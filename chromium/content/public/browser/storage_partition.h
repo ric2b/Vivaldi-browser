@@ -97,6 +97,12 @@ class CONTENT_EXPORT StoragePartition {
   // use after StoragePartition has gone.
   // The returned SharedURLLoaderFactory can be held on and will work across
   // network process restarts.
+  //
+  // SECURITY NOTE: This browser-process factory relaxes many security features
+  // (e.g. may disable CORB, won't set |request_initiator_origin_lock| or
+  // IsolationInfo, etc.).  Network requests that may be initiated or influenced
+  // by a web origin should typically use a different factory (e.g.  the one
+  // from RenderFrameHost::CreateNetworkServiceDefaultFactory).
   virtual scoped_refptr<network::SharedURLLoaderFactory>
   GetURLLoaderFactoryForBrowserProcess() = 0;
   virtual scoped_refptr<network::SharedURLLoaderFactory>
@@ -278,6 +284,11 @@ class CONTENT_EXPORT StoragePartition {
   virtual void SetNetworkContextForTesting(
       mojo::PendingRemote<network::mojom::NetworkContext>
           network_context_remote) = 0;
+
+  // Returns the same provider as GetProtoDatabaseProvider() but doesn't create
+  // a new instance and returns nullptr instead.
+  virtual leveldb_proto::ProtoDatabaseProvider*
+  GetProtoDatabaseProviderForTesting() = 0;
 
   // The value pointed to by |settings| should remain valid until the
   // the function is called again with a new value or a nullptr.

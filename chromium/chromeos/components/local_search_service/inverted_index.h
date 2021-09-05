@@ -11,6 +11,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include "base/callback.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string16.h"
@@ -59,6 +60,10 @@ class InvertedIndex {
   InvertedIndex(const InvertedIndex&) = delete;
   InvertedIndex& operator=(const InvertedIndex&) = delete;
 
+  // |on_index_built| will be called after the index is built.
+  void RegisterIndexBuiltCallback(
+      base::RepeatingCallback<void()> on_index_built);
+
   // Returns document ID and positions of a term.
   PostingList FindTerm(const base::string16& term) const;
 
@@ -90,10 +95,13 @@ class InvertedIndex {
   // Builds the inverted index.
   void BuildInvertedIndex();
 
+  // Clears all the data from the inverted index.
+  void ClearInvertedIndex();
+
   // Checks if the inverted index has been built: returns |true| if the inverted
   // index is up to date, returns |false| if there are some modified document
   // since the last time the index has been built.
-  bool IsInvertedIndexBuilt() const { return terms_to_be_updated_.empty(); }
+  bool IsInvertedIndexBuilt() const { return is_index_built_; }
 
   // Returns number of documents in the index.
   uint64_t NumberDocuments() const { return doc_length_.size(); }
@@ -114,6 +122,18 @@ class InvertedIndex {
   void OnUpdateDocumentsComplete(
       DocumentStateVariables&& document_state_variables);
 
+  void OnDataCleared(
+      std::pair<DocumentStateVariables, TfidfCache>&& inverted_index_data);
+
+  base::RepeatingCallback<void()> on_index_built_;
+
+  // |is_index_built_| is only true if index's TF-IDF is consistent with the
+  // documents in the index. This means as soon as documents are modified
+  // (added, updated or deleted), |is_index_built_| will be set to false. While
+  // the index is being rebuilt, its value will remain false. After the index is
+  // fully built/rebuilt, this value will be set to true.
+  bool is_index_built_ = true;
+
   // Set of the terms that are needed to be update in |tfidf_cache_|.
   TermSet terms_to_be_updated_;
   // Contains the length of the document (the number of terms in the document).
@@ -131,6 +151,7 @@ class InvertedIndex {
   bool request_to_build_index_ = false;
   bool update_in_progress_ = false;
   bool index_building_in_progress_ = false;
+  bool request_to_clear_index_ = false;
 
   SEQUENCE_CHECKER(sequence_checker_);
 

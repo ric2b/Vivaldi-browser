@@ -40,6 +40,7 @@ source_set("policy") {
     "//components/bookmarks/common",
     "//components/bookmarks/managed",
     "//components/enterprise",
+    "//components/metrics",
     "//components/password_manager/core/common",
     "//components/policy:generated",
     "//components/policy/core/common",
@@ -116,8 +117,8 @@ source_set("test_support") {
 
 bundle_data("test_resources") {
   visibility = [
-    ":unit_tests",
     ":eg2_tests",
+    ":unit_tests",
   ]
   testonly = true
   sources = [ "//ios/chrome/test/data/policy/policy_test_cases.json" ]
@@ -132,6 +133,7 @@ source_set("unit_tests") {
   sources = [
     "browser_dm_token_storage_ios_unittest.mm",
     "policy_unittest.mm",
+    "reporting/browser_report_generator_ios_unittest.mm",
   ]
   deps = [
     ":policy",
@@ -145,6 +147,7 @@ source_set("unit_tests") {
     "//ios/chrome/browser:utils",
     "//ios/chrome/browser/browser_state:test_support",
     "//ios/chrome/browser/prefs",
+    "//ios/chrome/test:test_support",
     "//testing/gtest",
   ]
 }
@@ -170,10 +173,15 @@ source_set("eg2_tests") {
     "//components/policy:generated",
     "//components/policy/core/common:common_constants",
     "//components/strings",
+    "//ios/chrome/app/strings:ios_strings_grit",
     "//ios/chrome/browser:pref_names",
     "//ios/chrome/browser:utils",
     "//ios/chrome/browser/translate:eg_test_support+eg2",
     "//ios/chrome/browser/ui/popup_menu:constants",
+    "//ios/chrome/browser/ui/settings:constants",
+    "//ios/chrome/browser/ui/settings/elements:constants",
+    "//ios/chrome/browser/ui/settings/password:password_constants",
+    "//ios/chrome/browser/ui/table_view/cells:cells_constants",
     "//ios/chrome/test/earl_grey:eg_test_support+eg2",
     "//ios/testing/earl_grey:eg_test_support+eg2",
     "//ios/third_party/earl_grey2:test_lib",

@@ -52,6 +52,7 @@ Chrome tarayıcı menüsünü açmak için Alt+F tuşlarına basın.</translatio
 <translation id="1291286136605998134">Açma/Kapatma Düğmesi</translation>
 <translation id="1299774449519412690">Açık Gök Mavisi</translation>
 <translation id="1303806948938513162">ChromeVox menülerine girmek için 4 parmağınızla dokunun</translation>
+<translation id="1313373992684326101">Önceki bölüme git. Örneğin, Durum Tepsisi ve Başlatıcı.</translation>
 <translation id="1325363694295259631"><ph name="NAME" />, menü öğesi radyo düğmesi seçili değil</translation>
 <translation id="1325946044405407859">Ten Rengi</translation>
 <translation id="1331702245475014624">toplam: <ph name="TOTAL" />, öğe: <ph name="INDEX" /></translation>
@@ -79,6 +80,7 @@ Chrome tarayıcı menüsünü açmak için Alt+F tuşlarına basın.</translatio
 <translation id="1506187449813838456">Sesi incelt</translation>
 <translation id="151784044608172266">Sonraki Cümle</translation>
 <translation id="1524531499102321782">Braille sonraki Satır</translation>
+<translation id="1542513807034338907">Önceki sayfaya kaydır</translation>
 <translation id="1546370775711804143">Kaydırma çubuğu</translation>
 <translation id="1555130319947370107">Mavi</translation>
 <translation id="1559739829547075274">Geri git</translation>
@@ -280,6 +282,7 @@ Chrome tarayıcı menüsünü açmak için Alt+F tuşlarına basın.</translatio
 <translation id="3103579948980282461">Orta Ton Mora Çalan Kırmızı</translation>
 <translation id="3104705064753753826">alrt dlg</translation>
 <translation id="3109724472072898302">Daraltılmış</translation>
+<translation id="311015743332597320">Dört parmağınızı sağa kaydırın</translation>
 <translation id="3112457281078985179">ChromeVox'u açmak veya kapatmak için Control+Alt+Z tuşlarını kullanın.</translation>
 <translation id="3131002934070407451">Numaraları şu şekilde oku:</translation>
 <translation id="3134461040845705080">rdonly</translation>
@@ -345,6 +348,7 @@ Chrome tarayıcı menüsünü açmak için Alt+F tuşlarına basın.</translatio
 <translation id="3549141990712742152"><ph name="TEXT" />metnini kes.</translation>
 <translation id="3549680091535286226">Konuşmayı geçici olarak durdurmak için 2 parmağınızla dokunun</translation>
 <translation id="3564729643041517261">Mevcut görüntüleme stili yan yanadır</translation>
+<translation id="3587482841069643663">Tümü</translation>
 <translation id="3589661172894441357">Terimler sözlüğü</translation>
 <translation id="3591784666823501596">Kraliyet Mavisi</translation>
 <translation id="3594207934078151302">Orta Ton Deniz Yeşili</translation>
@@ -436,6 +440,7 @@ Chrome tarayıcı menüsünü açmak için Alt+F tuşlarına basın.</translatio
 <translation id="4278486392851938658">Ziyaret edilmiş başka önceki bağlantı yok</translation>
 <translation id="4281245629646759298">Açık Sarı</translation>
 <translation id="4289540628985791613">Genel bakış</translation>
+<translation id="4294967782363273192">Artan sıra</translation>
 <translation id="4300318234632215983">Bir bağlantının arkasındaki URL'yi söyle</translation>
 <translation id="4322625298640984693">Koyu Kahverengi</translation>
 <translation id="4342180618051828363">{COUNT,plural, =1{nokta}=3{üç nokta}other{# nokta}}</translation>
@@ -447,6 +452,7 @@ Chrome tarayıcı menüsünü açmak için Alt+F tuşlarına basın.</translatio
 <translation id="4384583879834880242">Soru-Cevap</translation>
 <translation id="4391478986194775161">cntntinfo</translation>
 <translation id="4402014469255336455">Koyu Gök Mavisi</translation>
+<translation id="4406249099130339147">Noktalama yansıtma:</translation>
 <translation id="4432457053224379116">Hint Kırmızısı</translation>
 <translation id="4437615272777527928">Menülerde aramak için yazmaya başlayın. Sonuçlar arasında geçiş yapmak için yukarı ve aşağı okları kullanın. Metin imlecini ayarlamak ve menüler arasında dolaşmak için sol ve sağ okları kullanın.</translation>
 <translation id="4457472090507035117">Geçerli sesi seçin:</translation>
@@ -481,6 +487,7 @@ Chrome tarayıcı menüsünü açmak için Alt+F tuşlarına basın.</translatio
 <translation id="4763480195061959176">video</translation>
 <translation id="4764692524839457597">varsayılan</translation>
 <translation id="4772771694153161212">Altı çizili değil</translation>
+<translation id="4780458943471935919">Sonraki sayfaya kaydır</translation>
 <translation id="4784215347943747396">Cihazı yalnızca 1 veya 2 anahtarla kontrol edin</translation>
 <translation id="4786285211967466855">Önceki 1. düzey başlık yok</translation>
 <translation id="4787577491510559358">Mevcut öğenin biçimini söyler</translation>
@@ -644,6 +651,7 @@ Chrome tarayıcı menüsünü açmak için Alt+F tuşlarına basın.</translatio
 <translation id="5999630716831179808">Sesler</translation>
 <translation id="6006050241733874051">Form</translation>
 <translation id="6006064078185310784">{COUNT,plural, =1{ters eğik çizgi}other{# ters eğik çizgi}}</translation>
+<translation id="6010616110396250088">Azalan sıra</translation>
 <translation id="6017514345406065928">Yeşil</translation>
 <translation id="602001110135236999">Sola kaydır</translation>
 <translation id="6034000775414344507">Açık Gri</translation>
@@ -814,6 +822,7 @@ Chrome tarayıcı menüsünü açmak için Alt+F tuşlarına basın.</translatio
 <translation id="744163271241493234">pwded</translation>
 <translation id="7484805699335881122">Öğe türlerini ve alıntılanan, silinen, kalın harfli yapılan, parantez içine alınan veya büyük harfli yapılan metni seslendirirken ses tonunu değiştirin.</translation>
 <translation id="7491962110804786152">tab</translation>
+<translation id="7492497529767769458">Sonraki bölüme git. Örneğin, Durum Tepsisi ve Başlatıcı.</translation>
 <translation id="7505149250476994901">Harften önce "büyük harf" olduğunu söyleyin</translation>
 <translation id="7518543783849163354">ChromeVox'un konuşmasını geçici olarak durdurmak için Control tuşuna basın.</translation>
 <translation id="7533226154149229506">Açık Altın Başak Sarısı</translation>
@@ -821,6 +830,7 @@ Chrome tarayıcı menüsünü açmak için Alt+F tuşlarına basın.</translatio
 <translation id="7552432549459840808">Yararlı Chrome Kısayolları</translation>
 <translation id="7569983096843329377">Siyah</translation>
 <translation id="7579911500627256166">nokta <ph name="DOT" /></translation>
+<translation id="7592060599656252486">Bazı</translation>
 <translation id="7595446402663080101">Önceki tablo yok</translation>
 <translation id="7596131838331109045">Açık Somon</translation>
 <translation id="7604026522577407655">Mevcut sütunun başlangıcına git</translation>
@@ -840,6 +850,7 @@ Chrome tarayıcı menüsünü açmak için Alt+F tuşlarına basın.</translatio
 <translation id="7684431668231950609">Metni düzenle, URL girişi</translation>
 <translation id="7685589220304187312">tlbar</translation>
 <translation id="7693840228159394336">Önceki radyo düğmesi</translation>
+<translation id="7701040980221191251">Yok</translation>
 <translation id="7701196182766842984">autolst</translation>
 <translation id="7714340021005120797">Sonraki birleşik giriş kutusu yok</translation>
 <translation id="772146615414628379">Tebrikler! ChromeVox kullanımıyla ilgili temel bilgileri başarıyla öğrendiniz. ChromeVox komut menüsünü Arama+Nokta tuşlarına basarak istediğiniz zaman açabileceğinizi unutmayın. ChromeVox ve Chrome OS hakkında daha da fazla bilgi edinmek için aşağıdaki makaleleri inceleyin.
@@ -898,7 +909,9 @@ Chrome tarayıcı menüsünü açmak için Alt+F tuşlarına basın.</translatio
 <translation id="812886159861361726"><ph name="FILE_NAME" /> dosyasını indirme işlemi durduruldu</translation>
 <translation id="8129445297241948503">Yukarıda hücre yok</translation>
 <translation id="8138880386467279117">Dokunma</translation>
+<translation id="8173092779156526980">Dört parmağınızı sola kaydırın</translation>
 <translation id="817440585505441544">{COUNT,plural, =1{alt çizgi}other{# alt çizgi}}</translation>
+<translation id="8179976553408161302">Enter</translation>
 <translation id="8184828902145951186">satır</translation>
 <translation id="8186185314313222077">tam ekrana geç</translation>
 <translation id="8199231515320852133">Mevcut hücrenin üst bilgilerini söyle</translation>
@@ -984,6 +997,7 @@ Chrome tarayıcı menüsünü açmak için Alt+F tuşlarına basın.</translatio
 <translation id="8946628535652548639">r<ph name="TABLECELLROWINDEX" />c<ph name="TABLECELLCOLUMNINDEX" /></translation>
 <translation id="8952400011684167587">Önceki radyo düğmesi yok</translation>
 <translation id="8970172509886453271">Önceki bölüm yok</translation>
+<translation id="89720367119469899">Escape</translation>
 <translation id="8978496506222343566">tltip</translation>
 <translation id="8986362086234534611">Unut</translation>
 <translation id="9040132695316389094">Başlık 1</translation>

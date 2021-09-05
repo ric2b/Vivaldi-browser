@@ -148,7 +148,7 @@ apiBridge.registerCustomHook(function(bindingsAPI) {
   });
 
   apiFunctions.setHandleRequest('getContentMetadata',
-      function(fileEntry, mimeType, type, callback) {
+      function(fileEntry, mimeType, includeImages, callback) {
     fileEntry.file(blob => {
       var blobUUID = blobNatives.GetBlobUuid(blob);
 
@@ -162,7 +162,7 @@ apiBridge.registerCustomHook(function(bindingsAPI) {
       }.bind(this, blob);  // Bind a blob reference: crbug.com/415792#c12
 
       fileManagerPrivateInternal.getContentMetadata(
-          blobUUID, mimeType, type, onGetContentMetadata);
+          blobUUID, mimeType, !!includeImages, onGetContentMetadata);
     }, (error) => {
       var errorUUID = '';
 
@@ -172,7 +172,7 @@ apiBridge.registerCustomHook(function(bindingsAPI) {
       }.bind(this);
 
       fileManagerPrivateInternal.getContentMetadata(
-          errorUUID, mimeType, type, onGetContentMetadata);
+          errorUUID, mimeType, false, onGetContentMetadata);
     });
   });
 
@@ -208,6 +208,12 @@ apiBridge.registerCustomHook(function(bindingsAPI) {
   apiFunctions.setHandleRequest('getDownloadUrl', function(entry, callback) {
     var url = getEntryURL(entry);
     fileManagerPrivateInternal.getDownloadUrl(url, callback);
+  });
+
+  apiFunctions.setHandleRequest('copyImageToClipboard', function(
+        entry, callback) {
+    var url = getEntryURL(entry);
+    fileManagerPrivateInternal.copyImageToClipboard(url, callback);
   });
 
   apiFunctions.setHandleRequest('startCopy', function(
@@ -333,6 +339,13 @@ apiBridge.registerCustomHook(function(bindingsAPI) {
           return getEntryURL(entry);
         });
         fileManagerPrivateInternal.invokeSharesheet(urls, callback);
+      });
+
+  apiFunctions.setHandleRequest(
+      'toggleAddedToHoldingSpace', function(entries, added, callback) {
+        const urls = entries.map(entry => getEntryURL(entry));
+        fileManagerPrivateInternal.toggleAddedToHoldingSpace(
+            urls, added, callback);
       });
 });
 

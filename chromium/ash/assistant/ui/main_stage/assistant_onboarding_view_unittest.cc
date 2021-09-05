@@ -20,7 +20,6 @@
 #include "ash/public/cpp/assistant/controller/assistant_ui_controller.h"
 #include "ash/public/cpp/session/session_types.h"
 #include "ash/public/cpp/session/user_info.h"
-#include "ash/public/cpp/vector_icons/vector_icons.h"
 #include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
 #include "base/strings/stringprintf.h"
@@ -30,6 +29,7 @@
 #include "base/unguessable_token.h"
 #include "chromeos/services/assistant/public/cpp/assistant_service.h"
 #include "chromeos/services/assistant/public/cpp/features.h"
+#include "chromeos/ui/vector_icons/vector_icons.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/image/image_unittest_util.h"
@@ -168,90 +168,111 @@ class AssistantOnboardingViewTest : public AssistantAshTestBase {
 // Tests -----------------------------------------------------------------------
 
 TEST_F(AssistantOnboardingViewTest, ShouldHaveExpectedGreeting) {
-  // Cache the expected given name.
-  const std::string given_name = Shell::Get()
-                                     ->session_controller()
-                                     ->GetPrimaryUserSession()
-                                     ->user_info.given_name;
+  struct ExpectedGreeting {
+    std::string for_morning;
+    std::string for_afternoon;
+    std::string for_evening;
+    std::string for_night;
+  };
 
-  // Advance clock to midnight tomorrow.
-  AdvanceClock(base::Time::Now().LocalMidnight() +
-               base::TimeDelta::FromHours(24) - base::Time::Now());
+  struct TestCase {
+    std::string display_email;
+    std::string given_name;
+    ExpectedGreeting expected_greeting;
+  };
 
-  {
-    // Verify 4:59 AM.
-    AdvanceClock(base::TimeDelta::FromHours(4) +
-                 base::TimeDelta::FromMinutes(59));
-    ScopedShowUi scoped_show_ui;
-    EXPECT_EQ(greeting_label()->GetText(),
-              base::UTF8ToUTF16(
-                  base::StringPrintf("Good night %s,", given_name.c_str())));
-  }
+  const std::vector<TestCase> test_cases = {
+      TestCase{/*display_email=*/"empty@test",
+               /*given_name=*/std::string(),
+               ExpectedGreeting{
+                   /*for_morning=*/"Good morning,",
+                   /*for_afternoon=*/"Good afternoon,",
+                   /*for_evening=*/"Good evening,",
+                   /*for_night=*/"Good night,",
+               }},
+      TestCase{/*display_email=*/"david@test",
+               /*given_name=*/"David",
+               ExpectedGreeting{
+                   /*for_morning=*/"Good morning David,",
+                   /*for_afternoon=*/"Good afternoon David,",
+                   /*for_evening=*/"Good evening David,",
+                   /*for_night=*/"Good night David,",
+               }}};
 
-  {
-    // Verify 5:00 AM.
-    AdvanceClock(base::TimeDelta::FromMinutes(1));
-    ScopedShowUi scoped_show_ui;
-    EXPECT_EQ(greeting_label()->GetText(),
-              base::UTF8ToUTF16(
-                  base::StringPrintf("Good morning %s,", given_name.c_str())));
-  }
+  for (const auto& test_case : test_cases) {
+    CreateAndSwitchActiveUser(test_case.display_email, test_case.given_name);
 
-  {
-    // Verify 11:59 AM.
-    AdvanceClock(base::TimeDelta::FromHours(6) +
-                 base::TimeDelta::FromMinutes(59));
-    ScopedShowUi scoped_show_ui;
-    EXPECT_EQ(greeting_label()->GetText(),
-              base::UTF8ToUTF16(
-                  base::StringPrintf("Good morning %s,", given_name.c_str())));
-  }
+    // Advance clock to midnight tomorrow.
+    AdvanceClock(base::Time::Now().LocalMidnight() +
+                 base::TimeDelta::FromHours(24) - base::Time::Now());
 
-  {
-    // Verify 12:00 PM.
-    AdvanceClock(base::TimeDelta::FromMinutes(1));
-    ScopedShowUi scoped_show_ui;
-    EXPECT_EQ(greeting_label()->GetText(),
-              base::UTF8ToUTF16(base::StringPrintf("Good afternoon %s,",
-                                                   given_name.c_str())));
-  }
+    {
+      // Verify 4:59 AM.
+      AdvanceClock(base::TimeDelta::FromHours(4) +
+                   base::TimeDelta::FromMinutes(59));
+      ScopedShowUi scoped_show_ui;
+      EXPECT_EQ(greeting_label()->GetText(),
+                base::UTF8ToUTF16(test_case.expected_greeting.for_night));
+    }
 
-  {
-    // Verify 4:59 PM.
-    AdvanceClock(base::TimeDelta::FromHours(4) +
-                 base::TimeDelta::FromMinutes(59));
-    ScopedShowUi scoped_show_ui;
-    EXPECT_EQ(greeting_label()->GetText(),
-              base::UTF8ToUTF16(base::StringPrintf("Good afternoon %s,",
-                                                   given_name.c_str())));
-  }
+    {
+      // Verify 5:00 AM.
+      AdvanceClock(base::TimeDelta::FromMinutes(1));
+      ScopedShowUi scoped_show_ui;
+      EXPECT_EQ(greeting_label()->GetText(),
+                base::UTF8ToUTF16(test_case.expected_greeting.for_morning));
+    }
 
-  {
-    // Verify 5:00 PM.
-    AdvanceClock(base::TimeDelta::FromMinutes(1));
-    ScopedShowUi scoped_show_ui;
-    EXPECT_EQ(greeting_label()->GetText(),
-              base::UTF8ToUTF16(
-                  base::StringPrintf("Good evening %s,", given_name.c_str())));
-  }
+    {
+      // Verify 11:59 AM.
+      AdvanceClock(base::TimeDelta::FromHours(6) +
+                   base::TimeDelta::FromMinutes(59));
+      ScopedShowUi scoped_show_ui;
+      EXPECT_EQ(greeting_label()->GetText(),
+                base::UTF8ToUTF16(test_case.expected_greeting.for_morning));
+    }
 
-  {
-    // Verify 10:59 PM.
-    AdvanceClock(base::TimeDelta::FromHours(5) +
-                 base::TimeDelta::FromMinutes(59));
-    ScopedShowUi scoped_show_ui;
-    EXPECT_EQ(greeting_label()->GetText(),
-              base::UTF8ToUTF16(
-                  base::StringPrintf("Good evening %s,", given_name.c_str())));
-  }
+    {
+      // Verify 12:00 PM.
+      AdvanceClock(base::TimeDelta::FromMinutes(1));
+      ScopedShowUi scoped_show_ui;
+      EXPECT_EQ(greeting_label()->GetText(),
+                base::UTF8ToUTF16(test_case.expected_greeting.for_afternoon));
+    }
 
-  {
-    // Verify 11:00 PM.
-    AdvanceClock(base::TimeDelta::FromMinutes(1));
-    ScopedShowUi scoped_show_ui;
-    EXPECT_EQ(greeting_label()->GetText(),
-              base::UTF8ToUTF16(
-                  base::StringPrintf("Good night %s,", given_name.c_str())));
+    {
+      // Verify 4:59 PM.
+      AdvanceClock(base::TimeDelta::FromHours(4) +
+                   base::TimeDelta::FromMinutes(59));
+      ScopedShowUi scoped_show_ui;
+      EXPECT_EQ(greeting_label()->GetText(),
+                base::UTF8ToUTF16(test_case.expected_greeting.for_afternoon));
+    }
+
+    {
+      // Verify 5:00 PM.
+      AdvanceClock(base::TimeDelta::FromMinutes(1));
+      ScopedShowUi scoped_show_ui;
+      EXPECT_EQ(greeting_label()->GetText(),
+                base::UTF8ToUTF16(test_case.expected_greeting.for_evening));
+    }
+
+    {
+      // Verify 10:59 PM.
+      AdvanceClock(base::TimeDelta::FromHours(5) +
+                   base::TimeDelta::FromMinutes(59));
+      ScopedShowUi scoped_show_ui;
+      EXPECT_EQ(greeting_label()->GetText(),
+                base::UTF8ToUTF16(test_case.expected_greeting.for_evening));
+    }
+
+    {
+      // Verify 11:00 PM.
+      AdvanceClock(base::TimeDelta::FromMinutes(1));
+      ScopedShowUi scoped_show_ui;
+      EXPECT_EQ(greeting_label()->GetText(),
+                base::UTF8ToUTF16(test_case.expected_greeting.for_night));
+    }
   }
 }
 
@@ -290,53 +311,53 @@ TEST_F(AssistantOnboardingViewTest, ShouldHaveExpectedSuggestions) {
         expected_suggestions.push_back(
             {/*message=*/"Square root of 71",
              /*icon_with_color=*/std::make_unique<VectorIconWithColor>(
-                 ash::kCalculateIcon, gfx::kGoogleBlue800)});
+                 chromeos::kCalculateIcon, gfx::kGoogleBlue800)});
         expected_suggestions.push_back(
             {/*message=*/"How far is Venus",
              /*icon_with_color=*/std::make_unique<VectorIconWithColor>(
-                 ash::kStraightenIcon, gfx::kGoogleRed800)});
+                 chromeos::kStraightenIcon, gfx::kGoogleRed800)});
         expected_suggestions.push_back(
             {/*message=*/"Set timer",
              /*icon_with_color=*/std::make_unique<VectorIconWithColor>(
-                 ash::kTimerIcon, SkColorSetRGB(0xBF, 0x50, 0x00))});
+                 chromeos::kTimerIcon, SkColorSetRGB(0xBF, 0x50, 0x00))});
         expected_suggestions.push_back(
             {/*message=*/"Tell me a joke",
              /*icon_with_color=*/std::make_unique<VectorIconWithColor>(
-                 ash::kSentimentVerySatisfiedIcon, gfx::kGoogleGreen800)});
+                 chromeos::kSentimentVerySatisfiedIcon, gfx::kGoogleGreen800)});
         expected_suggestions.push_back(
             {/*message=*/"\"Hello\" in Chinese",
              /*icon_with_color=*/std::make_unique<VectorIconWithColor>(
-                 ash::kTranslateIcon, SkColorSetRGB(0x8A, 0x0E, 0x9E))});
+                 chromeos::kTranslateIcon, SkColorSetRGB(0x8A, 0x0E, 0x9E))});
         expected_suggestions.push_back(
             {/*message=*/"Take a screenshot",
              /*icon_with_color=*/std::make_unique<VectorIconWithColor>(
-                 ash::kScreenshotIcon, gfx::kGoogleBlue800)});
+                 chromeos::kScreenshotIcon, gfx::kGoogleBlue800)});
         break;
       case AssistantOnboardingMode::kDefault:
         expected_suggestions.push_back(
             {/*message=*/"5K in miles",
              /*icon_with_color=*/std::make_unique<VectorIconWithColor>(
-                 ash::kConversionPathIcon, gfx::kGoogleBlue800)});
+                 chromeos::kConversionPathIcon, gfx::kGoogleBlue800)});
         expected_suggestions.push_back(
             {/*message=*/"Population in Nigeria",
              /*icon_with_color=*/std::make_unique<VectorIconWithColor>(
-                 ash::kPersonPinCircleIcon, gfx::kGoogleRed800)});
+                 chromeos::kPersonPinCircleIcon, gfx::kGoogleRed800)});
         expected_suggestions.push_back(
             {/*message=*/"Set timer",
              /*icon_with_color=*/std::make_unique<VectorIconWithColor>(
-                 ash::kTimerIcon, SkColorSetRGB(0xBF, 0x50, 0x00))});
+                 chromeos::kTimerIcon, SkColorSetRGB(0xBF, 0x50, 0x00))});
         expected_suggestions.push_back(
             {/*message=*/"Tell me a joke",
              /*icon_with_color=*/std::make_unique<VectorIconWithColor>(
-                 ash::kSentimentVerySatisfiedIcon, gfx::kGoogleGreen800)});
+                 chromeos::kSentimentVerySatisfiedIcon, gfx::kGoogleGreen800)});
         expected_suggestions.push_back(
             {/*message=*/"\"Hello\" in Chinese",
              /*icon_with_color=*/std::make_unique<VectorIconWithColor>(
-                 ash::kTranslateIcon, SkColorSetRGB(0x8A, 0x0E, 0x9E))});
+                 chromeos::kTranslateIcon, SkColorSetRGB(0x8A, 0x0E, 0x9E))});
         expected_suggestions.push_back(
             {/*message=*/"Take a screenshot",
              /*icon_with_color=*/std::make_unique<VectorIconWithColor>(
-                 ash::kScreenshotIcon, gfx::kGoogleBlue800)});
+                 chromeos::kScreenshotIcon, gfx::kGoogleBlue800)});
         break;
     }
 
@@ -416,7 +437,7 @@ TEST_F(AssistantOnboardingViewTest, ShouldHandleLocalIcons) {
 
   const auto& actual = suggestion_views.at(0)->GetIcon();
   gfx::ImageSkia expected = gfx::CreateVectorIcon(
-      gfx::IconDescription(ash::kAssistantIcon, /*size=*/24));
+      gfx::IconDescription(chromeos::kAssistantIcon, /*size=*/24));
 
   ASSERT_PIXELS_EQ(actual, expected);
 }

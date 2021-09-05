@@ -13,12 +13,12 @@
 <translation id="1163931534039071049">&amp;Shoh burimin e kuadrit</translation>
 <translation id="1165039591588034296">Gabim</translation>
 <translation id="1175364870820465910">&amp;Printoj...</translation>
-<translation id="1177863135347784049">Të personalizuara</translation>
 <translation id="1181037720776840403">Heq</translation>
 <translation id="1187722533808055681">Daljet nga gjendja joaktive</translation>
 <translation id="119944043368869598">Pastroj të gjitha</translation>
 <translation id="1221825588892235038">Vetëm përzgjedhjen</translation>
 <translation id="1244303850296295656">Gabim me shtesën</translation>
+<translation id="125220115284141797">Standard</translation>
 <translation id="1274977772557788323">Parametrat e arkivimit të Adobe Flash Player</translation>
 <translation id="1297175357211070620">Destinacioni</translation>
 <translation id="1303101771013849280">Skedari HTML i faqeve interesante</translation>
@@ -45,9 +45,11 @@
 <translation id="1723824996674794290">Dritare të &amp;re</translation>
 <translation id="1725149567830788547">Tregoj &amp;butonat interaktivë</translation>
 <translation id="1729533290416704613">Kontrollon edhe faqen që hapet kur kërkoni nga Omnibox-i.</translation>
+<translation id="174123615272205933">Të personalizuara</translation>
 <translation id="1744108098763830590">faqe në sfond</translation>
 <translation id="176587472219019965">Dritare të &amp;re</translation>
 <translation id="1769104665586091481">Hap lidhjen në &amp;dritare të re</translation>
+<translation id="1779468444204342338">Minimale</translation>
 <translation id="1815083418640426271">Ngjit si tekst të thjeshtë</translation>
 <translation id="1828901632669367785">Printoj me tabelën e sistemit operativ...</translation>
 <translation id="1850508293116537636">Rrotulloj në kahun &amp;orar</translation>
@@ -87,7 +89,6 @@
 <translation id="2381756643783702095">Pyes para dërgimit (rekomandohet)</translation>
 <translation id="241082044617551207">Fishë e panjohur</translation>
 <translation id="2423578206845792524">Regji&amp;stroj imazhin në...</translation>
-<translation id="2436707352762155834">Minimale</translation>
 <translation id="2439110203301358333">Një program kompjuterik instaloi një shtesë që mund të ndryshojë funksionet e Vivaldit.</translation>
 <translation id="2445081178310039857">Duhet katalogu kryesor i shtesës.</translation>
 <translation id="2470702053775288986">Janë çaktivizuar shtesat jofunksionale</translation>
@@ -138,6 +139,7 @@
 <translation id="3222066309010235055">Parainterpretimi vizual: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3227137524299004712">Mikrofoni</translation>
 <translation id="3241680850019875542">Përzgjidhni katalogun kryesor të shtesës që do të paketohet. Për ta përditësuar, zgjidhet edhe një çelës privat që mund ta përdorni sërish.</translation>
+<translation id="3266179261140759675">Bllokoj dërgimin dhe marrjen e të dhënave nga faqet e mbyllura të internetit</translation>
 <translation id="3280237271814976245">Regjistroj &amp;në...</translation>
 <translation id="3285322247471302225">&amp;Skedë të re</translation>
 <translation id="3288047731229977326">Shtesat që ekzekutohen në variantin e programuesit mund të rrezikojnë kompjuterin. Për sigurinë tuaj, nëse nuk jeni programues, duhet t'i çaktivizoni shtesat e këtij varianti.</translation>
@@ -177,14 +179,14 @@
 <translation id="3810973564298564668">Administroj</translation>
 <translation id="3838085852053358637">E pamundur të hapej shtesa</translation>
 <translation id="383891835335927981">Nuk kanë ndryshuar dimensionet e faqeve</translation>
-<translation id="385051799172605136">Kthehem</translation>
+<translation id="385051799172605136">Prapa</translation>
 <translation id="3899879303189199559">Është shkëputur prej më shumë se një viti</translation>
 <translation id="3905761538810670789">Riparoj aplikacionin</translation>
 <translation id="3908501907586732282">Aktivizoj shtesën</translation>
 <translation id="3909791450649380159">Pre&amp;s</translation>
 <translation id="3927932062596804919">Refuzoj</translation>
 <translation id="3936390757709632190">&amp;Hap audion në skedë të re</translation>
-<translation id="3943582379552582368">&amp;Kthej</translation>
+<translation id="3943582379552582368">&amp;Prapa</translation>
 <translation id="3948116654032448504">&amp;Kërkoj për imazhin në <ph name="SEARCH_ENGINE" /></translation>
 <translation id="3955193568934677022">Autorizoj faqet të luajnë materiale të mbrojtura (rekomandohet)</translation>
 <translation id="3979395879372752341">U shtua një shtesë e re (<ph name="EXTENSION_NAME" />)</translation>
@@ -245,7 +247,6 @@
 <translation id="5039804452771397117">Autorizoj</translation>
 <translation id="5057110919553308744">Kur klikoni shtesën</translation>
 <translation id="5063480226653192405">Shfrytëzimi</translation>
-<translation id="5068918910148307423">Nuk autorizoj faqet e mbyllura së fundmi që të dërgojnë dhe marrin të dhëna</translation>
 <translation id="5116628073786783676">Regji&amp;stroj audion në...</translation>
 <translation id="5143374789336132547">Shtesa <ph name="EXTENSION_NAME" /> ka ndryshuar faqen që hapet kur klikoni butonin e Shtëpisë.</translation>
 <translation id="5154108062446123722">Parametrat e avancuar për <ph name="PRINTING_DESTINATION" /></translation>
@@ -262,8 +263,9 @@
 <translation id="5317780077021120954">Regjistroj</translation>
 <translation id="5334142896108694079">Cache i skripteve</translation>
 <translation id="5355926466126177564">Shtesa "<ph name="EXTENSION_NAME" />" ka ndryshuar faqen që hapet kur kërkoni nga Omnibox-i.</translation>
-<translation id="5360150013186312835">Tregoj në brezin e instrumenteve</translation>
+<translation id="5360150013186312835">Shfaq në brezin e instrumenteve</translation>
 <translation id="5362741141255528695">Përzgjidhni çelësin privat.</translation>
+<translation id="536638840841140142">Asnjë</translation>
 <translation id="5370819323174483825">&amp;Freskoj</translation>
 <translation id="5398572795982417028">Faqja e referuar kapërcen limitet. Limiti është <ph name="MAXIMUM_PAGE" /></translation>
 <translation id="5425042808445046667">Vazhdoj shkarkimin</translation>
@@ -308,7 +310,7 @@
 <translation id="6011449291337289699">Pastroj të dhënat e faqeve</translation>
 <translation id="6042308850641462728">Më shumë</translation>
 <translation id="6059925163896151826">Aparatet USB</translation>
-<translation id="6082651258230788217">Tregoj në brezin e instrumenteve</translation>
+<translation id="6082651258230788217">Shfaq në brezin e instrumenteve</translation>
 <translation id="6086846494333236931">E instaluar nga administratori</translation>
 <translation id="6101226222197207147">U shtua një aplikacion i ri (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">Është nën kontroll lidhja me internetin</translation>
@@ -388,7 +390,6 @@
 <translation id="7663719505383602579">Marrësi: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">E instaluar nga administratori</translation>
 <translation id="7685049629764448582">Memoria JavaScript</translation>
-<translation id="7701040980221191251">Asnjë</translation>
 <translation id="7701869757853594372">Objektet USER</translation>
 <translation id="7704305437604973648">Detyra</translation>
 <translation id="7710568461918838723">&amp;Transmetoj...</translation>

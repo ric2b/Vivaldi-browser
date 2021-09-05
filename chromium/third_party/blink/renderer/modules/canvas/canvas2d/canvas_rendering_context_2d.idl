@@ -52,6 +52,8 @@ interface CanvasRenderingContext2D {
     // state
     void save(); // push state on state stack
     void restore(); // pop state stack and restore state
+    // Clear the canvas and reset the path
+    [RuntimeEnabled=NewCanvas2DAPI] void reset();
 
     // transformations (default transform is the identity matrix)
     void scale(unrestricted double x, unrestricted double y);
@@ -133,7 +135,6 @@ interface CanvasRenderingContext2D {
 
     // https://github.com/WICG/canvas-color-space/blob/master/CanvasColorSpaceProposal.md
     [RuntimeEnabled=CanvasColorManagement, RaisesException] ImageData createImageData(unsigned long sw, unsigned long sh, ImageDataColorSettings imageDataColorSettings);
-    [RuntimeEnabled=CanvasColorManagement, RaisesException] ImageData createImageData(ImageDataArray data, unsigned long sw, unsigned long sh, optional ImageDataColorSettings imageDataColorSettings = {});
 
     // Context state
     // Should be merged with WebGL counterpart in CanvasRenderingContext, once no-longer experimental
@@ -158,7 +159,6 @@ interface CanvasRenderingContext2D {
     attribute DOMString textAlign; // "start", "end", "left", "right", "center" (default: "start")
     attribute DOMString textBaseline; // "top", "hanging", "middle", "alphabetic", "ideographic", "bottom" (default: "alphabetic")
     attribute DOMString direction; // "inherit", "rtl", "ltr" (default: "inherit")
-
 };
 
 CanvasRenderingContext2D includes CanvasPath;

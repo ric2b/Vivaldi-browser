@@ -4,11 +4,11 @@
 
 #include "chrome/browser/ui/global_media_controls/cast_media_notification_provider.h"
 
-#include "chrome/browser/media/router/test/mock_media_router.h"
-#include "chrome/common/media_router/media_route.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/media_message_center/media_notification_controller.h"
 #include "components/media_message_center/media_notification_view.h"
+#include "components/media_router/browser/test/mock_media_router.h"
+#include "components/media_router/common/media_route.h"
 #include "content/public/test/browser_task_environment.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -34,15 +34,16 @@ class MockMediaNotificationController
   MockMediaNotificationController() = default;
   ~MockMediaNotificationController() = default;
 
-  MOCK_METHOD1(ShowNotification, void(const std::string& id));
-  MOCK_METHOD1(HideNotification, void(const std::string& id));
-  MOCK_METHOD1(RemoveItem, void(const std::string& id));
+  MOCK_METHOD(void, ShowNotification, (const std::string& id));
+  MOCK_METHOD(void, HideNotification, (const std::string& id));
+  MOCK_METHOD(void, RemoveItem, (const std::string& id));
   scoped_refptr<base::SequencedTaskRunner> GetTaskRunner() const override {
     return nullptr;
   }
-  MOCK_METHOD2(LogMediaSessionActionButtonPressed,
-               void(const std::string& id,
-                    media_session::mojom::MediaSessionAction action));
+  MOCK_METHOD(void,
+              LogMediaSessionActionButtonPressed,
+              (const std::string& id,
+               media_session::mojom::MediaSessionAction action));
 };
 
 class MockMediaNotificationView
@@ -61,6 +62,7 @@ class MockMediaNotificationView
   MOCK_METHOD1(UpdateWithMediaArtwork, void(const gfx::ImageSkia&));
   MOCK_METHOD1(UpdateWithFavicon, void(const gfx::ImageSkia&));
   MOCK_METHOD1(UpdateWithVectorIcon, void(const gfx::VectorIcon& vector_icon));
+  MOCK_METHOD1(UpdateDeviceSelectorAvailability, void(bool availability));
 };
 
 class MockClosure {

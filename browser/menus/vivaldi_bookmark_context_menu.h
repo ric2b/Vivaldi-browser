@@ -34,7 +34,8 @@ class Profile;
 namespace vivaldi {
 void SetBookmarkContainer(const BookmarkMenuContainer* container,
                           int current_index);
-void BuildBookmarkContextMenu(ui::SimpleMenuModel* menu_model);
+void BuildBookmarkContextMenu(Profile* profile,
+                              ui::SimpleMenuModel* menu_model);
 void ExecuteBookmarkContextMenuCommand(Browser* browser,
                                        bookmarks::BookmarkModel* model,
                                        int64_t id,
@@ -52,7 +53,7 @@ const bookmarks::BookmarkNode* GetNextNode(bookmarks::BookmarkModel* model,
                                            gfx::Rect* rect);
 void SortBookmarkNodes(const bookmarks::BookmarkNode* parent,
                        std::vector<bookmarks::BookmarkNode*>& nodes);
-void AddExtraBookmarkMenuItems(Profile* profile_, views::MenuItemView* menu,
+void AddExtraBookmarkMenuItems(Profile* profile, views::MenuItemView* menu,
                                unsigned int* menu_index,
                                const bookmarks::BookmarkNode* parent,
                                bool on_top);
@@ -69,8 +70,8 @@ views::MenuItemView* AddMenuItem(views::MenuItemView* menu,
 unsigned int GetStartIndexForBookmarks(views::MenuItemView* menu, int64_t id);
 bool IsVivaldiMenuItem(int id);
 const gfx::ImageSkia* GetBookmarkDefaultIcon();
-gfx::ImageSkia GetBookmarkFolderIcon(SkColor text_color);
-gfx::ImageSkia GetBookmarkSpeeddialIcon(SkColor text_color);
+ui::ImageModel GetBookmarkFolderIcon(SkColor text_color);
+ui::ImageModel GetBookmarkSpeeddialIcon(SkColor text_color);
 }  // vivaldi
 
 

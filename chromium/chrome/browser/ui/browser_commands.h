@@ -140,6 +140,10 @@ void BookmarkCurrentTab(Browser* browser);
 bool CanBookmarkCurrentTab(const Browser* browser);
 void BookmarkAllTabs(Browser* browser);
 bool CanBookmarkAllTabs(const Browser* browser);
+bool CanMoveActiveTabToReadLater(Browser* browser);
+bool MoveCurrentTabToReadLater(Browser* browser);
+bool MarkCurrentTabAsReadInReadLater(Browser* browser);
+bool IsCurrentTabUnreadInReadLater(Browser* browser);
 void SaveCreditCard(Browser* browser);
 void MigrateLocalCards(Browser* browser);
 void MaybeShowSaveLocalCardSignInPromo(Browser* browser);
@@ -203,7 +207,9 @@ void CopyURL(Browser* browser);
 // the tabbed Browser.
 Browser* OpenInChrome(Browser* hosted_app_browser);
 bool CanViewSource(const Browser* browser);
+bool CanToggleCaretBrowsing(Browser* browser);
 void ToggleCaretBrowsing(Browser* browser);
+void PromptToNameWindow(Browser* browser);
 
 base::Optional<int> GetKeyboardFocusedTabIndex(const Browser* browser);
 

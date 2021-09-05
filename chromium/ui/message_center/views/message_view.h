@@ -191,6 +191,8 @@ class MESSAGE_CENTER_EXPORT MessageView
 
   views::FocusRing* focus_ring() { return focus_ring_; }
 
+  int bottom_radius() const { return bottom_radius_; }
+
  private:
   friend class test::MessagePopupCollectionTest;
 
@@ -206,6 +208,9 @@ class MESSAGE_CENTER_EXPORT MessageView
 
   // Sets the border if |is_nested_| is true.
   void SetNestedBorderIfNecessary();
+
+  // Updates the background painter using the themed background color and radii.
+  void UpdateBackgroundPainter();
 
   std::string notification_id_;
   views::ScrollView* scroller_ = nullptr;

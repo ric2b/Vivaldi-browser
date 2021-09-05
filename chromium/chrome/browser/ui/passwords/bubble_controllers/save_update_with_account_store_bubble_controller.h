@@ -51,6 +51,12 @@ class SaveUpdateWithAccountStoreBubbleController
   // creation. This method returns true iff the current state is "update".
   bool IsCurrentStateUpdate() const;
 
+  // The password bubble header image can switch its state between "save" and
+  // "update" depending on the user input. |state_| only captures the correct
+  // state on creation. This method returns true iff the current state is
+  // "save" or "update" to a password in the account store.
+  bool IsCurrentStateAffectingTheAccountStore();
+
   // Returns true if passwords revealing is not locked or re-authentication is
   // not available on the given platform. Otherwise, the method schedules
   // re-authentication and bubble reopen (the current bubble will be destroyed),
@@ -67,6 +73,10 @@ class SaveUpdateWithAccountStoreBubbleController
 
   // Returns true iff the password account store is used.
   bool IsUsingAccountStore();
+
+  // Returns true if the user must opt-in to the account-scoped password storage
+  // before the bubble action can be concluded.
+  bool IsAccountStorageOptInRequired();
 
   // Returns the email of current primary account. Returns empty string if no
   // account is signed in.

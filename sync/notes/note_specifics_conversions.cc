@@ -207,9 +207,7 @@ void UpdateNoteNodeFromSpecifics(const sync_pb::NotesSpecifics& specifics,
   // resolving any conflict in GUID. Either GUIDs are the same, or the GUID in
   // specifics is invalid, and hence we can ignore it.
   DCHECK(specifics.guid() == node->guid() ||
-         !base::IsValidGUIDOutputString(specifics.guid()) ||
-         !base::FeatureList::IsEnabled(
-             switches::kUpdateBookmarkGUIDWithNodeReplacement));
+         !base::IsValidGUIDOutputString(specifics.guid()));
 
   if (!node->is_folder() && !node->is_separator()) {
     model->SetURL(node, GURL(specifics.url()));
@@ -231,11 +229,6 @@ void UpdateNoteNodeFromSpecifics(const sync_pb::NotesSpecifics& specifics,
 const vivaldi::NoteNode* ReplaceNoteNodeGUID(const vivaldi::NoteNode* node,
                                              const std::string& guid,
                                              vivaldi::NotesModel* model) {
-  if (!base::FeatureList::IsEnabled(
-          switches::kUpdateBookmarkGUIDWithNodeReplacement)) {
-    return node;
-  }
-  const vivaldi::NoteNode* new_node;
   DCHECK(base::IsValidGUIDOutputString(guid));
 
   if (node->guid() == guid) {
@@ -243,6 +236,7 @@ const vivaldi::NoteNode* ReplaceNoteNodeGUID(const vivaldi::NoteNode* node,
     return node;
   }
 
+  const vivaldi::NoteNode* new_node = nullptr;
   if (node->is_folder()) {
     new_node =
         model->AddFolder(node->parent(), node->parent()->GetIndexOf(node),

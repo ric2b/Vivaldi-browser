@@ -89,7 +89,7 @@ idl::Printer PrinterToIdl(
   idl_printer.id = printer.id();
   idl_printer.name = printer.display_name();
   idl_printer.description = printer.description();
-  idl_printer.uri = printer.uri().GetNormalized();
+  idl_printer.uri = printer.uri().GetNormalized(true /*always_print_port*/);
   idl_printer.source = PrinterSourceToIdl(printer.source());
   idl_printer.is_default =
       DoesPrinterMatchDefaultPrinterRules(printer, default_printer_rules);
@@ -232,7 +232,7 @@ bool CheckSettingsAndCapabilitiesCompatibility(
     return false;
 
   base::Optional<bool> is_color =
-      ::printing::IsColorModelSelected(static_cast<int>(settings.color()));
+      ::printing::IsColorModelSelected(settings.color());
   bool color_mode_selected = is_color.has_value() && is_color.value();
   if (!color_mode_selected &&
       capabilities.bw_model ==

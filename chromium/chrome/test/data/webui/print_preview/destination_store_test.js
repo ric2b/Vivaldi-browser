@@ -31,7 +31,10 @@ destination_store_test.TestNames = {
   RecentSaveAsPdf: 'recent save as pdf',
   MultipleRecentDestinationsAccounts: 'multiple recent destinations accounts',
   LoadAndSelectDestination: 'select loaded destination',
+  MultipleRecentDestinationsAccountsCros:
+      'multiple recent destinations accounts for Chrome OS',
   LoadSaveToDriveCros: 'load Save to Drive Cros',
+  DriveNotMounted: 'drive not mounted',
 };
 
 suite(destination_store_test.suiteName, function() {
@@ -58,6 +61,10 @@ suite(destination_store_test.suiteName, function() {
 
   /** @type {number} */
   let numPrintersSelected = 0;
+
+  /** @type {boolean} */
+  const saveToDriveFlagEnabled =
+      isChromeOS && loadTimeData.getBoolean('printSaveToDrive');
 
   /** @override */
   setup(function() {
@@ -113,7 +120,8 @@ suite(destination_store_test.suiteName, function() {
         DestinationStore.EventType.SELECTED_DESTINATION_CAPABILITIES_READY,
         destinationStore);
     destinationStore.init(
-        initialSettings.pdfPrinterDisabled, initialSettings.printerName,
+        initialSettings.pdfPrinterDisabled, !!initialSettings.isDriveMounted,
+        initialSettings.printerName,
         initialSettings.serializedDefaultDestinationSelectionRulesStr,
         recentDestinations);
     return opt_expectPrinterFailure ? Promise.resolve() : Promise.race([
@@ -201,7 +209,8 @@ suite(destination_store_test.suiteName, function() {
           // The other recent destinations should be prefetched, but only one
           // should have been selected so there was only one preview request.
           const reportedPrinters = destinationStore.destinations();
-          assertEquals(4, reportedPrinters.length);
+          const expectedPrinters = isChromeOS && saveToDriveFlagEnabled ? 5 : 4;
+          assertEquals(expectedPrinters, reportedPrinters.length);
           destinations.forEach((destination, index) => {
             assertEquals(
                 index < 3, reportedPrinters.some(p => p.id === destination.id));
@@ -279,6 +288,7 @@ suite(destination_store_test.suiteName, function() {
         initialSettings.serializedDefaultDestinationSelectionRulesStr = '';
         initialSettings.serializedAppStateStr = '';
         initialSettings.pdfPrinterDisabled = true;
+        initialSettings.isDriveMounted = false;
         initialSettings.printerName = '';
 
         return setInitialSettings(false).then(function(args) {
@@ -303,6 +313,7 @@ suite(destination_store_test.suiteName, function() {
         initialSettings.serializedDefaultDestinationSelectionRulesStr = '';
         initialSettings.serializedAppStateStr = '';
         initialSettings.pdfPrinterDisabled = true;
+        initialSettings.isDriveMounted = false;
         initialSettings.printerName = '';
         localDestinations = [];
 
@@ -380,20 +391,24 @@ suite(destination_store_test.suiteName, function() {
       assert(
           destination_store_test.TestNames.MultipleRecentDestinationsAccounts),
       function() {
+        if (isChromeOS && saveToDriveFlagEnabled) {
+          return;
+        }
+
         const account1 = 'foo@chromium.org';
         const account2 = 'bar@chromium.org';
         const driveUser1 = getGoogleDriveDestination(account1);
         const driveUser2 = getGoogleDriveDestination(account2);
-        const cloudPrinterUser1 = new Destination(
+        const cloudPrintFoo = new Destination(
             'FooCloud', DestinationType.GOOGLE, DestinationOrigin.COOKIES,
             'FooCloudName', DestinationConnectionStatus.ONLINE,
             {account: account1});
         const recentDestinations = [
           makeRecentDestination(driveUser1),
           makeRecentDestination(driveUser2),
-          makeRecentDestination(cloudPrinterUser1),
+          makeRecentDestination(cloudPrintFoo),
         ];
-        cloudDestinations = [driveUser1, driveUser2, cloudPrinterUser1];
+        cloudDestinations = [driveUser1, driveUser2, cloudPrintFoo];
         initialSettings.serializedAppStateStr = JSON.stringify({
           version: 2,
           recentDestinations: recentDestinations,
@@ -463,7 +478,7 @@ suite(destination_store_test.suiteName, function() {
             .then(function(args) {
               assertEquals(
                   Destination.GooglePromotedId.SAVE_AS_PDF, args.destinationId);
-              assertEquals(PrinterType.LOCAL_PRINTER, args.printerType);
+              assertEquals(PrinterType.PDF_PRINTER, args.printerType);
               assertEquals(
                   Destination.GooglePromotedId.SAVE_AS_PDF,
                   destinationStore.selectedDestination.id);
@@ -514,6 +529,84 @@ suite(destination_store_test.suiteName, function() {
             });
       });
 
+  /**
+   * Tests that if there are recent destinations from different accounts, only
+   * destinations associated with the most recent account are fetched.
+   */
+  test(
+      assert(destination_store_test.TestNames
+                 .MultipleRecentDestinationsAccountsCros),
+      function() {
+        const account1 = 'foo@chromium.org';
+        const account2 = 'bar@chromium.org';
+        const cloudPrintFoo = new Destination(
+            'FooCloud', DestinationType.GOOGLE, DestinationOrigin.COOKIES,
+            'FooCloudName', DestinationConnectionStatus.ONLINE,
+            {account: account1});
+        const cloudPrintBar = new Destination(
+            'BarCloud', DestinationType.GOOGLE, DestinationOrigin.COOKIES,
+            'BarCloudName', DestinationConnectionStatus.ONLINE,
+            {account: account1});
+        const cloudPrintBaz = new Destination(
+            'BazCloud', DestinationType.GOOGLE, DestinationOrigin.COOKIES,
+            'BazCloudName', DestinationConnectionStatus.ONLINE,
+            {account: account2});
+        const recentDestinations = [
+          makeRecentDestination(cloudPrintFoo),
+          makeRecentDestination(cloudPrintBar),
+          makeRecentDestination(cloudPrintBaz),
+        ];
+        cloudDestinations = [cloudPrintFoo, cloudPrintBar, cloudPrintBaz];
+        initialSettings.serializedAppStateStr = JSON.stringify({
+          version: 2,
+          recentDestinations: recentDestinations,
+        });
+        initialSettings.userAccounts = [account1, account2];
+        initialSettings.syncAvailable = true;
+
+        const waitForPrinterDone = () => {
+          return eventToPromise(
+              CloudPrintInterfaceEventType.PRINTER_DONE,
+              cloudPrintInterface.getEventTarget());
+        };
+
+        // Wait for all three cloud printers to load.
+        return Promise
+            .all([
+              setInitialSettings(false),
+              waitForPrinterDone(),
+            ])
+            .then(() => waitForPrinterDone())
+            .then(() => waitForPrinterDone())
+            .then(() => {
+              // Should have loaded FooCloud as the selected printer, since
+              // it was most recent.
+              assertEquals('FooCloud', destinationStore.selectedDestination.id);
+
+              // Only the other cloud destination for the same user account
+              // should have been prefetched.
+              const loadedPrintersAccount1 =
+                  destinationStore.destinations(account1);
+              assertEquals(4, loadedPrintersAccount1.length);
+              cloudDestinations.forEach((destination) => {
+                assertEquals(
+                    destination.account === account1,
+                    loadedPrintersAccount1.some(
+                        p => p.key === destination.key));
+              });
+              assertEquals(1, numPrintersSelected);
+
+              // Cloud printer, Save as PDF, and Save to Drive exist when
+              // filtering for account 2.
+              const loadedPrintersAccount2 =
+                  destinationStore.destinations(account2);
+              assertEquals(3, loadedPrintersAccount2.length);
+              assertEquals(
+                  Destination.GooglePromotedId.SAVE_AS_PDF,
+                  loadedPrintersAccount2[0].id);
+            });
+      });
+
   /** Tests that the SAVE_TO_DRIVE_CROS destination is loaded on Chrome OS. */
   test(
       assert(destination_store_test.TestNames.LoadSaveToDriveCros), function() {
@@ -523,4 +616,15 @@ suite(destination_store_test.suiteName, function() {
                   Destination.GooglePromotedId.SAVE_TO_DRIVE_CROS));
         });
       });
+
+  // Tests that the SAVE_TO_DRIVE_CROS destination is not loaded on Chrome OS
+  // when Google Drive is not mounted.
+  test(assert(destination_store_test.TestNames.DriveNotMounted), function() {
+    initialSettings.isDriveMounted = false;
+    return setInitialSettings(false).then(function(args) {
+      assertFalse(!!destinationStore.destinations().find(
+          destination => destination.id ===
+              Destination.GooglePromotedId.SAVE_TO_DRIVE_CROS));
+    });
+  });
 });

@@ -56,7 +56,7 @@ std::string GetCorsExemptRequestedWithHeaderName() {
   return base::JoinString(pieces, "-");
 }
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
 const int kLowestRendererOomScore = 300;
 const int kHighestRendererOomScore = 1000;
 

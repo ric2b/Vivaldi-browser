@@ -14,7 +14,7 @@
     android:layout_width="match_parent"
     android:layout_height="@dimen/toolbar_height_no_shadow"
     android:layout_marginTop="@dimen/tab_strip_height"
-    android:background="@color/default_bg_color"
+    android:background="@color/toolbar_background_primary"
     android:paddingStart="@dimen/tablet_toolbar_start_padding" >
 
     <LinearLayout
@@ -26,7 +26,7 @@
         <org.vivaldi.browser.toolbar.PanelButton
             android:id="@+id/panel_button"
             app:tint="@color/default_icon_color_tint_list"
-            style="@style/BottomToolbarButton"
+            style="@style/ToolbarButton"
             android:contentDescription="@string/toolbar_button_panels" />
 
         <org.chromium.ui.widget.ChromeImageButton
@@ -114,6 +114,16 @@
                 android:importantForAccessibility="no"
                 android:layout_gravity="center"
                 android:visibility="invisible" />
+
+            <!-- Vivaldi - Adding dummy button to handle long click event on + button in tab strip  -->
+            <org.chromium.chrome.browser.toolbar.TabSwitcherButtonView
+                android:id="@+id/tab_switcher_menu_helper_button"
+                style="@style/ToolbarMenuButtonPhone"
+                tools:ignore="ContentDescription"
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:importantForAccessibility="no"
+                android:layout_gravity="top|end"/>
 
         </org.chromium.chrome.browser.toolbar.menu_button.MenuButton>
     </LinearLayout>

@@ -93,9 +93,10 @@ enum AppType {
   kExtension,  // Extension-backed app.
   kWeb,        // Web app.
   kMacNative,  // Native Mac app.
-  kPluginVm,   // Plugin VM app.
-  kLacros,     // Lacros app.
+  kPluginVm,   // Plugin VM app, see go/pluginvm.
+  kLacros,     // Lacros browser app, see //docs/lacros.md.
   kRemote,     // Remote app.
+  kBorealis,   // Borealis app, see go/borealis-app.
 };
 
 // Whether an app is ready to launch, i.e. installed.
@@ -324,6 +325,11 @@ struct Intent {
   string? mime_type; // MIME type. e.g. text/plain, image/*.
   array<url.mojom.Url>? file_urls; // The URLs of the files to share.
   string? activity_name; // The activity for the app to launch.
+
+  // The Drive share URL, this is only filled if the intent contains a file
+  // from Google Drive.
+  url.mojom.Url? drive_share_url;
+  string? share_text; // Text to share. e.g. Share link to other app.
 };
 
 // Represents a group of |app_ids| that is no longer preferred app of their

@@ -18,21 +18,21 @@
 namespace cc {
 
 LayerTreeHostPixelResourceTest::LayerTreeHostPixelResourceTest(
-    PixelResourceTestCase test_case)
-    : LayerTreePixelTest(test_case.renderer_type), test_case_(test_case) {
-  set_raster_type(test_case_.raster_type);
+    RasterTestConfig test_config)
+    : LayerTreePixelTest(test_config.renderer_type), test_config_(test_config) {
+  set_raster_type(test_config_.raster_type);
 }
 
 const char* LayerTreeHostPixelResourceTest::GetRendererSuffix() const {
   switch (renderer_type_) {
-    case TestRendererType::kGL:
+    case viz::RendererType::kGL:
       return "gl";
-    case TestRendererType::kSkiaGL:
+    case viz::RendererType::kSkiaGL:
       return "skia_gl";
-    case TestRendererType::kSkiaVk:
-    case TestRendererType::kSkiaDawn:
+    case viz::RendererType::kSkiaVk:
+    case viz::RendererType::kSkiaDawn:
       return "skia_vk";
-    case TestRendererType::kSoftware:
+    case viz::RendererType::kSoftware:
       return "sw";
   }
 }

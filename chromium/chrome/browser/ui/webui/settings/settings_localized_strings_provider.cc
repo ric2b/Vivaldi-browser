@@ -97,6 +97,7 @@
 #include "chrome/browser/chromeos/ownership/owner_settings_service_chromeos.h"
 #include "chrome/browser/chromeos/ownership/owner_settings_service_chromeos_factory.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
+#include "chrome/browser/ui/webui/settings/chromeos/constants/routes.mojom.h"
 #include "chrome/common/webui_url_constants.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "components/user_manager/user_manager.h"
@@ -720,6 +721,18 @@ void AddLanguagesStrings(content::WebUIDataSource* html_source,
   html_source->AddBoolean(
       "isSecondaryUser",
       user && user->GetAccountId() != primary_user->GetAccountId());
+
+  html_source->AddString(
+      "openChromeOSLanguagesSettingsLabel",
+      l10n_util::GetStringUTF16(
+          IDS_SETTINGS_LANGUAGES_OPEN_CHROME_OS_SETTINGS_LABEL));
+  html_source->AddString(
+      "chromeOSLanguagesSettingsPath",
+      chromeos::settings::mojom::kLanguagesAndInputSectionPath);
+  html_source->AddBoolean("isChromeOSLanguagesSettingsUpdate",
+                          base::FeatureList::IsEnabled(
+                              chromeos::features::kLanguageSettingsUpdate));
+
 #endif  // defined(OS_CHROMEOS)
 }
 
@@ -818,6 +831,7 @@ void AddAutofillStrings(content::WebUIDataSource* html_source,
       {"compromisedPasswords", IDS_SETTINGS_COMPROMISED_PASSWORDS},
       {"compromisedPasswordsDescription",
        IDS_SETTINGS_COMPROMISED_PASSWORDS_ADVICE},
+      {"weakPasswords", IDS_SETTINGS_WEAK_PASSWORDS},
       {"changePasswordButton", IDS_SETTINGS_CHANGE_PASSWORD_BUTTON},
       {"changePasswordInApp", IDS_SETTINGS_CHANGE_PASSWORD_IN_APP_LABEL},
       {"leakedPassword", IDS_SETTINGS_COMPROMISED_PASSWORD_REASON_LEAKED},
@@ -910,6 +924,7 @@ void AddAutofillStrings(content::WebUIDataSource* html_source,
       {"editPasswordTitle", IDS_SETTINGS_PASSWORD_EDIT_TITLE},
       {"editPassword", IDS_SETTINGS_PASSWORD_EDIT},
       {"editPasswordFootnote", IDS_SETTINGS_PASSWORD_EDIT_FOOTNOTE},
+      {"usernameAlreadyUsed", IDS_SETTINGS_PASSWORD_USERNAME_ALREADY_USED},
       {"copyPassword", IDS_SETTINGS_PASSWORD_COPY},
       {"passwordStoredOnDevice", IDS_SETTINGS_PASSWORD_STORED_ON_DEVICE},
       {"passwordStoredInAccount", IDS_SETTINGS_PASSWORD_STORED_IN_ACCOUNT},
@@ -1023,6 +1038,25 @@ void AddAutofillStrings(content::WebUIDataSource* html_source,
                          autofill::payments::GetManageInstrumentsUrl().spec());
   html_source->AddString("paymentMethodsLearnMoreURL",
                          chrome::kPaymentMethodsLearnMoreURL);
+  html_source->AddString(
+      "weakPasswordsDescription",
+      l10n_util::GetStringFUTF16(
+          IDS_SETTINGS_WEAK_PASSWORDS_DESCRIPTION,
+          base::ASCIIToUTF16(chrome::kSeeMoreSecurityTipsURL)));
+  html_source->AddString(
+      "weakPasswordsDescriptionGeneration",
+      l10n_util::GetStringFUTF16(
+          IDS_SETTINGS_WEAK_PASSWORDS_DESCRIPTION_GENERATION,
+          base::ASCIIToUTF16(chrome::kPasswordGenerationLearnMoreURL)));
+  html_source->AddString("signedOutUserLabel",
+                         l10n_util::GetStringFUTF16(
+                             IDS_SETTINGS_SIGNED_OUT_USER_LABEL,
+                             base::ASCIIToUTF16(chrome::kSyncLearnMoreURL)));
+  html_source->AddString(
+      "signedOutUserHasCompromisedCredentialsLabel",
+      l10n_util::GetStringFUTF16(
+          IDS_SETTINGS_SIGNED_OUT_USER_HAS_COMPROMISED_CREDENTIALS_LABEL,
+          base::ASCIIToUTF16(chrome::kSyncLearnMoreURL)));
   // The warning message that will be shown if there is a content setting
   // pattern with a wildcard in it. The check for wildcards is done on the js
   // side.
@@ -1176,6 +1210,12 @@ void AddPeopleStrings(content::WebUIDataSource* html_source, Profile* profile) {
      IDS_SETTINGS_SYNC_DISCONNECT_DELETE_PROFILE_WARNING_WITH_COUNTS_PLURAL},
     {"deleteProfileWarningWithoutCounts",
      IDS_SETTINGS_SYNC_DISCONNECT_DELETE_PROFILE_WARNING_WITHOUT_COUNTS},
+
+    // Color picker strings:
+    {"colorPickerLabel", IDS_NTP_CUSTOMIZE_COLOR_PICKER_LABEL},
+    {"defaultThemeLabel", IDS_NTP_CUSTOMIZE_DEFAULT_LABEL},
+    {"thirdPartyThemeDescription", IDS_NTP_CUSTOMIZE_3PT_THEME_DESC},
+    {"uninstallThirdPartyThemeButton", IDS_NTP_CUSTOMIZE_3PT_THEME_UNINSTALL},
   };
   AddLocalizedStringsBulk(html_source, kLocalizedStrings);
 
@@ -1478,14 +1518,12 @@ void AddSearchStrings(content::WebUIDataSource* html_source) {
   static constexpr webui::LocalizedString kLocalizedStrings[] = {
       {"searchEnginesManage", IDS_SETTINGS_SEARCH_MANAGE_SEARCH_ENGINES},
       {"searchPageTitle", IDS_SETTINGS_SEARCH},
-
+      {"searchExplanation", IDS_SETTINGS_SEARCH_EXPLANATION},
   };
   AddLocalizedStringsBulk(html_source, kLocalizedStrings);
 
-  html_source->AddString("searchExplanation",
-                         l10n_util::GetStringFUTF16(
-                             IDS_SETTINGS_SEARCH_EXPLANATION,
-                             base::ASCIIToUTF16(chrome::kOmniboxLearnMoreURL)));
+  html_source->AddString("searchExplanationLearnMoreURL",
+                         base::ASCIIToUTF16(chrome::kOmniboxLearnMoreURL));
 }
 
 void AddSearchEnginesStrings(content::WebUIDataSource* html_source) {
@@ -1752,8 +1790,8 @@ void AddSiteSettingsStrings(content::WebUIDataSource* html_source,
      IDS_SETTINGS_SITE_SETTINGS_ALLOW_RECENTLY_CLOSED_SITES},
     {"siteSettingsAllowRecentlyClosedSitesRecommended",
      IDS_SETTINGS_SITE_SETTINGS_ALLOW_RECENTLY_CLOSED_SITES_RECOMMENDED},
-    {"siteSettingsBackgroundSyncBlocked",
-     IDS_SETTINGS_SITE_SETTINGS_BACKGROUND_SYNC_BLOCKED},
+    {"siteSettingsBackgroundSyncBlock",
+     IDS_SETTINGS_SITE_SETTINGS_BACKGROUND_SYNC_BLOCK},
     {"siteSettingsHandlersAsk", IDS_SETTINGS_SITE_SETTINGS_HANDLERS_ASK},
     {"siteSettingsHandlersAskRecommended",
      IDS_SETTINGS_SITE_SETTINGS_HANDLERS_ASK_RECOMMENDED},
@@ -1825,11 +1863,11 @@ void AddSiteSettingsStrings(content::WebUIDataSource* html_source,
     {"siteSettingsSourcePolicyBlock",
      IDS_PAGE_INFO_PERMISSION_BLOCKED_BY_POLICY},
     {"siteSettingsSourcePolicyAsk", IDS_PAGE_INFO_PERMISSION_ASK_BY_POLICY},
-    {"siteSettingsAdsBlockNotBlacklistedSingular",
-     IDS_SETTINGS_SITE_SETTINGS_ADS_BLOCK_NOT_BLACKLISTED_SINGULAR},
+    {"siteSettingsAdsBlockNotBlocklistedSingular",
+     IDS_SETTINGS_SITE_SETTINGS_ADS_BLOCK_NOT_BLOCKLISTED_SINGULAR},
     {"siteSettingsAllowlisted", IDS_SETTINGS_SITE_SETTINGS_ALLOWLISTED},
-    {"siteSettingsAdsBlockBlacklistedSingular",
-     IDS_SETTINGS_SITE_SETTINGS_ADS_BLOCK_BLACKLISTED_SINGULAR},
+    {"siteSettingsAdsBlockBlocklistedSingular",
+     IDS_SETTINGS_SITE_SETTINGS_ADS_BLOCK_BLOCKLISTED_SINGULAR},
     {"siteSettingsSourceDrmDisabled",
      IDS_SETTINGS_SITE_SETTINGS_SOURCE_DRM_DISABLED},
     {"siteSettingsSourceEmbargo",
@@ -1934,6 +1972,125 @@ void AddSiteSettingsStrings(content::WebUIDataSource* html_source,
     {"incognitoSiteExceptionDesc",
      IDS_SETTINGS_SITE_SETTINGS_INCOGNITO_SITE_EXCEPTION_DESC},
     {"noSitesAdded", IDS_SETTINGS_SITE_NO_SITES_ADDED},
+    {"siteSettingsDefaultBehavior",
+     IDS_SETTINGS_SITE_SETTINGS_DEFAULT_BEHAVIOR},
+    {"siteSettingsDefaultBehaviorDescription",
+     IDS_SETTINGS_SITE_SETTINGS_DEFAULT_BEHAVIOR_DESCRIPTION},
+    {"siteSettingsAdsDescription", IDS_SETTINGS_SITE_SETTINGS_ADS_DESCRIPTION},
+    {"siteSettingsAdsAllowed", IDS_SETTINGS_SITE_SETTINGS_ADS_ALLOWED},
+    {"siteSettingsAdsBlocked", IDS_SETTINGS_SITE_SETTINGS_ADS_BLOCKED},
+    {"siteSettingsArDescription", IDS_SETTINGS_SITE_SETTINGS_AR_DESCRIPTION},
+    {"siteSettingsArAllowed", IDS_SETTINGS_SITE_SETTINGS_AR_ALLOWED},
+    {"siteSettingsArBlocked", IDS_SETTINGS_SITE_SETTINGS_AR_BLOCKED},
+    {"siteSettingsAutomaticDownloadsDescription",
+     IDS_SETTINGS_SITE_SETTINGS_AUTOMATIC_DOWNLOADS_DESCRIPTION},
+    {"siteSettingsAutomaticDownloadsAllowed",
+     IDS_SETTINGS_SITE_SETTINGS_AUTOMATIC_DOWNLOADS_ALLOWED},
+    {"siteSettingsAutomaticDownloadsBlocked",
+     IDS_SETTINGS_SITE_SETTINGS_AUTOMATIC_DOWNLOADS_BLOCKED},
+    {"siteSettingsBackgroundSyncDescription",
+     IDS_SETTINGS_SITE_SETTINGS_BACKGROUND_SYNC_DESCRIPTION},
+    {"siteSettingsBackgroundSyncAllowed",
+     IDS_SETTINGS_SITE_SETTINGS_BACKGROUND_SYNC_ALLOWED},
+    {"siteSettingsBackgroundSyncBlocked",
+     IDS_SETTINGS_SITE_SETTINGS_BACKGROUND_SYNC_BLOCKED},
+    {"siteSettingsCameraDescription",
+     IDS_SETTINGS_SITE_SETTINGS_CAMERA_DESCRIPTION},
+    {"siteSettingsCameraAllowed", IDS_SETTINGS_SITE_SETTINGS_CAMERA_ALLOWED},
+    {"siteSettingsCameraBlocked", IDS_SETTINGS_SITE_SETTINGS_CAMERA_BLOCKED},
+    {"siteSettingsCameraBlockedSubLabel",
+     IDS_SETTINGS_SITE_SETTINGS_CAMERA_BLOCKED_SUB_LABEL},
+    {"siteSettingsClipboardDescription",
+     IDS_SETTINGS_SITE_SETTINGS_CLIPBOARD_DESCRIPTION},
+    {"siteSettingsClipboardAllowed",
+     IDS_SETTINGS_SITE_SETTINGS_CLIPBOARD_ALLOWED},
+    {"siteSettingsClipboardBlocked",
+     IDS_SETTINGS_SITE_SETTINGS_CLIPBOARD_BLOCKED},
+    {"siteSettingsFileSystemWriteDescription",
+     IDS_SETTINGS_SITE_SETTINGS_FILE_SYSTEM_WRITE_DESCRIPTION},
+    {"siteSettingsFileSystemWriteAllowed",
+     IDS_SETTINGS_SITE_SETTINGS_FILE_SYSTEM_WRITE_ALLOWED},
+    {"siteSettingsFileSystemWriteBlocked",
+     IDS_SETTINGS_SITE_SETTINGS_FILE_SYSTEM_WRITE_BLOCKED},
+    {"siteSettingsLocationDescription",
+     IDS_SETTINGS_SITE_SETTINGS_LOCATION_DESCRIPTION},
+    {"siteSettingsLocationAllowed",
+     IDS_SETTINGS_SITE_SETTINGS_LOCATION_ALLOWED},
+    {"siteSettingsLocationBlocked",
+     IDS_SETTINGS_SITE_SETTINGS_LOCATION_BLOCKED},
+    {"siteSettingsLocationBlockedSubLabel",
+     IDS_SETTINGS_SITE_SETTINGS_LOCATION_BLOCKED_SUB_LABEL},
+    {"siteSettingsImagesDescription",
+     IDS_SETTINGS_SITE_SETTINGS_IMAGES_DESCRIPTION},
+    {"siteSettingsImagesAllowed", IDS_SETTINGS_SITE_SETTINGS_IMAGES_ALLOWED},
+    {"siteSettingsImagesBlocked", IDS_SETTINGS_SITE_SETTINGS_IMAGES_BLOCKED},
+    {"siteSettingsJavascriptDescription",
+     IDS_SETTINGS_SITE_SETTINGS_JAVASCRIPT_DESCRIPTION},
+    {"siteSettingsJavascriptAllowed",
+     IDS_SETTINGS_SITE_SETTINGS_JAVASCRIPT_ALLOWED},
+    {"siteSettingsJavascriptBlocked",
+     IDS_SETTINGS_SITE_SETTINGS_JAVASCRIPT_BLOCKED},
+    {"siteSettingsMicDescription", IDS_SETTINGS_SITE_SETTINGS_MIC_DESCRIPTION},
+    {"siteSettingsMicAllowed", IDS_SETTINGS_SITE_SETTINGS_MIC_ALLOWED},
+    {"siteSettingsMicBlocked", IDS_SETTINGS_SITE_SETTINGS_MIC_BLOCKED},
+    {"siteSettingsMicBlockedSubLabel",
+     IDS_SETTINGS_SITE_SETTINGS_MIC_BLOCKED_SUB_LABEL},
+    {"siteSettingsMidiDescription",
+     IDS_SETTINGS_SITE_SETTINGS_MIDI_DESCRIPTION},
+    {"siteSettingsMidiAllowed", IDS_SETTINGS_SITE_SETTINGS_MIDI_ALLOWED},
+    {"siteSettingsMidiBlocked", IDS_SETTINGS_SITE_SETTINGS_MIDI_BLOCKED},
+    {"siteSettingsPaymentHandlersDescription",
+     IDS_SETTINGS_SITE_SETTINGS_PAYMENT_HANDLERS_DESCRIPTION},
+    {"siteSettingsPaymentHandlersAllowed",
+     IDS_SETTINGS_SITE_SETTINGS_PAYMENT_HANDLERS_ALLOWED},
+    {"siteSettingsPaymentHandlersBlocked",
+     IDS_SETTINGS_SITE_SETTINGS_PAYMENT_HANDLERS_BLOCKED},
+    {"siteSettingsFlashDescription",
+     IDS_SETTINGS_SITE_SETTINGS_FLASH_DESCRIPTION},
+    {"siteSettingsFlashAllowed", IDS_SETTINGS_SITE_SETTINGS_FLASH_ALLOWED},
+    {"siteSettingsFlashBlocked", IDS_SETTINGS_SITE_SETTINGS_FLASH_BLOCKED},
+    {"siteSettingsPopupsDescription",
+     IDS_SETTINGS_SITE_SETTINGS_POPUPS_DESCRIPTION},
+    {"siteSettingsPopupsAllowed", IDS_SETTINGS_SITE_SETTINGS_POPUPS_ALLOWED},
+    {"siteSettingsPopupsBlocked", IDS_SETTINGS_SITE_SETTINGS_POPUPS_BLOCKED},
+    {"siteSettingsProtectedContentDescription",
+     IDS_SETTINGS_SITE_SETTINGS_PROTECTED_CONTENT_DESCRIPTION},
+    {"siteSettingsProtectedContentAllowed",
+     IDS_SETTINGS_SITE_SETTINGS_PROTECTED_CONTENT_ALLOWED},
+    {"siteSettingsProtectedContentBlocked",
+     IDS_SETTINGS_SITE_SETTINGS_PROTECTED_CONTENT_BLOCKED},
+    {"siteSettingsMotionSensorsDescription",
+     IDS_SETTINGS_SITE_SETTINGS_MOTION_SENSORS_DESCRIPTION},
+    {"siteSettingsMotionSensorsAllowed",
+     IDS_SETTINGS_SITE_SETTINGS_MOTION_SENSORS_ALLOWED},
+    {"siteSettingsMotionSensorsBlocked",
+     IDS_SETTINGS_SITE_SETTINGS_MOTION_SENSORS_BLOCKED},
+    {"siteSettingsMotionSensorsBlockedSubLabel",
+     IDS_SETTINGS_SITE_SETTINGS_MOTION_SENSORS_BLOCKED_SUB_LABEL},
+    {"siteSettingsSerialPortsDescription",
+     IDS_SETTINGS_SITE_SETTINGS_SERIAL_PORTS_DESCRIPTION},
+    {"siteSettingsSerialPortsAllowed",
+     IDS_SETTINGS_SITE_SETTINGS_SERIAL_PORTS_ALLOWED},
+    {"siteSettingsSerialPortsBlocked",
+     IDS_SETTINGS_SITE_SETTINGS_SERIAL_PORTS_BLOCKED},
+    {"siteSettingsSoundDescription",
+     IDS_SETTINGS_SITE_SETTINGS_SOUND_DESCRIPTION},
+    {"siteSettingsSoundAllowed", IDS_SETTINGS_SITE_SETTINGS_SOUND_ALLOWED},
+    {"siteSettingsSoundBlocked", IDS_SETTINGS_SITE_SETTINGS_SOUND_BLOCKED},
+    {"siteSettingsUnsandboxedPluginsDescription",
+     IDS_SETTINGS_SITE_SETTINGS_UNSANDBOXED_PLUGINS_DESCRIPTION},
+    {"siteSettingsUnsandboxedPluginsAllowed",
+     IDS_SETTINGS_SITE_SETTINGS_UNSANDBOXED_PLUGINS_ALLOWED},
+    {"siteSettingsUnsandboxedPluginsBlocked",
+     IDS_SETTINGS_SITE_SETTINGS_UNSANDBOXED_PLUGINS_BLOCKED},
+    {"siteSettingsUsbDescription", IDS_SETTINGS_SITE_SETTINGS_USB_DESCRIPTION},
+    {"siteSettingsUsbAllowed", IDS_SETTINGS_SITE_SETTINGS_USB_ALLOWED},
+    {"siteSettingsUsbBlocked", IDS_SETTINGS_SITE_SETTINGS_USB_BLOCKED},
+    {"siteSettingsVrDescription", IDS_SETTINGS_SITE_SETTINGS_VR_DESCRIPTION},
+    {"siteSettingsVrAllowed", IDS_SETTINGS_SITE_SETTINGS_VR_ALLOWED},
+    {"siteSettingsVrBlocked", IDS_SETTINGS_SITE_SETTINGS_VR_BLOCKED},
+    {"siteSettingsZoomLevelsDescription",
+     IDS_SETTINGS_SITE_SETTINGS_ZOOM_LEVELS_DESCRIPTION},
     {"siteSettingsAds", IDS_SETTINGS_SITE_SETTINGS_ADS},
     {"siteSettingsAdsBlock", IDS_SETTINGS_SITE_SETTINGS_ADS_BLOCK},
     {"siteSettingsAdsBlockRecommended",
@@ -1978,6 +2135,11 @@ void AddSiteSettingsStrings(content::WebUIDataSource* html_source,
     {"siteSettingsFontAccessAsk", IDS_SETTINGS_SITE_SETTINGS_FONT_ACCESS_ASK},
     {"siteSettingsFontAccessBlock",
      IDS_SETTINGS_SITE_SETTINGS_FONT_ACCESS_BLOCK},
+    {"siteSettingsIdleDetection", IDS_SETTINGS_SITE_SETTINGS_IDLE_DETECTION},
+    {"siteSettingsIdleDetectionAsk",
+     IDS_SETTINGS_SITE_SETTINGS_IDLE_DETECTION_ASK},
+    {"siteSettingsIdleDetectionBlock",
+     IDS_SETTINGS_SITE_SETTINGS_IDLE_DETECTION_BLOCK},
   };
   AddLocalizedStringsBulk(html_source, kLocalizedStrings);
 
@@ -2021,17 +2183,9 @@ void AddSiteSettingsStrings(content::WebUIDataSource* html_source,
       cmd.HasSwitch(::switches::kEnableExperimentalWebPlatformFeatures));
 
   html_source->AddBoolean(
-      "enableFileSystemWriteContentSetting",
-      base::FeatureList::IsEnabled(::blink::features::kNativeFileSystemAPI));
-
-  html_source->AddBoolean(
       "enableRemovingAllThirdPartyCookies",
       base::FeatureList::IsEnabled(
           browsing_data::features::kEnableRemovingAllThirdPartyCookies));
-
-  html_source->AddBoolean(
-      "enableInsecureContentContentSetting",
-      base::FeatureList::IsEnabled(features::kMixedContentSiteSetting));
 
   html_source->AddBoolean(
       "enableStoragePressureUI",

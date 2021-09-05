@@ -16,11 +16,12 @@
 
 #include "base/base_paths_fuchsia.h"
 #include "base/callback_helpers.h"
+#include "base/files/file_util.h"
 #include "base/fuchsia/file_utils.h"
 #include "base/fuchsia/filtered_service_directory.h"
 #include "base/fuchsia/fuchsia_logging.h"
+#include "base/fuchsia/process_context.h"
 #include "base/fuchsia/scoped_service_binding.h"
-#include "base/fuchsia/test_component_context_for_process.h"
 #include "base/path_service.h"
 #include "base/strings/strcat.h"
 #include "base/strings/stringprintf.h"
@@ -33,16 +34,16 @@
 #include "fuchsia/base/fake_component_context.h"
 #include "fuchsia/base/fit_adapter.h"
 #include "fuchsia/base/frame_test_util.h"
-#include "fuchsia/base/fuchsia_dir_scheme.h"
 #include "fuchsia/base/mem_buffer_util.h"
 #include "fuchsia/base/result_receiver.h"
 #include "fuchsia/base/string_util.h"
 #include "fuchsia/base/test_devtools_list_fetcher.h"
-#include "fuchsia/base/test_navigation_listener.h"
 #include "fuchsia/base/url_request_rewrite_test_util.h"
 #include "fuchsia/runners/cast/cast_runner.h"
+#include "fuchsia/runners/cast/cast_runner_switches.h"
 #include "fuchsia/runners/cast/fake_application_config_manager.h"
 #include "fuchsia/runners/cast/test_api_bindings.h"
+#include "mojo/core/embedder/embedder.h"
 #include "net/test/embedded_test_server/default_handlers.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -50,30 +51,15 @@
 namespace {
 
 constexpr char kTestAppId[] = "00000000";
+constexpr char kSecondTestAppId[] = "FFFFFFFF";
 
 constexpr char kBlankAppUrl[] = "/defaultresponse";
 constexpr char kEchoHeaderPath[] = "/echoheader?Test";
 
-constexpr char kTestServerRoot[] =
-    FILE_PATH_LITERAL("fuchsia/runners/cast/testdata");
+constexpr char kTestServerRoot[] = "fuchsia/runners/cast/testdata";
 
 constexpr char kDummyAgentUrl[] =
     "fuchsia-pkg://fuchsia.com/dummy_agent#meta/dummy_agent.cmx";
-
-// Helper used to ensure that cr_fuchsia::RegisterFuchsiaDirScheme() is called
-// once per process to register fuchsia-dir scheme. In cast_runner this function
-// is called in main.cc, but that code is not executed in
-// cast_runner_integration_tests.
-//
-// TODO(crbug.com/1062351): Update the tests to start cast_runner component
-// instead of creating CastRunner in process. Then remove this function.
-void EnsureFuchsiaDirSchemeInitialized() {
-  class SchemeInitializer {
-   public:
-    SchemeInitializer() { cr_fuchsia::RegisterFuchsiaDirScheme(); }
-  };
-  static SchemeInitializer initializer;
-}
 
 class FakeUrlRequestRewriteRulesProvider
     : public chromium::cast::UrlRequestRewriteRulesProvider {
@@ -213,6 +199,52 @@ class FakeComponentState : public cr_fuchsia::AgentImpl::ComponentStateBase {
       context_binding_;
   base::OnceClosure on_delete_;
 };
+
+sys::ServiceDirectory StartCastRunner(
+    fidl::InterfaceHandle<fuchsia::io::Directory> web_engine_host_directory,
+    bool enable_headless,
+    bool enable_vulkan,
+    fidl::InterfaceRequest<fuchsia::sys::ComponentController>
+        component_controller_request) {
+  fuchsia::sys::LaunchInfo launch_info;
+  launch_info.url =
+      "fuchsia-pkg://fuchsia.com/cast_runner#meta/cast_runner.cmx";
+
+  // Clone stderr from the current process to CastRunner and ask it to
+  // redirect all logs to stderr.
+  launch_info.err = fuchsia::sys::FileDescriptor::New();
+  launch_info.err->type0 = PA_FD;
+  zx_status_t status = fdio_fd_clone(
+      STDERR_FILENO, launch_info.err->handle0.reset_and_get_address());
+  ZX_CHECK(status == ZX_OK, status);
+  base::CommandLine command_line(base::CommandLine::NO_PROGRAM);
+  command_line.AppendSwitchASCII("enable-logging", "stderr");
+  if (enable_headless)
+    command_line.AppendSwitch(kForceHeadlessForTestsSwitch);
+  if (!enable_vulkan)
+    command_line.AppendSwitch(kDisableVulkanForTestsSwitch);
+  launch_info.arguments.emplace(std::vector<std::string>(
+      command_line.argv().begin() + 1, command_line.argv().end()));
+
+  fidl::InterfaceHandle<fuchsia::io::Directory> cast_runner_services_dir;
+  launch_info.directory_request =
+      cast_runner_services_dir.NewRequest().TakeChannel();
+
+  // Redirect ContextProvider to |web_engine_host_directory|.
+  launch_info.additional_services =
+      std::make_unique<fuchsia::sys::ServiceList>();
+  launch_info.additional_services->host_directory =
+      web_engine_host_directory.TakeChannel();
+  launch_info.additional_services->names.push_back(
+      fuchsia::web::ContextProvider::Name_);
+
+  fuchsia::sys::LauncherPtr launcher;
+  base::ComponentContextForProcess()->svc()->Connect(launcher.NewRequest());
+  launcher->CreateComponent(std::move(launch_info),
+                            std::move(component_controller_request));
+  return sys::ServiceDirectory(std::move(cast_runner_services_dir));
+}
+
 }  // namespace
 
 class CastRunnerIntegrationTest : public testing::Test {
@@ -224,37 +256,31 @@ class CastRunnerIntegrationTest : public testing::Test {
   CastRunnerIntegrationTest& operator=(const CastRunnerIntegrationTest&) =
       delete;
 
+  void SetUp() override { mojo::core::Init(); }
+
   void TearDown() override {
     if (component_controller_)
       ShutdownComponent();
-
-    // Disconnect the CastRunner & let things tear-down.
-    cast_runner_ptr_.Unbind();
-    base::RunLoop().RunUntilIdle();
   }
 
  protected:
   explicit CastRunnerIntegrationTest(bool enable_headless, bool enable_vulkan)
       : app_config_manager_binding_(&component_services_,
                                     &app_config_manager_) {
-    EnsureFuchsiaDirSchemeInitialized();
-
-    // Create the CastRunner, published into |outgoing_directory_|.
-    cast_runner_ = std::make_unique<CastRunner>(enable_headless);
-    if (!enable_vulkan)
-      cast_runner_->set_disable_vulkan_for_test();
-    cast_runner_binding_.emplace(&outgoing_directory_, cast_runner_.get());
-
     StartAndPublishWebEngine();
 
+    // Start CastRunner.
+    fidl::InterfaceHandle<::fuchsia::io::Directory> incoming_services;
+    services_for_cast_runner_.GetOrCreateDirectory("svc")->Serve(
+        ::fuchsia::io::OPEN_RIGHT_READABLE | ::fuchsia::io::OPEN_RIGHT_WRITABLE,
+        incoming_services.NewRequest().TakeChannel());
+    sys::ServiceDirectory cast_runner_services =
+        StartCastRunner(std::move(incoming_services), enable_headless,
+                        enable_vulkan, cast_runner_controller_.NewRequest());
+
     // Connect to the CastRunner's fuchsia.sys.Runner interface.
-    fidl::InterfaceHandle<fuchsia::io::Directory> directory;
-    outgoing_directory_.GetOrCreateDirectory("svc")->Serve(
-        fuchsia::io::OPEN_RIGHT_READABLE | fuchsia::io::OPEN_RIGHT_WRITABLE,
-        directory.NewRequest().TakeChannel());
-    sys::ServiceDirectory public_directory_client(std::move(directory));
-    cast_runner_ptr_ = public_directory_client.Connect<fuchsia::sys::Runner>();
-    cast_runner_ptr_.set_error_handler([](zx_status_t status) {
+    cast_runner_ = cast_runner_services.Connect<fuchsia::sys::Runner>();
+    cast_runner_.set_error_handler([](zx_status_t status) {
       ZX_LOG(ERROR, status) << "CastRunner closed channel.";
       ADD_FAILURE();
     });
@@ -267,14 +293,21 @@ class CastRunnerIntegrationTest : public testing::Test {
     std::vector<chromium::cast::ApiBinding> binding_list;
     chromium::cast::ApiBinding eval_js_binding;
     eval_js_binding.set_before_load_script(cr_fuchsia::MemBufferFromString(
+        "function valueOrUndefinedString(value) {"
+        "    return (typeof(value) == 'undefined') ? 'undefined' : value;"
+        "}"
         "window.addEventListener('DOMContentLoaded', (event) => {"
         "  var port = cast.__platform__.PortConnector.bind('testport');"
         "  port.onmessage = (e) => {"
         "    var result = eval(e.data);"
-        "    if (typeof(result) == \"undefined\") {"
-        "      result = \"undefined\";"
+        "    if (result && typeof(result.then) == 'function') {"
+        "      result"
+        "        .then(result =>"
+        "                port.postMessage(valueOrUndefinedString(result)))"
+        "        .catch(e => port.postMessage(JSON.stringify(e)));"
+        "    } else {"
+        "      port.postMessage(valueOrUndefinedString(result));"
         "    }"
-        "    port.postMessage(result);"
         "  };"
         "});",
         "test"));
@@ -301,9 +334,9 @@ class CastRunnerIntegrationTest : public testing::Test {
     sys::ServiceDirectory web_engine_outgoing_services(
         std::move(web_engine_outgoing_dir));
 
-    test_component_context_.additional_services()
-        ->RemovePublicService<fuchsia::web::ContextProvider>();
-    test_component_context_.additional_services()->AddPublicService(
+    services_for_cast_runner_
+        .RemovePublicService<fuchsia::web::ContextProvider>();
+    services_for_cast_runner_.AddPublicService(
         std::make_unique<vfs::Service>(
             [web_engine_outgoing_services =
                  std::move(web_engine_outgoing_services)](
@@ -331,8 +364,9 @@ class CastRunnerIntegrationTest : public testing::Test {
     app_config_manager_.AddAppConfig(std::move(app_config));
   }
 
-  void CreateComponentContextAndStartComponent() {
-    auto component_url = base::StringPrintf("cast:%s", kTestAppId);
+  void CreateComponentContextAndStartComponent(
+      const char* app_id = kTestAppId) {
+    auto component_url = base::StringPrintf("cast:%s", app_id);
     CreateComponentContext(component_url);
     StartCastComponent(component_url);
     WaitComponentState();
@@ -390,8 +424,10 @@ class CastRunnerIntegrationTest : public testing::Test {
     });
   }
 
-  // Executes |code| in the context of the test application and the returns
-  // serialized as string.
+  // Executes |code| in the context of the test application and then returns
+  // the result serialized as string. If the code evaluates to a promise then
+  // execution is blocked until the promise is complete and the result of the
+  // promise is returned.
   std::string ExecuteJavaScript(const std::string& code) {
     fuchsia::web::WebMessage message;
     message.set_data(cr_fuchsia::MemBufferFromString(code, "test-msg"));
@@ -463,9 +499,14 @@ class CastRunnerIntegrationTest : public testing::Test {
 
     state_loop.Run();
 
+    ResetComponentState();
+  }
+
+  void ResetComponentState() {
     component_context_ = nullptr;
     component_services_client_ = nullptr;
     component_state_ = nullptr;
+    test_port_ = nullptr;
   }
 
   base::test::SingleThreadTaskEnvironment task_environment_{
@@ -473,6 +514,7 @@ class CastRunnerIntegrationTest : public testing::Test {
   net::EmbeddedTestServer test_server_;
 
   fuchsia::sys::ComponentControllerPtr web_engine_controller_;
+  fuchsia::sys::ComponentControllerPtr cast_runner_controller_;
 
   FakeApplicationConfigManager app_config_manager_;
   TestApiBindings api_bindings_;
@@ -491,15 +533,12 @@ class CastRunnerIntegrationTest : public testing::Test {
 
   base::OnceClosure component_state_created_callback_;
 
-  // ServiceDirectory into which the CastRunner will publish itself.
-  sys::OutgoingDirectory outgoing_directory_;
+  // Directory used to publish test ContextProvider to CastRunner. Some tests
+  // restart ContextProvider, so we can't pass the services directory from
+  // ContextProvider to CastRunner directly.
+  sys::OutgoingDirectory services_for_cast_runner_;
 
-  std::unique_ptr<CastRunner> cast_runner_;
-  base::Optional<base::fuchsia::ScopedServiceBinding<fuchsia::sys::Runner>>
-      cast_runner_binding_;
-  fuchsia::sys::RunnerPtr cast_runner_ptr_;
-  base::TestComponentContextForProcess test_component_context_{
-      base::TestComponentContextForProcess::InitialState::kCloneAll};
+  fuchsia::sys::RunnerPtr cast_runner_;
 };
 
 // A basic integration test ensuring a basic cast request launches the right
@@ -529,17 +568,10 @@ TEST_F(CastRunnerIntegrationTest, CanRecreateContext) {
 
     CheckAppUrl(app_url);
 
-    // Setup a loop to wait for Context destruction after WebEngine is killed
-    // below.
-    base::RunLoop context_lost_loop;
-    cast_runner_->SetOnMainContextLostCallbackForTest(
-        context_lost_loop.QuitClosure());
-
     web_engine_controller_->Kill();
 
     // Wait for the component and the Context to be torn down.
     WaitForComponentDestroyed();
-    context_lost_loop.Run();
 
     // Start a new WebEngine instance for the next iteration.
     if (i < 1)
@@ -806,28 +838,54 @@ TEST_F(CastRunnerIntegrationTest, CameraRedirect) {
   auto app_config =
       FakeApplicationConfigManager::CreateConfig(kTestAppId, app_url);
 
-  fuchsia::web::PermissionDescriptor canera_permission;
-  canera_permission.set_type(fuchsia::web::PermissionType::CAMERA);
-  app_config.mutable_permissions()->push_back(std::move(canera_permission));
+  fuchsia::web::PermissionDescriptor camera_permission;
+  camera_permission.set_type(fuchsia::web::PermissionType::CAMERA);
+  app_config.mutable_permissions()->push_back(std::move(camera_permission));
   app_config_manager_.AddAppConfig(std::move(app_config));
 
   CreateComponentContextAndStartComponent();
 
   // Expect fuchsia.camera3.DeviceWatcher connection to be redirected to the
   // agent.
-  base::RunLoop run_loop;
+  bool received_device_watcher_request = false;
   component_state_->outgoing_directory()->AddPublicService(
       std::make_unique<vfs::Service>(
-          [quit_closure = run_loop.QuitClosure()](
+          [&received_device_watcher_request](
               zx::channel channel, async_dispatcher_t* dispatcher) mutable {
-            std::move(quit_closure).Run();
+            received_device_watcher_request = true;
           }),
       fuchsia::camera3::DeviceWatcher::Name_);
 
   ExecuteJavaScript("connectCamera();");
+  EXPECT_TRUE(received_device_watcher_request);
+}
 
-  // Will quit once camara3::DeviceWatcher is connected.
-  run_loop.Run();
+TEST_F(CastRunnerIntegrationTest, CameraAccessAfterComponentShutdown) {
+  GURL app_url = test_server_.GetURL("/camera.html");
+
+  // First app with camera permission.
+  auto app_config =
+      FakeApplicationConfigManager::CreateConfig(kTestAppId, app_url);
+  fuchsia::web::PermissionDescriptor camera_permission;
+  camera_permission.set_type(fuchsia::web::PermissionType::CAMERA);
+  app_config.mutable_permissions()->push_back(std::move(camera_permission));
+  app_config_manager_.AddAppConfig(std::move(app_config));
+
+  // Second app without camera permission (but it will still try to access
+  // fuchsia.camera3.DeviceWatcher service to enumerate devices).
+  auto app_config_2 =
+      FakeApplicationConfigManager::CreateConfig(kSecondTestAppId, app_url);
+  app_config_manager_.AddAppConfig(std::move(app_config_2));
+
+  // Start and then shutdown the first app.
+  CreateComponentContextAndStartComponent(kTestAppId);
+  ShutdownComponent();
+  ResetComponentState();
+
+  // Start the second app and try to connect the camera. It's expected to fail
+  // to initialize the camera without crashing CastRunner.
+  CreateComponentContextAndStartComponent(kSecondTestAppId);
+  EXPECT_EQ(ExecuteJavaScript("connectCamera();"), "getUserMediaFailed");
 }
 
 class HeadlessCastRunnerIntegrationTest : public CastRunnerIntegrationTest {

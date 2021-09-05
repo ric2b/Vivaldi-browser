@@ -13,12 +13,12 @@
 <translation id="1163931534039071049">&amp;Προβολή κώδικα πλαισίου</translation>
 <translation id="1165039591588034296">Σφάλμα</translation>
 <translation id="1175364870820465910">&amp;Εκτύπωση...</translation>
-<translation id="1177863135347784049">Προσαρμοσμένη</translation>
 <translation id="1181037720776840403">Κατάργηση</translation>
 <translation id="1187722533808055681">Έξοδος από την κατάσταση αδράνειας</translation>
 <translation id="119944043368869598">Διαγραφή όλων</translation>
 <translation id="1221825588892235038">Μόνο επιλογή</translation>
 <translation id="1244303850296295656">Σφάλμα επέκτασης</translation>
+<translation id="125220115284141797">Προεπιλογή</translation>
 <translation id="1274977772557788323">Ρυθμίσεις αποθήκευσης του Adobe Flash Player</translation>
 <translation id="1297175357211070620">Προορισμός</translation>
 <translation id="1303101771013849280">Αρχείο Σελιδοδεικτών HTML</translation>
@@ -45,9 +45,11 @@
 <translation id="1723824996674794290">&amp;Νέο παράθυρο</translation>
 <translation id="1725149567830788547">Εμφάνιση &amp;Στοιχείων Ελέγχου</translation>
 <translation id="1729533290416704613">Επίσης, ελέγχει τη σελίδα που εμφανίζεται όταν κάνετε αναζήτηση από το κύριο πλαίσιο.</translation>
+<translation id="174123615272205933">Προσαρμοσμένη</translation>
 <translation id="1744108098763830590">σελίδα παρασκηνίου</translation>
 <translation id="176587472219019965">&amp;Νέο Παράθυρο</translation>
 <translation id="1769104665586091481">Άνοιγμα Συνδέσμου σε Νέο &amp;Παράθυρο</translation>
+<translation id="1779468444204342338">Ελάχιστο</translation>
 <translation id="1815083418640426271">Επικόλληση Ως Απλό Κείμενο</translation>
 <translation id="1828901632669367785">Εκτύπωση με χρήση του παραθύρου διαλόγου του συστήματος...</translation>
 <translation id="1850508293116537636">Περιστροφή &amp;προς τα δεξιά</translation>
@@ -87,7 +89,6 @@
 <translation id="2381756643783702095">Ερώτηση πριν από την αποστολή (συνιστάται)</translation>
 <translation id="241082044617551207">Άγνωστη προσθήκη</translation>
 <translation id="2423578206845792524">Αποθήκευση εικόνας &amp;ως...</translation>
-<translation id="2436707352762155834">Ελάχιστο</translation>
 <translation id="2439110203301358333">Κάποιο άλλο πρόγραμμα στον υπολογιστή σας πρόσθεσε μια επέκταση, η οποία ενδέχεται να αλλάξει τον τρόπο λειτουργίας του Vivaldi.</translation>
 <translation id="2445081178310039857">Απαιτείται ο κατάλογος ρίζας επέκτασης.</translation>
 <translation id="2470702053775288986">Απενεργοποίηση μη υποστηριζόμενων επεκτάσεων</translation>
@@ -138,6 +139,7 @@
 <translation id="3222066309010235055">Απόδοση λειτουργίας εκ των προτέρων: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3227137524299004712">Μικρόφωνο</translation>
 <translation id="3241680850019875542">Επιλέξτε τον κατάλογο ρίζας της επέκτασης που θέλετε να στοιβάξετε. Για να ενημερώσετε μια επέκταση, επιλέξτε επίσης το αρχείο ιδιωτικού κλειδιού που θα επαναχρησιμοποιηθεί.</translation>
+<translation id="3266179261140759675">Αποκλεισμός κλειστών ιστότοπων να κάνουν αποστολή και λήψη δεδομένων</translation>
 <translation id="3280237271814976245">Αποθήκευση &amp;ως...</translation>
 <translation id="3285322247471302225">Νέα &amp;Καρτέλα</translation>
 <translation id="3288047731229977326">Οι επεκτάσεις που εκτελούνται σε λειτουργία προγραμματιστή μπορούν να βλάψουν τον υπολογιστή σας. Εάν δεν είστε προγραμματιστής, θα πρέπει να απενεργοποιήσετε αυτές τις επεκτάσεις που εκτελούνται σε λειτουργία προγραμματιστή για να διατηρήσετε την ασφάλειά σας.</translation>
@@ -245,7 +247,6 @@
 <translation id="5039804452771397117">Επιτρέπεται</translation>
 <translation id="5057110919553308744">Όταν κάνετε κλικ στην επέκταση</translation>
 <translation id="5063480226653192405">Χρήση</translation>
-<translation id="5068918910148307423">Να μην επιτρέπεται στους ιστότοπους που έκλεισαν πρόσφατα να ολοκληρώνουν την αποστολή και τη λήψη δεδομένων</translation>
 <translation id="5116628073786783676">Απο&amp;θήκευση Ήχου Ως...</translation>
 <translation id="5143374789336132547">Η επέκταση <ph name="EXTENSION_NAME" /> άλλαξε τη σελίδα που εμφανίζεται όταν κάνετε κλικ στο κουμπί αρχικής σελίδας.</translation>
 <translation id="5154108062446123722">Σύνθετες ρυθμίσεις για <ph name="PRINTING_DESTINATION" /></translation>
@@ -264,6 +265,7 @@
 <translation id="5355926466126177564">Η επέκταση "<ph name="EXTENSION_NAME" />" άλλαξε τη σελίδα που εμφανίζεται όταν κάνετε αναζήτηση από το κύριο πλαίσιο.</translation>
 <translation id="5360150013186312835">Εμφάνιση στη Γραμμή Εργαλείων</translation>
 <translation id="5362741141255528695">Επιλέξτε το αρχείο ιδιωτικού κλειδιού.</translation>
+<translation id="536638840841140142">Καμία</translation>
 <translation id="5370819323174483825">Ε&amp;πανάληψη φόρτωσης</translation>
 <translation id="5398572795982417028">Η αναφορά της σελίδας βρίσκεται εκτός ορίων, το όριο είναι <ph name="MAXIMUM_PAGE" /></translation>
 <translation id="5425042808445046667">Συνέχιση λήψης</translation>
@@ -388,7 +390,6 @@
 <translation id="7663719505383602579">Δέκτης: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Εγκαταστάθηκε από το διαχειριστή σας</translation>
 <translation id="7685049629764448582">Μνήμη JavaScript</translation>
-<translation id="7701040980221191251">Καμία</translation>
 <translation id="7701869757853594372">Χειρισμοί ΧΡΗΣΤΗ</translation>
 <translation id="7704305437604973648">Εργασία</translation>
 <translation id="7710568461918838723">&amp;Μετάδοση…</translation>

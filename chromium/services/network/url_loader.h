@@ -506,19 +506,15 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
   // specific to one direction.
   base::Optional<mojom::TrustTokenOperationStatus> trust_token_status_;
 
-  // Stores ResourceRequest::isolated_world_origin.
-  //
-  // Note that |isolated_world_origin_| is unreliable (i.e. always
-  // base::nullopt) when URLLoaderFactoryParams::ignore_isolated_world_origin
-  // may be |true| (e.g. when the CorbAllowlistAlsoAppliesToOorCors feature is
-  // enabled).
-  //
-  // TODO(lukasza): https://crbug.com/920638: Remove
-  // |isolated_world_origin_| once we gather enough UMA and UKM data.
-  const base::Optional<url::Origin> isolated_world_origin_;
-
   // Observer listening to all cookie reads and writes made by this request.
   mojo::Remote<mojom::CookieAccessObserver> cookie_observer_;
+
+  // Client security state copied from the input ResourceRequest.
+  //
+  // If |factory_params_->client_security_state| is non-null, this is null.
+  // We indeed prefer the factory params over the request params as we trust the
+  // former more, given that they always come from the browser process.
+  mojom::ClientSecurityStatePtr request_client_security_state_;
 
   // Indicates |url_request_| is fetch upload request and that has streaming
   // body.

@@ -31,6 +31,7 @@ import androidx.test.espresso.contrib.RecyclerViewActions;
 import androidx.test.filters.MediumTest;
 import androidx.test.filters.SmallTest;
 
+import org.hamcrest.Matchers;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -259,6 +260,7 @@ public class HomepagePromoTest {
 
     @Test
     @SmallTest
+    @Features.DisableFeatures({ChromeFeatureList.INTEREST_FEED_V2})
     public void testToggleFeed_WithSignIn() {
         // Test to toggle stream when HomepagePromo is hide. Toggle feed should hide promo still.
         launchNewTabPage();
@@ -373,8 +375,7 @@ public class HomepagePromoTest {
      */
     @Test
     @SmallTest
-    @DisableIf.
-    Build(sdk_is_greater_than = VERSION_CODES.LOLLIPOP_MR1, message = "crbug.com/1084756")
+    @DisabledTest(message = "crbug.com/1084756, crbug.com/1130564")
     public void testDismiss_SwipeToDismiss() {
         setVariationForTests(LayoutStyle.SLIM);
 
@@ -496,13 +497,17 @@ public class HomepagePromoTest {
         waitForView((ViewGroup) mActivityTestRule.getActivity().findViewById(R.id.homepage_promo),
                 allOf(withId(R.id.promo_primary_button), isDisplayed()));
 
-        // Verify impress tracking metrics is working.
-        Assert.assertEquals("Promo created should be seen.", 1,
-                RecordHistogram.getHistogramValueCountForTesting(
-                        METRICS_HOMEPAGE_PROMO, HomepagePromoAction.SEEN));
-        Assert.assertEquals("Impression should be tracked in shared preference.", 1,
-                SharedPreferencesManager.getInstance().readInt(
-                        HomepagePromoUtils.getTimesSeenKey()));
+        CriteriaHelper.pollUiThread(() -> {
+            // Verify impress tracking metrics is working.
+            Criteria.checkThat("Promo created should be seen.",
+                    RecordHistogram.getHistogramValueCountForTesting(
+                            METRICS_HOMEPAGE_PROMO, HomepagePromoAction.SEEN),
+                    Matchers.is(1));
+            Criteria.checkThat("Impression should be tracked in shared preference.",
+                    SharedPreferencesManager.getInstance().readInt(
+                            HomepagePromoUtils.getTimesSeenKey()),
+                    Matchers.is(1));
+        });
         Mockito.verify(mTracker).notifyEvent(EventConstants.HOMEPAGE_PROMO_SEEN);
     }
 

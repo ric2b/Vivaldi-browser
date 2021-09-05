@@ -35,7 +35,6 @@
 #include "content/public/common/content_constants.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/navigation_policy.h"
-#include "content/public/common/origin_util.h"
 #include "content/public/renderer/request_peer.h"
 #include "content/renderer/loader/request_extra_data.h"
 #include "content/renderer/loader/resource_dispatcher.h"
@@ -59,12 +58,15 @@
 #include "net/ssl/ssl_connection_status_flags.h"
 #include "net/ssl/ssl_info.h"
 #include "services/network/public/cpp/http_raw_request_response_info.h"
+#include "services/network/public/cpp/ip_address_space_util.h"
 #include "services/network/public/cpp/resource_request.h"
+#include "services/network/public/mojom/ip_address_space.mojom-shared.h"
 #include "services/network/public/mojom/trust_tokens.mojom-shared.h"
 #include "services/network/public/mojom/url_loader.mojom.h"
 #include "services/network/public/mojom/url_response_head.mojom.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/loader/mime_sniffing_throttle.h"
+#include "third_party/blink/public/common/loader/network_utils.h"
 #include "third_party/blink/public/common/loader/previews_state.h"
 #include "third_party/blink/public/common/loader/referrer_utils.h"
 #include "third_party/blink/public/common/loader/resource_type_util.h"
@@ -193,7 +195,7 @@ void SetSecurityStyleAndDetails(const GURL& url,
   if (!url.SchemeIsCryptographic()) {
     // Some origins are considered secure even though they're not cryptographic,
     // so treat them as secure in the UI.
-    if (IsOriginSecure(url))
+    if (blink::network_utils::IsOriginSecure(url))
       response->SetSecurityStyle(blink::SecurityStyle::kSecure);
     else
       response->SetSecurityStyle(blink::SecurityStyle::kInsecure);
@@ -315,8 +317,8 @@ bool IsBannedCrossSiteAuth(network::ResourceRequest* resource_request,
     // If the first party is secure but the subresource is not, this is
     // mixed-content. Do not allow the image.
     if (!allow_cross_origin_auth_prompt &&
-        IsOriginSecure(first_party.RepresentativeUrl()) &&
-        !IsOriginSecure(request_url)) {
+        blink::network_utils::IsOriginSecure(first_party.RepresentativeUrl()) &&
+        !blink::network_utils::IsOriginSecure(request_url)) {
       return true;
     }
     return false;
@@ -910,15 +912,13 @@ void WebURLLoaderImpl::PopulateURLResponse(
       net::IsCertStatusError(head.cert_status));
   response->SetCTPolicyCompliance(head.ct_policy_compliance);
   response->SetIsLegacyTLSVersion(head.is_legacy_tls_version);
+  response->SetHasRangeRequested(head.has_range_requested);
   response->SetTimingAllowPassed(head.timing_allow_passed);
   response->SetAppCacheID(head.appcache_id);
   response->SetAppCacheManifestURL(head.appcache_manifest_url);
   response->SetWasCached(!head.load_timing.request_start_time.is_null() &&
                          head.response_time <
                              head.load_timing.request_start_time);
-  response->SetRemoteIPAddress(WebString::FromUTF8(
-      net::HostPortPair::FromIPEndPoint(head.remote_endpoint).HostForURL()));
-  response->SetRemotePort(head.remote_endpoint.port());
   response->SetConnectionID(head.load_timing.socket_log_id);
   response->SetConnectionReused(head.load_timing.socket_reused);
   response->SetWasFetchedViaSPDY(head.was_fetched_via_spdy);
@@ -933,6 +933,24 @@ void WebURLLoaderImpl::PopulateURLResponse(
               network::mojom::FetchResponseSource::kCacheStorage
           ? blink::WebString::FromUTF8(head.cache_storage_cache_name)
           : blink::WebString());
+
+  response->SetRemoteIPEndpoint(head.remote_endpoint);
+
+  // This computation can only be done once SetUrlListViaServiceWorker() has
+  // been called on |response|, so that ResponseUrl() returns the correct
+  // answer.
+  //
+  // Implements: https://wicg.github.io/cors-rfc1918/#integration-html
+  //
+  // TODO(crbug.com/955213): Just copy the address space in |head| once it is
+  // made available.
+  if (response->ResponseUrl().ProtocolIs("file")) {
+    response->SetAddressSpace(network::mojom::IPAddressSpace::kLocal);
+  } else {
+    response->SetAddressSpace(
+        network::IPAddressToIPAddressSpace(head.remote_endpoint.address()));
+  }
+
   blink::WebVector<blink::WebString> cors_exposed_header_names(
       head.cors_exposed_header_names.size());
   std::transform(
@@ -956,6 +974,7 @@ void WebURLLoaderImpl::PopulateURLResponse(
   response->SetIsSignedExchangeInnerResponse(
       head.is_signed_exchange_inner_response);
   response->SetWasInPrefetchCache(head.was_in_prefetch_cache);
+  response->SetWasCookieInRequest(head.was_cookie_in_request);
   response->SetRecursivePrefetchToken(head.recursive_prefetch_token);
 
   SetSecurityStyleAndDetails(url, head, response, report_security_info);

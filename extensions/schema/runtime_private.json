@@ -26,12 +26,8 @@
             "type": "string"
           },
           "value": {
-            "description": "The current value for this flag (true or false) in official builds.",
-            "type": "string"
-          },
-          "internalValue": {
-            "description": "The current value for this flag (true or false) in internal builds.",
-            "type": "string"
+            "description": "The current value for this flag (true or false).",
+            "type": "boolean"
           },
           "locked": {
             "description": "Locked from being changed. If true, it cannot be changed as it's locked from command line.",

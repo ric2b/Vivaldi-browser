@@ -81,7 +81,6 @@ android_resources("java_resources") {
     ":java_strings_grd",
     "//chrome/android:chrome_app_java_resources",
   ]
-  create_srcjar = false
 }
 
 android_library("java") {
@@ -131,11 +130,6 @@ android_library("java") {
     "java/src/org/chromium/chrome/browser/tasks/tab_management/TabGridPanelViewBinder.java",
     "java/src/org/chromium/chrome/browser/tasks/tab_management/TabGridThumbnailView.java",
     "java/src/org/chromium/chrome/browser/tasks/tab_management/TabGridViewBinder.java",
-    "java/src/org/chromium/chrome/browser/tasks/tab_management/TabGroupPopupUiCoordinator.java",
-    "java/src/org/chromium/chrome/browser/tasks/tab_management/TabGroupPopupUiMediator.java",
-    "java/src/org/chromium/chrome/browser/tasks/tab_management/TabGroupPopupUiParent.java",
-    "java/src/org/chromium/chrome/browser/tasks/tab_management/TabGroupPopupUiProperties.java",
-    "java/src/org/chromium/chrome/browser/tasks/tab_management/TabGroupPopupUiViewBinder.java",
     "java/src/org/chromium/chrome/browser/tasks/tab_management/TabGroupTitleEditor.java",
     "java/src/org/chromium/chrome/browser/tasks/tab_management/TabGroupUiCoordinator.java",
     "java/src/org/chromium/chrome/browser/tasks/tab_management/TabGroupUiMediator.java",
@@ -188,6 +182,8 @@ android_library("java") {
     "//chrome/app:java_strings_grd",
     "//chrome/browser/android/lifecycle:java",
     "//chrome/browser/browser_controls/android:java",
+    "//chrome/browser/endpoint_fetcher:java",
+    "//chrome/browser/feedback/android:java",
     "//chrome/browser/flags:java",
     "//chrome/browser/profiles/android:java",
     "//chrome/browser/share:java",
@@ -215,13 +211,13 @@ android_library("java") {
     "//third_party/android_deps:androidx_annotation_annotation_java",
     "//third_party/android_deps:androidx_appcompat_appcompat_resources_java",
     "//third_party/android_deps:androidx_core_core_java",
-    "//third_party/android_deps:androidx_legacy_legacy_support_v13_java",
     "//third_party/android_deps:androidx_lifecycle_lifecycle_common_java",
     "//third_party/android_deps:androidx_lifecycle_lifecycle_runtime_java",
     "//third_party/android_deps:androidx_lifecycle_lifecycle_viewmodel_java",
     "//third_party/android_deps:androidx_recyclerview_recyclerview_java",
     "//third_party/android_deps:material_design_java",
     "//ui/android:ui_java",
+    "//url:gurl_java",
   ]
   resources_package = "org.chromium.chrome.tab_ui"
 }

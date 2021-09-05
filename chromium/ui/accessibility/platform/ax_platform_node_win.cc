@@ -3795,6 +3795,7 @@ IFACEMETHODIMP AXPlatformNodeWin::Navigate(
     NavigateDirection direction,
     IRawElementProviderFragment** element_provider) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_NAVIGATE);
+  WIN_ACCESSIBILITY_API_PERF_HISTOGRAM(UMA_API_NAVIGATE);
   UIA_VALIDATE_CALL_1_ARG(element_provider);
 
   *element_provider = nullptr;
@@ -3939,6 +3940,8 @@ IFACEMETHODIMP AXPlatformNodeWin::GetRuntimeId(SAFEARRAY** runtime_id) {
 IFACEMETHODIMP AXPlatformNodeWin::get_BoundingRectangle(
     UiaRect* screen_physical_pixel_bounds) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_BOUNDINGRECTANGLE);
+  WIN_ACCESSIBILITY_API_PERF_HISTOGRAM(UMA_API_GET_BOUNDINGRECTANGLE);
+
   UIA_VALIDATE_CALL_1_ARG(screen_physical_pixel_bounds);
 
   gfx::Rect bounds =
@@ -3999,6 +4002,7 @@ IFACEMETHODIMP AXPlatformNodeWin::get_FragmentRoot(
 IFACEMETHODIMP AXPlatformNodeWin::GetPatternProvider(PATTERNID pattern_id,
                                                      IUnknown** result) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_PATTERN_PROVIDER);
+  WIN_ACCESSIBILITY_API_PERF_HISTOGRAM(UMA_API_GET_PATTERN_PROVIDER);
   return GetPatternProviderImpl(pattern_id, result);
 }
 
@@ -4019,6 +4023,7 @@ HRESULT AXPlatformNodeWin::GetPatternProviderImpl(PATTERNID pattern_id,
 IFACEMETHODIMP AXPlatformNodeWin::GetPropertyValue(PROPERTYID property_id,
                                                    VARIANT* result) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_PROPERTY_VALUE);
+  WIN_ACCESSIBILITY_API_PERF_HISTOGRAM(UMA_API_GET_PROPERTY_VALUE);
 
   constexpr LONG kFirstKnownUiaPropertyId = UIA_RuntimeIdPropertyId;
   constexpr LONG kLastKnownUiaPropertyId = UIA_IsDialogPropertyId;
@@ -5315,21 +5320,16 @@ int AXPlatformNodeWin::MSAARole() {
     case ax::mojom::Role::kMenuBar:
       return ROLE_SYSTEM_MENUBAR;
 
-    case ax::mojom::Role::kMenuButton:
     case ax::mojom::Role::kMenuItem:
     case ax::mojom::Role::kMenuItemCheckBox:
     case ax::mojom::Role::kMenuItemRadio:
       return ROLE_SYSTEM_MENUITEM;
 
     case ax::mojom::Role::kMenuListPopup:
-      if (IsAncestorComboBox())
-        return ROLE_SYSTEM_LIST;
-      return ROLE_SYSTEM_MENUPOPUP;
+      return ROLE_SYSTEM_LIST;
 
     case ax::mojom::Role::kMenuListOption:
-      if (IsAncestorComboBox())
-        return ROLE_SYSTEM_LISTITEM;
-      return ROLE_SYSTEM_MENUITEM;
+      return ROLE_SYSTEM_LISTITEM;
 
     case ax::mojom::Role::kMeter:
       return ROLE_SYSTEM_PROGRESSBAR;
@@ -6143,7 +6143,6 @@ base::string16 AXPlatformNodeWin::UIAAriaRole() {
     case ax::mojom::Role::kMenuBar:
       return L"menubar";
 
-    case ax::mojom::Role::kMenuButton:
     case ax::mojom::Role::kMenuItem:
       return L"menuitem";
 
@@ -6154,14 +6153,10 @@ base::string16 AXPlatformNodeWin::UIAAriaRole() {
       return L"menuitemradio";
 
     case ax::mojom::Role::kMenuListPopup:
-      if (IsAncestorComboBox())
-        return L"list";
-      return L"menu";
+      return L"list";
 
     case ax::mojom::Role::kMenuListOption:
-      if (IsAncestorComboBox())
-        return L"listitem";
-      return L"menuitem";
+      return L"listitem";
 
     case ax::mojom::Role::kMeter:
       return L"progressbar";
@@ -6810,7 +6805,6 @@ LONG AXPlatformNodeWin::ComputeUIAControlType() {  // NOLINT(runtime/int)
     case ax::mojom::Role::kMenuBar:
       return UIA_MenuBarControlTypeId;
 
-    case ax::mojom::Role::kMenuButton:
     case ax::mojom::Role::kMenuItem:
       return UIA_MenuItemControlTypeId;
 
@@ -6821,14 +6815,10 @@ LONG AXPlatformNodeWin::ComputeUIAControlType() {  // NOLINT(runtime/int)
       return UIA_RadioButtonControlTypeId;
 
     case ax::mojom::Role::kMenuListPopup:
-      if (IsAncestorComboBox())
-        return UIA_ListControlTypeId;
-      return UIA_MenuControlTypeId;
+      return UIA_ListControlTypeId;
 
     case ax::mojom::Role::kMenuListOption:
-      if (IsAncestorComboBox())
-        return UIA_ListItemControlTypeId;
-      return UIA_MenuItemControlTypeId;
+      return UIA_ListItemControlTypeId;
 
     case ax::mojom::Role::kMeter:
       return UIA_ProgressBarControlTypeId;
@@ -7809,18 +7799,6 @@ HRESULT AXPlatformNodeWin::AllocateComArrayFromVector(
   for (LONG i = 0; i < count; i++)
     (*selected)[i] = results[i];
   return S_OK;
-}
-
-// TODO(dmazzoni): Remove this function once combo box refactoring is
-// complete.
-bool AXPlatformNodeWin::IsAncestorComboBox() {
-  auto* parent =
-      static_cast<AXPlatformNodeWin*>(FromNativeViewAccessible(GetParent()));
-  if (!parent)
-    return false;
-  if (parent->MSAARole() == ROLE_SYSTEM_COMBOBOX)
-    return true;
-  return parent->IsAncestorComboBox();
 }
 
 bool AXPlatformNodeWin::IsPlaceholderText() const {

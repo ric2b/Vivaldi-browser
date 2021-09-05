@@ -32,13 +32,14 @@ import org.chromium.base.test.util.AdvancedMockContext;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
+import org.chromium.chrome.browser.app.tabmodel.AsyncTabParamsManagerSingleton;
 import org.chromium.chrome.browser.app.tabmodel.ChromeTabModelFilterFactory;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
 import org.chromium.chrome.browser.tab.MockTab;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabStateFileManager;
-import org.chromium.chrome.browser.tabmodel.AsyncTabParamsManager;
 import org.chromium.chrome.browser.tabmodel.NextTabPolicy;
+import org.chromium.chrome.browser.tabmodel.NextTabPolicy.NextTabPolicySupplier;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorImpl;
 import org.chromium.chrome.browser.tabmodel.TabPersistencePolicy;
@@ -454,11 +455,13 @@ public class CustomTabTabPersistencePolicyTest {
 
         CustomTabActivity activity = new CustomTabActivity();
         ApplicationStatus.onStateChangeForTesting(activity, ActivityState.CREATED);
-        TabModelSelectorImpl selector = new TabModelSelectorImpl(activity, activity,
-                buildTestPersistencePolicy(), new ChromeTabModelFilterFactory(),
-                ()
-                        -> NextTabPolicy.LOCATIONAL,
-                AsyncTabParamsManager.getInstance(), false, false, false);
+
+        NextTabPolicySupplier nextTabPolicySupplier = () -> NextTabPolicy.LOCATIONAL;
+
+        TabModelSelectorImpl selector = new TabModelSelectorImpl(activity,
+                activity::getWindowAndroid, activity, buildTestPersistencePolicy(),
+                new ChromeTabModelFilterFactory(), nextTabPolicySupplier,
+                AsyncTabParamsManagerSingleton.getInstance(), false, false, false);
         selector.initializeForTesting(normalTabModel, incognitoTabModel);
         ApplicationStatus.onStateChangeForTesting(activity, ActivityState.DESTROYED);
         return selector;

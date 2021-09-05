@@ -12,12 +12,11 @@
 #include "base/containers/span.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/test/bind_test_util.h"
+#include "base/test/task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "content/browser/service_worker/service_worker_storage.h"
 #include "content/browser/service_worker/service_worker_test_utils.h"
-#include "content/public/test/browser_task_environment.h"
-#include "content/public/test/test_utils.h"
 #include "mojo/public/cpp/system/data_pipe_utils.h"
 #include "net/disk_cache/disk_cache.h"
 #include "net/http/http_util.h"
@@ -168,8 +167,7 @@ int WriteResponseMetadata(
 
 class ServiceWorkerStorageControlImplTest : public testing::Test {
  public:
-  ServiceWorkerStorageControlImplTest()
-      : task_environment_(BrowserTaskEnvironment::IO_MAINLOOP) {}
+  ServiceWorkerStorageControlImplTest() = default;
 
   void SetUp() override {
     ASSERT_TRUE(user_data_directory_.CreateUniqueTempDir());
@@ -190,7 +188,7 @@ class ServiceWorkerStorageControlImplTest : public testing::Test {
   void DestroyStorage() {
     storage_impl_.reset();
     disk_cache::FlushCacheThreadForTesting();
-    content::RunAllTasksUntilIdle();
+    task_environment().RunUntilIdle();
   }
 
   void RestartStorage() {
@@ -202,6 +200,8 @@ class ServiceWorkerStorageControlImplTest : public testing::Test {
   storage::mojom::ServiceWorkerStorageControl* storage() {
     return storage_impl_.get();
   }
+
+  base::test::TaskEnvironment& task_environment() { return task_environment_; }
 
   void LazyInitializeForTest() { storage_impl_->LazyInitializeForTest(); }
 
@@ -239,7 +239,7 @@ class ServiceWorkerStorageControlImplTest : public testing::Test {
 
   FindRegistrationResult FindRegistrationForId(
       int64_t registration_id,
-      const base::Optional<GURL>& origin) {
+      const base::Optional<url::Origin>& origin) {
     FindRegistrationResult return_value;
     base::RunLoop loop;
     storage()->FindRegistrationForId(
@@ -281,12 +281,10 @@ class ServiceWorkerStorageControlImplTest : public testing::Test {
     base::RunLoop loop;
     storage()->StoreRegistration(
         std::move(registration), std::move(resources),
-        base::BindLambdaForTesting(
-            [&](DatabaseStatus status, int64_t /*=deleted_version_id*/,
-                const std::vector<int64_t>& /*=newly_purgeable_resources*/) {
-              out_status = status;
-              loop.Quit();
-            }));
+        base::BindLambdaForTesting([&](DatabaseStatus status) {
+          out_status = status;
+          loop.Quit();
+        }));
     loop.Run();
     return out_status;
   }
@@ -299,9 +297,7 @@ class ServiceWorkerStorageControlImplTest : public testing::Test {
         registration_id, origin,
         base::BindLambdaForTesting(
             [&](DatabaseStatus status,
-                storage::mojom::ServiceWorkerStorageOriginState origin_state,
-                int64_t /*=deleted_version_id*/,
-                const std::vector<int64_t>& /*=newly_purgeable_resources*/) {
+                storage::mojom::ServiceWorkerStorageOriginState origin_state) {
               result.status = status;
               result.origin_state = origin_state;
               loop.Quit();
@@ -453,7 +449,7 @@ class ServiceWorkerStorageControlImplTest : public testing::Test {
 
   DatabaseStatus StoreUserData(
       int64_t registration_id,
-      const GURL& origin,
+      const url::Origin& origin,
       std::vector<storage::mojom::ServiceWorkerUserDataPtr> user_data) {
     DatabaseStatus return_value;
     base::RunLoop loop;
@@ -689,7 +685,7 @@ class ServiceWorkerStorageControlImplTest : public testing::Test {
 
  private:
   base::ScopedTempDir user_data_directory_;
-  BrowserTaskEnvironment task_environment_;
+  base::test::TaskEnvironment task_environment_;
   std::unique_ptr<ServiceWorkerStorageControlImpl> storage_impl_;
 };
 
@@ -714,7 +710,7 @@ TEST_F(ServiceWorkerStorageControlImplTest, FindRegistration_NoRegistration) {
 
   {
     FindRegistrationResult result =
-        FindRegistrationForId(kRegistrationId, kScope.GetOrigin());
+        FindRegistrationForId(kRegistrationId, url::Origin::Create(kScope));
     EXPECT_EQ(result.status, DatabaseStatus::kErrorNotFound);
   }
 
@@ -776,7 +772,8 @@ TEST_F(ServiceWorkerStorageControlImplTest, StoreAndDeleteRegistration) {
 
     result = FindRegistrationForScope(kScope);
     EXPECT_EQ(result.status, DatabaseStatus::kOk);
-    result = FindRegistrationForId(kRegistrationId, kScope.GetOrigin());
+    result =
+        FindRegistrationForId(kRegistrationId, url::Origin::Create(kScope));
     EXPECT_EQ(result.status, DatabaseStatus::kOk);
     result = FindRegistrationForId(kRegistrationId, base::nullopt);
     EXPECT_EQ(result.status, DatabaseStatus::kOk);
@@ -798,7 +795,8 @@ TEST_F(ServiceWorkerStorageControlImplTest, StoreAndDeleteRegistration) {
     EXPECT_EQ(result.status, DatabaseStatus::kErrorNotFound);
     result = FindRegistrationForScope(kScope);
     EXPECT_EQ(result.status, DatabaseStatus::kErrorNotFound);
-    result = FindRegistrationForId(kRegistrationId, kScope.GetOrigin());
+    result =
+        FindRegistrationForId(kRegistrationId, url::Origin::Create(kScope));
     EXPECT_EQ(result.status, DatabaseStatus::kErrorNotFound);
   }
 }
@@ -822,7 +820,7 @@ TEST_F(ServiceWorkerStorageControlImplTest, UpdateToActiveState) {
   // The stored registration shouldn't be activated yet.
   {
     FindRegistrationResult result =
-        FindRegistrationForId(registration_id, kScope.GetOrigin());
+        FindRegistrationForId(registration_id, url::Origin::Create(kScope));
     ASSERT_EQ(result.status, DatabaseStatus::kOk);
     EXPECT_FALSE(result.entry->registration->is_active);
   }
@@ -834,7 +832,7 @@ TEST_F(ServiceWorkerStorageControlImplTest, UpdateToActiveState) {
   // Now the stored registration should be active.
   {
     FindRegistrationResult result =
-        FindRegistrationForId(registration_id, kScope.GetOrigin());
+        FindRegistrationForId(registration_id, url::Origin::Create(kScope));
     ASSERT_EQ(result.status, DatabaseStatus::kOk);
     EXPECT_TRUE(result.entry->registration->is_active);
   }
@@ -859,7 +857,7 @@ TEST_F(ServiceWorkerStorageControlImplTest, UpdateLastUpdateCheckTime) {
   // The stored registration shouldn't have the last update check time yet.
   {
     FindRegistrationResult result =
-        FindRegistrationForId(registration_id, kScope.GetOrigin());
+        FindRegistrationForId(registration_id, url::Origin::Create(kScope));
     ASSERT_EQ(result.status, DatabaseStatus::kOk);
     EXPECT_EQ(result.entry->registration->last_update_check, base::Time());
   }
@@ -872,7 +870,7 @@ TEST_F(ServiceWorkerStorageControlImplTest, UpdateLastUpdateCheckTime) {
   // Now the stored registration should be active.
   {
     FindRegistrationResult result =
-        FindRegistrationForId(registration_id, kScope.GetOrigin());
+        FindRegistrationForId(registration_id, url::Origin::Create(kScope));
     ASSERT_EQ(result.status, DatabaseStatus::kOk);
     EXPECT_EQ(result.entry->registration->last_update_check, now);
   }
@@ -897,7 +895,7 @@ TEST_F(ServiceWorkerStorageControlImplTest, Update) {
   // Check the stored registration has default navigation preload fields.
   {
     FindRegistrationResult result =
-        FindRegistrationForId(registration_id, kScope.GetOrigin());
+        FindRegistrationForId(registration_id, url::Origin::Create(kScope));
     ASSERT_EQ(result.status, DatabaseStatus::kOk);
     EXPECT_FALSE(result.entry->registration->navigation_preload_state->enabled);
     EXPECT_EQ(result.entry->registration->navigation_preload_state->header,
@@ -916,7 +914,7 @@ TEST_F(ServiceWorkerStorageControlImplTest, Update) {
   // Check navigation preload fields are updated.
   {
     FindRegistrationResult result =
-        FindRegistrationForId(registration_id, kScope.GetOrigin());
+        FindRegistrationForId(registration_id, url::Origin::Create(kScope));
     ASSERT_EQ(result.status, DatabaseStatus::kOk);
     EXPECT_TRUE(result.entry->registration->navigation_preload_state->enabled);
     EXPECT_EQ(result.entry->registration->navigation_preload_state->header,
@@ -1168,7 +1166,7 @@ TEST_F(ServiceWorkerStorageControlImplTest, StoreAndGetUserData) {
     user_data.push_back(storage::mojom::ServiceWorkerUserData::New(
         registration_id, "key2", "value2"));
 
-    status = StoreUserData(registration_id, kScope.GetOrigin(),
+    status = StoreUserData(registration_id, url::Origin::Create(kScope),
                            std::move(user_data));
     ASSERT_EQ(status, DatabaseStatus::kOk);
   }
@@ -1261,8 +1259,8 @@ TEST_F(ServiceWorkerStorageControlImplTest, StoreAndGetUserDataByKeyPrefix) {
       registration_id, "prefixB", "value3"));
   user_data.push_back(storage::mojom::ServiceWorkerUserData::New(
       registration_id, "prefixC", "value4"));
-  status =
-      StoreUserData(registration_id, kScope.GetOrigin(), std::move(user_data));
+  status = StoreUserData(registration_id, url::Origin::Create(kScope),
+                         std::move(user_data));
   ASSERT_EQ(status, DatabaseStatus::kOk);
 
   {
@@ -1346,7 +1344,7 @@ TEST_F(ServiceWorkerStorageControlImplTest,
         registration_id1, "key2", "registration1_value2"));
     user_data.push_back(storage::mojom::ServiceWorkerUserData::New(
         registration_id1, "prefix1", "registration1_prefix_value1"));
-    status = StoreUserData(registration_id1, kScope1.GetOrigin(),
+    status = StoreUserData(registration_id1, url::Origin::Create(kScope1),
                            std::move(user_data));
     ASSERT_EQ(status, DatabaseStatus::kOk);
   }
@@ -1358,7 +1356,7 @@ TEST_F(ServiceWorkerStorageControlImplTest,
         registration_id1, "key3", "registration2_value3"));
     user_data.push_back(storage::mojom::ServiceWorkerUserData::New(
         registration_id1, "prefix2", "registration2_prefix_value2"));
-    status = StoreUserData(registration_id2, kScope2.GetOrigin(),
+    status = StoreUserData(registration_id2, url::Origin::Create(kScope2),
                            std::move(user_data));
     ASSERT_EQ(status, DatabaseStatus::kOk);
   }
@@ -1511,7 +1509,7 @@ TEST_F(ServiceWorkerStorageControlImplTest, TrackRunningVersion) {
   mojo::Remote<storage::mojom::ServiceWorkerLiveVersionRef> reference2;
   {
     FindRegistrationResult result =
-        FindRegistrationForId(registration_id, kScope.GetOrigin());
+        FindRegistrationForId(registration_id, url::Origin::Create(kScope));
     ASSERT_EQ(result.status, DatabaseStatus::kOk);
     ASSERT_TRUE(result.entry->version_reference);
     reference2.Bind(std::move(result.entry->version_reference));
@@ -1536,8 +1534,7 @@ TEST_F(ServiceWorkerStorageControlImplTest, TrackRunningVersion) {
   }
 
   // Make sure all tasks are ran.
-  // TODO(bashi): Don't rely on RunAllTasksUntilIdle()?
-  content::RunAllTasksUntilIdle();
+  task_environment().RunUntilIdle();
 
   // Resources shouldn't be purged because there are two active references.
   {
@@ -1555,7 +1552,7 @@ TEST_F(ServiceWorkerStorageControlImplTest, TrackRunningVersion) {
 
   // Drop the second reference.
   reference2.reset();
-  content::RunAllTasksUntilIdle();
+  task_environment().RunUntilIdle();
 
   // Resources shouldn't be purged because there is an active reference yet.
   {
@@ -1573,7 +1570,7 @@ TEST_F(ServiceWorkerStorageControlImplTest, TrackRunningVersion) {
 
   // Drop the third reference.
   reference3.reset();
-  content::RunAllTasksUntilIdle();
+  task_environment().RunUntilIdle();
 
   // Resources should have been purged.
   {

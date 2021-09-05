@@ -374,6 +374,7 @@ void HTMLFrameOwnerElement::FrameOwnerPropertiesChanged() {
   properties->allow_fullscreen = AllowFullscreen();
   properties->allow_payment_request = AllowPaymentRequest();
   properties->is_display_none = IsDisplayNone();
+  properties->color_scheme = GetColorScheme();
   properties->required_csp =
       RequiredCsp().IsNull() ? WTF::g_empty_string : RequiredCsp();
 
@@ -442,8 +443,9 @@ void HTMLFrameOwnerElement::SetEmbeddedContentView(
   if (doc && doc->GetFrame()) {
     bool will_be_display_none = !embedded_content_view;
     if (IsDisplayNone() != will_be_display_none) {
-      doc->WillChangeFrameOwnerProperties(
-          MarginWidth(), MarginHeight(), ScrollbarMode(), will_be_display_none);
+      doc->WillChangeFrameOwnerProperties(MarginWidth(), MarginHeight(),
+                                          ScrollbarMode(), will_be_display_none,
+                                          GetColorScheme());
     }
   }
 
@@ -470,11 +472,8 @@ void HTMLFrameOwnerElement::SetEmbeddedContentView(
   layout_embedded_content->UpdateOnEmbeddedContentViewChange();
 
   if (embedded_content_view_) {
-    // TODO(crbug.com/729196): Trace why LocalFrameView::DetachFromLayout
-    // crashes.  Perhaps view is getting reattached while document is shutting
-    // down.
     if (doc) {
-      CHECK_NE(doc->Lifecycle().GetState(), DocumentLifecycle::kStopping);
+      DCHECK_NE(doc->Lifecycle().GetState(), DocumentLifecycle::kStopping);
     }
 
     DCHECK_EQ(GetDocument().View(), layout_embedded_content->GetFrameView());
@@ -503,6 +502,7 @@ bool HTMLFrameOwnerElement::LoadOrRedirectSubframe(
     const KURL& url,
     const AtomicString& frame_name,
     bool replace_current_item) {
+  TRACE_EVENT0("navigation", "HTMLFrameOwnerElement::LoadOrRedirectSubframe");
   // Update the |should_lazy_load_children_| value according to the "loading"
   // attribute immediately, so that it still gets respected even if the "src"
   // attribute gets parsed in ParseAttribute() before the "loading" attribute
@@ -544,6 +544,9 @@ bool HTMLFrameOwnerElement::LoadOrRedirectSubframe(
       // frames that have multiple layers of iframes inside them can load faster
       // once they're near the viewport or visible.
       should_lazy_load_children_ = false;
+
+      if (lazy_load_frame_observer_)
+        lazy_load_frame_observer_->CancelPendingLazyLoad();
 
       lazy_load_frame_observer_ = MakeGarbageCollected<LazyLoadFrameObserver>(
           *this, LazyLoadFrameObserver::LoadType::kSubsequent);
@@ -668,6 +671,22 @@ bool HTMLFrameOwnerElement::IsAdRelated() const {
     return false;
 
   return content_frame_->IsAdSubframe();
+}
+
+ColorScheme HTMLFrameOwnerElement::GetColorScheme() const {
+  if (const auto* style = GetComputedStyle())
+    return style->UsedColorSchemeForInitialColors();
+  return ColorScheme::kLight;
+}
+
+void HTMLFrameOwnerElement::SetColorScheme(ColorScheme color_scheme) {
+  Document* doc = contentDocument();
+  if (doc && doc->GetFrame()) {
+    doc->WillChangeFrameOwnerProperties(MarginWidth(), MarginHeight(),
+                                        ScrollbarMode(), IsDisplayNone(),
+                                        color_scheme);
+  }
+  FrameOwnerPropertiesChanged();
 }
 
 void HTMLFrameOwnerElement::Trace(Visitor* visitor) const {

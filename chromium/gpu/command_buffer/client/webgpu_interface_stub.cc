@@ -23,6 +23,12 @@ const DawnProcTable& WebGPUInterfaceStub::GetProcs() const {
   return null_procs_;
 }
 void WebGPUInterfaceStub::FlushCommands() {}
+void WebGPUInterfaceStub::FlushCommands(DawnDeviceClientID device_client_id) {}
+void WebGPUInterfaceStub::EnsureAwaitingFlush(
+    DawnDeviceClientID device_client_id,
+    bool* needs_flush) {}
+void WebGPUInterfaceStub::FlushAwaitingCommands(
+    DawnDeviceClientID device_client_id) {}
 WGPUDevice WebGPUInterfaceStub::GetDevice(DawnDeviceClientID device_client_id) {
   return nullptr;
 }

@@ -13,20 +13,14 @@ import("//ui/views/features.gni")
 
 assert(toolkit_views)
 
-# Reset sources_assignment_filter for the BUILD.gn file to prevent
-# regression during the migration of Chromium away from the feature.
-# See docs/no_sources_assignment_filter.md for more information.
-# TODO(crbug.com/1018739): remove this when migration is done.
-set_sources_assignment_filter([])
-
 config("flags") {
   defines = [ "TOOLKIT_VIEWS=1" ]
 }
 
-aggregate_vector_icons("views_vector_icons") {
+aggregate_vector_icons2("views_vector_icons") {
   icon_directory = "vector_icons"
 
-  icons = [
+  sources = [
     "checkbox_active.icon",
     "checkbox_normal.icon",
     "close.icon",
@@ -120,8 +114,8 @@ component("views") {
     "controls/button/menu_button_controller.h",
     "controls/button/radio_button.h",
     "controls/button/toggle_button.h",
+    "controls/color_tracking_icon_view.h",
     "controls/combobox/combobox.h",
-    "controls/combobox/combobox_listener.h",
     "controls/combobox/combobox_util.h",
     "controls/editable_combobox/editable_combobox.h",
     "controls/focus_ring.h",
@@ -167,7 +161,6 @@ component("views") {
     "controls/separator.h",
     "controls/slider.h",
     "controls/styled_label.h",
-    "controls/styled_label_listener.h",
     "controls/tabbed_pane/tabbed_pane.h",
     "controls/tabbed_pane/tabbed_pane_listener.h",
     "controls/table/table_grouper.h",
@@ -199,6 +192,7 @@ component("views") {
     "layout/fill_layout.h",
     "layout/flex_layout.h",
     "layout/flex_layout_types.h",
+    "layout/flex_layout_view.h",
     "layout/grid_layout.h",
     "layout/layout_manager.h",
     "layout/layout_manager_base.h",
@@ -214,6 +208,8 @@ component("views") {
     "metadata/metadata_types.h",
     "metadata/property_metadata.h",
     "metadata/type_conversion.h",
+    "metadata/view_factory.h",
+    "metadata/view_factory_internal.h",
     "metrics.h",
     "mouse_constants.h",
     "mouse_watcher.h",
@@ -239,6 +235,7 @@ component("views") {
     "view_targeter.h",
     "view_targeter_delegate.h",
     "view_tracker.h",
+    "view_utils.h",
     "views_delegate.h",
     "views_export.h",
     "views_features.h",
@@ -332,6 +329,7 @@ component("views") {
     "controls/button/menu_button_controller.cc",
     "controls/button/radio_button.cc",
     "controls/button/toggle_button.cc",
+    "controls/color_tracking_icon_view.cc",
     "controls/combobox/combobox.cc",
     "controls/combobox/combobox_util.cc",
     "controls/combobox/empty_combobox_model.cc",
@@ -397,6 +395,7 @@ component("views") {
     "layout/fill_layout.cc",
     "layout/flex_layout.cc",
     "layout/flex_layout_types.cc",
+    "layout/flex_layout_view.cc",
     "layout/grid_layout.cc",
     "layout/layout_manager.cc",
     "layout/layout_manager_base.cc",
@@ -408,6 +407,7 @@ component("views") {
     "metadata/metadata_cache.cc",
     "metadata/metadata_types.cc",
     "metadata/type_conversion.cc",
+    "metadata/view_factory_internal.cc",
     "metrics.cc",
     "mouse_watcher.cc",
     "mouse_watcher_view_host.cc",
@@ -883,6 +883,8 @@ source_set("test_support") {
     "controls/textfield/textfield_test_api.h",
     "layout/animating_layout_manager_test_util.cc",
     "layout/animating_layout_manager_test_util.h",
+    "test/ax_event_counter.cc",
+    "test/ax_event_counter.h",
     "test/button_test_api.cc",
     "test/button_test_api.h",
     "test/capture_tracking_view.cc",
@@ -890,6 +892,8 @@ source_set("test_support") {
     "test/combobox_test_api.cc",
     "test/combobox_test_api.h",
     "test/desktop_test_views_delegate.h",
+    "test/dialog_test.cc",
+    "test/dialog_test.h",
     "test/focus_manager_test.cc",
     "test/focus_manager_test.h",
     "test/layout_test_utils.cc",
@@ -903,8 +907,6 @@ source_set("test_support") {
     "test/scoped_views_test_helper.h",
     "test/slider_test_api.cc",
     "test/slider_test_api.h",
-    "test/test_ax_event_observer.cc",
-    "test/test_ax_event_observer.h",
     "test/test_layout_manager.cc",
     "test/test_layout_manager.h",
     "test/test_layout_provider.cc",
@@ -1022,9 +1024,7 @@ source_set("test_support") {
 }
 
 test("views_unittests") {
-  if ((is_linux && !is_chromeos) || chromeos_is_browser_only) {
-    use_xvfb = true
-  }
+  use_xvfb = use_xvfb_in_this_config
 
   sources = [
     "accessible_pane_view_unittest.cc",
@@ -1045,6 +1045,7 @@ test("views_unittests") {
     "border_unittest.cc",
     "bubble/bubble_border_unittest.cc",
     "bubble/bubble_dialog_delegate_view_unittest.cc",
+    "bubble/bubble_dialog_model_host_unittest.cc",
     "bubble/bubble_frame_view_unittest.cc",
     "bubble/info_bubble_unittest.cc",
     "controls/base_control_test_widget.cc",
@@ -1072,6 +1073,7 @@ test("views_unittests") {
     "controls/menu/submenu_view_unittest.cc",
     "controls/menu/test_menu_item_view.cc",
     "controls/menu/test_menu_item_view.h",
+    "controls/message_box_view_unittest.cc",
     "controls/native/native_view_host_test_base.cc",
     "controls/native/native_view_host_test_base.h",
     "controls/native/native_view_host_unittest.cc",
@@ -1106,6 +1108,7 @@ test("views_unittests") {
     "layout/proposed_layout_unittest.cc",
     "metadata/metadata_unittest.cc",
     "metadata/type_conversion_unittest.cc",
+    "metadata/view_factory_unittest.cc",
     "paint_info_unittest.cc",
     "rect_based_targeting_utils_unittest.cc",
     "repeat_controller_unittest.cc",
@@ -1301,7 +1304,7 @@ test("views_unittests") {
           ]
         }
       }
-      if (use_ozone) {
+      if (use_ozone || use_x11) {
         sources +=
             [ "widget/desktop_aura/desktop_drag_drop_client_ozone_unittest.cc" ]
         deps += [ "//ui/platform_window" ]
@@ -1390,6 +1393,9 @@ source_set("views_interactive_ui_tests") {
     sources += [
       "widget/desktop_aura/x11_topmost_window_finder_interactive_uitest.cc",
     ]
+    if (use_ozone) {
+      deps += [ "//ui/ozone" ]
+    }
   }
 
   if (use_x11 || ozone_platform_x11) {

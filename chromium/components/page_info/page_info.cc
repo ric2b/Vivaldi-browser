@@ -12,7 +12,6 @@
 #include <utility>
 #include <vector>
 
-#include "base/command_line.h"
 #include "base/i18n/time_formatting.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_functions.h"
@@ -61,7 +60,6 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_features.h"
-#include "content/public/common/content_switches.h"
 #include "content/public/common/url_constants.h"
 #include "net/cert/cert_status_flags.h"
 #include "net/cert/x509_certificate.h"
@@ -124,36 +122,12 @@ ContentSettingsType kPermissionType[] = {
     ContentSettingsType::BLUETOOTH_SCANNING,
     ContentSettingsType::VR,
     ContentSettingsType::AR,
+    ContentSettingsType::IDLE_DETECTION,
 };
-
-// Checks whether this permission is currently the factory default, as set by
-// Chrome. Specifically, that the following three conditions are true:
-//   - The current active setting comes from the default or pref provider.
-//   - The setting is the factory default setting (as opposed to a global
-//     default setting set by the user).
-//   - The setting is a wildcard setting applying to all origins (which can only
-//     be set from the default provider).
-bool IsPermissionFactoryDefault(HostContentSettingsMap* content_settings,
-                                const PageInfoUI::PermissionInfo& info) {
-  const ContentSetting factory_default_setting =
-      content_settings::ContentSettingsRegistry::GetInstance()
-          ->Get(info.type)
-          ->GetInitialDefaultSetting();
-
-  // Settings that are granted in regular mode get reduced to ASK in incognito
-  // mode. These settings should not be displayed either.
-  const bool is_incognito_default =
-      info.is_incognito && info.setting == CONTENT_SETTING_ASK &&
-      factory_default_setting == CONTENT_SETTING_ASK;
-
-  return info.source == content_settings::SETTING_SOURCE_USER &&
-         factory_default_setting == info.default_setting &&
-         (info.setting == CONTENT_SETTING_DEFAULT || is_incognito_default);
-}
 
 // Determines whether to show permission |type| in the Page Info UI. Only
 // applies to permissions listed in |kPermissionType|.
-bool ShouldShowPermission(const PageInfoUI::PermissionInfo& info,
+bool ShouldShowPermission(const PageInfo::PermissionInfo& info,
                           const GURL& site_url,
                           HostContentSettingsMap* content_settings,
                           content::WebContents* web_contents,
@@ -207,16 +181,8 @@ bool ShouldShowPermission(const PageInfoUI::PermissionInfo& info,
     return true;
   }
 
-  // Camera PTZ is shown only if Experimental Web Platform features are enabled.
-  base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
-  if (info.type == ContentSettingsType::CAMERA_PAN_TILT_ZOOM &&
-      !cmd->HasSwitch(switches::kEnableExperimentalWebPlatformFeatures)) {
-    return false;
-  }
-
   // Hide camera if camera PTZ is granted or blocked.
-  if (info.type == ContentSettingsType::MEDIASTREAM_CAMERA &&
-      cmd->HasSwitch(switches::kEnableExperimentalWebPlatformFeatures)) {
+  if (info.type == ContentSettingsType::MEDIASTREAM_CAMERA) {
     std::unique_ptr<base::Value> value = content_settings->GetWebsiteSetting(
         site_url, site_url, ContentSettingsType::CAMERA_PAN_TILT_ZOOM,
         std::string(), nullptr);
@@ -241,12 +207,12 @@ bool ShouldShowPermission(const PageInfoUI::PermissionInfo& info,
   if (info.type == ContentSettingsType::BLUETOOTH_GUARD &&
       base::FeatureList::IsEnabled(
           features::kWebBluetoothNewPermissionsBackend) &&
-      !IsPermissionFactoryDefault(content_settings, info)) {
+      !PageInfo::IsPermissionFactoryDefault(info)) {
     return true;
   }
 
   // Show the content setting when it has a non-default value.
-  if (!IsPermissionFactoryDefault(content_settings, info))
+  if (!PageInfo::IsPermissionFactoryDefault(info))
     return true;
 
   return false;
@@ -430,6 +396,32 @@ PageInfo::~PageInfo() {
   }
 }
 
+// static
+bool PageInfo::IsPermissionFactoryDefault(const PermissionInfo& info) {
+  const ContentSetting factory_default_setting =
+      content_settings::ContentSettingsRegistry::GetInstance()
+          ->Get(info.type)
+          ->GetInitialDefaultSetting();
+
+  // Settings that are granted in regular mode get reduced to ASK in incognito
+  // mode. These settings should not be displayed either.
+  const bool is_incognito_default =
+      info.is_incognito && info.setting == CONTENT_SETTING_ASK &&
+      factory_default_setting == CONTENT_SETTING_ASK;
+
+  return info.source == content_settings::SETTING_SOURCE_USER &&
+         factory_default_setting == info.default_setting &&
+         (info.setting == CONTENT_SETTING_DEFAULT || is_incognito_default);
+}
+
+// static
+bool PageInfo::IsFileOrInternalPage(const GURL& url) {
+  return url.SchemeIs(content::kChromeUIScheme) ||
+         url.SchemeIs(content::kChromeDevToolsScheme) ||
+         url.SchemeIs(content::kViewSourceScheme) ||
+         url.SchemeIs(url::kFileScheme);
+}
+
 void PageInfo::InitializeUiState(PageInfoUI* ui) {
   ui_ = ui;
   DCHECK(ui_);
@@ -511,6 +503,11 @@ void PageInfo::RecordPageInfoAction(PageInfoAction action) {
     UMA_HISTOGRAM_ENUMERATION("Security.PageInfo.Action.HttpUrl.Neutral",
                               action, PAGE_INFO_COUNT);
   }
+}
+
+void PageInfo::UpdatePermissions() {
+  // Refresh the UI to reflect the new setting.
+  PresentSitePermissions();
 }
 
 void PageInfo::OnSitePermissionChanged(ContentSettingsType type,
@@ -917,7 +914,7 @@ void PageInfo::PresentSitePermissions() {
   PermissionInfoList permission_info_list;
   ChosenObjectInfoList chosen_object_info_list;
 
-  PageInfoUI::PermissionInfo permission_info;
+  PermissionInfo permission_info;
   HostContentSettingsMap* content_settings = GetContentSettings();
   for (const ContentSettingsType type : kPermissionType) {
     permission_info.type = type;

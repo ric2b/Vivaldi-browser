@@ -820,9 +820,10 @@ class BBJSONGenerator(object):
     if 'gpu' in dimension_set:
       # First remove the driver version, then split into vendor and device.
       gpu = dimension_set['gpu']
-      gpu = gpu.split('-')[0].split(':')
-      substitutions['gpu_vendor_id'] = gpu[0]
-      substitutions['gpu_device_id'] = gpu[1]
+      if gpu != 'none':
+        gpu = gpu.split('-')[0].split(':')
+        substitutions['gpu_vendor_id'] = gpu[0]
+        substitutions['gpu_device_id'] = gpu[1]
     return [string.Template(arg).safe_substitute(substitutions) for arg in args]
 
   def generate_gpu_telemetry_test(self, waterfall, tester_name, tester_config,
@@ -1310,7 +1311,7 @@ class BBJSONGenerator(object):
     filters = self.args.waterfall_filters
     result = collections.defaultdict(dict)
 
-    required_fields = ('project', 'bucket', 'name')
+    required_fields = ('name',)
     for waterfall in self.waterfalls:
       for field in required_fields:
         # Verify required fields
@@ -1324,12 +1325,6 @@ class BBJSONGenerator(object):
       # Join config files and hardcoded values together
       all_tests = self.generate_output_tests(waterfall)
       result[waterfall['name']] = all_tests
-
-      # Deduce per-bucket mappings
-      # This will be the standard after masternames are gone
-      bucket_filename = waterfall['project'] + '.' + waterfall['bucket']
-      for buildername in waterfall['machines'].keys():
-        result[bucket_filename][buildername] = all_tests[buildername]
 
     # Add do not edit warning
     for tests in result.values():
@@ -1413,6 +1408,7 @@ class BBJSONGenerator(object):
         'mac10.13-blink-rel-dummy',
         'mac10.14-blink-rel-dummy',
         'mac10.15-blink-rel-dummy',
+        'mac11.0-blink-rel-dummy',
         'win7-blink-rel-dummy',
         'win10-blink-rel-dummy',
         'WebKit Linux composite_after_paint Dummy Builder',
@@ -1440,7 +1436,7 @@ class BBJSONGenerator(object):
   def get_internal_waterfalls(self):
     # Similar to get_builders_that_do_not_actually_exist above, but for
     # waterfalls defined in internal configs.
-    return ['chrome', 'chrome.pgo']
+    return ['chrome', 'chrome.pgo', 'internal.chromeos.fyi', 'internal.soda']
 
   def check_input_file_consistency(self, verbose=False):
     self.check_input_files_sorting(verbose)
@@ -1476,6 +1472,8 @@ class BBJSONGenerator(object):
             if waterfall['name'] in ['client.devtools-frontend.integration',
                                      'tryserver.devtools-frontend',
                                      'chromium.devtools-frontend']:
+              continue  # pragma: no cover
+            if waterfall['name'] in ['client.openscreen.chromium']:
               continue  # pragma: no cover
             raise self.unknown_bot(bot_name, waterfall['name'])
 

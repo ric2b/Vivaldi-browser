@@ -2,14 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {FittingType, Point} from './constants.js';
+import {assert} from 'chrome://resources/js/assert.m.js';
+import {FittingType, NamedDestinationMessageData, Point} from './constants.js';
 
 /**
  * @typedef {{
  *   url: (string|undefined),
  *   zoom: (number|undefined),
  *   view: (!FittingType|undefined),
- *   viewPosition: (!Point|undefined)
+ *   viewPosition: (!Point|undefined),
+ *   position: (!Object|undefined),
  * }}
  */
 let OpenPdfParams;
@@ -18,14 +20,12 @@ let OpenPdfParams;
 // settings for opening the pdf.
 export class OpenPdfParamsParser {
   /**
-   * @param {function(string):void} getNamedDestinationCallback
-   *     Function called to fetch information for a named destination.
+   * @param {function(string):!Promise<!NamedDestinationMessageData>}
+   *     getNamedDestinationCallback Function called to fetch information for a
+   *     named destination.
    */
   constructor(getNamedDestinationCallback) {
-    /** @private {!Array<!Object>} */
-    this.outstandingRequests_ = [];
-
-    /** @private {!function(string):void} */
+    /** @private {!function(string):!Promise<!NamedDestinationMessageData>} */
     this.getNamedDestinationCallback_ = getNamedDestinationCallback;
   }
 
@@ -101,6 +101,42 @@ export class OpenPdfParamsParser {
   }
 
   /**
+   * Parse view parameters which come from nameddest.
+   * @param {string} paramValue view value.
+   * @return {!OpenPdfParams} Map with view parameters.
+   * @private
+   */
+  parseNameddestViewParam_(paramValue) {
+    const viewModeComponents = paramValue.toLowerCase().split(',');
+    const viewMode = viewModeComponents[0];
+    const params = {};
+
+    if (viewMode === 'xyz' && viewModeComponents.length === 4) {
+      const x = parseFloat(viewModeComponents[1]);
+      const y = parseFloat(viewModeComponents[2]);
+      const zoom = parseFloat(viewModeComponents[3]);
+      // If |x|, |y| or |zoom| is NaN, the values of the current positions and
+      // zoom level are retained.
+      if (!Number.isNaN(x) && !Number.isNaN(y) && !Number.isNaN(zoom)) {
+        params['position'] = {x: x, y: y};
+        // A zoom of 0 should be treated as a zoom of null (See table 151 in ISO
+        // 32000-1 standard for more details about syntax of "XYZ".
+        if (zoom !== 0) {
+          params['zoom'] = zoom;
+        }
+      }
+      return params;
+    }
+
+    if (viewMode === 'fitr' && viewModeComponents.length === 5) {
+      // TODO(crbug.com/535978): Add support for fit type "FitR" in nameddest.
+      return params;
+    }
+
+    return this.parseViewParam_(paramValue);
+  }
+
+  /**
    * Parse the parameters encoded in the fragment of a URL.
    * @param {string} url to parse
    * @return {!URLSearchParams}
@@ -168,25 +204,22 @@ export class OpenPdfParamsParser {
     }
 
     if (params.page === undefined && urlParams.has('nameddest')) {
-      this.outstandingRequests_.push({callback: callback, params: params});
       this.getNamedDestinationCallback_(
-          /** @type {string} */ (urlParams.get('nameddest')));
+              /** @type {string} */ (urlParams.get('nameddest')))
+          .then(data => {
+            if (data.pageNumber !== -1) {
+              params.page = data.pageNumber;
+            }
+            if (data.namedDestinationView) {
+              Object.assign(
+                  params,
+                  this.parseNameddestViewParam_(
+                      /** @type {string} */ (data.namedDestinationView)));
+            }
+            callback(params);
+          });
     } else {
       callback(params);
     }
-  }
-
-  /**
-   * This is called when a named destination is received and the page number
-   * corresponding to the request for which a named destination is passed.
-   * @param {number} pageNumber The page corresponding to the named destination
-   *    requested.
-   */
-  onNamedDestinationReceived(pageNumber) {
-    const outstandingRequest = this.outstandingRequests_.shift();
-    if (pageNumber !== -1) {
-      outstandingRequest.params.page = pageNumber;
-    }
-    outstandingRequest.callback(outstandingRequest.params);
   }
 }

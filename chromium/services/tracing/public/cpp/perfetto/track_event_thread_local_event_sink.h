@@ -32,7 +32,8 @@ namespace tracing {
 // ThreadLocalEventSink that emits TrackEvent protos.
 class COMPONENT_EXPORT(TRACING_CPP) TrackEventThreadLocalEventSink
     : public base::ThreadIdNameManager::Observer,
-      public base::trace_event::TrackEventHandle::CompletionListener {
+      public base::trace_event::TrackEventHandle::CompletionListener,
+      public base::trace_event::TracePacketHandle::CompletionListener {
  public:
   enum class IndexType {
     kName = 0,
@@ -75,6 +76,7 @@ class COMPONENT_EXPORT(TRACING_CPP) TrackEventThreadLocalEventSink
 
   base::trace_event::TrackEventHandle AddTypedTraceEvent(
       base::trace_event::TraceEvent* trace_event);
+  base::trace_event::TracePacketHandle AddTracePacket();
 
   void UpdateDuration(
       const unsigned char* category_group_enabled,
@@ -94,6 +96,9 @@ class COMPONENT_EXPORT(TRACING_CPP) TrackEventThreadLocalEventSink
 
   // base::trace_event::TrackEventHandle::CompletionListener implementation:
   void OnTrackEventCompleted() override;
+
+  // base::trace_event::TracePacketHandle::CompletionListener implementation:
+  void OnTracePacketCompleted() override;
 
  private:
   static constexpr size_t kMaxCompleteEventDepth = 30;
@@ -151,6 +156,10 @@ class COMPONENT_EXPORT(TRACING_CPP) TrackEventThreadLocalEventSink
   InterningIndex<TypeList<std::string>, SizeList<128>>
       interned_log_message_bodies_;
   InternedIndexesUpdates pending_interning_updates_;
+
+  // Track event interning state.
+  // TODO(skyostil): Merge the above interning indices into this.
+  perfetto::internal::TrackEventIncrementalState incremental_state_;
 
   std::vector<uint64_t> extra_emitted_track_descriptor_uuids_;
 

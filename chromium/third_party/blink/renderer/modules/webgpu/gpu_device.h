@@ -33,6 +33,8 @@ class GPUDeviceDescriptor;
 class GPUDeviceLostInfo;
 class GPUPipelineLayout;
 class GPUPipelineLayoutDescriptor;
+class GPUQuerySet;
+class GPUQuerySetDescriptor;
 class GPUQueue;
 class GPURenderBundleEncoder;
 class GPURenderBundleEncoderDescriptor;
@@ -96,6 +98,8 @@ class GPUDevice final : public EventTargetWithInlineData,
   GPURenderBundleEncoder* createRenderBundleEncoder(
       const GPURenderBundleEncoderDescriptor* descriptor);
 
+  GPUQuerySet* createQuerySet(const GPUQuerySetDescriptor* descriptor);
+
   void pushErrorScope(const WTF::String& filter);
   ScriptPromise popErrorScope(ScriptState* script_state);
 
@@ -112,6 +116,7 @@ class GPUDevice final : public EventTargetWithInlineData,
       ScriptPromiseProperty<Member<GPUDeviceLostInfo>, ToV8UndefinedGenerator>;
 
   void OnUncapturedError(WGPUErrorType errorType, const char* message);
+  void OnDeviceLostError(const char* message);
 
   void OnPopErrorScopeCallback(ScriptPromiseResolver* resolver,
                                WGPUErrorType type,
@@ -124,6 +129,8 @@ class GPUDevice final : public EventTargetWithInlineData,
   std::unique_ptr<
       DawnCallback<base::RepeatingCallback<void(WGPUErrorType, const char*)>>>
       error_callback_;
+  std::unique_ptr<DawnCallback<base::OnceCallback<void(const char*)>>>
+      lost_callback_;
 
   static constexpr int kMaxAllowedConsoleWarnings = 500;
   int allowed_console_warnings_remaining_ = kMaxAllowedConsoleWarnings;

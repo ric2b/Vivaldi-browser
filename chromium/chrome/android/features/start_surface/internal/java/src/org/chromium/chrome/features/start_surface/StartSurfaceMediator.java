@@ -44,6 +44,7 @@ import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.compositor.layouts.OverviewModeState;
 import org.chromium.chrome.browser.feed.FeedSurfaceCoordinator;
+import org.chromium.chrome.browser.feed.shared.FeedFeatures;
 import org.chromium.chrome.browser.feed.shared.stream.Stream;
 import org.chromium.chrome.browser.flags.CachedFeatureFlags;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
@@ -53,6 +54,7 @@ import org.chromium.chrome.browser.omnibox.UrlFocusChangeListener;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.EmptyTabModelSelectorObserver;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelObserver;
@@ -532,10 +534,10 @@ class StartSurfaceMediator
             mIsIncognito = mTabModelSelector.isIncognitoSelected();
             mPropertyModel.set(IS_INCOGNITO, mIsIncognito);
 
-            // if OvervieModeState is NOT_SHOWN, default to SHOWING_HOMEPAGE. This should only
+            // if OvervieModeState is NOT_SHOWN, default to SHOWING_TABSWITCHER. This should only
             // happen when entering Start through SwipeDown gesture on URL bar.
             if (mOverviewModeState == OverviewModeState.NOT_SHOWN) {
-                mOverviewModeState = OverviewModeState.SHOWING_HOMEPAGE;
+                mOverviewModeState = OverviewModeState.SHOWING_TABSWITCHER;
             }
 
             // set OverviewModeState
@@ -617,6 +619,11 @@ class StartSurfaceMediator
         }
     }
 
+    @Override
+    public boolean isHomePageShowing() {
+        return mOverviewModeState == OverviewModeState.SHOWN_HOMEPAGE;
+    }
+
     // Implements TabSwitcher.OverviewModeObserver.
     @Override
     public void startedShowing() {
@@ -640,7 +647,13 @@ class StartSurfaceMediator
             }
             mPropertyModel.set(IS_SHOWING_OVERVIEW, false);
 
-            destroyFeedSurfaceCoordinator();
+            if (mTabModelSelector.getCurrentTab() == null
+                    || mTabModelSelector.getCurrentTab().getLaunchType()
+                            != TabLaunchType.FROM_START_SURFACE) {
+                // TODO(https://crbug.com/1132852): Destroy FeedSurfaceCoordinator if users don't
+                // navigate back to Start after a while.
+                destroyFeedSurfaceCoordinator();
+            }
             if (mNormalTabModelObserver != null) {
                 mNormalTabModel.removeObserver(mNormalTabModelObserver);
             }
@@ -700,7 +713,7 @@ class StartSurfaceMediator
         return mSurfaceMode == SurfaceMode.SINGLE_PANE
                 && CachedFeatureFlags.isEnabled(ChromeFeatureList.INSTANT_START)
                 && StartSurfaceConfiguration.getFeedArticlesVisibility()
-                && !CachedFeatureFlags.isEnabled(ChromeFeatureList.INTEREST_FEED_V2);
+                && !FeedFeatures.cachedIsV2Enabled();
     }
 
     /** This interface builds the feed surface coordinator when showing if needed. */
@@ -745,9 +758,11 @@ class StartSurfaceMediator
             if (mSecondaryTasksSurfacePropertyModel == null) {
                 mSecondaryTasksSurfaceController = mSecondaryTasksSurfaceInitializer.initialize();
             }
-            mSecondaryTasksSurfacePropertyModel.set(IS_FAKE_SEARCH_BOX_VISIBLE,
-                    mIsIncognito && mOverviewModeState == OverviewModeState.SHOWN_HOMEPAGE);
-            mSecondaryTasksSurfacePropertyModel.set(IS_INCOGNITO, mIsIncognito);
+            if (mSecondaryTasksSurfacePropertyModel != null) {
+                mSecondaryTasksSurfacePropertyModel.set(IS_FAKE_SEARCH_BOX_VISIBLE,
+                        mIsIncognito && mOverviewModeState == OverviewModeState.SHOWN_HOMEPAGE);
+                mSecondaryTasksSurfacePropertyModel.set(IS_INCOGNITO, mIsIncognito);
+            }
             if (mSecondaryTasksSurfaceController != null) {
                 mSecondaryTasksSurfaceController.showOverview(false);
             }

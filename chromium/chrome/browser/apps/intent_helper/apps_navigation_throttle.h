@@ -199,7 +199,7 @@ class AppsNavigationThrottle : public content::NavigationThrottle {
 
   virtual bool ShouldCancelNavigation(content::NavigationHandle* handle);
 
-  void ShowIntentPickerForApps(
+  virtual void ShowIntentPickerForApps(
       content::WebContents* web_contents,
       IntentPickerAutoDisplayService* ui_auto_display_service,
       const GURL& url,
@@ -217,6 +217,11 @@ class AppsNavigationThrottle : public content::NavigationThrottle {
       const GURL& url);
 
   bool navigate_from_link() const;
+
+  bool ShouldAutoDisplayUi(
+      const std::vector<apps::IntentPickerAppInfo>& apps_for_picker,
+      content::WebContents* web_contents,
+      const GURL& url);
 
   // Keeps track of whether we already shown the UI or preferred app. Since
   // AppsNavigationThrottle cannot wait for the user (due to the non-blocking

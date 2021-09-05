@@ -171,10 +171,8 @@ class MarketingOptInScreenTestWithRequest : public MarketingOptInScreenTest {
 };
 
 MarketingOptInScreenTest::MarketingOptInScreenTest() {
-  // To reuse existing wizard controller in the flow.
   feature_list_.InitWithFeatures(
-      {chromeos::features::kOobeScreensPriority,
-       ::features::kOobeMarketingDoubleOptInCountriesSupported,
+      {::features::kOobeMarketingDoubleOptInCountriesSupported,
        ::features::kOobeMarketingAdditionalCountriesSupported},
       {});
 }
@@ -410,12 +408,16 @@ IN_PROC_BROWSER_TEST_P(MarketingTestCountryCodes, CountryCodes) {
   TapOnGetStartedAndWaitForScreenExit();
   WaitForBackendRequest();
   EXPECT_EQ(GetRequestedCountryCode(), param.country_code);
-  histogram_tester_.ExpectUniqueSample(
-      "OOBE.MarketingOptInScreen.Event." + std::string(param.country_code),
+  const auto event =
       (param.is_default_opt_in)
           ? MarketingOptInScreen::Event::kUserOptedInWhenDefaultIsOptIn
-          : MarketingOptInScreen::Event::kUserOptedInWhenDefaultIsOptOut,
-      1);
+          : MarketingOptInScreen::Event::kUserOptedInWhenDefaultIsOptOut;
+  histogram_tester_.ExpectUniqueSample(
+      "OOBE.MarketingOptInScreen.Event." + std::string(param.country_code),
+      event, 1);
+  // Expect a generic event in addition to the country specific one.
+  histogram_tester_.ExpectUniqueSample("OOBE.MarketingOptInScreen.Event", event,
+                                       1);
 
   // Expect successful geolocation resolve.
   ExpectGeolocationMetric(true, std::string(param.country_code).size());
@@ -442,9 +444,8 @@ class MarketingDisabledExtraCountries : public MarketingOptInScreenTest,
   MarketingDisabledExtraCountries() {
     feature_list_.Reset();
     feature_list_.InitWithFeatures(
-        {chromeos::features::kOobeScreensPriority},
-        {::features::kOobeMarketingDoubleOptInCountriesSupported,
-         ::features::kOobeMarketingAdditionalCountriesSupported});
+        {}, {::features::kOobeMarketingDoubleOptInCountriesSupported,
+             ::features::kOobeMarketingAdditionalCountriesSupported});
   }
 
   ~MarketingDisabledExtraCountries() = default;
@@ -489,10 +490,8 @@ class MarketingOptInScreenTestDisabled : public MarketingOptInScreenTest {
  public:
   MarketingOptInScreenTestDisabled() {
     feature_list_.Reset();
-    // Enable |kOobeScreensPriority| to reuse existing wizard controller in
-    // the flow and disable kOobeMarketingScreen to disable marketing screen.
-    feature_list_.InitWithFeatures({chromeos::features::kOobeScreensPriority},
-                                   {::features::kOobeMarketingScreen});
+    // Disable kOobeMarketingScreen to disable marketing screen.
+    feature_list_.InitWithFeatures({}, {::features::kOobeMarketingScreen});
   }
 
   ~MarketingOptInScreenTestDisabled() override = default;

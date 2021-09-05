@@ -59,6 +59,7 @@
 #include "chrome/browser/ui/exclusive_access/exclusive_access_manager.h"
 #include "chrome/browser/ui/search/local_ntp_test_utils.h"
 #include "chrome/browser/ui/search/search_tab_helper.h"
+#include "chrome/browser/ui/startup/launch_mode_recorder.h"
 #include "chrome/browser/ui/startup/startup_browser_creator.h"
 #include "chrome/browser/ui/startup/startup_browser_creator_impl.h"
 #include "chrome/browser/ui/tabs/pinned_tab_codec.h"
@@ -188,7 +189,9 @@ int CountRenderProcessHosts() {
 
 class TabClosingObserver : public TabStripModelObserver {
  public:
-  TabClosingObserver() : closing_count_(0) {}
+  TabClosingObserver() = default;
+  TabClosingObserver(const TabClosingObserver&) = delete;
+  TabClosingObserver& operator=(const TabClosingObserver&) = delete;
 
   void OnTabStripModelChanged(
       TabStripModel* tab_strip_model,
@@ -205,9 +208,7 @@ class TabClosingObserver : public TabStripModelObserver {
   int closing_count() const { return closing_count_; }
 
  private:
-  int closing_count_;
-
-  DISALLOW_COPY_AND_ASSIGN(TabClosingObserver);
+  int closing_count_ = 0;
 };
 
 // Used by CloseWithAppMenuOpen. Invokes CloseWindow on the supplied browser.
@@ -229,6 +230,8 @@ class RenderViewSizeObserver : public content::WebContentsObserver {
   RenderViewSizeObserver(content::WebContents* web_contents,
                          BrowserWindow* browser_window)
       : WebContentsObserver(web_contents), browser_window_(browser_window) {}
+  RenderViewSizeObserver(const RenderViewSizeObserver&) = delete;
+  RenderViewSizeObserver& operator=(const RenderViewSizeObserver&) = delete;
 
   void GetSizeForRenderViewHost(content::RenderViewHost* render_view_host,
                                 gfx::Size* rwhv_create_size,
@@ -308,8 +311,6 @@ class RenderViewSizeObserver : public content::WebContentsObserver {
   // DidStartNavigation.
   gfx::Size wcv_resize_insets_;
   BrowserWindow* browser_window_;  // Weak ptr.
-
-  DISALLOW_COPY_AND_ASSIGN(RenderViewSizeObserver);
 };
 
 }  // namespace
@@ -852,7 +853,8 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, BeforeUnloadVsBeforeReload) {
 class BrowserTestWithTabGroupsEnabled : public BrowserTest {
  public:
   BrowserTestWithTabGroupsEnabled() {
-    feature_list_.InitAndEnableFeature(features::kTabGroups);
+    feature_list_.InitWithFeatures(
+        {features::kTabGroups, features::kTabGroupsAutoCreate}, {});
   }
 
  private:
@@ -860,7 +862,7 @@ class BrowserTestWithTabGroupsEnabled : public BrowserTest {
 };
 
 IN_PROC_BROWSER_TEST_F(BrowserTestWithTabGroupsEnabled,
-                       NewTabFromLinkOpensInGroup) {
+                       NewTabFromLinkInGroupedTabOpensInGroup) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
   // Add a grouped tab.
@@ -879,7 +881,59 @@ IN_PROC_BROWSER_TEST_F(BrowserTestWithTabGroupsEnabled,
                     ui::PAGE_TRANSITION_TYPED, false));
 
   // It should have inherited the tab group from the first tab.
-  EXPECT_EQ(group_id, browser()->tab_strip_model()->GetTabGroupForTab(1));
+  EXPECT_EQ(group_id, model->GetTabGroupForTab(1));
+}
+
+IN_PROC_BROWSER_TEST_F(BrowserTestWithTabGroupsEnabled,
+                       NewTabFromLinkWithSameDomainCreatesGroup) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  // Open a tab not in a group.
+  TabStripModel* const model = browser()->tab_strip_model();
+  GURL url1("http://www.example.com/empty.html");
+  ui_test_utils::NavigateToURL(browser(), url1);
+  ASSERT_FALSE(model->GetTabGroupForTab(0).has_value());
+
+  // Open a new background tab with the same domain as the active tab.
+  WebContents* const contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  GURL url2("http://www.example.com/");
+  OpenURLFromTab(
+      contents,
+      OpenURLParams(url2, Referrer(), WindowOpenDisposition::NEW_BACKGROUND_TAB,
+                    ui::PAGE_TRANSITION_TYPED, false));
+
+  // The new tab which has the same domain as the tab it originated from should
+  // be grouped with its parent tab.
+  EXPECT_TRUE(model->GetTabGroupForTab(0).has_value());
+  EXPECT_TRUE(model->GetTabGroupForTab(1).has_value());
+  EXPECT_EQ(model->GetTabGroupForTab(0).value(),
+            model->GetTabGroupForTab(1).value());
+}
+
+IN_PROC_BROWSER_TEST_F(BrowserTestWithTabGroupsEnabled,
+                       NewTabFromLinkWithDifferentDomainDoesNotCreateGroup) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  // Open a tab not in a group.
+  TabStripModel* const model = browser()->tab_strip_model();
+  ui_test_utils::NavigateToURL(browser(),
+                               embedded_test_server()->GetURL("/empty.html"));
+  ASSERT_FALSE(model->GetTabGroupForTab(0).has_value());
+
+  // Open a new background tab with a different domain from the active tab.
+  WebContents* const contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  GURL url2("http://www.example.com/");
+  OpenURLFromTab(
+      contents,
+      OpenURLParams(url2, Referrer(), WindowOpenDisposition::NEW_BACKGROUND_TAB,
+                    ui::PAGE_TRANSITION_TYPED, false));
+
+  // The new tab which has a different domain as the tab it originated from will
+  // open without creating a group.
+  EXPECT_FALSE(model->GetTabGroupForTab(0).has_value());
+  EXPECT_FALSE(model->GetTabGroupForTab(1).has_value());
 }
 
 IN_PROC_BROWSER_TEST_F(BrowserTestWithTabGroupsEnabled,
@@ -1266,7 +1320,8 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, AppIdSwitch) {
 
   // The app should open as a tab.
   EXPECT_TRUE(launch.Launch(browser()->profile(), std::vector<GURL>(),
-                            /*process_startup=*/false));
+                            /*process_startup=*/false,
+                            std::make_unique<LaunchModeRecorder>()));
 
   {
     // From startup_browser_creator_impl.cc:
@@ -1438,7 +1493,7 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, RestorePinnedTabs) {
       first_run::IsChromeFirstRun() ? chrome::startup::IS_FIRST_RUN
                                     : chrome::startup::IS_NOT_FIRST_RUN;
   StartupBrowserCreatorImpl launch(base::FilePath(), dummy, first_run);
-  launch.Launch(browser()->profile(), std::vector<GURL>(), false);
+  launch.Launch(browser()->profile(), std::vector<GURL>(), false, nullptr);
 
   // The launch should have created a new browser.
   ASSERT_EQ(2u, chrome::GetBrowserCount(browser()->profile()));
@@ -1464,9 +1519,18 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, RestorePinnedTabs) {
 }
 #endif  // !defined(OS_CHROMEOS)
 
+// TODO(1126339): fix the way how exo creates accelerated widgets. At the
+// moment, they are created only after the client attaches a buffer to a surface,
+// which is incorrect and results in the "[destroyed object]: error 1: popup
+// parent not constructed" error.
+#if BUILDFLAG(IS_LACROS)
+#define MAYBE_CloseWithAppMenuOpen DISABLED_CloseWithAppMenuOpen
+#else
+#define MAYBE_CloseWithAppMenuOpen CloseWithAppMenuOpen
+#endif
 // This test verifies we don't crash when closing the last window and the app
 // menu is showing.
-IN_PROC_BROWSER_TEST_F(BrowserTest, CloseWithAppMenuOpen) {
+IN_PROC_BROWSER_TEST_F(BrowserTest, MAYBE_CloseWithAppMenuOpen) {
   if (browser_defaults::kBrowserAliveWithNoWindows)
     return;
 
@@ -1683,16 +1747,21 @@ IN_PROC_BROWSER_TEST_F(BrowserTest,
 
 class BrowserTestWithExtensionsDisabled : public BrowserTest {
  protected:
-  BrowserTestWithExtensionsDisabled() {}
+  BrowserTestWithExtensionsDisabled() = default;
+
+ public:
+  BrowserTestWithExtensionsDisabled(const BrowserTestWithExtensionsDisabled&) =
+      delete;
+  BrowserTestWithExtensionsDisabled& operator=(
+      const BrowserTestWithExtensionsDisabled&) = delete;
+
+ protected:
   ~BrowserTestWithExtensionsDisabled() override = default;
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
     BrowserTest::SetUpCommandLine(command_line);
     command_line->AppendSwitch(switches::kDisableExtensions);
   }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(BrowserTestWithExtensionsDisabled);
 };
 
 // Makes sure Extensions and Settings commands are disabled in certain
@@ -1944,7 +2013,9 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, WindowOpenClose2) {
   EXPECT_EQ(title, title_watcher.WaitAndGetTitle());
 }
 
-IN_PROC_BROWSER_TEST_F(BrowserTest, WindowOpenClose3) {
+// Disabled because of timeouts in several builders.
+// https://crbug.com/1129313
+IN_PROC_BROWSER_TEST_F(BrowserTest, DISABLED_WindowOpenClose3) {
 #if defined(OS_MAC)
   // Ensure that tests don't wait for frames that will never come.
   ui::CATransactionCoordinator::Get().DisableForTesting();
@@ -2201,10 +2272,12 @@ static const char kSecondPageTitle[] = "New window!";
 
 class ClickModifierTest : public InProcessBrowserTest {
  public:
-  ClickModifierTest() {}
+  ClickModifierTest() = default;
+  ClickModifierTest(const ClickModifierTest&) = delete;
+  ClickModifierTest& operator=(const ClickModifierTest&) = delete;
 
   // Returns a url that opens a new window or tab when clicked, via javascript.
-  GURL GetWindowOpenURL() {
+  GURL GetWindowOpenURL() const {
     return ui_test_utils::GetTestUrl(
         base::FilePath(kTestDir),
         base::FilePath(FILE_PATH_LITERAL("window_open.html")));
@@ -2212,15 +2285,19 @@ class ClickModifierTest : public InProcessBrowserTest {
 
   // Returns a url that follows a simple link when clicked, unless affected by
   // modifiers.
-  GURL GetHrefURL() {
+  GURL GetHrefURL() const {
     return ui_test_utils::GetTestUrl(
         base::FilePath(kTestDir),
         base::FilePath(FILE_PATH_LITERAL("href.html")));
   }
 
-  base::string16 GetFirstPageTitle() { return ASCIIToUTF16(kFirstPageTitle); }
+  base::string16 GetFirstPageTitle() const {
+    return ASCIIToUTF16(kFirstPageTitle);
+  }
 
-  base::string16 GetSecondPageTitle() { return ASCIIToUTF16(kSecondPageTitle); }
+  base::string16 GetSecondPageTitle() const {
+    return ASCIIToUTF16(kSecondPageTitle);
+  }
 
   // Loads our test page and simulates a single click using the supplied button
   // and modifiers.  The click will cause either a navigation or the creation of
@@ -2270,9 +2347,6 @@ class ClickModifierTest : public InProcessBrowserTest {
       EXPECT_EQ(GetFirstPageTitle(), web_contents->GetTitle());
     }
   }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(ClickModifierTest);
 };
 
 // Tests for clicking on elements with handlers that run window.open.

@@ -11,7 +11,7 @@
 #include "base/macros.h"
 #include "base/optional.h"
 #include "base/time/time.h"
-#include "components/page_load_metrics/browser/observers/largest_contentful_paint_handler.h"
+#include "components/page_load_metrics/browser/observers/core/largest_contentful_paint_handler.h"
 #include "components/page_load_metrics/browser/page_load_metrics_observer.h"
 #include "components/page_load_metrics/browser/page_load_metrics_observer_delegate.h"
 #include "components/page_load_metrics/browser/page_load_metrics_update_dispatcher.h"
@@ -204,7 +204,8 @@ class PageLoadTracker : public PageLoadMetricsUpdateDispatcher::Client,
   void OnFrameIntersectionUpdate(
       content::RenderFrameHost* rfh,
       const mojom::FrameIntersectionUpdate& frame_intersection_update) override;
-  void UpdateThroughput(mojom::ThroughputUkmDataPtr throughput_data) override;
+  void SetUpSharedMemoryForSmoothness(
+      base::ReadOnlySharedMemoryRegion shared_memory) override;
 
   // PageLoadMetricsObserverDelegate implementation:
   content::WebContents* GetWebContents() const override;

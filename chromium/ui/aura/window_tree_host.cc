@@ -25,7 +25,6 @@
 #include "ui/base/ui_base_features.h"
 #include "ui/base/view_prop.h"
 #include "ui/compositor/compositor_switches.h"
-#include "ui/compositor/dip_util.h"
 #include "ui/compositor/layer.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
@@ -52,13 +51,11 @@ class ScopedLocalSurfaceIdValidator {
  public:
   explicit ScopedLocalSurfaceIdValidator(Window* window)
       : window_(window),
-        local_surface_id_(
-            window ? window->GetLocalSurfaceIdAllocation().local_surface_id()
-                   : viz::LocalSurfaceId()) {}
+        local_surface_id_(window ? window->GetLocalSurfaceId()
+                                 : viz::LocalSurfaceId()) {}
   ~ScopedLocalSurfaceIdValidator() {
     if (window_) {
-      DCHECK_EQ(local_surface_id_,
-                window_->GetLocalSurfaceIdAllocation().local_surface_id());
+      DCHECK_EQ(local_surface_id_, window_->GetLocalSurfaceId());
     }
   }
 
@@ -193,7 +190,7 @@ void WindowTreeHost::UpdateCompositorScaleAndSize(
   window_->AllocateLocalSurfaceId();
   ScopedLocalSurfaceIdValidator lsi_validator(window());
   compositor_->SetScaleAndSize(device_scale_factor_, new_bounds.size(),
-                               window_->GetLocalSurfaceIdAllocation());
+                               window_->GetLocalSurfaceId());
 }
 
 void WindowTreeHost::ConvertDIPToScreenInPixels(gfx::Point* point) const {
@@ -425,7 +422,7 @@ void WindowTreeHost::CreateCompositor(const viz::FrameSinkId& frame_sink_id,
 void WindowTreeHost::InitCompositor() {
   DCHECK(!compositor_->root_layer());
   compositor_->SetScaleAndSize(device_scale_factor_, GetBoundsInPixels().size(),
-                               window()->GetLocalSurfaceIdAllocation());
+                               window()->GetLocalSurfaceId());
   compositor_->SetRootLayer(window()->layer());
 
   display::Display display =

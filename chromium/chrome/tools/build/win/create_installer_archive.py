@@ -212,6 +212,7 @@ def SignTargets(config, options, distribution, staging_dir,enable_hidpi):
     sections.append('HIDPI')
 
   for section in sections:
+    assert "WIDEWINE_SIGN" not in section.capitalize() , "Should not happen"
     for option in config.options(section):
       if option.endswith('dir'):
         continue
@@ -224,6 +225,49 @@ def SignTargets(config, options, distribution, staging_dir,enable_hidpi):
       for target in src_paths:
         SignTarget(options, target)
   print "Completed signing"
+
+def SignWidevineTargets(config, options, staging_dir, distro, blessed=0, versioned=False):
+  print ("Start Widevine Signing %s" % distro)
+  for option in config.options(distro):
+    if option.endswith('dir'):
+      continue
+
+    if versioned:
+      src_file = os.path.join(staging_dir, CHROME_DIR, versioned, option)
+    else:
+      src_file = os.path.join(staging_dir, CHROME_DIR, option)
+    target_file = os.path.join(staging_dir, config.get(distro, option))
+
+    cmd = [
+          sys.executable,
+          options.vivaldi_widevine_sign_cmd,
+          "--input", src_file,
+          "--output", target_file,
+          "--private_key", options.vivaldi_widevine_private_key,
+          "--certificate", options.vivaldi_widevine_cert,
+          ]
+    if blessed:
+      cmd.extend(["--flags", "1"])
+
+    print ("Signing cmd: %s"% str(cmd))
+    subprocess.check_call(cmd)
+
+    cmd = [
+          sys.executable,
+          options.vivaldi_widevine_verify_cmd,
+          "--input", src_file,
+          "--sig_file", target_file,
+          ]
+    if blessed:
+      cmd.extend(["--flags", "1"])
+
+    print ("Verifying cmd: %s"% str(cmd))
+    subprocess.check_call(cmd)
+
+    g_archive_inputs.append(target_file)
+
+  print ("Completed Widevine signing")
+
 
 def GenerateDiffPatch(options, orig_file, new_file, patch_file):
   if (options.diff_algorithm == "COURGETTE"):
@@ -624,6 +668,12 @@ def main(options):
     SignTargets(config, options, options.distribution,
                              staging_dir,
                              options.enable_hidpi)
+  if options.vivaldi_widevine_sign_cmd:
+    assert options.vivaldi_widevine_verify_cmd
+    assert options.vivaldi_widevine_private_key
+    assert options.vivaldi_widevine_cert
+    SignWidevineTargets(config, options, staging_dir, "WIDEWINE_SIGN_BLESSED", blessed=1)
+    SignWidevineTargets(config, options, staging_dir, "WIDEWINE_SIGN_VERSIONED", versioned=current_version)
 
   if options.component_build == '1':
     DoComponentBuildTasks(staging_dir, options.build_dir,
@@ -716,6 +766,12 @@ def _ParseOptions():
   parser.add_option('--vivaldi-build-version', default="", type="str")
   parser.add_option("--vivaldi-sign-key", default="", type="str")
   parser.add_option("--vivaldi-sign-cmd", default="", type="str")
+
+  parser.add_option("--vivaldi-widevine-sign-cmd", default="", type="str")
+  parser.add_option("--vivaldi-widevine-verify-cmd", default="", type="str")
+  parser.add_option("--vivaldi-widevine-private-key", default="", type="str")
+  parser.add_option("--vivaldi-widevine-cert", default="", type="str")
+
 
   options, _ = parser.parse_args()
   if not options.build_dir:

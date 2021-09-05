@@ -9,13 +9,16 @@
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_utils.h"
 #include "components/bookmarks/vivaldi_bookmark_kit.h"
+#include "components/prefs/pref_service.h"
 #include "extensions/api/bookmark_context_menu/bookmark_context_menu_api.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/models/image_model.h"
 #include "ui/base/models/simple_menu_model.h"
 #include "ui/gfx/color_utils.h"
 #include "ui/views/controls/menu/menu_item_view.h"
 #include "ui/views/controls/menu/submenu_view.h"
 #include "ui/vivaldi_context_menu.h"
+#include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 namespace vivaldi {
 
@@ -28,11 +31,15 @@ typedef std::map<int, const bookmarks::BookmarkNode*> MenuIdToNodeMap;
 static int NextMenuId = 0;
 static MenuIdToNodeMap MenuIdToBookmarkMap;
 
-void BuildBookmarkContextMenu(ui::SimpleMenuModel* menu_model) {
+void BuildBookmarkContextMenu(Profile* profile,
+                              ui::SimpleMenuModel* menu_model) {
   menu_model->AddItemWithStringId(IDC_VIV_BOOKMARK_BAR_OPEN_NEW_TAB,
       IDS_VIV_BOOKMARK_BAR_OPEN_NEW_TAB);
-  menu_model->AddItemWithStringId(IDC_VIV_BOOKMARK_BAR_OPEN_BACKGROUND_TAB,
-      IDS_VIV_BOOKMARK_BAR_OPEN_BACKGROUND_TAB);
+  if (!profile->GetPrefs()->GetBoolean(
+          vivaldiprefs::kTabsOpenNewInBackground)) {
+    menu_model->AddItemWithStringId(IDC_VIV_BOOKMARK_BAR_OPEN_BACKGROUND_TAB,
+        IDS_VIV_BOOKMARK_BAR_OPEN_BACKGROUND_TAB);
+  }
   menu_model->AddItemWithStringId(IDC_VIV_BOOKMARK_BAR_OPEN_CURRENT_TAB,
       IDS_VIV_BOOKMARK_BAR_OPEN_CURRENT_TAB);
   menu_model->AddSeparator(ui::NORMAL_SEPARATOR);
@@ -285,15 +292,18 @@ const gfx::ImageSkia* GetBookmarkDefaultIcon() {
   return Container->support.icons[BookmarkSupport::kUrl].ToImageSkia();
 }
 
-gfx::ImageSkia GetBookmarkFolderIcon(SkColor text_color) {
-  return *Container->support.icons[color_utils::IsDark(text_color) ?
-      BookmarkSupport::kFolder : BookmarkSupport::kFolderDark].ToImageSkia();
+ui::ImageModel GetBookmarkFolderIcon(SkColor text_color) {
+  return ui::ImageModel::FromImage(
+      Container->support.icons[color_utils::IsDark(text_color)
+                                   ? BookmarkSupport::kFolder
+                                   : BookmarkSupport::kFolderDark]);
 }
 
-gfx::ImageSkia GetBookmarkSpeeddialIcon(SkColor text_color) {
-  return *Container->support.icons[color_utils::IsDark(text_color) ?
-      BookmarkSupport::kSpeeddial :
-      BookmarkSupport::kSpeeddialDark].ToImageSkia();
+ui::ImageModel GetBookmarkSpeeddialIcon(SkColor text_color) {
+  return ui::ImageModel::FromImage(
+      Container->support.icons[color_utils::IsDark(text_color)
+                                   ? BookmarkSupport::kSpeeddial
+                                   : BookmarkSupport::kSpeeddialDark]);
 }
 
 }  // vivaldi

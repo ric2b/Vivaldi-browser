@@ -26,16 +26,17 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "components/url_formatter/url_formatter.h"
-#include "content/browser/frame_host/frame_tree.h"
-#include "content/browser/frame_host/navigation_entry_impl.h"
-#include "content/browser/frame_host/navigation_request.h"
-#include "content/browser/frame_host/render_frame_host_impl.h"
+#include "content/browser/renderer_host/frame_tree.h"
+#include "content/browser/renderer_host/navigation_entry_impl.h"
+#include "content/browser/renderer_host/navigation_request.h"
+#include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_input_event_router.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/browser/web_contents/web_contents_view.h"
 #include "content/common/content_navigation_policy.h"
 #include "content/common/frame.mojom-test-utils.h"
+#include "content/common/frame.mojom.h"
 #include "content/common/frame_messages.h"
 #include "content/common/page_messages.h"
 #include "content/common/unfreezable_frame_messages.h"
@@ -118,7 +119,7 @@ class NotifyPreferencesChangedTestContentBrowserClient
   NotifyPreferencesChangedTestContentBrowserClient() = default;
 
   void OverrideWebkitPrefs(RenderViewHost* render_view_host,
-                           WebPreferences* prefs) override {
+                           blink::web_pref::WebPreferences* prefs) override {
     override_webkit_prefs_rvh_set_.insert(render_view_host);
   }
 
@@ -2083,8 +2084,9 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
   DownloadImageTestInternal(shell(), kImageUrl, 200, 1);
 }
 
+// Disabled due to flakiness: https://crbug.com/1124349.
 IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
-                       DownloadImage_Deny_FileImage) {
+                       DISABLED_DownloadImage_Deny_FileImage) {
   ASSERT_TRUE(embedded_test_server()->Start());
   shell()->LoadURL(embedded_test_server()->GetURL("/simple_page.html"));
 
@@ -2092,8 +2094,9 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
   DownloadImageTestInternal(shell(), kImageUrl, 0, 0);
 }
 
+// Disabled due to flakiness: https://crbug.com/1124349.
 IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
-                       DownloadImage_Allow_FileImage) {
+                       DISABLED_DownloadImage_Allow_FileImage) {
   shell()->LoadURL(GetTestUrl("", "simple_page.html"));
 
   const GURL kImageUrl =
@@ -4380,7 +4383,7 @@ class DidStopLoadingInterceptor : public mojom::FrameHostInterceptorForTesting {
   void DidStopLoading() override {
     static_cast<RenderProcessHostImpl*>(render_frame_host_->GetProcess())
         ->mark_child_process_activity_time();
-    render_frame_host_->DidStopLoading();
+    static_cast<mojom::FrameHost*>(render_frame_host_)->DidStopLoading();
   }
 
  private:

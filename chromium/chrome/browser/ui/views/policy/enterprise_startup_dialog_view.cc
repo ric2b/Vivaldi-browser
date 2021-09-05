@@ -59,7 +59,7 @@ std::unique_ptr<views::Label> CreateText(const base::string16& message) {
   text->SetFontList(gfx::FontList().Derive(kFontSizeDelta, gfx::Font::NORMAL,
                                            gfx::Font::Weight::MEDIUM));
   text->SetEnabledColor(
-      views::style::GetColor(*text, views::style::CONTEXT_MESSAGE_BOX_BODY_TEXT,
+      views::style::GetColor(*text, views::style::CONTEXT_DIALOG_BODY_TEXT,
                              views::style::STYLE_PRIMARY));
   text->SetLineHeight(kLineHeight);
   return text;
@@ -75,7 +75,7 @@ std::unique_ptr<views::View> CreateLogoView() {
                              ? IDR_PRODUCT_LOGO_ENTERPRISE_WHITE
                              : IDR_PRODUCT_LOGO_ENTERPRISE)
           .AsImageSkia());
-  logo_image->set_tooltip_text(
+  logo_image->SetTooltipText(
       l10n_util::GetStringUTF16(IDS_PRODUCT_LOGO_ENTERPRISE_ALT_TEXT));
   gfx::Rect logo_bounds = logo_image->GetImageBounds();
   logo_image->SetImageSize(gfx::Size(

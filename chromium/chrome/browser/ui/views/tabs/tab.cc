@@ -76,6 +76,7 @@
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/highlight_path_generator.h"
 #include "ui/views/controls/label.h"
+#include "ui/views/metadata/metadata_impl_macros.h"
 #include "ui/views/rect_based_targeting_utils.h"
 #include "ui/views/view.h"
 #include "ui/views/view_class_properties.h"
@@ -176,9 +177,6 @@ class Tab::TabCloseButtonObserver : public views::ViewObserver {
 // Tab -------------------------------------------------------------------------
 
 // static
-const char Tab::kViewClassName[] = "Tab";
-
-// static
 void Tab::SetShowHoverCardOnMouseHoverForTesting(bool value) {
   g_show_hover_card_on_mouse_hover = value;
 }
@@ -193,7 +191,7 @@ Tab::Tab(TabController* controller)
 
   // So we get don't get enter/exit on children and don't prematurely stop the
   // hover.
-  set_notify_enter_exit_on_child(true);
+  SetNotifyEnterExitOnChild(true);
 
   SetID(VIEW_ID_TAB);
 
@@ -220,9 +218,10 @@ Tab::Tab(TabController* controller)
   // Unretained is safe here because this class outlives its close button, and
   // the controller outlives this Tab.
   close_button_ = new TabCloseButton(
-      this, base::BindRepeating(&TabController::OnMouseEventInTab,
-                                base::Unretained(controller_)));
-  close_button_->set_has_ink_drop_action_on_click(true);
+      base::BindRepeating(&Tab::CloseButtonPressed, base::Unretained(this)),
+      base::BindRepeating(&TabController::OnMouseEventInTab,
+                          base::Unretained(controller_)));
+  close_button_->SetHasInkDropActionOnClick(true);
   AddChildView(close_button_);
 
   tab_close_button_observer_ = std::make_unique<TabCloseButtonObserver>(
@@ -255,25 +254,6 @@ void Tab::AnimationProgressed(const gfx::Animation* animation) {
       gfx::Tween::CalculateValue(gfx::Tween::FAST_OUT_SLOW_IN,
                                  animation->GetCurrentValue()),
       start_title_bounds_, target_title_bounds_));
-}
-
-void Tab::ButtonPressed(views::Button* sender, const ui::Event& event) {
-  if (!alert_indicator_ || !alert_indicator_->GetVisible())
-    base::RecordAction(UserMetricsAction("CloseTab_NoAlertIndicator"));
-  else if (GetAlertStateToShow(data_.alert_state) ==
-           TabAlertState::AUDIO_PLAYING)
-    base::RecordAction(UserMetricsAction("CloseTab_AudioIndicator"));
-  else
-    base::RecordAction(UserMetricsAction("CloseTab_RecordingIndicator"));
-
-  const CloseTabSource source = (event.type() == ui::ET_MOUSE_RELEASED &&
-                                 !(event.flags() & ui::EF_FROM_TOUCH))
-                                    ? CLOSE_TAB_FROM_MOUSE
-                                    : CLOSE_TAB_FROM_TOUCH;
-  DCHECK_EQ(close_button_, sender);
-  controller_->CloseTab(this, source);
-  if (event.type() == ui::ET_GESTURE_TAP)
-    TouchUMA::RecordGestureAction(TouchUMA::kGestureTabCloseTap);
 }
 
 bool Tab::GetHitTestMask(SkPath* mask) const {
@@ -348,8 +328,7 @@ void Tab::Layout() {
     const int left = std::min(after_title_padding, close_x);
     const int bottom = height() - close_button_size - top;
     const int right = std::max(0, width() - (close_x + close_button_size));
-    close_button_->SetBorder(
-        views::CreateEmptyBorder(top, left, bottom, right));
+    close_button_->SetButtonPadding(gfx::Insets(top, left, bottom, right));
     close_button_->SetBoundsRect(
         {gfx::Point(close_x - left, 0), close_button_->GetPreferredSize()});
   }
@@ -422,10 +401,6 @@ void Tab::Layout() {
 
   if (focus_ring_)
     focus_ring_->Layout();
-}
-
-const char* Tab::GetClassName() const {
-  return kViewClassName;
 }
 
 bool Tab::OnKeyPressed(const ui::KeyEvent& event) {
@@ -1050,3 +1025,23 @@ void Tab::UpdateForegroundColors() {
 
   SchedulePaint();
 }
+
+void Tab::CloseButtonPressed(const ui::Event& event) {
+  if (!alert_indicator_ || !alert_indicator_->GetVisible())
+    base::RecordAction(UserMetricsAction("CloseTab_NoAlertIndicator"));
+  else if (GetAlertStateToShow(data_.alert_state) ==
+           TabAlertState::AUDIO_PLAYING)
+    base::RecordAction(UserMetricsAction("CloseTab_AudioIndicator"));
+  else
+    base::RecordAction(UserMetricsAction("CloseTab_RecordingIndicator"));
+
+  const bool from_mouse = event.type() == ui::ET_MOUSE_RELEASED &&
+                          !(event.flags() & ui::EF_FROM_TOUCH);
+  controller_->CloseTab(
+      this, from_mouse ? CLOSE_TAB_FROM_MOUSE : CLOSE_TAB_FROM_TOUCH);
+  if (event.type() == ui::ET_GESTURE_TAP)
+    TouchUMA::RecordGestureAction(TouchUMA::kGestureTabCloseTap);
+}
+
+BEGIN_METADATA(Tab, TabSlotView)
+END_METADATA

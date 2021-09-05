@@ -4,12 +4,16 @@
 
 #include "chrome/browser/chromeos/phonehub/phone_hub_manager_factory.h"
 
+#include "ash/public/cpp/system_tray.h"
 #include "chrome/browser/chromeos/device_sync/device_sync_client_factory.h"
 #include "chrome/browser/chromeos/multidevice_setup/multidevice_setup_client_factory.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
+#include "chrome/browser/chromeos/secure_channel/secure_channel_client_provider.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/webui/chromeos/multidevice_setup/multidevice_setup_dialog.h"
 #include "chromeos/components/phonehub/notification_access_manager_impl.h"
-#include "chromeos/components/phonehub/phone_hub_manager.h"
+#include "chromeos/components/phonehub/onboarding_ui_tracker_impl.h"
+#include "chromeos/components/phonehub/phone_hub_manager_impl.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "chromeos/services/multidevice_setup/public/cpp/prefs.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
@@ -40,7 +44,7 @@ bool IsLoggedInAsPrimaryUser(Profile* profile) {
 
 // static
 PhoneHubManager* PhoneHubManagerFactory::GetForProfile(Profile* profile) {
-  return static_cast<PhoneHubManager*>(
+  return static_cast<PhoneHubManagerImpl*>(
       PhoneHubManagerFactory::GetInstance()->GetServiceForBrowserContext(
           profile, /*create=*/true));
 }
@@ -74,10 +78,18 @@ KeyedService* PhoneHubManagerFactory::BuildServiceInstanceFor(
   if (IsProhibitedByPolicy(profile))
     return nullptr;
 
-  return new PhoneHubManager(
+  PhoneHubManagerImpl* phone_hub_manager = new PhoneHubManagerImpl(
       profile->GetPrefs(),
       device_sync::DeviceSyncClientFactory::GetForProfile(profile),
-      multidevice_setup::MultiDeviceSetupClientFactory::GetForProfile(profile));
+      multidevice_setup::MultiDeviceSetupClientFactory::GetForProfile(profile),
+      secure_channel::SecureChannelClientProvider::GetInstance()->GetClient(),
+      base::BindRepeating(&multidevice_setup::MultiDeviceSetupDialog::Show));
+
+  // Provide |phone_hub_manager| to the system tray so that it can be used by
+  // the UI.
+  ash::SystemTray::Get()->SetPhoneHubManager(phone_hub_manager);
+
+  return phone_hub_manager;
 }
 
 bool PhoneHubManagerFactory::ServiceIsCreatedWithBrowserContext() const {
@@ -87,6 +99,7 @@ bool PhoneHubManagerFactory::ServiceIsCreatedWithBrowserContext() const {
 void PhoneHubManagerFactory::RegisterProfilePrefs(
     user_prefs::PrefRegistrySyncable* registry) {
   NotificationAccessManagerImpl::RegisterPrefs(registry);
+  OnboardingUiTrackerImpl::RegisterPrefs(registry);
 }
 
 }  // namespace phonehub

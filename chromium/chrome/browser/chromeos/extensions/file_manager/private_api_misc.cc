@@ -5,9 +5,8 @@
 #include "chrome/browser/chromeos/extensions/file_manager/private_api_misc.h"
 
 #include <stddef.h>
+#include <stdint.h>
 
-#include <algorithm>
-#include <memory>
 #include <set>
 #include <utility>
 #include <vector>
@@ -16,8 +15,11 @@
 #include "base/base64.h"
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/containers/span.h"
 #include "base/files/file_path.h"
+#include "base/files/file_util.h"
 #include "base/i18n/encoding_detection.h"
+#include "base/memory/read_only_shared_memory_region.h"
 #include "base/memory/ref_counted.h"
 #include "base/strings/strcat.h"
 #include "base/strings/stringprintf.h"
@@ -44,6 +46,7 @@
 #include "chrome/browser/file_util_service.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/net/system_network_context_manager.h"
+#include "chrome/browser/printing/printing_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profiles_state.h"
@@ -68,6 +71,8 @@
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/user_manager/user_manager.h"
 #include "components/zoom/page_zoom.h"
+#include "content/public/browser/browser_task_traits.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/page_zoom.h"
 #include "extensions/browser/api/file_handlers/mime_util.h"
@@ -78,7 +83,9 @@
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "storage/common/file_system/file_system_types.h"
 #include "storage/common/file_system/file_system_util.h"
+#include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/webui/web_ui_util.h"
+#include "ui/gfx/geometry/size.h"
 #include "url/gurl.h"
 
 namespace extensions {
@@ -199,13 +206,48 @@ bool IsAllowedSource(storage::FileSystemType type,
 
 // Encodes PNG data as a dataURL.
 std::string MakeThumbnailDataUrlOnThreadPool(
-    const std::vector<uint8_t>& png_data) {
-  std::string encoded;
-  base::Base64Encode(
-      base::StringPiece(reinterpret_cast<const char*>(png_data.data()),
-                        png_data.size()),
-      &encoded);
-  return base::StrCat({"data:image/png;base64,", encoded});
+    base::span<const uint8_t> png_data) {
+  base::AssertLongCPUWorkAllowed();
+  return base::StrCat({"data:image/png;base64,", base::Base64Encode(png_data)});
+}
+
+// Converts bitmap to a PNG image and encodes it as a dataURL.
+std::string ConvertAndEncode(const SkBitmap& bitmap) {
+  if (bitmap.isNull()) {
+    DLOG(WARNING) << "Got an invalid bitmap";
+    return std::string();
+  }
+  sk_sp<SkImage> image = SkImage::MakeFromBitmap(bitmap);
+  sk_sp<SkData> png_data(image->encodeToData(SkEncodedImageFormat::kPNG, 100));
+  if (!png_data) {
+    DLOG(WARNING) << "Thumbnail encoding error";
+    return std::string();
+  }
+  return MakeThumbnailDataUrlOnThreadPool(
+      base::make_span(png_data->bytes(), png_data->size()));
+}
+
+// The maximum size of the input PDF file for which thumbnails are generated.
+constexpr uint32_t kMaxPdfSizeInBytes = 1024u * 1024u;
+
+// A function that performs IO operations to read and render PDF thumbnail
+// Must be run by a blocking task runner.
+std::string ReadLocalPdf(const base::FilePath& pdf_file_path) {
+  int64_t file_size;
+  if (!base::GetFileSize(pdf_file_path, &file_size)) {
+    DLOG(ERROR) << "Failed to get file size of " << pdf_file_path;
+    return std::string();
+  }
+  if (file_size > kMaxPdfSizeInBytes) {
+    DLOG(ERROR) << "File " << pdf_file_path << " is too large " << file_size;
+    return std::string();
+  }
+  std::string contents;
+  if (!base::ReadFileToString(pdf_file_path, &contents)) {
+    DLOG(ERROR) << "Failed to load " << pdf_file_path;
+    return std::string();
+  }
+  return contents;
 }
 
 }  // namespace
@@ -564,16 +606,13 @@ FileManagerPrivateGetProvidersFunction::Run() {
     result_item.multiple_mounts = capabilities.multiple_mounts;
     switch (capabilities.source) {
       case SOURCE_FILE:
-        result_item.source =
-            api::manifest_types::FILE_SYSTEM_PROVIDER_SOURCE_FILE;
+        result_item.source = api::file_manager_private::PROVIDER_SOURCE_FILE;
         break;
       case SOURCE_DEVICE:
-        result_item.source =
-            api::manifest_types::FILE_SYSTEM_PROVIDER_SOURCE_DEVICE;
+        result_item.source = api::file_manager_private::PROVIDER_SOURCE_DEVICE;
         break;
       case SOURCE_NETWORK:
-        result_item.source =
-            api::manifest_types::FILE_SYSTEM_PROVIDER_SOURCE_NETWORK;
+        result_item.source = api::file_manager_private::PROVIDER_SOURCE_NETWORK;
         break;
     }
     result.push_back(std::move(result_item));
@@ -1124,7 +1163,7 @@ FileManagerPrivateDetectCharacterEncodingFunction::Run() {
 }
 
 FileManagerPrivateInternalGetThumbnailFunction::
-    FileManagerPrivateInternalGetThumbnailFunction() {}
+    FileManagerPrivateInternalGetThumbnailFunction() = default;
 
 FileManagerPrivateInternalGetThumbnailFunction::
     ~FileManagerPrivateInternalGetThumbnailFunction() = default;
@@ -1167,7 +1206,67 @@ FileManagerPrivateInternalGetThumbnailFunction::GetLocalThumbnail(
       base::FilePath::CompareIgnoreCase(path.Extension(), ".pdf") != 0) {
     return RespondNow(Error("Can only handle PDF files"));
   }
-  return RespondNow(Error("Not implemented"));
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, {base::TaskPriority::USER_VISIBLE, base::MayBlock()},
+      base::BindOnce(&ReadLocalPdf, std::move(path)),
+      base::BindOnce(
+          &FileManagerPrivateInternalGetThumbnailFunction::FetchPdfThumbnail,
+          this, crop_to_square));
+  return RespondLater();
+}
+
+void FileManagerPrivateInternalGetThumbnailFunction::FetchPdfThumbnail(
+    bool crop_to_square,
+    const std::string& content) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  if (content.empty()) {
+    Respond(Error("Failed to read PDF file"));
+    return;
+  }
+  auto pdf_region = base::ReadOnlySharedMemoryRegion::Create(content.size());
+  if (!pdf_region.IsValid()) {
+    Respond(Error("Failed allocate memory for PDF file"));
+    return;
+  }
+  memcpy(pdf_region.mapping.memory(), content.data(), content.size());
+  DCHECK(!pdf_thumbnailer_.is_bound());
+  GetPrintingService()->BindPdfThumbnailer(
+      pdf_thumbnailer_.BindNewPipeAndPassReceiver());
+  pdf_thumbnailer_.set_disconnect_handler(base::BindOnce(
+      &FileManagerPrivateInternalGetThumbnailFunction::PdfThumbnailDisconected,
+      base::Unretained(this)));
+  gfx::Size thumb_size =
+      crop_to_square
+          ? gfx::Size(FileManagerPrivateInternalGetThumbnailFunction::kSize,
+                      FileManagerPrivateInternalGetThumbnailFunction::kSize)
+          : gfx::Size(FileManagerPrivateInternalGetThumbnailFunction::kWidth,
+                      FileManagerPrivateInternalGetThumbnailFunction::kHeight);
+  auto params = printing::mojom::ThumbParams::New(
+      thumb_size,
+      gfx::Size(FileManagerPrivateInternalGetThumbnailFunction::kDpi,
+                FileManagerPrivateInternalGetThumbnailFunction::kDpi),
+      /*stretch_to_bounds=*/false, /*keep_aspect_ratio=*/true);
+  pdf_thumbnailer_->GetThumbnail(
+      std::move(params), std::move(pdf_region.region),
+      base::BindOnce(
+          &FileManagerPrivateInternalGetThumbnailFunction::GotPdfThumbnail,
+          this));
+}
+
+void FileManagerPrivateInternalGetThumbnailFunction::PdfThumbnailDisconected() {
+  DLOG(WARNING) << "PDF thumbnail disconnected";
+  Respond(Error("PDF service disconnected"));
+}
+
+void FileManagerPrivateInternalGetThumbnailFunction::GotPdfThumbnail(
+    const SkBitmap& bitmap) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  pdf_thumbnailer_.reset();
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, base::BindOnce(&ConvertAndEncode, bitmap),
+      base::BindOnce(
+          &FileManagerPrivateInternalGetThumbnailFunction::SendEncodedThumbnail,
+          this));
 }
 
 ExtensionFunction::ResponseAction
@@ -1199,14 +1298,14 @@ FileManagerPrivateInternalGetThumbnailFunction::GetDrivefsThumbnail(
   drivefs_interface->GetThumbnail(
       path, crop_to_square,
       mojo::WrapCallbackWithDefaultInvokeIfNotRun(
-          base::BindOnce(
-              &FileManagerPrivateInternalGetThumbnailFunction::GotThumbnail,
-              this),
-          base::Optional<std::vector<uint8_t>>()));
+          base::BindOnce(&FileManagerPrivateInternalGetThumbnailFunction::
+                             GotDriveThumbnail,
+                         this),
+          base::nullopt));
   return RespondLater();
 }
 
-void FileManagerPrivateInternalGetThumbnailFunction::GotThumbnail(
+void FileManagerPrivateInternalGetThumbnailFunction::GotDriveThumbnail(
     const base::Optional<std::vector<uint8_t>>& data) {
   if (!data) {
     Respond(OneArgument(std::make_unique<base::Value>("")));

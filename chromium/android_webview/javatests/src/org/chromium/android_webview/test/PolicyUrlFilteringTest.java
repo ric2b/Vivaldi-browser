@@ -20,16 +20,16 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.android_webview.AwContents;
-import org.chromium.android_webview.ErrorCodeConversionHelper;
+import org.chromium.android_webview.WebviewErrorCode;
 import org.chromium.android_webview.policy.AwPolicyProvider;
 import org.chromium.base.test.util.Feature;
+import org.chromium.components.policy.AbstractAppRestrictionsProvider;
+import org.chromium.components.policy.CombinedPolicyProvider;
+import org.chromium.components.policy.test.PolicyData;
+import org.chromium.components.policy.test.annotations.Policies;
 import org.chromium.content_public.browser.test.util.TestCallbackHelperContainer;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.net.test.util.TestWebServer;
-import org.chromium.policy.AbstractAppRestrictionsProvider;
-import org.chromium.policy.CombinedPolicyProvider;
-import org.chromium.policy.test.PolicyData;
-import org.chromium.policy.test.annotations.Policies;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -88,7 +88,7 @@ public class PolicyUrlFilteringTest {
         setFilteringPolicy(testProvider, new String[] {"localhost"}, new String[] {});
 
         navigateAndCheckOutcome(mFooTestUrl, 0 /* error count before */, 1 /* error count after */);
-        Assert.assertEquals(ErrorCodeConversionHelper.ERROR_CONNECT,
+        Assert.assertEquals(WebviewErrorCode.ERROR_CONNECT,
                 mContentsClient.getOnReceivedErrorHelper().getErrorCode());
     }
 
@@ -107,7 +107,7 @@ public class PolicyUrlFilteringTest {
 
         // Make sure it goes through the blocklist
         navigateAndCheckOutcome(mBarTestUrl, 0 /* error count before */, 1 /* error count after */);
-        Assert.assertEquals(ErrorCodeConversionHelper.ERROR_CONNECT,
+        Assert.assertEquals(WebviewErrorCode.ERROR_CONNECT,
                 mContentsClient.getOnReceivedErrorHelper().getErrorCode());
     }
     // clang-format on

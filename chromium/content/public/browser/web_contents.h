@@ -55,6 +55,9 @@ namespace blink {
 namespace mojom {
 class RendererPreferences;
 }
+namespace web_pref {
+struct WebPreferences;
+}
 struct Manifest;
 struct UserAgentOverride;
 }  // namespace blink
@@ -89,7 +92,6 @@ class WebUI;
 struct CustomContextMenuContext;
 struct DropData;
 struct MHTMLGenerationParams;
-struct WebPreferences;
 
 // WebContents is the core class in content/. A WebContents renders web content
 // (usually HTML) in a rectangular area.
@@ -152,6 +154,12 @@ class WebContents : public PageNavigator,
     // when creating a named window (e.g. <a target="foo"> or
     // window.open('', 'bar')).
     std::string main_frame_name;
+
+    // New window starts from the initial empty document. When created by an
+    // opener, the latter can request an initial navigation attempt to be made.
+    // This is the url specified in: `window.open(initial_popup_url, ...)`.
+    // This is empty otherwise.
+    GURL initial_popup_url;
 
     // True if the contents should be initially hidden.
     bool initially_hidden;
@@ -252,6 +260,8 @@ class WebContents : public PageNavigator,
   // render view host's delegate isn't a WebContents.
   CONTENT_EXPORT static WebContents* FromRenderViewHost(RenderViewHost* rvh);
 
+  // Returns the WebContents for the RenderFrameHost. It is unsafe to call this
+  // function with an invalid (e.g. destructed) `rfh`.
   CONTENT_EXPORT static WebContents* FromRenderFrameHost(RenderFrameHost* rfh);
 
   // Returns the WebContents associated with the |frame_tree_node_id|. This may
@@ -424,7 +434,7 @@ class WebContents : public PageNavigator,
 
   virtual void SetAccessibilityMode(ui::AXMode mode) = 0;
 
-  virtual base::string16 DumpAccessibilityTree(
+  virtual std::string DumpAccessibilityTree(
       bool internal,
       std::vector<content::AccessibilityTreeFormatter::PropertyFilter>
           property_filters) = 0;
@@ -986,7 +996,8 @@ class WebContents : public PageNavigator,
   // WebPreferences. If we want to guarantee that the value reflects the current
   // state of the WebContents, NotifyPreferencesChanged() should be called
   // before calling this.
-  virtual const WebPreferences& GetOrCreateWebPreferences() = 0;
+  virtual const blink::web_pref::WebPreferences&
+  GetOrCreateWebPreferences() = 0;
 
   // Notify this WebContents that the preferences have changed, so it needs to
   // recompute the current WebPreferences based on the current state of the
@@ -1016,7 +1027,8 @@ class WebContents : public PageNavigator,
   // recomputation logic in either of those functions.
   // TODO(rakina): Try to make values set through this function stick even after
   // recomputations.
-  virtual void SetWebPreferences(const WebPreferences& prefs) = 0;
+  virtual void SetWebPreferences(
+      const blink::web_pref::WebPreferences& prefs) = 0;
 
   // Passes current web preferences to all renderer in this WebContents after
   // possibly recomputing them as follows: all "fast" preferences (those not

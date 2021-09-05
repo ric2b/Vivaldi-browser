@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "content/browser/renderer_host/render_widget_host_input_event_router.h"
+#include <memory>
 
 #include "base/run_loop.h"
 #include "base/test/task_environment.h"
@@ -12,6 +13,7 @@
 #include "components/viz/test/host_frame_sink_manager_test_api.h"
 #include "content/browser/compositor/surface_utils.h"
 #include "content/browser/compositor/test/test_image_transport_factory.h"
+#include "content/browser/renderer_host/agent_scheduling_group_host.h"
 #include "content/browser/renderer_host/frame_connector_delegate.h"
 #include "content/browser/renderer_host/frame_token_message_queue.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
@@ -226,25 +228,27 @@ class RenderWidgetHostInputEventRouterTest : public testing::Test {
 
     process_host_root_ =
         std::make_unique<MockRenderProcessHost>(browser_context_.get());
+    agent_scheduling_group_host_root_ =
+        std::make_unique<AgentSchedulingGroupHost>(*process_host_root_);
     widget_host_root_ = std::make_unique<RenderWidgetHostImpl>(
-        &delegate_, process_host_root_.get(),
+        &delegate_, *agent_scheduling_group_host_root_,
         process_host_root_->GetNextRoutingID(),
         /*hidden=*/false, std::make_unique<FrameTokenMessageQueue>());
 
     mojo::AssociatedRemote<blink::mojom::WidgetHost> blink_widget_host;
     mojo::AssociatedRemote<blink::mojom::Widget> blink_widget;
     auto blink_widget_receiver =
-        blink_widget.BindNewEndpointAndPassDedicatedReceiverForTesting();
+        blink_widget.BindNewEndpointAndPassDedicatedReceiver();
     widget_host_root_->BindWidgetInterfaces(
-        blink_widget_host.BindNewEndpointAndPassDedicatedReceiverForTesting(),
+        blink_widget_host.BindNewEndpointAndPassDedicatedReceiver(),
         blink_widget.Unbind());
 
     mojo::AssociatedRemote<blink::mojom::FrameWidgetHost> frame_widget_host;
     mojo::AssociatedRemote<blink::mojom::FrameWidget> frame_widget;
     auto frame_widget_receiver =
-        frame_widget.BindNewEndpointAndPassDedicatedReceiverForTesting();
+        frame_widget.BindNewEndpointAndPassDedicatedReceiver();
     widget_host_root_->BindFrameWidgetInterfaces(
-        frame_widget_host.BindNewEndpointAndPassDedicatedReceiverForTesting(),
+        frame_widget_host.BindNewEndpointAndPassDedicatedReceiver(),
         frame_widget.Unbind());
 
     view_root_ =
@@ -257,7 +261,8 @@ class RenderWidgetHostInputEventRouterTest : public testing::Test {
     mojo::Remote<viz::mojom::InputTargetClient> input_target_client;
     input_target_client_root_ = std::make_unique<MockInputTargetClient>(
         input_target_client.BindNewPipeAndPassReceiver());
-    widget_host_root_->SetInputTargetClient(std::move(input_target_client));
+    widget_host_root_->SetInputTargetClientForTesting(
+        std::move(input_target_client));
 
     EXPECT_EQ(view_root_.get(),
               rwhier()->FindViewFromFrameSinkId(view_root_->GetFrameSinkId()));
@@ -265,6 +270,7 @@ class RenderWidgetHostInputEventRouterTest : public testing::Test {
 
   struct ChildViewState {
     std::unique_ptr<MockRenderProcessHost> process_host;
+    std::unique_ptr<AgentSchedulingGroupHost> agent_scheduling_group_host;
     std::unique_ptr<RenderWidgetHostImpl> widget_host;
     std::unique_ptr<TestRenderWidgetHostViewChildFrame> view;
     std::unique_ptr<MockFrameConnectorDelegate> frame_connector;
@@ -275,8 +281,10 @@ class RenderWidgetHostInputEventRouterTest : public testing::Test {
 
     child.process_host =
         std::make_unique<MockRenderProcessHost>(browser_context_.get());
+    child.agent_scheduling_group_host =
+        std::make_unique<AgentSchedulingGroupHost>(*child.process_host);
     child.widget_host = std::make_unique<RenderWidgetHostImpl>(
-        &delegate_, child.process_host.get(),
+        &delegate_, *child.agent_scheduling_group_host,
         child.process_host->GetNextRoutingID(),
         /*hidden=*/false, std::make_unique<FrameTokenMessageQueue>());
     child.view = std::make_unique<TestRenderWidgetHostViewChildFrame>(
@@ -324,6 +332,7 @@ class RenderWidgetHostInputEventRouterTest : public testing::Test {
   std::unique_ptr<BrowserContext> browser_context_;
 
   std::unique_ptr<MockRenderProcessHost> process_host_root_;
+  std::unique_ptr<AgentSchedulingGroupHost> agent_scheduling_group_host_root_;
   std::unique_ptr<RenderWidgetHostImpl> widget_host_root_;
   std::unique_ptr<MockRootRenderWidgetHostView> view_root_;
   std::unique_ptr<MockInputTargetClient> input_target_client_root_;

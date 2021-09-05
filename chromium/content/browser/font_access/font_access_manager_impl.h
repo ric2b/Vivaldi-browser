@@ -5,9 +5,7 @@
 #ifndef CONTENT_BROWSER_FONT_ACCESS_FONT_ACCESS_MANAGER_IMPL_H_
 #define CONTENT_BROWSER_FONT_ACCESS_FONT_ACCESS_MANAGER_IMPL_H_
 
-#include "base/macros.h"
 #include "base/sequence_checker.h"
-#include "build/build_config.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/global_routing_id.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
@@ -22,6 +20,10 @@ class CONTENT_EXPORT FontAccessManagerImpl
   FontAccessManagerImpl();
   ~FontAccessManagerImpl() override;
 
+  // Disallow copy and assign.
+  FontAccessManagerImpl(const FontAccessManagerImpl&) = delete;
+  FontAccessManagerImpl operator=(const FontAccessManagerImpl&) = delete;
+
   struct BindingContext {
     BindingContext(const url::Origin& origin, GlobalFrameRoutingId frame_id)
         : origin(origin), frame_id(frame_id) {}
@@ -35,12 +37,6 @@ class CONTENT_EXPORT FontAccessManagerImpl
       mojo::PendingReceiver<blink::mojom::FontAccessManager> receiver);
 
   // blink.mojom.FontAccessManager:
-#if defined(OS_MAC)
-  // TODO(crbug.com/1119575): Remove this IPC method. It is there due to
-  // the Mac enumeration implementation being done renderer-side and only
-  // the permission request being needed browser-side.
-  void RequestPermission(RequestPermissionCallback callback) override;
-#endif
   void EnumerateLocalFonts(EnumerateLocalFontsCallback callback) override;
 
  private:
@@ -52,7 +48,6 @@ class CONTENT_EXPORT FontAccessManagerImpl
   scoped_refptr<base::TaskRunner> results_task_runner_;
 
   SEQUENCE_CHECKER(sequence_checker_);
-  DISALLOW_COPY_AND_ASSIGN(FontAccessManagerImpl);
 };
 
 }  // namespace content

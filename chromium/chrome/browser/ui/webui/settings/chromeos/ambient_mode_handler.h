@@ -12,6 +12,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
 #include "chrome/browser/ui/webui/settings/settings_page_ui_handler.h"
+#include "net/base/backoff_entry.h"
 
 namespace ash {
 struct AmbientSettings;
@@ -80,13 +81,14 @@ class AmbientModeHandler : public ::settings::SettingsPageUIHandler {
   // Called when the settings is updated.
   void OnUpdateSettings(bool success);
 
+  // Will be called from ambientMode/photos subpage and ambientMode subpage.
+  // |topic_source| is used to request the albums in that source and identify
+  // the callers:
+  //   1. |kGooglePhotos|: ambientMode/photos?topicSource=0
+  //   2. |kArtGallery|:   ambientMode/photos?topicSource=1
+  //   3. base::nullopt:   ambientMode/
   void RequestSettingsAndAlbums(
-      ash::AmbientBackendController::OnSettingsAndAlbumsFetchedCallback
-          callback);
-
-  // |topic_source| is what the |settings_| and |personal_albums_| were
-  // requested for the ambientMode/photos subpage. It is base::nullopt if they
-  // were requested by the ambientMode subpage.
+      base::Optional<ash::AmbientModeTopicSource> topic_source);
   void OnSettingsAndAlbumsFetched(
       base::Optional<ash::AmbientModeTopicSource> topic_source,
       const base::Optional<ash::AmbientSettings>& settings,
@@ -114,6 +116,18 @@ class AmbientModeHandler : public ::settings::SettingsPageUIHandler {
   base::Optional<ash::AmbientSettings> settings_;
 
   ash::PersonalAlbums personal_albums_;
+
+  // Backoff retries for RequestSettingsAndAlbums().
+  net::BackoffEntry fetch_settings_retry_backoff_;
+
+  // Whether the Settings updating is ongoing.
+  bool is_updating_backend_ = false;
+
+  // Whether there are pending updates.
+  bool has_pending_updates_for_backend_ = false;
+
+  // Backoff retries for UpdateSettings().
+  net::BackoffEntry update_settings_retry_backoff_;
 
   base::WeakPtrFactory<AmbientModeHandler> backend_weak_factory_{this};
   base::WeakPtrFactory<AmbientModeHandler> ui_update_weak_factory_{this};

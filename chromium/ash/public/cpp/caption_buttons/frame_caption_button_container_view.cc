@@ -10,9 +10,7 @@
 #include "ash/public/cpp/caption_buttons/caption_button_model.h"
 #include "ash/public/cpp/caption_buttons/frame_size_button.h"
 #include "ash/public/cpp/caption_buttons/snap_controller.h"
-#include "ash/public/cpp/gesture_action_type.h"
 #include "ash/public/cpp/tablet_mode.h"
-#include "ash/public/cpp/window_properties.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/numerics/ranges.h"
@@ -228,6 +226,7 @@ void FrameCaptionButtonContainerView::SetPaintAsActive(bool paint_as_active) {
   minimize_button_->set_paint_as_active(paint_as_active);
   size_button_->set_paint_as_active(paint_as_active);
   close_button_->set_paint_as_active(paint_as_active);
+  SchedulePaint();
 }
 
 void FrameCaptionButtonContainerView::SetBackgroundColor(

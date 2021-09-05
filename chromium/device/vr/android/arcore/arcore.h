@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "base/android/scoped_java_ref.h"
+#include "base/component_export.h"
 #include "base/macros.h"
 #include "base/optional.h"
 #include "base/time/time.h"
@@ -20,22 +21,24 @@ namespace device {
 
 // This allows a real or fake implementation of ArCore to
 // be used as appropriate (i.e. for testing).
-class ArCore {
+class COMPONENT_EXPORT(VR_ARCORE) ArCore {
  public:
   virtual ~ArCore() = default;
 
   // Initializes the runtime and returns whether it was successful.
   // If successful, the runtime must be paused when this method returns.
   virtual bool Initialize(
-      base::android::ScopedJavaLocalRef<jobject> application_context) = 0;
+      base::android::ScopedJavaLocalRef<jobject> application_context,
+      const std::unordered_set<device::mojom::XRSessionFeature>&
+          enabled_features) = 0;
 
   virtual void SetDisplayGeometry(
       const gfx::Size& frame_size,
       display::Display::Rotation display_rotation) = 0;
   virtual void SetCameraTexture(uint32_t camera_texture_id) = 0;
-  // Transform the given UV coordinates by the current display rotation.
-  virtual std::vector<float> TransformDisplayUvCoords(
-      const base::span<const float> uvs) = 0;
+
+  gfx::Transform GetCameraUvFromScreenUvTransform() const;
+
   virtual gfx::Transform GetProjectionMatrix(float near, float far) = 0;
 
   // Update ArCore state. This call blocks for up to 1/30s while waiting for a
@@ -60,6 +63,8 @@ class ArCore {
 
   // Returns information about lighting estimation.
   virtual mojom::XRLightEstimationDataPtr GetLightEstimationData() = 0;
+
+  virtual mojom::XRDepthDataPtr GetDepthData() = 0;
 
   virtual bool RequestHitTest(
       const mojom::XRRayPtr& ray,
@@ -136,6 +141,10 @@ class ArCore {
 
   virtual void Pause() = 0;
   virtual void Resume() = 0;
+
+ protected:
+  virtual std::vector<float> TransformDisplayUvCoords(
+      const base::span<const float> uvs) const = 0;
 };
 
 class ArCoreFactory {

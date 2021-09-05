@@ -122,8 +122,8 @@ class CalendarService : public KeyedService {
   typedef base::Callback<void(std::shared_ptr<GetAllNotificationResult>)>
       GetAllNotificationsCallback;
 
-  typedef base::Callback<void(std::shared_ptr<CreateNotificationResult>)>
-      CreateNotificationCallback;
+  typedef base::Callback<void(std::shared_ptr<NotificationResult>)>
+      NotificationCallback;
 
   typedef base::Callback<void(std::shared_ptr<DeleteNotificationResult>)>
       DeleteNotificationCallback;
@@ -166,7 +166,7 @@ class CalendarService : public KeyedService {
 
   base::CancelableTaskTracker::TaskId UpdateCalendarEvent(
       EventID event_id,
-      CalendarEvent event,
+      EventRow event,
       const UpdateEventCallback& callback,
       base::CancelableTaskTracker* tracker);
 
@@ -226,7 +226,13 @@ class CalendarService : public KeyedService {
 
   base::CancelableTaskTracker::TaskId CreateNotification(
       NotificationRow notification,
-      const CreateNotificationCallback& callback,
+      const NotificationCallback& callback,
+      base::CancelableTaskTracker* tracker);
+
+  base::CancelableTaskTracker::TaskId UpdateNotification(
+      NotificationID notification_id,
+      UpdateNotificationRow notification,
+      const NotificationCallback& callback,
       base::CancelableTaskTracker* tracker);
 
   base::CancelableTaskTracker::TaskId DeleteNotification(

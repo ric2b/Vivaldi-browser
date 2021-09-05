@@ -91,16 +91,12 @@ gfx::ImageSkia RelaunchRecommendedBubbleView::GetWindowIcon() {
                            gfx::kChromeIconGrey));
 }
 
-bool RelaunchRecommendedBubbleView::ShouldShowWindowIcon() const {
-  return true;
-}
-
 void RelaunchRecommendedBubbleView::Init() {
   SetLayoutManager(std::make_unique<views::FillLayout>());
   auto label = std::make_unique<views::Label>(
       l10n_util::GetPluralStringFUTF16(IDS_RELAUNCH_RECOMMENDED_BODY,
                                        BrowserList::GetIncognitoBrowserCount()),
-      views::style::CONTEXT_MESSAGE_BOX_BODY_TEXT);
+      views::style::CONTEXT_DIALOG_BODY_TEXT);
 
   label->SetMultiLine(true);
   label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
@@ -152,6 +148,7 @@ RelaunchRecommendedBubbleView::RelaunchRecommendedBubbleView(
   SetButtons(ui::DIALOG_BUTTON_OK);
   SetButtonLabel(ui::DIALOG_BUTTON_OK,
                  l10n_util::GetStringUTF16(IDS_RELAUNCH_ACCEPT_BUTTON));
+  SetShowIcon(true);
 
   SetCloseCallback(
       base::BindOnce(&base::RecordAction,

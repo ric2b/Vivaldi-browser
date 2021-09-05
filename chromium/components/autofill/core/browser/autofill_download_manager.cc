@@ -29,8 +29,7 @@
 #include "components/autofill/core/browser/autofill_metrics.h"
 #include "components/autofill/core/browser/logging/log_manager.h"
 #include "components/autofill/core/browser/logging/log_protobufs.h"
-#include "components/autofill/core/browser/proto/legacy_proto_bridge.h"
-#include "components/autofill/core/browser/proto/server.pb.h"
+#include "components/autofill/core/browser/proto/api_v1.pb.h"
 #include "components/autofill/core/common/autofill_clock.h"
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/autofill_internals/log_message.h"
@@ -324,16 +323,16 @@ const char* RequestTypeToString(AutofillDownloadManager::RequestType type) {
 }
 
 std::ostream& operator<<(std::ostream& out,
-                         const autofill::AutofillQueryContents& query) {
+                         const autofill::AutofillPageQueryRequest& query) {
   out << "client_version: " << query.client_version();
-  for (const auto& form : query.form()) {
+  for (const auto& form : query.forms()) {
     out << "\nForm\n signature: " << form.signature();
-    for (const auto& field : form.field()) {
+    for (const auto& field : form.fields()) {
       out << "\n Field\n  signature: " << field.signature();
       if (!field.name().empty())
         out << "\n  name: " << field.name();
-      if (!field.type().empty())
-        out << "\n  type: " << field.type();
+      if (!field.control_type().empty())
+        out << "\n  type: " << field.control_type();
     }
   }
   return out;
@@ -500,20 +499,9 @@ bool CanThrottleUpload(const FormStructure& form,
   return !is_first_upload_for_event;
 }
 
-// Determines whether to use the API instead of the legacy server.
-inline bool UseApi() {
-  return base::FeatureList::IsEnabled(features::kAutofillUseApi);
-}
-
 // Determines whether a HTTP request was successful based on its response code.
 bool IsHttpSuccess(int response_code) {
   return (response_code >= 200 && response_code < 300);
-}
-
-// Gets an upload payload for requests to the legacy server.
-inline bool GetUploadPayloadForLegacy(const AutofillUploadContents& upload,
-                                      std::string* payload) {
-  return upload.SerializeToString(payload);
 }
 
 bool GetUploadPayloadForApi(const AutofillUploadContents& upload,
@@ -571,13 +559,12 @@ bool GetAPIBodyPayload(const std::string& payload,
 }
 
 // Gets the data payload for API Query (POST and GET).
-bool GetAPIQueryPayload(const AutofillQueryContents& query,
+bool GetAPIQueryPayload(const AutofillPageQueryRequest& query,
                         std::string* payload) {
   std::string serialized_query;
-  if (!CreateApiRequestFromLegacyRequest(query).SerializeToString(
-          &serialized_query)) {
+  if (!query.SerializeToString(&serialized_query))
     return false;
-  }
+
   base::Base64UrlEncode(serialized_query,
                         base::Base64UrlEncodePolicy::INCLUDE_PADDING, payload);
   return true;
@@ -586,7 +573,7 @@ bool GetAPIQueryPayload(const AutofillQueryContents& query,
 }  // namespace
 
 struct AutofillDownloadManager::FormRequestData {
-  FormAndFieldSignatures signatures;
+  std::vector<FormSignature> form_signatures;
   RequestType request_type;
   std::string payload;
   int num_attempts = 0;
@@ -638,9 +625,10 @@ bool AutofillDownloadManager::StartQueryRequest(
     return false;
 
   // Encode the query for the requested forms.
-  AutofillQueryContents query;
-  FormAndFieldSignatures signatures;
-  if (!FormStructure::EncodeQueryRequest(forms, &query, &signatures)) {
+  AutofillPageQueryRequest query;
+  std::vector<FormSignature> queried_form_signatures;
+  if (!FormStructure::EncodeQueryRequest(forms, &query,
+                                         &queried_form_signatures)) {
     return false;
   }
 
@@ -657,33 +645,30 @@ bool AutofillDownloadManager::StartQueryRequest(
 
   // Get the query request payload.
   std::string payload;
-  bool is_payload_serialized = UseApi() ? GetAPIQueryPayload(query, &payload)
-                                        : query.SerializeToString(&payload);
+  bool is_payload_serialized = GetAPIQueryPayload(query, &payload);
   if (!is_payload_serialized) {
     return false;
   }
 
   FormRequestData request_data;
-  request_data.signatures = std::move(signatures);
+  request_data.form_signatures = std::move(queried_form_signatures);
   request_data.request_type = AutofillDownloadManager::REQUEST_QUERY;
   request_data.payload = std::move(payload);
   AutofillMetrics::LogServerQueryMetric(AutofillMetrics::QUERY_SENT);
 
   std::string query_data;
-  if (CheckCacheForQueryRequest(request_data.signatures, &query_data)) {
+  if (CheckCacheForQueryRequest(request_data.form_signatures, &query_data)) {
     DVLOG(1) << "AutofillDownloadManager: query request has been retrieved "
-             << "from the cache, form signatures:" <<
-        [&request_data] {
-          std::string form_sigs;
-          for (const auto& form_and_fields : request_data.signatures) {
-            base::StrAppend(
-                &form_sigs,
-                {" ", base::NumberToString(form_and_fields.first.value())});
-          }
-          return form_sigs;
-        }();
+             << "from the cache, form signatures:" << [&request_data] {
+                  std::string form_sigs;
+                  for (const auto& form : request_data.form_signatures) {
+                    base::StrAppend(&form_sigs,
+                                    {" ", base::NumberToString(form.value())});
+                  }
+                  return form_sigs;
+                }();
     observer_->OnLoadedServerPredictions(std::move(query_data),
-                                         request_data.signatures);
+                                         request_data.form_signatures);
     return true;
   }
 
@@ -718,10 +703,10 @@ bool AutofillDownloadManager::StartUploadRequest(
     return false;
 
   AutofillUploadContents upload;
-  FormAndFieldSignatures signatures;
+  std::vector<FormSignature> form_signatures;
   if (!form.EncodeUploadRequest(available_field_types, form_was_autofilled,
                                 login_form_signature, observed_submission,
-                                &upload, &signatures)) {
+                                &upload, &form_signatures)) {
     return false;
   }
 
@@ -739,8 +724,7 @@ bool AutofillDownloadManager::StartUploadRequest(
 
   // Get the POST payload that contains upload data.
   std::string payload;
-  bool is_payload = UseApi() ? GetUploadPayloadForApi(upload, &payload)
-                             : GetUploadPayloadForLegacy(upload, &payload);
+  bool is_payload = GetUploadPayloadForApi(upload, &payload);
   // Indicate that we could not serialize upload in the payload.
   if (!is_payload) {
     return false;
@@ -752,7 +736,7 @@ bool AutofillDownloadManager::StartUploadRequest(
   }
 
   FormRequestData request_data;
-  request_data.signatures = std::move(signatures);
+  request_data.form_signatures = std::move(form_signatures);
   request_data.request_type = AutofillDownloadManager::REQUEST_UPLOAD;
   request_data.payload = std::move(payload);
 
@@ -849,9 +833,7 @@ bool AutofillDownloadManager::StartRequest(FormRequestData request_data) {
   // Get the URL and method to use for this request.
   std::string method;
   GURL request_url;
-  std::tie(request_url, method) =
-      UseApi() ? GetRequestURLAndMethodForApi(request_data)
-               : GetRequestURLAndMethod(request_data);
+  std::tie(request_url, method) = GetRequestURLAndMethodForApi(request_data);
 
   // Track the URL length for GET queries because the URL length can be in the
   // thousands when rich metadata is enabled.
@@ -881,11 +863,10 @@ bool AutofillDownloadManager::StartRequest(FormRequestData request_data) {
                              : variations::InIncognito::kNo,
       resource_request.get());
 
-  // Set headers specific to the API if using it.
-  if (UseApi())
-    // Encode response serialized proto in base64 for safety.
-    resource_request->headers.SetHeader(kGoogEncodeResponseIfExecutable,
-                                        "base64");
+  // Set headers specific to the API.
+  // Encode response serialized proto in base64 for safety.
+  resource_request->headers.SetHeader(kGoogEncodeResponseIfExecutable,
+                                      "base64");
 
   // Put API key in request's header if a key exists, and the endpoint is
   // trusted by Google.
@@ -904,17 +885,13 @@ bool AutofillDownloadManager::StartRequest(FormRequestData request_data) {
   simple_loader->SetAllowHttpErrorResults(true);
 
   if (method == "POST") {
-    const std::string content_type =
-        UseApi() ? "application/x-protobuf" : "text/proto";
+    const std::string content_type = "application/x-protobuf";
     std::string payload;
-    if (UseApi()) {
-      if (!GetAPIBodyPayload(request_data.payload, request_data.request_type,
-                             &payload)) {
-        return false;
-      }
-    } else {
-      payload = request_data.payload;
+    if (!GetAPIBodyPayload(request_data.payload, request_data.request_type,
+                           &payload)) {
+      return false;
     }
+
     // Attach payload data and add data format header.
     simple_loader->AttachStringForUpload(payload, content_type);
   }
@@ -934,7 +911,7 @@ bool AutofillDownloadManager::StartRequest(FormRequestData request_data) {
 }
 
 void AutofillDownloadManager::CacheQueryRequest(
-    const FormAndFieldSignatures& forms_in_query,
+    const std::vector<FormSignature>& forms_in_query,
     const std::string& query_data) {
   for (auto it = cached_forms_.begin(); it != cached_forms_.end(); ++it) {
     if (it->first == forms_in_query) {
@@ -951,7 +928,7 @@ void AutofillDownloadManager::CacheQueryRequest(
 }
 
 bool AutofillDownloadManager::CheckCacheForQueryRequest(
-    const FormAndFieldSignatures& forms_in_query,
+    const std::vector<FormSignature>& forms_in_query,
     std::string* query_data) const {
   for (const auto& it : cached_forms_) {
     if (it.first == forms_in_query) {
@@ -982,7 +959,7 @@ void AutofillDownloadManager::OnSimpleLoaderComplete(
   std::unique_ptr<network::SimpleURLLoader> simple_loader = std::move(*it);
   url_loaders_.erase(it);
 
-  CHECK(request_data.signatures.size() > 0);
+  CHECK(request_data.form_signatures.size() > 0);
   int response_code = -1;  // Invalid response code.
   if (simple_loader->ResponseInfo() && simple_loader->ResponseInfo()->headers) {
     response_code = simple_loader->ResponseInfo()->headers->response_code();
@@ -1011,7 +988,7 @@ void AutofillDownloadManager::OnSimpleLoaderComplete(
              << response_code << " and error message from the server "
              << error_message;
 
-    observer_->OnServerRequestError(request_data.signatures.front().first,
+    observer_->OnServerRequestError(request_data.form_signatures.front(),
                                     request_data.request_type, response_code);
 
     LogFailingPayloadSize(request_data.request_type,
@@ -1040,11 +1017,11 @@ void AutofillDownloadManager::OnSimpleLoaderComplete(
   }
 
   if (request_data.request_type == AutofillDownloadManager::REQUEST_QUERY) {
-    CacheQueryRequest(request_data.signatures, *response_body);
+    CacheQueryRequest(request_data.form_signatures, *response_body);
     UMA_HISTOGRAM_BOOLEAN("Autofill.Query.WasInCache",
                           simple_loader->LoadedFromCache());
     observer_->OnLoadedServerPredictions(std::move(*response_body),
-                                         request_data.signatures);
+                                         request_data.form_signatures);
     return;
   }
 
@@ -1062,7 +1039,8 @@ void AutofillDownloadManager::InitActiveExperiments() {
   delete active_experiments_;
   active_experiments_ = new std::vector<variations::VariationID>(
       variations_ids_provider->GetVariationsVector(
-          variations::GOOGLE_WEB_PROPERTIES_TRIGGER));
+          {variations::GOOGLE_WEB_PROPERTIES_TRIGGER_ANY_CONTEXT,
+           variations::GOOGLE_WEB_PROPERTIES_TRIGGER_FIRST_PARTY}));
   base::EraseIf(*active_experiments_, [](variations::VariationID id) {
     return !IsAutofillExperimentId(id);
   });

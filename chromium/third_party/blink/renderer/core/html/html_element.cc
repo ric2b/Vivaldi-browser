@@ -65,6 +65,7 @@
 #include "third_party/blink/renderer/core/html/html_frame_owner_element.h"
 #include "third_party/blink/renderer/core/html/html_template_element.h"
 #include "third_party/blink/renderer/core/html/parser/html_parser_idioms.h"
+#include "third_party/blink/renderer/core/html/shadow/shadow_element_names.h"
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/core/input_type_names.h"
 #include "third_party/blink/renderer/core/layout/adjust_for_absolute_zoom.h"
@@ -1076,6 +1077,12 @@ void HTMLElement::setDir(const AtomicString& value) {
   setAttribute(html_names::kDirAttr, value);
 }
 
+HTMLFormElement* HTMLElement::formOwner() const {
+  if (const auto* internals = GetElementInternals())
+    return internals->Form();
+  return nullptr;
+}
+
 HTMLFormElement* HTMLElement::FindFormAncestor() const {
   return Traversal<HTMLFormElement>::FirstAncestor(*this);
 }
@@ -1122,7 +1129,8 @@ TextDirection HTMLElement::Directionality() const {
     if (EqualIgnoringASCIICase(node->nodeName(), "bdi") ||
         IsA<HTMLScriptElement>(*node) || IsA<HTMLStyleElement>(*node) ||
         (element && element->IsTextControl()) ||
-        (element && element->ShadowPseudoId() == "-webkit-input-placeholder")) {
+        (element && element->ShadowPseudoId() ==
+                        shadow_element_names::kPseudoInputPlaceholder)) {
       node = FlatTreeTraversal::NextSkippingChildren(*node, this);
       continue;
     }
@@ -1575,6 +1583,7 @@ ElementInternals* HTMLElement::attachInternals(
         "Unable to attach ElementInternals to a customized built-in element.");
     return nullptr;
   }
+
   CustomElementRegistry* registry = CustomElement::Registry(*this);
   auto* definition =
       registry ? registry->DefinitionForName(localName()) : nullptr;
@@ -1584,6 +1593,7 @@ ElementInternals* HTMLElement::attachInternals(
         "Unable to attach ElementInternals to non-custom elements.");
     return nullptr;
   }
+
   if (definition->DisableInternals()) {
     exception_state.ThrowDOMException(
         DOMExceptionCode::kNotSupportedError,
@@ -1596,6 +1606,23 @@ ElementInternals* HTMLElement::attachInternals(
         "ElementInternals for the specified element was already attached.");
     return nullptr;
   }
+
+  // If element's custom element state is not "precustomized" or "custom",
+  // throw "NotSupportedError" DOMException.
+  if (GetCustomElementState() != CustomElementState::kCustom &&
+      GetCustomElementState() != CustomElementState::kPreCustomized) {
+    if (RuntimeEnabledFeatures::DeclarativeShadowDOMEnabled(
+            GetExecutionContext())) {
+      exception_state.ThrowDOMException(
+          DOMExceptionCode::kNotSupportedError,
+          "The attachInternals() function cannot be called prior to the "
+          "execution of the custom element constructor.");
+      return nullptr;
+    }
+    UseCounter::Count(GetDocument(),
+                      WebFeature::kElementAttachInternalsBeforeConstructor);
+  }
+
   UseCounter::Count(GetDocument(), WebFeature::kElementAttachInternals);
   SetDidAttachInternals();
   return &EnsureElementInternals();

@@ -18,13 +18,12 @@
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame_client.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
+#include "third_party/blink/renderer/core/html/forms/html_input_element.h"
 #include "third_party/blink/renderer/core/html/html_dialog_element.h"
 #include "third_party/blink/renderer/core/input/event_handler.h"
 #include "third_party/blink/renderer/core/input/event_handling_util.h"
 #include "third_party/blink/renderer/core/input/input_device_capabilities.h"
 #include "third_party/blink/renderer/core/input/scroll_manager.h"
-#include "third_party/blink/renderer/core/layout/layout_object.h"
-#include "third_party/blink/renderer/core/layout/layout_text_control_single_line.h"
 #include "third_party/blink/renderer/core/page/chrome_client.h"
 #include "third_party/blink/renderer/core/page/focus_controller.h"
 #include "third_party/blink/renderer/core/page/page.h"
@@ -166,7 +165,7 @@ bool KeyboardEventManager::HandleAccessKey(const WebKeyboardEvent& evt) {
   // using alt-key combos for menu access, unlike chrome. Access keys on mac
   // are triggered by ctrl+alt and don't conflict with any existing key
   // shortcuts.
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
   if (vivaldi::IsVivaldiRunning()) {
     if ((evt.GetModifiers() & WebKeyboardEvent::kKeyModifiers) !=
         (kAccessKeyModifiers | WebInputEvent::kShiftKey)) {
@@ -178,7 +177,7 @@ bool KeyboardEventManager::HandleAccessKey(const WebKeyboardEvent& evt) {
   if ((evt.GetModifiers() & (WebKeyboardEvent::kKeyModifiers &
                              ~WebInputEvent::kShiftKey)) != kAccessKeyModifiers)
     return false;
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
   }
 #endif
   String key = String(evt.unmodified_text);
@@ -376,10 +375,8 @@ WebInputEventResult KeyboardEventManager::KeyEvent(
 
 void KeyboardEventManager::CapsLockStateMayHaveChanged() {
   if (Element* element = frame_->GetDocument()->FocusedElement()) {
-    if (LayoutObject* r = element->GetLayoutObject()) {
-      if (auto* text_control = DynamicTo<LayoutTextControlSingleLine>(r))
-        text_control->CapsLockStateMayHaveChanged();
-    }
+    if (auto* text_control = DynamicTo<HTMLInputElement>(element))
+      text_control->CapsLockStateMayHaveChanged();
   }
 }
 

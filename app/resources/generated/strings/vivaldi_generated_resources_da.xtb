@@ -13,12 +13,12 @@
 <translation id="1163931534039071049">&amp;Vis rammens kildetekst</translation>
 <translation id="1165039591588034296">Fejl</translation>
 <translation id="1175364870820465910">&amp;Udskriv...</translation>
-<translation id="1177863135347784049">Brugerdefineret</translation>
 <translation id="1181037720776840403">Fjern</translation>
 <translation id="1187722533808055681">Aktivering efter dvale</translation>
 <translation id="119944043368869598">Ryd alle</translation>
 <translation id="1221825588892235038">Kun det markerede</translation>
 <translation id="1244303850296295656">Udvidelsesfejl</translation>
+<translation id="125220115284141797">Standard</translation>
 <translation id="1274977772557788323">Lagerindstillinger for Adobe Flash Player</translation>
 <translation id="1297175357211070620">Destination</translation>
 <translation id="1303101771013849280">Tilføjer HTML-fil som bogmærke</translation>
@@ -45,9 +45,11 @@
 <translation id="1723824996674794290">&amp;Nyt vindue</translation>
 <translation id="1725149567830788547">Vis &amp;kontroller</translation>
 <translation id="1729533290416704613">Den styrer også, hvilken side der vises, når du søger via omnifeltet.</translation>
+<translation id="174123615272205933">Brugerdefineret</translation>
 <translation id="1744108098763830590">baggrundsside</translation>
 <translation id="176587472219019965">&amp;Nyt vindue</translation>
 <translation id="1769104665586091481">Åbn link i nyt &amp;vindue</translation>
+<translation id="1779468444204342338">Minimum</translation>
 <translation id="1815083418640426271">Indsæt som almindelig tekst</translation>
 <translation id="1828901632669367785">Udskriv ved brug af systemets dialogboks...</translation>
 <translation id="1850508293116537636">Roter med &amp;uret</translation>
@@ -87,7 +89,6 @@
 <translation id="2381756643783702095">Spørg inden afsendelse (anbefales)</translation>
 <translation id="241082044617551207">Ukendt plugin</translation>
 <translation id="2423578206845792524">&amp;Gem billede som...</translation>
-<translation id="2436707352762155834">Minimum</translation>
 <translation id="2439110203301358333">Et andet program på din computer tilføjede en udvidelse, der kan ændre den måde, hvorpå Vivaldi fungerer.</translation>
 <translation id="2445081178310039857">Udvidelsens rodmappe er påkrævet.</translation>
 <translation id="2470702053775288986">Understøttede udvidelser er blevet deaktiveret</translation>
@@ -138,6 +139,7 @@
 <translation id="3222066309010235055">Forhåndsgengivelse: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3227137524299004712">Mikrofon</translation>
 <translation id="3241680850019875542">Vælg rodmappen for udvidelsen, der skal pakkes. Opdater en udvidelse ved også at vælge den private nøglefil til genbrug.</translation>
+<translation id="3266179261140759675">Bloker lukkede sider, så de ikke kan sende og modtage data</translation>
 <translation id="3280237271814976245">Gem &amp;som...</translation>
 <translation id="3285322247471302225">Ny &amp;fane</translation>
 <translation id="3288047731229977326">Udvidelser, der kører i udviklertilstand, kan skade din computer. Hvis du ikke er udvikler, skal du deaktivere udvidelserne, der kører i udviklertilstand, af hensyn til sikkerheden.</translation>
@@ -245,7 +247,6 @@
 <translation id="5039804452771397117">Tillad</translation>
 <translation id="5057110919553308744">Når du klikker på udvidelsen</translation>
 <translation id="5063480226653192405">Forbrug</translation>
-<translation id="5068918910148307423">Tillad ikke, at nyligt lukkede websites færdiggør afsendelse og modtagelse af data</translation>
 <translation id="5116628073786783676">Ge&amp;m lyd som...</translation>
 <translation id="5143374789336132547">Udvidelsen <ph name="EXTENSION_NAME" /> har ændret, hvilken side der vises, når du klikker på knappen Startside.</translation>
 <translation id="5154108062446123722">Avancerede indstillinger for <ph name="PRINTING_DESTINATION" /></translation>
@@ -264,6 +265,7 @@
 <translation id="5355926466126177564">Udvidelsen <ph name="EXTENSION_NAME" /> har ændret, hvilken side der vises, når du søger via omnifeltet.</translation>
 <translation id="5360150013186312835">Vis på værktøjslinjen</translation>
 <translation id="5362741141255528695">Vælg privat nøglefil.</translation>
+<translation id="536638840841140142">Ingen</translation>
 <translation id="5370819323174483825">&amp;Genindlæs</translation>
 <translation id="5398572795982417028">Sidereferencen er ugyldig. Grænsen er <ph name="MAXIMUM_PAGE" /></translation>
 <translation id="5425042808445046667">Fortsæt download</translation>
@@ -388,7 +390,6 @@
 <translation id="7663719505383602579">Modtager: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Installeret af din administrator</translation>
 <translation id="7685049629764448582">JavaScript-hukommelse</translation>
-<translation id="7701040980221191251">Ingen</translation>
 <translation id="7701869757853594372">BRUGER-håndtag</translation>
 <translation id="7704305437604973648">Opgave</translation>
 <translation id="7710568461918838723">&amp;Cast...</translation>

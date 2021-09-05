@@ -5,6 +5,7 @@
 <translation id="1195447618553298278">Naməlum xəta.</translation>
 <translation id="1413240736185167732">Alınmadı - Filtr xətası</translation>
 <translation id="1468664791493211953">Təkliflər</translation>
+<translation id="1478594628797167447">Skaner</translation>
 <translation id="1482734542997480527"><ph name="ENROLLMENT_DOMAIN" /> bu cihazı idarə edir və fəaliyyətinizə nəzarət edə bilər.</translation>
 <translation id="150962533380566081">Yanlış PUK.</translation>
 <translation id="1510238584712386396">Başladıcı</translation>
@@ -19,10 +20,12 @@
 <translation id="2161394479394250669">Çap işini ləğv edin</translation>
 <translation id="2338501278241028356">Yaxınlıqdakı cihazları tapmaq üçün Bluetooth'u aktiv edin</translation>
 <translation id="2375079107209812402"><ph name="ATTEMPTS_LEFT" /> cəhd qalıb</translation>
+<translation id="2517472476991765520">Skan edin</translation>
 <translation id="2805756323405976993">Tətbiq</translation>
 <translation id="2872961005593481000">Qapadın</translation>
 <translation id="3008341117444806826">YENİLƏYİN</translation>
 <translation id="3091839911843451378">Alınmadı - Dayandırılıb</translation>
+<translation id="3246869037381808805">1 gündən köhnə çap işləri silinəcək</translation>
 <translation id="3268178239013324452">Alınmadı - Qapı açıqdır</translation>
 <translation id="3369013195428705271">Bütün çap tarixçəsini silmək istədiyinizə əminsiniz? Davam edən çap işləriniz silinməyəcək.</translation>
 <translation id="3456078764689556234"><ph name="PRINTED_PAGES" />/<ph name="TOTAL_PAGES" /> səhifə çap edilib.</translation>
@@ -33,13 +36,13 @@
 <translation id="38114475217616659">Bütün tarixçəni silin</translation>
 <translation id="3820172043799983114">Yanlış PIN.</translation>
 <translation id="3838338534323494292">Yeni parol</translation>
+<translation id="39823212440917567"><ph name="NUMBER_OF_DAYS" /> gündən köhnə çap işləri silinəcək</translation>
 <translation id="4003259559679196451"><ph name="ENROLLMENT_DOMAIN" /> bu cihazı idarə edir və giriş edilən veb səhifə, parol və e-poçt daxil olmaqla bütün istifadəçi fəaliyyətinə girişi var.</translation>
 <translation id="4003384961948020559">Alınmadı - Çap xidməti doludur</translation>
 <translation id="4027485274696301677">Bu <ph name="DEVICE_TYPE" /> <ph name="ENROLLMENT_DOMAIN" /> tərəfindən idarə olunur. Administratorlar cihazı məsafədən konfiqurasiya edə bilər.</translation>
 <translation id="4034824040120875894">Printer</translation>
 <translation id="4227825898293920515">Parolun vaxtı <ph name="TIME" /> ərzində başa çatır</translation>
 <translation id="4238516577297848345">Hazırda davam edən çap işləri yoxdur</translation>
-<translation id="428217921675623177">90 gündən köhnə çap işləri silinəcək</translation>
 <translation id="4297501883039923494">Dayanıb - Naməlum xəta</translation>
 <translation id="4429881212383817840">Kerberos biletinin vaxtı tezliklə başa çatacaq</translation>
 <translation id="445059817448385655">Köhnə parol</translation>
@@ -52,6 +55,7 @@
 <translation id="4890353053343094602">Dərhal yenisini seçin</translation>
 <translation id="4917889632206600977">Dayanıb - Kağız yoxdur</translation>
 <translation id="4932733599132424254">Tarix</translation>
+<translation id="520299634122159966">Əlçatan skaner yoxdur</translation>
 <translation id="5212543919916444558">Ekranınızda kömək edə biləcəyim heç nə tapmadım. Məndən hər hansı bir şey soruşmaq üçün mikrofona klikləyin.</translation>
 <translation id="5222676887888702881">Hesabdan çıxın</translation>
 <translation id="5267975978099728568"><ph name="DOCUMENT_TITLE" />, <ph name="PRINTER_NAME" />, <ph name="CREATION_TIME" />, <ph name="ERROR_STATUS" /></translation>
@@ -70,6 +74,7 @@
 <translation id="649050271426829538">Dayanıb - Kağız ilişib</translation>
 <translation id="6517239166834772319">Araşdırın</translation>
 <translation id="6564646048574748301">Alınmadı - Printer əlçatan deyil</translation>
+<translation id="6620487321149975369">Manual olaraq silinməsə, çap işləri tarixçədə görünəcək</translation>
 <translation id="6643016212128521049">Silin</translation>
 <translation id="6747215703636344499">Dayanıb - Çıxış doludur</translation>
 <translation id="7162487448488904999">Qalereya</translation>
@@ -80,7 +85,9 @@
 <translation id="7805768142964895445">Status</translation>
 <translation id="808894953321890993">Parolu dəyişin</translation>
 <translation id="8208861521865154048">İmtiyazlar</translation>
+<translation id="8294431847097064396">Mənbə</translation>
 <translation id="8347227221149377169">Çap işləri</translation>
+<translation id="8352772353338965963">Çoxsaylı giriş üçün hesab əlavə edin. Bu hesablara parolsuz daxil olmaq olar, ona görə də bu funksiya yalnız güvənilən hesablar ilə işlədilməlidir.</translation>
 <translation id="8701136875688985581"><ph name="ENROLLMENT_DOMAIN" /> bu istifadəçini idarə edir. O, ayarları məsafədən idarə edə və istifadəçi fəaliyyətini izləyə bilər.</translation>
 <translation id="871560550817059752">Alınmadı - Mürəkkəb yoxdur</translation>
 <translation id="8726019395068607495">Dayanıb - Qapı açıqdır</translation>

@@ -26,7 +26,6 @@ LayoutNGMixin<Base>::LayoutNGMixin(Element* element) : Base(element) {
   static_assert(
       std::is_base_of<LayoutBlock, Base>::value,
       "Base class of LayoutNGMixin must be LayoutBlock or derived class.");
-  DCHECK(!element || !element->ShouldForceLegacyLayout());
   if (element)
     Base::GetDocument().IncLayoutBlockCounterNG();
 }
@@ -38,8 +37,7 @@ template <typename Base>
 void LayoutNGMixin<Base>::Paint(const PaintInfo& paint_info) const {
   // Avoid painting dirty objects because descendants maybe already destroyed.
   if (UNLIKELY(Base::NeedsLayout() &&
-               !Base::LayoutBlockedByDisplayLock(
-                   DisplayLockLifecycleTarget::kChildren))) {
+               !Base::ChildLayoutBlockedByDisplayLock())) {
     NOTREACHED();
     return;
   }

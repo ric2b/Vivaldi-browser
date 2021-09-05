@@ -13,12 +13,12 @@
 <translation id="1163931534039071049">檢視頁框原始碼(&amp;V)</translation>
 <translation id="1165039591588034296">錯誤</translation>
 <translation id="1175364870820465910">列印(&amp;P)...</translation>
-<translation id="1177863135347784049">自訂</translation>
 <translation id="1181037720776840403">移除</translation>
 <translation id="1187722533808055681">閒置喚醒</translation>
 <translation id="119944043368869598">全部清除</translation>
 <translation id="1221825588892235038">僅限選取的內容</translation>
 <translation id="1244303850296295656">延伸套件錯誤</translation>
+<translation id="125220115284141797">預設</translation>
 <translation id="1274977772557788323">Adobe Flash Player 儲存設定</translation>
 <translation id="1297175357211070620">印表機</translation>
 <translation id="1303101771013849280">HTML 書籤檔案</translation>
@@ -45,9 +45,11 @@
 <translation id="1723824996674794290">新增視窗(&amp;N)</translation>
 <translation id="1725149567830788547">顯示控制介面(&amp;C)</translation>
 <translation id="1729533290416704613">這個延伸套件也會控制您使用網址列搜尋時所顯示的網頁。</translation>
+<translation id="174123615272205933">自訂</translation>
 <translation id="1744108098763830590">背景頁面</translation>
 <translation id="176587472219019965">新增視窗(&amp;N)</translation>
 <translation id="1769104665586091481">在新視窗開啟連結(&amp;W)</translation>
+<translation id="1779468444204342338">最小值</translation>
 <translation id="1815083418640426271">以純文字貼上</translation>
 <translation id="1828901632669367785">列印使用系統對話方塊...</translation>
 <translation id="1850508293116537636">順時針旋轉(&amp;C)</translation>
@@ -87,7 +89,6 @@
 <translation id="2381756643783702095">傳送前詢問我 (建議)</translation>
 <translation id="241082044617551207">未知外掛程式</translation>
 <translation id="2423578206845792524">另存圖片(&amp;V)...</translation>
-<translation id="2436707352762155834">最小值</translation>
 <translation id="2439110203301358333">電腦中其他程式所新增的延伸套件可能會變更 Vivaldi 的運作方式。</translation>
 <translation id="2445081178310039857">請指定延伸套件根目錄。</translation>
 <translation id="2470702053775288986">已停用不支援的延伸套件</translation>
@@ -245,7 +246,6 @@
 <translation id="5039804452771397117">允許</translation>
 <translation id="5057110919553308744">點一下延伸套件時</translation>
 <translation id="5063480226653192405">用量</translation>
-<translation id="5068918910148307423">禁止最近關閉的網站完成資料的傳送及接收</translation>
 <translation id="5116628073786783676">另存音訊(&amp;V)...</translation>
 <translation id="5143374789336132547">延伸套件「<ph name="EXTENSION_NAME" />」已變更您點選首頁按鈕時所顯示的網頁。</translation>
 <translation id="5154108062446123722">「<ph name="PRINTING_DESTINATION" />」進階設定</translation>
@@ -264,6 +264,7 @@
 <translation id="5355926466126177564">延伸套件「<ph name="EXTENSION_NAME" />」已變更您使用網址列搜尋時所顯示的網頁。</translation>
 <translation id="5360150013186312835">顯示於工具列</translation>
 <translation id="5362741141255528695">選取私鑰檔案。</translation>
+<translation id="536638840841140142">無</translation>
 <translation id="5370819323174483825">重新載入(&amp;R)</translation>
 <translation id="5398572795982417028">參照的網頁超出範圍限制 (<ph name="MAXIMUM_PAGE" />)</translation>
 <translation id="5425042808445046667">繼續下載</translation>
@@ -388,7 +389,6 @@
 <translation id="7663719505383602579">接收端：<ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">由您的管理員安裝</translation>
 <translation id="7685049629764448582">JavaScript 記憶體</translation>
-<translation id="7701040980221191251">無</translation>
 <translation id="7701869757853594372">USER 處理</translation>
 <translation id="7704305437604973648">工作</translation>
 <translation id="7710568461918838723">投影(&amp;C)...</translation>

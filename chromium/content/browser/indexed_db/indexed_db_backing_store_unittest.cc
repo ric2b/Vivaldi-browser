@@ -75,6 +75,7 @@ class TestableIndexedDBBackingStore : public IndexedDBBackingStore {
       std::unique_ptr<TransactionalLevelDBDatabase> db,
       storage::mojom::BlobStorageContext* blob_storage_context,
       storage::mojom::NativeFileSystemContext* native_file_system_context,
+      std::unique_ptr<storage::FilesystemProxy> filesystem_proxy,
       BlobFilesCleanedCallback blob_files_cleaned,
       ReportOutstandingBlobsCallback report_outstanding_blobs,
       scoped_refptr<base::SequencedTaskRunner> idb_task_runner,
@@ -86,6 +87,7 @@ class TestableIndexedDBBackingStore : public IndexedDBBackingStore {
                               std::move(db),
                               blob_storage_context,
                               native_file_system_context,
+                              std::move(filesystem_proxy),
                               std::move(blob_files_cleaned),
                               std::move(report_outstanding_blobs),
                               std::move(idb_task_runner),
@@ -137,6 +139,7 @@ class TestIDBFactory : public IndexedDBFactoryImpl {
       std::unique_ptr<TransactionalLevelDBDatabase> db,
       storage::mojom::BlobStorageContext*,
       storage::mojom::NativeFileSystemContext*,
+      std::unique_ptr<storage::FilesystemProxy> filesystem_proxy,
       IndexedDBBackingStore::BlobFilesCleanedCallback blob_files_cleaned,
       IndexedDBBackingStore::ReportOutstandingBlobsCallback
           report_outstanding_blobs,
@@ -148,8 +151,9 @@ class TestIDBFactory : public IndexedDBFactoryImpl {
     return std::make_unique<TestableIndexedDBBackingStore>(
         backing_store_mode, leveldb_factory, origin, blob_path, std::move(db),
         blob_storage_context_, native_file_system_context_,
-        std::move(blob_files_cleaned), std::move(report_outstanding_blobs),
-        std::move(idb_task_runner), std::move(io_task_runner));
+        std::move(filesystem_proxy), std::move(blob_files_cleaned),
+        std::move(report_outstanding_blobs), std::move(idb_task_runner),
+        std::move(io_task_runner));
   }
 
  private:
@@ -890,6 +894,68 @@ TEST_P(IndexedDBBackingStoreTestWithExternalObjects, PutGetConsistency) {
   task_environment_.RunUntilIdle();
 }
 
+// http://crbug.com/1131151
+// Validate that recovery journal cleanup during a transaction does
+// not delete blobs that were just written.
+TEST_P(IndexedDBBackingStoreTestWithExternalObjects, BlobWriteCleanup) {
+  const std::vector<IndexedDBKey> keys = {
+      IndexedDBKey(ASCIIToUTF16("key0")), IndexedDBKey(ASCIIToUTF16("key1")),
+      IndexedDBKey(ASCIIToUTF16("key2")), IndexedDBKey(ASCIIToUTF16("key3"))};
+
+  const int64_t database_id = 1;
+  const int64_t object_store_id = 1;
+
+  external_objects().clear();
+  for (size_t j = 0; j < 4; ++j) {
+    std::string type = "type " + base::NumberToString(j);
+    external_objects().push_back(CreateBlobInfo(base::UTF8ToUTF16(type), 1));
+  }
+
+  std::vector<IndexedDBValue> values = {
+      IndexedDBValue("value0", {external_objects()[0]}),
+      IndexedDBValue("value1", {external_objects()[1]}),
+      IndexedDBValue("value2", {external_objects()[2]}),
+      IndexedDBValue("value3", {external_objects()[3]}),
+  };
+  ASSERT_GE(keys.size(), values.size());
+
+  // Validate that cleaning up after writing blobs does not delete those
+  // blobs.
+  backing_store()->SetExecuteJournalCleaningOnNoTransactionsForTesting();
+
+  std::unique_ptr<IndexedDBBackingStore::Transaction> transaction1 =
+      std::make_unique<IndexedDBBackingStore::Transaction>(
+          backing_store()->AsWeakPtr(),
+          blink::mojom::IDBTransactionDurability::Relaxed,
+          blink::mojom::IDBTransactionMode::ReadWrite);
+  transaction1->Begin(CreateDummyLock());
+  IndexedDBBackingStore::RecordIdentifier record;
+  for (size_t i = 0; i < values.size(); ++i) {
+    EXPECT_TRUE(backing_store()
+                    ->PutRecord(transaction1.get(), database_id,
+                                object_store_id, keys[i], &values[i], &record)
+                    .ok());
+  }
+
+  // Start committing transaction1.
+  bool succeeded = false;
+  EXPECT_TRUE(
+      transaction1->CommitPhaseOne(CreateBlobWriteCallback(&succeeded)).ok());
+  task_environment_.RunUntilIdle();
+  EXPECT_TRUE(CheckBlobWrites());
+
+  // Finish committing transaction1.
+  EXPECT_TRUE(succeeded);
+  EXPECT_TRUE(transaction1->CommitPhaseTwo().ok());
+
+  // Verify lack of blob removals.
+  ASSERT_EQ(0UL, backing_store()->removals().size());
+
+  // Clean up on the IDB sequence.
+  transaction1.reset();
+  task_environment_.RunUntilIdle();
+}
+
 TEST_P(IndexedDBBackingStoreTestWithExternalObjects, DeleteRange) {
   const std::vector<IndexedDBKey> keys = {
       IndexedDBKey(ASCIIToUTF16("key0")), IndexedDBKey(ASCIIToUTF16("key1")),
@@ -1523,9 +1589,13 @@ TEST_F(IndexedDBBackingStoreTest, GetDatabaseNames) {
 }
 
 TEST_F(IndexedDBBackingStoreTest, ReadCorruptionInfo) {
+  auto filesystem_proxy = std::make_unique<storage::FilesystemProxy>(
+      storage::FilesystemProxy::UNRESTRICTED, base::FilePath());
+
   // No |path_base|.
-  EXPECT_TRUE(
-      indexed_db::ReadCorruptionInfo(base::FilePath(), Origin()).empty());
+  EXPECT_TRUE(indexed_db::ReadCorruptionInfo(filesystem_proxy.get(),
+                                             base::FilePath(), Origin())
+                  .empty());
 
   const base::FilePath path_base = temp_dir_.GetPath();
   const Origin origin = Origin::Create(GURL("http://www.google.com/"));
@@ -1533,7 +1603,9 @@ TEST_F(IndexedDBBackingStoreTest, ReadCorruptionInfo) {
   ASSERT_TRUE(PathIsWritable(path_base));
 
   // File not found.
-  EXPECT_TRUE(indexed_db::ReadCorruptionInfo(path_base, origin).empty());
+  EXPECT_TRUE(
+      indexed_db::ReadCorruptionInfo(filesystem_proxy.get(), path_base, origin)
+          .empty());
 
   const base::FilePath info_path =
       path_base.AppendASCII("http_www.google.com_0.indexeddb.leveldb")
@@ -1543,45 +1615,59 @@ TEST_F(IndexedDBBackingStoreTest, ReadCorruptionInfo) {
   // Empty file.
   std::string dummy_data;
   ASSERT_TRUE(base::WriteFile(info_path, dummy_data));
-  EXPECT_TRUE(indexed_db::ReadCorruptionInfo(path_base, origin).empty());
+  EXPECT_TRUE(
+      indexed_db::ReadCorruptionInfo(filesystem_proxy.get(), path_base, origin)
+          .empty());
   EXPECT_FALSE(PathExists(info_path));
 
   // File size > 4 KB.
   dummy_data.resize(5000, 'c');
   ASSERT_TRUE(base::WriteFile(info_path, dummy_data));
-  EXPECT_TRUE(indexed_db::ReadCorruptionInfo(path_base, origin).empty());
+  EXPECT_TRUE(
+      indexed_db::ReadCorruptionInfo(filesystem_proxy.get(), path_base, origin)
+          .empty());
   EXPECT_FALSE(PathExists(info_path));
 
   // Random string.
   ASSERT_TRUE(base::WriteFile(info_path, "foo bar"));
-  EXPECT_TRUE(indexed_db::ReadCorruptionInfo(path_base, origin).empty());
+  EXPECT_TRUE(
+      indexed_db::ReadCorruptionInfo(filesystem_proxy.get(), path_base, origin)
+          .empty());
   EXPECT_FALSE(PathExists(info_path));
 
   // Not a dictionary.
   ASSERT_TRUE(base::WriteFile(info_path, "[]"));
-  EXPECT_TRUE(indexed_db::ReadCorruptionInfo(path_base, origin).empty());
+  EXPECT_TRUE(
+      indexed_db::ReadCorruptionInfo(filesystem_proxy.get(), path_base, origin)
+          .empty());
   EXPECT_FALSE(PathExists(info_path));
 
   // Empty dictionary.
   ASSERT_TRUE(base::WriteFile(info_path, "{}"));
-  EXPECT_TRUE(indexed_db::ReadCorruptionInfo(path_base, origin).empty());
+  EXPECT_TRUE(
+      indexed_db::ReadCorruptionInfo(filesystem_proxy.get(), path_base, origin)
+          .empty());
   EXPECT_FALSE(PathExists(info_path));
 
   // Dictionary, no message key.
   ASSERT_TRUE(base::WriteFile(info_path, "{\"foo\":\"bar\"}"));
-  EXPECT_TRUE(indexed_db::ReadCorruptionInfo(path_base, origin).empty());
+  EXPECT_TRUE(
+      indexed_db::ReadCorruptionInfo(filesystem_proxy.get(), path_base, origin)
+          .empty());
   EXPECT_FALSE(PathExists(info_path));
 
   // Dictionary, message key.
   ASSERT_TRUE(base::WriteFile(info_path, "{\"message\":\"bar\"}"));
-  std::string message = indexed_db::ReadCorruptionInfo(path_base, origin);
+  std::string message =
+      indexed_db::ReadCorruptionInfo(filesystem_proxy.get(), path_base, origin);
   EXPECT_FALSE(message.empty());
   EXPECT_FALSE(PathExists(info_path));
   EXPECT_EQ("bar", message);
 
   // Dictionary, message key and more.
   ASSERT_TRUE(base::WriteFile(info_path, "{\"message\":\"foo\",\"bar\":5}"));
-  message = indexed_db::ReadCorruptionInfo(path_base, origin);
+  message =
+      indexed_db::ReadCorruptionInfo(filesystem_proxy.get(), path_base, origin);
   EXPECT_FALSE(message.empty());
   EXPECT_FALSE(PathExists(info_path));
   EXPECT_EQ("foo", message);

@@ -60,6 +60,8 @@
 #include "content/browser/host_zoom_level_context.h"
 #endif
 
+#include "content/browser/blob_storage/blob_registry_wrapper.h"
+
 namespace leveldb_proto {
 class ProtoDatabaseProvider;
 }
@@ -67,15 +69,15 @@ class ProtoDatabaseProvider;
 namespace content {
 
 class BackgroundFetchContext;
+class BlobRegistryWrapper;
 class ConversionManagerImpl;
 class CookieStoreContext;
-class BlobRegistryWrapper;
-class IndexedDBContextImpl;
-class PrefetchURLLoaderService;
 class GeneratedCodeCacheContext;
+class IndexedDBContextImpl;
 class NativeFileSystemEntryFactory;
 class NativeFileSystemManagerImpl;
 class NativeIOContext;
+class PrefetchURLLoaderService;
 class QuotaContext;
 
 class CONTENT_EXPORT StoragePartitionImpl
@@ -154,6 +156,8 @@ class CONTENT_EXPORT StoragePartitionImpl
   leveldb_proto::ProtoDatabaseProvider* GetProtoDatabaseProvider() override;
   void SetProtoDatabaseProvider(
       std::unique_ptr<leveldb_proto::ProtoDatabaseProvider> proto_db_provider)
+      override;
+  leveldb_proto::ProtoDatabaseProvider* GetProtoDatabaseProviderForTesting()
       override;
   void ClearDataForOrigin(uint32_t remove_mask,
                           uint32_t quota_storage_remove_mask,
@@ -269,7 +273,6 @@ class CONTENT_EXPORT StoragePartitionImpl
 #if defined(OS_CHROMEOS)
   void OnTrustAnchorUsed() override;
 #endif
-  void OnSCTReportReady(const std::string& cache_key) override;
 
   scoped_refptr<URLLoaderFactoryGetter> url_loader_factory_getter() {
     return url_loader_factory_getter_;
@@ -346,6 +349,17 @@ class CONTENT_EXPORT StoragePartitionImpl
 
   std::vector<std::string> GetCorsExemptHeaderList();
 
+  // NOTE(andre@vivaldi.com) : When we have a WebView that "adopt" a WebContents
+  // in WebViewGuest we need to set the parent of the WebView as fallback
+  // storage. See VB-72847 and
+  // https://source.chromium.org/chromium/chromium/src/+/98f465d27454f40690199ed1c32ab0ce2f8f3230
+  void UpdateBlobRegistryWithParentAsFallback(
+      StoragePartitionImpl* fallback_for_blob_urls);
+
+  scoped_refptr<BlobRegistryWrapper> blob_registry() {
+    return blob_registry_;
+  }
+
  private:
   class DataDeletionHelper;
   class QuotaManagedDataDeletionHelper;
@@ -420,7 +434,10 @@ class CONTENT_EXPORT StoragePartitionImpl
   // The purpose of the Create, Initialize sequence is that code that
   // initializes members of the StoragePartitionImpl and gets a pointer to it
   // can query properties of the StoragePartitionImpl (notably GetPath()).
-  void Initialize();
+  // If `fallback_for_blob_urls` is not null, blob urls that can't be resolved
+  // in this storage partition will be attempted to be resolved in the fallback
+  // storage partition instead.
+  void Initialize(StoragePartitionImpl* fallback_for_blob_urls = nullptr);
 
   // If we're running Storage Service out-of-process and it crashes, this
   // re-establishes a connection and makes sure the service returns to a usable
@@ -569,6 +586,9 @@ class CONTENT_EXPORT StoragePartitionImpl
   base::ObserverList<DataRemovalObserver> data_removal_observers_;
 
   bool is_vivaldi_ = false;
+  // NOTE(andre@vivaldi.com) : Used to give webviews access to the embedders
+  // blobs.
+  scoped_refptr<BlobRegistryWrapper> fallback_blob_registry_;
 
   // Called when all deletions are done. For test use only.
   base::OnceClosure on_deletion_helpers_done_callback_;

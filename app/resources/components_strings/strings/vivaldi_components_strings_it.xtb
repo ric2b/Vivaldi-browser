@@ -153,6 +153,7 @@
 <translation id="6165508094623778733">Ulteriori informazioni</translation>
 <translation id="6177128806592000436">La tua connessione a questo sito non è sicura</translation>
 <translation id="6203231073485539293">Controlla la connessione a Internet</translation>
+<translation id="6225522625585012689">Visita &lt;strong&gt;vivaldi://policy&lt;/strong&gt; per visualizzare l'elenco degli URL bloccati e degli altri criteri applicati dall'amministratore di sistema.</translation>
 <translation id="625755898061068298">Hai scelto di disattivare gli avvisi di sicurezza per questo sito.</translation>
 <translation id="6264485186158353794">Torna nell'area protetta</translation>
 <translation id="6305205051461490394"><ph name="URL" /> non è raggiungibile.</translation>
@@ -202,7 +203,6 @@
 <translation id="8041940743680923270">Usa predefinita globale (Chiedi)</translation>
 <translation id="808894953321890993">Cambia password</translation>
 <translation id="8119307142152921512">traccianti e annunci</translation>
-<translation id="8142868475871995937">Visita &lt;strong&gt;vivaldi://policy&lt;/strong&gt; per visualizzare l'elenco di URL inseriti nella blacklist e altre norme applicate dall'amministratore di sistema.</translation>
 <translation id="8149426793427495338">Il computer è entrato in modalità sospensione.</translation>
 <translation id="8150722005171944719">Il file all'indirizzo <ph name="URL" /> non è leggibile. Potrebbe essere stato rimosso, spostato oppure delle autorizzazioni del file potrebbero impedire l'accesso.</translation>
 <translation id="8184538546369750125">Usa predefinita globale (Consenti)</translation>

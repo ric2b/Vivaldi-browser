@@ -11,8 +11,8 @@
 #include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
 #include "base/unguessable_token.h"
-#include "content/browser/frame_host/navigation_request_info.h"
 #include "content/browser/loader/navigation_url_loader.h"
+#include "content/browser/renderer_host/navigation_request_info.h"
 #include "content/browser/web_package/prefetched_signed_exchange_cache.h"
 #include "content/common/navigation_params.h"
 #include "content/public/browser/browser_context.h"
@@ -90,7 +90,8 @@ class NavigationURLLoaderTest : public testing::Test {
             nullptr /* blob_url_loader_factory */,
             base::UnguessableToken::Create() /* devtools_navigation_token */,
             base::UnguessableToken::Create() /* devtools_frame_token */,
-            false /* obey_origin_policy */, {} /* cors_exempt_headers */));
+            false /* obey_origin_policy */, {} /* cors_exempt_headers */,
+            nullptr /* client_security_state */));
     return NavigationURLLoader::Create(
         browser_context_.get(),
         BrowserContext::GetDefaultStoragePartition(browser_context_.get()),

@@ -52,10 +52,6 @@ class NearbyShareClientImpl : public NearbyShareClient {
   void UpdateDevice(const nearbyshare::proto::UpdateDeviceRequest& request,
                     UpdateDeviceCallback&& callback,
                     ErrorCallback&& error_callback) override;
-  void CheckContactsReachability(
-      const nearbyshare::proto::CheckContactsReachabilityRequest& request,
-      CheckContactsReachabilityCallback&& callback,
-      ErrorCallback&& error_callback) override;
   void ListContactPeople(
       const nearbyshare::proto::ListContactPeopleRequest& request,
       ListContactPeopleCallback&& callback,

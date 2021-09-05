@@ -5,13 +5,14 @@
 package org.chromium.chrome.browser.share.screenshot;
 
 import android.app.Dialog;
-import android.app.DialogFragment;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.os.Bundle;
 
 import androidx.appcompat.app.AlertDialog;
+import androidx.fragment.app.DialogFragment;
 
+import org.chromium.base.Callback;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.share.share_sheet.ChromeOptionShareCallback;
 import org.chromium.chrome.browser.tab.Tab;
@@ -21,12 +22,10 @@ import org.chromium.chrome.browser.tab.Tab;
  */
 public class ScreenshotShareSheetDialog extends DialogFragment {
     private Context mContext;
-    private ScreenshotShareSheetView mDialogView;
     private Bitmap mScreenshot;
-    private Runnable mDeleteRunnable;
     private Tab mTab;
-    private ChromeOptionShareCallback mShareCallback;
-    private Runnable mInstallCallback;
+    private ChromeOptionShareCallback mChromeOptionShareCallback;
+    private Callback<Runnable> mInstallCallback;
 
     /**
      * The ScreenshotShareSheetDialog constructor.
@@ -36,17 +35,17 @@ public class ScreenshotShareSheetDialog extends DialogFragment {
     /**
      * Initialize the dialog outside of the constructor as fragments require default constructor.
      * @param screenshot The screenshot image to show.
-     * @param deleteRunnable The function to call on delete.
      * @param tab The shared tab.
-     * @param shareSheetCoordnator the base share sheet coordinator
+     * @param chromeOptionShareCallback the callback to trigger on share.
+     * @param installCallback the callback to trigger on install.
      */
-    public void init(Bitmap screenshot, Runnable deleteRunnable, Tab tab,
-            ChromeOptionShareCallback shareSheetCallback, Runnable installCallback) {
+    public void init(Bitmap screenshot, Tab tab,
+            ChromeOptionShareCallback chromeOptionShareCallback,
+            Callback<Runnable> installCallback) {
         mScreenshot = screenshot;
-        mDeleteRunnable = deleteRunnable;
         mInstallCallback = installCallback;
         mTab = tab;
-        mShareCallback = shareSheetCallback;
+        mChromeOptionShareCallback = chromeOptionShareCallback;
     }
 
     @Override
@@ -64,9 +63,8 @@ public class ScreenshotShareSheetDialog extends DialogFragment {
                         R.layout.screenshot_share_sheet, null);
         builder.setView(screenshotShareSheetView);
 
-        ScreenshotShareSheetCoordinator shareCoordinator =
-                new ScreenshotShareSheetCoordinator(mContext, mScreenshot, mDeleteRunnable,
-                        screenshotShareSheetView, mTab, mShareCallback, mInstallCallback);
+        new ScreenshotShareSheetCoordinator(mContext, mScreenshot, this::dismiss,
+                screenshotShareSheetView, mTab, mChromeOptionShareCallback, mInstallCallback);
         return builder.create();
     }
 }

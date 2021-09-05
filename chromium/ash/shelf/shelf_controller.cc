@@ -26,6 +26,7 @@
 #include "ui/base/ui_base_features.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
+#include "ui/message_center/message_center.h"
 
 namespace ash {
 
@@ -108,6 +109,7 @@ ShelfController::ShelfController()
   Shell::Get()->tablet_mode_controller()->AddObserver(this);
   Shell::Get()->window_tree_host_manager()->AddObserver(this);
   model_.AddObserver(this);
+  message_center::MessageCenter::Get()->AddObserver(this);
 }
 
 ShelfController::~ShelfController() {
@@ -115,6 +117,7 @@ ShelfController::~ShelfController() {
 }
 
 void ShelfController::Shutdown() {
+  message_center::MessageCenter::Get()->RemoveObserver(this);
   model_.RemoveObserver(this);
   Shell::Get()->window_tree_host_manager()->RemoveObserver(this);
   Shell::Get()->tablet_mode_controller()->RemoveObserver(this);
@@ -151,24 +154,27 @@ void ShelfController::OnActiveUserPrefServiceChanged(
                               base::BindRepeating(&SetShelfBehaviorsFromPrefs));
 
   if (is_notification_indicator_enabled_) {
+    pref_change_registrar_->Add(
+        prefs::kAppNotificationBadgingEnabled,
+        base::BindRepeating(&ShelfController::UpdateAppBadging,
+                            base::Unretained(this)));
+
     // Observe AppRegistryCache for the current active account to get
     // notification updates.
     AccountId account_id =
         Shell::Get()->session_controller()->GetActiveAccountId();
     cache_ =
         apps::AppRegistryCacheWrapper::Get().GetAppRegistryCache(account_id);
-
     Observe(cache_);
 
-    if (cache_) {
-      // Update the notification badge indicator for all apps. This will also
-      // ensure that apps have the correct notification badge value for the
-      // multiprofile case when switching between users.
-      cache_->ForEachApp([this](const apps::AppUpdate& update) {
-        bool has_badge = update.HasBadge() == apps::mojom::OptionalBool::kTrue;
-        model_.UpdateItemNotification(update.AppId(), has_badge);
-      });
-    }
+    // Resetting the recorded pref forces the next call to UpdateAppBadging()
+    // to update notification badging for every app item.
+    notification_badging_pref_enabled_.reset();
+
+    // Update the notification badge indicator for all apps. This will also
+    // ensure that apps have the correct notification badge value for the
+    // multiprofile case when switching between users.
+    UpdateAppBadging();
   }
 }
 
@@ -218,7 +224,9 @@ void ShelfController::OnDisplayConfigurationChanged() {
 }
 
 void ShelfController::OnAppUpdate(const apps::AppUpdate& update) {
-  if (update.HasBadgeChanged()) {
+  if (update.HasBadgeChanged() &&
+      notification_badging_pref_enabled_.value_or(false) &&
+      !quiet_mode_enabled_.value_or(false)) {
     bool has_badge = update.HasBadge() == apps::mojom::OptionalBool::kTrue;
     model_.UpdateItemNotification(update.AppId(), has_badge);
   }
@@ -230,7 +238,8 @@ void ShelfController::OnAppRegistryCacheWillBeDestroyed(
 }
 
 void ShelfController::ShelfItemAdded(int index) {
-  if (!is_notification_indicator_enabled_ || !cache_)
+  if (!cache_ || !is_notification_indicator_enabled_ ||
+      !notification_badging_pref_enabled_.value_or(false))
     return;
 
   auto app_id = model_.items()[index].id.app_id;
@@ -240,6 +249,41 @@ void ShelfController::ShelfItemAdded(int index) {
     bool has_badge = update.HasBadge() == apps::mojom::OptionalBool::kTrue;
     model_.UpdateItemNotification(update.AppId(), has_badge);
   });
+}
+
+void ShelfController::OnQuietModeChanged(bool in_quiet_mode) {
+  UpdateAppBadging();
+}
+
+void ShelfController::UpdateAppBadging() {
+  bool new_badging_enabled = pref_change_registrar_
+                                 ? pref_change_registrar_->prefs()->GetBoolean(
+                                       prefs::kAppNotificationBadgingEnabled)
+                                 : false;
+  bool new_quiet_mode_enabled =
+      message_center::MessageCenter::Get()->IsQuietMode();
+
+  if (notification_badging_pref_enabled_.has_value() &&
+      notification_badging_pref_enabled_.value() == new_badging_enabled &&
+      quiet_mode_enabled_.has_value() &&
+      quiet_mode_enabled_.value() == new_quiet_mode_enabled) {
+    return;
+  }
+  notification_badging_pref_enabled_ = new_badging_enabled;
+  quiet_mode_enabled_ = new_quiet_mode_enabled;
+
+  if (cache_) {
+    cache_->ForEachApp([this](const apps::AppUpdate& update) {
+      // Set the app notification badge hidden when the pref is disabled.
+      bool has_badge =
+          notification_badging_pref_enabled_.value() &&
+                  !quiet_mode_enabled_.value()
+              ? (update.HasBadge() == apps::mojom::OptionalBool::kTrue)
+              : false;
+
+      model_.UpdateItemNotification(update.AppId(), has_badge);
+    });
+  }
 }
 
 }  // namespace ash

@@ -10,9 +10,12 @@
 #include "base/callback.h"
 #include "base/files/file_util.h"
 #include "base/guid.h"
+#include "base/hash/sha1.h"
 #include "base/json/json_writer.h"
 #include "base/macros.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/run_loop.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -36,6 +39,7 @@
 #include "chrome/browser/chromeos/login/test/oobe_screen_exit_waiter.h"
 #include "chrome/browser/chromeos/login/test/oobe_screen_waiter.h"
 #include "chrome/browser/chromeos/login/test/session_manager_state_waiter.h"
+#include "chrome/browser/chromeos/login/test/webview_content_extractor.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host.h"
 #include "chrome/browser/chromeos/login/wizard_controller.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
@@ -83,6 +87,7 @@
 #include "media/base/media_switches.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "net/base/net_errors.h"
+#include "net/cert/x509_certificate.h"
 #include "net/cookies/canonical_cookie.h"
 #include "net/cookies/cookie_access_result.h"
 #include "net/cookies/cookie_util.h"
@@ -93,6 +98,7 @@
 #include "net/test/spawned_test_server/spawned_test_server.h"
 #include "net/test/test_data_directory.h"
 #include "services/network/public/mojom/cookie_manager.mojom.h"
+#include "third_party/boringssl/src/include/openssl/pool.h"
 
 namespace em = enterprise_management;
 
@@ -237,6 +243,21 @@ class ErrorScreenWatcher : public OobeUI::Observer {
   bool has_error_screen_been_shown_ = false;
 };
 
+std::string GetCertSha1Fingerprint(const std::string& cert_name) {
+  const std::string cert_file_name =
+      base::StringPrintf("%s.pem", cert_name.c_str());
+  scoped_refptr<net::X509Certificate> cert =
+      net::ImportCertFromFile(net::GetTestCertsDirectory(), cert_file_name);
+  if (!cert) {
+    ADD_FAILURE() << "Failed to read certificate " << cert_name;
+    return std::string();
+  }
+  unsigned char hash[base::kSHA1Length];
+  base::SHA1HashBytes(CRYPTO_BUFFER_data(cert->cert_buffer()),
+                      CRYPTO_BUFFER_len(cert->cert_buffer()), hash);
+  return base::ToLowerASCII(base::HexEncode(hash, base::kSHA1Length));
+}
+
 }  // namespace
 
 class WebviewLoginTest : public OobeBaseTest {
@@ -244,8 +265,7 @@ class WebviewLoginTest : public OobeBaseTest {
   WebviewLoginTest() {
     // TODO(https://crbug.com/1121910) Migrate to the kChildSpecificSignin
     // enabled.
-    scoped_feature_list_.InitWithFeatures(
-        {features::kGaiaActionButtons}, {features::kChildSpecificSignin});
+    scoped_feature_list_.InitWithFeatures({}, {features::kChildSpecificSignin});
   }
   ~WebviewLoginTest() override = default;
 
@@ -432,8 +452,7 @@ class WebviewLoginTestWithChildSigninEnabled : public WebviewLoginTest {
  public:
   WebviewLoginTestWithChildSigninEnabled() {
     scoped_feature_list_.Reset();
-    scoped_feature_list_.InitWithFeatures(
-        {features::kGaiaActionButtons, features::kChildSpecificSignin}, {});
+    scoped_feature_list_.InitWithFeatures({features::kChildSpecificSignin}, {});
   }
 };
 
@@ -461,7 +480,7 @@ IN_PROC_BROWSER_TEST_F(WebviewLoginTest, AllowNewUser) {
   // New users are allowed.
   test::OobeJS().ExpectTrue(frame_url + ".search('flow=nosignup') == -1");
 
-  // Disallow new users - we also need to set a whitelist due to weird logic.
+  // Disallow new users - we also need to set an allowlist due to weird logic.
   scoped_testing_cros_settings_.device_settings()->Set(kAccountsPrefUsers,
                                                        base::ListValue());
   scoped_testing_cros_settings_.device_settings()->Set(
@@ -677,8 +696,7 @@ class WebviewClientCertsLoginTestBase : public WebviewLoginTest {
   WebviewClientCertsLoginTestBase() {
     // TODO(crbug.com/1101318): Fix tests when kChildSpecificSignin is enabled.
     scoped_feature_list_.Reset();
-    scoped_feature_list_.InitWithFeatures({features::kGaiaActionButtons},
-                                          {features::kChildSpecificSignin});
+    scoped_feature_list_.InitWithFeatures({}, {features::kChildSpecificSignin});
   }
   WebviewClientCertsLoginTestBase(const WebviewClientCertsLoginTestBase&) =
       delete;
@@ -748,29 +766,23 @@ class WebviewClientCertsLoginTestBase : public WebviewLoginTest {
     navigation_observer.WatchExistingWebContents();
     navigation_observer.StartWatchingNewWebContents();
 
-    // TODO(https://crbug.com/830337): Remove the logs if flakiness is gone.
+    // TODO(https://crbug.com/1092562): Remove the logs if flakiness is gone.
     // If you see this after April 2019, please ping the owner of the above bug.
-    LOG(INFO) << "Triggering navigation to " << url.spec() << ".";
     test::OobeJS().Evaluate(base::StringPrintf(
         "%s.src='%s'", test::GetOobeElementPath(webview_path).c_str(),
         url.spec().c_str()));
     navigation_observer.Wait();
     LOG(INFO) << "Navigation done.";
 
-    content::WebContents* main_web_contents = GetLoginUI()->GetWebContents();
-    const std::string webview_id = std::prev(webview_path.end())->as_string();
-    content::WebContents* frame_web_contents =
-        signin::GetAuthFrameWebContents(main_web_contents, webview_id);
-    test::JSChecker frame_js_checker(frame_web_contents);
     const std::string https_reply_content =
-        frame_js_checker.GetString("document.body.textContent");
-    // TODO(https://crbug.com/830337): Remove this is if flakiness does not
+        test::GetWebViewContents(webview_path);
+    // TODO(https://crbug.com/1092562): Remove this is if flakiness does not
     // reproduce.
-    // If you see this after April 2019, please ping the owner of the above bug.
+    // If you see this after October 2020, please ping the above bug.
     if (https_reply_content.empty()) {
       base::PlatformThread::Sleep(base::TimeDelta::FromMilliseconds(1000));
       const std::string https_reply_content_after_sleep =
-          frame_js_checker.GetString("document.body.textContent");
+          test::GetWebViewContents(webview_path);
       if (!https_reply_content_after_sleep.empty())
         LOG(INFO) << "Magic - textContent appeared after sleep.";
     }
@@ -870,8 +882,7 @@ IN_PROC_BROWSER_TEST_F(WebviewClientCertsLoginTest,
   const std::string https_reply_content =
       RequestClientCertTestPageInFrame({"gaia-signin", gaia_frame_parent_});
   EXPECT_EQ(
-      "got client cert with fingerprint: "
-      "c66145f49caca4d1325db96ace0f12f615ba4981",
+      "got client cert with fingerprint: " + GetCertSha1Fingerprint("client_1"),
       https_reply_content);
 }
 
@@ -894,8 +905,7 @@ IN_PROC_BROWSER_TEST_F(WebviewClientCertsLoginTest,
   const std::string https_reply_content =
       RequestClientCertTestPageInFrame({"gaia-signin", gaia_frame_parent_});
   EXPECT_EQ(
-      "got client cert with fingerprint: "
-      "c66145f49caca4d1325db96ace0f12f615ba4981",
+      "got client cert with fingerprint: " + GetCertSha1Fingerprint("client_1"),
       https_reply_content);
 }
 
@@ -937,8 +947,7 @@ IN_PROC_BROWSER_TEST_F(WebviewClientCertsLoginTest, SigninFrameAuthorityGiven) {
   const std::string https_reply_content =
       RequestClientCertTestPageInFrame({"gaia-signin", gaia_frame_parent_});
   EXPECT_EQ(
-      "got client cert with fingerprint: "
-      "c66145f49caca4d1325db96ace0f12f615ba4981",
+      "got client cert with fingerprint: " + GetCertSha1Fingerprint("client_1"),
       https_reply_content);
 }
 
@@ -1021,8 +1030,7 @@ IN_PROC_BROWSER_TEST_F(WebviewClientCertsLoginTest,
   const std::string https_reply_content =
       RequestClientCertTestPageInFrame({"gaia-signin", gaia_frame_parent_});
   EXPECT_EQ(
-      "got client cert with fingerprint: "
-      "c66145f49caca4d1325db96ace0f12f615ba4981",
+      "got client cert with fingerprint: " + GetCertSha1Fingerprint("client_1"),
       https_reply_content);
 }
 
@@ -1179,8 +1187,7 @@ IN_PROC_BROWSER_TEST_F(WebviewClientCertsTokenLoadingLoginTest,
   const std::string https_reply_content =
       RequestClientCertTestPageInFrame({"gaia-signin", gaia_frame_parent_});
   EXPECT_EQ(
-      "got client cert with fingerprint: "
-      "c66145f49caca4d1325db96ace0f12f615ba4981",
+      "got client cert with fingerprint: " + GetCertSha1Fingerprint("client_1"),
       https_reply_content);
 
   EXPECT_TRUE(IsTpmTokenReady());
@@ -1347,7 +1354,6 @@ IN_PROC_BROWSER_TEST_F(WebviewProxyAuthLoginTest, DISABLED_ProxyAuthTransfer) {
   // so the sign-in screen will not display user pods.
   ExpectIdentifierPage();
 }
-
 
 using WebviewLoginTestWithChildSigninDisabled = WebviewLoginTest;
 

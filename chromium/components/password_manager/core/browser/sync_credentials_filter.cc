@@ -28,8 +28,7 @@ SyncCredentialsFilter::SyncCredentialsFilter(
 
 SyncCredentialsFilter::~SyncCredentialsFilter() = default;
 
-bool SyncCredentialsFilter::ShouldSave(
-    const autofill::PasswordForm& form) const {
+bool SyncCredentialsFilter::ShouldSave(const PasswordForm& form) const {
   if (client_->IsIncognito())
     return false;
 
@@ -68,17 +67,17 @@ bool SyncCredentialsFilter::ShouldSave(
 }
 
 bool SyncCredentialsFilter::ShouldSaveGaiaPasswordHash(
-    const autofill::PasswordForm& form) const {
-#if defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
+    const PasswordForm& form) const {
+#if defined(PASSWORD_REUSE_DETECTION_ENABLED)
   return !client_->IsIncognito() &&
          sync_util::IsGaiaCredentialPage(form.signon_realm);
 #else
   return false;
-#endif  // SYNC_PASSWORD_REUSE_DETECTION_ENABLED
+#endif  // PASSWORD_REUSE_DETECTION_ENABLED
 }
 
 bool SyncCredentialsFilter::ShouldSaveEnterprisePasswordHash(
-    const autofill::PasswordForm& form) const {
+    const PasswordForm& form) const {
   return !client_->IsIncognito() && sync_util::ShouldSaveEnterprisePasswordHash(
                                         form, *client_->GetPrefs());
 }

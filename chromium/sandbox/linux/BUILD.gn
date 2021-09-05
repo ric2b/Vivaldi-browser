@@ -11,6 +11,13 @@ if (is_android) {
   import("//build/config/android/rules.gni")
 }
 
+# This file depends on the legacy global sources assignment filter. It should
+# be converted to check target platform before assigning source files to the
+# sources variable. Remove this import and set_sources_assignment_filter call
+# when the file has been converted. See https://crbug.com/1018739 for details.
+import("//build/config/deprecated_default_sources_assignment_filter.gni")
+set_sources_assignment_filter(deprecated_default_sources_assignment_filter)
+
 declare_args() {
   compile_suid_client = is_linux || is_chromeos
 
@@ -96,6 +103,7 @@ source_set("sandbox_linux_unittests_sources") {
     "syscall_broker/broker_file_permission_unittest.cc",
     "syscall_broker/broker_process_unittest.cc",
     "syscall_broker/broker_simple_message_unittest.cc",
+    "syscall_broker/remote_syscall_arg_handler_unittest.cc",
     "tests/main.cc",
     "tests/scoped_temporary_file.cc",
     "tests/scoped_temporary_file.h",
@@ -351,6 +359,10 @@ component("sandbox_services") {
     "syscall_broker/broker_process.h",
     "syscall_broker/broker_simple_message.cc",
     "syscall_broker/broker_simple_message.h",
+    "syscall_broker/remote_syscall_arg_handler.cc",
+    "syscall_broker/remote_syscall_arg_handler.h",
+    "syscall_broker/syscall_dispatcher.cc",
+    "syscall_broker/syscall_dispatcher.h",
   ]
 
   defines = [ "SANDBOX_IMPLEMENTATION" ]
@@ -400,6 +412,10 @@ component("sandbox_services") {
       "syscall_broker/broker_process.h",
       "syscall_broker/broker_simple_message.cc",
       "syscall_broker/broker_simple_message.h",
+      "syscall_broker/remote_syscall_arg_handler.cc",
+      "syscall_broker/remote_syscall_arg_handler.h",
+      "syscall_broker/syscall_dispatcher.cc",
+      "syscall_broker/syscall_dispatcher.h",
     ]
   } else if (!is_android) {
     sources += [
@@ -417,6 +433,7 @@ source_set("sandbox_services_headers") {
     "system_headers/i386_linux_ucontext.h",
     "system_headers/linux_filter.h",
     "system_headers/linux_futex.h",
+    "system_headers/linux_prctl.h",
     "system_headers/linux_seccomp.h",
     "system_headers/linux_signal.h",
     "system_headers/linux_syscalls.h",

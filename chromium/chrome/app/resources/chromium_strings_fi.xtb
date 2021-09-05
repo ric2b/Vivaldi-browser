@@ -7,10 +7,12 @@
 <translation id="1098170124587656448">Chromium voi auttaa suojaamaan sinua tietosuojaloukkauksilta, haitallisilta laajennuksilta ja muilta</translation>
 <translation id="1104942323762546749">Chromium yrittää viedä salasanojasi tiedostoon. Salli tämä kirjoittamalla Windows-salasanasi.</translation>
 <translation id="113122355610423240">Chromium on oletusselaimesi.</translation>
+<translation id="1131805035311359397">Jos haluat tarkistaa, ovatko salasanasi turvassa tietosuojaloukkauksilta ja muilta tietoturvaongelmilta, <ph name="BEGIN_LINK" />kirjaudu Chromiumiin<ph name="END_LINK" />.</translation>
 <translation id="1185134272377778587">Tietoja Chromiumista</translation>
 <translation id="1315551408014407711">Luo uusi Chromium-profiili</translation>
 <translation id="1396446129537741364">Chromium yrittää näyttää salasanat.</translation>
 <translation id="1414495520565016063">Olet kirjautunut Chromiumiin!</translation>
+<translation id="1414973082589232775">Voidaksesi käyttää Rosettaa suojatun median toistamiseen, sinun täytyy uudelleenkäynnistää Chromium.</translation>
 <translation id="151962892725702025">Chromium-käyttöjärjestelmä ei voi synkronoida tietoja, koska synkronointi ei ole käytettävissä verkkotunnuksessasi.</translation>
 <translation id="1524282610922162960">Jaa Chromium-välilehti</translation>
 <translation id="1553461853655228091">Chromium tarvitsee luvan käyttää kameraasi ympäristön 3D-kartoittamiseen</translation>
@@ -24,10 +26,12 @@
 <translation id="1929939181775079593">Chromium ei vastaa. Käynnistetäänkö uudelleen?</translation>
 <translation id="1966382378801805537">Chromium ei voi tunnistaa tai asettaa oletusselainta.</translation>
 <translation id="2008474315282236005">Tämä poistaa yhden kohteen pysyvästi laitteelta. Jos haluat palauttaa tiedot myöhemmin, kirjaudu Chromiumiin käyttäjänä <ph name="USER_EMAIL" />.</translation>
+<translation id="2020032459870799438">Jos haluat tarkistaa, ovatko muut salasanasi turvassa tietosuojaloukkauksilta ja muilta tietoturvaongelmilta, <ph name="BEGIN_LINK" />kirjaudu Chromiumiin<ph name="END_LINK" />.</translation>
 <translation id="2185166961232948079">Chromium – Kirjautuminen verkkoon – <ph name="PAGE_TITLE" /></translation>
 <translation id="2225696941839557119">Chromium-käyttöjärjestelmä ei voinut synkronoida salasanojasi.</translation>
 <translation id="2241627712206172106">Jos käytät jaettua tietokonetta, kaverisi ja perheenjäsenesi voivat selata verkkoa omista profiileistaan käsin ja muokata Chromiumista juuri itselleen sopivan.</translation>
 <translation id="2294245788148774212">Valinnainen: Auta parantamaan Chromium-käyttöjärjestelmän ominaisuuksia ja suorituskykyä lähettämällä automaattisesti diagnostiikka- ja käyttödataa Googlelle.</translation>
+<translation id="2343156876103232566">Jos haluat lähettää numeron täältä Android-puhelimeesi, kirjaudu Chromiumiin molemmilla laitteilla.</translation>
 <translation id="2347108572062610441">Tämä laajennus on vaihtanut Chromiumin aloitussivun.</translation>
 <translation id="2396765026452590966">Laajennus <ph name="EXTENSION_NAME" /> on vaihtanut Chromiumin aloitussivun.</translation>
 <translation id="2483889755041906834">Chromiumissa</translation>
@@ -37,6 +41,7 @@
 <translation id="2560420686485554789">Chromium tarvitsee tallennustilan käyttöoikeuden tiedostojen lataamiseen.</translation>
 <translation id="2572494885440352020">Chromium Helper</translation>
 <translation id="2587578672395088481">Chromium-käyttöjärjestelmä täytyy käynnistää uudelleen, jotta päivitys voidaan ottaa käyttöön.</translation>
+<translation id="2615699638672665509">Tämän tietokoneen Chromium-päivitykset päättyvät pian, sillä sen laitteistoa ei enää tueta.</translation>
 <translation id="2648074677641340862">Asennuksessa ilmeni käyttöjärjestelmävirhe. Lataa Chromium uudelleen.</translation>
 <translation id="2711502716910134313">Chromium-välilehti</translation>
 <translation id="2718390899429598676">Chromium lisää suojausta salaamalla tietosi.</translation>
@@ -72,6 +77,7 @@
 <translation id="3575459661164320785">Tietokoneellasi on haitallinen ohjelmisto. Chromium voi poistaa sen, palauttaa asetuksesi ja poistaa laajennukset käytöstä, jotta selaimesi toimii taas normaalisti.</translation>
 <translation id="3639635944603682591">Käyttäjän selaustiedot poistetaan tältä laitteelta. Jos haluat palauttaa tiedot myöhemmin, kirjaudu Chromiumiin käyttäjänä <ph name="USER_EMAIL" />.</translation>
 <translation id="364817392622123556">{COUNT,plural, =0{Uusi Chromium-päivitys on saatavilla, ja se otetaan käyttöön uudelleenkäynnistyksen jälkeen.}=1{Uusi Chromium-päivitys on saatavilla, ja se otetaan käyttöön uudelleenkäynnistyksen jälkeen. Incognito-ikkunaasi ei avata uudelleen.}other{Uusi Chromium-päivitys on saatavilla, ja se otetaan käyttöön uudelleenkäynnistyksen jälkeen. # incognito-ikkunaasi ei avata uudelleen.}}</translation>
+<translation id="3651803019964686660">Jos haluat lähettää numeron osoitteesta <ph name="ORIGIN" /> Android-puhelimeesi, kirjaudu Chromiumiin molemmilla laitteilla.</translation>
 <translation id="3685209450716071127">Chromium ei voi tarkistaa salasanojasi. Tarkista internetyhteytesi.</translation>
 <translation id="370962675267501463">{COUNT,plural, =0{Ylläpitäjä pyytää Chromiumin uudelleenkäynnistystä, jotta tämä päivitys voidaan ottaa käyttöön.}=1{Ylläpitäjä pyytää Chromiumin uudelleenkäynnistystä, jotta tämä päivitys voidaan ottaa käyttöön. Incognito-ikkunaasi ei avata uudelleen.}other{Ylläpitäjä pyytää Chromiumin uudelleenkäynnistystä, jotta tämä päivitys voidaan ottaa käyttöön. # incognito-ikkunaasi ei avata uudelleen.}}</translation>
 <translation id="3713809861844741608">Avaa linkki uudella Chromiumin välilehdellä</translation>
@@ -127,6 +133,7 @@
 <translation id="5634636535844844681">Chromium edellyttää Windows 7:ää tai uudempaa versiota.</translation>
 <translation id="5653831366781983928">Käynnistä Chromium uudelleen nyt</translation>
 <translation id="5698481217667032250">Näytä Chromium tällä kielellä</translation>
+<translation id="5736967399513123100">Sinun täytyy asentaa Rosetta, jotta Chromium voi toistaa suojattua mediaa. Haluatko asentaa sen nyt?</translation>
 <translation id="5820394555380036790">Chromium-käyttöjärjestelmä</translation>
 <translation id="5862307444128926510">Tervetuloa Chromiumiin</translation>
 <translation id="5895138241574237353">Käynnistä uudelleen</translation>
@@ -142,6 +149,7 @@
 <translation id="6120345080069858279">Chromium tallentaa tämän salasanan Google-tilillesi. Sinun ei tarvitse muistaa sitä.</translation>
 <translation id="6129621093834146363"><ph name="FILE_NAME" /> on vaarallinen, joten Chromium on estänyt sen.</translation>
 <translation id="6134968993075716475">Selaussuoja on pois päältä. Chromium suosittelee laittamaan sen päälle.</translation>
+<translation id="6183079672144801177">Varmista, että olet kirjautunut Chromiumiin laitteellasi (<ph name="TARGET_DEVICE_NAME" />) ja yritä sitten lähettämistä uudelleen.</translation>
 <translation id="6212496753309875659">Tälle tietokoneelle on jo asennettu Chromiumin uudempi versio. Jos Chromium ei toimi, poista sen asennus ja yritä uudelleen.</translation>
 <translation id="6219195342503754812">{0,plural, =0{Chromium käynnistetään uudelleen nyt}=1{Chromium käynnistetään uudelleen 1 sekunnin kuluttua}other{Chromium käynnistetään uudelleen # sekunnin kuluttua}}</translation>
 <translation id="623836266260425961">Chromium-käyttöjärjestelmä ei voinut synkronoida dataasi.</translation>
@@ -153,7 +161,6 @@
 <translation id="6333502561965082103">Toinen Chromium-prosessi on jo käynnissä. Yritä myöhemmin uudelleen.</translation>
 <translation id="6334986366598267305">Nyt voit helpommin käyttää Chromiumia Google-tililläsi ja jaetuilla tietokoneilla.</translation>
 <translation id="6373523479360886564">Haluatko varmasti poistaa Chromiumin asennuksen?</translation>
-<translation id="6400072781405947421">Chromium ei välttämättä toimi oikein, koska Mac OS X 10.9 ei enää tue sitä.</translation>
 <translation id="6403826409255603130">Chromium on selain, jolla verkkosivut ja sovellukset toimivat salamannopeasti. Se on nopea, vakaa ja helppokäyttöinen. Chromiumin sisäänrakennettu haittaohjelma- ja tietojenkalastelusuojaus tekevät verkkoselauksesta turvallisempaa.</translation>
 <translation id="6434250628340475518">Chromium-käyttöjärjestelmä</translation>
 <translation id="6457450909262716557">{SECONDS,plural, =1{Chromium käynnistyy uudelleen 1 sekunnin kuluttua}other{Chromium käynnistyy uudelleen # sekunnin kuluttua}}</translation>
@@ -174,7 +181,9 @@ Kaikki ominaisuudet eivät ehkä ole käytettävissä. Määritä jokin muu prof
 <translation id="6863361426438995919">Google Pay (kopioitu Chromiumiin)</translation>
 <translation id="6863846675160669383">{NUM_DAYS,plural, =1{Chromium tarkistaa ei-toivotut ohjelmistot kerran viikossa. Tarkistettu viimeksi 1 päivä sitten.}other{Chromium tarkistaa ei-toivotut ohjelmistot kerran viikossa. Tarkistettu viimeksi {NUM_DAYS} päivää sitten.}}</translation>
 <translation id="6893813176749746474">Chromium on päivitetty, mutta et ole käyttänyt sitä ainakaan 30 päivään.</translation>
+<translation id="6897548120660295439">Chromium voi toistaa suojattua mediaa tällä sivulla käyttämällä Rosettaa.</translation>
 <translation id="6964305034639999644">Avaa linkki Chromiumin inco&amp;gnito-ikkunassa</translation>
+<translation id="6978145336957848883">Heikko salasana on helppo arvata. Chromium voi <ph name="BEGIN_LINK" />luoda ja muistaa vahvoja salasanoja puolestasi<ph name="END_LINK" />.</translation>
 <translation id="6990124437352146030">Chromium tarvitsee oikeuden käyttää mikrofoniasi tällä sivustolla.</translation>
 <translation id="701244094609242530">Chromium ei voi tarkistaa laajennuksiasi. Yritä myöhemmin uudelleen.</translation>
 <translation id="705851970750939768">Päivitä Chromium</translation>
@@ -213,6 +222,7 @@ Chromium ei voi palauttaa asetuksiasi.</translation>
 <translation id="7773960292263897147">Varoitus: Chromium ei voi estää laajennuksia tallentamasta selaushistoriaasi. Poista tämä valinta, jos haluat poistaa tämän laajennuksen käytöstä incognito-tilassa.</translation>
 <translation id="7790626492778995050"><ph name="PAGE_TITLE" /> – Chromium Canary</translation>
 <translation id="7827169012280634081">Tyhjennä evästeet ja sivustodata, kun suljet Chromiumin</translation>
+<translation id="7857220146454061152">Jotta saat tulevia Chromiumin päivityksiä, sinulla on oltava OS X 10.11 tai uudempi. Tietokoneen käyttöjärjestelmä on OS X 10.10.</translation>
 <translation id="7867198900892795913">Chromiumia ei voitu päivittää uusimpaan versioon, joten sinulta puuttuu joitakin uusia ominaisuuksia ja tietoturvakorjauksia.</translation>
 <translation id="7898472181347242998">Tarkista <ph name="LINK_BEGIN" />Chromium-käyttöjärjestelmän asetuksista<ph name="LINK_END" />, onko laitteesi ajan tasalla</translation>
 <translation id="7937630085815544518">Chromiumiin kirjautunut käyttäjä: <ph name="USER_EMAIL_ADDRESS" />. Kirjaudu uudelleen sisään samalla tilillä.</translation>

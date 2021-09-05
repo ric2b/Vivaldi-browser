@@ -751,7 +751,6 @@ TEST(PermissionsTest, PermissionMessages) {
   skip.insert(APIPermission::kAppView);
   skip.insert(APIPermission::kAudio);
   skip.insert(APIPermission::kBrowsingData);
-  skip.insert(APIPermission::kCastStreaming);
   skip.insert(APIPermission::kCommandsAccessibility);
   skip.insert(APIPermission::kContextMenus);
   skip.insert(APIPermission::kCryptotokenPrivate);
@@ -828,7 +827,6 @@ TEST(PermissionsTest, PermissionMessages) {
   skip.insert(APIPermission::kBookmarkManagerPrivate);
   skip.insert(APIPermission::kBrailleDisplayPrivate);
   skip.insert(APIPermission::kCast);
-  skip.insert(APIPermission::kCastStreaming);
   skip.insert(APIPermission::kCecPrivate);
   skip.insert(APIPermission::kChromeosInfoPrivate);
   skip.insert(APIPermission::kCloudPrintPrivate);

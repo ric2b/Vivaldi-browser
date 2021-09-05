@@ -22,7 +22,7 @@
 #include "chrome/browser/extensions/webstore_installer.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "components/sync/model/string_ordinal.h"
-#include "extensions/browser/api/declarative_net_request/ruleset_checksum.h"
+#include "extensions/browser/api/declarative_net_request/ruleset_install_pref.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/install_flag.h"
 #include "extensions/browser/preload_check.h"
@@ -268,10 +268,10 @@ class CrxInstaller : public SandboxedUnpackerClient {
   ~CrxInstaller() override;
 
   // Converts the source user script to an extension.
-  void ConvertUserScriptOnFileThread();
+  void ConvertUserScriptOnSharedFileThread();
 
   // Converts the source web app to an extension.
-  void ConvertWebAppOnFileThread(const WebApplicationInfo& web_app);
+  void ConvertWebAppOnSharedFileThread(const WebApplicationInfo& web_app);
 
   // Called after OnUnpackSuccess check to see whether the install expectations
   // are met and the install process should continue.
@@ -291,13 +291,13 @@ class CrxInstaller : public SandboxedUnpackerClient {
       scoped_refptr<const Extension> extension,
       base::OnceCallback<void(bool)> callback) override;
   void OnUnpackFailure(const CrxInstallError& error) override;
-  void OnUnpackSuccess(
-      const base::FilePath& temp_dir,
-      const base::FilePath& extension_dir,
-      std::unique_ptr<base::DictionaryValue> original_manifest,
-      const Extension* extension,
-      const SkBitmap& install_icon,
-      declarative_net_request::RulesetChecksums ruleset_checksums) override;
+  void OnUnpackSuccess(const base::FilePath& temp_dir,
+                       const base::FilePath& extension_dir,
+                       std::unique_ptr<base::DictionaryValue> original_manifest,
+                       const Extension* extension,
+                       const SkBitmap& install_icon,
+                       declarative_net_request::RulesetInstallPrefs
+                           ruleset_install_prefs) override;
   void OnStageChanged(InstallationStage stage) override;
 
   // Called on the UI thread to start the requirements, policy and blocklist
@@ -324,9 +324,9 @@ class CrxInstaller : public SandboxedUnpackerClient {
   void ReloadExtensionAfterInstall(const base::FilePath& version_dir);
 
   // Result reporting.
-  void ReportFailureFromFileThread(const CrxInstallError& error);
+  void ReportFailureFromSharedFileThread(const CrxInstallError& error);
   void ReportFailureFromUIThread(const CrxInstallError& error);
-  void ReportSuccessFromFileThread();
+  void ReportSuccessFromSharedFileThread();
   void ReportSuccessFromUIThread();
   // Always report from the UI thread.
   void ReportInstallationStage(InstallationStage stage);
@@ -344,12 +344,25 @@ class CrxInstaller : public SandboxedUnpackerClient {
   // and needs additional permissions.
   void ConfirmReEnable();
 
+  // OnUnpackSuccess() gets called on the unpacker sequence. It calls this
+  // method on the shared file sequence, to avoid race conditions.
+  virtual void OnUnpackSuccessOnSharedFileThread(
+      base::FilePath temp_dir,
+      base::FilePath extension_dir,
+      std::unique_ptr<base::DictionaryValue> original_manifest,
+      scoped_refptr<const Extension> extension,
+      SkBitmap install_icon,
+      declarative_net_request::RulesetInstallPrefs ruleset_install_prefs);
+
   void set_install_flag(int flag, bool val) {
     if (val)
       install_flags_ |= flag;
     else
       install_flags_ &= ~flag;
   }
+
+  // Returns |unpacker_task_runner_|. Initializes it if it's still nullptr.
+  base::SequencedTaskRunner* GetUnpackerTaskRunner();
 
   // The Profile the extension is being installed in.
   Profile* profile_;
@@ -489,8 +502,15 @@ class CrxInstaller : public SandboxedUnpackerClient {
   // will continue but the extension will be distabled.
   bool error_on_unsupported_requirements_;
 
-  // Sequenced task runner where file I/O operations will be performed.
-  scoped_refptr<base::SequencedTaskRunner> installer_task_runner_;
+  // Sequenced task runner where most file I/O operations will be performed.
+  scoped_refptr<base::SequencedTaskRunner> shared_file_task_runner_;
+
+  // Sequenced task runner where the SandboxedUnpacker will run. Because the
+  // unpacker uses its own temp dir, it won't hit race conditions, and can use a
+  // separate task runner per instance (for better performance).
+  //
+  // Lazily initialized by GetUnpackerTaskRunner().
+  scoped_refptr<base::SequencedTaskRunner> unpacker_task_runner_ = nullptr;
 
   // Used to show the install dialog.
   ExtensionInstallPrompt::ShowDialogCallback show_dialog_callback_;
@@ -502,9 +522,8 @@ class CrxInstaller : public SandboxedUnpackerClient {
   // The flags for ExtensionService::OnExtensionInstalled.
   int install_flags_;
 
-  // The checksums for the indexed rulesets corresponding to the Declarative Net
-  // Request API.
-  declarative_net_request::RulesetChecksums ruleset_checksums_;
+  // Install prefs needed for the Declarative Net Request API.
+  declarative_net_request::RulesetInstallPrefs ruleset_install_prefs_;
 
   // Checks that may run before installing the extension.
   std::unique_ptr<PreloadCheck> policy_check_;

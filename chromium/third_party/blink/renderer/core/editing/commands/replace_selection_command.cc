@@ -81,6 +81,8 @@ class ReplacementFragment final {
 
  public:
   ReplacementFragment(Document*, DocumentFragment*, const VisibleSelection&);
+  ReplacementFragment(const ReplacementFragment&) = delete;
+  ReplacementFragment& operator=(const ReplacementFragment&) = delete;
 
   Node* FirstChild() const;
   Node* LastChild() const;
@@ -109,8 +111,6 @@ class ReplacementFragment final {
   DocumentFragment* fragment_;
   bool has_interchange_newline_at_start_;
   bool has_interchange_newline_at_end_;
-
-  DISALLOW_COPY_AND_ASSIGN(ReplacementFragment);
 };
 
 static bool IsInterchangeHTMLBRElement(const Node* node) {
@@ -189,7 +189,8 @@ ReplacementFragment::ReplacementFragment(Document* document,
       // register an event handler.
       &&
       !(shadow_ancestor_element && shadow_ancestor_element->GetLayoutObject() &&
-        shadow_ancestor_element->GetLayoutObject()->IsTextControl()) &&
+        shadow_ancestor_element->GetLayoutObject()
+            ->IsTextControlIncludingNG()) &&
       HasRichlyEditableStyle(*editable_root)) {
     RemoveInterchangeNodes(fragment_);
     return;

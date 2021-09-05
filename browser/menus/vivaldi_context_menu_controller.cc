@@ -130,7 +130,11 @@ void ContextMenuController::PopulateModel(const Element& child,
       case context_menu::ITEM_TYPE_NONE:
         return;
     }
-    if (item.url.get() && item.url->length() > 0) {
+    if (item.shortcut) {
+      id_to_accelerator_map_[id] = ::vivaldi::ParseShortcut(
+          *item.shortcut, true);
+    }
+    if (item.url && !item.url->empty()) {
        // Set default document icon
       SetIcon(id, params_->properties.icons.at(0), menu_model);
       // Attempt loading a favicon that will replace the default.
@@ -283,6 +287,12 @@ base::string16 ContextMenuController::GetLabelForCommandId(
 bool ContextMenuController::GetAcceleratorForCommandId(
     int command_id,
     ui::Accelerator* accelerator) const {
+  auto it = id_to_accelerator_map_.find(command_id);
+  if (it != id_to_accelerator_map_.end()) {
+    *accelerator = it->second;
+    return true;
+  }
+
   if (developertools_controller_->GetAcceleratorForCommandId(command_id,
                                                              accelerator)) {
     return true;

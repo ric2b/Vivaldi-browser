@@ -82,19 +82,19 @@ class AccessibilityControllerImpl;
 class AccessibilityDelegate;
 class AccessibilityFocusRingControllerImpl;
 class AmbientController;
+class AppListControllerImpl;
+class AshColorProvider;
 class AshDBusServices;
 class AshFocusRules;
-class AppListControllerImpl;
-class NativeCursorManagerAsh;
 class AshTouchTransformController;
 class AssistantControllerImpl;
 class AutoclickController;
 class BackGestureEventHandler;
 class BacklightsForcedOffSetter;
+class BloomUiControllerImpl;
 class BluetoothNotificationController;
 class BluetoothPowerController;
 class BrightnessControlDelegate;
-class AshColorProvider;
 class CaptureModeController;
 class CrosDisplayConfig;
 class DesksController;
@@ -102,6 +102,7 @@ class DetachableBaseHandler;
 class DetachableBaseNotificationController;
 class DisplayAlignmentController;
 class DisplayColorManager;
+class NativeCursorManagerAsh;
 class DisplayConfigurationController;
 class DisplayConfigurationObserver;
 class DisplayErrorObserver;
@@ -139,6 +140,8 @@ class MessageCenterController;
 class MouseCursorEventFilter;
 class MruWindowTracker;
 class MultiDeviceNotificationPresenter;
+class NearbyShareControllerImpl;
+class NearbyShareDelegate;
 class NightLightControllerImpl;
 class OverlayEventFilter;
 class OverviewController;
@@ -181,7 +184,7 @@ class SystemTrayModel;
 class SystemTrayNotifier;
 class ToastManagerImpl;
 class ToplevelWindowEventHandler;
-class ClipboardHistoryController;
+class ClipboardHistoryControllerImpl;
 class TouchDevicesController;
 class TrayAction;
 class TrayBluetoothHelper;
@@ -428,6 +431,12 @@ class ASH_EXPORT Shell : public SessionObserver,
     return mouse_cursor_filter_.get();
   }
   MruWindowTracker* mru_window_tracker() { return mru_window_tracker_.get(); }
+  NearbyShareControllerImpl* nearby_share_controller() {
+    return nearby_share_controller_.get();
+  }
+  NearbyShareDelegate* nearby_share_delegate() {
+    return nearby_share_delegate_.get();
+  }
   NightLightControllerImpl* night_light_controller() {
     return night_light_controller_.get();
   }
@@ -500,7 +509,7 @@ class ASH_EXPORT Shell : public SessionObserver,
   views::corewm::TooltipController* tooltip_controller() {
     return tooltip_controller_.get();
   }
-  ClipboardHistoryController* clipboard_history_controller() {
+  ClipboardHistoryControllerImpl* clipboard_history_controller() {
     return clipboard_history_controller_.get();
   }
   TouchDevicesController* touch_devices_controller() {
@@ -531,6 +540,7 @@ class ASH_EXPORT Shell : public SessionObserver,
   BackGestureEventHandler* back_gesture_event_handler() {
     return back_gesture_event_handler_.get();
   }
+  ui::EventHandler* shell_tab_handler() { return shell_tab_handler_.get(); }
   ToplevelWindowEventHandler* toplevel_window_event_handler() {
     return toplevel_window_event_handler_.get();
   }
@@ -666,6 +676,7 @@ class ASH_EXPORT Shell : public SessionObserver,
   std::unique_ptr<AshDBusServices> ash_dbus_services_;
   std::unique_ptr<AssistantControllerImpl> assistant_controller_;
   std::unique_ptr<BacklightsForcedOffSetter> backlights_forced_off_setter_;
+  std::unique_ptr<BloomUiControllerImpl> bloom_ui_controller_;
   std::unique_ptr<BrightnessControlDelegate> brightness_control_delegate_;
   std::unique_ptr<CrosDisplayConfig> cros_display_config_;
   std::unique_ptr<DesksController> desks_controller_;
@@ -694,11 +705,13 @@ class ASH_EXPORT Shell : public SessionObserver,
   std::unique_ptr<MruWindowTracker> mru_window_tracker_;
   std::unique_ptr<MultiDeviceNotificationPresenter>
       multidevice_notification_presenter_;
+  std::unique_ptr<NearbyShareControllerImpl> nearby_share_controller_;
+  std::unique_ptr<NearbyShareDelegate> nearby_share_delegate_;
   std::unique_ptr<ParentAccessController> parent_access_controller_;
   std::unique_ptr<QuickAnswersController> quick_answers_controller_;
   std::unique_ptr<ResizeShadowController> resize_shadow_controller_;
-  std::unique_ptr<AshColorProvider> ash_color_provider_;
   std::unique_ptr<SessionControllerImpl> session_controller_;
+  std::unique_ptr<AshColorProvider> ash_color_provider_;
   std::unique_ptr<NightLightControllerImpl> night_light_controller_;
   std::unique_ptr<PrivacyScreenController> privacy_screen_controller_;
   std::unique_ptr<PolicyRecommendationRestorer> policy_recommendation_restorer_;
@@ -713,7 +726,7 @@ class ASH_EXPORT Shell : public SessionObserver,
   std::unique_ptr<SystemTrayModel> system_tray_model_;
   std::unique_ptr<SystemTrayNotifier> system_tray_notifier_;
   std::unique_ptr<ToastManagerImpl> toast_manager_;
-  std::unique_ptr<ClipboardHistoryController> clipboard_history_controller_;
+  std::unique_ptr<ClipboardHistoryControllerImpl> clipboard_history_controller_;
   std::unique_ptr<TouchDevicesController> touch_devices_controller_;
   std::unique_ptr<TrayAction> tray_action_;
   std::unique_ptr<WallpaperControllerImpl> wallpaper_controller_;
@@ -751,6 +764,10 @@ class ASH_EXPORT Shell : public SessionObserver,
 
   // An event filter which handles swiping back from left side of the window.
   std::unique_ptr<BackGestureEventHandler> back_gesture_event_handler_;
+
+  // An event filter which redirects focus when tab is pressed on a RootWindow
+  // with no active windows.
+  std::unique_ptr<ui::EventHandler> shell_tab_handler_;
 
   // An event filter which handles moving and resizing windows.
   std::unique_ptr<ToplevelWindowEventHandler> toplevel_window_event_handler_;

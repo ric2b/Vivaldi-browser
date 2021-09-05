@@ -38,13 +38,8 @@
 #include <unistd.h>
 #endif
 
-// Some new Android NDKs (64 bit) does not expose (p)valloc anymore. These
-// functions are implemented at the shim-layer level.
-#if defined(OS_ANDROID)
-extern "C" {
-void* valloc(size_t size);
-void* pvalloc(size_t size);
-}
+#if defined(LIBC_GLIBC)
+extern "C" void* __libc_memalign(size_t align, size_t s);
 #endif
 
 namespace base {
@@ -61,26 +56,26 @@ constexpr size_t kTestSizeEstimate = 1234;
 
 class AllocatorShimTest : public testing::Test {
  public:
-#if defined(OS_IOS)
-  // TODO(crbug.com/1077271): 64-bit iOS uses a page size that is larger than
-  // kSystemPageSize, causing this test to make larger allocations, relative to
-  // kSystemPageSize.
-  static const size_t kMaxSizeTracked = 6 * base::kSystemPageSize;
-#else
-  static const size_t kMaxSizeTracked = 2 * base::kSystemPageSize;
-#endif
   AllocatorShimTest() : testing::Test() {}
 
   static size_t Hash(const void* ptr) {
-    return reinterpret_cast<uintptr_t>(ptr) % kMaxSizeTracked;
+    return reinterpret_cast<uintptr_t>(ptr) % MaxSizeTracked();
   }
 
   static void* MockAlloc(const AllocatorDispatch* self,
                          size_t size,
                          void* context) {
-    if (instance_ && size < kMaxSizeTracked)
+    if (instance_ && size < MaxSizeTracked())
       ++(instance_->allocs_intercepted_by_size[size]);
     return self->next->alloc_function(self->next, size, context);
+  }
+
+  static void* MockAllocUnchecked(const AllocatorDispatch* self,
+                                  size_t size,
+                                  void* context) {
+    if (instance_ && size < MaxSizeTracked())
+      ++(instance_->allocs_intercepted_by_size[size]);
+    return self->next->alloc_unchecked_function(self->next, size, context);
   }
 
   static void* MockAllocZeroInit(const AllocatorDispatch* self,
@@ -88,7 +83,7 @@ class AllocatorShimTest : public testing::Test {
                                  size_t size,
                                  void* context) {
     const size_t real_size = n * size;
-    if (instance_ && real_size < kMaxSizeTracked)
+    if (instance_ && real_size < MaxSizeTracked())
       ++(instance_->zero_allocs_intercepted_by_size[real_size]);
     return self->next->alloc_zero_initialized_function(self->next, n, size,
                                                        context);
@@ -99,9 +94,9 @@ class AllocatorShimTest : public testing::Test {
                                 size_t size,
                                 void* context) {
     if (instance_) {
-      if (size < kMaxSizeTracked)
+      if (size < MaxSizeTracked())
         ++(instance_->aligned_allocs_intercepted_by_size[size]);
-      if (alignment < kMaxSizeTracked)
+      if (alignment < MaxSizeTracked())
         ++(instance_->aligned_allocs_intercepted_by_alignment[alignment]);
     }
     return self->next->alloc_aligned_function(self->next, alignment, size,
@@ -124,7 +119,7 @@ class AllocatorShimTest : public testing::Test {
         return address;
       }
 
-      if (size < kMaxSizeTracked)
+      if (size < MaxSizeTracked())
         ++(instance_->reallocs_intercepted_by_size[size]);
       ++instance_->reallocs_intercepted_by_addr[Hash(address)];
     }
@@ -190,7 +185,7 @@ class AllocatorShimTest : public testing::Test {
                                  size_t size,
                                  size_t alignment,
                                  void* context) {
-    if (instance_ && size < kMaxSizeTracked) {
+    if (instance_ && size < MaxSizeTracked()) {
       ++instance_->aligned_mallocs_intercepted_by_size[size];
     }
     return self->next->aligned_malloc_function(self->next, size, alignment,
@@ -203,7 +198,7 @@ class AllocatorShimTest : public testing::Test {
                                   size_t alignment,
                                   void* context) {
     if (instance_) {
-      if (size < kMaxSizeTracked)
+      if (size < MaxSizeTracked())
         ++instance_->aligned_reallocs_intercepted_by_size[size];
       ++instance_->aligned_reallocs_intercepted_by_addr[Hash(address)];
     }
@@ -231,22 +226,21 @@ class AllocatorShimTest : public testing::Test {
   }
 
   void SetUp() override {
-    const size_t array_size = kMaxSizeTracked * sizeof(size_t);
-    memset(&allocs_intercepted_by_size, 0, array_size);
-    memset(&zero_allocs_intercepted_by_size, 0, array_size);
-    memset(&aligned_allocs_intercepted_by_size, 0, array_size);
-    memset(&aligned_allocs_intercepted_by_alignment, 0, array_size);
-    memset(&reallocs_intercepted_by_size, 0, array_size);
-    memset(&reallocs_intercepted_by_addr, 0, array_size);
-    memset(&frees_intercepted_by_addr, 0, array_size);
-    memset(&batch_mallocs_intercepted_by_size, 0, array_size);
-    memset(&batch_frees_intercepted_by_addr, 0, array_size);
-    memset(&free_definite_sizes_intercepted_by_size, 0, array_size);
-    memset(&aligned_mallocs_intercepted_by_size, 0, array_size);
-    memset(&aligned_reallocs_intercepted_by_size, 0, array_size);
-    memset(&aligned_reallocs_intercepted_by_addr, 0, array_size);
-    memset(&aligned_frees_intercepted_by_addr, 0, array_size);
-    did_fail_realloc_0xfeed_once.reset(new ThreadLocalBoolean());
+    allocs_intercepted_by_size.resize(MaxSizeTracked());
+    zero_allocs_intercepted_by_size.resize(MaxSizeTracked());
+    aligned_allocs_intercepted_by_size.resize(MaxSizeTracked());
+    aligned_allocs_intercepted_by_alignment.resize(MaxSizeTracked());
+    reallocs_intercepted_by_size.resize(MaxSizeTracked());
+    reallocs_intercepted_by_addr.resize(MaxSizeTracked());
+    frees_intercepted_by_addr.resize(MaxSizeTracked());
+    batch_mallocs_intercepted_by_size.resize(MaxSizeTracked());
+    batch_frees_intercepted_by_addr.resize(MaxSizeTracked());
+    free_definite_sizes_intercepted_by_size.resize(MaxSizeTracked());
+    aligned_mallocs_intercepted_by_size.resize(MaxSizeTracked());
+    aligned_reallocs_intercepted_by_size.resize(MaxSizeTracked());
+    aligned_reallocs_intercepted_by_addr.resize(MaxSizeTracked());
+    aligned_frees_intercepted_by_addr.resize(MaxSizeTracked());
+    did_fail_realloc_0xfeed_once = std::make_unique<ThreadLocalBoolean>();
     num_new_handler_calls.store(0, std::memory_order_release);
     instance_ = this;
 
@@ -262,21 +256,32 @@ class AllocatorShimTest : public testing::Test {
 #endif
   }
 
+  static size_t MaxSizeTracked() {
+#if defined(OS_IOS)
+    // TODO(crbug.com/1077271): 64-bit iOS uses a page size that is larger than
+    // SystemPageSize(), causing this test to make larger allocations, relative
+    // to SystemPageSize().
+    return 6 * base::SystemPageSize();
+#else
+    return 2 * base::SystemPageSize();
+#endif
+  }
+
  protected:
-  size_t allocs_intercepted_by_size[kMaxSizeTracked];
-  size_t zero_allocs_intercepted_by_size[kMaxSizeTracked];
-  size_t aligned_allocs_intercepted_by_size[kMaxSizeTracked];
-  size_t aligned_allocs_intercepted_by_alignment[kMaxSizeTracked];
-  size_t reallocs_intercepted_by_size[kMaxSizeTracked];
-  size_t reallocs_intercepted_by_addr[kMaxSizeTracked];
-  size_t frees_intercepted_by_addr[kMaxSizeTracked];
-  size_t batch_mallocs_intercepted_by_size[kMaxSizeTracked];
-  size_t batch_frees_intercepted_by_addr[kMaxSizeTracked];
-  size_t free_definite_sizes_intercepted_by_size[kMaxSizeTracked];
-  size_t aligned_mallocs_intercepted_by_size[kMaxSizeTracked];
-  size_t aligned_reallocs_intercepted_by_size[kMaxSizeTracked];
-  size_t aligned_reallocs_intercepted_by_addr[kMaxSizeTracked];
-  size_t aligned_frees_intercepted_by_addr[kMaxSizeTracked];
+  std::vector<size_t> allocs_intercepted_by_size;
+  std::vector<size_t> zero_allocs_intercepted_by_size;
+  std::vector<size_t> aligned_allocs_intercepted_by_size;
+  std::vector<size_t> aligned_allocs_intercepted_by_alignment;
+  std::vector<size_t> reallocs_intercepted_by_size;
+  std::vector<size_t> reallocs_intercepted_by_addr;
+  std::vector<size_t> frees_intercepted_by_addr;
+  std::vector<size_t> batch_mallocs_intercepted_by_size;
+  std::vector<size_t> batch_frees_intercepted_by_addr;
+  std::vector<size_t> free_definite_sizes_intercepted_by_size;
+  std::vector<size_t> aligned_mallocs_intercepted_by_size;
+  std::vector<size_t> aligned_reallocs_intercepted_by_size;
+  std::vector<size_t> aligned_reallocs_intercepted_by_addr;
+  std::vector<size_t> aligned_frees_intercepted_by_addr;
   std::unique_ptr<ThreadLocalBoolean> did_fail_realloc_0xfeed_once;
   std::atomic<uint32_t> num_new_handler_calls;
 
@@ -313,7 +318,8 @@ class ThreadDelegateForNewHandlerTest : public PlatformThread::Delegate {
 AllocatorShimTest* AllocatorShimTest::instance_ = nullptr;
 
 AllocatorDispatch g_mock_dispatch = {
-    &AllocatorShimTest::MockAlloc,         /* alloc_function */
+    &AllocatorShimTest::MockAlloc,          /* alloc_function */
+    &AllocatorShimTest::MockAllocUnchecked, /* alloc_unchecked_function */
     &AllocatorShimTest::MockAllocZeroInit, /* alloc_zero_initialized_function */
     &AllocatorShimTest::MockAllocAligned,  /* alloc_aligned_function */
     &AllocatorShimTest::MockRealloc,       /* realloc_function */
@@ -340,7 +346,6 @@ TEST_F(AllocatorShimTest, InterceptLibcSymbols) {
   ASSERT_GE(zero_allocs_intercepted_by_size[2 * 23], 1u);
 
 #if !defined(OS_WIN)
-  const size_t kPageSize = base::GetPageSize();
   void* posix_memalign_ptr = nullptr;
   int res = posix_memalign(&posix_memalign_ptr, 256, 59);
   ASSERT_EQ(0, res);
@@ -349,11 +354,17 @@ TEST_F(AllocatorShimTest, InterceptLibcSymbols) {
   ASSERT_GE(aligned_allocs_intercepted_by_alignment[256], 1u);
   ASSERT_GE(aligned_allocs_intercepted_by_size[59], 1u);
 
+  // (p)valloc() are not defined on Android. pvalloc() is a GNU extension,
+  // valloc() is not in POSIX.
+#if !defined(OS_ANDROID)
+  const size_t kPageSize = base::GetPageSize();
   void* valloc_ptr = valloc(61);
   ASSERT_NE(nullptr, valloc_ptr);
   ASSERT_EQ(0u, reinterpret_cast<uintptr_t>(valloc_ptr) % kPageSize);
   ASSERT_GE(aligned_allocs_intercepted_by_alignment[kPageSize], 1u);
   ASSERT_GE(aligned_allocs_intercepted_by_size[61], 1u);
+#endif  // !defined(OS_ANDROID)
+
 #endif  // !OS_WIN
 
 #if !defined(OS_WIN) && !defined(OS_APPLE)
@@ -363,13 +374,27 @@ TEST_F(AllocatorShimTest, InterceptLibcSymbols) {
   ASSERT_GE(aligned_allocs_intercepted_by_alignment[128], 1u);
   ASSERT_GE(aligned_allocs_intercepted_by_size[53], 1u);
 
+#if !defined(OS_ANDROID)
   void* pvalloc_ptr = pvalloc(67);
   ASSERT_NE(nullptr, pvalloc_ptr);
   ASSERT_EQ(0u, reinterpret_cast<uintptr_t>(pvalloc_ptr) % kPageSize);
   ASSERT_GE(aligned_allocs_intercepted_by_alignment[kPageSize], 1u);
   // pvalloc rounds the size up to the next page.
   ASSERT_GE(aligned_allocs_intercepted_by_size[kPageSize], 1u);
+#endif  // !defined(OS_ANDROID)
+
 #endif  // !OS_WIN && !OS_APPLE
+
+// See allocator_shim_override_glibc_weak_symbols.h for why we intercept
+// internal libc symbols.
+#if defined(LIBC_GLIBC) && \
+    (BUILDFLAG(USE_TCMALLOC) || BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC))
+  void* libc_memalign_ptr = __libc_memalign(512, 56);
+  ASSERT_NE(nullptr, memalign_ptr);
+  ASSERT_EQ(0u, reinterpret_cast<uintptr_t>(libc_memalign_ptr) % 512);
+  ASSERT_GE(aligned_allocs_intercepted_by_alignment[512], 1u);
+  ASSERT_GE(aligned_allocs_intercepted_by_size[56], 1u);
+#endif
 
   char* realloc_ptr = static_cast<char*>(malloc(10));
   strcpy(realloc_ptr, "foobar");
@@ -389,17 +414,29 @@ TEST_F(AllocatorShimTest, InterceptLibcSymbols) {
   free(memalign_ptr);
   ASSERT_GE(frees_intercepted_by_addr[Hash(memalign_ptr)], 1u);
 
+#if !defined(OS_ANDROID)
   free(pvalloc_ptr);
   ASSERT_GE(frees_intercepted_by_addr[Hash(pvalloc_ptr)], 1u);
+#endif  // !defined(OS_ANDROID)
+
 #endif  // !OS_WIN && !OS_APPLE
 
 #if !defined(OS_WIN)
   free(posix_memalign_ptr);
   ASSERT_GE(frees_intercepted_by_addr[Hash(posix_memalign_ptr)], 1u);
 
+#if !defined(OS_ANDROID)
   free(valloc_ptr);
   ASSERT_GE(frees_intercepted_by_addr[Hash(valloc_ptr)], 1u);
+#endif  // !defined(OS_ANDROID)
+
 #endif  // !OS_WIN
+
+#if defined(LIBC_GLIBC) && \
+    (BUILDFLAG(USE_TCMALLOC) || BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC))
+  free(libc_memalign_ptr);
+  ASSERT_GE(frees_intercepted_by_addr[Hash(memalign_ptr)], 1u);
+#endif
 
   free(realloc_ptr);
   ASSERT_GE(frees_intercepted_by_addr[Hash(realloc_ptr)], 1u);

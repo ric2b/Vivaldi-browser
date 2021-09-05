@@ -287,6 +287,24 @@ bool KeyframeEffectModelBase::IsTransformRelatedEffect() const {
          Affects(PropertyHandle(GetCSSPropertyTranslate()));
 }
 
+bool KeyframeEffectModelBase::SetLogicalPropertyResolutionContext(
+    TextDirection text_direction,
+    WritingMode writing_mode) {
+  bool changed = false;
+  for (wtf_size_t i = 0; i < keyframes_.size(); i++) {
+    if (auto* string_keyframe = DynamicTo<StringKeyframe>(*keyframes_[i])) {
+      if (string_keyframe->HasLogicalProperty()) {
+        string_keyframe->SetLogicalPropertyResolutionContext(text_direction,
+                                                             writing_mode);
+        changed = true;
+      }
+    }
+  }
+  if (changed)
+    ClearCachedData();
+  return changed;
+}
+
 void KeyframeEffectModelBase::Trace(Visitor* visitor) const {
   visitor->Trace(keyframes_);
   visitor->Trace(keyframe_groups_);
@@ -331,6 +349,17 @@ void KeyframeEffectModelBase::EnsureKeyframeGroups() const {
 
     entry.value->RemoveRedundantKeyframes();
   }
+}
+
+bool KeyframeEffectModelBase::HasNonVariableProperty() const {
+  for (const auto& keyframe : keyframes_) {
+    for (const auto& property : keyframe->Properties()) {
+      if (!property.IsCSSProperty() ||
+          property.GetCSSProperty().PropertyID() != CSSPropertyID::kVariable)
+        return true;
+    }
+  }
+  return false;
 }
 
 void KeyframeEffectModelBase::EnsureInterpolationEffectPopulated() const {

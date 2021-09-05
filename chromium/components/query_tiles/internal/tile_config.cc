@@ -48,6 +48,11 @@ constexpr char kBackoffInitDelayInMsKey[] = "backoff_policy_init_delay_in_ms";
 // Finch parameter key for Backoff policy maximum delay in ms.
 constexpr char kBackoffMaxDelayInMsKey[] = "backoff_policy_max_delay_in_ms";
 
+constexpr char kTileScoreDecayLambdaKey[] = "tile_score_decay_lambda";
+
+constexpr char kMinimumScoreForNewFrontTilesKey[] =
+    "min_score_for_new_front_tiles";
+
 // Default expire duration.
 constexpr int kDefaultExpireDurationInSeconds = 48 * 60 * 60;  // 2 days.
 
@@ -66,6 +71,14 @@ constexpr int kDefaultBackoffInitDelayInMs = 30 * 1000;  // 30 seconds.
 
 // Default maximum delay in backoff policy, also used for suspend duration.
 constexpr int kDefaultBackoffMaxDelayInMs = 24 * 3600 * 1000;  // 1 day.
+
+// Default lambda value used for calculating tile score decay over time.
+constexpr double kDefaultTileScoreDecayLambda = -0.099;
+
+// Default minimum score for new tiles in front of others. 0.9 is chosen so
+// that new tiles will have a higher score than tiles that have not been
+// clicked for 2 days.
+constexpr double kDefaultMinimumTileScoreForNewFrontTiles = 0.9;
 
 namespace {
 
@@ -169,6 +182,20 @@ int TileConfig::GetBackoffPolicyArgsMaxDelayInMs() {
   return base::GetFieldTrialParamByFeatureAsInt(features::kQueryTiles,
                                                 kBackoffMaxDelayInMsKey,
                                                 kDefaultBackoffMaxDelayInMs);
+}
+
+// static
+double TileConfig::GetTileScoreDecayLambda() {
+  return base::GetFieldTrialParamByFeatureAsDouble(
+      features::kQueryTiles, kTileScoreDecayLambdaKey,
+      kDefaultTileScoreDecayLambda);
+}
+
+// static
+double TileConfig::GetMinimumScoreForNewFrontTiles() {
+  return base::GetFieldTrialParamByFeatureAsDouble(
+      features::kQueryTiles, kMinimumScoreForNewFrontTilesKey,
+      kDefaultMinimumTileScoreForNewFrontTiles);
 }
 
 }  // namespace query_tiles

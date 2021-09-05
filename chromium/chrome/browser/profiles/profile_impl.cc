@@ -18,7 +18,6 @@
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/environment.h"
-#include "base/feature_list.h"
 #include "base/files/file.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -109,7 +108,6 @@
 #include "chrome/common/buildflags.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_constants.h"
-#include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_paths_internal.h"
 #include "chrome/common/chrome_switches.h"
@@ -163,7 +161,6 @@
 #include "ppapi/buildflags/buildflags.h"
 #include "printing/buildflags/buildflags.h"
 #include "services/data_decoder/public/cpp/data_decoder.h"
-#include "services/network/public/cpp/features.h"
 #include "services/preferences/public/mojom/preferences.mojom.h"
 #include "services/preferences/public/mojom/tracked_preference_validation_delegate.mojom.h"
 #include "services/service_manager/public/cpp/service.h"
@@ -1135,8 +1132,8 @@ ChromeZoomLevelPrefs* ProfileImpl::GetZoomLevelPrefs() {
 #endif  // !defined(OS_ANDROID)
 
 PrefService* ProfileImpl::GetOffTheRecordPrefs() {
-  if (HasOffTheRecordProfile()) {
-    return GetOffTheRecordProfile()->GetPrefs();
+  if (HasPrimaryOTRProfile()) {
+    return GetPrimaryOTRProfile()->GetPrefs();
   } else {
     // The extensions preference API and many tests call this method even when
     // there's no OTR profile, in order to figure out what a pref value would
@@ -1292,13 +1289,13 @@ void ProfileImpl::SetCorsOriginAccessListForOrigin(
                                 base::RetainedRef(profile_setter.get())));
 
   // Keep incognito storage partitions' NetworkContexts synchronized.
-  if (HasOffTheRecordProfile()) {
+  if (HasPrimaryOTRProfile()) {
     auto off_the_record_setter = base::MakeRefCounted<CorsOriginPatternSetter>(
         source_origin, CorsOriginPatternSetter::ClonePatterns(allow_patterns),
         CorsOriginPatternSetter::ClonePatterns(block_patterns),
         barrier_closure);
     ForEachStoragePartition(
-        GetOffTheRecordProfile(),
+        GetPrimaryOTRProfile(),
         base::BindRepeating(&CorsOriginPatternSetter::SetLists,
                             base::RetainedRef(off_the_record_setter.get())));
   } else {
@@ -1317,10 +1314,6 @@ void ProfileImpl::SetCorsOriginAccessListForOrigin(
 content::SharedCorsOriginAccessList*
 ProfileImpl::GetSharedCorsOriginAccessList() {
   return shared_cors_origin_access_list_.get();
-}
-
-bool ProfileImpl::ShouldEnableOutOfBlinkCors() {
-  return base::FeatureList::IsEnabled(network::features::kOutOfBlinkCors);
 }
 
 std::string ProfileImpl::GetMediaDeviceIDSalt() {

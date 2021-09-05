@@ -32,7 +32,7 @@ float ComputeDeviceScaleFactor(float diagonal_inch,
   float diagonal_pixel = std::sqrt(std::pow(resolution.width(), 2) +
                                    std::pow(resolution.height(), 2));
   float dpi = diagonal_pixel / diagonal_inch;
-  return DisplayChangeObserver::FindDeviceScaleFactor(dpi);
+  return DisplayChangeObserver::FindDeviceScaleFactor(dpi, resolution);
 }
 
 std::unique_ptr<DisplayMode> MakeDisplayMode(int width,
@@ -196,12 +196,20 @@ TEST_P(DisplayChangeObserverTest, GetEmptyExternalManagedDisplayModeList) {
 
 TEST_P(DisplayChangeObserverTest, FindDeviceScaleFactor) {
   // sanity check
-  EXPECT_EQ(1.25f, DisplayChangeObserver::FindDeviceScaleFactor(150));
-  EXPECT_EQ(1.6f, DisplayChangeObserver::FindDeviceScaleFactor(180));
-  EXPECT_EQ(kDsf_1_777, DisplayChangeObserver::FindDeviceScaleFactor(220));
-  EXPECT_EQ(2.f, DisplayChangeObserver::FindDeviceScaleFactor(230));
-  EXPECT_EQ(kDsf_2_252, DisplayChangeObserver::FindDeviceScaleFactor(270));
-  EXPECT_EQ(kDsf_2_666, DisplayChangeObserver::FindDeviceScaleFactor(300));
+  EXPECT_EQ(1.25f,
+            DisplayChangeObserver::FindDeviceScaleFactor(150, gfx::Size()));
+  EXPECT_EQ(1.6f,
+            DisplayChangeObserver::FindDeviceScaleFactor(180, gfx::Size()));
+  EXPECT_EQ(kDsf_1_777,
+            DisplayChangeObserver::FindDeviceScaleFactor(220, gfx::Size()));
+  EXPECT_EQ(2.f,
+            DisplayChangeObserver::FindDeviceScaleFactor(230, gfx::Size()));
+  EXPECT_EQ(2.4f,
+            DisplayChangeObserver::FindDeviceScaleFactor(270, gfx::Size()));
+  EXPECT_EQ(kDsf_2_252, DisplayChangeObserver::FindDeviceScaleFactor(
+                            0, gfx::Size(3000, 2000)));
+  EXPECT_EQ(kDsf_2_666,
+            DisplayChangeObserver::FindDeviceScaleFactor(310, gfx::Size()));
   constexpr struct Data {
     const float diagonal_size;
     const gfx::Size resolution;
@@ -225,6 +233,7 @@ TEST_P(DisplayChangeObserverTest, FindDeviceScaleFactor) {
       {10.1f,  {1920, 1200}, kDsf_1_777, {1080, 675},  false},
       {11.0f,  {2160, 1440}, 2.f,        {1080, 720},  false},
       {12.3f,  {3000, 2000}, kDsf_2_252, {1332, 888},  true},
+      {15.6f,  {3840, 2160}, 2.4f,       {1600, 900},  true},
       {13.1f,  {3840, 2160}, kDsf_2_666, {1440, 810},  false},
       // clang-format on
   };
@@ -263,10 +272,12 @@ TEST_P(DisplayChangeObserverTest, FindDeviceScaleFactor) {
 
   float max_scale_factor = kDsf_2_666;
   // Erroneous values should still work.
-  EXPECT_EQ(1.0f, DisplayChangeObserver::FindDeviceScaleFactor(-100.0f));
-  EXPECT_EQ(1.0f, DisplayChangeObserver::FindDeviceScaleFactor(0.0f));
-  EXPECT_EQ(max_scale_factor,
-            DisplayChangeObserver::FindDeviceScaleFactor(10000.0f));
+  EXPECT_EQ(1.0f,
+            DisplayChangeObserver::FindDeviceScaleFactor(-100.0f, gfx::Size()));
+  EXPECT_EQ(1.0f,
+            DisplayChangeObserver::FindDeviceScaleFactor(0.0f, gfx::Size()));
+  EXPECT_EQ(max_scale_factor, DisplayChangeObserver::FindDeviceScaleFactor(
+                                  10000.0f, gfx::Size()));
 }
 
 TEST_P(DisplayChangeObserverTest,
@@ -369,6 +380,40 @@ TEST_P(DisplayChangeObserverTest, SDRDisplayColorSpaces) {
             gfx::ColorSpace::TransferID::IEC61966_2_1);
 }
 
+TEST_P(DisplayChangeObserverTest, WCGDisplayColorSpaces) {
+  const std::unique_ptr<DisplaySnapshot> display_snapshot =
+      FakeDisplaySnapshot::Builder()
+          .SetId(123)
+          .SetName("AmazingFakeDisplay")
+          .SetNativeMode(MakeDisplayMode(1920, 1080, true, 60))
+          .SetColorSpace(gfx::ColorSpace::CreateDisplayP3D65())
+          .Build();
+
+  ui::DeviceDataManager::CreateInstance();
+  DisplayManager manager(nullptr);
+  const auto display_mode = MakeDisplayMode(1920, 1080, true, 60);
+  DisplayChangeObserver observer(&manager);
+  const ManagedDisplayInfo display_info = CreateManagedDisplayInfo(
+      &observer, display_snapshot.get(), display_mode.get());
+
+  EXPECT_EQ(display_info.bits_per_channel(), 8u);
+
+  const auto display_color_spaces = display_info.display_color_spaces();
+  EXPECT_FALSE(display_color_spaces.SupportsHDR());
+
+  EXPECT_EQ(
+      DisplaySnapshot::PrimaryFormat(),
+      display_color_spaces.GetOutputBufferFormat(gfx::ContentColorUsage::kSRGB,
+                                                 /*needs_alpha=*/true));
+
+  const auto color_space = display_color_spaces.GetRasterColorSpace();
+  EXPECT_TRUE(color_space.IsValid());
+  EXPECT_EQ(color_space.GetPrimaryID(),
+            gfx::ColorSpace::PrimaryID::SMPTEST432_1);
+  EXPECT_EQ(color_space.GetTransferID(),
+            gfx::ColorSpace::TransferID::IEC61966_2_1);
+}
+
 #if defined(OS_CHROMEOS)
 TEST_P(DisplayChangeObserverTest, HDRDisplayColorSpaces) {
   // TODO(crbug.com/1012846): Remove this flag and provision when HDR is fully
@@ -376,12 +421,13 @@ TEST_P(DisplayChangeObserverTest, HDRDisplayColorSpaces) {
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitAndEnableFeature(features::kUseHDRTransferFunction);
 
+  const auto display_color_space = gfx::ColorSpace::CreateHDR10(100.0f);
   const std::unique_ptr<DisplaySnapshot> display_snapshot =
       FakeDisplaySnapshot::Builder()
           .SetId(123)
           .SetName("AmazingFakeDisplay")
           .SetNativeMode(MakeDisplayMode(1920, 1080, true, 60))
-          .SetColorSpace(gfx::ColorSpace::CreateHDR10(100.0f))
+          .SetColorSpace(display_color_space)
           .SetBitsPerChannel(10u)
           .Build();
 
@@ -407,7 +453,7 @@ TEST_P(DisplayChangeObserverTest, HDRDisplayColorSpaces) {
       display_color_spaces.GetOutputColorSpace(gfx::ContentColorUsage::kSRGB,
                                                /*needs_alpha=*/true);
   EXPECT_TRUE(sdr_color_space.IsValid());
-  EXPECT_EQ(sdr_color_space.GetPrimaryID(), gfx::ColorSpace::PrimaryID::BT709);
+  EXPECT_EQ(sdr_color_space.GetPrimaryID(), display_color_space.GetPrimaryID());
   EXPECT_EQ(sdr_color_space.GetTransferID(),
             gfx::ColorSpace::TransferID::IEC61966_2_1);
 

@@ -42,12 +42,12 @@
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
+#include "components/safe_browsing/core/common/safe_browsing_prefs.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/network_service_instance.h"
 #include "content/public/browser/shared_cors_origin_access_list.h"
 #include "content/public/browser/storage_partition.h"
-#include "content/public/common/content_features.h"
 #include "content/public/common/service_names.mojom.h"
 #include "content/public/common/url_constants.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
@@ -70,6 +70,7 @@
 #include "chrome/browser/chromeos/policy/policy_cert_service_factory.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/policy/profile_policy_connector.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/constants/chromeos_switches.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
@@ -606,11 +607,11 @@ bool GetHttpCacheBackendResetParam(PrefService* local_state) {
   field_trial = base::FeatureList::GetFieldTrial(
       net::features::kAppendFrameOriginToNetworkIsolationKey);
   current_field_trial_status +=
-      (field_trial ? field_trial->group_name() : "None") + " ";
-  field_trial = base::FeatureList::GetFieldTrial(
-      net::features::kUseRegistrableDomainInNetworkIsolationKey);
-  current_field_trial_status +=
       (field_trial ? field_trial->group_name() : "None");
+  // This used to be for keying on scheme + eTLD+1 vs origin, but the trial was
+  // removed, and now it's always keyed on eTLD+1. Still keeping a third "None"
+  // to avoid resetting the disk cache.
+  current_field_trial_status += " None";
 
   std::string previous_field_trial_status =
       local_state->GetString(kHttpCacheFinchExperimentGroups);
@@ -644,11 +645,6 @@ void ProfileNetworkContextService::ConfigureNetworkContextParamsInternal(
     network_context_params->reporting_delivery_interval =
         base::TimeDelta::FromMilliseconds(100);
   }
-
-  network_context_params->cors_mode =
-      profile_->ShouldEnableOutOfBlinkCors()
-          ? network::mojom::NetworkContextParams::CorsMode::kEnable
-          : network::mojom::NetworkContextParams::CorsMode::kDisable;
 
   // Always enable the HTTP cache.
   network_context_params->http_cache_enabled = true;
@@ -735,13 +731,20 @@ void ProfileNetworkContextService::ConfigureNetworkContextParamsInternal(
   // TODO(mmenke): Find a better way of handling tracking supported schemes.
 #if !BUILDFLAG(DISABLE_FTP_SUPPORT)
   network_context_params->enable_ftp_url_support =
-      base::FeatureList::IsEnabled(features::kFtpProtocol);
+      base::FeatureList::IsEnabled(blink::features::kFtpProtocol);
 #endif  // !BUILDFLAG(DISABLE_FTP_SUPPORT)
 
   proxy_config_monitor_.AddToNetworkContextParams(network_context_params);
 
   network_context_params->enable_certificate_reporting = true;
   network_context_params->enable_expect_ct_reporting = true;
+
+  // Initialize the network context to do SCT auditing only if the current
+  // profile is opted in to Safe Browsing Extended Reporting.
+  if (!profile_->IsOffTheRecord() &&
+      safe_browsing::IsExtendedReportingEnabled(*profile_->GetPrefs())) {
+    network_context_params->enable_sct_auditing = true;
+  }
 
   network_context_params->ct_policy = GetCTPolicy();
 
@@ -830,6 +833,13 @@ void ProfileNetworkContextService::ConfigureNetworkContextParamsInternal(
     network_context_params->initial_additional_certificates =
         GetAdditionalCertificates(policy_cert_service,
                                   GetPartitionPath(relative_partition_path));
+  }
+  // Disable idle sockets close on memory pressure if configured by finch or
+  // about://flags.
+  if (base::FeatureList::IsEnabled(
+          chromeos::features::kDisableIdleSocketsCloseOnMemoryPressure)) {
+    network_context_params->disable_idle_sockets_close_on_memory_pressure =
+        true;
   }
 #endif
 

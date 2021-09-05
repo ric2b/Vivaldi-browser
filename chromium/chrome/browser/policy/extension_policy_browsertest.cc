@@ -28,8 +28,8 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/web_applications/components/app_registrar.h"
-#include "chrome/browser/web_applications/components/app_shortcut_manager.h"
 #include "chrome/browser/web_applications/components/install_manager.h"
+#include "chrome/browser/web_applications/components/os_integration_manager.h"
 #include "chrome/browser/web_applications/components/web_app_provider_base.h"
 #include "chrome/browser/web_applications/test/web_app_install_observer.h"
 #include "chrome/common/extensions/extension_test_util.h"
@@ -190,8 +190,8 @@ class ExtensionPolicyTest : public PolicyTest {
     }
 
     web_app::WebAppProviderBase::GetProviderBase(browser()->profile())
-        ->shortcut_manager()
-        .SuppressShortcutsForTesting();
+        ->os_integration_manager()
+        .SuppressOsHooksForTesting();
   }
 
   extensions::ExtensionCacheFake* extension_cache() {
@@ -237,7 +237,7 @@ class ExtensionPolicyTest : public PolicyTest {
   const extensions::Extension* InstallBookmarkApp() {
     WebApplicationInfo web_app;
     web_app.title = base::ASCIIToUTF16("Bookmark App");
-    web_app.app_url = GURL("http://www.google.com");
+    web_app.start_url = GURL("http://www.google.com");
 
     scoped_refptr<extensions::CrxInstaller> installer =
         extensions::CrxInstaller::CreateSilent(extension_service());
@@ -261,7 +261,7 @@ class ExtensionPolicyTest : public PolicyTest {
     std::unique_ptr<WebApplicationInfo> web_application =
         std::make_unique<WebApplicationInfo>();
     web_application->title = base::ASCIIToUTF16("Web App");
-    web_application->app_url = GURL("http://www.google.com");
+    web_application->start_url = GURL("http://www.google.com");
     base::RunLoop loop;
     web_app::AppId return_app_id;
     web_app_provider_base()->install_manager().InstallWebAppFromInfo(
@@ -284,7 +284,7 @@ class ExtensionPolicyTest : public PolicyTest {
   const extensions::Extension* InstallOSSettings() {
     WebApplicationInfo web_app;
     web_app.title = base::ASCIIToUTF16("Settings");
-    web_app.app_url = GURL("chrome://os-settings/");
+    web_app.start_url = GURL("chrome://os-settings/");
 
     scoped_refptr<extensions::CrxInstaller> installer =
         extensions::CrxInstaller::CreateSilent(extension_service());
@@ -1170,21 +1170,6 @@ IN_PROC_BROWSER_TEST_F(ExtensionPolicyTest, ExtensionInstallForcelist) {
   Sequence sequence;
   EXPECT_CALL(
       collector_observer,
-      ExtensionStageChanged(
-          extensions::InstallStageTracker::Stage::NOTIFIED_FROM_MANAGEMENT))
-      .InSequence(sequence);
-  EXPECT_CALL(
-      collector_observer,
-      ExtensionStageChanged(
-          extensions::InstallStageTracker::Stage::SEEN_BY_POLICY_LOADER))
-      .InSequence(sequence);
-  EXPECT_CALL(
-      collector_observer,
-      ExtensionStageChanged(
-          extensions::InstallStageTracker::Stage::SEEN_BY_EXTERNAL_PROVIDER))
-      .InSequence(sequence);
-  EXPECT_CALL(
-      collector_observer,
       ExtensionStageChanged(extensions::InstallStageTracker::Stage::PENDING))
       .InSequence(sequence);
   EXPECT_CALL(collector_observer,
@@ -1375,8 +1360,17 @@ IN_PROC_BROWSER_TEST_F(ExtensionPolicyTest,
 
 // Verifies that corrupted non-webstore policy-based extension is automatically
 // repaired (reinstalled) even if hashes file is damaged too.
-IN_PROC_BROWSER_TEST_F(ExtensionPolicyTest,
-                       CorruptedNonWebstoreExtensionWithDamagedHashesRepaired) {
+// crbug.com/1131634: flaky on win
+#if defined(OS_WIN)
+#define MAYBE_CorruptedNonWebstoreExtensionWithDamagedHashesRepaired \
+  DISABLED_CorruptedNonWebstoreExtensionWithDamagedHashesRepaired
+#else
+#define MAYBE_CorruptedNonWebstoreExtensionWithDamagedHashesRepaired \
+  CorruptedNonWebstoreExtensionWithDamagedHashesRepaired
+#endif
+IN_PROC_BROWSER_TEST_F(
+    ExtensionPolicyTest,
+    MAYBE_CorruptedNonWebstoreExtensionWithDamagedHashesRepaired) {
   ignore_content_verifier_.reset();
   ExtensionRequestInterceptor interceptor;
   ASSERT_TRUE(embedded_test_server()->Start());
@@ -2032,7 +2026,7 @@ IN_PROC_BROWSER_TEST_F(WebAppInstallForceListPolicyTest, StartUpInstallation) {
       registrar.FindAppWithUrlInScope(policy_app_url_);
   if (!app_id)
     app_id = install_observer.AwaitNextInstall();
-  EXPECT_EQ(policy_app_url_, registrar.GetAppLaunchURL(*app_id));
+  EXPECT_EQ(policy_app_url_, registrar.GetAppStartUrl(*app_id));
 }
 
 // Fixture for tests that have two profiles with a different policy for each.

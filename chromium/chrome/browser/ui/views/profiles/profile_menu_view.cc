@@ -171,11 +171,12 @@ ProfileMenuView::~ProfileMenuView() = default;
 
 void ProfileMenuView::BuildMenu() {
   Profile* profile = browser()->profile();
+  const bool is_guest = profile->IsGuestSession();
   if (profile->IsRegularProfile()) {
     BuildIdentity();
     BuildSyncInfo();
     BuildAutofillButtons();
-  } else if (profile->IsGuestSession()) {
+  } else if (is_guest) {
     BuildGuestIdentity();
   } else {
     NOTREACHED();
@@ -185,9 +186,12 @@ void ProfileMenuView::BuildMenu() {
 
 //  ChromeOS doesn't support multi-profile.
 #if !defined(OS_CHROMEOS)
-  BuildProfileManagementHeading();
-  BuildSelectableProfiles();
-  BuildProfileManagementFeatureButtons();
+  if (!(is_guest &&
+        base::FeatureList::IsEnabled(features::kNewProfilePicker))) {
+    BuildProfileManagementHeading();
+    BuildSelectableProfiles();
+    BuildProfileManagementFeatureButtons();
+  }
 #endif
 }
 
@@ -478,11 +482,25 @@ void ProfileMenuView::BuildIdentity() {
 }
 
 void ProfileMenuView::BuildGuestIdentity() {
-  SetProfileIdentityInfo(/*profile_name=*/base::string16(),
-                         /*background_color=*/SK_ColorTRANSPARENT,
-                         /*edit_button=*/base::nullopt,
-                         profiles::GetGuestAvatar(),
-                         l10n_util::GetStringUTF16(IDS_GUEST_PROFILE_NAME));
+  int guest_window_count = BrowserList::GetGuestBrowserCount();
+
+  base::string16 subtitle;
+  if (guest_window_count > 1 &&
+      base::FeatureList::IsEnabled(features::kNewProfilePicker)) {
+    subtitle = l10n_util::GetPluralStringFUTF16(IDS_GUEST_WINDOW_COUNT_MESSAGE,
+                                                guest_window_count);
+  }
+
+  // TODO(crbug.com/1105763): Add asset colors to native theme and update icon
+  // temporary color placeholder to align with the design deck colors.
+  ui::ThemedVectorIcon header_art_icon(&kGuestMenuArtIcon,
+                                       ui::NativeTheme::kColorId_MenuIconColor);
+  SetProfileIdentityInfo(
+      /*profile_name=*/base::string16(),
+      /*background_color=*/SK_ColorTRANSPARENT,
+      /*edit_button=*/base::nullopt, profiles::GetGuestAvatar(),
+      l10n_util::GetStringUTF16(IDS_GUEST_PROFILE_NAME), subtitle,
+      header_art_icon);
 }
 
 void ProfileMenuView::BuildAutofillButtons() {
@@ -590,13 +608,22 @@ void ProfileMenuView::BuildFeatureButtons() {
   }
 
   int window_count = CountBrowsersFor(profile);
-  if (window_count > 1) {
+  if (base::FeatureList::IsEnabled(features::kNewProfilePicker) && is_guest) {
     AddFeatureButton(
-        l10n_util::GetPluralStringFUTF16(IDS_PROFILES_CLOSE_X_WINDOWS_BUTTON,
+        l10n_util::GetPluralStringFUTF16(IDS_GUEST_PROFILE_MENU_CLOSE_BUTTON,
                                          window_count),
         base::BindRepeating(&ProfileMenuView::OnExitProfileButtonClicked,
                             base::Unretained(this)),
         vector_icons::kCloseIcon);
+  } else {
+    if (window_count > 1) {
+      AddFeatureButton(
+          l10n_util::GetPluralStringFUTF16(IDS_PROFILES_CLOSE_X_WINDOWS_BUTTON,
+                                           window_count),
+          base::BindRepeating(&ProfileMenuView::OnExitProfileButtonClicked,
+                              base::Unretained(this)),
+          vector_icons::kCloseIcon);
+    }
   }
 
 #if !defined(OS_CHROMEOS)

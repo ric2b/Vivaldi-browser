@@ -214,18 +214,11 @@ constexpr base::TimeDelta kEventLatencyHistogramMax =
     base::TimeDelta::FromSeconds(5);
 constexpr int kEventLatencyHistogramBucketCount = 100;
 
-bool ShouldReportLatencyMetricsForSequenceType(
-    FrameSequenceTrackerType sequence_type) {
-  return sequence_type != FrameSequenceTrackerType::kUniversal;
-}
-
 std::string GetCompositorLatencyHistogramName(
     const int report_type_index,
     FrameSequenceTrackerType frame_sequence_tracker_type,
     const int stage_type_index) {
   DCHECK_LE(frame_sequence_tracker_type, FrameSequenceTrackerType::kMaxType);
-  DCHECK(
-      ShouldReportLatencyMetricsForSequenceType(frame_sequence_tracker_type));
   const char* tracker_type_name =
       FrameSequenceTracker::GetFrameSequenceTrackerTypeName(
           frame_sequence_tracker_type);
@@ -242,9 +235,9 @@ std::string GetCompositorLatencyHistogramName(
 std::string GetEventLatencyHistogramBaseName(
     const EventMetrics& event_metrics) {
   const bool is_scroll = event_metrics.scroll_type().has_value();
-  return base::StrCat(
-      {"EventLatency.", event_metrics.GetTypeName(), is_scroll ? "." : nullptr,
-       is_scroll ? event_metrics.GetScrollTypeName() : nullptr});
+  return base::StrCat({"EventLatency.", event_metrics.GetTypeName(),
+                       is_scroll ? "." : "",
+                       is_scroll ? event_metrics.GetScrollTypeName() : ""});
 }
 
 base::TimeTicks ComputeSafeDeadlineForFrame(const viz::BeginFrameArgs& args) {
@@ -300,14 +293,18 @@ CompositorFrameReporter::CompositorFrameReporter(
     const ActiveTrackers& active_trackers,
     const viz::BeginFrameArgs& args,
     LatencyUkmReporter* latency_ukm_reporter,
-    bool should_report_metrics)
+    bool should_report_metrics,
+    SmoothThread smooth_thread,
+    int layer_tree_host_id)
     : should_report_metrics_(should_report_metrics),
       args_(args),
       active_trackers_(active_trackers),
-      latency_ukm_reporter_(latency_ukm_reporter) {}
+      latency_ukm_reporter_(latency_ukm_reporter),
+      smooth_thread_(smooth_thread),
+      layer_tree_host_id_(layer_tree_host_id) {}
 
 std::unique_ptr<CompositorFrameReporter>
-CompositorFrameReporter::CopyReporterAtBeginImplStage() const {
+CompositorFrameReporter::CopyReporterAtBeginImplStage() {
   if (stage_history_.empty() ||
       stage_history_.front().stage_type !=
           StageType::kBeginImplFrameToSendBeginMainFrame ||
@@ -315,7 +312,8 @@ CompositorFrameReporter::CopyReporterAtBeginImplStage() const {
     return nullptr;
   }
   auto new_reporter = std::make_unique<CompositorFrameReporter>(
-      active_trackers_, args_, latency_ukm_reporter_, should_report_metrics_);
+      active_trackers_, args_, latency_ukm_reporter_, should_report_metrics_,
+      smooth_thread_, layer_tree_host_id_);
   new_reporter->did_finish_impl_frame_ = did_finish_impl_frame_;
   new_reporter->impl_frame_finish_time_ = impl_frame_finish_time_;
   new_reporter->main_frame_abort_time_ = main_frame_abort_time_;
@@ -324,6 +322,11 @@ CompositorFrameReporter::CopyReporterAtBeginImplStage() const {
   new_reporter->current_stage_.start_time = stage_history_.front().start_time;
   new_reporter->set_tick_clock(tick_clock_);
   new_reporter->SetDroppedFrameCounter(dropped_frame_counter_);
+  new_reporter->cloned_from_ = weak_factory_.GetWeakPtr();
+
+  // TODO(https://crbug.com/1127872) Check |cloned_to_| is null before replacing
+  // it.
+  cloned_to_ = new_reporter->GetWeakPtr();
   return new_reporter;
 }
 
@@ -447,8 +450,17 @@ void CompositorFrameReporter::TerminateReporter() {
       EnableReportType(FrameReportType::kDroppedFrame);
       break;
     case FrameTerminationStatus::kDidNotProduceFrame:
-      if (!frame_skip_reason_.has_value() ||
-          frame_skip_reason() != FrameSkippedReason::kNoDamage) {
+      if (frame_skip_reason_.has_value() &&
+          frame_skip_reason() == FrameSkippedReason::kNoDamage) {
+        // If this reporter was cloned, and the cloned repoter was marked as
+        // containing 'partial update' (i.e. missing desired updates from the
+        // main-thread), but this reporter terminated with 'no damage', then
+        // reset the 'partial update' flag from the cloned reporter.
+        if (cloned_to_ && cloned_to_->has_partial_update())
+          cloned_to_->set_has_partial_update(false);
+      } else {
+        // If no frames were produced, it was not due to no-damage, then it is a
+        // dropped frame.
         EnableReportType(FrameReportType::kDroppedFrame);
       }
       break;
@@ -484,6 +496,9 @@ void CompositorFrameReporter::TerminateReporter() {
       else
         dropped_frame_counter_->AddGoodFrame();
     }
+
+    if (IsDroppedFrameAffectingSmoothness())
+      dropped_frame_counter_->AddDroppedFrameAffectingSmoothness();
   }
 }
 
@@ -515,11 +530,16 @@ void CompositorFrameReporter::ReportCompositorLatencyHistograms() const {
       latency_ukm_reporter_->ReportCompositorLatencyUkm(
           report_type, stage_history_, active_trackers_, viz_breakdown_);
     }
+    bool any_active_interaction = false;
     for (size_t fst_type = 0; fst_type < active_trackers_.size(); ++fst_type) {
-      if (!active_trackers_.test(fst_type)) {
+      const auto tracker_type = static_cast<FrameSequenceTrackerType>(fst_type);
+      if (!active_trackers_.test(fst_type) ||
+          tracker_type == FrameSequenceTrackerType::kCustom ||
+          tracker_type == FrameSequenceTrackerType::kMaxType) {
         continue;
       }
-      switch (static_cast<FrameSequenceTrackerType>(fst_type)) {
+      any_active_interaction = true;
+      switch (tracker_type) {
         case FrameSequenceTrackerType::kCompositorAnimation:
           UMA_HISTOGRAM_ENUMERATION(
               "CompositorLatency.Type.CompositorAnimation", report_type);
@@ -551,11 +571,26 @@ void CompositorFrameReporter::ReportCompositorLatencyHistograms() const {
           UMA_HISTOGRAM_ENUMERATION("CompositorLatency.Type.ScrollbarScroll",
                                     report_type);
           break;
-        case FrameSequenceTrackerType::kUniversal:
+        case FrameSequenceTrackerType::kCanvas:
+          UMA_HISTOGRAM_ENUMERATION("CompositorLatency.Type.Canvas",
+                                    report_type);
+          break;
+        case FrameSequenceTrackerType::kJSAnimation:
+          UMA_HISTOGRAM_ENUMERATION("CompositorLatency.Type.JSAnimation",
+                                    report_type);
+          break;
         case FrameSequenceTrackerType::kCustom:
         case FrameSequenceTrackerType::kMaxType:
+          NOTREACHED();
           break;
       }
+    }
+    if (any_active_interaction) {
+      UMA_HISTOGRAM_ENUMERATION("CompositorLatency.Type.AnyInteraction",
+                                report_type);
+    } else {
+      UMA_HISTOGRAM_ENUMERATION("CompositorLatency.Type.NoInteraction",
+                                report_type);
     }
   }
 }
@@ -563,8 +598,6 @@ void CompositorFrameReporter::ReportCompositorLatencyHistograms() const {
 void CompositorFrameReporter::ReportStageHistogramWithBreakdown(
     const CompositorFrameReporter::StageData& stage,
     FrameSequenceTrackerType frame_sequence_tracker_type) const {
-  if (!ShouldReportLatencyMetricsForSequenceType(frame_sequence_tracker_type))
-    return;
   base::TimeDelta stage_delta = stage.end_time - stage.start_time;
   ReportCompositorLatencyHistogram(frame_sequence_tracker_type,
                                    static_cast<int>(stage.stage_type),
@@ -813,6 +846,11 @@ void CompositorFrameReporter::ReportCompositorLatencyTraceEvents() const {
   if (stage_history_.empty())
     return;
 
+  if (IsDroppedFrameAffectingSmoothness()) {
+    devtools_instrumentation::DidDropSmoothnessFrame(layer_tree_host_id_,
+                                                     args_.frame_time);
+  }
+
   const auto trace_track = perfetto::Track(reinterpret_cast<uint64_t>(this));
   TRACE_EVENT_BEGIN(
       "cc,benchmark", "PipelineReporter", trace_track,
@@ -826,12 +864,19 @@ void CompositorFrameReporter::ReportCompositorLatencyTraceEvents() const {
                    FrameTerminationStatus::kDidNotProduceFrame) {
           state = ChromeFrameReporter::STATE_NO_UPDATE_DESIRED;
         } else {
-          state = ChromeFrameReporter::STATE_PRESENTED_ALL;
+          state = has_partial_update()
+                      ? ChromeFrameReporter::STATE_PRESENTED_PARTIAL
+                      : ChromeFrameReporter::STATE_PRESENTED_ALL;
         }
         auto* reporter = context.event()->set_chrome_frame_reporter();
         reporter->set_state(state);
         reporter->set_frame_source(args_.frame_id.source_id);
         reporter->set_frame_sequence(args_.frame_id.sequence_number);
+        if (IsDroppedFrameAffectingSmoothness()) {
+          DCHECK(state == ChromeFrameReporter::STATE_DROPPED ||
+                 state == ChromeFrameReporter::STATE_PRESENTED_PARTIAL);
+          reporter->set_affects_smoothness(true);
+        }
         // TODO(crbug.com/1086974): Set 'drop reason' if applicable.
       });
 
@@ -1031,6 +1076,37 @@ base::TimeDelta CompositorFrameReporter::SumOfStageHistory() const {
 
 base::TimeTicks CompositorFrameReporter::Now() const {
   return tick_clock_->NowTicks();
+}
+
+bool CompositorFrameReporter::IsDroppedFrameAffectingSmoothness() const {
+  // If the frame was not shown, then it hurt smoothness only if either of the
+  // threads is affecting smoothness (e.g. running an animation, scroll, pinch,
+  // etc.).
+  if (TestReportType(FrameReportType::kDroppedFrame)) {
+    return smooth_thread_ != SmoothThread::kSmoothNone;
+  }
+
+  // If the frame was shown, but included only partial updates, then it hurt
+  // smoothness only if the main-thread is affecting smoothness (e.g. running an
+  // animation, or scroll etc.).
+  if (has_partial_update_) {
+    return smooth_thread_ == SmoothThread::kSmoothMain ||
+           smooth_thread_ == SmoothThread::kSmoothBoth;
+  }
+
+  // If the frame was shown, and did not include partial updates, then this
+  // frame did not hurt smoothness.
+  return false;
+}
+
+base::WeakPtr<CompositorFrameReporter> CompositorFrameReporter::GetWeakPtr() {
+  return weak_factory_.GetWeakPtr();
+}
+
+void CompositorFrameReporter::AdoptReporter(
+    std::unique_ptr<CompositorFrameReporter> reporter) {
+  DCHECK_EQ(cloned_to_.get(), reporter.get());
+  own_cloned_to_ = std::move(reporter);
 }
 
 }  // namespace cc

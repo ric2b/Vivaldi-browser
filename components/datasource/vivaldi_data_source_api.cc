@@ -601,7 +601,6 @@ void VivaldiDataSourcesAPI::AddImageDataForBookmark(
     int64_t bookmark_id,
     scoped_refptr<base::RefCountedMemory> png_data,
     AddBookmarkImageCallback callback) {
-  DCHECK(png_data->size() > 0);
   VivaldiDataSourcesAPI* api = FromBrowserContext(browser_context);
   DCHECK(api);
   if (!api) {
@@ -617,8 +616,11 @@ void VivaldiDataSourcesAPI::AddImageDataForBookmarkUIThread(
     int64_t bookmark_id,
     AddBookmarkImageCallback ui_thread_callback,
     scoped_refptr<base::RefCountedMemory> png_data) {
-  DCHECK(png_data->size() > 0);
-
+  if (!png_data || !png_data->size()) {
+    // Propage a capture or encoding error to the callback.
+    std::move(ui_thread_callback).Run(false);
+    return;
+  }
   sequence_task_runner_->PostTask(
       FROM_HERE,
       base::BindOnce(

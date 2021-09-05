@@ -17,27 +17,17 @@ namespace {
 
 class LayerTreeHostMirrorPixelTest
     : public LayerTreePixelTest,
-      public ::testing::WithParamInterface<TestRendererType> {
+      public ::testing::WithParamInterface<viz::RendererType> {
  protected:
   LayerTreeHostMirrorPixelTest() : LayerTreePixelTest(renderer_type()) {}
 
-  TestRendererType renderer_type() const { return GetParam(); }
-};
-
-const TestRendererType kRendererTypes[] = {
-    TestRendererType::kGL,       TestRendererType::kSkiaGL,
-    TestRendererType::kSoftware,
-#if defined(ENABLE_CC_VULKAN_TESTS)
-    TestRendererType::kSkiaVk,
-#endif  // defined(ENABLE_CC_VULKAN_TESTS)
-#if defined(ENABLE_CC_DAWN_TESTS)
-    TestRendererType::kSkiaDawn,
-#endif  // defined(ENABLE_CC_DAWN_TESTS)
+  viz::RendererType renderer_type() const { return GetParam(); }
 };
 
 INSTANTIATE_TEST_SUITE_P(All,
                          LayerTreeHostMirrorPixelTest,
-                         ::testing::ValuesIn(kRendererTypes));
+                         ::testing::ValuesIn(viz::GetRendererTypes()),
+                         ::testing::PrintToStringParamName());
 
 // Verifies that a mirror layer with a scale mirrors another layer correctly.
 TEST_P(LayerTreeHostMirrorPixelTest, MirrorLayer) {

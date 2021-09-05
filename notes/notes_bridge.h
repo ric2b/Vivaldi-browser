@@ -284,6 +284,12 @@ class NotesBridge : public vivaldi::NotesModelObserver {
     void GroupedNotesChangesBeginning(vivaldi::NotesModel* model) override {}
     void GroupedNotesChangesEnded(vivaldi::NotesModel* model) override {}*/
 
+    void ReorderChildren(
+        JNIEnv* env,
+        const base::android::JavaParamRef<jobject>& obj,
+        const base::android::JavaParamRef<jobject>& j_note_id_obj,
+        jlongArray arr);
+
 
  private:
   ~NotesBridge() override;

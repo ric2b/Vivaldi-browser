@@ -1,4 +1,5 @@
 import("//vivaldi/gn/config/features.gni")
+import("//vivaldi/gn/config/locales.gni")
 import("//vivaldi/gn/config/product.gni")
 import("//vivaldi/gn/config/version.gni")
 import("//vivaldi/app/resource_list.gni")
@@ -164,7 +165,11 @@ foreach(_target_config, CHROMIUM_VIVALDI_RESOURCE_LIST) {
     outputs += extra_outputs
   }
 
-  update_target(_target+"_grit") {
+  grit_suffix = "_grit"
+  if (is_android && defined(_flags.java_grd_name) && _flags.java_grd_name) {
+    grit_suffix = "__grit" + grit_suffix
+  }
+  update_target(_target+grit_suffix) {
     inputs += [
       vivaldi_source,
       "//vivaldi/app/gritsettings/resource_ids",

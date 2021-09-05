@@ -23,12 +23,6 @@ if (current_cpu == "mipsel" || current_cpu == "mips64el") {
   import("//build/config/mips.gni")
 }
 
-# Reset sources_assignment_filter for the BUILD.gn file to prevent
-# regression during the migration of Chromium away from the feature.
-# See docs/no_sources_assignment_filter.md for more information.
-# TODO(crbug.com/1018739): remove this when migration is done.
-set_sources_assignment_filter([])
-
 skia_support_gpu = !is_ios
 skia_support_pdf = !is_ios && enable_basic_printing
 skia_support_skottie = true
@@ -268,7 +262,7 @@ component("skia") {
     "ext/skia_utils_base.cc",
     "ext/skia_utils_base.h",
   ]
-  if (!is_mac && !is_ios) {
+  if (!is_apple) {
     sources += [
       "ext/fontmgr_default.cc",
       "ext/fontmgr_default.h",
@@ -948,10 +942,9 @@ test("skia_unittests") {
   if (!is_ios) {
     sources += [ "public/mojom/test/mojom_traits_unittest.cc" ]
     deps += [
-      # TODO: Fix this test to not depend on cc.
-      "//cc:test_support",
       "//mojo/public/cpp/bindings",
-      "//skia/public/mojom:test_interfaces",
+      "//mojo/public/cpp/test_support:test_utils",
+      "//skia/public/mojom",
     ]
   }
 

@@ -181,14 +181,17 @@ using autofill::FieldRendererId;
         completionHandler:(nullable void (^)(void))completionHandler {
   web::WebFrame* frame =
       web::GetWebFrameWithId(_webState, base::SysNSStringToUTF8(frameID));
-  [_JSAutofillManager clearAutofilledFieldsForFormName:formName
-                                       fieldIdentifier:fieldIdentifier
-                                               inFrame:frame
-                                     completionHandler:^(NSString*) {
-                                       if (completionHandler) {
-                                         completionHandler();
-                                       }
-                                     }];
+  [_JSAutofillManager
+      clearAutofilledFieldsForFormName:formName
+                          formUniqueID:_lastFormActivityUniqueFormID
+                       fieldIdentifier:fieldIdentifier
+                         fieldUniqueID:_lastFormActivityUniqueFieldID
+                               inFrame:frame
+                     completionHandler:^(NSString*) {
+                       if (completionHandler) {
+                         completionHandler();
+                       }
+                     }];
 }
 
 - (void)fetchSuggestionsForFormWithName:(NSString*)formName
@@ -339,6 +342,10 @@ using autofill::FieldRendererId;
   [_autofillAgent hideAutofillPopup];
 }
 
+- (bool)isQueryIDRelevant:(int)queryID {
+  return [_autofillAgent isQueryIDRelevant:queryID];
+}
+
 - (void)
     confirmCreditCardAccountName:(const base::string16&)name
                         callback:
@@ -477,10 +484,10 @@ showUnmaskPromptForCard:(const autofill::CreditCard&)creditCard
   DCHECK_EQ(_webState, webState);
 
   NSString* nsFormName = base::SysUTF8ToNSString(params.form_name);
-  _lastFormActivityUniqueFormID = FormRendererId(params.unique_form_id);
+  _lastFormActivityUniqueFormID = params.unique_form_id;
   NSString* nsFieldIdentifier =
       base::SysUTF8ToNSString(params.field_identifier);
-  _lastFormActivityUniqueFieldID = FieldRendererId(params.unique_field_id);
+  _lastFormActivityUniqueFieldID = params.unique_field_id;
   NSString* nsFieldType = base::SysUTF8ToNSString(params.field_type);
   NSString* nsFrameID = base::SysUTF8ToNSString(GetWebFrameId(frame));
   NSString* nsValue = base::SysUTF8ToNSString(params.value);
@@ -625,18 +632,18 @@ showUnmaskPromptForCard:(const autofill::CreditCard&)creditCard
   CWVPassword* password =
       [[CWVPassword alloc] initWithPasswordForm:credentials];
 
-  [self.delegate
-               autofillController:self
-      decideSavePolicyForPassword:password
-                  decisionHandler:^(CWVPasswordUserDecision decision) {
-                    // Marking a password update as "never" makes no sense as
-                    // the password has already been saved.
-                    DCHECK_NE(decision, CWVPasswordUserDecisionNever)
-                        << "A password update can only be accepted or ignored.";
-                    if (decision == CWVPasswordUserDecisionYes) {
-                      formPtr->Update(credentials);
-                    }
-                  }];
+  [self.delegate autofillController:self
+      decideUpdatePolicyForPassword:password
+                    decisionHandler:^(CWVPasswordUserDecision decision) {
+                      // Marking a password update as "never" makes no sense as
+                      // the password has already been saved.
+                      DCHECK_NE(decision, CWVPasswordUserDecisionNever)
+                          << "A password update can only be accepted or "
+                             "ignored.";
+                      if (decision == CWVPasswordUserDecisionYes) {
+                        formPtr->Update(credentials);
+                      }
+                    }];
 }
 
 - (void)removePasswordInfoBarManualFallback:(BOOL)manual {

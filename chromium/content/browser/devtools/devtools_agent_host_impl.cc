@@ -22,7 +22,7 @@
 #include "content/browser/devtools/service_worker_devtools_manager.h"
 #include "content/browser/devtools/shared_worker_devtools_agent_host.h"
 #include "content/browser/devtools/shared_worker_devtools_manager.h"
-#include "content/browser/frame_host/frame_tree_node.h"
+#include "content/browser/renderer_host/frame_tree_node.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
@@ -101,7 +101,7 @@ DevToolsAgentHostImpl::~DevToolsAgentHostImpl() {
 }
 
 // static
-scoped_refptr<DevToolsAgentHost> DevToolsAgentHost::GetForId(
+scoped_refptr<DevToolsAgentHostImpl> DevToolsAgentHostImpl::GetForId(
     const std::string& id) {
   if (!g_devtools_instances.IsCreated())
     return nullptr;
@@ -109,6 +109,12 @@ scoped_refptr<DevToolsAgentHost> DevToolsAgentHost::GetForId(
   if (it == g_devtools_instances.Get().end())
     return nullptr;
   return it->second;
+}
+
+// static
+scoped_refptr<DevToolsAgentHost> DevToolsAgentHost::GetForId(
+    const std::string& id) {
+  return DevToolsAgentHostImpl::GetForId(id);
 }
 
 // static
@@ -231,6 +237,10 @@ std::string DevToolsAgentHostImpl::GetParentId() {
 }
 
 std::string DevToolsAgentHostImpl::GetOpenerId() {
+  return std::string();
+}
+
+std::string DevToolsAgentHostImpl::GetOpenerFrameId() {
   return std::string();
 }
 
@@ -382,6 +392,31 @@ void DevToolsAgentHostImpl::NotifyDestroyed() {
   for (auto& observer : g_devtools_observers.Get())
     observer.DevToolsAgentHostDestroyed(this);
   g_devtools_instances.Get().erase(id_);
+}
+
+DevToolsAgentHostImpl::NetworkLoaderFactoryParamsAndInfo::
+    NetworkLoaderFactoryParamsAndInfo() = default;
+DevToolsAgentHostImpl::NetworkLoaderFactoryParamsAndInfo::
+    NetworkLoaderFactoryParamsAndInfo(
+        url::Origin origin,
+        net::SiteForCookies site_for_cookies,
+        network::mojom::URLLoaderFactoryParamsPtr factory_params)
+    : origin(std::move(origin)),
+      site_for_cookies(std::move(site_for_cookies)),
+      factory_params(std::move(factory_params)) {}
+DevToolsAgentHostImpl::NetworkLoaderFactoryParamsAndInfo::
+    NetworkLoaderFactoryParamsAndInfo(
+        DevToolsAgentHostImpl::NetworkLoaderFactoryParamsAndInfo&&) = default;
+DevToolsAgentHostImpl::NetworkLoaderFactoryParamsAndInfo::
+    ~NetworkLoaderFactoryParamsAndInfo() = default;
+
+DevToolsAgentHostImpl::NetworkLoaderFactoryParamsAndInfo
+DevToolsAgentHostImpl::CreateNetworkFactoryParamsForDevTools() {
+  return {};
+}
+
+RenderProcessHost* DevToolsAgentHostImpl::GetProcessHost() {
+  return nullptr;
 }
 
 }  // namespace content

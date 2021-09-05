@@ -14,6 +14,7 @@
 #include "chrome/browser/nearby_sharing/local_device_data/nearby_share_local_device_data_manager.h"
 #include "chrome/browser/nearby_sharing/proto/device_rpc.pb.h"
 #include "chrome/browser/nearby_sharing/proto/rpc_resources.pb.h"
+#include "chrome/browser/ui/webui/nearby_share/public/mojom/nearby_share_settings.mojom.h"
 
 class NearbyShareClientFactory;
 class NearbyShareDeviceDataUpdater;
@@ -32,14 +33,16 @@ class NearbyShareLocalDeviceDataManagerImpl
    public:
     static std::unique_ptr<NearbyShareLocalDeviceDataManager> Create(
         PrefService* pref_service,
-        NearbyShareClientFactory* http_client_factory);
+        NearbyShareClientFactory* http_client_factory,
+        const std::string& default_device_name);
     static void SetFactoryForTesting(Factory* test_factory);
 
    protected:
     virtual ~Factory();
     virtual std::unique_ptr<NearbyShareLocalDeviceDataManager> CreateInstance(
         PrefService* pref_service,
-        NearbyShareClientFactory* http_client_factory) = 0;
+        NearbyShareClientFactory* http_client_factory,
+        const std::string& default_device_name) = 0;
 
    private:
     static Factory* test_factory_;
@@ -50,14 +53,18 @@ class NearbyShareLocalDeviceDataManagerImpl
  private:
   NearbyShareLocalDeviceDataManagerImpl(
       PrefService* pref_service,
-      NearbyShareClientFactory* http_client_factory);
+      NearbyShareClientFactory* http_client_factory,
+      const std::string& default_device_name);
 
   // NearbyShareLocalDeviceDataManager:
   std::string GetId() override;
-  base::Optional<std::string> GetDeviceName() const override;
+  std::string GetDeviceName() const override;
   base::Optional<std::string> GetFullName() const override;
   base::Optional<std::string> GetIconUrl() const override;
-  void SetDeviceName(const std::string& name) override;
+  nearby_share::mojom::DeviceNameValidationResult ValidateDeviceName(
+      const std::string& name) override;
+  nearby_share::mojom::DeviceNameValidationResult SetDeviceName(
+      const std::string& name) override;
   void DownloadDeviceData() override;
   void UploadContacts(std::vector<nearbyshare::proto::Contact> contacts,
                       UploadCompleteCallback callback) override;
@@ -67,15 +74,8 @@ class NearbyShareLocalDeviceDataManagerImpl
   void OnStart() override;
   void OnStop() override;
 
-  base::Optional<std::string> GetStringPref(const std::string& pref_name) const;
-  void SetStringPref(const std::string& pref_name,
-                     const base::Optional<std::string>& value);
-
   void OnDownloadDeviceDataRequested();
-  void OnUploadDeviceNameRequested();
   void OnDownloadDeviceDataFinished(
-      const base::Optional<nearbyshare::proto::UpdateDeviceResponse>& response);
-  void OnUploadDeviceNameFinished(
       const base::Optional<nearbyshare::proto::UpdateDeviceResponse>& response);
   void OnUploadContactsFinished(
       UploadCompleteCallback callback,
@@ -89,7 +89,6 @@ class NearbyShareLocalDeviceDataManagerImpl
   PrefService* pref_service_ = nullptr;
   std::unique_ptr<NearbyShareDeviceDataUpdater> device_data_updater_;
   std::unique_ptr<NearbyShareScheduler> download_device_data_scheduler_;
-  std::unique_ptr<NearbyShareScheduler> upload_device_name_scheduler_;
 };
 
 #endif  // CHROME_BROWSER_NEARBY_SHARING_LOCAL_DEVICE_DATA_NEARBY_SHARE_LOCAL_DEVICE_DATA_MANAGER_IMPL_H_

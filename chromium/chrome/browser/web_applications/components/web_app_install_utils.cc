@@ -8,8 +8,11 @@
 #include <string>
 #include <utility>
 
+#include "base/feature_list.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/optional.h"
 #include "base/stl_util.h"
+#include "base/strings/string16.h"
 #include "base/time/time.h"
 #include "chrome/browser/banners/app_banner_manager.h"
 #include "chrome/browser/banners/app_banner_manager_desktop.h"
@@ -20,6 +23,7 @@
 #include "chrome/browser/web_applications/components/web_app_icon_generator.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/web_application_info.h"
+#include "components/services/app_service/public/cpp/share_target.h"
 #include "third_party/blink/public/common/manifest/manifest.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 
@@ -122,20 +126,79 @@ UpdateShortcutsMenuItemInfosFromManifest(
   return web_app_shortcut_infos;
 }
 
+apps::ShareTarget::Method ToAppsShareTargetMethod(
+    blink::Manifest::ShareTarget::Method method) {
+  switch (method) {
+    case blink::Manifest::ShareTarget::Method::kGet:
+      return apps::ShareTarget::Method::kGet;
+    case blink::Manifest::ShareTarget::Method::kPost:
+      return apps::ShareTarget::Method::kPost;
+  }
+  NOTREACHED();
+}
+
+apps::ShareTarget::Enctype ToAppsShareTargetEnctype(
+    blink::Manifest::ShareTarget::Enctype enctype) {
+  switch (enctype) {
+    case blink::Manifest::ShareTarget::Enctype::kFormUrlEncoded:
+      return apps::ShareTarget::Enctype::kFormUrlEncoded;
+    case blink::Manifest::ShareTarget::Enctype::kMultipartFormData:
+      return apps::ShareTarget::Enctype::kMultipartFormData;
+  }
+  NOTREACHED();
+}
+
+base::Optional<apps::ShareTarget> ToWebAppShareTarget(
+    const base::Optional<blink::Manifest::ShareTarget>& share_target) {
+  if (!share_target) {
+    return base::nullopt;
+  }
+  apps::ShareTarget apps_share_target;
+  apps_share_target.action = share_target->action;
+  apps_share_target.method = ToAppsShareTargetMethod(share_target->method);
+  apps_share_target.enctype = ToAppsShareTargetEnctype(share_target->enctype);
+
+  if (share_target->params.title.has_value()) {
+    apps_share_target.params.title =
+        base::UTF16ToUTF8(*share_target->params.title);
+  }
+  if (share_target->params.text.has_value()) {
+    apps_share_target.params.text =
+        base::UTF16ToUTF8(*share_target->params.text);
+  }
+  if (share_target->params.url.has_value()) {
+    apps_share_target.params.url = base::UTF16ToUTF8(*share_target->params.url);
+  }
+
+  for (const auto& file_filter : share_target->params.files) {
+    apps::ShareTarget::Files apps_share_target_files;
+    apps_share_target_files.name = base::UTF16ToUTF8(file_filter.name);
+
+    for (const auto& file_type : file_filter.accept) {
+      apps_share_target_files.accept.push_back(base::UTF16ToUTF8(file_type));
+    }
+
+    apps_share_target.params.files.push_back(
+        std::move(apps_share_target_files));
+  }
+
+  return std::move(apps_share_target);
+}
+
 }  // namespace
 
 void UpdateWebAppInfoFromManifest(const blink::Manifest& manifest,
                                   WebApplicationInfo* web_app_info) {
-  if (!manifest.short_name.is_null())
-    web_app_info->title = manifest.short_name.string();
-
   // Give the full length name priority if it's not empty.
-  if (!manifest.name.is_null() && !manifest.name.string().empty())
-    web_app_info->title = manifest.name.string();
+  base::string16 name = manifest.name.value_or(base::string16());
+  if (!name.empty())
+    web_app_info->title = name;
+  else if (manifest.short_name)
+    web_app_info->title = *manifest.short_name;
 
   // Set the url based on the manifest value, if any.
   if (manifest.start_url.is_valid())
-    web_app_info->app_url = manifest.start_url;
+    web_app_info->start_url = manifest.start_url;
 
   if (manifest.scope.is_valid())
     web_app_info->scope = manifest.scope;
@@ -207,6 +270,8 @@ void UpdateWebAppInfoFromManifest(const blink::Manifest& manifest,
     web_app_info->icon_infos = std::move(web_app_icons);
 
   web_app_info->file_handlers = manifest.file_handlers;
+
+  web_app_info->share_target = ToWebAppShareTarget(manifest.share_target);
 
   web_app_info->protocol_handlers = manifest.protocol_handlers;
 
@@ -309,7 +374,7 @@ void FilterAndResizeIconsGenerateMissing(WebApplicationInfo* web_app_info,
 
   base::char16 icon_letter =
       web_app_info->title.empty()
-          ? GenerateIconLetterFromUrl(web_app_info->app_url)
+          ? GenerateIconLetterFromUrl(web_app_info->start_url)
           : GenerateIconLetterFromAppName(web_app_info->title);
   web_app_info->generated_icon_color = SK_ColorTRANSPARENT;
   // Ensure that all top-level icons that are in web_app_info with  Purpose::ANY

@@ -272,13 +272,12 @@ void TtsControllerImpl::OnTtsEvent(int utterance_id,
 void TtsControllerImpl::GetVoices(BrowserContext* browser_context,
                                   std::vector<VoiceData>* out_voices) {
   TtsPlatform* tts_platform = GetTtsPlatform();
-  if (tts_platform) {
-    // Ensure we have all built-in voices loaded. This is a no-op if already
-    // loaded.
-    tts_platform->LoadBuiltInTtsEngine(browser_context);
-    if (tts_platform->PlatformImplAvailable())
-      tts_platform->GetVoices(out_voices);
-  }
+  DCHECK(tts_platform);
+  // Ensure we have all built-in voices loaded. This is a no-op if already
+  // loaded.
+  tts_platform->LoadBuiltInTtsEngine(browser_context);
+  if (tts_platform->PlatformImplAvailable())
+    tts_platform->GetVoices(out_voices);
 
   if (browser_context && engine_delegate_)
     engine_delegate_->GetVoices(browser_context, out_voices);
@@ -772,6 +771,12 @@ TtsControllerDelegate* TtsControllerImpl::GetTtsControllerDelegate() {
   }
   return nullptr;
 }
+
+void TtsControllerImpl::SetTtsControllerDelegateForTesting(
+    TtsControllerDelegate* delegate) {
+  delegate_ = delegate;
+}
+
 #endif  // defined(OS_CHROMEOS)
 
 }  // namespace content

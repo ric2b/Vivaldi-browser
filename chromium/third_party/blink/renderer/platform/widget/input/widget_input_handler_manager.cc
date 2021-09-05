@@ -8,6 +8,7 @@
 
 #include "base/bind.h"
 #include "base/check_op.h"
+#include "base/feature_list.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
 #include "cc/base/features.h"
@@ -88,25 +89,25 @@ mojom::blink::InputEventResultState InputEventDispositionToAck(
   }
 }
 
-blink::WebGestureEvent ScrollBeginFromScrollUpdate(
+std::unique_ptr<blink::WebGestureEvent> ScrollBeginFromScrollUpdate(
     const WebGestureEvent& gesture_update) {
   DCHECK(gesture_update.GetType() == WebInputEvent::Type::kGestureScrollUpdate);
 
-  WebGestureEvent scroll_begin(gesture_update);
-  scroll_begin.SetType(WebInputEvent::Type::kGestureScrollBegin);
+  auto scroll_begin = std::make_unique<WebGestureEvent>(gesture_update);
+  scroll_begin->SetType(WebInputEvent::Type::kGestureScrollBegin);
 
-  scroll_begin.data.scroll_begin.delta_x_hint =
+  scroll_begin->data.scroll_begin.delta_x_hint =
       gesture_update.data.scroll_update.delta_x;
-  scroll_begin.data.scroll_begin.delta_y_hint =
+  scroll_begin->data.scroll_begin.delta_y_hint =
       gesture_update.data.scroll_update.delta_y;
-  scroll_begin.data.scroll_begin.delta_hint_units =
+  scroll_begin->data.scroll_begin.delta_hint_units =
       gesture_update.data.scroll_update.delta_units;
-  scroll_begin.data.scroll_begin.target_viewport = false;
-  scroll_begin.data.scroll_begin.inertial_phase =
+  scroll_begin->data.scroll_begin.target_viewport = false;
+  scroll_begin->data.scroll_begin.inertial_phase =
       gesture_update.data.scroll_update.inertial_phase;
-  scroll_begin.data.scroll_begin.synthetic = false;
-  scroll_begin.data.scroll_begin.pointer_count = 0;
-  scroll_begin.data.scroll_begin.scrollable_area_element_id = 0;
+  scroll_begin->data.scroll_begin.synthetic = false;
+  scroll_begin->data.scroll_begin.pointer_count = 0;
+  scroll_begin->data.scroll_begin.scrollable_area_element_id = 0;
 
   return scroll_begin;
 }
@@ -221,7 +222,7 @@ void WidgetInputHandlerManager::InitInputHandler() {
   uses_input_handler_ = true;
   base::OnceClosure init_closure = base::BindOnce(
       &WidgetInputHandlerManager::InitOnInputHandlingThread, this,
-      widget_->LayerTreeHost()->GetInputHandler(), sync_compositing);
+      widget_->LayerTreeHost()->GetDelegateForInput(), sync_compositing);
   InputThreadTaskRunner()->PostTask(FROM_HERE, std::move(init_closure));
 }
 
@@ -321,7 +322,7 @@ void WidgetInputHandlerManager::GenerateScrollBeginAndSendToMainThread(
   DCHECK_EQ(update_event.GetType(), WebInputEvent::Type::kGestureScrollUpdate);
   std::unique_ptr<WebCoalescedInputEvent> event =
       std::make_unique<WebCoalescedInputEvent>(
-          ScrollBeginFromScrollUpdate(update_event).Clone(), ui::LatencyInfo());
+          ScrollBeginFromScrollUpdate(update_event), ui::LatencyInfo());
 
   DispatchNonBlockingEventToMainThread(std::move(event), attribution);
 }
@@ -389,6 +390,27 @@ void WidgetInputHandlerManager::LogInputTimingUMA() {
   }
 }
 
+void WidgetInputHandlerManager::DispatchScrollGestureToCompositor(
+    std::unique_ptr<WebGestureEvent> event) {
+  DCHECK(base::FeatureList::IsEnabled(features::kScrollUnification));
+  std::unique_ptr<WebCoalescedInputEvent> web_scoped_gesture_event =
+      std::make_unique<WebCoalescedInputEvent>(std::move(event),
+                                               ui::LatencyInfo());
+  DCHECK(compositor_task_runner_);
+  compositor_task_runner_->PostTask(
+      FROM_HERE, base::BindOnce(&WidgetInputHandlerManager::
+                                    HandleInputEventWithLatencyInfoOnCompositor,
+                                this, std::move(web_scoped_gesture_event)));
+}
+
+void WidgetInputHandlerManager::HandleInputEventWithLatencyInfoOnCompositor(
+    std::unique_ptr<WebCoalescedInputEvent> event) {
+  DCHECK(base::FeatureList::IsEnabled(features::kScrollUnification));
+  DCHECK(input_handler_proxy_);
+  input_handler_proxy_->HandleInputEventWithLatencyInfo(std::move(event),
+                                                        base::DoNothing());
+}
+
 void WidgetInputHandlerManager::DispatchEvent(
     std::unique_ptr<WebCoalescedInputEvent> event,
     mojom::blink::WidgetInputHandler::DispatchEventCallback callback) {
@@ -398,7 +420,7 @@ void WidgetInputHandlerManager::DispatchEvent(
   if (!event_is_move)
     LogInputTimingUMA();
 
-  // Drop input if we are deferring a rendring pipeline phase, unless it's a
+  // Drop input if we are deferring a rendering pipeline phase, unless it's a
   // move event.
   // We don't want users interacting with stuff they can't see, so we drop it.
   // We allow moves because we need to keep the current pointer location up
@@ -436,7 +458,7 @@ void WidgetInputHandlerManager::DispatchEvent(
       return;
     }
 
-    // The InputHandlerProxy will be the first to try handing the event on the
+    // The InputHandlerProxy will be the first to try handling the event on the
     // compositor thread. It will respond to this class by calling
     // DidHandleInputEventSentToCompositor with the result of its attempt. Based
     // on the resulting disposition, DidHandleInputEventSentToCompositor will
@@ -547,22 +569,28 @@ void WidgetInputHandlerManager::OnDeferCommitsChanged(bool status) {
 }
 
 void WidgetInputHandlerManager::InitOnInputHandlingThread(
-    const base::WeakPtr<cc::InputHandler>& input_handler,
+    const base::WeakPtr<cc::CompositorDelegateForInput>& compositor_delegate,
     bool sync_compositing) {
   DCHECK(InputThreadTaskRunner()->BelongsToCurrentThread());
   DCHECK(uses_input_handler_);
 
-  // It is possible that the input_handle has already been destroyed before this
-  // Init() call was invoked. If so, early out.
-  if (!input_handler)
+  // It is possible that the input_handler has already been destroyed before
+  // this Init() call was invoked. If so, early out.
+  if (!compositor_delegate)
     return;
 
   // If there's no compositor thread (i.e. we're in a LayoutTest), force input
   // to go through the main thread.
   bool force_input_handling_on_main = !compositor_task_runner_;
 
+  // The input handler is created and ownership is passed to the compositor
+  // delegate; hence we only receive a WeakPtr back.
+  base::WeakPtr<cc::InputHandler> input_handler =
+      cc::InputHandler::Create(*compositor_delegate);
+  DCHECK(input_handler);
+
   input_handler_proxy_ = std::make_unique<InputHandlerProxy>(
-      input_handler.get(), this, force_input_handling_on_main);
+      *input_handler.get(), this, force_input_handling_on_main);
 
 #if defined(OS_ANDROID)
   if (sync_compositing) {
@@ -708,11 +736,15 @@ void WidgetInputHandlerManager::DidHandleInputEventSentToCompositor(
                                     attribution, std::move(handled_event));
     return;
   }
+
   if (callback) {
     std::move(callback).Run(
         mojom::blink::InputEventResultSource::kCompositorThread,
         event->latency_info(), ack_state,
-        ToDidOverscrollParams(overscroll_params.get()), nullptr);
+        ToDidOverscrollParams(overscroll_params.get()),
+        allowed_touch_action_ ? mojom::blink::TouchActionOptional::New(
+                                    allowed_touch_action_.value())
+                              : nullptr);
   }
 }
 

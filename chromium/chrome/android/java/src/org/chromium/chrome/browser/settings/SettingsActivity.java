@@ -5,6 +5,7 @@
 package org.chromium.chrome.browser.settings;
 
 import android.annotation.SuppressLint;
+import android.app.ActivityManager;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager.NameNotFoundException;
@@ -28,7 +29,7 @@ import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeBaseAppCompatActivity;
 import org.chromium.chrome.browser.feedback.FragmentHelpAndFeedbackLauncher;
-import org.chromium.chrome.browser.help.HelpAndFeedback;
+import org.chromium.chrome.browser.feedback.HelpAndFeedbackLauncherImpl;
 import org.chromium.chrome.browser.init.ChromeBrowserInitializer;
 import org.chromium.chrome.browser.password_check.PasswordCheckComponentUiFactory;
 import org.chromium.chrome.browser.password_check.PasswordCheckEditFragmentView;
@@ -92,6 +93,7 @@ public class SettingsActivity extends ChromeBaseAppCompatActivity
     @SuppressLint("InlinedApi")
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        setTitle(R.string.settings);
         ensureActivityNotExported();
 
         // The browser process must be started here because this Activity may be started explicitly
@@ -123,9 +125,10 @@ public class SettingsActivity extends ChromeBaseAppCompatActivity
         }
 
         Resources res = getResources();
-        ApiCompatibilityUtils.setTaskDescription(this, res.getString(R.string.app_name),
+
+        setTaskDescription(new ActivityManager.TaskDescription(res.getString(R.string.app_name),
                 BitmapFactory.decodeResource(res, R.mipmap.app_icon),
-                ApiCompatibilityUtils.getColor(res, R.color.default_primary_color));
+                ApiCompatibilityUtils.getColor(res, R.color.default_primary_color)));
 
         setStatusBarColor();
     }
@@ -253,8 +256,9 @@ public class SettingsActivity extends ChromeBaseAppCompatActivity
             finish();
             return true;
         } else if (item.getItemId() == R.id.menu_id_general_help) {
-            HelpAndFeedback.getInstance().show(this, getString(R.string.help_context_settings),
-                    Profile.getLastUsedRegularProfile(), null);
+            HelpAndFeedbackLauncherImpl.getInstance().show(this,
+                    getString(R.string.help_context_settings), Profile.getLastUsedRegularProfile(),
+                    null);
             return true;
         }
         return super.onOptionsItemSelected(item);
@@ -289,7 +293,7 @@ public class SettingsActivity extends ChromeBaseAppCompatActivity
             FragmentHelpAndFeedbackLauncher fragmentHelpAndFeedbackLauncher =
                     (FragmentHelpAndFeedbackLauncher) fragment;
             fragmentHelpAndFeedbackLauncher.setHelpAndFeedbackLauncher(
-                    HelpAndFeedback.getInstance());
+                    HelpAndFeedbackLauncherImpl.getInstance());
         }
         if (fragment instanceof SafetyCheckSettingsFragment) {
             SafetyCheckCoordinator.create((SafetyCheckSettingsFragment) fragment,

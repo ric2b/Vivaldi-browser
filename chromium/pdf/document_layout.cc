@@ -8,10 +8,8 @@
 
 #include "base/check_op.h"
 #include "base/values.h"
-#include "ppapi/cpp/rect.h"
-#include "ppapi/cpp/var.h"
-#include "ppapi/cpp/var_dictionary.h"
 #include "ui/gfx/geometry/point.h"
+#include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 
 namespace chrome_pdf {
@@ -30,11 +28,12 @@ int GetWidestPageWidth(const std::vector<gfx::Size>& page_sizes) {
   return widest_page_width;
 }
 
-pp::Rect InsetRect(pp::Rect rect,
-                   const draw_utils::PageInsetSizes& inset_sizes) {
-  rect.Inset(inset_sizes.left, inset_sizes.top, inset_sizes.right,
-             inset_sizes.bottom);
-  return rect;
+gfx::Rect InsetRect(const gfx::Rect& rect,
+                    const draw_utils::PageInsetSizes& inset_sizes) {
+  gfx::Rect inset_rect(rect);
+  inset_rect.Inset(inset_sizes.left, inset_sizes.top, inset_sizes.right,
+                   inset_sizes.bottom);
+  return inset_rect;
 }
 
 }  // namespace
@@ -58,11 +57,11 @@ base::Value DocumentLayout::Options::ToValue() const {
   return dictionary;
 }
 
-void DocumentLayout::Options::FromVar(const pp::Var& var) {
-  pp::VarDictionary dictionary(var);
+void DocumentLayout::Options::FromValue(const base::Value& value) {
+  DCHECK(value.is_dict());
 
   int32_t default_page_orientation =
-      dictionary.Get(kDefaultPageOrientation).AsInt();
+      value.FindKey(kDefaultPageOrientation)->GetInt();
   DCHECK_GE(default_page_orientation,
             static_cast<int32_t>(PageOrientation::kOriginal));
   DCHECK_LE(default_page_orientation,
@@ -70,7 +69,7 @@ void DocumentLayout::Options::FromVar(const pp::Var& var) {
   default_page_orientation_ =
       static_cast<PageOrientation>(default_page_orientation);
 
-  two_up_view_enabled_ = dictionary.Get(kTwoUpViewEnabled).AsBool();
+  two_up_view_enabled_ = value.FindKey(kTwoUpViewEnabled)->GetBool();
 }
 
 void DocumentLayout::Options::RotatePagesClockwise() {
@@ -116,11 +115,11 @@ void DocumentLayout::ComputeSingleViewLayout(
     }
 
     const gfx::Size& page_size = page_sizes[i];
-    pp::Rect page_rect =
+    gfx::Rect page_rect =
         draw_utils::GetRectForSingleView(page_size, document_size);
-    CopyRectIfModified(page_rect, &page_layouts_[i].outer_rect);
+    CopyRectIfModified(page_rect, page_layouts_[i].outer_rect);
     CopyRectIfModified(InsetRect(page_rect, kSingleViewInsets),
-                       &page_layouts_[i].inner_rect);
+                       page_layouts_[i].inner_rect);
 
     draw_utils::ExpandDocumentSize(page_size, &document_size);
   }
@@ -147,7 +146,7 @@ void DocumentLayout::ComputeTwoUpViewLayout(
             i, page_sizes.size(), kSingleViewInsets, kHorizontalSeparator);
     const gfx::Size& page_size = page_sizes[i];
 
-    pp::Rect page_rect;
+    gfx::Rect page_rect;
     if (i % 2 == 0) {
       page_rect = draw_utils::GetLeftRectForTwoUpView(
           page_size, {document_size.width(), document_size.height()});
@@ -157,9 +156,9 @@ void DocumentLayout::ComputeTwoUpViewLayout(
       document_size.Enlarge(
           0, std::max(page_size.height(), page_sizes[i - 1].height()));
     }
-    CopyRectIfModified(page_rect, &page_layouts_[i].outer_rect);
+    CopyRectIfModified(page_rect, page_layouts_[i].outer_rect);
     CopyRectIfModified(InsetRect(page_rect, page_insets),
-                       &page_layouts_[i].inner_rect);
+                       page_layouts_[i].inner_rect);
   }
 
   if (page_sizes.size() % 2 == 1) {
@@ -174,10 +173,10 @@ void DocumentLayout::ComputeTwoUpViewLayout(
   }
 }
 
-void DocumentLayout::CopyRectIfModified(const pp::Rect& source_rect,
-                                        pp::Rect* destination_rect) {
-  if (*destination_rect != source_rect) {
-    *destination_rect = source_rect;
+void DocumentLayout::CopyRectIfModified(const gfx::Rect& source_rect,
+                                        gfx::Rect& destination_rect) {
+  if (destination_rect != source_rect) {
+    destination_rect = source_rect;
     dirty_ = true;
   }
 }

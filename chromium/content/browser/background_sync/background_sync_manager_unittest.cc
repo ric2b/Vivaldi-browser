@@ -183,12 +183,12 @@ class BackgroundSyncManagerTest
     // Hang onto the registrations as they need to be "live" when
     // calling BackgroundSyncManager::Register.
     helper_->context_wrapper()->FindReadyRegistrationForId(
-        sw_registration_id_1_, GURL(kScope1).GetOrigin(),
+        sw_registration_id_1_, url::Origin::Create(GURL(kScope1)),
         base::BindOnce(FindServiceWorkerRegistrationCallback,
                        &sw_registration_1_));
 
     helper_->context_wrapper()->FindReadyRegistrationForId(
-        sw_registration_id_2_, GURL(kScope1).GetOrigin(),
+        sw_registration_id_2_, url::Origin::Create(GURL(kScope1)),
         base::BindOnce(FindServiceWorkerRegistrationCallback,
                        &sw_registration_2_));
     base::RunLoop().RunUntilIdle();
@@ -361,14 +361,14 @@ class BackgroundSyncManagerTest
     if (GetBackgroundSyncType(options) ==
         blink::mojom::BackgroundSyncType::ONE_SHOT) {
       test_background_sync_manager()->Register(
-          sw_registration_id, std::move(options),
+          sw_registration_id, options,
           base::BindOnce(&BackgroundSyncManagerTest::
                              StatusAndOneShotSyncRegistrationCallback,
                          base::Unretained(this), &was_called));
       callback_status = &one_shot_sync_callback_status_;
     } else {
       test_background_sync_manager()->Register(
-          sw_registration_id, std::move(options),
+          sw_registration_id, options,
           base::BindOnce(&BackgroundSyncManagerTest::
                              StatusAndPeriodicSyncRegistrationCallback,
                          base::Unretained(this), &was_called));

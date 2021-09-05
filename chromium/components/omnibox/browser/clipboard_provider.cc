@@ -552,8 +552,13 @@ void ClipboardProvider::NewClipboardImageMatch(
 void ClipboardProvider::OnReceiveImage(
     ClipboardImageMatchCallback callback,
     base::Optional<gfx::Image> optional_image) {
-  if (!optional_image)
+  // ImageSkia::ToImageSkia should only be called if the gfx::Image is
+  // non-empty. It is unclear when the clipboard returns a non-optional but
+  // empty image. See crbug.com/1136759 for more details.
+  if (!optional_image || optional_image.value().IsEmpty()) {
     std::move(callback).Run(base::nullopt);
+    return;
+  }
   gfx::ImageSkia image_skia = *optional_image.value().ToImageSkia();
   image_skia.MakeThreadSafe();
   base::ThreadPool::PostTaskAndReplyWithResult(

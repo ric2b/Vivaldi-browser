@@ -30,6 +30,7 @@
 <translation id="1208421848177517699">Transliterație (namaste → નમસ્તે)</translation>
 <translation id="1243314992276662751">Încărcați</translation>
 <translation id="1249250836236328755">Gen</translation>
+<translation id="1276362640455948667">Portugheză cu tastatură S.U.A. internațională</translation>
 <translation id="1278813325885878377">Tastatură maghiară QWERTY</translation>
 <translation id="1293556467332435079">Fișiere</translation>
 <translation id="1297922636971898492">Google Drive nu este disponibil momentan. Încărcarea va reporni automat când Google Drive va putea fi accesat.</translation>
@@ -63,6 +64,7 @@
 <translation id="1572585716423026576">Setează ca imagine de fundal</translation>
 <translation id="158809615184981282">Tastatură feroeză</translation>
 <translation id="1589128298353575783"><ph name="NUMBER_OF_PB" /> PB</translation>
+<translation id="1620510694547887537">Cameră</translation>
 <translation id="1646136617204068573">Tastatură maghiară</translation>
 <translation id="164729547906544836">Tastatură tamilă (itrans)</translation>
 <translation id="164969095109328410">Dispozitiv Chrome</translation>
@@ -70,6 +72,7 @@
 <translation id="1673103856845176271">Fișierul nu a putut fi accesat din motive de securitate.</translation>
 <translation id="169515659049020177">Shift</translation>
 <translation id="1722487484194605434">Se arhivează <ph name="NUMBER_OF_ITEMS" /> elemente...</translation>
+<translation id="1731889557567069540">Elemente copiate: <ph name="NUMBER_OF_ITEMS" />.</translation>
 <translation id="174173592514158117">Afișează toate dosarele Play</translation>
 <translation id="174937106936716857">Numărul total de fișiere</translation>
 <translation id="1775381402323441512">Informații despre fișierul video</translation>
@@ -114,7 +117,9 @@
 <translation id="2208158072373999562">Arhivă zip</translation>
 <translation id="2225536596944493418">Sigur dorești să ștergi <ph name="NUMBER_OF_ITEMS" /> elemente?</translation>
 <translation id="2230062665678605299">Nu s-a putut crea dosarul „<ph name="FOLDER_NAME" />”. <ph name="ERROR_MESSAGE" /></translation>
+<translation id="2275059641601412272">Mutat.</translation>
 <translation id="2278988676849463018">Tastatură kannada (Fonetică)</translation>
+<translation id="2287742181953707290">Portugheză cu tastatură S.U.A. internațională pentru PC</translation>
 <translation id="2288278176040912387">Picup</translation>
 <translation id="2291538123825441971">Se deschid <ph name="NUMBER_OF_FILES" /> fișiere.</translation>
 <translation id="2303301624314357662">Se deschide <ph name="FILE_NAME" />.</translation>
@@ -185,7 +190,6 @@
 <translation id="3064388234319122767">Transliterație (zdravo → здраво)</translation>
 <translation id="3067790092342515856">Fișiere Windows</translation>
 <translation id="3078461028045006476">Permite accesul pentru <ph name="EXTENSION_NAME" /></translation>
-<translation id="3088034400796962477">Transliterație (salam ← سلام)</translation>
 <translation id="3116361045094675131">Tastatură UK</translation>
 <translation id="3126026824346185272">Ctrl</translation>
 <translation id="3144126448740580210">TERMINAT</translation>
@@ -219,6 +223,7 @@
 <translation id="3473378059788601120">S-a copiat în <ph name="FOLDER_NAME" />.</translation>
 <translation id="3475447146579922140">Foaie de calcul Google</translation>
 <translation id="3495304270784461826"><ph name="COUNT" /> erori.</translation>
+<translation id="349603508045926994">Persană, transliterație</translation>
 <translation id="3519867315646775981">Transliterație (shalom ← שלום)</translation>
 <translation id="3522708245912499433">Portugheză</translation>
 <translation id="3524311639100184459">Atenție: aceste fișiere sunt temporare și pot fi șterse automat pentru a elibera spațiu pe disc.  <ph name="BEGIN_LINK" />Află mai multe<ph name="END_LINK" /></translation>
@@ -235,6 +240,7 @@
 <translation id="3620292326130836921">S-a făcut backup pentru tot!</translation>
 <translation id="3626281679859535460">Luminozitate</translation>
 <translation id="3644896802912593514">Lățime</translation>
+<translation id="3645233063072417428">Elemente mutate: <ph name="NUMBER_OF_ITEMS" />.</translation>
 <translation id="3645531960514756307">Anulează fixarea dosarului</translation>
 <translation id="3678559383040232393">Tastatură malteză</translation>
 <translation id="3685122418104378273">Sincronizarea cu Google Drive este dezactivată în mod prestabilit la folosirea datelor mobile.</translation>
@@ -276,6 +282,7 @@
 <translation id="4072248638558688893">Tastatură tamilă (Fonetică)</translation>
 <translation id="4124935795427217608">Unicorn</translation>
 <translation id="4158739975813877944">Deschide playlistul</translation>
+<translation id="4159731583141908892">Mutate: <ph name="FILE_NAME" />.</translation>
 <translation id="418179967336296930">Tastatură rusă fonetică (YaZHert)</translation>
 <translation id="4193154014135846272">Document Google</translation>
 <translation id="4195249722193633765">Instalează aplicația cu Linux (Beta)</translation>
@@ -289,6 +296,7 @@
 <translation id="4298972503445160211">Tastatură daneză</translation>
 <translation id="4299729908419173967">Braziliană</translation>
 <translation id="4309915981827077375">Informații generale</translation>
+<translation id="4315949787858895817">Neerlandeză (Belgia)</translation>
 <translation id="4326192123064055915">Cafea</translation>
 <translation id="4336032328163998280">Operația de copiere nu a reușit. <ph name="ERROR_MESSAGE" /></translation>
 <translation id="4364327530094270451">Pepene galben</translation>
@@ -300,7 +308,6 @@
 <translation id="4477219268485577442">Bulgară fonetică</translation>
 <translation id="4479812471636796472">Tastatură S.U.A. Dvorak</translation>
 <translation id="4481711095103932593">Windows are acces la acest dosar</translation>
-<translation id="4487088045714738411">Tastatură bulgară</translation>
 <translation id="4522570452068850558">Detalii</translation>
 <translation id="4542387084127299777">Nu se poate deschide „<ph name="PATH" />”</translation>
 <translation id="4552678318981539154">Cumpărați mai mult spațiu de stocare</translation>
@@ -311,6 +318,7 @@
 <translation id="4582497162516204941">Instalează cu Linux (Beta)</translation>
 <translation id="4594543368593301662">Se afișează rezultate pentru <ph name="SEARCH_TERM" />.</translation>
 <translation id="4603392156942865207">Se copiază <ph name="FILE_NAME" /> în <ph name="FOLDER_NAME" /></translation>
+<translation id="4627439232948440198">Sanscrită</translation>
 <translation id="4631887759990505102">Artist</translation>
 <translation id="4656293982926141856">Acest computer</translation>
 <translation id="4669606053856530811">Membrii „<ph name="SOURCE_NAME" />” vor pierde accesul, exceptând cazul în care li se permite accesul la aceste articole.</translation>
@@ -336,6 +344,7 @@
 <translation id="4804827417948292437">Avocado</translation>
 <translation id="4823651846660089135">Dispozitivul este numai în citire</translation>
 <translation id="4839847978919684242"><ph name="SELCTED_FILES_COUNT" /> elemente selectate</translation>
+<translation id="4849981557599196363">Germană (Belgia)</translation>
 <translation id="4850886885716139402">Afișează</translation>
 <translation id="485316830061041779">Germană</translation>
 <translation id="4867079195717347957">Dă clic pentru a sorta coloana în ordine descrescătoare.</translation>
@@ -361,6 +370,7 @@
 <translation id="5010406651457630570">Computere</translation>
 <translation id="5011233892417813670">Chromebook</translation>
 <translation id="5024856940085636730">O operațiune durează mai mult decât ar trebui. Dorești să o anulezi?</translation>
+<translation id="5026887030745057099">Hindi</translation>
 <translation id="5036159836254554629">Gestionează permiterea accesului Parallels Desktop</translation>
 <translation id="5038625366300922036">Mai multe detalii...</translation>
 <translation id="5061708541166515394">Contrast</translation>
@@ -371,6 +381,7 @@
 <translation id="5098629044894065541">Ebraică</translation>
 <translation id="5123433949759960244">Baschet</translation>
 <translation id="5129662217315786329">Poloneză</translation>
+<translation id="5132435854979302863">Filipineză</translation>
 <translation id="5144820558584035333">Hangul setul 3 (390)</translation>
 <translation id="5145331109270917438">Data modificării</translation>
 <translation id="515594325917491223">Șah</translation>
@@ -395,7 +406,9 @@
     Indiferent de ceea ce se întâmplă cu dispozitivul, fișierele sunt stocate în siguranță în Google Drive.<ph name="MARKUP_6" />
     <ph name="MARKUP_7" />Trimite și creează fișiere. Colaborează<ph name="MARKUP_8" />
     cu alte persoane la realizarea fișierelor. Totul într-un singur loc.<ph name="MARKUP_9" /></translation>
+<translation id="5274350207900771082">Copiat.</translation>
 <translation id="5275973617553375938">Fișiere recuperate din Google Drive</translation>
+<translation id="5283140566205748520">Franceză (Belgia)</translation>
 <translation id="5288481194217812690"><ph name="FILENAME" /></translation>
 <translation id="5317780077021120954">Salvează</translation>
 <translation id="5318819489018851358">Trimite cu Linux</translation>
@@ -412,16 +425,17 @@
 <translation id="5418923334382419584">Tastatură birmană</translation>
 <translation id="5428105026674456456">Spaniolă</translation>
 <translation id="5438282218546237410">Nu există rezultate pentru <ph name="SEARCH_TERM" />.</translation>
+<translation id="5449551289610225147">Parolă nevalidă</translation>
 <translation id="5464696796438641524">Tastatură poloneză</translation>
 <translation id="5465122519792752163">Tastatură nepaleză (InScript)</translation>
 <translation id="5469868506864199649">Italiană</translation>
+<translation id="5484429245813572665">Indoneziană</translation>
 <translation id="5494920125229734069">Selectează-le pe toate</translation>
 <translation id="5500122897333236901">Islandeză</translation>
 <translation id="5508696409934741614">Puncte</translation>
 <translation id="5522908512596376669">Lista de fișiere s-a modificat la afișare listă.</translation>
 <translation id="5524517123096967210">Fișierul nu a putut fi citit.</translation>
 <translation id="5533102081734025921">Imagine <ph name="IMAGE_TYPE" /></translation>
-<translation id="5533555070048896610">Transliterație (namaste → नमस्ते)</translation>
 <translation id="5534520101572674276">Se calculează dimensiunea</translation>
 <translation id="5583640892426849032">Backspace</translation>
 <translation id="5605830556594064952">S.U.A. Dvorak</translation>
@@ -593,6 +607,7 @@
 <translation id="751507702149411736">Belarusă</translation>
 <translation id="7544853251252956727">Redă aleatoriu</translation>
 <translation id="7547811415869834682">Neerlandeză</translation>
+<translation id="7551643184018910560">Fixați în raft</translation>
 <translation id="7576032389798113292">6x4</translation>
 <translation id="7589661784326793847">Așteptați puțin</translation>
 <translation id="7603724359189955920">Grile</translation>
@@ -601,8 +616,10 @@
 <translation id="7649070708921625228">Ajutor</translation>
 <translation id="7654209398114106148">Se mută <ph name="NUMBER_OF_ITEMS" /> elemente…</translation>
 <translation id="7658239707568436148">Anulează</translation>
+<translation id="7693909743393669729">Formatarea unității va șterge toate datele stocate pe unitate și va elimina toate partițiile existente, inclusiv partițiile care nu sunt vizibile. Această acțiune nu poate fi anulată.</translation>
 <translation id="7695430100978772476">Nu s-a putut formata <ph name="DRIVE_NAME" /></translation>
 <translation id="770015031906360009">Greacă</translation>
+<translation id="7705251383879779343">Copiate: <ph name="FILE_NAME" />.</translation>
 <translation id="7706319470528945664">Tastatură portugheză</translation>
 <translation id="7711920809702896782">Informații despre fișierul imagine</translation>
 <translation id="7724603315864178912">Decupează</translation>
@@ -632,6 +649,7 @@
 <translation id="78946041517601018">Drive-uri în comun</translation>
 <translation id="7896906914454843592">Tastatură S.U.A. extinsă</translation>
 <translation id="7898607018410277265">Tastatură gujarati (Fonetică nouă)</translation>
+<translation id="7908793776359722643">Formatarea partiției va șterge toate datele stocate pe partiție. Această acțiune nu poate fi anulată.</translation>
 <translation id="7917972308273378936">Tastatură lituaniană</translation>
 <translation id="7925686952655276919">Nu utilizați date mobile pentru sincronizare</translation>
 <translation id="7928710562641958568">Scoateți dispozitivul</translation>
@@ -676,7 +694,9 @@
 <translation id="8299269255470343364">Japoneză</translation>
 <translation id="8312871300878166382">Inserați în dosar</translation>
 <translation id="8329978297633540474">Text simplu</translation>
+<translation id="8335587457941836791">Anulați fixarea din raft</translation>
 <translation id="8336153091935557858">Ieri, la <ph name="YESTERDAY_DAYTIME" /></translation>
+<translation id="8336524887811696057">Nepaleză, transliterație</translation>
 <translation id="8336579025507394412">Tastatură islandeză</translation>
 <translation id="8342318071240498787">Un fișier sau un director cu același nume există deja.</translation>
 <translation id="8382450452152102026">În <ph name="FOLDER_NAME" /></translation>
@@ -702,12 +722,14 @@
 <translation id="8600173386174225982">Lista de fișiere s-a modificat la vizualizare cu miniaturi.</translation>
 <translation id="8601932370724196034">Fișier imagine Crostini</translation>
 <translation id="8669949407341943408">Se mută...</translation>
+<translation id="8694836330346852143">Urdu</translation>
 <translation id="8698464937041809063">Desen Google</translation>
 <translation id="8714406895390098252">Bicicletă</translation>
 <translation id="8719721339511222681">S-a selectat <ph name="ENTRY_NAME" />.</translation>
 <translation id="8722421161699219904">Tastatură S.U.A. internațională</translation>
 <translation id="872537912056138402">Croată</translation>
 <translation id="874420130893181774">Metoda de introducere a textului Pinyin pentru chineză tradițională</translation>
+<translation id="8770002329960263418">Neerlandeză (Țările de Jos) cu tastatură S.U.A. internațională pentru PC</translation>
 <translation id="8775404590947523323">Editările dvs. sunt salvate în mod automat.<ph name="BREAKS" />Pentru a păstra o copie a imaginii originale, debifați „Suprascrieți fișierul original”</translation>
 <translation id="8803496343472038847">Tastatură rusă fonetică</translation>
 <translation id="8808686172382650546">Pisică</translation>
@@ -718,6 +740,7 @@
 <translation id="8900820606136623064">Maghiară</translation>
 <translation id="8901822611024316615">Tastatură QWERTY cehă</translation>
 <translation id="8919081441417203123">Daneză</translation>
+<translation id="8941776146379310519">Malaieză</translation>
 <translation id="8960999352790021682">Tastatură bengaleză (Fonetică)</translation>
 <translation id="8965697826696209160">Nu există spațiu suficient.</translation>
 <translation id="9017798300203431059">Rusă fonetică</translation>

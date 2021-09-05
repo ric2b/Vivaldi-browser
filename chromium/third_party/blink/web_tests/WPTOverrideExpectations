@@ -176,9 +176,6 @@ external/wpt/content-security-policy/reporting-api/reporting-api-sends-reports-o
 external/wpt/content-security-policy/reporting-api/reporting-api-works-on-frame-src.https.sub.html [ Pass ] # wpt_subtest_failure
 external/wpt/content-security-policy/script-src/script-src-strict_dynamic_hashes.html [ Failure ]
 external/wpt/content-security-policy/securitypolicyviolation/img-src-redirect-upgrade-reporting.https.html [ Timeout ] # wpt_subtest_failure
-external/wpt/content-security-policy/securitypolicyviolation/inside-dedicated-worker.html [ Timeout ] # wpt_subtest_failure
-external/wpt/content-security-policy/securitypolicyviolation/inside-service-worker.https.html [ Timeout ] # wpt_subtest_failure
-external/wpt/content-security-policy/securitypolicyviolation/inside-shared-worker.html [ Timeout ] # wpt_subtest_failure
 external/wpt/content-security-policy/securitypolicyviolation/securitypolicyviolation-block-cross-origin-image.sub.html [ Pass ] # wpt_subtest_failure
 external/wpt/content-security-policy/securitypolicyviolation/targeting.html [ Timeout ] # wpt_subtest_failure
 external/wpt/content-security-policy/worker-src/service-none.https.sub.html [ Pass Failure ]
@@ -946,11 +943,6 @@ external/wpt/orientation-sensor/AbsoluteOrientationSensor.https.html [ Pass ] # 
 external/wpt/orientation-sensor/RelativeOrientationSensor-iframe-access.https.html [ Pass ] # wpt_subtest_failure
 external/wpt/orientation-sensor/RelativeOrientationSensor.https.html [ Pass ] # wpt_subtest_failure
 external/wpt/paint-timing/sibling-painting-first-image.html [ Failure Pass ] # wpt_subtest_failure
-external/wpt/payment-request/payment-is-showing.https.html [ Failure ] # wpt_subtest_failure
-external/wpt/payment-request/payment-request-canmakepayment-method-protection.https.html [ Pass ] # wpt_subtest_failure
-external/wpt/payment-request/payment-request-canmakepayment-method.https.html [ Failure ]
-external/wpt/payment-request/payment-request-hasenrolledinstrument-method.tentative.https.html [ Failure ] # wpt_subtest_failure
-external/wpt/payment-request/payment-request-show-method.https.html [ Failure ]
 external/wpt/picture-in-picture/css-selector.html [ Pass ] # wpt_subtest_failure
 external/wpt/picture-in-picture/disable-picture-in-picture.html [ Pass ] # wpt_subtest_failure
 external/wpt/picture-in-picture/enter-picture-in-picture.html [ Pass ] # wpt_subtest_failure
@@ -1446,18 +1438,6 @@ external/wpt/webaudio/the-audio-api/the-audioworklet-interface/suspended-context
 external/wpt/webaudio/the-audio-api/the-mediaelementaudiosourcenode-interface/mediaElementAudioSourceToScriptProcessorTest.html [ Pass Failure ]
 external/wpt/webaudio/the-audio-api/the-mediastreamaudiosourcenode-interface/mediastreamaudiosourcenode-routing.html [ Pass Failure ]
 external/wpt/webaudio/the-audio-api/the-offlineaudiocontext-interface/offlineaudiocontext-detached-execution-context.tentative.html [ Failure ]
-external/wpt/webauthn/createcredential-badargs-authnrselection.https.html [ Failure ]
-external/wpt/webauthn/createcredential-excludecredentials.https.html [ Failure ]
-external/wpt/webauthn/createcredential-extensions.https.html [ Failure Timeout ]
-external/wpt/webauthn/createcredential-passing.https.html [ Failure ]
-external/wpt/webauthn/createcredential-pubkeycredparams.https.html [ Failure ]
-external/wpt/webauthn/createcredential-timeout.https.html [ Failure Pass ]
-external/wpt/webauthn/getcredential-badargs-rpid.https.html [ Failure ]
-external/wpt/webauthn/getcredential-badargs-userverification.https.html [ Failure ]
-external/wpt/webauthn/getcredential-extensions.https.html [ Failure ]
-external/wpt/webauthn/getcredential-passing.https.html [ Failure ]
-external/wpt/webauthn/getcredential-timeout.https.html [ Failure ]
-external/wpt/webauthn/webauthn-testdriver-basic.https.html [ Failure ]
 external/wpt/webmessaging/broadcastchannel/sandbox.html [ Failure Pass ] # wpt_subtest_failure
 external/wpt/webmessaging/with-options/broken-origin.html [ Failure Pass ] # wpt_subtest_failure
 external/wpt/webmessaging/with-ports/001.html [ Failure Pass ] # wpt_subtest_failure

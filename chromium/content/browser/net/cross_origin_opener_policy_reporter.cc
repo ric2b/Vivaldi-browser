@@ -5,9 +5,9 @@
 #include "content/browser/net/cross_origin_opener_policy_reporter.h"
 
 #include "base/values.h"
-#include "content/browser/frame_host/frame_tree_node.h"
-#include "content/browser/frame_host/render_frame_host_impl.h"
-#include "content/browser/frame_host/render_frame_proxy_host.h"
+#include "content/browser/renderer_host/frame_tree_node.h"
+#include "content/browser/renderer_host/render_frame_host_impl.h"
+#include "content/browser/renderer_host/render_frame_proxy_host.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/site_instance.h"
 #include "content/public/browser/storage_partition.h"
@@ -24,13 +24,17 @@ namespace {
 constexpr char kColumnNumber[] = "columnNumber";
 constexpr char kDisposition[] = "disposition";
 constexpr char kEffectivePolicy[] = "effectivePolicy";
+constexpr char kInitialPopupURL[] = "initialPopupURL";
 constexpr char kLineNumber[] = "lineNumber";
 constexpr char kNextURL[] = "nextResponseURL";
+constexpr char kOpeneeURL[] = "openeeURL";
+constexpr char kOpenerURL[] = "openerURL";
+constexpr char kOtherDocumentURL[] = "otherDocumentURL";
 constexpr char kPreviousURL[] = "previousResponseURL";
 constexpr char kProperty[] = "property";
 constexpr char kReferrer[] = "referrer";
 constexpr char kSourceFile[] = "sourceFile";
-constexpr char kViolationType[] = "type";
+constexpr char kType[] = "type";
 
 // Report attribute values:
 constexpr char kDispositionEnforce[] = "enforce";
@@ -51,25 +55,9 @@ std::string ToString(network::mojom::CrossOriginOpenerPolicyValue coop_value) {
   }
 }
 
-const char* ToString(network::mojom::CoopAccessReportType report_type) {
-  switch (report_type) {
-    case network::mojom::CoopAccessReportType::kAccessFromCoopPageToOpener:
-      return "access-from-coop-page-to-opener";
-    case network::mojom::CoopAccessReportType::kAccessFromCoopPageToOpenee:
-      return "access-from-coop-page-to-openee";
-    case network::mojom::CoopAccessReportType::kAccessFromCoopPageToOther:
-      return "access-from-coop-page-to-other";
-    case network::mojom::CoopAccessReportType::kAccessToCoopPageFromOpener:
-      return "access-to-coop-page-from-opener";
-    case network::mojom::CoopAccessReportType::kAccessToCoopPageFromOpenee:
-      return "access-to-coop-page-from-openee";
-    case network::mojom::CoopAccessReportType::kAccessToCoopPageFromOther:
-      return "access-to-coop-page-from-other";
-  }
-}
-
-base::UnguessableToken GetFrameToken(FrameTreeNode* frame,
-                                     SiteInstance* site_instance) {
+base::Optional<base::UnguessableToken> GetFrameToken(
+    FrameTreeNode* frame,
+    SiteInstance* site_instance) {
   RenderFrameHostImpl* rfh = frame->current_frame_host();
   if (rfh->GetSiteInstance() == site_instance)
     return rfh->GetFrameToken();
@@ -79,7 +67,7 @@ base::UnguessableToken GetFrameToken(FrameTreeNode* frame,
   if (proxy)
     return proxy->GetFrameToken();
 
-  return base::UnguessableToken::Null();
+  return base::nullopt;
 }
 
 // Find all the related windows that might try to access the new document in
@@ -113,22 +101,56 @@ FrameTreeNode* TopLevelOpener(FrameTreeNode* frame) {
   return opener ? opener->frame_tree()->root() : nullptr;
 }
 
+// Remove sensitive data from URL used in reports.
+std::string SanitizedURL(const GURL& url) {
+  // Strip username, password and ref fragment from the URL.
+  // Keep only the valid http/https ones.
+  //
+  // Note: This is the exact same operation used in
+  // ReportingServiceImpl::QueueReport() for the |url|.
+  return url.GetAsReferrer().spec();
+}
+
+class Receiver : public network::mojom::CrossOriginOpenerPolicyReporter {
+ public:
+  Receiver(content::CrossOriginOpenerPolicyReporter* reporter,
+           std::string initial_popup_url)
+      : reporter_(reporter), initial_popup_url_(initial_popup_url) {}
+  ~Receiver() final = default;
+  Receiver(const Receiver&) = delete;
+  Receiver& operator=(const Receiver&) = delete;
+
+ private:
+  void QueueAccessReport(network::mojom::CoopAccessReportType report_type,
+                         const std::string& property,
+                         network::mojom::SourceLocationPtr source_location,
+                         const std::string& reported_window_url) final {
+    reporter_->QueueAccessReport(report_type, property,
+                                 std::move(source_location),
+                                 reported_window_url, initial_popup_url_);
+  }
+
+  // |reporter_| is always valid, because it owns |this|.
+  const content::CrossOriginOpenerPolicyReporter* reporter_;
+  const std::string initial_popup_url_;
+};
+
 }  // namespace
 
 CrossOriginOpenerPolicyReporter::CrossOriginOpenerPolicyReporter(
     StoragePartition* storage_partition,
     const GURL& context_url,
+    const GURL& context_referrer_url,
     const network::CrossOriginOpenerPolicy& coop)
     : storage_partition_(storage_partition),
       context_url_(context_url),
-      coop_(coop) {
-}
+      context_referrer_url_(SanitizedURL(context_referrer_url)),
+      coop_(coop) {}
 
 CrossOriginOpenerPolicyReporter::~CrossOriginOpenerPolicyReporter() = default;
 
 void CrossOriginOpenerPolicyReporter::QueueNavigationToCOOPReport(
     const GURL& previous_url,
-    const GURL& referrer_url,
     bool same_origin_with_previous,
     bool is_report_only) {
   const base::Optional<std::string>& endpoint =
@@ -137,22 +159,13 @@ void CrossOriginOpenerPolicyReporter::QueueNavigationToCOOPReport(
   if (!endpoint)
     return;
 
-  url::Replacements<char> replacements;
-  replacements.ClearUsername();
-  replacements.ClearPassword();
-  std::string sanitized_previous_url;
-  if (same_origin_with_previous) {
-    sanitized_previous_url =
-        previous_url.ReplaceComponents(replacements).spec();
-  }
-  std::string sanitized_referrer_url =
-      referrer_url.ReplaceComponents(replacements).spec();
   base::DictionaryValue body;
   body.SetString(kDisposition,
                  is_report_only ? kDispositionReporting : kDispositionEnforce);
-  body.SetString(kPreviousURL, sanitized_previous_url);
-  body.SetString(kReferrer, sanitized_referrer_url);
-  body.SetString(kViolationType, kTypeToResponse);
+  body.SetString(kPreviousURL,
+                 same_origin_with_previous ? SanitizedURL(previous_url) : "");
+  body.SetString(kReferrer, context_referrer_url_);
+  body.SetString(kType, kTypeToResponse);
   QueueNavigationReport(std::move(body), *endpoint, is_report_only);
 }
 
@@ -167,23 +180,21 @@ void CrossOriginOpenerPolicyReporter::QueueNavigationAwayFromCOOPReport(
   if (!endpoint)
     return;
 
-  url::Replacements<char> replacements;
-  replacements.ClearUsername();
-  replacements.ClearPassword();
   std::string sanitized_next_url;
-  if (is_current_source || same_origin_with_next) {
-    sanitized_next_url = next_url.ReplaceComponents(replacements).spec();
-  }
+  if (is_current_source || same_origin_with_next)
+    sanitized_next_url = SanitizedURL(next_url);
   base::DictionaryValue body;
   body.SetString(kNextURL, sanitized_next_url);
-  body.SetString(kViolationType, kTypeFromResponse);
+  body.SetString(kType, kTypeFromResponse);
   QueueNavigationReport(std::move(body), *endpoint, is_report_only);
 }
 
 void CrossOriginOpenerPolicyReporter::QueueAccessReport(
     network::mojom::CoopAccessReportType report_type,
     const std::string& property,
-    network::mojom::SourceLocationPtr source_location) {
+    network::mojom::SourceLocationPtr source_location,
+    const std::string& reported_window_url,
+    const std::string& initial_popup_url) const {
   // Cross-Origin-Opener-Policy-Report-Only is not required to provide
   // endpoints.
   if (!coop_.report_only_reporting_endpoint)
@@ -195,26 +206,42 @@ void CrossOriginOpenerPolicyReporter::QueueAccessReport(
       network::features::kCrossOriginOpenerPolicyAccessReporting));
 
   base::DictionaryValue body;
-  body.SetStringPath(kViolationType, ToString(report_type));
+  body.SetStringPath(kType, network::CoopAccessReportTypeToString(report_type));
   body.SetStringPath(kDisposition, kDispositionReporting);
   body.SetStringPath(kEffectivePolicy,
                      ToString(coop_.report_only_value));
   body.SetStringPath(kProperty, property);
-  // TODO(arthursonzogni): Fill "blocked-window-url".
   if (network::IsAccessFromCoopPage(report_type) &&
       source_location->url != "") {
     body.SetStringPath(kSourceFile, source_location->url);
     body.SetIntPath(kLineNumber, source_location->line);
     body.SetIntPath(kColumnNumber, source_location->column);
   }
+
+  switch (report_type) {
+    // Reporter is the openee:
+    case network::mojom::CoopAccessReportType::kAccessFromCoopPageToOpener:
+    case network::mojom::CoopAccessReportType::kAccessToCoopPageFromOpener:
+      body.SetStringPath(kOpenerURL, reported_window_url);
+      body.SetStringPath(kReferrer, context_referrer_url_);
+      break;
+
+    // Reporter is the opener:
+    case network::mojom::CoopAccessReportType::kAccessFromCoopPageToOpenee:
+    case network::mojom::CoopAccessReportType::kAccessToCoopPageFromOpenee:
+      body.SetStringPath(kOpeneeURL, reported_window_url);
+      body.SetStringPath(kInitialPopupURL, initial_popup_url);
+      break;
+
+    // Other:
+    case network::mojom::CoopAccessReportType::kAccessFromCoopPageToOther:
+    case network::mojom::CoopAccessReportType::kAccessToCoopPageFromOther:
+      body.SetStringPath(kOtherDocumentURL, reported_window_url);
+      break;
+  }
+
   storage_partition_->GetNetworkContext()->QueueReport(
       "coop", endpoint, context_url_, base::nullopt, std::move(body));
-}
-
-void CrossOriginOpenerPolicyReporter::Clone(
-    mojo::PendingReceiver<network::mojom::CrossOriginOpenerPolicyReporter>
-        receiver) {
-  receiver_set_.Add(this, std::move(receiver));
 }
 
 // static
@@ -280,16 +307,13 @@ void CrossOriginOpenerPolicyReporter::MonitorAccesses(
   // inside the same SiteInstance. Only one SiteInstance has to be updated.
 
   RenderFrameHostImpl* accessing_rfh = accessing_node->current_frame_host();
+  RenderFrameHostImpl* accessed_rfh = accessed_node->current_frame_host();
   SiteInstance* site_instance = accessing_rfh->GetSiteInstance();
 
-  base::UnguessableToken accessed_window_token =
+  base::Optional<base::UnguessableToken> accessed_window_token =
       GetFrameToken(accessed_node, site_instance);
   if (!accessed_window_token)
     return;
-
-  mojo::PendingRemote<network::mojom::CrossOriginOpenerPolicyReporter>
-      remote_reporter;
-  Clone(remote_reporter.InitWithNewPipeAndPassReceiver());
 
   bool access_from_coop_page =
       this == accessing_node->current_frame_host()->coop_reporter();
@@ -312,8 +336,43 @@ void CrossOriginOpenerPolicyReporter::MonitorAccesses(
       report_type = CoopAccessReportType::kAccessToCoopPageFromOther;
   }
 
+  bool same_origin = accessing_rfh->GetLastCommittedOrigin().IsSameOriginWith(
+      accessed_rfh->GetLastCommittedOrigin());
+  RenderFrameHostImpl* reported_rfh =
+      access_from_coop_page ? accessed_rfh : accessing_rfh;
+  RenderFrameHostImpl* reporting_rfh =
+      access_from_coop_page ? accessing_rfh : accessed_rfh;
+  std::string reported_window_url =
+      same_origin ? SanitizedURL(reported_rfh->GetLastCommittedURL()) : "";
+
+  bool endpoint_defined =
+      coop_.report_only_reporting_endpoint || coop_.reporting_endpoint;
+
+  // If the COOP window is the opener, and the other window's popup creator is
+  // same-origin with the COOP document, the openee' initial popup URL is
+  // reported.
+  std::string reported_initial_popup_url;
+  if (report_type == CoopAccessReportType::kAccessFromCoopPageToOpenee ||
+      report_type == CoopAccessReportType::kAccessToCoopPageFromOpenee) {
+    if (reporting_rfh->GetLastCommittedOrigin().IsSameOriginWith(
+            reported_rfh->frame_tree_node()->popup_creator_origin())) {
+      reported_initial_popup_url =
+          SanitizedURL(reported_rfh->frame_tree_node()->initial_popup_url());
+    }
+  }
+
+  mojo::PendingRemote<network::mojom::CrossOriginOpenerPolicyReporter>
+      remote_reporter;
+  receiver_set_.Add(
+      std::make_unique<Receiver>(this, reported_initial_popup_url),
+      remote_reporter.InitWithNewPipeAndPassReceiver());
+
+  // Warning: Do not send cross-origin sensitive data. They will be read from:
+  // 1) A potentially compromised renderer (the accessing window).
+  // 2) A network server (defined from the reporter).
   accessing_rfh->GetAssociatedLocalMainFrame()->InstallCoopAccessMonitor(
-      report_type, accessed_window_token, std::move(remote_reporter));
+      report_type, *accessed_window_token, std::move(remote_reporter),
+      endpoint_defined, std::move(reported_window_url));
 }
 
 // static
@@ -331,12 +390,8 @@ void CrossOriginOpenerPolicyReporter::QueueNavigationReport(
   body.SetString(
       kEffectivePolicy,
       ToString(is_report_only ? coop_.report_only_value : coop_.value));
-  url::Replacements<char> replacements;
-  replacements.ClearUsername();
-  replacements.ClearPassword();
-  GURL sanitized_context_url = context_url_.ReplaceComponents(replacements);
   storage_partition_->GetNetworkContext()->QueueReport(
-      "coop", endpoint, sanitized_context_url, /*user_agent=*/base::nullopt,
+      "coop", endpoint, context_url_, /*user_agent=*/base::nullopt,
       std::move(body));
 }
 

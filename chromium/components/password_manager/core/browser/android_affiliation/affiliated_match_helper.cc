@@ -11,8 +11,8 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/threading/sequenced_task_runner_handle.h"
-#include "components/autofill/core/common/password_form.h"
 #include "components/password_manager/core/browser/android_affiliation/android_affiliation_service.h"
+#include "components/password_manager/core/browser/password_form.h"
 
 namespace password_manager {
 
@@ -20,10 +20,10 @@ namespace {
 
 // Returns whether or not |form| represents a credential for an Android
 // application, and if so, returns the |facet_uri| of that application.
-bool IsAndroidApplicationCredential(const autofill::PasswordForm& form,
+bool IsAndroidApplicationCredential(const PasswordForm& form,
                                     FacetURI* facet_uri) {
   DCHECK(facet_uri);
-  if (form.scheme != autofill::PasswordForm::Scheme::kHtml)
+  if (form.scheme != PasswordForm::Scheme::kHtml)
     return false;
 
   *facet_uri = FacetURI::FromPotentiallyInvalidSpec(form.signon_realm);
@@ -89,9 +89,10 @@ void AffiliatedMatchHelper::GetAffiliatedWebRealms(
 }
 
 void AffiliatedMatchHelper::InjectAffiliationAndBrandingInformation(
-    std::vector<std::unique_ptr<autofill::PasswordForm>> forms,
+    std::vector<std::unique_ptr<PasswordForm>> forms,
+    AndroidAffiliationService::StrategyOnCacheMiss strategy_on_cache_miss,
     PasswordFormsCallback result_callback) {
-  std::vector<autofill::PasswordForm*> android_credentials;
+  std::vector<PasswordForm*> android_credentials;
   for (const auto& form : forms) {
     if (IsValidAndroidCredential(PasswordStore::FormDigest(*form)))
       android_credentials.push_back(form.get());
@@ -103,7 +104,7 @@ void AffiliatedMatchHelper::InjectAffiliationAndBrandingInformation(
   for (auto* form : android_credentials) {
     affiliation_service_->GetAffiliationsAndBranding(
         FacetURI::FromPotentiallyInvalidSpec(form->signon_realm),
-        AndroidAffiliationService::StrategyOnCacheMiss::FAIL,
+        strategy_on_cache_miss,
         base::BindOnce(&AffiliatedMatchHelper::
                            CompleteInjectAffiliationAndBrandingInformation,
                        weak_ptr_factory_.GetWeakPtr(), base::Unretained(form),
@@ -112,7 +113,7 @@ void AffiliatedMatchHelper::InjectAffiliationAndBrandingInformation(
 }
 
 void AffiliatedMatchHelper::CompleteInjectAffiliationAndBrandingInformation(
-    autofill::PasswordForm* form,
+    PasswordForm* form,
     base::OnceClosure barrier_closure,
     const AffiliatedFacets& results,
     bool success) {
@@ -151,7 +152,7 @@ void AffiliatedMatchHelper::CompleteInjectAffiliationAndBrandingInformation(
 // static
 bool AffiliatedMatchHelper::IsValidAndroidCredential(
     const PasswordStore::FormDigest& form) {
-  return form.scheme == autofill::PasswordForm::Scheme::kHtml &&
+  return form.scheme == PasswordForm::Scheme::kHtml &&
          IsValidAndroidFacetURI(form.signon_realm);
 }
 
@@ -159,7 +160,7 @@ bool AffiliatedMatchHelper::IsValidAndroidCredential(
 bool AffiliatedMatchHelper::IsValidWebCredential(
     const PasswordStore::FormDigest& form) {
   FacetURI facet_uri(FacetURI::FromPotentiallyInvalidSpec(form.signon_realm));
-  return form.scheme == autofill::PasswordForm::Scheme::kHtml &&
+  return form.scheme == PasswordForm::Scheme::kHtml &&
          facet_uri.IsValidWebFacetURI();
 }
 
@@ -232,7 +233,7 @@ void AffiliatedMatchHelper::OnLoginsChanged(
 }
 
 void AffiliatedMatchHelper::OnGetPasswordStoreResults(
-    std::vector<std::unique_ptr<autofill::PasswordForm>> results) {
+    std::vector<std::unique_ptr<PasswordForm>> results) {
   for (const auto& form : results) {
     FacetURI facet_uri;
     if (IsAndroidApplicationCredential(*form, &facet_uri))

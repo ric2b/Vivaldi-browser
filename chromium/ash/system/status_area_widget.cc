@@ -16,10 +16,13 @@
 #include "ash/shell.h"
 #include "ash/system/accessibility/dictation_button_tray.h"
 #include "ash/system/accessibility/select_to_speak_tray.h"
+#include "ash/system/bloom/bloom_tray.h"
 #include "ash/system/holding_space/holding_space_tray.h"
 #include "ash/system/ime_menu/ime_menu_tray.h"
+#include "ash/system/media/media_tray.h"
 #include "ash/system/overview/overview_button_tray.h"
 #include "ash/system/palette/palette_tray.h"
+#include "ash/system/phonehub/phone_hub_tray.h"
 #include "ash/system/session/logout_button_tray.h"
 #include "ash/system/status_area_widget_delegate.h"
 #include "ash/system/tray/status_area_overflow_button_tray.h"
@@ -32,7 +35,10 @@
 #include "base/containers/adapters.h"
 #include "base/i18n/time_formatting.h"
 #include "base/metrics/histogram_macros.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/constants/chromeos_switches.h"
+#include "chromeos/services/assistant/public/cpp/features.h"
+#include "media/base/media_switches.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
 #include "ui/display/display.h"
 
@@ -105,6 +111,11 @@ void StatusAreaWidget::Initialize() {
   virtual_keyboard_tray_ = std::make_unique<VirtualKeyboardTray>(shelf_);
   AddTrayButton(virtual_keyboard_tray_.get());
 
+  if (chromeos::assistant::features::IsBloomEnabled()) {
+    bloom_tray_ = std::make_unique<BloomTray>(shelf_);
+    AddTrayButton(bloom_tray_.get());
+  }
+
   if (features::IsCaptureModeEnabled()) {
     stop_recording_button_tray_ =
         std::make_unique<StopRecordingButtonTray>(shelf_);
@@ -113,6 +124,16 @@ void StatusAreaWidget::Initialize() {
 
   palette_tray_ = std::make_unique<PaletteTray>(shelf_);
   AddTrayButton(palette_tray_.get());
+
+  if (base::FeatureList::IsEnabled(media::kGlobalMediaControlsForChromeOS)) {
+    media_tray_ = std::make_unique<MediaTray>(shelf_);
+    AddTrayButton(media_tray_.get());
+  }
+
+  if (chromeos::features::IsPhoneHubEnabled()) {
+    phone_hub_tray_ = std::make_unique<PhoneHubTray>(shelf_);
+    AddTrayButton(phone_hub_tray_.get());
+  }
 
   unified_system_tray_ = std::make_unique<UnifiedSystemTray>(shelf_);
   AddTrayButton(unified_system_tray_.get());

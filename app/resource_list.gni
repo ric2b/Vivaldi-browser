@@ -165,6 +165,21 @@ ANDROID_VIVALDI_RESOURCE_LIST = [
       string_file_prefix="android_chrome_strings_"
     },
   ],
+  [
+    "//components/permissions/android:permissions_strings_grd",
+    "//vivaldi/app/resources/android-permissions/vivaldi_android_permissions_strings.grd",
+    {
+      have_strings_flag = true
+      translation_dir_setting = "translations"
+      pak_file_locale_prefix="values-"
+      pak_file_prefix="permissions_android_strings"
+      pak_file_extension = "xml"
+      source = "permissions_android_strings.grd"
+      vivaldi_translation_dir_setting = "strings"
+      string_file_prefix="permissions_android_strings_"
+      java_grd_name = true
+    },
+  ],
 ]
 
 if (is_android) {

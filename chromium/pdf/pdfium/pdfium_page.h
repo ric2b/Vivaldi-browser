@@ -10,26 +10,30 @@
 #include <string>
 #include <vector>
 
+#include "base/callback.h"
+#include "base/callback_forward.h"
 #include "base/gtest_prod_util.h"
 #include "base/optional.h"
 #include "base/strings/string16.h"
 #include "pdf/page_orientation.h"
 #include "pdf/pdf_engine.h"
 #include "ppapi/cpp/private/pdf.h"
-#include "ppapi/cpp/rect.h"
 #include "third_party/pdfium/public/cpp/fpdf_scopers.h"
 #include "third_party/pdfium/public/fpdf_doc.h"
 #include "third_party/pdfium/public/fpdf_formfill.h"
 #include "third_party/pdfium/public/fpdf_text.h"
 #include "ui/gfx/geometry/point_f.h"
+#include "ui/gfx/geometry/rect.h"
 
 namespace gfx {
 class Point;
+class RectF;
 }  // namespace gfx
 
 namespace chrome_pdf {
 
 class PDFiumEngine;
+class Thumbnail;
 
 // Wrapper around a page from the document.
 class PDFiumPage {
@@ -59,7 +63,7 @@ class PDFiumPage {
   // Get a unicode character from the page.
   uint32_t GetCharUnicode(int char_index);
   // Get the bounds of a character in page pixels.
-  pp::FloatRect GetCharBounds(int char_index);
+  gfx::RectF GetCharBounds(int char_index);
   // For all the links on the page, get their urls, underlying text ranges and
   // bounding boxes.
   std::vector<PDFEngine::AccessibilityLinkInfo> GetLinkInfo();
@@ -144,28 +148,35 @@ class PDFiumPage {
   // Given a rectangle in page coordinates, computes the range of continuous
   // characters which lie inside that rectangle. Returns false without
   // modifying the out parameters if no character lies inside the rectangle.
-  bool GetUnderlyingTextRangeForRect(const pp::FloatRect& rect,
+  bool GetUnderlyingTextRangeForRect(const gfx::RectF& rect,
                                      int* start_index,
                                      int* char_len);
 
   // Converts from page coordinates to screen coordinates.
-  pp::Rect PageToScreen(const gfx::Point& page_point,
-                        double zoom,
-                        double left,
-                        double top,
-                        double right,
-                        double bottom,
-                        PageOrientation orientation) const;
+  gfx::Rect PageToScreen(const gfx::Point& page_point,
+                         double zoom,
+                         double left,
+                         double top,
+                         double right,
+                         double bottom,
+                         PageOrientation orientation) const;
+
+  // Sets the callbacks for sending the thumbnail.
+  void RequestThumbnail(float device_pixel_ratio,
+                        SendThumbnailCallback send_callback);
+
+  // Generates a page thumbnail accommodating a specific |device_pixel_ratio|.
+  Thumbnail GenerateThumbnail(float device_pixel_ratio);
 
   int index() const { return index_; }
 
-  const pp::Rect& rect() const { return rect_; }
-  void set_rect(const pp::Rect& r) { rect_ = r; }
+  const gfx::Rect& rect() const { return rect_; }
+  void set_rect(const gfx::Rect& r) { rect_ = r; }
 
   // Availability is a one-way transition: A page can become available, but it
   // cannot become unavailable (unless deleted entirely).
   bool available() const { return available_; }
-  void MarkAvailable() { available_ = true; }
+  void MarkAvailable();
 
   void set_calculated_links(bool calculated_links) {
     calculated_links_ = calculated_links;
@@ -208,7 +219,7 @@ class PDFiumPage {
     int32_t start_char_index = -1;
     // Represents the number of characters that the link overlaps with.
     int32_t char_count = 0;
-    std::vector<pp::Rect> bounding_rects;
+    std::vector<gfx::Rect> bounding_rects;
     LinkTarget target;
   };
 
@@ -218,7 +229,7 @@ class PDFiumPage {
     Image(const Image& other);
     ~Image();
 
-    pp::Rect bounding_rect;
+    gfx::Rect bounding_rect;
     // Alt text is available only for tagged PDFs.
     std::string alt_text;
   };
@@ -233,7 +244,7 @@ class PDFiumPage {
     int32_t start_char_index = -1;
     // Number of characters encompassed by this highlight.
     int32_t char_count = 0;
-    pp::Rect bounding_rect;
+    gfx::Rect bounding_rect;
 
     // Color of the highlight in ARGB. Alpha is stored in the first 8 MSBs. RGB
     // follows after it with each using 8 bytes.
@@ -249,7 +260,7 @@ class PDFiumPage {
     FormField(const FormField& other);
     ~FormField();
 
-    pp::Rect bounding_rect;
+    gfx::Rect bounding_rect;
     // Represents the name of form field as defined in the field dictionary.
     std::string name;
     // Represents the flags of form field as defined in the field dictionary.
@@ -371,13 +382,16 @@ class PDFiumPage {
       const std::vector<Highlight>& highlights);
   bool PopulateFormFieldProperties(FPDF_ANNOTATION annot,
                                    FormField* form_field);
+  // Generates and sends the thumbnail using |send_callback|.
+  void GenerateAndSendThumbnail(float device_pixel_ratio,
+                                SendThumbnailCallback send_callback);
 
   PDFiumEngine* engine_;
   ScopedFPDFPage page_;
   ScopedFPDFTextPage text_page_;
   int index_;
   int preventing_unload_count_ = 0;
-  pp::Rect rect_;
+  gfx::Rect rect_;
   bool calculated_links_ = false;
   std::vector<Link> links_;
   bool calculated_images_ = false;
@@ -392,6 +406,7 @@ class PDFiumPage {
   // The set of character indices on which text runs need to be broken for page
   // objects.
   std::set<int> page_object_text_run_breaks_;
+  base::OnceClosure thumbnail_callback_;
   bool available_;
 };
 

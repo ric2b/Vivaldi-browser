@@ -504,10 +504,10 @@ void Navigate(NavigateParams* params) {
     return;
 
   // Trying to open a background tab when in an app browser results in
-  // focusing a regular browser window an opening a tab in the background
+  // focusing a regular browser window and opening a tab in the background
   // of that window. Change the disposition to NEW_FOREGROUND_TAB so that
   // the new tab is focused.
-  if (source_browser && source_browser->deprecated_is_app() &&
+  if (source_browser && source_browser->is_type_app() &&
       params->disposition == WindowOpenDisposition::NEW_BACKGROUND_TAB) {
     params->disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
   }
@@ -694,6 +694,12 @@ void Navigate(NavigateParams* params) {
     // TabStripModel to respect it.
     if (params->tabstrip_index != -1)
       params->tabstrip_add_types |= TabStripModel::ADD_FORCE_INDEX;
+
+    // Maybe notify that an open operation has been done from a gesture.
+    // TODO(crbug.com/1129028): preferably pipe this information through the
+    // TabStripModel instead. See bug for deeper discussion.
+    if (params->user_gesture && source_browser == params->browser)
+      params->browser->window()->LinkOpeningFromGesture(params->disposition);
 
     DCHECK(contents_to_insert);
     // The navigation should insert a new tab into the target Browser.

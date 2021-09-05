@@ -541,8 +541,10 @@ int Label::GetHeightForWidth(int w) const {
   w -= GetInsets().width();
   int height = 0;
   int base_line_height = GetLineHeight();
-  if (!GetMultiLine() || GetText().empty() || w <= 0) {
+  if (!GetMultiLine() || GetText().empty() || w < 0) {
     height = base_line_height;
+  } else if (w == 0) {
+    height = std::max(GetMaxLines(), 1) * base_line_height;
   } else {
     // SetDisplayRect() has a side effect for later calls of GetStringSize().
     // Be careful to invoke |full_text_->SetDisplayRect(gfx::Rect())| to
@@ -570,7 +572,7 @@ View* Label::GetTooltipHandlerForPoint(const gfx::Point& point) {
   return HitTestPoint(point) ? this : nullptr;
 }
 
-bool Label::CanProcessEventsWithinSubtree() const {
+bool Label::GetCanProcessEventsWithinSubtree() const {
   return !!GetRenderTextForSelectionController();
 }
 
@@ -990,7 +992,7 @@ void Label::Init(const base::string16& text,
   SetText(text);
 
   // Only selectable labels will get requests to show the context menu, due to
-  // CanProcessEventsWithinSubtree().
+  // GetCanProcessEventsWithinSubtree().
   BuildContextMenuContents();
   set_context_menu_controller(this);
 
@@ -1132,30 +1134,29 @@ void Label::BuildContextMenuContents() {
                                              IDS_APP_SELECT_ALL);
 }
 
-BEGIN_METADATA(Label)
-METADATA_PARENT_CLASS(View)
-ADD_PROPERTY_METADATA(Label, base::string16, Text)
-ADD_PROPERTY_METADATA(Label, int, TextStyle)
-ADD_PROPERTY_METADATA(Label, bool, AutoColorReadabilityEnabled)
-ADD_PROPERTY_METADATA(Label, SkColor, EnabledColor)
-ADD_PROPERTY_METADATA(Label, gfx::ElideBehavior, ElideBehavior)
-ADD_PROPERTY_METADATA(Label, SkColor, BackgroundColor)
-ADD_PROPERTY_METADATA(Label, SkColor, SelectionTextColor)
-ADD_PROPERTY_METADATA(Label, SkColor, SelectionBackgroundColor)
-ADD_PROPERTY_METADATA(Label, bool, SubpixelRenderingEnabled)
-ADD_PROPERTY_METADATA(Label, gfx::ShadowValues, Shadows)
-ADD_PROPERTY_METADATA(Label, gfx::HorizontalAlignment, HorizontalAlignment)
-ADD_PROPERTY_METADATA(Label, gfx::VerticalAlignment, VerticalAlignment)
-ADD_PROPERTY_METADATA(Label, int, LineHeight)
-ADD_PROPERTY_METADATA(Label, bool, MultiLine)
-ADD_PROPERTY_METADATA(Label, int, MaxLines)
-ADD_PROPERTY_METADATA(Label, bool, Obscured)
-ADD_PROPERTY_METADATA(Label, bool, AllowCharacterBreak)
-ADD_PROPERTY_METADATA(Label, base::string16, TooltipText)
-ADD_PROPERTY_METADATA(Label, bool, HandlesTooltips)
-ADD_PROPERTY_METADATA(Label, bool, CollapseWhenHidden)
-ADD_PROPERTY_METADATA(Label, int, MaximumWidth)
-ADD_READONLY_PROPERTY_METADATA(Label, int, TextContext)
-END_METADATA()
+BEGIN_METADATA(Label, View)
+ADD_PROPERTY_METADATA(base::string16, Text)
+ADD_PROPERTY_METADATA(int, TextStyle)
+ADD_PROPERTY_METADATA(bool, AutoColorReadabilityEnabled)
+ADD_PROPERTY_METADATA(SkColor, EnabledColor)
+ADD_PROPERTY_METADATA(gfx::ElideBehavior, ElideBehavior)
+ADD_PROPERTY_METADATA(SkColor, BackgroundColor)
+ADD_PROPERTY_METADATA(SkColor, SelectionTextColor)
+ADD_PROPERTY_METADATA(SkColor, SelectionBackgroundColor)
+ADD_PROPERTY_METADATA(bool, SubpixelRenderingEnabled)
+ADD_PROPERTY_METADATA(gfx::ShadowValues, Shadows)
+ADD_PROPERTY_METADATA(gfx::HorizontalAlignment, HorizontalAlignment)
+ADD_PROPERTY_METADATA(gfx::VerticalAlignment, VerticalAlignment)
+ADD_PROPERTY_METADATA(int, LineHeight)
+ADD_PROPERTY_METADATA(bool, MultiLine)
+ADD_PROPERTY_METADATA(int, MaxLines)
+ADD_PROPERTY_METADATA(bool, Obscured)
+ADD_PROPERTY_METADATA(bool, AllowCharacterBreak)
+ADD_PROPERTY_METADATA(base::string16, TooltipText)
+ADD_PROPERTY_METADATA(bool, HandlesTooltips)
+ADD_PROPERTY_METADATA(bool, CollapseWhenHidden)
+ADD_PROPERTY_METADATA(int, MaximumWidth)
+ADD_READONLY_PROPERTY_METADATA(int, TextContext)
+END_METADATA
 
 }  // namespace views

@@ -210,9 +210,6 @@ bool ChromeExtensionsRendererClient::AllowPopup() {
       return true;
     case extensions::Feature::BLESSED_WEB_PAGE_CONTEXT:
       return !current_context->web_frame()->Parent();
-    default:
-      NOTREACHED();
-      return false;
   }
 }
 
@@ -335,7 +332,7 @@ ChromeExtensionsRendererClient::GetExtensionDispatcherForTest() {
 }
 
 // static
-content::BrowserPluginDelegate*
+guest_view::GuestViewContainer*
 ChromeExtensionsRendererClient::CreateBrowserPluginDelegate(
     content::RenderFrame* render_frame,
     const content::WebPluginInfo& info,

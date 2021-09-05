@@ -7,9 +7,10 @@
 
 #include <bitset>
 
+#include "base/allocator/partition_allocator/address_pool_manager_types.h"
 #include "base/allocator/partition_allocator/partition_alloc_constants.h"
 #include "base/atomicops.h"
-#include "base/no_destructor.h"
+#include "base/lazy_instance.h"
 #include "base/synchronization/lock.h"
 #include "base/thread_annotations.h"
 #include "build/build_config.h"
@@ -18,16 +19,8 @@ namespace base {
 
 namespace internal {
 
-using pool_handle = unsigned;
-
 // The feature is not applicable to 32-bit address space.
-// ARCH_CPU_64_BITS implies 64-bit instruction set, but not necessarily 64-bit
-// address space. The only known case where address space is 32-bit is NaCl, so
-// eliminate it explicitly. static_assert below ensures that other won't slip
-// through.
-#if defined(ARCH_CPU_64_BITS) && !defined(OS_NACL)
-
-static_assert(sizeof(size_t) >= 8, "Nee more than 32-bit address space");
+#if defined(PA_HAS_64_BITS_POINTERS)
 
 // AddressPoolManager takes a reserved virtual address space and manages address
 // space allocation.
@@ -88,11 +81,11 @@ class BASE_EXPORT AddressPoolManager {
   static constexpr size_t kNumPools = 2;
   Pool pools_[kNumPools];
 
-  friend class NoDestructor<AddressPoolManager>;
+  friend struct base::LazyInstanceTraitsBase<AddressPoolManager>;
   DISALLOW_COPY_AND_ASSIGN(AddressPoolManager);
 };
 
-#endif  // defined(ARCH_CPU_64_BITS) && !defined(OS_NACL)
+#endif  // defined(PA_HAS_64_BITS_POINTERS)
 
 }  // namespace internal
 }  // namespace base

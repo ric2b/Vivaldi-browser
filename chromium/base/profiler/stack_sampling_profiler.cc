@@ -18,6 +18,7 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/singleton.h"
+#include "base/profiler/profiler_buildflags.h"
 #include "base/profiler/stack_buffer.h"
 #include "base/profiler/stack_sampler.h"
 #include "base/profiler/unwinder.h"
@@ -578,6 +579,8 @@ void StackSamplingProfiler::SamplingThread::AddCollectionTask(
   const int collection_id = collection->collection_id;
   const TimeDelta initial_delay = collection->params.initial_delay;
 
+  collection->sampler->Initialize();
+
   active_collections_.insert(
       std::make_pair(collection_id, std::move(collection)));
 
@@ -738,9 +741,9 @@ TimeTicks StackSamplingProfiler::TestPeer::GetNextSampleTime(
 }
 
 // static
-// The profiler is currently only implemented for Windows x64 and MacOSX.
-// TODO(https://crbug.com/1004855): enable for Android arm.
-bool StackSamplingProfiler::IsSupported() {
+// The profiler is currently supported for Windows x64, MacOSX x64, and Android
+// ARM32.
+bool StackSamplingProfiler::IsSupportedForCurrentPlatform() {
 #if (defined(OS_WIN) && defined(ARCH_CPU_X86_64)) || \
     (defined(OS_MAC) && defined(ARCH_CPU_X86_64)) || \
     (defined(OS_ANDROID) && BUILDFLAG(ENABLE_ARM_CFI_TABLE))
@@ -772,13 +775,14 @@ StackSamplingProfiler::StackSamplingProfiler(
     SamplingProfilerThreadToken thread_token,
     const SamplingParams& params,
     std::unique_ptr<ProfileBuilder> profile_builder,
-    std::vector<std::unique_ptr<Unwinder>> unwinders,
+    UnwindersFactory core_unwinders_factory,
     RepeatingClosure record_sample_callback,
     StackSamplerTestDelegate* test_delegate)
     : StackSamplingProfiler(params, std::move(profile_builder), nullptr) {
-  sampler_ = StackSampler::Create(
-      thread_token, profile_builder_->GetModuleCache(), std::move(unwinders),
-      std::move(record_sample_callback), test_delegate);
+  sampler_ =
+      StackSampler::Create(thread_token, profile_builder_->GetModuleCache(),
+                           std::move(core_unwinders_factory),
+                           std::move(record_sample_callback), test_delegate);
 }
 
 StackSamplingProfiler::StackSamplingProfiler(

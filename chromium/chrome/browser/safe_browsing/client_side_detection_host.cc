@@ -504,11 +504,11 @@ void ClientSideDetectionHost::PhishingDetectionDone(
       verdict->clear_phash_dimension_size();
     }
 
-    // We only send phishing verdict to the server if the verdict is phishing or
-    // if a SafeBrowsing interstitial was already shown for this site.  E.g., a
-    // phishing interstitial was shown but the user clicked
-    // through.
-    if (verdict->is_phishing() || DidShowSBInterstitial()) {
+    base::UmaHistogramBoolean("SBClientPhishing.LocalModelDetectsPhishing",
+                              verdict->is_phishing());
+
+    // We only send phishing verdict to the server if the verdict is phishing.
+    if (verdict->is_phishing()) {
       if (DidShowSBInterstitial()) {
         browse_info_->unsafe_resource = std::move(unsafe_resource_);
       }
@@ -525,6 +525,8 @@ void ClientSideDetectionHost::PhishingDetectionDone(
 void ClientSideDetectionHost::MaybeShowPhishingWarning(GURL phishing_url,
                                                        bool is_phishing) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  base::UmaHistogramBoolean("SBClientPhishing.ServerModelDetectsPhishing",
+                            is_phishing);
   if (is_phishing) {
     DCHECK(web_contents());
     if (ui_manager_.get()) {
@@ -567,8 +569,7 @@ void ClientSideDetectionHost::FeatureExtractionDone(
       Profile::FromBrowserContext(web_contents()->GetBrowserContext());
   // Send ping even if the browser feature extraction failed.
   csd_service_->SendClientReportPhishingRequest(
-      request.release(),  // The service takes ownership of the request object.
-      IsExtendedReportingEnabled(*profile->GetPrefs()),
+      std::move(request), IsExtendedReportingEnabled(*profile->GetPrefs()),
       IsEnhancedProtectionEnabled(*profile->GetPrefs()), callback);
 }
 

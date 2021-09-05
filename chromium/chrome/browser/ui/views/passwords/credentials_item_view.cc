@@ -64,7 +64,7 @@ CredentialsItemView::CredentialsItemView(
     int upper_text_style,
     int lower_text_style)
     : Button(button_listener), form_(form) {
-  set_notify_enter_exit_on_child(true);
+  SetNotifyEnterExitOnChild(true);
   views::BoxLayout* layout =
       SetLayoutManager(std::make_unique<views::BoxLayout>(
           views::BoxLayout::Orientation::kHorizontal));
@@ -77,7 +77,7 @@ CredentialsItemView::CredentialsItemView(
   // the parent can receive the events instead.
   auto image_view = std::make_unique<CircularImageView>();
   image_view_ = image_view.get();
-  image_view_->set_can_process_events_within_subtree(false);
+  image_view_->SetCanProcessEventsWithinSubtree(false);
   gfx::Image image = ui::ResourceBundle::GetSharedInstance().GetImageNamed(
       IDR_PROFILE_AVATAR_PLACEHOLDER_LARGE);
   DCHECK(image.Width() >= kAvatarImageSize &&
@@ -93,7 +93,7 @@ CredentialsItemView::CredentialsItemView(
 
   // TODO(tapted): Check these (and the STYLE_ values below) against the spec on
   // http://crbug.com/651681.
-  const int kLabelContext = CONTEXT_BODY_TEXT_SMALL;
+  const int kLabelContext = CONTEXT_DIALOG_BODY_TEXT_SMALL;
 
   views::View* text_container = nullptr;
   if (!upper_text.empty() || !lower_text.empty()) {
@@ -142,7 +142,7 @@ void CredentialsItemView::SetStoreIndicatorIcon(
       !store_indicator_icon_view_) {
     store_indicator_icon_view_ =
         AddChildView(std::make_unique<views::ImageView>());
-    store_indicator_icon_view_->set_can_process_events_within_subtree(false);
+    store_indicator_icon_view_->SetCanProcessEventsWithinSubtree(false);
     store_indicator_icon_view_->SetImage(gfx::CreateVectorIcon(
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
         kGoogleGLogoIcon,

@@ -63,7 +63,6 @@
 #include "chrome/browser/ui/webui/theme_source.h"
 #include "chrome/browser/upgrade_detector/upgrade_detector.h"
 #include "chrome/browser/web_applications/components/externally_installed_web_app_prefs.h"
-#include "chrome/browser/web_applications/components/web_app_shortcuts_menu.h"
 #include "chrome/common/buildflags.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/crash_keys.h"
@@ -325,9 +324,14 @@ bool ExtensionService::OnExternalExtensionUpdateUrlFound(
           info.extension_id, info.install_parameter, info.update_url,
           info.download_location, info.creation_flags,
           info.mark_acknowledged)) {
-    install_stage_tracker->ReportFailure(
-        info.extension_id,
-        InstallStageTracker::FailureReason::PENDING_ADD_FAILED);
+    // We can reach here if the extension from an equal or higher priority
+    // source is already present in the |pending_extension_list_|. No need to
+    // report the failure in this case.
+    if (!pending_extension_manager()->GetById(info.extension_id)) {
+      install_stage_tracker->ReportFailure(
+          info.extension_id,
+          InstallStageTracker::FailureReason::PENDING_ADD_FAILED);
+    }
     return false;
   }
 
@@ -684,7 +688,7 @@ void ExtensionService::LoadExtensionsFromCommandLineFlag(
       std::string extension_id;
       UnpackedInstaller::Create(this)->LoadFromCommandLine(
           base::FilePath(t.token()), &extension_id, false /*only-allow-apps*/);
-      // Extension id is added to whitelist after its extension is loaded
+      // Extension id is added to allowlist after its extension is loaded
       // because code is executed asynchronously. TODO(michaelpg): Remove this
       // assumption so loading extensions does not have to be asynchronous:
       // crbug.com/708354.
@@ -837,11 +841,6 @@ bool ExtensionService::UninstallExtension(
                                                          reason);
 
   delayed_installs_.Remove(extension->id());
-  if (extension->from_bookmark() &&
-      web_app::ShouldRegisterShortcutsMenuWithOs()) {
-    web_app::UnregisterShortcutsMenuWithOs(extension->id(),
-                                           profile_->GetPath());
-  }
   extension_prefs_->OnExtensionUninstalled(
       extension->id(), extension->location(), external_uninstall);
 
@@ -1443,10 +1442,10 @@ void ExtensionService::AddComponentExtension(const Extension* extension) {
             << extension->version().GetString();
 
     // TODO(crbug.com/696822): If needed, add support for Declarative Net
-    // Request to component extensions and pass the ruleset checksum here.
+    // Request to component extensions and pass the ruleset install prefs here.
     AddNewOrUpdatedExtension(extension, Extension::ENABLED, kInstallFlagNone,
                              syncer::StringOrdinal(), std::string(),
-                             {} /* ruleset_checksums */);
+                             {} /* ruleset_install_prefs */);
     return;
   }
 
@@ -1586,7 +1585,7 @@ void ExtensionService::OnExtensionInstalled(
     const Extension* extension,
     const syncer::StringOrdinal& page_ordinal,
     int install_flags,
-    const declarative_net_request::RulesetChecksums& ruleset_checksums) {
+    const declarative_net_request::RulesetInstallPrefs& ruleset_install_prefs) {
   CHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
 
   const std::string& id = extension->id();
@@ -1690,12 +1689,12 @@ void ExtensionService::OnExtensionInstalled(
     case InstallGate::INSTALL:
       AddNewOrUpdatedExtension(extension, initial_state, install_flags,
                                page_ordinal, install_parameter,
-                               ruleset_checksums);
+                               ruleset_install_prefs);
       return;
     case InstallGate::DELAY:
       extension_prefs_->SetDelayedInstallInfo(
           extension, initial_state, install_flags, delay_reason, page_ordinal,
-          install_parameter, ruleset_checksums);
+          install_parameter, ruleset_install_prefs);
 
       // Transfer ownership of |extension|.
       delayed_installs_.Insert(extension);
@@ -1744,11 +1743,11 @@ void ExtensionService::AddNewOrUpdatedExtension(
     int install_flags,
     const syncer::StringOrdinal& page_ordinal,
     const std::string& install_parameter,
-    const declarative_net_request::RulesetChecksums& ruleset_checksums) {
+    const declarative_net_request::RulesetInstallPrefs& ruleset_install_prefs) {
   CHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
   extension_prefs_->OnExtensionInstalled(extension, initial_state, page_ordinal,
                                          install_flags, install_parameter,
-                                         ruleset_checksums);
+                                         ruleset_install_prefs);
   delayed_installs_.Remove(extension->id());
   if (InstallVerifier::NeedsVerification(*extension))
     InstallVerifier::Get(GetBrowserContext())->VerifyExtension(extension->id());

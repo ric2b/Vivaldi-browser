@@ -8,7 +8,8 @@
 #include <utility>
 
 #include "base/containers/flat_map.h"
-#include "components/viz/common/quads/render_pass.h"
+#include "components/viz/common/quads/aggregated_render_pass.h"
+#include "components/viz/common/quads/compositor_render_pass.h"
 #include "components/viz/common/surfaces/surface_id.h"
 
 namespace viz {
@@ -23,9 +24,9 @@ class RenderPassIdRemapper {
 
   RenderPassIdRemapper& operator=(const RenderPassIdRemapper&) = delete;
 
-  RenderPassId Remap(RenderPassId surface_local_pass_id,
-                     const SurfaceId& surface_id);
-  RenderPassId NextAvailableId();
+  AggregatedRenderPassId Remap(CompositorRenderPassId surface_local_pass_id,
+                               const SurfaceId& surface_id);
+  AggregatedRenderPassId NextAvailableId();
 
   void ClearUnusedMappings();
 
@@ -38,14 +39,14 @@ class RenderPassIdRemapper {
     RenderPassInfo& operator=(const RenderPassInfo& other);
 
     // This is the id the pass is mapped to.
-    RenderPassId id;
+    AggregatedRenderPassId id;
     // This is true if the pass was used in the last aggregated frame.
     bool in_use = true;
   };
 
-  base::flat_map<std::pair<SurfaceId, RenderPassId>, RenderPassInfo>
+  base::flat_map<std::pair<SurfaceId, CompositorRenderPassId>, RenderPassInfo>
       render_pass_allocator_map_;
-  RenderPassId::Generator render_pass_id_generator_;
+  AggregatedRenderPassId::Generator render_pass_id_generator_;
 };
 
 }  // namespace viz

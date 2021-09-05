@@ -12,10 +12,13 @@
 #include "cc/trees/ukm_manager.h"
 #include "mojo/public/cpp/bindings/pending_associated_receiver.h"
 #include "mojo/public/cpp/bindings/pending_associated_remote.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/input/web_input_event_attribution.h"
 #include "third_party/blink/public/common/switches.h"
 #include "third_party/blink/public/common/widget/screen_info.h"
 #include "third_party/blink/public/mojom/input/pointer_lock_context.mojom-blink.h"
+#include "third_party/blink/public/mojom/page/record_content_to_visible_time_request.mojom-blink.h"
+#include "third_party/blink/public/mojom/widget/visual_properties.mojom-blink.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/scheduler/web_render_widget_scheduling_state.h"
 #include "third_party/blink/public/platform/scheduler/web_thread_scheduler.h"
@@ -31,6 +34,7 @@
 #include "third_party/blink/renderer/platform/widget/input/widget_input_handler_manager.h"
 #include "third_party/blink/renderer/platform/widget/widget_base_client.h"
 #include "ui/base/ime/mojom/text_input_state.mojom-blink.h"
+#include "ui/gfx/geometry/dip_util.h"
 #include "ui/gfx/presentation_feedback.h"
 
 #include "app/vivaldi_apptools.h"
@@ -96,11 +100,16 @@ WidgetBase::WidgetBase(
     WidgetBaseClient* client,
     CrossVariantMojoAssociatedRemote<mojom::WidgetHostInterfaceBase>
         widget_host,
-    CrossVariantMojoAssociatedReceiver<mojom::WidgetInterfaceBase> widget)
+    CrossVariantMojoAssociatedReceiver<mojom::WidgetInterfaceBase> widget,
+    bool hidden,
+    bool never_composited)
     : client_(client),
       widget_host_(std::move(widget_host)),
       receiver_(this, std::move(widget)),
-      next_previous_flags_(kInvalidNextPreviousFlagsValue) {
+      next_previous_flags_(kInvalidNextPreviousFlagsValue),
+      use_zoom_for_dsf_(Platform::Current()->IsUseZoomForDSFEnabled()),
+      is_hidden_(hidden),
+      never_composited_(never_composited) {
   if (auto* main_thread_scheduler =
           scheduler::WebThreadScheduler::MainThreadScheduler()) {
     render_widget_scheduling_state_ =
@@ -114,7 +123,6 @@ WidgetBase::~WidgetBase() {
 }
 
 void WidgetBase::InitializeCompositing(
-    bool never_composited,
     scheduler::WebThreadScheduler* main_thread_scheduler,
     cc::TaskGraphRunner* task_graph_runner,
     bool for_child_local_root_frame,
@@ -164,7 +172,7 @@ void WidgetBase::InitializeCompositing(
   // WidgetBaseInputHandler.
   bool uses_input_handler = frame_widget;
   widget_input_handler_manager_ = WidgetInputHandlerManager::Create(
-      weak_ptr_factory_.GetWeakPtr(), never_composited,
+      weak_ptr_factory_.GetWeakPtr(), never_composited_,
       std::move(compositor_input_task_runner), main_thread_scheduler,
       uses_input_handler);
 
@@ -172,6 +180,8 @@ void WidgetBase::InitializeCompositing(
       *base::CommandLine::ForCurrentProcess();
   if (command_line.HasSwitch(switches::kAllowPreCommitInput))
     widget_input_handler_manager_->AllowPreCommitInput();
+
+  UpdateScreenInfo(screen_info);
 }
 
 void WidgetBase::Shutdown(
@@ -335,8 +345,54 @@ void WidgetBase::UpdateVisualProperties(
 void WidgetBase::UpdateScreenRects(const gfx::Rect& widget_screen_rect,
                                    const gfx::Rect& window_screen_rect,
                                    UpdateScreenRectsCallback callback) {
-  client_->UpdateScreenRects(widget_screen_rect, window_screen_rect);
+  if (!client_->UpdateScreenRects(widget_screen_rect, window_screen_rect)) {
+    widget_screen_rect_ = widget_screen_rect;
+    window_screen_rect_ = window_screen_rect;
+  }
   std::move(callback).Run();
+}
+
+void WidgetBase::WasHidden() {
+  // A provisional frame widget will never be hidden since that would require it
+  // to be shown first. A frame must be attached to the frame tree before
+  // changing visibility.
+  DCHECK(!IsForProvisionalFrame());
+
+  TRACE_EVENT0("renderer", "WidgetBase::WasHidden");
+
+  SetHidden(true);
+
+  tab_switch_time_recorder_.TabWasHidden();
+
+  client_->WasHidden();
+}
+
+void WidgetBase::WasShown(base::TimeTicks show_request_timestamp,
+                          bool was_evicted,
+                          mojom::blink::RecordContentToVisibleTimeRequestPtr
+                              record_tab_switch_time_request) {
+  // The frame must be attached to the frame tree (which makes it no longer
+  // provisional) before changing visibility.
+  DCHECK(!IsForProvisionalFrame());
+
+  TRACE_EVENT_WITH_FLOW0("renderer", "WidgetBase::WasShown", this,
+                         TRACE_EVENT_FLAG_FLOW_IN);
+
+  SetHidden(false);
+
+  if (record_tab_switch_time_request) {
+    LayerTreeHost()->RequestPresentationTimeForNextFrame(
+        tab_switch_time_recorder_.TabWasShown(
+            false /* has_saved_frames */,
+            record_tab_switch_time_request->event_start_time,
+            record_tab_switch_time_request->destination_is_loaded,
+            record_tab_switch_time_request->show_reason_tab_switching,
+            record_tab_switch_time_request->show_reason_unoccluded,
+            record_tab_switch_time_request->show_reason_bfcache_restore,
+            show_request_timestamp));
+  }
+
+  client_->WasShown(was_evicted);
 }
 
 void WidgetBase::ApplyViewportChanges(
@@ -362,11 +418,11 @@ void WidgetBase::SendScrollEndEventFromImplSide(
 
 void WidgetBase::OnDeferMainFrameUpdatesChanged(bool defer) {
   // LayerTreeHost::CreateThreaded() will defer main frame updates immediately
-  // until it gets a LocalSurfaceIdAllocation. That's before the
+  // until it gets a LocalSurfaceId. That's before the
   // |widget_input_handler_manager_| is created, so it can be null here.
   // TODO(schenney): To avoid ping-ponging between defer main frame states
   // during initialization, and requiring null checks here, we should probably
-  // pass the LocalSurfaceIdAllocation to the compositor while it is
+  // pass the LocalSurfaceId to the compositor while it is
   // initialized so that it doesn't have to immediately switch into deferred
   // mode without being requested to.
   if (!widget_input_handler_manager_)
@@ -389,10 +445,18 @@ void WidgetBase::DidBeginMainFrame() {
 
 void WidgetBase::RequestNewLayerTreeFrameSink(
     LayerTreeFrameSinkCallback callback) {
+  // For widgets that are never visible, we don't start the compositor, so we
+  // never get a request for a cc::LayerTreeFrameSink.
+  DCHECK(!never_composited_);
+
   client_->RequestNewLayerTreeFrameSink(std::move(callback));
 }
 
 void WidgetBase::DidCommitAndDrawCompositorFrame() {
+  // NOTE: Tests may break if this event is renamed or moved. See
+  // tab_capture_performancetest.cc.
+  TRACE_EVENT0("gpu", "WidgetBase::DidCommitAndDrawCompositorFrame");
+
   client_->DidCommitAndDrawCompositorFrame();
 }
 
@@ -450,15 +514,10 @@ void WidgetBase::WillBeginMainFrame() {
   UpdateTextInputState();
 }
 
-void WidgetBase::SubmitThroughputData(ukm::SourceId source_id,
-                                      int aggregated_percent,
-                                      int impl_percent,
-                                      base::Optional<int> main_percent) {
-  client_->SubmitThroughputData(source_id, aggregated_percent, impl_percent,
-                                main_percent);
-}
-
 void WidgetBase::SetCompositorVisible(bool visible) {
+  if (never_composited_)
+    return;
+
   if (visible)
     was_shown_time_ = base::TimeTicks::Now();
   else
@@ -799,6 +858,29 @@ bool WidgetBase::ShouldUpdateCompositionInfo(const gfx::Range& range,
   return false;
 }
 
+void WidgetBase::SetHidden(bool hidden) {
+  // A provisional frame widget will never be shown or hidden, as the frame must
+  // be attached to the frame tree before changing visibility.
+  DCHECK(!IsForProvisionalFrame());
+
+  if (is_hidden_ == hidden)
+    return;
+
+  // The status has changed.  Tell the RenderThread about it and ensure
+  // throttled acks are released in case frame production ceases.
+  is_hidden_ = hidden;
+
+  if (auto* scheduler_state = RendererWidgetSchedulingState())
+    scheduler_state->SetHidden(hidden);
+
+  // If the renderer was hidden, resolve any pending synthetic gestures so they
+  // aren't blocked waiting for a compositor frame to be generated.
+  if (is_hidden_)
+    FlushInputProcessedCallback();
+
+  SetCompositorVisible(!is_hidden_);
+}
+
 ui::TextInputType WidgetBase::GetTextInputType() {
   return ConvertWebTextInputType(client_->GetTextInputType());
 }
@@ -1043,7 +1125,7 @@ void WidgetBase::RequestMouseLock(
 }
 
 void WidgetBase::UpdateSurfaceAndScreenInfo(
-    const viz::LocalSurfaceIdAllocation& new_local_surface_id_allocation,
+    const viz::LocalSurfaceId& new_local_surface_id,
     const gfx::Rect& compositor_viewport_pixel_rect,
     const ScreenInfo& new_screen_info_param) {
   ScreenInfo new_screen_info = new_screen_info_param;
@@ -1062,7 +1144,7 @@ void WidgetBase::UpdateSurfaceAndScreenInfo(
       screen_info_.orientation_type != new_screen_info.orientation_type;
   ScreenInfo previous_original_screen_info = client_->GetOriginalScreenInfo();
 
-  local_surface_id_allocation_from_parent_ = new_local_surface_id_allocation;
+  local_surface_id_from_parent_ = new_local_surface_id;
   screen_info_ = new_screen_info;
 
   // Note carefully that the DSF specified in |new_screen_info| is not the
@@ -1070,7 +1152,7 @@ void WidgetBase::UpdateSurfaceAndScreenInfo(
   LayerTreeHost()->SetViewportRectAndScale(
       compositor_viewport_pixel_rect,
       client_->GetOriginalScreenInfo().device_scale_factor,
-      local_surface_id_allocation_from_parent_);
+      local_surface_id_from_parent_);
   // The ViewportVisibleRect derives from the LayerTreeView's viewport size,
   // which is set above.
   LayerTreeHost()->SetViewportVisibleRect(client_->ViewportVisibleRect());
@@ -1079,24 +1161,31 @@ void WidgetBase::UpdateSurfaceAndScreenInfo(
   if (orientation_changed)
     client_->OrientationChanged();
 
-  client_->UpdatedSurfaceAndScreen(previous_original_screen_info);
+  client_->DidUpdateSurfaceAndScreen(previous_original_screen_info);
 }
 
 void WidgetBase::UpdateScreenInfo(const ScreenInfo& new_screen_info) {
-  UpdateSurfaceAndScreenInfo(local_surface_id_allocation_from_parent_,
+  UpdateSurfaceAndScreenInfo(local_surface_id_from_parent_,
                              CompositorViewportRect(), new_screen_info);
 }
 
 void WidgetBase::UpdateCompositorViewportAndScreenInfo(
     const gfx::Rect& compositor_viewport_pixel_rect,
     const ScreenInfo& new_screen_info) {
-  UpdateSurfaceAndScreenInfo(local_surface_id_allocation_from_parent_,
+  UpdateSurfaceAndScreenInfo(local_surface_id_from_parent_,
                              compositor_viewport_pixel_rect, new_screen_info);
 }
 
 void WidgetBase::UpdateCompositorViewportRect(
     const gfx::Rect& compositor_viewport_pixel_rect) {
-  UpdateSurfaceAndScreenInfo(local_surface_id_allocation_from_parent_,
+  UpdateSurfaceAndScreenInfo(local_surface_id_from_parent_,
+                             compositor_viewport_pixel_rect, screen_info_);
+}
+
+void WidgetBase::UpdateSurfaceAndCompositorRect(
+    const viz::LocalSurfaceId& new_local_surface_id,
+    const gfx::Rect& compositor_viewport_pixel_rect) {
+  UpdateSurfaceAndScreenInfo(new_local_surface_id,
                              compositor_viewport_pixel_rect, screen_info_);
 }
 
@@ -1104,8 +1193,152 @@ const ScreenInfo& WidgetBase::GetScreenInfo() {
   return screen_info_;
 }
 
+void WidgetBase::SetScreenRects(const gfx::Rect& widget_screen_rect,
+                                const gfx::Rect& window_screen_rect) {
+  widget_screen_rect_ = widget_screen_rect;
+  window_screen_rect_ = window_screen_rect;
+}
+
+void WidgetBase::SetPendingWindowRect(const gfx::Rect* rect) {
+  if (rect) {
+    pending_window_rect_ = *rect;
+    // Popups don't get size updates back from the browser so just store the set
+    // values.
+    if (!client_->FrameWidget()) {
+      SetScreenRects(*rect, *rect);
+    }
+  } else {
+    pending_window_rect_.reset();
+  }
+}
+
+gfx::Rect WidgetBase::WindowRect() {
+  gfx::Rect rect;
+  if (pending_window_rect_) {
+    // NOTE(mbelshe): If there is a pending_window_rect_, then getting
+    // the RootWindowRect is probably going to return wrong results since the
+    // browser may not have processed the Move yet.  There isn't really anything
+    // good to do in this case, and it shouldn't happen - since this size is
+    // only really needed for windowToScreen, which is only used for Popups.
+    rect = pending_window_rect_.value();
+  } else {
+    rect = window_screen_rect_;
+  }
+
+  client_->ScreenRectToEmulated(rect);
+  return rect;
+}
+
+gfx::Rect WidgetBase::ViewRect() {
+  gfx::Rect rect = widget_screen_rect_;
+  client_->ScreenRectToEmulated(rect);
+  return rect;
+}
+
 gfx::Rect WidgetBase::CompositorViewportRect() const {
   return LayerTreeHost()->device_viewport_rect();
+}
+
+bool WidgetBase::ComputePreferCompositingToLCDText() {
+  const base::CommandLine& command_line =
+      *base::CommandLine::ForCurrentProcess();
+  if (command_line.HasSwitch(switches::kDisablePreferCompositingToLCDText))
+    return false;
+#if defined(OS_ANDROID) || defined(OS_CHROMEOS)
+  // On Android, we never have subpixel antialiasing. On Chrome OS we prefer to
+  // composite all scrollers for better scrolling performance.
+  return true;
+#else
+  // Prefer compositing if the device scale is high enough that losing subpixel
+  // antialiasing won't have a noticeable effect on text quality.
+  // Note: We should keep kHighDPIDeviceScaleFactorThreshold in
+  // cc/metrics/lcd_text_metrics_reporter.cc the same as the value below.
+  if (screen_info_.device_scale_factor >= 1.5f)
+    return true;
+  if (command_line.HasSwitch(switches::kEnablePreferCompositingToLCDText))
+    return true;
+  if (!Platform::Current()->IsLcdTextEnabled())
+    return true;
+  if (base::FeatureList::IsEnabled(features::kPreferCompositingToLCDText))
+    return true;
+  return false;
+#endif
+}
+
+gfx::PointF WidgetBase::DIPsToBlinkSpace(const gfx::PointF& point) {
+  if (!use_zoom_for_dsf_)
+    return point;
+  // TODO(danakj): Should this be GetScreenInfo() so it changes under emulation?
+  return gfx::ScalePoint(point,
+                         client_->GetOriginalScreenInfo().device_scale_factor);
+}
+
+gfx::Point WidgetBase::DIPsToRoundedBlinkSpace(const gfx::Point& point) {
+  if (!use_zoom_for_dsf_)
+    return point;
+  // TODO(danakj): Should this be GetScreenInfo() so it changes under emulation?
+  return gfx::ScaleToRoundedPoint(
+      point, client_->GetOriginalScreenInfo().device_scale_factor);
+}
+
+gfx::PointF WidgetBase::BlinkSpaceToDIPs(const gfx::PointF& point) {
+  if (!use_zoom_for_dsf_)
+    return point;
+  // TODO(danakj): Should this be GetScreenInfo() so it changes under emulation?
+  return gfx::ScalePoint(
+      point, 1.f / client_->GetOriginalScreenInfo().device_scale_factor);
+}
+
+gfx::Point WidgetBase::BlinkSpaceToFlooredDIPs(const gfx::Point& point) {
+  if (!use_zoom_for_dsf_)
+    return point;
+  // TODO(danakj): Should this be GetScreenInfo() so it changes under emulation?
+  // TODO(dtapuska): Determine if this should be a floor vs rounded.
+  float reverse = 1 / client_->GetOriginalScreenInfo().device_scale_factor;
+  return gfx::ScaleToFlooredPoint(point, reverse);
+}
+
+gfx::Size WidgetBase::DIPsToCeiledBlinkSpace(const gfx::Size& size) {
+  if (!use_zoom_for_dsf_)
+    return size;
+  return gfx::ScaleToCeiledSize(
+      size, client_->GetOriginalScreenInfo().device_scale_factor);
+}
+
+gfx::RectF WidgetBase::DIPsToBlinkSpace(const gfx::RectF& rect) {
+  if (!use_zoom_for_dsf_)
+    return rect;
+  // TODO(danakj): Should this be GetScreenInfo() so it changes under emulation?
+  return gfx::ScaleRect(rect,
+                        client_->GetOriginalScreenInfo().device_scale_factor);
+}
+
+float WidgetBase::DIPsToBlinkSpace(float scalar) {
+  if (!use_zoom_for_dsf_)
+    return scalar;
+  // TODO(danakj): Should this be GetScreenInfo() so it changes under emulation?
+  return client_->GetOriginalScreenInfo().device_scale_factor * scalar;
+}
+
+gfx::Size WidgetBase::BlinkSpaceToFlooredDIPs(const gfx::Size& size) {
+  if (!use_zoom_for_dsf_)
+    return size;
+  float reverse = 1 / client_->GetOriginalScreenInfo().device_scale_factor;
+  return gfx::ScaleToFlooredSize(size, reverse);
+}
+
+gfx::Rect WidgetBase::BlinkSpaceToEnclosedDIPs(const gfx::Rect& rect) {
+  if (!use_zoom_for_dsf_)
+    return rect;
+  float reverse = 1 / client_->GetOriginalScreenInfo().device_scale_factor;
+  return gfx::ScaleToEnclosedRect(rect, reverse);
+}
+
+gfx::RectF WidgetBase::BlinkSpaceToDIPs(const gfx::RectF& rect) {
+  if (!use_zoom_for_dsf_)
+    return rect;
+  float reverse = 1 / client_->GetOriginalScreenInfo().device_scale_factor;
+  return gfx::ScaleRect(rect, reverse);
 }
 
 }  // namespace blink

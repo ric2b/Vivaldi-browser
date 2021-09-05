@@ -25,6 +25,8 @@
 #include "components/translate/core/browser/translate_pref_names.h"
 #include "components/translate/core/browser/translate_prefs.h"
 #include "components/user_prefs/user_prefs.h"
+#include "components/variations/proto/study.pb.h"
+#include "components/variations/variations.mojom.h"
 #include "components/variations/variations_client.h"
 #include "components/variations/variations_ids_provider.h"
 #include "content/public/browser/device_service.h"
@@ -295,16 +297,20 @@ class BrowserContextImpl::WebLayerVariationsClient
     return browser_context_->IsOffTheRecord();
   }
 
-  std::string GetVariationsHeader() const override {
+  variations::mojom::VariationsHeadersPtr GetVariationsHeaders()
+      const override {
     return variations::VariationsIdsProvider::GetInstance()
-        ->GetClientDataHeader(IsSignedIn());
+        ->GetClientDataHeaders(IsSignedIn());
   }
 
  private:
-  bool IsSignedIn() const {
-    // TODO(weblayer-dev): Update when signin is supported.
-    return false;
-  }
+  // Signed-in state shouldn't control the set of variations for WebLayer,
+  // so this always returns true. This is particularly experiment for
+  // registering external experiment ids, which are registered assuming
+  // signed-in.
+  // TODO(sky): this is rather misleading, and needs to be resolved. Figure
+  // out right long term solution.
+  bool IsSignedIn() const { return true; }
 
   content::BrowserContext* browser_context_;
 };

@@ -17,9 +17,9 @@
 #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
 #include "third_party/blink/public/mojom/browser_interface_broker.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/script/script_type.mojom-blink-forward.h"
+#include "third_party/blink/public/mojom/v8_cache_options.mojom-blink.h"
 #include "third_party/blink/public/platform/web_content_settings_client.h"
 #include "third_party/blink/public/platform/web_worker_fetch_context.h"
-#include "third_party/blink/renderer/bindings/core/v8/v8_cache_options.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/frame/csp/content_security_policy.h"
 #include "third_party/blink/renderer/core/workers/worker_clients.h"
@@ -42,7 +42,7 @@ struct CORE_EXPORT GlobalScopeCreationParams final {
  public:
   GlobalScopeCreationParams(
       const KURL& script_url,
-      mojom::ScriptType script_type,
+      mojom::blink::ScriptType script_type,
       const String& global_scope_name,
       const String& user_agent,
       const base::Optional<UserAgentMetadata>& ua_metadata,
@@ -58,7 +58,7 @@ struct CORE_EXPORT GlobalScopeCreationParams final {
       const Vector<String>* origin_trial_tokens,
       const base::UnguessableToken& parent_devtools_token,
       std::unique_ptr<WorkerSettings>,
-      V8CacheOptions,
+      mojom::blink::V8CacheOptions,
       WorkletModuleResponsesMap*,
       mojo::PendingRemote<mojom::blink::BrowserInterfaceBroker>
           browser_interface_broker = mojo::NullRemote(),
@@ -66,7 +66,8 @@ struct CORE_EXPORT GlobalScopeCreationParams final {
       const FeaturePolicy* parent_feature_policy = nullptr,
       base::UnguessableToken agent_cluster_id = {},
       const base::Optional<ExecutionContextToken>& parent_context_token =
-          base::nullopt);
+          base::nullopt,
+      bool parent_cross_origin_isolated_capability = false);
 
   ~GlobalScopeCreationParams() = default;
 
@@ -84,7 +85,7 @@ struct CORE_EXPORT GlobalScopeCreationParams final {
   // workers.
   KURL script_url;
 
-  mojom::ScriptType script_type;
+  mojom::blink::ScriptType script_type;
 
   String global_scope_name;
   String user_agent;
@@ -147,7 +148,7 @@ struct CORE_EXPORT GlobalScopeCreationParams final {
 
   std::unique_ptr<WorkerSettings> worker_settings;
 
-  V8CacheOptions v8_cache_options;
+  mojom::blink::V8CacheOptions v8_cache_options;
 
   CrossThreadPersistent<WorkletModuleResponsesMap> module_responses_map;
 
@@ -167,6 +168,10 @@ struct CORE_EXPORT GlobalScopeCreationParams final {
   // worker or worklet, which caused it to be created, and to whose lifetime
   // this worker/worklet is bound. This is used for resource usage attribution.
   base::Optional<ExecutionContextToken> parent_context_token;
+
+  // https://html.spec.whatwg.org/C/#concept-settings-object-cross-origin-isolated-capability
+  // Used by dedicated workers, and set to false when there is no parent.
+  const bool parent_cross_origin_isolated_capability;
 
   DISALLOW_COPY_AND_ASSIGN(GlobalScopeCreationParams);
 };

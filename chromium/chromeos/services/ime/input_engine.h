@@ -45,8 +45,9 @@ class InputEngine : public mojom::InputChannel {
   // mojom::InputChannel overrides:
   void ProcessMessage(const std::vector<uint8_t>& message,
                       ProcessMessageCallback callback) override;
+  void OnFocus() override;
   void ProcessKeypressForRulebased(
-      mojom::KeypressInfoForRulebasedPtr keypress_info,
+      mojom::PhysicalKeyEventPtr event,
       ProcessKeypressForRulebasedCallback callback) override;
   void ResetForRulebased() override;
   void GetRulebasedKeypressCountForTesting(

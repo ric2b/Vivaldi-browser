@@ -141,6 +141,14 @@ class PLATFORM_EXPORT ResourceFetcher
                             const ResourceFactory&,
                             ResourceClient*);
 
+  // TODO(crbug/1112515): Instead of having one-off notifications of these
+  // loading milestones, we should introduce an abstract interface that
+  // interested parties can hook into, to be notified of relevant loading
+  // milestones.
+  // These are only called for main frames.
+  void MarkFirstPaint();
+  void MarkFirstContentfulPaint();
+
   // Returns the task runner used by this fetcher, and loading operations
   // this fetcher initiates. The returned task runner will keep working even
   // after ClearContext is called.
@@ -149,7 +157,7 @@ class PLATFORM_EXPORT ResourceFetcher
   }
 
   // Create a loader. This cannot be called after ClearContext is called.
-  std::unique_ptr<WebURLLoader> CreateURLLoader(const ResourceRequest&,
+  std::unique_ptr<WebURLLoader> CreateURLLoader(const ResourceRequestHead&,
                                                 const ResourceLoaderOptions&);
   // Create a code cache loader. This cannot be called after ClearContext is
   // called.
@@ -223,7 +231,7 @@ class PLATFORM_EXPORT ResourceFetcher
                          uint32_t inflight_keepalive_bytes);
   blink::mojom::ControllerServiceWorkerMode IsControlledByServiceWorker() const;
 
-  String GetCacheIdentifier() const;
+  String GetCacheIdentifier(const KURL& url) const;
 
   enum IsImageSet { kImageNotImageSet, kImageIsImageSet };
 
@@ -281,6 +289,12 @@ class PLATFORM_EXPORT ResourceFetcher
   void SetThrottleOptionOverride(
       ResourceLoadScheduler::ThrottleOptionOverride throttle_option_override) {
     scheduler_->SetThrottleOptionOverride(throttle_option_override);
+  }
+
+  void SetOptimizationGuideHints(
+      mojom::blink::DelayCompetingLowPriorityRequestsHintsPtr
+          optimization_hints) {
+    scheduler_->SetOptimizationGuideHints(std::move(optimization_hints));
   }
 
   void AddSubresourceWebBundle(SubresourceWebBundle& subresource_web_bundle);
@@ -412,6 +426,11 @@ class PLATFORM_EXPORT ResourceFetcher
   // optimizations and might still contain images which are actually loaded.
   HeapHashSet<WeakMember<Resource>> not_loaded_image_resources_;
 
+#if DCHECK_IS_ON()
+  // TODO(keishi): Added to check for crbug.com/1108676 Remove when fixed.
+  bool not_loaded_image_resources_is_being_iterated_ = false;
+#endif
+
   HeapHashMap<PreloadKey, Member<Resource>> preloads_;
   HeapVector<Member<Resource>> matched_preloads_;
   Member<MHTMLArchive> archive_;
@@ -499,12 +518,14 @@ struct PLATFORM_EXPORT ResourceFetcherInit final {
   ResourceFetcherInit(DetachableResourceFetcherProperties& properties,
                       FetchContext* context,
                       scoped_refptr<base::SingleThreadTaskRunner> task_runner,
-                      ResourceFetcher::LoaderFactory* loader_factory);
+                      ResourceFetcher::LoaderFactory* loader_factory,
+                      ContextLifecycleNotifier* context_lifecycle_notifier);
 
   DetachableResourceFetcherProperties* const properties;
   FetchContext* const context;
   const scoped_refptr<base::SingleThreadTaskRunner> task_runner;
   ResourceFetcher::LoaderFactory* const loader_factory;
+  ContextLifecycleNotifier* const context_lifecycle_notifier;
   DetachableUseCounter* use_counter = nullptr;
   DetachableConsoleLogger* console_logger = nullptr;
   ResourceLoadScheduler::ThrottlingPolicy initial_throttling_policy =
@@ -513,6 +534,7 @@ struct PLATFORM_EXPORT ResourceFetcherInit final {
   FrameOrWorkerScheduler* frame_or_worker_scheduler = nullptr;
   ResourceLoadScheduler::ThrottleOptionOverride throttle_option_override =
       ResourceLoadScheduler::ThrottleOptionOverride::kNone;
+  LoadingBehaviorObserver* loading_behavior_observer = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(ResourceFetcherInit);
 };

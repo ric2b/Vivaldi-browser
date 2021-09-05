@@ -19,15 +19,14 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
-import org.chromium.chrome.browser.app.ChromeActivity;
+import org.chromium.chrome.browser.AppHooks;
 import org.chromium.chrome.browser.background_sync.BackgroundSyncBackgroundTaskScheduler.BackgroundSyncTask;
 import org.chromium.chrome.browser.engagement.SiteEngagementService;
-import org.chromium.chrome.browser.externalauth.ExternalAuthUtils;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
+import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.browser.TabTitleObserver;
 import org.chromium.chrome.test.util.browser.signin.AccountManagerTestRule;
 import org.chromium.content_public.browser.test.NativeLibraryTestUtils;
@@ -54,8 +53,8 @@ import java.util.concurrent.atomic.AtomicInteger;
                 + "skip_permissions_check_for_testing/true"})
 public final class PeriodicBackgroundSyncTest {
     @Rule
-    public final ChromeActivityTestRule<ChromeActivity> mActivityTestRule =
-            new ChromeActivityTestRule<>(ChromeActivity.class);
+    public final ChromeTabbedActivityTestRule mActivityTestRule =
+            new ChromeTabbedActivityTestRule();
 
     // loadNativeLibraryNoBrowserProcess will access AccountManagerFacade, so we need
     // to mock AccountManagerFacade
@@ -83,7 +82,7 @@ public final class PeriodicBackgroundSyncTest {
         // been fixed.
         // Note that this should be done before the startMainActivityOnBlankPage(), because Chrome
         // will otherwise run this check on startup and disable Periodic Background Sync code.
-        if (!ExternalAuthUtils.canUseGooglePlayServices()) {
+        if (!AppHooks.get().getExternalAuthUtils().canUseGooglePlayServices()) {
             NativeLibraryTestUtils.loadNativeLibraryNoBrowserProcess();
             disableGooglePlayServicesVersionCheck();
         }

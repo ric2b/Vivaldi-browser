@@ -22,9 +22,6 @@ if (enable_pdf) {
   assert(enable_plugins, "PDF support requires plugins be enabled.")
 }
 
-# See docs/no_sources_assignment_filter.md and https://crbug.com/1018739.
-set_sources_assignment_filter([])
-
 grit("resources") {
   source = "common_resources.grd"
   defines = chrome_grit_defines
@@ -54,7 +51,6 @@ buildflag_header("buildflags") {
     "ENABLE_TAB_SEARCH=$enable_tab_search",
     "ENABLE_WAYLAND_SERVER=$enable_wayland_server",
     "ENABLE_WEBUI_TAB_STRIP=$enable_webui_tab_strip",
-    "PGO_BUILD=$pgo_build",
     "OPTIMIZE_WEBUI=$optimize_webui",
   ]
 }
@@ -202,6 +198,7 @@ static_library("common") {
     "//components/prefs",
     "//components/safe_browsing:buildflags",
     "//components/safe_browsing/core/web_ui:constants",
+    "//components/services/app_service/public/cpp:app_share_target",
     "//components/services/heap_profiling/public/cpp",
     "//components/strings",
     "//components/translate/content/common",
@@ -406,8 +403,6 @@ static_library("common") {
   if (is_android) {
     sources -= [ "media_galleries/metadata_types.h" ]
     sources += [
-      "android/cpu_affinity_experiments.cc",
-      "android/cpu_affinity_experiments.h",
       "media/chrome_media_drm_bridge_client.cc",
       "media/chrome_media_drm_bridge_client.h",
     ]
@@ -478,7 +473,7 @@ static_library("common") {
     deps += [ "//media/cdm:cdm_paths" ]  # Needed by chrome_content_client.cc
 
     if (enable_widevine) {
-      if (is_desktop_linux) {
+      if (is_linux) {
         sources += [
           "media/component_widevine_cdm_hint_file_linux.cc",
           "media/component_widevine_cdm_hint_file_linux.h",
@@ -607,7 +602,7 @@ static_library("constants") {
     "//base",
     "//base/third_party/dynamic_annotations",
     "//build:branding_buildflags",
-    "//build:lacros_buildflags",
+    "//build:chromeos_buildflags",
     "//components/bookmarks/common",
     "//components/nacl/common:switches",
     "//components/offline_pages/buildflags",
@@ -745,6 +740,10 @@ mojom("mojo_bindings") {
     enabled_features = [ "enable_offline_pages" ]
   }
 
+  if (enable_extensions) {
+    sources += [ "url_loader_factory_proxy.mojom" ]
+  }
+
   public_deps = [
     "//components/content_settings/core/common:mojo_bindings",
     "//components/prerender/common:mojo_bindings",
@@ -771,6 +770,21 @@ mojom("mojo_bindings") {
   ]
 
   component_deps = [ "//content/public/common" ]
+
+  cpp_typemaps = [
+    {
+      types = [
+        {
+          mojom = "chrome.mojom.WebApplicationInfo"
+          cpp = "::WebApplicationInfo"
+        },
+      ]
+      traits_headers = [ "web_application_info.h" ]
+      traits_private_headers =
+          [ "web_application_info_provider_param_traits.h" ]
+      traits_deps = [ "//ipc" ]
+    },
+  ]
 }
 
 if (enable_print_preview && !is_chromeos) {

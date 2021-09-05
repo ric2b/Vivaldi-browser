@@ -47,6 +47,7 @@
 #include "chrome/browser/extensions/api/braille_display_private/stub_braille_controller.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/ui/ash/keyboard/chrome_keyboard_controller_client.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
 #include "chrome/browser/ui/singleton_tabs.h"
 #include "chrome/common/chrome_paths.h"
@@ -507,9 +508,14 @@ void AccessibilityManager::OnLocaleChanged() {
   EnableSpokenFeedback(true);
 }
 
-void AccessibilityManager::OnViewFocusedInArc(
-    const gfx::Rect& bounds_in_screen) {
+void AccessibilityManager::OnViewFocusedInArc(const gfx::Rect& bounds_in_screen,
+                                              bool is_editable) {
   ash::AccessibilityController::Get()->SetFocusHighlightRect(bounds_in_screen);
+
+  MagnificationManager* magnification_manager = MagnificationManager::Get();
+  if (magnification_manager)
+    magnification_manager->HandleFocusedRectChangedIfEnabled(bounds_in_screen,
+                                                             is_editable);
 }
 
 bool AccessibilityManager::PlayEarcon(int sound_key, PlaySoundOption option) {
@@ -668,15 +674,15 @@ void AccessibilityManager::RequestAutoclickScrollableBoundsForPoint(
     gfx::Point& point_in_screen) {
   extensions::EventRouter* event_router =
       extensions::EventRouter::Get(profile_);
-  std::unique_ptr<base::ListValue> event_args =
-      extensions::api::accessibility_private::FindScrollableBoundsForPoint::
-          Create(point_in_screen.x(), point_in_screen.y());
+  std::unique_ptr<base::ListValue> event_args = extensions::api::
+      accessibility_private::OnScrollableBoundsForPointRequested::Create(
+          point_in_screen.x(), point_in_screen.y());
   std::unique_ptr<extensions::Event> event =
       std::make_unique<extensions::Event>(
           extensions::events::
               ACCESSIBILITY_PRIVATE_FIND_SCROLLABLE_BOUNDS_FOR_POINT,
-          extensions::api::accessibility_private::FindScrollableBoundsForPoint::
-              kEventName,
+          extensions::api::accessibility_private::
+              OnScrollableBoundsForPointRequested::kEventName,
           std::move(event_args));
   event_router->DispatchEventWithLazyListener(
       extension_misc::kAccessibilityCommonExtensionId, std::move(event));
@@ -838,7 +844,7 @@ void AccessibilityManager::RequestSelectToSpeakStateChange() {
       extension_misc::kSelectToSpeakExtensionId, std::move(event));
 }
 
-void AccessibilityManager::OnSelectToSpeakStateChanged(
+void AccessibilityManager::SetSelectToSpeakState(
     ash::SelectToSpeakState state) {
   ash::AccessibilityController::Get()->SetSelectToSpeakState(state);
 
@@ -1431,6 +1437,12 @@ void AccessibilityManager::PostUnloadSelectToSpeak() {
 
 void AccessibilityManager::PostLoadSwitchAccess() {
   InitializeFocusRings(extension_misc::kSwitchAccessExtensionId);
+
+  was_vk_enabled_before_switch_access_ =
+      ChromeKeyboardControllerClient::Get()->IsEnableFlagSet(
+          keyboard::KeyboardEnableFlag::kExtensionEnabled);
+  ChromeKeyboardControllerClient::Get()->SetEnableFlag(
+      keyboard::KeyboardEnableFlag::kExtensionEnabled);
 }
 
 void AccessibilityManager::PostUnloadSwitchAccess() {
@@ -1439,6 +1451,13 @@ void AccessibilityManager::PostUnloadSwitchAccess() {
 
   // Clear the accessibility focus ring.
   RemoveFocusRings(extension_misc::kSwitchAccessExtensionId);
+
+  if (!was_vk_enabled_before_switch_access_) {
+    ChromeKeyboardControllerClient::Get()->ClearEnableFlag(
+        keyboard::KeyboardEnableFlag::kExtensionEnabled);
+  } else {
+    was_vk_enabled_before_switch_access_ = false;
+  }
 }
 
 void AccessibilityManager::PostLoadAccessibilityCommon() {

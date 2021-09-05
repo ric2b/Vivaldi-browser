@@ -240,8 +240,9 @@ markerMid
 markerStart
 mask
 maskType
+mathDepth
+mathShift
 mathStyle
-mathSuperscriptShiftStyle
 maxBlockSize
 maxHeight
 maxInlineSize
@@ -479,7 +480,6 @@ webkitFlexGrow
 webkitFlexShrink
 webkitFlexWrap
 webkitFontFeatureSettings
-webkitFontSizeDelta
 webkitFontSmoothing
 webkitHighlight
 webkitHyphenateCharacter

@@ -7,6 +7,7 @@ Checks a policy_templates.json file for conformity to its syntax specification.
 '''
 
 import argparse
+import ast
 import json
 import os
 import re
@@ -139,7 +140,7 @@ KEYS_DEFINING_SCHEMAS_PER_TYPE = {
 }
 
 # The list of platforms policy could support.
-ALL_SUPPORTED_PLATFOMRS = [
+ALL_SUPPORTED_PLATFORMS = [
     'chrome_frame', 'chrome_os', 'android', 'webview_android', 'ios',
     'chrome.win', 'chrome.win7', 'chrome.linux', 'chrome.mac', 'chrome.*'
 ]
@@ -199,6 +200,20 @@ def MergeDict(*dicts):
   for dictionary in dicts:
     result.update(dictionary)
   return result
+
+
+class DuplicateKeyVisitor(ast.NodeVisitor):
+  def visit_Dict(self, node):
+    seen_keys = set()
+    for i, node_key in enumerate(node.keys):
+      key = ast.literal_eval(node_key)
+      if key in seen_keys:
+        raise ValueError("Duplicate key '%s' in line %d found." %
+                         (key, node.values[i].lineno))
+      seen_keys.add(key)
+
+    # Recursively check for all nested objects.
+    self.generic_visit(node)
 
 
 class PolicyTemplateChecker(object):
@@ -665,9 +680,9 @@ class PolicyTemplateChecker(object):
                 'policy', policy.get('name', policy))
 
       # All user policies must have a per_profile feature flag.
-      if (not policy.get('device_only', False) and
-          not policy.get('deprecated', False) and
-          not filter(re.compile('^chrome_frame:.*').match, supported_on)):
+      if (not policy.get('device_only', False)
+          and not policy.get('deprecated', False)
+          and not 'chrome_frame' in supported_platforms):
         self._CheckContains(
             features,
             'per_profile',
@@ -734,9 +749,21 @@ class PolicyTemplateChecker(object):
                                           optional=True,
                                           container_name='features')
 
+      # 'private' feature must be an optional boolean flag.
+      is_unlisted = self._CheckContains(features,
+                                        'unlisted',
+                                        bool,
+                                        optional=True,
+                                        container_name='features')
+
       if cloud_only and platform_only:
-        self._Error("cloud_only and platfrom_only must not be true at the same "
-                    "time.")
+        self._Error(
+            'cloud_only and platfrom_only must not be true at the same '
+            'time.', 'policy', policy.get('name'))
+
+      if is_unlisted and not cloud_only:
+        self._Error('unlisted can only be used by cloud_only policy.', 'policy',
+                    policy.get('name'))
 
 
       # Chrome OS policies may have a non-empty supported_chrome_os_management
@@ -863,10 +890,10 @@ class PolicyTemplateChecker(object):
 
     duplicated = set()
     for platform in platforms:
-      if platform not in ALL_SUPPORTED_PLATFOMRS:
+      if platform not in ALL_SUPPORTED_PLATFORMS:
         self._Error(
             'Platform %s is not supported in %s. Valid platforms are %s.' %
-            (platform, field_name, ', '.join(ALL_SUPPORTED_PLATFOMRS)),
+            (platform, field_name, ', '.join(ALL_SUPPORTED_PLATFORMS)),
             'policy', policy_name)
       if platform in duplicated:
         self._Error(
@@ -1516,7 +1543,12 @@ class PolicyTemplateChecker(object):
   def Main(self, filename, options, original_file_contents, current_version):
     try:
       with open(filename, "rb") as f:
-        data = eval(f.read().decode("UTF-8"))
+        raw_data = f.read().decode("UTF-8")
+        data = eval(raw_data)
+        DuplicateKeyVisitor().visit(ast.parse(raw_data))
+    except ValueError as e:
+      self._Error(str(e))
+      return 1
     except:
       import traceback
       traceback.print_exc(file=sys.stdout)

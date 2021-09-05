@@ -8,6 +8,7 @@
 
 #include "ash/ambient/ambient_constants.h"
 #include "ash/ambient/model/ambient_backend_model_observer.h"
+#include "base/logging.h"
 
 namespace ash {
 
@@ -56,17 +57,18 @@ void AmbientBackendModel::AppendTopics(
   NotifyTopicsChanged();
 }
 
-bool AmbientBackendModel::ShouldFetchImmediately() const {
-  // Prefetch one image |next_image_| for photo transition animation.
-  return current_image_.IsNull() || next_image_.IsNull();
+bool AmbientBackendModel::ImagesReady() const {
+  return !current_image_.IsNull() && !next_image_.IsNull();
 }
 
 void AmbientBackendModel::AddNextImage(
     const PhotoWithDetails& photo_with_details) {
+  ResetImageFailures();
   if (current_image_.IsNull()) {
     current_image_ = photo_with_details;
   } else if (next_image_.IsNull()) {
     next_image_ = photo_with_details;
+    NotifyImagesReady();
   } else {
     current_image_ = next_image_;
     next_image_ = photo_with_details;
@@ -75,8 +77,29 @@ void AmbientBackendModel::AddNextImage(
   NotifyImagesChanged();
 }
 
+bool AmbientBackendModel::HashMatchesNextImage(const std::string& hash) const {
+  return GetNextImage().hash == hash;
+}
+
+void AmbientBackendModel::AddImageFailure() {
+  failures_++;
+  if (ImageLoadingFailed()) {
+    DVLOG(3) << "image loading failed";
+    for (auto& observer : observers_)
+      observer.OnImagesFailed();
+  }
+}
+
+void AmbientBackendModel::ResetImageFailures() {
+  failures_ = 0;
+}
+
+bool AmbientBackendModel::ImageLoadingFailed() {
+  return !ImagesReady() && failures_ >= kMaxConsecutiveReadPhotoFailures;
+}
+
 base::TimeDelta AmbientBackendModel::GetPhotoRefreshInterval() {
-  if (ShouldFetchImmediately())
+  if (!ImagesReady())
     return base::TimeDelta();
 
   return photo_refresh_interval_;
@@ -123,6 +146,11 @@ void AmbientBackendModel::NotifyTopicsChanged() {
 void AmbientBackendModel::NotifyImagesChanged() {
   for (auto& observer : observers_)
     observer.OnImagesChanged();
+}
+
+void AmbientBackendModel::NotifyImagesReady() {
+  for (auto& observer : observers_)
+    observer.OnImagesReady();
 }
 
 void AmbientBackendModel::NotifyWeatherInfoUpdated() {

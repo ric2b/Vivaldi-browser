@@ -30,6 +30,7 @@
 <translation id="1208421848177517699">Տառադարձություն (namaste → નમસ્તે)</translation>
 <translation id="1243314992276662751">Վերբեռնել</translation>
 <translation id="1249250836236328755">Ժանրը</translation>
+<translation id="1276362640455948667">պորտուգալերեն՝ ԱՄՆ միջազգային ստեղնաշարի հետ</translation>
 <translation id="1278813325885878377">Հունգարական QWERTY ստեղնաշար</translation>
 <translation id="1293556467332435079">Ֆայլեր</translation>
 <translation id="1297922636971898492">Այս պահին Google Drive-ը մատչելի չէ: Վերբեռնումը ավտոմատ կվերագործարկվի, երբ Google Drive-ը մատչելի լինի:</translation>
@@ -63,6 +64,7 @@
 <translation id="1572585716423026576">Օգտագործել որպես պաստառ</translation>
 <translation id="158809615184981282">Ֆարերյան ստեղնաշար</translation>
 <translation id="1589128298353575783"><ph name="NUMBER_OF_PB" /> ՊԲ</translation>
+<translation id="1620510694547887537">Տեսախցիկ</translation>
 <translation id="1646136617204068573">Հունգարերենի ստեղնաշար</translation>
 <translation id="164729547906544836">Թամիլերենի ստեղնաշար (itrans)</translation>
 <translation id="164969095109328410">Chrome սարք</translation>
@@ -70,6 +72,7 @@
 <translation id="1673103856845176271">Անվտանգության նկատառումներից ելնելով՝ ֆայլի օգտագործումն արգելված է:</translation>
 <translation id="169515659049020177">Shift</translation>
 <translation id="1722487484194605434">Արխիվացվում է <ph name="NUMBER_OF_ITEMS" /> տարր…</translation>
+<translation id="1731889557567069540">Պատճենվեց <ph name="NUMBER_OF_ITEMS" /> տարր։</translation>
 <translation id="174173592514158117">Ցուցադրել Google Play-ի բոլոր պանակները</translation>
 <translation id="174937106936716857">Ֆայլերի ընդհանուր թիվը</translation>
 <translation id="1775381402323441512">Տեղեկություններ տեսանյութի մասին</translation>
@@ -114,7 +117,9 @@
 <translation id="2208158072373999562">Zip արխիվ</translation>
 <translation id="2225536596944493418">Իսկապե՞ս ուզում եք ջնջել <ph name="NUMBER_OF_ITEMS" /> տարրերը։</translation>
 <translation id="2230062665678605299">Հնարավոր չէ ստեղծել «<ph name="FOLDER_NAME" />» պանակը: <ph name="ERROR_MESSAGE" /></translation>
+<translation id="2275059641601412272">Տեղափոխվեց։</translation>
 <translation id="2278988676849463018">Կաննադայի ստեղնաշար (հնչյունաբանական)</translation>
+<translation id="2287742181953707290">պորտուգալերեն՝ ԱՄՆ միջազգային համակարգչային ստեղնաշարի հետ</translation>
 <translation id="2288278176040912387">Գրամոֆոն</translation>
 <translation id="2291538123825441971">Բացվում է <ph name="NUMBER_OF_FILES" /> ֆայլ։</translation>
 <translation id="2303301624314357662">Բացվում է <ph name="FILE_NAME" /> ֆայլը։</translation>
@@ -185,7 +190,6 @@
 <translation id="3064388234319122767">Տառադարձություն (zdravo → здраво)</translation>
 <translation id="3067790092342515856">Windows-ի ֆայլեր</translation>
 <translation id="3078461028045006476">Ուղարկել <ph name="EXTENSION_NAME" />-ի միջոցով</translation>
-<translation id="3088034400796962477">Տառադարձություն (salam ← سلام)</translation>
 <translation id="3116361045094675131">ՄԹ ստեղնաշար</translation>
 <translation id="3126026824346185272">Ctrl</translation>
 <translation id="3144126448740580210">ՊԱՏՐԱՍՏ Է</translation>
@@ -219,6 +223,7 @@
 <translation id="3473378059788601120">Պատճենվեց «<ph name="FOLDER_NAME" />» պանակում</translation>
 <translation id="3475447146579922140">Google աղյուսակ</translation>
 <translation id="3495304270784461826"><ph name="COUNT" /> սխալ:</translation>
+<translation id="349603508045926994">Պարսկերեն տառադարձություն</translation>
 <translation id="3519867315646775981">Տառադարձություն (shalom ← שלום)</translation>
 <translation id="3522708245912499433">պորտուգալերեն</translation>
 <translation id="3524311639100184459">Ուշադրություն. այս ֆայլերը ժամանակավոր են և կարող են ավտոմատ ջնջվել՝ սկավառակի վրա տարածք ազատելու համար։  <ph name="BEGIN_LINK" />Իմանալ ավելին<ph name="END_LINK" /></translation>
@@ -235,6 +240,7 @@
 <translation id="3620292326130836921">Բոլորը ֆայլերը կրկնօրինակվեցին:</translation>
 <translation id="3626281679859535460">Պայծառություն</translation>
 <translation id="3644896802912593514">Լայնություն</translation>
+<translation id="3645233063072417428">Տեղափոխվեց <ph name="NUMBER_OF_ITEMS" /> տարր։</translation>
 <translation id="3645531960514756307">Ապամրացնել պանակը</translation>
 <translation id="3678559383040232393">Մալթերեն ստեղնաշար</translation>
 <translation id="3685122418104378273">Շարժական տվյալներն օգտագործելիս Google Drive համաժամացումը ըստ կանխադրման անջատվում է:</translation>
@@ -276,6 +282,7 @@
 <translation id="4072248638558688893">Թամիլերենի ստեղնաշար (հնչյունաբանական)</translation>
 <translation id="4124935795427217608">Միաեղջյուր</translation>
 <translation id="4158739975813877944">Բացել երգացանկը</translation>
+<translation id="4159731583141908892">Տեղափոխվեց <ph name="FILE_NAME" /> տարր։</translation>
 <translation id="418179967336296930">Ռուսերեն հնչյունային (YaZHert) ստեղնաշար</translation>
 <translation id="4193154014135846272">Google փաստաթուղթ</translation>
 <translation id="4195249722193633765">Տեղադրեք Լինուքսի հավելված</translation>
@@ -289,6 +296,7 @@
 <translation id="4298972503445160211">Դանիերենի ստեղնաշար</translation>
 <translation id="4299729908419173967">Բրազիլական</translation>
 <translation id="4309915981827077375">Ընդհանուր տեղեկություններ</translation>
+<translation id="4315949787858895817">հոլանդերեն (Բելգիա)</translation>
 <translation id="4326192123064055915">Սուրճ</translation>
 <translation id="4336032328163998280">Պատճենումը չհաջողվեց: <ph name="ERROR_MESSAGE" /></translation>
 <translation id="4364327530094270451">Սեխ</translation>
@@ -300,7 +308,6 @@
 <translation id="4477219268485577442">Բուլղարական հնչյունային</translation>
 <translation id="4479812471636796472">ԱՄՆ Դվորակի ստեղնաշար</translation>
 <translation id="4481711095103932593">Այս պանակը հասանելի է Windows-ին</translation>
-<translation id="4487088045714738411">Բելգիական ստեղնաշար</translation>
 <translation id="4522570452068850558">Մանրամասներ</translation>
 <translation id="4542387084127299777">Չհաջողվեց բացել «<ph name="PATH" />» ֆայլը</translation>
 <translation id="4552678318981539154">Գնեք լրացուցիչ պահեստ</translation>
@@ -311,6 +318,7 @@
 <translation id="4582497162516204941">Տեղադրեք Լինուքսով (բետա)</translation>
 <translation id="4594543368593301662">Ցուցադրված են «<ph name="SEARCH_TERM" />» հարցումով որոնման արդյունքները:</translation>
 <translation id="4603392156942865207">«<ph name="FILE_NAME" />» ֆայլը պատճենվում է «<ph name="FOLDER_NAME" />» պանակում</translation>
+<translation id="4627439232948440198">սանսկրիտ</translation>
 <translation id="4631887759990505102">Կատարող</translation>
 <translation id="4656293982926141856">Այս համակարգիչը</translation>
 <translation id="4669606053856530811">«<ph name="SOURCE_NAME" />»-ի անդամներն այլևս չեն կարողանա օգտագործել այս տարրերը, եթե դրանց համար չտրվի ընդհանուր հասանելիություն։</translation>
@@ -336,6 +344,7 @@
 <translation id="4804827417948292437">Ավոկադո</translation>
 <translation id="4823651846660089135">Սարքում կարելի է միայն կարդալու գործողություններ կատարել</translation>
 <translation id="4839847978919684242">Ընտրված է <ph name="SELCTED_FILES_COUNT" /> տարր</translation>
+<translation id="4849981557599196363">գերմաներեն (Բելգիա)</translation>
 <translation id="4850886885716139402">Տեսք</translation>
 <translation id="485316830061041779">Գերմանական</translation>
 <translation id="4867079195717347957">Սեղմեք՝ սյունակներն ըստ նվազման կարգի տեսակավորելու համար։</translation>
@@ -361,6 +370,7 @@
 <translation id="5010406651457630570">Համակարգիչներ</translation>
 <translation id="5011233892417813670">Chromebook</translation>
 <translation id="5024856940085636730">Գործողությունը սպասվածից երկար է տևում: Ցանկանո՞ւմ եք ընդհատել:</translation>
+<translation id="5026887030745057099">հինդի</translation>
 <translation id="5036159836254554629">Կարգավորել հասանելիությունը Parallels Desktop-ի համար</translation>
 <translation id="5038625366300922036">Տեսնել ավելին…</translation>
 <translation id="5061708541166515394">Ցայտունություն</translation>
@@ -371,6 +381,7 @@
 <translation id="5098629044894065541">Եբրայական</translation>
 <translation id="5123433949759960244">Բասկետբոլ</translation>
 <translation id="5129662217315786329">Լեհական</translation>
+<translation id="5132435854979302863">տագալերեն</translation>
 <translation id="5144820558584035333">Հանգուլ 3 Set (390)</translation>
 <translation id="5145331109270917438">Փոփոխման ամսաթիվ</translation>
 <translation id="515594325917491223">Շախմատ</translation>
@@ -395,7 +406,9 @@
     Անկախ նրանից, թե ինչ կպատահի ձեր սարքին, ձեր ֆայլերը ապահով պահված կլինեն Google Drive-ում:<ph name="MARKUP_6" />
     <ph name="MARKUP_7" />Ստեղծեք, կիսվեք և համագործակցեք<ph name="MARKUP_8" />
     ուրիշների հետ մեկ վայրում:<ph name="MARKUP_9" /></translation>
+<translation id="5274350207900771082">Պատճենվեց։</translation>
 <translation id="5275973617553375938">Վերականգնված ֆայլեր Google Drive-ից</translation>
+<translation id="5283140566205748520">ֆրանսերեն (Բելգիա)</translation>
 <translation id="5317780077021120954">Պահել</translation>
 <translation id="5318819489018851358">Հասանելի դարձնել Լինուքսին</translation>
 <translation id="5319782540886810524">Լատվիերենի ստեղնաշար</translation>
@@ -411,16 +424,17 @@
 <translation id="5418923334382419584">Մյանմական ստեղնաշար</translation>
 <translation id="5428105026674456456">Իսպանական</translation>
 <translation id="5438282218546237410">«<ph name="SEARCH_TERM" />» հարցումով ոչինչ չի գտնվել:</translation>
+<translation id="5449551289610225147">Սխալ գաղտնաբառ</translation>
 <translation id="5464696796438641524">Լեհերենի ստեղնաշար</translation>
 <translation id="5465122519792752163">Նեպալերենի ստեղնաշար (Ներգիր)</translation>
 <translation id="5469868506864199649">Իտալական</translation>
+<translation id="5484429245813572665">ինդոնեզերեն</translation>
 <translation id="5494920125229734069">Ընտրել բոլորը</translation>
 <translation id="5500122897333236901">Իսլանդական</translation>
 <translation id="5508696409934741614">Կետեր</translation>
 <translation id="5522908512596376669">Ֆայլերի ցանկն այժմ ցուցադրված է ցանկի տեսքով:</translation>
 <translation id="5524517123096967210">Չհաջողվեց բացել ֆայլը:</translation>
 <translation id="5533102081734025921">Պատկեր (<ph name="IMAGE_TYPE" />)</translation>
-<translation id="5533555070048896610">Տառադարձություն (namaste → नमस्ते)</translation>
 <translation id="5534520101572674276">Չափի հաշվարկում</translation>
 <translation id="5583640892426849032">Backspace</translation>
 <translation id="5605830556594064952">ԱՄՆ Դվորակ</translation>
@@ -592,6 +606,7 @@
 <translation id="751507702149411736">Բելառուսական</translation>
 <translation id="7544853251252956727">Խառնել</translation>
 <translation id="7547811415869834682">Հոլանդական</translation>
+<translation id="7551643184018910560">Ամրացնել դարակին</translation>
 <translation id="7576032389798113292">6 x 4</translation>
 <translation id="7589661784326793847">Մեկ վայրկյան</translation>
 <translation id="7603724359189955920">Ցանց</translation>
@@ -600,8 +615,10 @@
 <translation id="7649070708921625228">Օգնություն</translation>
 <translation id="7654209398114106148"><ph name="NUMBER_OF_ITEMS" /> տարր տեղափոխվում է…</translation>
 <translation id="7658239707568436148">Չեղարկել</translation>
+<translation id="7693909743393669729">Եթե կրիչը ֆորմատավորեք, դրա վրա պահված բոլոր տվյալներն ու բաժինները (այդ թվում՝ անտեսանելի) կջնջվեն։ Գործողությունը հնարավոր չէ հետարկել։</translation>
 <translation id="7695430100978772476">Չհաջողվեց ձևաչափել «<ph name="DRIVE_NAME" />» կրիչը</translation>
 <translation id="770015031906360009">Հունական</translation>
+<translation id="7705251383879779343">Պատճենվեց <ph name="FILE_NAME" /> տարր։</translation>
 <translation id="7706319470528945664">Պորտուգալերենի ստեղնաշար</translation>
 <translation id="7711920809702896782">Տեղեկություններ պատկերի մասին</translation>
 <translation id="7724603315864178912">Կտրել</translation>
@@ -631,6 +648,7 @@
 <translation id="78946041517601018">Ընդհանուր պանակներ</translation>
 <translation id="7896906914454843592">ԱՄՆ ընդլայնված ստեղնաշար</translation>
 <translation id="7898607018410277265">գուջարաթի ստեղնաշար (հնչյունային)</translation>
+<translation id="7908793776359722643">Եթե բաժինը ֆորմատավորեք, դրա մեջ պահված բոլոր տվյալները կջնջվեն։ Գործողությունը հնարավոր չէ հետարկել։</translation>
 <translation id="7917972308273378936">Լիտվերենի ստեղնաշար</translation>
 <translation id="7925686952655276919">Չօգտագործել բջջային սարքերի տվյալները համաժամացման համար</translation>
 <translation id="7928710562641958568">Անջատել սարքը</translation>
@@ -675,7 +693,9 @@
 <translation id="8299269255470343364">Ճապոնական</translation>
 <translation id="8312871300878166382">Տեղադրել պանակում</translation>
 <translation id="8329978297633540474">Պարզ տեքստ</translation>
+<translation id="8335587457941836791">Ապամրացնել դարակից</translation>
 <translation id="8336153091935557858">Երեկ <ph name="YESTERDAY_DAYTIME" /></translation>
+<translation id="8336524887811696057">Նեպալերեն տառադարձություն</translation>
 <translation id="8336579025507394412">Իսլանդերենի ստեղնաշար</translation>
 <translation id="8342318071240498787">Այս անունով ֆայլ կամ գրացուցակ արդեն առկա է:</translation>
 <translation id="8382450452152102026">«<ph name="FOLDER_NAME" />» պանակ</translation>
@@ -701,12 +721,14 @@
 <translation id="8600173386174225982">Ֆայլերի ցանկն այժմ ցուցադրված է մանրապատկերների տեսքով:</translation>
 <translation id="8601932370724196034">Crostini գրաֆիկական ֆայլ</translation>
 <translation id="8669949407341943408">Տեղափոխում...</translation>
+<translation id="8694836330346852143">ուրդու</translation>
 <translation id="8698464937041809063">Google գծագիր</translation>
 <translation id="8714406895390098252">Հեծանիվ</translation>
 <translation id="8719721339511222681">Ընտրվեց «<ph name="ENTRY_NAME" />» գրառումը:</translation>
 <translation id="8722421161699219904">ԱՄՆ միջազգային ստեղնաշար</translation>
 <translation id="872537912056138402">Խորվաթական</translation>
 <translation id="874420130893181774">Ավանդական փինյինի ներածման եղանակ</translation>
+<translation id="8770002329960263418">հոլանդերեն (Նիդեռլանդներ)՝ ԱՄՆ միջազգային համակարգչային ստեղնաշարի հետ</translation>
 <translation id="8775404590947523323">Ձեր փոփոխություններն ավտոմատ պահվել են:<ph name="BREAKS" />Սկզբնական պատկերի պատճենը պահպանելու համար ապանշեք «Վրագրել սկզբնականը» նշավանդակը</translation>
 <translation id="8803496343472038847">Ռուսերենի հնչյունային ստեղնաշար</translation>
 <translation id="8808686172382650546">Կատու</translation>
@@ -717,6 +739,7 @@
 <translation id="8900820606136623064">Հունգարական</translation>
 <translation id="8901822611024316615">Չեխերենի QWERTY ստեղնաշար</translation>
 <translation id="8919081441417203123">Դանիական</translation>
+<translation id="8941776146379310519">մալայերեն</translation>
 <translation id="8960999352790021682">Բենգալերենի ստեղնաշար (հնչյունային)</translation>
 <translation id="8965697826696209160">Բավարար տարածք չկա:</translation>
 <translation id="9017798300203431059">Ռուսական հնչյունային</translation>

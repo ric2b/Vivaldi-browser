@@ -34,6 +34,8 @@ class CaptureModeDelegate;
 class ScreenshotDelegate;
 class BackGestureContextualNudgeDelegate;
 class BackGestureContextualNudgeController;
+class NearbyShareController;
+class NearbyShareDelegate;
 
 // Delegate of the Shell.
 class ASH_EXPORT ShellDelegate {
@@ -49,7 +51,7 @@ class ASH_EXPORT ShellDelegate {
   virtual std::unique_ptr<CaptureModeDelegate> CreateCaptureModeDelegate()
       const = 0;
 
-  // TODO(jamescook): Replace with a mojo-compatible interface.
+  // Creates the screenshot delegate, which has dependencies on //chrome.
   virtual std::unique_ptr<ScreenshotDelegate> CreateScreenshotDelegate() = 0;
 
   // Creates a accessibility delegate. Shell takes ownership of the delegate.
@@ -60,8 +62,14 @@ class ASH_EXPORT ShellDelegate {
   CreateBackGestureContextualNudgeDelegate(
       BackGestureContextualNudgeController* controller) = 0;
 
+  virtual std::unique_ptr<NearbyShareDelegate> CreateNearbyShareDelegate(
+      NearbyShareController* controller) const = 0;
+
   // Check whether the current tab of the browser window can go back.
   virtual bool CanGoBack(gfx::NativeWindow window) const = 0;
+
+  // Sets the tab scrubber |enabled_| field to |enabled|.
+  virtual void SetTabScrubberEnabled(bool enabled) = 0;
 
   // Returns true if |window| allows default touch behaviors. If false, it means
   // no default touch behavior is allowed (i.e., the touch action of window is

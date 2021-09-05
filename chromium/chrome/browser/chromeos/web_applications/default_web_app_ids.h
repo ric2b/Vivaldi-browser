@@ -24,6 +24,11 @@ constexpr char kHelpAppId[] = "nbljnnecbjbmifnoehiemkgefbnpoeak";
 
 // Generated as
 // web_app::GenerateAppIdFromURL(GURL(
+// "chrome://camera-app/src/views/main.html")).
+constexpr char kCameraAppId[] = "lokiojgebppilomhkceogdnchlbpcoaj";
+
+// Generated as
+// web_app::GenerateAppIdFromURL(GURL(
 // "https://google.com/chromebook/whatsnew/embedded/")).
 constexpr char kReleaseNotesAppId[] = "lddhblppcjmenljhdleiahjighahdcje";
 
@@ -52,6 +57,10 @@ constexpr char kMediaAppId[] = "jhdjimmaggjajfjphpljagpgkidjilnj";
 // Generated as
 // web_app::GenerateAppIdFromURL(GURL("https://music.youtube.com/?source=pwa")).
 constexpr char kYoutubeMusicAppId[] = "cinhimbnkkaeohfgghhklpknlkffjgod";
+
+// Generated as
+// web_app::GenerateAppIdFromURL(GURL("https://stadia.google.com/?lfhs=2")).
+constexpr char kStadiaAppId[] = "pnkcfpnngfokcnnijgkllghjlhkailce";
 
 }  // namespace default_web_apps
 }  // namespace chromeos

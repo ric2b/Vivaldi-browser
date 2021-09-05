@@ -7,30 +7,37 @@ package org.chromium.chrome.browser.sync;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.annotations.CalledByNative;
-import org.chromium.components.sync.SyncContentResolverDelegate;
-import org.chromium.components.sync.test.util.MockSyncContentResolverDelegate;
+import org.chromium.content_public.browser.test.util.TestThreadUtils;
 
 /**
  * A utility class for mocking AndroidSyncSettings.
  */
 public class AndroidSyncSettingsTestUtils {
     /**
-     * Sets up AndroidSyncSettings with a mock SyncContentResolverDelegate and with Android's master
-     * sync setting enabled. (This setting is found, e.g., under Settings > Accounts & Sync >
-     * Auto-sync data.)
+     * Sets up a MockSyncContentResolverDelegate with Android's master sync setting enabled.
+     * (This setting is found, e.g., under Settings > Accounts & Sync > Auto-sync data.)
      */
     @CalledByNative
     @VisibleForTesting
     public static void setUpAndroidSyncSettingsForTesting() {
-        setUpAndroidSyncSettingsForTesting(new MockSyncContentResolverDelegate());
+        MockSyncContentResolverDelegate delegate = new MockSyncContentResolverDelegate();
+        delegate.setMasterSyncAutomatically(true);
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> SyncContentResolverDelegate.overrideForTests(delegate));
     }
 
-    @VisibleForTesting
-    public static void setUpAndroidSyncSettingsForTesting(SyncContentResolverDelegate delegate) {
-        delegate.setMasterSyncAutomatically(true);
-        // Explicitly pass null account to AndroidSyncSettings ctor. Normally, AndroidSyncSettings
-        // ctor uses IdentityManager to get the sync account, but some native tests call this method
-        // before profiles are initialized (when IdentityManager doesn't exist yet).
-        AndroidSyncSettings.overrideForTests(new AndroidSyncSettings(delegate, null, null));
+    public static boolean getIsSyncEnabledOnUiThread() {
+        return TestThreadUtils.runOnUiThreadBlockingNoException(
+                () -> AndroidSyncSettings.get().isSyncEnabled());
+    }
+
+    public static boolean getIsChromeSyncEnabledOnUiThread() {
+        return TestThreadUtils.runOnUiThreadBlockingNoException(
+                () -> AndroidSyncSettings.get().isChromeSyncEnabled());
+    }
+
+    public static boolean getDoesMasterSyncAllowSyncOnUiThread() {
+        return TestThreadUtils.runOnUiThreadBlockingNoException(
+                () -> AndroidSyncSettings.get().doesMasterSyncSettingAllowChromeSync());
     }
 }

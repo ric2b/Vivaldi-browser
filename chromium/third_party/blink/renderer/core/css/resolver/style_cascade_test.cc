@@ -2540,30 +2540,10 @@ TEST_F(StyleCascadeTest, AnimatePendingSubstitutionValue) {
   EXPECT_EQ("15px", cascade.ComputedValue("margin-left"));
 }
 
-TEST_F(StyleCascadeTest, ForeignObjectZoomVsEffectiveZoom) {
-  GetDocument().body()->setInnerHTML(R"HTML(
-    <svg>
-      <foreignObject id='foreign'></foreignObject>
-    </svg>
-  )HTML");
-  UpdateAllLifecyclePhasesForTest();
-
-  Element* foreign_object = GetDocument().getElementById("foreign");
-  ASSERT_TRUE(foreign_object);
-
-  TestCascade cascade(GetDocument(), foreign_object);
-  cascade.Add("zoom:-internal-reset-effective !important",
-              CascadeOrigin::kUserAgent);
-  cascade.Add("zoom:200%");
-  cascade.Apply();
-
-  EXPECT_EQ(1.0f, cascade.TakeStyle()->EffectiveZoom());
-}
-
 TEST_F(StyleCascadeTest, ZoomCascadeOrder) {
   TestCascade cascade(GetDocument());
   cascade.Add("zoom:200%", CascadeOrigin::kUserAgent);
-  cascade.Add("zoom:-internal-reset-effective", CascadeOrigin::kUserAgent);
+  cascade.Add("zoom:normal", CascadeOrigin::kUserAgent);
   cascade.Apply();
 
   EXPECT_EQ(1.0f, cascade.TakeStyle()->EffectiveZoom());
@@ -2578,23 +2558,9 @@ TEST_F(StyleCascadeTest, ZoomVsAll) {
   EXPECT_EQ(1.0f, cascade.TakeStyle()->EffectiveZoom());
 }
 
-TEST_F(StyleCascadeTest, InternalEffectiveZoomVsAll) {
-  TestCascade parent(GetDocument());
-  parent.Add("zoom", "200%");
-  parent.Apply();
-
-  TestCascade cascade(GetDocument());
-  cascade.InheritFrom(parent.TakeStyle());
-  cascade.Add("zoom:-internal-reset-effective", CascadeOrigin::kUserAgent);
-  cascade.Add("all:inherit");
-  cascade.Apply();
-
-  EXPECT_EQ(4.0f, cascade.TakeStyle()->EffectiveZoom());
-}
-
 TEST_F(StyleCascadeTest, ZoomReversedCascadeOrder) {
   TestCascade cascade(GetDocument());
-  cascade.Add("zoom:-internal-reset-effective", CascadeOrigin::kUserAgent);
+  cascade.Add("zoom:normal", CascadeOrigin::kUserAgent);
   cascade.Add("zoom:200%", CascadeOrigin::kUserAgent);
   cascade.Apply();
 
@@ -2604,7 +2570,7 @@ TEST_F(StyleCascadeTest, ZoomReversedCascadeOrder) {
 TEST_F(StyleCascadeTest, ZoomImportant) {
   TestCascade cascade(GetDocument());
   cascade.Add("zoom:200% !important", CascadeOrigin::kUserAgent);
-  cascade.Add("zoom:-internal-reset-effective", CascadeOrigin::kAuthor);
+  cascade.Add("zoom:normal", CascadeOrigin::kAuthor);
   cascade.Apply();
 
   EXPECT_EQ(2.0f, cascade.TakeStyle()->EffectiveZoom());
@@ -3528,6 +3494,31 @@ TEST_F(StyleCascadeTest, GetCascadedValuesInterpolated) {
   EXPECT_EQ("linear", CssTextAt(map, "animation-timing-function"));
   EXPECT_EQ("10s", CssTextAt(map, "animation-duration"));
   EXPECT_EQ("-5s", CssTextAt(map, "animation-delay"));
+}
+
+TEST_F(StyleCascadeTest, ForcedVisitedBackgroundColor) {
+  ScopedForcedColorsForTest scoped_feature(true);
+  ColorSchemeHelper color_scheme_helper(GetDocument());
+  color_scheme_helper.SetForcedColors(GetDocument(), ForcedColors::kActive);
+  UpdateAllLifecyclePhasesForTest();
+
+  TestCascade cascade(GetDocument());
+  cascade.State().Style()->SetInsideLink(EInsideLink::kInsideVisitedLink);
+  cascade.Add(ParseDeclarationBlock("background-color:#aabbccdd"),
+              CascadeOrigin::kAuthor, CSSSelector::kMatchVisited);
+  cascade.Apply();
+
+  Color forced_bg_color =
+      StyleColor(CSSValueID::kCanvas).Resolve(Color(), ColorScheme::kLight);
+  Color expected_bg_color =
+      Color(forced_bg_color.Red(), forced_bg_color.Green(),
+            forced_bg_color.Blue(), 0xdd);
+
+  // Verify that the visited background color alpha channel is preserved in
+  // Forced Colors Mode.
+  EXPECT_EQ(
+      expected_bg_color,
+      cascade.State().Style()->InternalVisitedBackgroundColor().GetColor());
 }
 
 }  // namespace blink

@@ -42,8 +42,7 @@ class TestModule : public base::ModuleCache::Module {
 };
 
 v8::Local<v8::String> ToV8String(const char* str) {
-  return v8::String::NewFromUtf8(v8::Isolate::GetCurrent(), str,
-                                 v8::NewStringType::kNormal)
+  return v8::String::NewFromUtf8(v8::Isolate::GetCurrent(), str)
       .ToLocalChecked();
 }
 
@@ -436,8 +435,9 @@ TEST(V8UnwinderTest, CanUnwindFrom_NullModule) {
 }
 
 // Checks that unwinding from C++ through JavaScript and back into C++ succeeds.
-// NB: unwinding is only supported for 64 bit Windows and OS X.
-#if (defined(OS_WIN) && defined(ARCH_CPU_64_BITS)) || defined(OS_MAC)
+// NB: unwinding is only supported for 64 bit Windows and Intel macOS.
+#if (defined(OS_WIN) && defined(ARCH_CPU_64_BITS)) || \
+    (defined(OS_MAC) && defined(ARCH_CPU_X86_64))
 #define MAYBE_UnwindThroughV8Frames UnwindThroughV8Frames
 #else
 #define MAYBE_UnwindThroughV8Frames DISABLED_UnwindThroughV8Frames

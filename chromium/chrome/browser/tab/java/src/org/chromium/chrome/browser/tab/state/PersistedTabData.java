@@ -9,11 +9,14 @@ import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.Callback;
 import org.chromium.base.ThreadUtils;
+import org.chromium.base.TraceEvent;
 import org.chromium.base.UserData;
 import org.chromium.base.UserDataHost;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.supplier.Supplier;
+import org.chromium.base.task.PostTask;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.content_public.browser.UiThreadTaskTraits;
 
 import java.util.HashMap;
 import java.util.LinkedList;
@@ -98,8 +101,8 @@ public abstract class PersistedTabData implements UserData {
         // TODO(crbug.com/1059602) cache callbacks
         T persistedTabDataFromTab = getUserData(tab, clazz);
         if (persistedTabDataFromTab != null) {
-            // TODO(crbug.com/1060181) post the task
-            callback.onResult(persistedTabDataFromTab);
+            PostTask.runOrPostTask(UiThreadTaskTraits.DEFAULT,
+                    () -> { callback.onResult(persistedTabDataFromTab); });
             return;
         }
         String key = String.format(Locale.ENGLISH, "%d-%s", tab.getId(), clazz.toString());
@@ -188,7 +191,10 @@ public abstract class PersistedTabData implements UserData {
     abstract byte[] serialize();
 
     private byte[] serializeAndLog() {
-        byte[] res = serialize();
+        byte[] res;
+        try (TraceEvent e = TraceEvent.scoped("PersistedTabData.Serialize")) {
+            res = serialize();
+        }
         RecordHistogram.recordBooleanHistogram(
                 "Tabs.PersistedTabData.Serialize." + getUmaTag(), res != null);
         return res;
@@ -202,7 +208,10 @@ public abstract class PersistedTabData implements UserData {
     abstract boolean deserialize(@Nullable byte[] bytes);
 
     private void deserializeAndLog(@Nullable byte[] bytes) {
-        boolean success = deserialize(bytes);
+        boolean success;
+        try (TraceEvent e = TraceEvent.scoped("PersistedTabData.Deserialize")) {
+            success = deserialize(bytes);
+        }
         RecordHistogram.recordBooleanHistogram(
                 "Tabs.PersistedTabData.Deserialize." + getUmaTag(), success);
     }

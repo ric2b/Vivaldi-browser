@@ -6,8 +6,8 @@ package org.chromium.chrome.browser.omnibox.suggestions;
 
 import android.text.TextUtils;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.annotation.VisibleForTesting;
 import androidx.core.util.ObjectsCompat;
 
 import org.chromium.chrome.browser.omnibox.MatchClassificationStyle;
@@ -16,15 +16,35 @@ import org.chromium.components.query_tiles.QueryTile;
 import org.chromium.url.GURL;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Container class with information about each omnibox suggestion item.
  */
-@VisibleForTesting
 public class OmniboxSuggestion {
     public static final int INVALID_GROUP = -1;
     public static final int INVALID_TYPE = -1;
+
+    /**
+     * Specifies an individual tile for TILE_NAVSUGGEST suggestions.
+     */
+    public static class NavsuggestTile {
+        /**
+         * Title of the website the tile points to.
+         */
+        public final String title;
+        /**
+         * URL of the website the tile points to.
+         */
+        public final GURL url;
+
+        public NavsuggestTile(String title, GURL url) {
+            this.title = title;
+            this.url = url;
+        }
+    }
 
     /**
      * Specifies the style of portions of the suggestion text.
@@ -57,6 +77,7 @@ public class OmniboxSuggestion {
     }
 
     private final int mType;
+    private final @NonNull Set<Integer> mSubtypes;
     private final boolean mIsSearchType;
     private final String mDisplayText;
     private final List<MatchClassification> mDisplayTextClassifications;
@@ -77,15 +98,21 @@ public class OmniboxSuggestion {
     private final List<QueryTile> mQueryTiles;
     private final byte[] mClipboardImageData;
     private final boolean mHasTabMatch;
+    private final @Nullable List<NavsuggestTile> mNavsuggestTiles;
 
-    public OmniboxSuggestion(int nativeType, boolean isSearchType, int relevance, int transition,
-            String displayText, List<MatchClassification> displayTextClassifications,
-            String description, List<MatchClassification> descriptionClassifications,
-            SuggestionAnswer answer, String fillIntoEdit, GURL url, GURL imageUrl,
-            String imageDominantColor, boolean isStarred, boolean isDeletable,
-            String postContentType, byte[] postData, int groupId, List<QueryTile> queryTiles,
-            byte[] clipboardImageData, boolean hasTabMatch) {
+    public OmniboxSuggestion(int nativeType, Set<Integer> subtypes, boolean isSearchType,
+            int relevance, int transition, String displayText,
+            List<MatchClassification> displayTextClassifications, String description,
+            List<MatchClassification> descriptionClassifications, SuggestionAnswer answer,
+            String fillIntoEdit, GURL url, GURL imageUrl, String imageDominantColor,
+            boolean isStarred, boolean isDeletable, String postContentType, byte[] postData,
+            int groupId, List<QueryTile> queryTiles, byte[] clipboardImageData, boolean hasTabMatch,
+            List<NavsuggestTile> navsuggestTiles) {
+        if (subtypes == null) {
+            subtypes = Collections.emptySet();
+        }
         mType = nativeType;
+        mSubtypes = subtypes;
         mIsSearchType = isSearchType;
         mRelevance = relevance;
         mTransition = transition;
@@ -108,6 +135,7 @@ public class OmniboxSuggestion {
         mQueryTiles = queryTiles;
         mClipboardImageData = clipboardImageData;
         mHasTabMatch = hasTabMatch;
+        mNavsuggestTiles = navsuggestTiles;
     }
 
     public int getType() {
@@ -209,6 +237,13 @@ public class OmniboxSuggestion {
         return mRelevance;
     }
 
+    /**
+     * @return Set of suggestion subtypes.
+     */
+    public @NonNull Set<Integer> getSubtypes() {
+        return mSubtypes;
+    }
+
     @Override
     public int hashCode() {
         int hash = 37 * mType + mDisplayText.hashCode() + mFillIntoEdit.hashCode()
@@ -224,7 +259,7 @@ public class OmniboxSuggestion {
         }
 
         OmniboxSuggestion suggestion = (OmniboxSuggestion) obj;
-        return mType == suggestion.mType
+        return mType == suggestion.mType && ObjectsCompat.equals(mSubtypes, suggestion.mSubtypes)
                 && TextUtils.equals(mFillIntoEdit, suggestion.mFillIntoEdit)
                 && TextUtils.equals(mDisplayText, suggestion.mDisplayText)
                 && ObjectsCompat.equals(
@@ -249,15 +284,23 @@ public class OmniboxSuggestion {
         return mGroupId;
     }
 
+    /**
+     * @return List of tiles for TILE_NAVSUGGEST suggestion.
+     */
+    public @Nullable List<NavsuggestTile> getNavsuggestTiles() {
+        return mNavsuggestTiles;
+    }
+
     @Override
     public String toString() {
-        List<String> pieces = Arrays.asList("mType=" + mType, "mIsSearchType=" + mIsSearchType,
-                "mDisplayText=" + mDisplayText, "mDescription=" + mDescription,
-                "mFillIntoEdit=" + mFillIntoEdit, "mUrl=" + mUrl, "mImageUrl=" + mImageUrl,
-                "mImageDominatColor=" + mImageDominantColor, "mRelevance=" + mRelevance,
-                "mTransition=" + mTransition, "mIsStarred=" + mIsStarred,
-                "mIsDeletable=" + mIsDeletable, "mPostContentType=" + mPostContentType,
-                "mPostData=" + Arrays.toString(mPostData), "mGroupId=" + mGroupId,
+        List<String> pieces = Arrays.asList("mType=" + mType, "mSubtypes=" + mSubtypes.toString(),
+                "mIsSearchType=" + mIsSearchType, "mDisplayText=" + mDisplayText,
+                "mDescription=" + mDescription, "mFillIntoEdit=" + mFillIntoEdit, "mUrl=" + mUrl,
+                "mImageUrl=" + mImageUrl, "mImageDominatColor=" + mImageDominantColor,
+                "mRelevance=" + mRelevance, "mTransition=" + mTransition,
+                "mIsStarred=" + mIsStarred, "mIsDeletable=" + mIsDeletable,
+                "mPostContentType=" + mPostContentType, "mPostData=" + Arrays.toString(mPostData),
+                "mGroupId=" + mGroupId,
                 "mDisplayTextClassifications=" + mDisplayTextClassifications,
                 "mDescriptionClassifications=" + mDescriptionClassifications, "mAnswer=" + mAnswer);
         return pieces.toString();

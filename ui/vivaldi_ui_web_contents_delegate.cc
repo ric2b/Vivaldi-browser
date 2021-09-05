@@ -16,7 +16,8 @@
 #include "chrome/browser/ui/color_chooser.h"
 #include "chrome/common/pref_names.h"
 #include "components/printing/browser/print_composite_client.h"
-#include "content/browser/frame_host/render_frame_host_impl.h"
+#include "content/browser/renderer_host/render_frame_host_impl.h"
+#include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/file_select_listener.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_view_host.h"
@@ -178,6 +179,11 @@ void VivaldiUIWebContentsDelegate::PrintCrossProcessSubframe(
   const gfx::Rect& rect,
   int document_cookie,
   content::RenderFrameHost* subframe_host) const {
+
+  // |web_contents| is the app-contents which we do not want to print.
+  web_contents = content::WebContentsImpl::FromRenderFrameHostID(
+      subframe_host->GetProcess()->GetID(), subframe_host->GetRoutingID());
+
   auto* client = printing::PrintCompositeClient::FromWebContents(web_contents);
   if (client) {
     client->PrintCrossProcessSubframe(rect, document_cookie, subframe_host);

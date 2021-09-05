@@ -214,8 +214,9 @@ marker-end: none
 marker-mid: none
 marker-start: none
 mask-type: luminance
-math-style: inline
-math-superscript-shift-style: display
+math-depth: 0
+math-shift: normal
+math-style: normal
 max-block-size: none
 max-height: none
 max-inline-size: none

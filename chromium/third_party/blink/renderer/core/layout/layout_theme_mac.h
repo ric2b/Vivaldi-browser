@@ -38,23 +38,23 @@ class LayoutThemeMac final : public LayoutThemeDefault {
   }
 
   Color PlatformActiveSelectionBackgroundColor(
-      WebColorScheme color_scheme) const override;
+      ColorScheme color_scheme) const override;
   Color PlatformInactiveSelectionBackgroundColor(
-      WebColorScheme color_scheme) const override;
+      ColorScheme color_scheme) const override;
   Color PlatformActiveSelectionForegroundColor(
-      WebColorScheme color_scheme) const override;
+      ColorScheme color_scheme) const override;
   Color PlatformSpellingMarkerUnderlineColor() const override;
   Color PlatformGrammarMarkerUnderlineColor() const override;
   Color FocusRingColor() const override;
   String DisplayNameForFile(const File& file) const override;
-  bool PopsMenuByArrowKeys() const override;
-  bool PopsMenuByReturnKey() const override;
+  bool PopsMenuByArrowKeys() const override { return true; }
+  bool PopsMenuByReturnKey() const override { return false; }
   bool SupportsSelectionForegroundColors() const override { return false; }
 
  protected:
   // Controls color values returned from FocusRingColor().
   bool UsesTestModeFocusRingColor() const;
-  bool IsAccentColorCustomized(WebColorScheme color_scheme) const;
+  bool IsAccentColorCustomized(ColorScheme color_scheme) const;
 };
 
 }  // namespace blink

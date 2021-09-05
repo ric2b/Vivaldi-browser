@@ -21,6 +21,10 @@ class RenderWidgetHostView;
 class WebContents;
 }
 
+namespace base {
+class FilePath;
+}
+
 namespace extensions {
 
 // Start capturing the given area of the window corresponding to the given

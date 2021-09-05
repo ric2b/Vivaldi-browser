@@ -7,25 +7,43 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="wrap_content"
     android:layout_height="wrap_content"
-    android:layout_marginBottom="8dp"
-    android:orientation="horizontal">
+    android:paddingStart="24dp"
+    android:paddingEnd="24dp"
+    android:orientation="vertical">
 
-    <TextView
-        android:id="@+id/incognito_interstitial_learn_more"
-        android:layout_width="wrap_content"
+    <org.chromium.ui.widget.TextViewWithLeading
+        android:id="@+id/incognito_interstitial_message"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginStart="112dp"
-        android:layout_marginEnd="24dp"
-        android:layout_gravity="center_vertical"
-        android:text="@string/learn_more"
-        android:textAppearance="@style/TextAppearance.TextMediumThick.Blue" />
+        android:layout_marginBottom="16dp"
+        android:gravity="center_vertical"
+        android:textAppearance="@style/TextAppearance.TextMedium.Secondary"
+        android:text="@string/incognito_interstitial_message"
+        app:leading="@dimen/text_size_medium_leading" />
 
-    <org.chromium.ui.widget.ButtonCompat
-        android:id="@+id/incognito_interstitial_continue_button"
-        style="@style/FilledButton.Flat"
-        android:layout_width="wrap_content"
+    <LinearLayout
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginEnd="24dp"
-        android:text="@string/continue_button"/>
+        android:gravity="end"
+        android:orientation="horizontal">
+
+        <org.chromium.ui.widget.ButtonCompat
+            android:id="@+id/incognito_interstitial_learn_more"
+            style="@style/TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:paddingStart="24dp"
+            android:paddingEnd="24dp"
+            android:text="@string/learn_more" />
+
+        <org.chromium.ui.widget.ButtonCompat
+            android:id="@+id/incognito_interstitial_continue_button"
+            style="@style/FilledButton.Flat"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:text="@string/continue_button" />
+
+    </LinearLayout>
 
 </LinearLayout>

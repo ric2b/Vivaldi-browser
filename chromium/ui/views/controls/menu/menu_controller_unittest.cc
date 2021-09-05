@@ -26,8 +26,6 @@
 #include "ui/events/types/event_type.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
-#include "ui/views/accessibility/ax_event_manager.h"
-#include "ui/views/accessibility/ax_event_observer.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/controls/menu/menu_controller_delegate.h"
@@ -37,6 +35,7 @@
 #include "ui/views/controls/menu/menu_item_view.h"
 #include "ui/views/controls/menu/menu_scroll_view_container.h"
 #include "ui/views/controls/menu/submenu_view.h"
+#include "ui/views/test/ax_event_counter.h"
 #include "ui/views/test/menu_test_utils.h"
 #include "ui/views/test/views_test_base.h"
 #include "ui/views/widget/root_view.h"
@@ -260,22 +259,6 @@ class CancelMenuOnMousePressView : public View {
 
  private:
   MenuController* controller_;
-};
-
-class TestAXEventObserver : public views::AXEventObserver {
- public:
-  TestAXEventObserver() { views::AXEventManager::Get()->AddObserver(this); }
-  ~TestAXEventObserver() override {
-    views::AXEventManager::Get()->RemoveObserver(this);
-  }
-
-  bool saw_selected_children_changed_ = false;
-
-  void OnViewEvent(views::View*, ax::mojom::Event event_type) override {
-    if (event_type == ax::mojom::Event::kSelectedChildrenChanged) {
-      saw_selected_children_changed_ = true;
-    }
-  }
 };
 
 }  // namespace
@@ -1003,6 +986,70 @@ TEST_F(MenuControllerTest, InitialSelectedItem) {
 
   // Clear references in menu controller to the menu item that is going away.
   ResetSelection();
+}
+
+// Verifies that the context menu bubble should prioritize its cached menu
+// position (above or below the anchor) after its size updates
+// (https://crbug.com/1126244).
+TEST_F(MenuControllerTest, VerifyMenuBubblePositionAfterSizeChanges) {
+  constexpr gfx::Rect monitor_bounds(0, 0, 500, 500);
+  constexpr gfx::Size menu_size(100, 200);
+  const gfx::Insets border_and_shadow_insets =
+      BubbleBorder::GetBorderAndShadowInsets(
+          MenuConfig::instance().touchable_menu_shadow_elevation);
+
+  // Calculate the suitable anchor point to ensure that if the menu shows below
+  // the anchor point, the bottom of the menu should be one pixel off the
+  // bottom of the display. It means that there is insufficient space for the
+  // menu below the anchor.
+  const gfx::Point anchor_point(monitor_bounds.width() / 2,
+                                monitor_bounds.bottom() + 1 -
+                                    menu_size.height() +
+                                    border_and_shadow_insets.top());
+
+  MenuBoundsOptions options;
+  options.menu_anchor = MenuAnchorPosition::kBubbleRight;
+  options.monitor_bounds = monitor_bounds;
+  options.anchor_bounds = gfx::Rect(anchor_point, gfx::Size());
+
+  // Case 1: There is insufficient space for the menu below `anchor_point` and
+  // there is no cached menu position. The menu should show above the anchor.
+  {
+    options.menu_size = menu_size;
+    ASSERT_GT(options.anchor_bounds.y() - border_and_shadow_insets.top() +
+                  menu_size.height(),
+              monitor_bounds.bottom());
+    CalculateBubbleMenuBounds(options);
+    EXPECT_EQ(MenuItemView::MenuPosition::kAboveBounds,
+              menu_item()->ActualMenuPosition());
+  }
+
+  // Case 2: There is insufficient space for the menu below `anchor_point`. The
+  // cached position is below the anchor. The menu should show above the anchor.
+  {
+    options.menu_size = menu_size;
+    options.menu_position = MenuItemView::MenuPosition::kBelowBounds;
+    CalculateBubbleMenuBounds(options);
+    EXPECT_EQ(MenuItemView::MenuPosition::kAboveBounds,
+              menu_item()->ActualMenuPosition());
+  }
+
+  // Case 3: There is enough space for the menu below `anchor_point`. The cached
+  // menu position is above the anchor. The menu should show above the anchor.
+  {
+    // Shrink the menu size. Verify that there is enough space below the anchor
+    // point now.
+    constexpr gfx::Size updated_size(menu_size.width(), menu_size.height() / 2);
+    options.menu_size = updated_size;
+    EXPECT_LE(options.anchor_bounds.y() - border_and_shadow_insets.top() +
+                  updated_size.height(),
+              monitor_bounds.bottom());
+
+    options.menu_position = MenuItemView::MenuPosition::kAboveBounds;
+    CalculateBubbleMenuBounds(options);
+    EXPECT_EQ(MenuItemView::MenuPosition::kAboveBounds,
+              menu_item()->ActualMenuPosition());
+  }
 }
 
 // Tests that opening the menu and pressing 'Home' selects the first menu item.
@@ -2565,18 +2612,17 @@ TEST_F(MenuControllerTest, AccessibilityDoDefaultCallsAccept) {
 // Test that the kSelectedChildrenChanged event is emitted on
 // the root menu item when the selected menu item changes.
 TEST_F(MenuControllerTest, AccessibilityEmitsSelectChildrenChanged) {
-  TestAXEventObserver observer;
+  AXEventCounter ax_counter(views::AXEventManager::Get());
   menu_controller()->Run(owner(), nullptr, menu_item(), gfx::Rect(),
                          MenuAnchorPosition::kTopLeft, false, false);
 
   // Arrow down to select an item checking the event has been emitted.
-  EXPECT_EQ(observer.saw_selected_children_changed_, false);
+  EXPECT_EQ(ax_counter.GetCount(ax::mojom::Event::kSelectedChildrenChanged), 0);
   DispatchKey(ui::VKEY_DOWN);
-  EXPECT_EQ(observer.saw_selected_children_changed_, true);
+  EXPECT_EQ(ax_counter.GetCount(ax::mojom::Event::kSelectedChildrenChanged), 1);
 
-  observer.saw_selected_children_changed_ = false;
   DispatchKey(ui::VKEY_DOWN);
-  EXPECT_EQ(observer.saw_selected_children_changed_, true);
+  EXPECT_EQ(ax_counter.GetCount(ax::mojom::Event::kSelectedChildrenChanged), 2);
 }
 
 #if defined(OS_APPLE)

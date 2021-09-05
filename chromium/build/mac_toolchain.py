@@ -34,9 +34,9 @@ MAC_BINARIES_TAG = {
     # This contains binaries from Xcode 11.2.1, along with the 10.15 SDKs (aka
     # 11B53).
     'default': 'wXywrnOhzFxwLYlwO62UzRxVCjnu6DoSI2D2jrCd00gC',
-    # This contains binaries from Xcode 12 beta 5, along with the
-    # 11 SDK (aka 12A8189h).
-    'xcode_12_beta': 'MzSaRpqZju2_boJy04DQnw5xpGgiQdPU53iHdst_dHQC',
+    # This contains binaries from the Xcode 12.2 release candidate, along with
+    # the macOS 11 SDK (aka 12B5044c).
+    'xcode_12_beta': 'UwKVijd1FvMzmCAjyoYq_sw6xXJZpw_mGBH420gwlrwC',
 }
 
 # The toolchain will not be downloaded if the minimum OS version is not met.
@@ -151,9 +151,10 @@ def InstallXcodeBinaries(version, binaries_root=None):
   current_license_path = '/Library/Preferences/com.apple.dt.Xcode.plist'
   if os.path.exists(current_license_path):
     current_license_plist = plistlib.readPlist(current_license_path)
-    xcode_version = current_license_plist['IDEXcodeVersionForAgreedToGMLicense']
-    if (pkg_resources.parse_version(xcode_version) >=
-        pkg_resources.parse_version(cipd_xcode_version)):
+    xcode_version = current_license_plist.get(
+        'IDEXcodeVersionForAgreedToGMLicense')
+    if (xcode_version is not None and pkg_resources.parse_version(xcode_version)
+        >= pkg_resources.parse_version(cipd_xcode_version)):
       should_overwrite_license = False
 
   if not should_overwrite_license:

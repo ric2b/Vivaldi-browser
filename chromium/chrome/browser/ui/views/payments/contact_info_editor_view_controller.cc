@@ -28,9 +28,9 @@
 namespace payments {
 
 ContactInfoEditorViewController::ContactInfoEditorViewController(
-    PaymentRequestSpec* spec,
-    PaymentRequestState* state,
-    PaymentRequestDialogView* dialog,
+    base::WeakPtr<PaymentRequestSpec> spec,
+    base::WeakPtr<PaymentRequestState> state,
+    base::WeakPtr<PaymentRequestDialogView> dialog,
     BackNavigationType back_navigation_type,
     base::OnceClosure on_edited,
     base::OnceCallback<void(const autofill::AutofillProfile&)> on_added,
@@ -268,14 +268,15 @@ bool ContactInfoEditorViewController::ContactInfoValidationDelegate::
 }
 
 bool ContactInfoEditorViewController::ContactInfoValidationDelegate::
-    IsValidCombobox(views::Combobox* combobox, base::string16* error_message) {
+    IsValidCombobox(ValidatingCombobox* combobox,
+                    base::string16* error_message) {
   // This UI doesn't contain any comboboxes.
   NOTREACHED();
   return true;
 }
 
 bool ContactInfoEditorViewController::ContactInfoValidationDelegate::
-    ComboboxValueChanged(views::Combobox* combobox) {
+    ComboboxValueChanged(ValidatingCombobox* combobox) {
   // This UI doesn't contain any comboboxes.
   NOTREACHED();
   return true;

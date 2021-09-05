@@ -148,6 +148,7 @@
 <translation id="6165508094623778733">Viac informácií</translation>
 <translation id="6177128806592000436">Vaše pripojenie na túto stránku nie je zabezpečené</translation>
 <translation id="6203231073485539293">Skontrolujte internetové pripojenie</translation>
+<translation id="6225522625585012689">Na stránke &lt;strong&gt;vivaldi://policy&lt;/strong&gt; nájdete zoznam zakázaných webových adries a ďalšie pravidlá presadzované vaším správcom systému.</translation>
 <translation id="625755898061068298">Vybrali ste vypnutie bezpečnostných upozornení pre túto stránku.</translation>
 <translation id="6264485186158353794">Naspäť do bezpečného režimu</translation>
 <translation id="6305205051461490394">Web <ph name="URL" /> je nedostupný.</translation>
@@ -197,7 +198,6 @@
 <translation id="8041940743680923270">Použiť predvolené všeobecné nastavenie (Opýtať sa)</translation>
 <translation id="808894953321890993">Zmeniť heslo</translation>
 <translation id="8119307142152921512">sledovanie a reklamy</translation>
-<translation id="8142868475871995937">Na stránke &lt;strong&gt;vivaldi://policy&lt;/strong&gt; nájdete zoznam zakázaných webových adries a ďalšie pravidlá vynútené vaším správcom systému.</translation>
 <translation id="8149426793427495338">Váš počítač prešiel do režimu spánku.</translation>
 <translation id="8150722005171944719">Súbor na adrese <ph name="URL" /> nie je možné prečítať. Je možné, že bol odstránený, presunutý alebo môžu v prístupe brániť povolenia súboru.</translation>
 <translation id="8184538546369750125">Použiť predvolené všeobecné nastavenie (Povoliť)</translation>

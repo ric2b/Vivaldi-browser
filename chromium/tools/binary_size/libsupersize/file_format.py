@@ -108,20 +108,21 @@ import itertools
 import json
 import logging
 import os
-import shutil
 import sys
 
 import models
 import parallel
 
 
+_COMMON_HEADER = b'# Created by //tools/binary_size\n'
+
 # File format version for .size files.
-_SERIALIZATION_VERSION_SINGLE_CONTAINER = 'Size File Format v1'
-_SERIALIZATION_VERSION_MULTI_CONTAINER = 'Size File Format v1.1'
+_SIZE_HEADER_SINGLE_CONTAINER = b'Size File Format v1\n'
+_SIZE_HEADER_MULTI_CONTAINER = b'Size File Format v1.1\n'
 
 # Header for .sizediff files
-_SIZEDIFF_HEADER = '# Created by //tools/binary_size\nDIFF\n'
-
+_SIZEDIFF_HEADER = b'DIFF\n'
+_SIZEDIFF_VERSION = 1
 
 class _Writer:
   """Helper to format and write data to a file object."""
@@ -161,8 +162,22 @@ def SortSymbols(raw_symbols):
   #     (and not using .sort()), or have it specify a total ordering (which must
   #     also include putting padding-only symbols before others of the same
   #     address). Note: The sort as-is takes ~1.5 seconds.
-  raw_symbols.sort(
-      key=lambda s: (s.IsPak(), s.IsBss(), s.section_name, s.address))
+  # s.size_without_padding > 0 prevents CalculatePadding() from incorrectly
+  #   detecting duplicate symbols.
+  # (s.full_name, s.object_path) are important for sort stability when called by
+  #   _ExpandSparseSymbols().
+  def sort_key(s):
+    return (s.IsPak(), s.IsBss(), s.section_name, s.address,
+            s.size_without_padding > 0, s.full_name, s.object_path)
+
+  raw_symbols.sort(key=sort_key)
+  seen_aliases = set()
+  for s in raw_symbols:
+    if s.aliases:
+      if s.aliases[0] not in seen_aliases:
+        s.aliases.sort(key=sort_key)
+        seen_aliases.add(s.aliases[0])
+
   logging.info('Processed %d symbols', len(raw_symbols))
 
 
@@ -181,8 +196,11 @@ def CalculatePadding(raw_symbols):
     if (prev_symbol.container.name != symbol.container.name
         or prev_symbol.section_name != symbol.section_name):
       container_and_section = (symbol.container.name, symbol.section_name)
-      assert container_and_section not in seen_container_and_sections, (
-          'Input symbols must be sorted by container, section, then address.')
+      assert container_and_section not in seen_container_and_sections, """\
+Input symbols must be sorted by container, section, then address.
+Found: {}
+Then: {}
+""".format(prev_symbol, symbol)
       seen_container_and_sections.add(container_and_section)
       continue
     if (symbol.address <= 0 or prev_symbol.address <= 0
@@ -213,17 +231,16 @@ def _ExpandSparseSymbols(sparse_symbols):
     sparse_symbols: A list or SymbolGroup to expand.
   """
   representative_symbols = set()
-  raw_symbols = set()
+  raw_symbols = []
   logging.debug('Expanding sparse_symbols with aliases of included symbols')
   for sym in sparse_symbols:
     if sym.aliases:
+      num_syms = len(representative_symbols)
       representative_symbols.add(sym.aliases[0])
+      if num_syms < len(representative_symbols):
+        raw_symbols.extend(sym.aliases)
     else:
-      raw_symbols.add(sym)
-  for sym in representative_symbols:
-    raw_symbols.update(set(sym.aliases))
-  raw_symbols = list(raw_symbols)
-  SortSymbols(raw_symbols)
+      raw_symbols.append(sym)
   logging.debug('Done expanding sparse_symbols')
   return models.SymbolGroup(raw_symbols)
 
@@ -252,14 +269,11 @@ def _SaveSizeInfoToFile(size_info,
   num_containers = len(size_info.containers)
   has_multi_containers = (num_containers > 1)
 
-  w = _Writer(file_obj)
-
-  # "Created by SuperSize" header
-  w.WriteLine('# Created by //tools/binary_size')
+  file_obj.write(_COMMON_HEADER)
   if has_multi_containers:
-    w.WriteLine(_SERIALIZATION_VERSION_MULTI_CONTAINER)
+    file_obj.write(_SIZE_HEADER_MULTI_CONTAINER)
   else:
-    w.WriteLine(_SERIALIZATION_VERSION_SINGLE_CONTAINER)
+    file_obj.write(_SIZE_HEADER_SINGLE_CONTAINER)
 
   # JSON header fields
   fields = {
@@ -283,6 +297,8 @@ def _SaveSizeInfoToFile(size_info,
     fields['section_sizes'] = size_info.containers[0].section_sizes
 
   fields_str = json.dumps(fields, indent=2, sort_keys=True)
+
+  w = _Writer(file_obj)
   w.WriteLine(str(len(fields_str)))
   w.WriteLine(fields_str)
   w.LogSize('header')  # For libchrome: 570 bytes.
@@ -404,11 +420,12 @@ def _LoadSizeInfoFromFile(file_obj, size_path):
   """
   # Split lines on '\n', since '\r' can appear in some lines!
   lines = io.TextIOWrapper(file_obj, newline='\n')
-  _ReadLine(lines)  # Line 0: "Created by SuperSize" header
-  actual_version = _ReadLine(lines)
-  if actual_version == _SERIALIZATION_VERSION_SINGLE_CONTAINER:
+  header_line = _ReadLine(lines).encode('ascii')
+  assert header_line == _COMMON_HEADER[:-1], 'was ' + str(header_line)
+  header_line = _ReadLine(lines).encode('ascii')
+  if header_line == _SIZE_HEADER_SINGLE_CONTAINER[:-1]:
     has_multi_containers = False
-  elif actual_version == _SERIALIZATION_VERSION_MULTI_CONTAINER:
+  elif header_line == _SIZE_HEADER_MULTI_CONTAINER[:-1]:
     has_multi_containers = True
   else:
     raise ValueError('Version mismatch. Need to write some upgrade code.')
@@ -459,6 +476,10 @@ def _LoadSizeInfoFromFile(file_obj, size_path):
   path_tuples = [
       _ReadValuesFromLine(lines, split='\t') for _ in range(num_path_tuples)
   ]
+
+  if num_path_tuples == 0:
+    logging.warning('File contains no symbols: %s', size_path)
+    return models.SizeInfo(build_config, containers, [], size_path=size_path)
 
   # Component list.
   if has_components:
@@ -557,10 +578,10 @@ def _LoadSizeInfoFromFile(file_obj, size_path):
       # Derived.
       if cur_paddings:
         new_sym.padding = cur_paddings[i]
-        new_sym.size += new_sym.padding
+        if not new_sym.IsOverhead():
+          new_sym.size += new_sym.padding
       else:
-        # This will be computed during CreateSizeInfo().
-        new_sym.padding = 0
+        new_sym.padding = 0  # Computed below.
       new_sym.template_name = ''
       new_sym.name = ''
 
@@ -624,9 +645,8 @@ def SaveSizeInfo(size_info,
         sparse_symbols=sparse_symbols)
 
     logging.debug('Serialization complete. Gzipping...')
-    bytesio.seek(0)
     with _OpenGzipForWrite(path, file_obj=file_obj) as f:
-      f.write(bytesio.read())
+      f.write(bytesio.getvalue())
 
 
 def LoadSizeInfo(filename, file_obj=None):
@@ -637,6 +657,10 @@ def LoadSizeInfo(filename, file_obj=None):
 
 def SaveDeltaSizeInfo(delta_size_info, path, file_obj=None):
   """Saves |delta_size_info| to |path|."""
+
+  if not file_obj:
+    with open(path, 'wb') as f:
+      return SaveDeltaSizeInfo(delta_size_info, path, f)
 
   changed_symbols = delta_size_info.raw_symbols \
       .WhereDiffStatusIs(models.DIFF_STATUS_UNCHANGED).Inverted()
@@ -662,25 +686,46 @@ def SaveDeltaSizeInfo(delta_size_info, path, file_obj=None):
       include_padding=True,
       sparse_symbols=before_symbols)
 
-  with file_obj or open(path, 'wb') as output_file:
-    w = _Writer(output_file)
+  w = _Writer(file_obj)
+  w.WriteBytes(_COMMON_HEADER + _SIZEDIFF_HEADER)
+  # JSON header fields
+  fields = {
+      'version': _SIZEDIFF_VERSION,
+      'before_length': before_size_file.tell(),
+  }
+  fields_str = json.dumps(fields, indent=2, sort_keys=True)
 
-    # |_SIZEDIFF_HEADER| is multi-line with new line at end, so use
-    # WriteString() instead of WriteLine().
-    w.WriteString(_SIZEDIFF_HEADER)
+  w.WriteLine(str(len(fields_str)))
+  w.WriteLine(fields_str)
 
-    # JSON header fields
-    fields = {
-        'version': 1,
-        'before_length': before_size_file.tell(),
-    }
-    fields_str = json.dumps(fields, indent=2, sort_keys=True)
-    w.WriteLine(str(len(fields_str)))
-    w.WriteLine(fields_str)
+  w.WriteBytes(before_size_file.getvalue())
+  after_promise.get()
+  w.WriteBytes(after_size_file.getvalue())
 
-    before_size_file.seek(0)
-    shutil.copyfileobj(before_size_file, output_file)
 
-    after_promise.get()
-    after_size_file.seek(0)
-    shutil.copyfileobj(after_size_file, output_file)
+def LoadDeltaSizeInfo(path, file_obj=None):
+  """Returns a tuple of size infos (before, after).
+
+  To reconstruct the DeltaSizeInfo, diff the two size infos.
+  """
+  if not file_obj:
+    with open(path, 'rb') as f:
+      return LoadDeltaSizeInfo(path, f)
+
+  combined_header = _COMMON_HEADER + _SIZEDIFF_HEADER
+  actual_header = file_obj.read(len(combined_header))
+  if actual_header != combined_header:
+    raise Exception('Bad file header.')
+
+  json_len = int(file_obj.readline())
+  json_str = file_obj.read(json_len + 1)  # + 1 for \n
+  fields = json.loads(json_str)
+
+  assert fields['version'] == _SIZEDIFF_VERSION
+  after_pos = file_obj.tell() + fields['before_length']
+
+  before_size_info = LoadSizeInfo(path, file_obj)
+  file_obj.seek(after_pos)
+  after_size_info = LoadSizeInfo(path, file_obj)
+
+  return before_size_info, after_size_info

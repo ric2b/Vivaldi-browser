@@ -10,7 +10,7 @@
 #include "base/containers/flat_map.h"
 #include "base/memory/ref_counted.h"
 #include "base/single_thread_task_runner.h"
-#include "components/viz/common/quads/render_pass.h"
+#include "components/viz/common/quads/aggregated_render_pass.h"
 #include "components/viz/service/viz_service_export.h"
 #include "gpu/command_buffer/common/mailbox.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -18,6 +18,7 @@
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/video_types.h"
 #include "ui/gl/gpu_switching_observer.h"
+#include "ui/gl/hdr_metadata.h"
 
 namespace viz {
 struct DebugRendererSettings;
@@ -67,6 +68,8 @@ class VIZ_SERVICE_EXPORT DCLayerOverlay {
 
   gfx::ProtectedVideoType protected_video_type =
       gfx::ProtectedVideoType::kClear;
+
+  gl::HDRMetadata hdr_metadata;
 };
 
 typedef std::vector<DCLayerOverlay> DCLayerOverlayList;
@@ -84,7 +87,7 @@ class VIZ_SERVICE_EXPORT DCLayerOverlayProcessor
   // Virtual for testing.
   virtual void Process(DisplayResourceProvider* resource_provider,
                        const gfx::RectF& display_rect,
-                       RenderPassList* render_passes,
+                       AggregatedRenderPassList* render_passes,
                        gfx::Rect* damage_rect,
                        DCLayerOverlayList* dc_layer_overlays);
   void ClearOverlayState();
@@ -103,36 +106,34 @@ class VIZ_SERVICE_EXPORT DCLayerOverlayProcessor
   // UpdateDCLayerOverlays() adds the quad at |it| to the overlay list
   // |dc_layer_overlays|.
   void UpdateDCLayerOverlays(const gfx::RectF& display_rect,
-                             RenderPass* render_pass,
+                             AggregatedRenderPass* render_pass,
                              const QuadList::Iterator& it,
                              const gfx::Rect& quad_rectangle_in_target_space,
                              const gfx::Rect& occluding_damage_rect,
                              bool is_overlay,
                              QuadList::Iterator* new_it,
                              size_t* new_index,
-                             gfx::Rect* this_frame_overlay_rect,
                              gfx::Rect* this_frame_underlay_rect,
                              gfx::Rect* damage_rect,
                              DCLayerOverlayList* dc_layer_overlays);
 
   // Returns an iterator to the element after |it|.
   QuadList::Iterator ProcessForOverlay(const gfx::RectF& display_rect,
-                                       RenderPass* render_pass,
+                                       AggregatedRenderPass* render_pass,
                                        const gfx::Rect& quad_rectangle,
                                        const QuadList::Iterator& it,
                                        gfx::Rect* damage_rect);
   void ProcessForUnderlay(const gfx::RectF& display_rect,
-                          RenderPass* render_pass,
+                          AggregatedRenderPass* render_pass,
                           const gfx::Rect& quad_rectangle,
                           const QuadList::Iterator& it,
                           gfx::Rect* damage_rect,
                           gfx::Rect* this_frame_underlay_rect,
                           DCLayerOverlay* dc_layer);
 
-  void InsertDebugBorderDrawQuad(const gfx::RectF& display_rect,
-                                 const gfx::Rect& overlay_rect,
-                                 SkColor border_color,
-                                 RenderPass* render_pass,
+  void InsertDebugBorderDrawQuad(const DCLayerOverlayList* dc_layer_overlays,
+                                 AggregatedRenderPass* render_pass,
+                                 const gfx::RectF& display_rect,
                                  gfx::Rect* damage_rect);
 
   bool has_overlay_support_;

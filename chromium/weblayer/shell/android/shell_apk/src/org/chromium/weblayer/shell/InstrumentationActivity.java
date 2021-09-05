@@ -48,6 +48,7 @@ public class InstrumentationActivity extends FragmentActivity {
 
     public static final String EXTRA_PERSISTENCE_ID = "EXTRA_PERSISTENCE_ID";
     public static final String EXTRA_PROFILE_NAME = "EXTRA_PROFILE_NAME";
+    public static final String EXTRA_IS_INCOGNITO = "EXTRA_IS_INCOGNITO";
     private static final float DEFAULT_TEXT_SIZE = 15.0F;
 
     // Used in tests to specify whether WebLayer should be created automatically on launch.
@@ -57,6 +58,12 @@ public class InstrumentationActivity extends FragmentActivity {
     // Used in tests to specify whether WebLayer URL bar should set default click listeners
     // that show Page Info UI on its TextView.
     public static final String EXTRA_URLBAR_TEXT_CLICKABLE = "EXTRA_URLBAR_TEXT_CLICKABLE";
+
+    private static OnCreatedCallback sOnCreatedCallback;
+
+    // If true, multiple fragments may be created. Only the first is attached. This is useful for
+    // tests that need to create multiple BrowserFragments.
+    public static boolean sAllowMultipleFragments;
 
     private Profile mProfile;
     private Fragment mFragment;
@@ -83,6 +90,25 @@ public class InstrumentationActivity extends FragmentActivity {
         } catch (LinkageError | ClassNotFoundException e) {
         }
         return false;
+    }
+
+    /**
+     * Use this callback for tests that need to be notified synchronously when the Browser has been
+     * created.
+     */
+    public static interface OnCreatedCallback {
+        // Notification that a Browser was created.
+        // This is called on the UI thread.
+        public void onCreated(Browser browser);
+    }
+
+    // Registers a callback that is notified on the UI thread when a Browser is created.
+    public static void registerOnCreatedCallback(OnCreatedCallback callback) {
+        sOnCreatedCallback = callback;
+        // Ideally |callback| would be registered in the Intent, but that isn't possible as to do so
+        // |callback| would have to be a Parceable (which doesn't make sense). As at this time each
+        // test runs in its own process a static is used, if multiple tests were to run in the same
+        // binary, then some state would need to be put in the intent.
     }
 
     public Tab getTab() {
@@ -292,6 +318,12 @@ public class InstrumentationActivity extends FragmentActivity {
             setTabCallbacks(mBrowser.getActiveTab());
             setTab(mBrowser.getActiveTab());
         }
+
+        if (sOnCreatedCallback != null) {
+            sOnCreatedCallback.onCreated(mBrowser);
+            // Don't reset |sOnCreatedCallback| as it's needed for tests that exercise activity
+            // recreation.
+        }
     }
 
     private void setTabCallbacks(Tab tab) {
@@ -372,10 +404,6 @@ public class InstrumentationActivity extends FragmentActivity {
                 mPreviousTabList.add(mTab);
                 setTab(newTab);
             }
-            @Override
-            public void onCloseTab() {
-                assert false;
-            }
         });
 
         // Creates and adds a new UrlBarView to |mTopContentsContainer|.
@@ -391,9 +419,18 @@ public class InstrumentationActivity extends FragmentActivity {
             // FragmentManager could have re-created the fragment.
             List<Fragment> fragments = fragmentManager.getFragments();
             if (fragments.size() > 1) {
-                throw new IllegalStateException("More than one fragment added, shouldn't happen");
+                if (!sAllowMultipleFragments) {
+                    throw new IllegalStateException(
+                            "More than one fragment added, shouldn't happen");
+                }
+                if (sOnCreatedCallback != null) {
+                    for (int i = 1; i < fragments.size(); ++i) {
+                        sOnCreatedCallback.onCreated(Browser.fromFragment(fragments.get(i)));
+                    }
+                }
+                return fragments.get(0);
             }
-            if (fragments.size() == 1) {
+            if (fragments.size() > 0) {
                 return fragments.get(0);
             }
         }
@@ -401,14 +438,23 @@ public class InstrumentationActivity extends FragmentActivity {
     }
 
     public Fragment createBrowserFragment(int viewId) {
+        return createBrowserFragment(viewId, getIntent());
+    }
+
+    public Fragment createBrowserFragment(int viewId, Intent intent) {
         FragmentManager fragmentManager = getSupportFragmentManager();
-        String profileName = getIntent().hasExtra(EXTRA_PROFILE_NAME)
-                ? getIntent().getStringExtra(EXTRA_PROFILE_NAME)
+        String profileName = intent.hasExtra(EXTRA_PROFILE_NAME)
+                ? intent.getStringExtra(EXTRA_PROFILE_NAME)
                 : "DefaultProfile";
-        String persistenceId = getIntent().hasExtra(EXTRA_PERSISTENCE_ID)
-                ? getIntent().getStringExtra(EXTRA_PERSISTENCE_ID)
+        String persistenceId = intent.hasExtra(EXTRA_PERSISTENCE_ID)
+                ? intent.getStringExtra(EXTRA_PERSISTENCE_ID)
                 : null;
-        Fragment fragment = WebLayer.createBrowserFragment(profileName, persistenceId);
+        boolean incognito = intent.hasExtra(EXTRA_IS_INCOGNITO)
+                ? intent.getBooleanExtra(EXTRA_IS_INCOGNITO, false)
+                : (profileName == null);
+        Fragment fragment = incognito
+                ? WebLayer.createBrowserFragmentWithIncognitoProfile(profileName, persistenceId)
+                : WebLayer.createBrowserFragment(profileName, persistenceId);
         FragmentTransaction transaction = fragmentManager.beginTransaction();
         transaction.add(viewId, fragment);
 
@@ -416,6 +462,11 @@ public class InstrumentationActivity extends FragmentActivity {
         // activity synchronously, so we can use all the functionality immediately. Otherwise we'd
         // have to wait until the commit is executed.
         transaction.commitNow();
+
+        if (viewId != mMainViewId && sOnCreatedCallback != null) {
+            sOnCreatedCallback.onCreated(Browser.fromFragment(fragment));
+        }
+
         return fragment;
     }
 

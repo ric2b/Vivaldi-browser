@@ -64,16 +64,25 @@ class VIEWS_EXPORT DialogDelegate : public WidgetDelegate {
     // dialog. It's legal for a button to be marked enabled that isn't present
     // in |buttons| (see above).
     int enabled_buttons = ui::DIALOG_BUTTON_OK | ui::DIALOG_BUTTON_CANCEL;
-
-    // The view that should receive initial focus in the dialog. If not set, the
-    // default button will receive initial focus. If explicitly set to nullptr,
-    // no view will receive focus.
-    base::Optional<View*> initially_focused_view;
   };
 
   DialogDelegate();
+  ~DialogDelegate() override;
 
   // Creates a widget at a default location.
+  // There are two variant of this method. The newer one is the unique_ptr
+  // method, which simply takes ownership of the WidgetDelegate and passes it to
+  // the created Widget. When using the unique_ptr version, it is required that
+  // delegate->owned_by_widget(). Unless you have a good reason, you should use
+  // this variant.
+  //
+  // If !delegate->owned_by_widget() *or* if your WidgetDelegate subclass has a
+  // custom override of WidgetDelegate::DeleteDelegate, use the raw pointer
+  // variant instead, and please talk to one of the //ui/views owners about
+  // your use case.
+  static Widget* CreateDialogWidget(std::unique_ptr<WidgetDelegate> delegate,
+                                    gfx::NativeWindow context,
+                                    gfx::NativeView parent);
   static Widget* CreateDialogWidget(WidgetDelegate* delegate,
                                     gfx::NativeWindow context,
                                     gfx::NativeView parent);
@@ -196,7 +205,6 @@ class VIEWS_EXPORT DialogDelegate : public WidgetDelegate {
   void SetButtons(int buttons);
   void SetButtonLabel(ui::DialogButton button, base::string16 label);
   void SetButtonEnabled(ui::DialogButton button, bool enabled);
-  void SetInitiallyFocusedView(View* view);
 
   // Called when the user presses the dialog's "OK" button or presses the dialog
   // accept accelerator, if there is one.
@@ -278,8 +286,6 @@ class VIEWS_EXPORT DialogDelegate : public WidgetDelegate {
   void WindowWillClose();
 
  protected:
-  ~DialogDelegate() override;
-
   // Overridden from WidgetDelegate:
   ax::mojom::Role GetAccessibleWindowRole() override;
 
@@ -348,14 +354,9 @@ class VIEWS_EXPORT DialogDelegateView : public DialogDelegate, public View {
   ~DialogDelegateView() override;
 
   // DialogDelegate:
-  void DeleteDelegate() override;
   Widget* GetWidget() override;
   const Widget* GetWidget() const override;
   View* GetContentsView() override;
-
-  // View:
-  void ViewHierarchyChanged(
-      const ViewHierarchyChangedDetails& details) override;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(DialogDelegateView);

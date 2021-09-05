@@ -29,7 +29,6 @@
 
 #include <memory>
 
-#include "base/macros.h"
 #include "third_party/blink/renderer/core/accessibility/axid.h"
 #include "third_party/blink/renderer/core/accessibility/blink_ax_event_intent.h"
 #include "third_party/blink/renderer/core/core_export.h"
@@ -57,6 +56,8 @@ class CORE_EXPORT AXObjectCache : public GarbageCollected<AXObjectCache> {
 
   static AXObjectCache* Create(Document&);
 
+  AXObjectCache(const AXObjectCache&) = delete;
+  AXObjectCache& operator=(const AXObjectCache&) = delete;
   virtual ~AXObjectCache() = default;
   virtual void Trace(Visitor*) const {}
 
@@ -116,7 +117,7 @@ class CORE_EXPORT AXObjectCache : public GarbageCollected<AXObjectCache> {
   virtual void HandleLayoutComplete(Document*) = 0;
   virtual void HandleClicked(Node*) = 0;
   virtual void HandleValidationMessageVisibilityChanged(
-      const Element* form_control) = 0;
+      const Node* form_control) = 0;
 
   // Handle any notifications which arrived while layout was dirty.
   virtual void ProcessDeferredAccessibilityEvents(Document&) = 0;
@@ -162,6 +163,9 @@ class CORE_EXPORT AXObjectCache : public GarbageCollected<AXObjectCache> {
   // Static helper functions.
   static bool IsInsideFocusableElementOrARIAWidget(const Node&);
 
+  // Returns true if there are any pending updates that need processing.
+  virtual bool IsDirty() const = 0;
+
  protected:
   friend class ScopedBlinkAXEventIntent;
   FRIEND_TEST_ALL_PREFIXES(ScopedBlinkAXEventIntentTest, SingleIntent);
@@ -180,7 +184,6 @@ class CORE_EXPORT AXObjectCache : public GarbageCollected<AXObjectCache> {
   AXObjectCache() = default;
 
   static AXObjectCacheCreateFunction create_function_;
-  DISALLOW_COPY_AND_ASSIGN(AXObjectCache);
 };
 
 }  // namespace blink

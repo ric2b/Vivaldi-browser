@@ -35,6 +35,7 @@
 
 #include "base/optional.h"
 #include "base/time/time.h"
+#include "net/base/ip_endpoint.h"
 #include "net/cert/ct_policy_status.h"
 #include "net/http/http_response_info.h"
 #include "third_party/blink/public/common/security/security_style.h"
@@ -46,6 +47,7 @@ namespace network {
 namespace mojom {
 enum class FetchResponseSource;
 enum class FetchResponseType : int32_t;
+enum class IPAddressSpace : int32_t;
 class LoadTimingInfo;
 }
 }  // namespace network
@@ -219,6 +221,7 @@ class WebURLResponse {
   BLINK_PLATFORM_EXPORT void SetHasMajorCertificateErrors(bool);
   BLINK_PLATFORM_EXPORT void SetCTPolicyCompliance(net::ct::CTPolicyCompliance);
   BLINK_PLATFORM_EXPORT void SetIsLegacyTLSVersion(bool);
+  BLINK_PLATFORM_EXPORT void SetHasRangeRequested(bool);
   BLINK_PLATFORM_EXPORT void SetTimingAllowPassed(bool);
 
   BLINK_PLATFORM_EXPORT void SetSecurityStyle(SecurityStyle);
@@ -284,13 +287,13 @@ class WebURLResponse {
   // See network::ResourceResponseInfo::did_navigation_preload for details.
   BLINK_PLATFORM_EXPORT void SetDidServiceWorkerNavigationPreload(bool);
 
-  // Remote IP address of the socket which fetched this resource.
-  BLINK_PLATFORM_EXPORT WebString RemoteIPAddress() const;
-  BLINK_PLATFORM_EXPORT void SetRemoteIPAddress(const WebString&);
+  // Remote IP endpoint of the socket which fetched this resource.
+  BLINK_PLATFORM_EXPORT net::IPEndPoint RemoteIPEndpoint() const;
+  BLINK_PLATFORM_EXPORT void SetRemoteIPEndpoint(const net::IPEndPoint&);
 
-  // Remote port number of the socket which fetched this resource.
-  BLINK_PLATFORM_EXPORT uint16_t RemotePort() const;
-  BLINK_PLATFORM_EXPORT void SetRemotePort(uint16_t);
+  // Address space from which this resource was fetched.
+  BLINK_PLATFORM_EXPORT network::mojom::IPAddressSpace AddressSpace() const;
+  BLINK_PLATFORM_EXPORT void SetAddressSpace(network::mojom::IPAddressSpace);
 
   // ALPN negotiated protocol of the socket which fetched this resource.
   BLINK_PLATFORM_EXPORT bool WasAlpnNegotiated() const;
@@ -317,6 +320,7 @@ class WebURLResponse {
 
   BLINK_PLATFORM_EXPORT void SetIsSignedExchangeInnerResponse(bool);
   BLINK_PLATFORM_EXPORT void SetWasInPrefetchCache(bool);
+  BLINK_PLATFORM_EXPORT void SetWasCookieInRequest(bool);
   BLINK_PLATFORM_EXPORT void SetRecursivePrefetchToken(
       const base::Optional<base::UnguessableToken>&);
 

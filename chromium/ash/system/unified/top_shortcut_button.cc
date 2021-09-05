@@ -5,7 +5,6 @@
 #include "ash/system/unified/top_shortcut_button.h"
 
 #include "ash/style/ash_color_provider.h"
-#include "ash/style/default_color_constants.h"
 #include "ash/system/tray/tray_popup_utils.h"
 #include "ash/system/unified/unified_system_tray_view.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -27,8 +26,7 @@ TopShortcutButton::TopShortcutButton(const gfx::VectorIcon& icon,
            gfx::CreateVectorIcon(
                icon, kTrayTopShortcutButtonIconSize,
                AshColorProvider::Get()->GetContentLayerColor(
-                   AshColorProvider::ContentLayerType::kIconColorPrimary,
-                   AshColorProvider::AshColorMode::kDark)));
+                   AshColorProvider::ContentLayerType::kIconColorPrimary)));
   SetEnabled(false);
 
   focus_ring()->SetColor(UnifiedSystemTrayView::GetFocusRingColor());
@@ -39,8 +37,7 @@ TopShortcutButton::TopShortcutButton(views::ButtonListener* listener,
                                      int accessible_name_id)
     : TopShortcutButton(listener, accessible_name_id) {
   const SkColor icon_color = AshColorProvider::Get()->GetContentLayerColor(
-      AshColorProvider::ContentLayerType::kIconColorPrimary,
-      AshColorProvider::AshColorMode::kDark);
+      AshColorProvider::ContentLayerType::kIconColorPrimary);
   SetImage(
       views::Button::STATE_NORMAL,
       gfx::CreateVectorIcon(icon, kTrayTopShortcutButtonIconSize, icon_color));
@@ -76,9 +73,8 @@ gfx::Size TopShortcutButton::CalculatePreferredSize() const {
 void TopShortcutButton::PaintButtonContents(gfx::Canvas* canvas) {
   cc::PaintFlags flags;
   flags.setAntiAlias(true);
-  flags.setColor(AshColorProvider::Get()->DeprecatedGetControlsLayerColor(
-      AshColorProvider::ControlsLayerType::kControlBackgroundColorInactive,
-      kUnifiedMenuButtonColor));
+  flags.setColor(AshColorProvider::Get()->GetControlsLayerColor(
+      AshColorProvider::ControlsLayerType::kControlBackgroundColorInactive));
   flags.setStyle(cc::PaintFlags::kFill_Style);
   canvas->DrawPath(views::GetHighlightPath(this), flags);
 
@@ -93,15 +89,12 @@ std::unique_ptr<views::InkDropRipple> TopShortcutButton::CreateInkDropRipple()
     const {
   return TrayPopupUtils::CreateInkDropRipple(
       TrayPopupInkDropStyle::FILL_BOUNDS, this,
-      GetInkDropCenterBasedOnLastEvent(),
-      UnifiedSystemTrayView::GetBackgroundColor());
+      GetInkDropCenterBasedOnLastEvent());
 }
 
 std::unique_ptr<views::InkDropHighlight>
 TopShortcutButton::CreateInkDropHighlight() const {
-  return TrayPopupUtils::CreateInkDropHighlight(
-      TrayPopupInkDropStyle::FILL_BOUNDS, this,
-      UnifiedSystemTrayView::GetBackgroundColor());
+  return TrayPopupUtils::CreateInkDropHighlight(this);
 }
 
 const char* TopShortcutButton::GetClassName() const {

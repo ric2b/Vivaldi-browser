@@ -29,12 +29,12 @@
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/url_constants.h"
-#include "content/public/common/web_preferences.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/management_policy.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/extension.h"
+#include "third_party/blink/public/common/web_preferences/web_preferences.h"
 #include "third_party/blink/public/mojom/manifest/display_mode.mojom.h"
 #include "third_party/blink/public/mojom/renderer_preferences.mojom.h"
 #include "ui/gfx/image/image_skia.h"
@@ -144,7 +144,7 @@ base::string16 HostedAppBrowserController::GetTitle() const {
   return AppBrowserController::GetTitle();
 }
 
-GURL HostedAppBrowserController::GetAppLaunchURL() const {
+GURL HostedAppBrowserController::GetAppStartUrl() const {
   const Extension* extension = GetExtension();
   if (!extension)
     return GURL();
@@ -163,7 +163,7 @@ bool HostedAppBrowserController::IsUrlInAppScope(const GURL& url) const {
 
   // We don't have a scope, fall back to same origin check.
   if (!url_handlers)
-    return IsSameHostAndPort(GetAppLaunchURL(), url);
+    return IsSameHostAndPort(GetAppStartUrl(), url);
 
   return UrlHandlers::CanBookmarkAppHandleUrl(extension, url);
 }

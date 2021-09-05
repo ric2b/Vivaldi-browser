@@ -53,10 +53,9 @@ bool PrintMockRenderThread::OnMessageReceived(const IPC::Message& msg) {
   bool handled = true;
   IPC_BEGIN_MESSAGE_MAP(PrintMockRenderThread, msg)
 #if BUILDFLAG(ENABLE_PRINTING)
-    IPC_MESSAGE_HANDLER(PrintHostMsg_GetDefaultPrintSettings,
-                        OnGetDefaultPrintSettings)
-    IPC_MESSAGE_HANDLER(PrintHostMsg_ScriptedPrint, OnScriptedPrint)
-    IPC_MESSAGE_HANDLER(PrintHostMsg_UpdatePrintSettings, OnUpdatePrintSettings)
+    IPC_MESSAGE_HANDLER_DELAY_REPLY(PrintHostMsg_ScriptedPrint, OnScriptedPrint)
+    IPC_MESSAGE_HANDLER_DELAY_REPLY(PrintHostMsg_UpdatePrintSettings,
+                                    OnUpdatePrintSettings)
     IPC_MESSAGE_HANDLER_DELAY_REPLY(PrintHostMsg_DidPrintDocument,
                                     OnDidPrintDocument)
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
@@ -72,18 +71,17 @@ bool PrintMockRenderThread::OnMessageReceived(const IPC::Message& msg) {
 
 #if BUILDFLAG(ENABLE_PRINTING)
 
-void PrintMockRenderThread::OnGetDefaultPrintSettings(
-    printing::mojom::PrintParams* params) {
-  printer_->GetDefaultPrintSettings(params);
-}
-
 void PrintMockRenderThread::OnScriptedPrint(
-    const PrintHostMsg_ScriptedPrint_Params& params,
-    PrintMsg_PrintPages_Params* settings) {
+    const printing::mojom::ScriptedPrintParams& params,
+    IPC::Message* reply_msg) {
+  printing::mojom::PrintPagesParams settings;
+  settings.params = printing::mojom::PrintParams::New();
   if (print_dialog_user_response_) {
     printer_->ScriptedPrint(params.cookie, params.expected_pages_count,
-                            params.has_selection, settings);
+                            params.has_selection, &settings);
   }
+  PrintHostMsg_ScriptedPrint::WriteReplyParams(reply_msg, settings);
+  Send(reply_msg);
 }
 
 void PrintMockRenderThread::OnDidPrintDocument(
@@ -97,22 +95,23 @@ void PrintMockRenderThread::OnDidPrintDocument(
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
 void PrintMockRenderThread::OnDidStartPreview(
     const printing::mojom::DidStartPreviewParams& params,
-    const PrintHostMsg_PreviewIds& ids) {
+    const printing::mojom::PreviewIds& ids) {
   print_preview_pages_remaining_ = params.page_count;
 }
 
 void PrintMockRenderThread::OnDidPreviewPage(
     const printing::mojom::DidPreviewPageParams& params,
-    const PrintHostMsg_PreviewIds& ids) {
-  int page_number = params.page_number;
-  DCHECK_GE(page_number, printing::FIRST_PAGE_INDEX);
+    const printing::mojom::PreviewIds& ids) {
+  uint32_t page_number = params.page_number;
+  DCHECK_NE(page_number, printing::kInvalidPageIndex);
   print_preview_pages_remaining_--;
   print_preview_pages_.emplace_back(
       params.page_number, params.content->metafile_data_region.GetSize());
 }
 
-void PrintMockRenderThread::OnCheckForCancel(const PrintHostMsg_PreviewIds& ids,
-                                             bool* cancel) {
+void PrintMockRenderThread::OnCheckForCancel(
+    const printing::mojom::PreviewIds& ids,
+    bool* cancel) {
   *cancel =
       (print_preview_pages_remaining_ == print_preview_cancel_page_number_);
 }
@@ -121,10 +120,11 @@ void PrintMockRenderThread::OnCheckForCancel(const PrintHostMsg_PreviewIds& ids,
 void PrintMockRenderThread::OnUpdatePrintSettings(
     int document_cookie,
     const base::DictionaryValue& job_settings,
-    PrintMsg_PrintPages_Params* params,
-    bool* canceled) {
-  if (canceled)
-    *canceled = false;
+    IPC::Message* reply_msg) {
+  printing::mojom::PrintPagesParams params;
+  params.params = printing::mojom::PrintParams::New();
+  bool canceled = false;
+
   // Check and make sure the required settings are all there.
   // We don't actually care about the values.
   base::Optional<int> margins_type =
@@ -140,6 +140,9 @@ void PrintMockRenderThread::OnUpdatePrintSettings(
       !job_settings.FindIntKey(printing::kSettingCopies) ||
       !job_settings.FindIntKey(printing::kPreviewUIID) ||
       !job_settings.FindIntKey(printing::kPreviewRequestID)) {
+    PrintHostMsg_UpdatePrintSettings::WriteReplyParams(reply_msg, params,
+                                                       canceled);
+    Send(reply_msg);
     return;
   }
 
@@ -192,15 +195,18 @@ void PrintMockRenderThread::OnUpdatePrintSettings(
       job_settings.FindIntKey(printing::kSettingScaleFactor);
   int scale_factor = setting_scale_factor.value_or(100);
 
-  std::vector<int> pages(printing::PageRange::GetPages(new_ranges));
-  printer_->UpdateSettings(document_cookie, params, pages, margins_type.value(),
-                           page_size, scale_factor);
+  std::vector<uint32_t> pages(printing::PageRange::GetPages(new_ranges));
+  printer_->UpdateSettings(document_cookie, &params, pages,
+                           margins_type.value(), page_size, scale_factor);
   base::Optional<bool> selection_only =
       job_settings.FindBoolKey(printing::kSettingShouldPrintSelectionOnly);
   base::Optional<bool> should_print_backgrounds =
       job_settings.FindBoolKey(printing::kSettingShouldPrintBackgrounds);
-  params->params.selection_only = selection_only.value();
-  params->params.should_print_backgrounds = should_print_backgrounds.value();
+  params.params->selection_only = selection_only.value();
+  params.params->should_print_backgrounds = should_print_backgrounds.value();
+  PrintHostMsg_UpdatePrintSettings::WriteReplyParams(reply_msg, params,
+                                                     canceled);
+  Send(reply_msg);
 }
 
 MockPrinter* PrintMockRenderThread::printer() {
@@ -211,15 +217,16 @@ void PrintMockRenderThread::set_print_dialog_user_response(bool response) {
   print_dialog_user_response_ = response;
 }
 
-void PrintMockRenderThread::set_print_preview_cancel_page_number(int page) {
+void PrintMockRenderThread::set_print_preview_cancel_page_number(
+    uint32_t page) {
   print_preview_cancel_page_number_ = page;
 }
 
-int PrintMockRenderThread::print_preview_pages_remaining() const {
+uint32_t PrintMockRenderThread::print_preview_pages_remaining() const {
   return print_preview_pages_remaining_;
 }
 
-const std::vector<std::pair<int, uint32_t>>&
+const std::vector<std::pair<uint32_t, uint32_t>>&
 PrintMockRenderThread::print_preview_pages() const {
   return print_preview_pages_;
 }

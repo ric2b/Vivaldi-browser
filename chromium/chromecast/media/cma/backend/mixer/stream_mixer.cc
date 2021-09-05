@@ -159,12 +159,14 @@ StreamMixer::StreamMixer(
     : StreamMixer(nullptr,
                   std::make_unique<base::Thread>("CMA mixer"),
                   nullptr,
+                  "",
                   std::move(io_task_runner)) {}
 
 StreamMixer::StreamMixer(
     std::unique_ptr<MixerOutputStream> output,
     std::unique_ptr<base::Thread> mixer_thread,
     scoped_refptr<base::SingleThreadTaskRunner> mixer_task_runner,
+    const std::string& pipeline_json,
     scoped_refptr<base::SequencedTaskRunner> io_task_runner)
     : output_(std::move(output)),
       post_processing_pipeline_factory_(
@@ -190,6 +192,7 @@ StreamMixer::StreamMixer(
           ExternalAudioPipelineShlib::IsSupported()),
       weak_factory_(this) {
   LOG(INFO) << __func__;
+  logging::InitializeAudioLog();
 
   volume_info_[AudioContentType::kOther].volume = 1.0f;
   volume_info_[AudioContentType::kOther].limit = 1.0f;
@@ -221,15 +224,12 @@ StreamMixer::StreamMixer(
     io_task_runner_ = mixer_task_runner_;
   }
 
-  io_task_runner_->PostTask(FROM_HERE,
-                            base::BindOnce(&logging::InitializeAudioLog));
-
   if (fixed_output_sample_rate_ != MixerOutputStream::kInvalidSampleRate) {
     LOG(INFO) << "Setting fixed sample rate to " << fixed_output_sample_rate_;
   }
 
-  CreatePostProcessors([](bool, const std::string&) {},
-                       "" /* override_config */, kDefaultInputChannels);
+  CreatePostProcessors([](bool, const std::string&) {}, pipeline_json,
+                       kDefaultInputChannels);
   mixer_pipeline_->SetPlayoutChannel(playout_channel_);
 
   // TODO(jyw): command line flag for filter frame alignment.

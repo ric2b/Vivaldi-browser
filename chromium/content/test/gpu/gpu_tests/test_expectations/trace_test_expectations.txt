@@ -14,9 +14,6 @@
 crbug.com/648369 [ linux debug intel ] TraceTest_* [ RetryOnFailure ]
 crbug.com/978516 [ win10 nvidia-0x1cb3 ] TraceTest_* [ RetryOnFailure ]
 
-# Device traces are not supported on all machines.
-DeviceTraceTest_* [ Skip ]
-
 # Require page actions - which are only supported in pixel tests.
 crbug.com/1048892 TraceTest_OffscreenCanvasIBRCWebGLMain [ Skip ]
 crbug.com/1048892 TraceTest_OffscreenCanvasIBRCWebGLWorker [ Skip ]
@@ -25,9 +22,7 @@ crbug.com/1048892 TraceTest_OffscreenCanvasIBRCWebGLWorker [ Skip ]
 # appear flaky on multiple platforms. These are mainly meant to run as
 # pixel tests so they're being skipped in this test suite.
 crbug.com/974077 TraceTest_Video_Context_Loss_MP4 [ Skip ]
-crbug.com/974077 DeviceTraceTest_Video_Context_Loss_MP4 [ Skip ]
 crbug.com/974077 TraceTest_Video_Context_Loss_VP9 [ Skip ]
-crbug.com/974077 DeviceTraceTest_Video_Context_Loss_VP9 [ Skip ]
 
 # Skip on platforms where DirectComposition isn't supported
 crbug.com/867136 [ mac ] VideoPathTraceTest_* [ Skip ]
@@ -60,6 +55,7 @@ crbug.com/1096431 [ fuchsia ] TraceTest_Video_MP4_FourColors_Rot_90 [ Skip ]
 crbug.com/1096431 [ fuchsia ] TraceTest_Video_MP4_Rounded_Corner [ Skip ]
 crbug.com/1096431 [ fuchsia ] TraceTest_Video_VP9 [ Skip ]
 crbug.com/1096431 [ fuchsia ] TraceTest_Video_VP9_DXVA [ Skip ]
+crbug.com/1096431 [ fuchsia ] TraceTest_Video_Media_Stream_Incompatible_Stride [ Skip ]
 
 # Skip unaccelerated canvas test since we don't use swap chains without GPU compositing.
 crbug.com/1009860 [ win10 ] SwapChainTraceTest_CanvasUnacceleratedLowLatency2D [ Skip ]
@@ -108,3 +104,20 @@ crbug.com/1079393 [ win10 intel-0x5912 ] VideoPathTraceTest_DirectComposition_Vi
 
 # Fuchsia Flakes.
 crbug.com/1058255 [ fuchsia ] TraceTest_WebGLGreenTriangle_AA_Alpha [ Skip ]
+
+# Software compositing is not supported on Android/ChromeOS/Fuchsia: we skip the
+# tests that disable GPU compositing (--disable-gpu-compositing).
+[ android ] TraceTest_RepeatedWebGLTo2D_SoftwareCompositing [ Skip ]
+[ android ] TraceTest_Canvas2DTabSwitch_SoftwareCompositing [ Skip ]
+[ android ] TraceTest_WebGLReadPixelsTabSwitch_SoftwareCompositing [ Skip ]
+[ chromeos ] TraceTest_RepeatedWebGLTo2D_SoftwareCompositing [ Skip ]
+[ chromeos ] TraceTest_Canvas2DTabSwitch_SoftwareCompositing [ Skip ]
+[ chromeos ] TraceTest_WebGLReadPixelsTabSwitch_SoftwareCompositing [ Skip ]
+[ fuchsia ] TraceTest_RepeatedWebGLTo2D_SoftwareCompositing [ Skip ]
+[ fuchsia ] TraceTest_Canvas2DTabSwitch_SoftwareCompositing [ Skip ]
+[ fuchsia ] TraceTest_WebGLReadPixelsTabSwitch_SoftwareCompositing [ Skip ]
+
+# Cannot use file in Chromium checkout for fake video capture device on Android
+# or ChromeOS.
+crbug.com/1129879 [ android ] TraceTest_Video_Media_Stream_Incompatible_Stride [ Skip ]
+crbug.com/1129879 [ chromeos ] TraceTest_Video_Media_Stream_Incompatible_Stride [ Skip ]

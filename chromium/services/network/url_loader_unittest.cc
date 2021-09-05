@@ -160,14 +160,15 @@ static ResourceRequest CreateResourceRequest(const char* method,
 class URLRequestMultipleWritesJob : public net::URLRequestJob {
  public:
   URLRequestMultipleWritesJob(net::URLRequest* request,
-                              net::NetworkDelegate* network_delegate,
                               std::list<std::string> packets,
                               net::Error net_error,
                               bool async_reads)
-      : URLRequestJob(request, network_delegate),
+      : URLRequestJob(request),
         packets_(std::move(packets)),
         net_error_(net_error),
         async_reads_(async_reads) {}
+
+  ~URLRequestMultipleWritesJob() override = default;
 
   // net::URLRequestJob implementation:
   void Start() override {
@@ -199,8 +200,6 @@ class URLRequestMultipleWritesJob : public net::URLRequestJob {
   }
 
  private:
-  ~URLRequestMultipleWritesJob() override {}
-
   void StartAsync() { NotifyHeadersComplete(); }
 
   std::list<std::string> packets_;
@@ -225,12 +224,10 @@ class MultipleWritesInterceptor : public net::URLRequestInterceptor {
   static GURL GetURL() { return GURL("http://foo"); }
 
   // URLRequestInterceptor implementation:
-  net::URLRequestJob* MaybeInterceptRequest(
-      net::URLRequest* request,
-      net::NetworkDelegate* network_delegate) const override {
-    return new URLRequestMultipleWritesJob(request, network_delegate,
-                                           std::move(packets_), net_error_,
-                                           async_reads_);
+  std::unique_ptr<net::URLRequestJob> MaybeInterceptRequest(
+      net::URLRequest* request) const override {
+    return std::make_unique<URLRequestMultipleWritesJob>(
+        request, std::move(packets_), net_error_, async_reads_);
   }
 
  private:
@@ -247,10 +244,10 @@ class URLRequestEternalSyncReadsJob : public net::URLRequestJob {
   // If |fill_entire_buffer| is true, each read fills the entire read buffer at
   // once. Otherwise, one byte is read at a time.
   URLRequestEternalSyncReadsJob(net::URLRequest* request,
-                                net::NetworkDelegate* network_delegate,
                                 bool fill_entire_buffer)
-      : URLRequestJob(request, network_delegate),
-        fill_entire_buffer_(fill_entire_buffer) {}
+      : URLRequestJob(request), fill_entire_buffer_(fill_entire_buffer) {}
+
+  ~URLRequestEternalSyncReadsJob() override = default;
 
   // net::URLRequestJob implementation:
   void Start() override {
@@ -271,8 +268,6 @@ class URLRequestEternalSyncReadsJob : public net::URLRequestJob {
   }
 
  private:
-  ~URLRequestEternalSyncReadsJob() override {}
-
   void StartAsync() { NotifyHeadersComplete(); }
 
   const bool fill_entire_buffer_;
@@ -293,16 +288,15 @@ class EternalSyncReadsInterceptor : public net::URLRequestInterceptor {
   static GURL GetFillBufferURL() { return GURL("http://eternal/fill-buffer"); }
 
   // URLRequestInterceptor implementation:
-  net::URLRequestJob* MaybeInterceptRequest(
-      net::URLRequest* request,
-      net::NetworkDelegate* network_delegate) const override {
+  std::unique_ptr<net::URLRequestJob> MaybeInterceptRequest(
+      net::URLRequest* request) const override {
     if (request->url() == GetSingleByteURL()) {
-      return new URLRequestEternalSyncReadsJob(request, network_delegate,
-                                               false /* fill_entire_buffer */);
+      return std::make_unique<URLRequestEternalSyncReadsJob>(
+          request, false /* fill_entire_buffer */);
     }
     if (request->url() == GetFillBufferURL()) {
-      return new URLRequestEternalSyncReadsJob(request, network_delegate,
-                                               true /* fill_entire_buffer */);
+      return std::make_unique<URLRequestEternalSyncReadsJob>(
+          request, true /* fill_entire_buffer */);
     }
     return nullptr;
   }
@@ -319,12 +313,13 @@ class URLRequestSimulatedCacheJob : public net::URLRequestJob {
   // once. Otherwise, one byte is read at a time.
   URLRequestSimulatedCacheJob(
       net::URLRequest* request,
-      net::NetworkDelegate* network_delegate,
       scoped_refptr<net::IOBuffer>* simulated_cache_dest,
       bool use_text_plain)
-      : URLRequestJob(request, network_delegate),
+      : URLRequestJob(request),
         simulated_cache_dest_(simulated_cache_dest),
         use_text_plain_(use_text_plain) {}
+
+  ~URLRequestSimulatedCacheJob() override = default;
 
   // net::URLRequestJob implementation:
   void Start() override {
@@ -356,7 +351,6 @@ class URLRequestSimulatedCacheJob : public net::URLRequestJob {
   }
 
  private:
-  ~URLRequestSimulatedCacheJob() override {}
   void StartAsync() { NotifyHeadersComplete(); }
 
   scoped_refptr<net::IOBuffer>* simulated_cache_dest_;
@@ -374,11 +368,10 @@ class SimulatedCacheInterceptor : public net::URLRequestInterceptor {
       : simulated_cache_dest_(simulated_cache_dest),
         use_text_plain_(use_text_plain) {}
 
-  net::URLRequestJob* MaybeInterceptRequest(
-      net::URLRequest* request,
-      net::NetworkDelegate* network_delegate) const override {
-    return new URLRequestSimulatedCacheJob(
-        request, network_delegate, simulated_cache_dest_, use_text_plain_);
+  std::unique_ptr<net::URLRequestJob> MaybeInterceptRequest(
+      net::URLRequest* request) const override {
+    return std::make_unique<URLRequestSimulatedCacheJob>(
+        request, simulated_cache_dest_, use_text_plain_);
   }
 
  private:
@@ -392,15 +385,15 @@ class URLRequestFakeTransportInfoJob : public net::URLRequestJob {
  public:
   // |transport_info| is subsequently passed to the OnConnected() callback.
   URLRequestFakeTransportInfoJob(net::URLRequest* request,
-                                 net::NetworkDelegate* network_delegate,
                                  const net::TransportInfo& transport_info)
-      : URLRequestJob(request, network_delegate),
-        transport_info_(transport_info) {}
+      : URLRequestJob(request), transport_info_(transport_info) {}
 
   URLRequestFakeTransportInfoJob(const URLRequestFakeTransportInfoJob&) =
       delete;
   URLRequestFakeTransportInfoJob& operator=(
       const URLRequestFakeTransportInfoJob&) = delete;
+
+  ~URLRequestFakeTransportInfoJob() override = default;
 
   // net::URLRequestJob implementation:
   void Start() override {
@@ -412,8 +405,6 @@ class URLRequestFakeTransportInfoJob : public net::URLRequestJob {
   int ReadRawData(net::IOBuffer* buf, int buf_size) override { return 0; }
 
  private:
-  ~URLRequestFakeTransportInfoJob() override = default;
-
   void StartAsync() {
     const int result = NotifyConnected(transport_info_);
     if (result != net::OK) {
@@ -446,14 +437,10 @@ class FakeTransportInfoInterceptor : public net::URLRequestInterceptor {
       delete;
 
   // URLRequestInterceptor implementation:
-  net::URLRequestJob* MaybeInterceptRequest(
-      net::URLRequest* request,
-      net::NetworkDelegate* network_delegate) const override {
-    // NOTE: We cannot use make_unique() because
-    // URLRequestFakeTransportInfoJob's destructor is private, which prevents
-    // use of unique_ptr.
-    return new URLRequestFakeTransportInfoJob(request, network_delegate,
-                                              transport_info_);
+  std::unique_ptr<net::URLRequestJob> MaybeInterceptRequest(
+      net::URLRequest* request) const override {
+    return std::make_unique<URLRequestFakeTransportInfoJob>(request,
+                                                            transport_info_);
   }
 
  private:
@@ -482,8 +469,8 @@ WARN_UNUSED_RESULT bool StartMonitorBodyReadFromNetBeforePausedHistogram(
       kBodyReadFromNetBeforePausedHistogram,
       base::BindRepeating(
           [](const base::RepeatingClosure& quit_closure,
-             base::HistogramBase::Sample* output,
-             base::HistogramBase::Sample sample) {
+             base::HistogramBase::Sample* output, const char* histogram_name,
+             uint64_t name_hash, base::HistogramBase::Sample sample) {
             *output = sample;
             quit_closure.Run();
           },
@@ -579,6 +566,9 @@ class URLLoaderTest : public testing::Test {
     if (request_body_)
       request.request_body = request_body_;
 
+    request.trusted_params->client_security_state.Swap(
+        &request_client_security_state_);
+
     base::RunLoop delete_run_loop;
     mojo::Remote<mojom::URLLoader> loader;
     std::unique_ptr<URLLoader> url_loader;
@@ -586,7 +576,7 @@ class URLLoaderTest : public testing::Test {
     mojom::URLLoaderFactoryParams params;
     params.process_id = mojom::kBrowserProcessId;
     params.is_corb_enabled = false;
-    params.client_security_state.Swap(&client_security_state_);
+    params.client_security_state.Swap(&factory_client_security_state_);
 
     url::Origin origin = url::Origin::Create(url);
     params.isolation_info =
@@ -762,8 +752,11 @@ class URLLoaderTest : public testing::Test {
     DCHECK(!ran_);
     expect_redirect_ = true;
   }
-  void set_client_security_state(mojom::ClientSecurityStatePtr state) {
-    client_security_state_ = std::move(state);
+  void set_factory_client_security_state(mojom::ClientSecurityStatePtr state) {
+    factory_client_security_state_ = std::move(state);
+  }
+  void set_request_client_security_state(mojom::ClientSecurityStatePtr state) {
+    request_client_security_state_ = std::move(state);
   }
   void set_request_body(scoped_refptr<ResourceRequestBody> request_body) {
     request_body_ = request_body;
@@ -888,7 +881,8 @@ class URLLoaderTest : public testing::Test {
   bool send_ssl_with_response_ = false;
   bool send_ssl_for_cert_error_ = false;
   bool expect_redirect_ = false;
-  mojom::ClientSecurityStatePtr client_security_state_;
+  mojom::ClientSecurityStatePtr factory_client_security_state_;
+  mojom::ClientSecurityStatePtr request_client_security_state_;
   scoped_refptr<ResourceRequestBody> request_body_;
 
   // Used to ensure that methods are called either before or after a request is
@@ -949,7 +943,7 @@ TEST_F(URLLoaderTest, SecureUnknownToLocalIsOk) {
   auto client_security_state = NewSecurityState();
   client_security_state->is_web_secure_context = true;
   client_security_state->ip_address_space = mojom::IPAddressSpace::kUnknown;
-  set_client_security_state(std::move(client_security_state));
+  set_factory_client_security_state(std::move(client_security_state));
 
   EXPECT_THAT(Load(test_server()->GetURL("/empty.html")), IsOk());
 }
@@ -958,7 +952,7 @@ TEST_F(URLLoaderTest, SecurePublicToLocalIsOk) {
   auto client_security_state = NewSecurityState();
   client_security_state->is_web_secure_context = true;
   client_security_state->ip_address_space = mojom::IPAddressSpace::kPublic;
-  set_client_security_state(std::move(client_security_state));
+  set_factory_client_security_state(std::move(client_security_state));
 
   EXPECT_THAT(Load(test_server()->GetURL("/empty.html")), IsOk());
 }
@@ -967,7 +961,7 @@ TEST_F(URLLoaderTest, SecurePrivateToLocalIsBlocked) {
   auto client_security_state = NewSecurityState();
   client_security_state->is_web_secure_context = true;
   client_security_state->ip_address_space = mojom::IPAddressSpace::kPrivate;
-  set_client_security_state(std::move(client_security_state));
+  set_factory_client_security_state(std::move(client_security_state));
 
   EXPECT_THAT(Load(test_server()->GetURL("/empty.html")), IsOk());
 }
@@ -976,7 +970,7 @@ TEST_F(URLLoaderTest, SecureLocalToLocalIsOk) {
   auto client_security_state = NewSecurityState();
   client_security_state->is_web_secure_context = true;
   client_security_state->ip_address_space = mojom::IPAddressSpace::kLocal;
-  set_client_security_state(std::move(client_security_state));
+  set_factory_client_security_state(std::move(client_security_state));
 
   EXPECT_THAT(Load(test_server()->GetURL("/empty.html")), IsOk());
 }
@@ -989,7 +983,7 @@ TEST_F(URLLoaderTest, PolicyIsAllowUnknownToLocalIsOk) {
   client_security_state->private_network_request_policy =
       mojom::PrivateNetworkRequestPolicy::kAllow;
   client_security_state->ip_address_space = mojom::IPAddressSpace::kUnknown;
-  set_client_security_state(std::move(client_security_state));
+  set_factory_client_security_state(std::move(client_security_state));
 
   EXPECT_THAT(Load(test_server()->GetURL("/empty.html")), IsOk());
 }
@@ -999,7 +993,7 @@ TEST_F(URLLoaderTest, PolicyIsAllowPublicToLocalIsOk) {
   client_security_state->private_network_request_policy =
       mojom::PrivateNetworkRequestPolicy::kAllow;
   client_security_state->ip_address_space = mojom::IPAddressSpace::kPublic;
-  set_client_security_state(std::move(client_security_state));
+  set_factory_client_security_state(std::move(client_security_state));
 
   EXPECT_THAT(Load(test_server()->GetURL("/empty.html")), IsOk());
 }
@@ -1009,7 +1003,7 @@ TEST_F(URLLoaderTest, PolicyIsAllowPrivateToLocalIsBlocked) {
   client_security_state->private_network_request_policy =
       mojom::PrivateNetworkRequestPolicy::kAllow;
   client_security_state->ip_address_space = mojom::IPAddressSpace::kPrivate;
-  set_client_security_state(std::move(client_security_state));
+  set_factory_client_security_state(std::move(client_security_state));
 
   EXPECT_THAT(Load(test_server()->GetURL("/empty.html")), IsOk());
 }
@@ -1019,7 +1013,7 @@ TEST_F(URLLoaderTest, PolicyIsAllowLocalToLocalIsOk) {
   client_security_state->private_network_request_policy =
       mojom::PrivateNetworkRequestPolicy::kAllow;
   client_security_state->ip_address_space = mojom::IPAddressSpace::kLocal;
-  set_client_security_state(std::move(client_security_state));
+  set_factory_client_security_state(std::move(client_security_state));
 
   EXPECT_THAT(Load(test_server()->GetURL("/empty.html")), IsOk());
 }
@@ -1038,7 +1032,7 @@ TEST_F(URLLoaderTest, InsecureRequestToLocalResource) {
   auto client_security_state = NewSecurityState();
   client_security_state->is_web_secure_context = false;
   client_security_state->ip_address_space = mojom::IPAddressSpace::kUnknown;
-  set_client_security_state(std::move(client_security_state));
+  set_factory_client_security_state(std::move(client_security_state));
 
   EXPECT_THAT(Load(test_server()->GetURL("/empty.html")),
               IsError(net::ERR_INSECURE_PRIVATE_NETWORK_REQUEST));
@@ -1048,7 +1042,7 @@ TEST_F(URLLoaderTest, InsecurePublicToLocalIsBlocked) {
   auto client_security_state = NewSecurityState();
   client_security_state->is_web_secure_context = false;
   client_security_state->ip_address_space = mojom::IPAddressSpace::kPublic;
-  set_client_security_state(std::move(client_security_state));
+  set_factory_client_security_state(std::move(client_security_state));
 
   EXPECT_THAT(Load(test_server()->GetURL("/empty.html")),
               IsError(net::ERR_INSECURE_PRIVATE_NETWORK_REQUEST));
@@ -1058,7 +1052,7 @@ TEST_F(URLLoaderTest, InsecurePrivateToLocalIsBlocked) {
   auto client_security_state = NewSecurityState();
   client_security_state->is_web_secure_context = false;
   client_security_state->ip_address_space = mojom::IPAddressSpace::kPrivate;
-  set_client_security_state(std::move(client_security_state));
+  set_factory_client_security_state(std::move(client_security_state));
 
   EXPECT_THAT(Load(test_server()->GetURL("/empty.html")),
               IsError(net::ERR_INSECURE_PRIVATE_NETWORK_REQUEST));
@@ -1068,9 +1062,23 @@ TEST_F(URLLoaderTest, InsecureLocalToLocalIsOk) {
   auto client_security_state = NewSecurityState();
   client_security_state->is_web_secure_context = false;
   client_security_state->ip_address_space = mojom::IPAddressSpace::kLocal;
-  set_client_security_state(std::move(client_security_state));
+  set_factory_client_security_state(std::move(client_security_state));
 
   EXPECT_THAT(Load(test_server()->GetURL("/empty.html")), IsOk());
+}
+
+// This test verifies that if the request's TrustedParams field carries a client
+// security state indicating that the request initiator is not a secure context
+// and came from the public IP address space, requests to local IP addresses
+// are blocked.
+TEST_F(URLLoaderTest, TrustedParamsInsecurePublicToLocalIsBlocked) {
+  auto client_security_state = NewSecurityState();
+  client_security_state->is_web_secure_context = false;
+  client_security_state->ip_address_space = mojom::IPAddressSpace::kPublic;
+  set_request_client_security_state(std::move(client_security_state));
+
+  EXPECT_THAT(Load(test_server()->GetURL("/empty.html")),
+              IsError(net::ERR_INSECURE_PRIVATE_NETWORK_REQUEST));
 }
 
 // Bundles together the inputs to a parameterized private network request test.
@@ -1132,7 +1140,7 @@ TEST_P(URLLoaderFakeTransportInfoTest, PrivateNetworkRequestLoadsCorrectly) {
 
   auto client_security_state = NewSecurityState();
   client_security_state->ip_address_space = params.client_address_space;
-  set_client_security_state(std::move(client_security_state));
+  set_factory_client_security_state(std::move(client_security_state));
 
   const GURL url("http://fake-endpoint");
 
@@ -2082,43 +2090,6 @@ TEST_F(URLLoaderTest, UploadFileCanceled) {
   base::RunLoop().RunUntilIdle();
 }
 
-TEST_F(URLLoaderTest, UploadRawFile) {
-  base::FilePath file_path = GetTestFilePath("simple_page.html");
-
-  std::string expected_body;
-  ASSERT_TRUE(base::ReadFileToString(file_path, &expected_body))
-      << "File not found: " << file_path.value();
-
-  scoped_refptr<ResourceRequestBody> request_body(new ResourceRequestBody());
-  request_body->AppendRawFileRange(
-      OpenFileForUpload(file_path), GetTestFilePath("should_be_ignored"), 0,
-      std::numeric_limits<uint64_t>::max(), base::Time());
-  set_request_body(std::move(request_body));
-
-  std::string response_body;
-  EXPECT_EQ(net::OK, Load(test_server()->GetURL("/echo"), &response_body));
-  EXPECT_EQ(expected_body, response_body);
-}
-
-TEST_F(URLLoaderTest, UploadRawFileWithRange) {
-  base::FilePath file_path = GetTestFilePath("simple_page.html");
-
-  std::string expected_body;
-  ASSERT_TRUE(base::ReadFileToString(file_path, &expected_body))
-      << "File not found: " << file_path.value();
-  expected_body = expected_body.substr(1, expected_body.size() - 2);
-
-  scoped_refptr<ResourceRequestBody> request_body(new ResourceRequestBody());
-  request_body->AppendRawFileRange(OpenFileForUpload(file_path),
-                                   GetTestFilePath("should_be_ignored"), 1,
-                                   expected_body.size(), base::Time());
-  set_request_body(std::move(request_body));
-
-  std::string response_body;
-  EXPECT_EQ(net::OK, Load(test_server()->GetURL("/echo"), &response_body));
-  EXPECT_EQ(expected_body, response_body);
-}
-
 // Tests a request body with a data pipe element.
 TEST_F(URLLoaderTest, UploadDataPipe) {
   const std::string kRequestBody = "Request Body";
@@ -2207,27 +2178,6 @@ TEST_F(URLLoaderTest, UploadDataPipeClosedEarly) {
 
   std::string response_body;
   EXPECT_EQ(net::ERR_FAILED, Load(test_server()->GetURL("/echo")));
-}
-
-TEST_F(URLLoaderTest, UploadDoubleRawFile) {
-  base::FilePath file_path = GetTestFilePath("simple_page.html");
-
-  std::string expected_body;
-  ASSERT_TRUE(base::ReadFileToString(file_path, &expected_body))
-      << "File not found: " << file_path.value();
-
-  scoped_refptr<ResourceRequestBody> request_body(new ResourceRequestBody());
-  request_body->AppendRawFileRange(
-      OpenFileForUpload(file_path), GetTestFilePath("should_be_ignored"), 0,
-      std::numeric_limits<uint64_t>::max(), base::Time());
-  request_body->AppendRawFileRange(
-      OpenFileForUpload(file_path), GetTestFilePath("should_be_ignored"), 0,
-      std::numeric_limits<uint64_t>::max(), base::Time());
-  set_request_body(std::move(request_body));
-
-  std::string response_body;
-  EXPECT_EQ(net::OK, Load(test_server()->GetURL("/echo"), &response_body));
-  EXPECT_EQ(expected_body + expected_body, response_body);
 }
 
 // Tests a request body with a chunked data pipe element.
@@ -2877,15 +2827,15 @@ TEST_F(URLLoaderTest, RedirectDirectlyModifiedSecHeadersUser) {
 class MockHTTPSURLRequestJob : public net::URLRequestTestJob {
  public:
   MockHTTPSURLRequestJob(net::URLRequest* request,
-                         net::NetworkDelegate* network_delegate,
                          const std::string& response_headers,
                          const std::string& response_data,
                          bool auto_advance)
       : net::URLRequestTestJob(request,
-                               network_delegate,
                                response_headers,
                                response_data,
                                auto_advance) {}
+
+  ~MockHTTPSURLRequestJob() override = default;
 
   // net::URLRequestTestJob:
   void GetResponseInfo(net::HttpResponseInfo* info) override {
@@ -2897,8 +2847,6 @@ class MockHTTPSURLRequestJob : public net::URLRequestTestJob {
   }
 
  private:
-  ~MockHTTPSURLRequestJob() override {}
-
   DISALLOW_COPY_AND_ASSIGN(MockHTTPSURLRequestJob);
 };
 
@@ -2908,11 +2856,10 @@ class MockHTTPSJobURLRequestInterceptor : public net::URLRequestInterceptor {
   ~MockHTTPSJobURLRequestInterceptor() override {}
 
   // net::URLRequestInterceptor:
-  net::URLRequestJob* MaybeInterceptRequest(
-      net::URLRequest* request,
-      net::NetworkDelegate* network_delegate) const override {
-    return new MockHTTPSURLRequestJob(request, network_delegate, std::string(),
-                                      "dummy response", true);
+  std::unique_ptr<net::URLRequestJob> MaybeInterceptRequest(
+      net::URLRequest* request) const override {
+    return std::make_unique<MockHTTPSURLRequestJob>(request, std::string(),
+                                                    "dummy response", true);
   }
 };
 
@@ -3205,9 +3152,6 @@ class MockNetworkServiceClient : public TestNetworkServiceClient {
       std::move(wait_for_raw_response_).Run();
     }
   }
-
-  void LogCrossOriginFetchFromContentScript3(
-      const std::string& isolated_world_host) override {}
 
   void WaitUntilRawResponse(size_t goal) {
     if (raw_response_cookies_.size() < goal) {

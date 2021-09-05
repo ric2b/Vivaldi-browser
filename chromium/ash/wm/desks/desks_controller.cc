@@ -27,6 +27,7 @@
 #include "ash/wm/overview/overview_item.h"
 #include "ash/wm/splitview/split_view_controller.h"
 #include "ash/wm/splitview/split_view_utils.h"
+#include "ash/wm/window_cycle_controller.h"
 #include "ash/wm/window_util.h"
 #include "base/auto_reset.h"
 #include "base/check_op.h"
@@ -136,7 +137,8 @@ void MaybeUpdateShelfItems(
 
 }  // namespace
 
-DesksController::DesksController() {
+DesksController::DesksController()
+    : is_enhanced_desk_animations_(features::IsEnhancedDeskAnimations()) {
   Shell::Get()->activation_client()->AddObserver(this);
   Shell::Get()->session_controller()->AddObserver(this);
 
@@ -162,13 +164,13 @@ DesksController* DesksController::Get() {
 }
 
 const Desk* DesksController::GetTargetActiveDesk() const {
-  if (!animations_.empty())
-    return animations_.back()->ending_desk();
+  if (animation_)
+    return desks_[animation_->ending_desk_index()].get();
   return active_desk();
 }
 
 void DesksController::Shutdown() {
-  animations_.clear();
+  animation_.reset();
 }
 
 void DesksController::AddObserver(Observer* observer) {
@@ -180,7 +182,7 @@ void DesksController::RemoveObserver(Observer* observer) {
 }
 
 bool DesksController::AreDesksBeingModified() const {
-  return are_desks_being_modified_ || !animations_.empty();
+  return are_desks_being_modified_ || !!animation_;
 }
 
 bool DesksController::CanCreateDesks() const {
@@ -255,10 +257,9 @@ void DesksController::RemoveDesk(const Desk* desk,
         current_desk_index + ((current_desk_index > 0) ? -1 : 1);
     DCHECK_GE(target_desk_index, 0);
     DCHECK_LT(target_desk_index, static_cast<int>(desks_.size()));
-    const bool move_left = current_desk_index < target_desk_index;
-    animations_.emplace_back(std::make_unique<DeskRemovalAnimation>(
-        this, desk, desks_[target_desk_index].get(), move_left, source));
-    animations_.back()->Launch();
+    animation_ = std::make_unique<DeskRemovalAnimation>(
+        this, current_desk_index, target_desk_index, source);
+    animation_->Launch();
     return;
   }
 
@@ -267,6 +268,7 @@ void DesksController::RemoveDesk(const Desk* desk,
 
 void DesksController::ActivateDesk(const Desk* desk, DesksSwitchSource source) {
   DCHECK(HasDesk(desk));
+  DCHECK(!animation_);
 
   OverviewController* overview_controller = Shell::Get()->overview_controller();
   const bool in_overview = overview_controller->InOverviewSession();
@@ -287,8 +289,7 @@ void DesksController::ActivateDesk(const Desk* desk, DesksSwitchSource source) {
     Shell::Get()
         ->accessibility_controller()
         ->TriggerAccessibilityAlertWithMessage(l10n_util::GetStringFUTF8(
-            IDS_ASH_VIRTUAL_DESKS_ALERT_DESK_ACTIVATED,
-            base::NumberToString16(target_desk_index + 1)));
+            IDS_ASH_VIRTUAL_DESKS_ALERT_DESK_ACTIVATED, desk->name()));
   }
 
   if (source == DesksSwitchSource::kDeskRemoved ||
@@ -299,26 +300,27 @@ void DesksController::ActivateDesk(const Desk* desk, DesksSwitchSource source) {
     return;
   }
 
-  // New desks are always added at the end of the list to the right of existing
-  // desks. Therefore, desks at lower indices are located on the left of desks
-  // with higher indices.
-  const bool move_left = GetDeskIndex(active_desk_) < target_desk_index;
-  animations_.emplace_back(
-      std::make_unique<DeskActivationAnimation>(this, desk, move_left));
-  animations_.back()->Launch();
+  const int starting_desk_index = GetDeskIndex(active_desk());
+  animation_ = std::make_unique<DeskActivationAnimation>(
+      this, starting_desk_index, target_desk_index, source);
+  animation_->Launch();
 }
 
 bool DesksController::ActivateAdjacentDesk(bool going_left,
                                            DesksSwitchSource source) {
-  // An on-going desk switch animation might be in progress. For now skip this
-  // accelerator or touchpad event. Later we might want to consider queueing
-  // these animations, or cancelling the on-going ones and start over.
-  // TODO(afakhry): Discuss with UX.
-  if (AreDesksBeingModified())
+  // An on-going desk switch animation might be in progress. Skip this
+  // accelerator or touchpad event if enhanced desk animations are not enabled.
+  if (!is_enhanced_desk_animations_ && AreDesksBeingModified())
     return false;
 
   if (Shell::Get()->session_controller()->IsUserSessionBlocked())
     return false;
+
+  // Try replacing an ongoing desk animation of the same source.
+  if (is_enhanced_desk_animations_ && animation_ &&
+      animation_->Replace(going_left, source)) {
+    return true;
+  }
 
   const Desk* desk_to_activate = going_left ? GetPreviousDesk() : GetNextDesk();
   if (desk_to_activate) {
@@ -329,6 +331,27 @@ bool DesksController::ActivateAdjacentDesk(bool going_left,
   }
 
   return true;
+}
+
+bool DesksController::StartSwipeAnimation(bool move_left) {
+  DCHECK(is_enhanced_desk_animations_);
+
+  // Activate an adjacent desk. It will replace an ongoing touchpad animation if
+  // one exists.
+  return ActivateAdjacentDesk(move_left,
+                              DesksSwitchSource::kDeskSwitchTouchpad);
+}
+
+void DesksController::UpdateSwipeAnimation(float scroll_delta_x) {
+  DCHECK(is_enhanced_desk_animations_);
+  if (animation_)
+    animation_->UpdateSwipeAnimation(scroll_delta_x);
+}
+
+void DesksController::EndSwipeAnimation() {
+  DCHECK(is_enhanced_desk_animations_);
+  if (animation_)
+    animation_->EndSwipeAnimation();
 }
 
 bool DesksController::MoveWindowFromActiveDeskTo(
@@ -372,9 +395,7 @@ bool DesksController::MoveWindowFromActiveDeskTo(
       ->accessibility_controller()
       ->TriggerAccessibilityAlertWithMessage(l10n_util::GetStringFUTF8(
           IDS_ASH_VIRTUAL_DESKS_ALERT_WINDOW_MOVED_FROM_ACTIVE_DESK,
-          window->GetTitle(),
-          base::NumberToString16(GetDeskIndex(active_desk_) + 1),
-          base::NumberToString16(GetDeskIndex(target_desk) + 1)));
+          window->GetTitle(), active_desk_->name(), target_desk->name()));
 
   UMA_HISTOGRAM_ENUMERATION(kMoveWindowFromActiveDeskHistogramName, source);
   ReportNumberOfWindowsPerDeskHistogram();
@@ -473,7 +494,8 @@ void DesksController::OnFirstSessionStarted() {
 }
 
 void DesksController::OnAnimationFinished(DeskAnimationBase* animation) {
-  base::EraseIf(animations_, base::MatchesUniquePtr(animation));
+  DCHECK_EQ(animation_.get(), animation);
+  animation_.reset();
 }
 
 bool DesksController::HasDesk(const Desk* desk) const {
@@ -514,6 +536,13 @@ void DesksController::ActivateDeskInternal(const Desk* desk,
   active_desk_->Activate(update_window_activation);
 
   MaybeUpdateShelfItems(old_active->windows(), active_desk_->windows());
+
+  // If in the middle of a window cycle gesture, reset the window cycle list
+  // contents so it contains the new active desk's windows.
+  if (features::IsAltTabLimitedToActiveDesk()) {
+    auto* window_cycle_controller = Shell::Get()->window_cycle_controller();
+    window_cycle_controller->MaybeResetCycleList();
+  }
 
   for (auto& observer : observers_)
     observer.OnDeskActivationChanged(active_desk_, old_active);
@@ -652,9 +681,8 @@ void DesksController::RemoveDeskInternal(const Desk* desk,
   Shell::Get()
       ->accessibility_controller()
       ->TriggerAccessibilityAlertWithMessage(l10n_util::GetStringFUTF8(
-          IDS_ASH_VIRTUAL_DESKS_ALERT_DESK_REMOVED,
-          base::NumberToString16(removed_desk_number),
-          base::NumberToString16(active_desk_number)));
+          IDS_ASH_VIRTUAL_DESKS_ALERT_DESK_REMOVED, removed_desk->name(),
+          active_desk_->name()));
 
   desks_restore_util::UpdatePrimaryUserDesksPrefs();
 

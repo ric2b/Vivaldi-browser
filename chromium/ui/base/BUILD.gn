@@ -23,12 +23,6 @@ if (is_android) {
   import("//build/config/mac/rules.gni")
 }
 
-# Reset sources_assignment_filter for the BUILD.gn file to prevent
-# regression during the migration of Chromium away from the feature.
-# See docs/no_sources_assignment_filter.md for more information.
-# TODO(crbug.com/1018739): remove this when migration is done.
-set_sources_assignment_filter([])
-
 build_ime = !is_ios
 
 # As part of building Chrome on iOS, it is necessary to run a tool on
@@ -150,9 +144,9 @@ component("base") {
     "page_transition_types.h",
     "pointer/touch_ui_controller.cc",
     "pointer/touch_ui_controller.h",
+    "resource/allowlist.h",
     "resource/resource_bundle.cc",
     "resource/resource_bundle.h",
-    "resource/whitelist.h",
     "scoped_visibility_tracker.cc",
     "scoped_visibility_tracker.h",
     "template_expressions.cc",
@@ -635,6 +629,7 @@ component("features") {
   deps = [
     ":buildflags",
     "//base",
+    "//build:chromeos_buildflags",
   ]
 }
 
@@ -773,13 +768,6 @@ static_library("test_support") {
       "ime/dummy_text_input_client.h",
     ]
 
-    if (is_win) {
-      sources += [
-        "ime/win/mock_tsf_bridge.cc",
-        "ime/win/mock_tsf_bridge.h",
-      ]
-    }
-
     deps += [
       "//ui/base/ime",
       "//ui/events",
@@ -792,13 +780,13 @@ static_library("test_support") {
 
   if (is_chromeos) {
     sources += [
-      "ime/chromeos/input_method_whitelist.cc",
-      "ime/chromeos/input_method_whitelist.h",
+      "ime/chromeos/input_method_allowlist.cc",
+      "ime/chromeos/input_method_allowlist.h",
       "ime/chromeos/mock_input_method_manager.cc",
       "ime/chromeos/mock_input_method_manager.h",
     ]
     deps += [
-      # Generates a header used by input_method_whitelist.cc
+      # Generates a header used by input_method_allowlist.cc
       "//chromeos/ime:gencode",
       "//ui/base/ime/chromeos",
     ]
@@ -864,6 +852,8 @@ if (is_ios) {
 }
 
 test("ui_base_unittests") {
+  use_xvfb = use_xvfb_in_this_config
+
   sources = [
     "class_property_unittest.cc",
     "l10n/l10n_util_unittest.cc",

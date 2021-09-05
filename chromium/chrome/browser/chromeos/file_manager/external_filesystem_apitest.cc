@@ -19,7 +19,6 @@
 #include "chrome/browser/chromeos/file_manager/volume_manager.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/extensions/extension_apitest.h"
-#include "chrome/browser/media/router/test/mock_media_router.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/ash/cast_config_controller_media_router.h"
@@ -30,6 +29,7 @@
 #include "chrome/common/chrome_paths.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "chromeos/constants/chromeos_switches.h"
+#include "components/media_router/browser/test/mock_media_router.h"
 #include "components/session_manager/core/session_manager.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/navigation_handle.h"
@@ -764,7 +764,9 @@ std::string MediaAppBoolString(const testing::TestParamInfo<bool> info) {
 // gallery.
 IN_PROC_BROWSER_TEST_P(FileSystemExtensionApiTestWithApps, OpenGalleryForPng) {
   base::HistogramTester histogram_tester;
-  EXPECT_TRUE(RunBackgroundPageTestCase("open_gallery", "testPngOpensGallery"))
+  EXPECT_TRUE(RunBackgroundPageTestCase(
+      "open_gallery", MediaAppEnabled() ? "testPngOpensGalleryReturnsOpened"
+                                        : "testPngOpensGalleryReturnsMsgSent"))
       << message_;
   histogram_tester.ExpectBucketCount(kAppLaunchMetric, kGalleryUmaBucket,
                                      MediaAppEnabled() ? 0 : 1);

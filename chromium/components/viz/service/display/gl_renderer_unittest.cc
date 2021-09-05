@@ -45,6 +45,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkMatrix.h"
 #include "third_party/skia/include/effects/SkColorMatrixFilter.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/gfx/color_transform.h"
 #include "ui/gfx/transform.h"
 #include "ui/latency/latency_info.h"
@@ -91,7 +92,7 @@ class GLRendererTest : public testing::Test {
     // they are all cleaned up and completed before destroying the test.
     VizTestSuite::RunUntilIdle();
   }
-  RenderPass* root_render_pass() {
+  AggregatedRenderPass* root_render_pass() {
     return render_passes_in_draw_order_.back().get();
   }
   void DrawFrame(GLRenderer* renderer,
@@ -112,7 +113,7 @@ class GLRendererTest : public testing::Test {
   }
 
   DebugRendererSettings debug_settings_;
-  RenderPassList render_passes_in_draw_order_;
+  AggregatedRenderPassList render_passes_in_draw_order_;
 };
 
 #define EXPECT_PROGRAM_VALID(program_binding)      \
@@ -164,17 +165,19 @@ static inline SkBlendMode BlendModeToSkXfermode(BlendMode blend_mode) {
 }
 
 // Explicitly named to be a friend in GLRenderer for shader access.
-class GLRendererShaderPixelTest : public cc::GLRendererPixelTest {
+class GLRendererShaderPixelTest : public cc::PixelTest {
  public:
   void SetUp() override {
-    cc::GLRendererPixelTest::SetUp();
+    SetUpGLRenderer(gfx::SurfaceOrigin::kBottomLeft);
     ASSERT_FALSE(renderer()->IsContextLost());
   }
 
   void TearDown() override {
-    cc::GLRendererPixelTest::TearDown();
+    cc::PixelTest::TearDown();
     ASSERT_FALSE(renderer());
   }
+
+  GLRenderer* renderer() { return static_cast<GLRenderer*>(renderer_.get()); }
 
   void TestShaderWithDrawingFrame(
       const ProgramKey& program_key,
@@ -227,6 +230,7 @@ class GLRendererShaderPixelTest : public cc::GLRendererPixelTest {
           auto color_transform = gfx::ColorTransform::NewColorTransform(
               adjusted_color_space, dst_color_space,
               gfx::ColorTransform::Intent::INTENT_PERCEPTUAL);
+
           ASSERT_EQ(color_transform->GetShaderSource(),
                     renderer()
                         ->current_program_->color_transform_for_testing()
@@ -234,8 +238,15 @@ class GLRendererShaderPixelTest : public cc::GLRendererPixelTest {
         }
 
         if (validate_output_color_matrix) {
-          ASSERT_NE(
-              -1, renderer()->current_program_->output_color_matrix_location());
+          if (program_key.type() == ProgramType::PROGRAM_TYPE_SOLID_COLOR) {
+            ASSERT_EQ(
+                -1,
+                renderer()->current_program_->output_color_matrix_location());
+          } else {
+            ASSERT_NE(
+                -1,
+                renderer()->current_program_->output_color_matrix_location());
+          }
         }
       }
     }
@@ -248,10 +259,10 @@ class GLRendererShaderPixelTest : public cc::GLRendererPixelTest {
   void TestShadersWithOutputColorMatrix(const ProgramKey& program_key) {
     GLRenderer::DrawingFrame frame;
 
-    RenderPassList render_passes_in_draw_order;
+    AggregatedRenderPassList render_passes_in_draw_order;
     gfx::Size viewport_size(100, 100);
-    RenderPassId root_pass_id{1};
-    RenderPass* root_pass = cc::AddRenderPass(
+    AggregatedRenderPassId root_pass_id{1};
+    auto* root_pass = cc::AddRenderPass(
         &render_passes_in_draw_order, root_pass_id, gfx::Rect(viewport_size),
         gfx::Transform(), cc::FilterOperations());
     root_pass->damage_rect = gfx::Rect(0, 0, 25, 25);
@@ -399,10 +410,10 @@ class GLRendererShaderPixelTest : public cc::GLRendererPixelTest {
     UVTextureMode uv_modes[2] = {UV_TEXTURE_MODE_UV, UV_TEXTURE_MODE_U_V};
     YUVAlphaTextureMode a_modes[2] = {YUV_NO_ALPHA_TEXTURE,
                                       YUV_HAS_ALPHA_TEXTURE};
-    for (int j = 0; j < 2; j++) {
-      for (int k = 0; k < 2; k++) {
-        TestShader(ProgramKey::YUVVideo(precision, sampler, a_modes[j],
-                                        uv_modes[k], false, false));
+    for (auto uv_mode : uv_modes) {
+      for (auto a_mode : a_modes) {
+        TestShader(ProgramKey::YUVVideo(precision, sampler, a_mode, uv_mode,
+                                        false, false));
       }
     }
   }
@@ -487,8 +498,11 @@ class PrecisionSamplerShaderPixelTest
           std::tuple<TexCoordPrecision, SamplerType>> {};
 
 TEST_P(PrecisionSamplerShaderPixelTest, ShadersCompile) {
-  TestShadersWithPrecisionAndSampler(std::get<0>(GetParam()),
-                                     std::get<1>(GetParam()));
+  SamplerType sampler = std::get<1>(GetParam());
+  if (sampler != SAMPLER_TYPE_2D_RECT ||
+      context_provider()->ContextCapabilities().texture_rectangle) {
+    TestShadersWithPrecisionAndSampler(std::get<0>(GetParam()), sampler);
+  }
 }
 
 INSTANTIATE_TEST_SUITE_P(PrecisionSamplerShadersCompile,
@@ -502,8 +516,12 @@ class MaskShaderPixelTest
           std::tuple<TexCoordPrecision, SamplerType, BlendMode, bool>> {};
 
 TEST_P(MaskShaderPixelTest, ShadersCompile) {
-  TestShadersWithMasks(std::get<0>(GetParam()), std::get<1>(GetParam()),
-                       std::get<2>(GetParam()), std::get<3>(GetParam()));
+  SamplerType sampler = std::get<1>(GetParam());
+  if (sampler != SAMPLER_TYPE_2D_RECT ||
+      context_provider()->ContextCapabilities().texture_rectangle) {
+    TestShadersWithMasks(std::get<0>(GetParam()), sampler,
+                         std::get<2>(GetParam()), std::get<3>(GetParam()));
+  }
 }
 
 INSTANTIATE_TEST_SUITE_P(MaskShadersCompile,
@@ -718,9 +736,9 @@ TEST_F(GLRendererWithDefaultHarnessTest, ExternalStencil) {
 
   output_surface_->set_has_external_stencil_test(true);
 
-  RenderPass* root_pass = cc::AddRenderPass(
-      &render_passes_in_draw_order_, RenderPassId{1}, gfx::Rect(viewport_size),
-      gfx::Transform(), cc::FilterOperations());
+  auto* root_pass = cc::AddRenderPass(
+      &render_passes_in_draw_order_, AggregatedRenderPassId{1},
+      gfx::Rect(viewport_size), gfx::Transform(), cc::FilterOperations());
   root_pass->has_transparent_background = false;
 
   DrawFrame(renderer_.get(), viewport_size);
@@ -735,9 +753,9 @@ TEST_F(GLRendererWithDefaultHarnessTest, TextureDrawQuadShaderPrecisionHigh) {
   // the correct precision qualifier.
 
   const gfx::Size viewport_size(1, 1);
-  RenderPass* root_pass = cc::AddRenderPass(
-      &render_passes_in_draw_order_, RenderPassId{1}, gfx::Rect(viewport_size),
-      gfx::Transform(), cc::FilterOperations());
+  auto* root_pass = cc::AddRenderPass(
+      &render_passes_in_draw_order_, AggregatedRenderPassId{1},
+      gfx::Rect(viewport_size), gfx::Transform(), cc::FilterOperations());
 
   const bool needs_blending = false;
   const bool premultiplied_alpha = false;
@@ -798,9 +816,9 @@ TEST_F(GLRendererWithDefaultHarnessTest, TextureDrawQuadShaderPrecisionMedium) {
   // the correct precision qualifier.
 
   const gfx::Size viewport_size(1, 1);
-  RenderPass* root_pass = cc::AddRenderPass(
-      &render_passes_in_draw_order_, RenderPassId{1}, gfx::Rect(viewport_size),
-      gfx::Transform(), cc::FilterOperations());
+  auto* root_pass = cc::AddRenderPass(
+      &render_passes_in_draw_order_, AggregatedRenderPassId{1},
+      gfx::Rect(viewport_size), gfx::Transform(), cc::FilterOperations());
 
   const bool needs_blending = false;
   const bool premultiplied_alpha = false;
@@ -858,8 +876,8 @@ class GLRendererTextureDrawQuadHDRTest
  protected:
   void RunTest(bool is_video_frame) {
     const gfx::Size viewport_size(10, 10);
-    RenderPass* root_pass = cc::AddRenderPass(
-        &render_passes_in_draw_order_, RenderPassId{1},
+    auto* root_pass = cc::AddRenderPass(
+        &render_passes_in_draw_order_, AggregatedRenderPassId{1},
         gfx::Rect(viewport_size), gfx::Transform(), cc::FilterOperations());
 
     const bool needs_blending = false;
@@ -1141,9 +1159,9 @@ TEST_F(GLRendererTest, OpaqueBackground) {
   renderer.SetVisible(true);
 
   gfx::Size viewport_size(1, 1);
-  RenderPass* root_pass = cc::AddRenderPass(
-      &render_passes_in_draw_order_, RenderPassId{1}, gfx::Rect(viewport_size),
-      gfx::Transform(), cc::FilterOperations());
+  AggregatedRenderPass* root_pass = cc::AddRenderPass(
+      &render_passes_in_draw_order_, AggregatedRenderPassId{1},
+      gfx::Rect(viewport_size), gfx::Transform(), cc::FilterOperations());
   root_pass->has_transparent_background = false;
 
   // On DEBUG builds, render passes with opaque background clear to blue to
@@ -1187,9 +1205,9 @@ TEST_F(GLRendererTest, TransparentBackground) {
   renderer.SetVisible(true);
 
   gfx::Size viewport_size(1, 1);
-  RenderPass* root_pass = cc::AddRenderPass(
-      &render_passes_in_draw_order_, RenderPassId{1}, gfx::Rect(viewport_size),
-      gfx::Transform(), cc::FilterOperations());
+  AggregatedRenderPass* root_pass = cc::AddRenderPass(
+      &render_passes_in_draw_order_, AggregatedRenderPassId{1},
+      gfx::Rect(viewport_size), gfx::Transform(), cc::FilterOperations());
   root_pass->has_transparent_background = true;
 
   EXPECT_CALL(*gl, DiscardFramebufferEXT(GL_FRAMEBUFFER, 1, _)).Times(1);
@@ -1226,7 +1244,7 @@ TEST_F(GLRendererTest, OffscreenOutputSurface) {
   renderer.SetVisible(true);
 
   gfx::Size viewport_size(1, 1);
-  cc::AddRenderPass(&render_passes_in_draw_order_, RenderPassId{1},
+  cc::AddRenderPass(&render_passes_in_draw_order_, AggregatedRenderPassId{1},
                     gfx::Rect(viewport_size), gfx::Transform(),
                     cc::FilterOperations());
 
@@ -1299,13 +1317,14 @@ TEST_F(GLRendererTest, ActiveTextureState) {
   // During initialization we are allowed to set any texture parameters.
   EXPECT_CALL(*gl, TexParameteri(_, _, _)).Times(AnyNumber());
 
-  RenderPass* root_pass = cc::AddRenderPass(
-      &render_passes_in_draw_order_, RenderPassId{1}, gfx::Rect(100, 100),
-      gfx::Transform(), cc::FilterOperations());
+  AggregatedRenderPass* root_pass = cc::AddRenderPass(
+      &render_passes_in_draw_order_, AggregatedRenderPassId{1},
+      gfx::Rect(100, 100), gfx::Transform(), cc::FilterOperations());
   gpu::SyncToken mailbox_sync_token;
   cc::AddOneOfEveryQuadTypeInDisplayResourceProvider(
       root_pass, resource_provider.get(), child_resource_provider.get(),
-      child_context_provider.get(), RenderPassId{0}, &mailbox_sync_token);
+      child_context_provider.get(), AggregatedRenderPassId{0},
+      &mailbox_sync_token);
 
   EXPECT_EQ(12u, resource_provider->num_resources());
   renderer.DecideRenderPassAllocationsForFrame(render_passes_in_draw_order_);
@@ -1413,9 +1432,9 @@ TEST_F(GLRendererTest, DrawYUVVideoDrawQuadWithVisibleRect) {
   renderer.Initialize();
   renderer.SetVisible(true);
 
-  RenderPass* root_pass = cc::AddRenderPass(
-      &render_passes_in_draw_order_, RenderPassId{1}, gfx::Rect(viewport_size),
-      gfx::Transform(), cc::FilterOperations());
+  AggregatedRenderPass* root_pass = cc::AddRenderPass(
+      &render_passes_in_draw_order_, AggregatedRenderPassId{1},
+      gfx::Rect(viewport_size), gfx::Transform(), cc::FilterOperations());
   root_pass->has_transparent_background = false;
 
   gfx::Rect rect(viewport_size);
@@ -1489,14 +1508,14 @@ TEST_F(GLRendererTest, ShouldClearRootRenderPass) {
 
   gfx::Size viewport_size(10, 10);
 
-  RenderPassId child_pass_id{2};
-  RenderPass* child_pass = cc::AddRenderPass(
+  AggregatedRenderPassId child_pass_id{2};
+  AggregatedRenderPass* child_pass = cc::AddRenderPass(
       &render_passes_in_draw_order_, child_pass_id, gfx::Rect(viewport_size),
       gfx::Transform(), cc::FilterOperations());
   cc::AddQuad(child_pass, gfx::Rect(viewport_size), SK_ColorBLUE);
 
-  RenderPassId root_pass_id{1};
-  RenderPass* root_pass = cc::AddRenderPass(
+  AggregatedRenderPassId root_pass_id{1};
+  AggregatedRenderPass* root_pass = cc::AddRenderPass(
       &render_passes_in_draw_order_, root_pass_id, gfx::Rect(viewport_size),
       gfx::Transform(), cc::FilterOperations());
   cc::AddQuad(root_pass, gfx::Rect(viewport_size), SK_ColorGREEN);
@@ -1578,21 +1597,21 @@ TEST_F(GLRendererTest, ScissorTestWhenClearing) {
   gfx::Size viewport_size(100, 100);
 
   gfx::Rect grand_child_rect(25, 25);
-  RenderPassId grand_child_pass_id{3};
-  RenderPass* grand_child_pass = cc::AddRenderPass(
+  AggregatedRenderPassId grand_child_pass_id{3};
+  AggregatedRenderPass* grand_child_pass = cc::AddRenderPass(
       &render_passes_in_draw_order_, grand_child_pass_id, grand_child_rect,
       gfx::Transform(), cc::FilterOperations());
   cc::AddClippedQuad(grand_child_pass, grand_child_rect, SK_ColorYELLOW);
 
   gfx::Rect child_rect(50, 50);
-  RenderPassId child_pass_id{2};
-  RenderPass* child_pass =
+  AggregatedRenderPassId child_pass_id{2};
+  AggregatedRenderPass* child_pass =
       cc::AddRenderPass(&render_passes_in_draw_order_, child_pass_id,
                         child_rect, gfx::Transform(), cc::FilterOperations());
   cc::AddQuad(child_pass, child_rect, SK_ColorBLUE);
 
-  RenderPassId root_pass_id{1};
-  RenderPass* root_pass = cc::AddRenderPass(
+  AggregatedRenderPassId root_pass_id{1};
+  AggregatedRenderPass* root_pass = cc::AddRenderPass(
       &render_passes_in_draw_order_, root_pass_id, gfx::Rect(viewport_size),
       gfx::Transform(), cc::FilterOperations());
   cc::AddQuad(root_pass, gfx::Rect(viewport_size), SK_ColorGREEN);
@@ -1654,8 +1673,8 @@ TEST_F(GLRendererTest, NoDiscardOnPartialUpdates) {
   {
     // Draw one black frame to make sure the output surface is reshaped before
     // testes.
-    RenderPassId root_pass_id{1};
-    RenderPass* root_pass = cc::AddRenderPass(
+    AggregatedRenderPassId root_pass_id{1};
+    AggregatedRenderPass* root_pass = cc::AddRenderPass(
         &render_passes_in_draw_order_, root_pass_id, gfx::Rect(viewport_size),
         gfx::Transform(), cc::FilterOperations());
     cc::AddQuad(root_pass, gfx::Rect(viewport_size), SK_ColorBLACK);
@@ -1667,8 +1686,8 @@ TEST_F(GLRendererTest, NoDiscardOnPartialUpdates) {
   }
   {
     // Partial frame, should not discard.
-    RenderPassId root_pass_id{1};
-    RenderPass* root_pass = cc::AddRenderPass(
+    AggregatedRenderPassId root_pass_id{1};
+    AggregatedRenderPass* root_pass = cc::AddRenderPass(
         &render_passes_in_draw_order_, root_pass_id, gfx::Rect(viewport_size),
         gfx::Transform(), cc::FilterOperations());
     cc::AddQuad(root_pass, gfx::Rect(viewport_size), SK_ColorGREEN);
@@ -1681,8 +1700,8 @@ TEST_F(GLRendererTest, NoDiscardOnPartialUpdates) {
   }
   {
     // Full frame, should discard.
-    RenderPassId root_pass_id{1};
-    RenderPass* root_pass = cc::AddRenderPass(
+    AggregatedRenderPassId root_pass_id{1};
+    AggregatedRenderPass* root_pass = cc::AddRenderPass(
         &render_passes_in_draw_order_, root_pass_id, gfx::Rect(viewport_size),
         gfx::Transform(), cc::FilterOperations());
     cc::AddQuad(root_pass, gfx::Rect(viewport_size), SK_ColorGREEN);
@@ -1696,8 +1715,8 @@ TEST_F(GLRendererTest, NoDiscardOnPartialUpdates) {
   {
     // Full frame, external scissor is set, should not discard.
     output_surface->set_has_external_stencil_test(true);
-    RenderPassId root_pass_id{1};
-    RenderPass* root_pass = cc::AddRenderPass(
+    AggregatedRenderPassId root_pass_id{1};
+    AggregatedRenderPass* root_pass = cc::AddRenderPass(
         &render_passes_in_draw_order_, root_pass_id, gfx::Rect(viewport_size),
         gfx::Transform(), cc::FilterOperations());
     cc::AddQuad(root_pass, gfx::Rect(viewport_size), SK_ColorGREEN);
@@ -1865,8 +1884,8 @@ TEST_F(GLRendererTest, NoResourceLeak) {
 
     gfx::Size viewport_size(100, 100);
 
-    RenderPassId root_pass_id{1};
-    RenderPass* root_pass = cc::AddRenderPass(
+    AggregatedRenderPassId root_pass_id{1};
+    AggregatedRenderPass* root_pass = cc::AddRenderPass(
         &render_passes_in_draw_order_, root_pass_id, gfx::Rect(viewport_size),
         gfx::Transform(), cc::FilterOperations());
     cc::AddQuad(root_pass, gfx::Rect(viewport_size), SK_ColorGREEN);
@@ -1913,8 +1932,8 @@ class GLRendererSkipTest : public GLRendererTest {
   void DrawBlackFrame(const gfx::Size& viewport_size) {
     EXPECT_CALL(*gl_, DrawElements(_, _, _, _)).Times(1);
 
-    RenderPassId root_pass_id{1};
-    RenderPass* root_pass = cc::AddRenderPass(
+    AggregatedRenderPassId root_pass_id{1};
+    AggregatedRenderPass* root_pass = cc::AddRenderPass(
         &render_passes_in_draw_order_, root_pass_id, gfx::Rect(viewport_size),
         gfx::Transform(), cc::FilterOperations());
     root_pass->damage_rect = gfx::Rect(viewport_size);
@@ -1943,8 +1962,8 @@ TEST_F(GLRendererSkipTest, DrawQuad) {
   DrawBlackFrame(viewport_size);
 
   EXPECT_CALL(*gl_, DrawElements(_, _, _, _)).Times(1);
-  RenderPassId root_pass_id{1};
-  RenderPass* root_pass = cc::AddRenderPass(
+  AggregatedRenderPassId root_pass_id{1};
+  AggregatedRenderPass* root_pass = cc::AddRenderPass(
       &render_passes_in_draw_order_, root_pass_id, gfx::Rect(viewport_size),
       gfx::Transform(), cc::FilterOperations());
   root_pass->damage_rect = gfx::Rect(0, 0, 25, 25);
@@ -1962,8 +1981,8 @@ TEST_F(GLRendererSkipTest, SkipVisibleRect) {
   // tests.
   DrawBlackFrame(viewport_size);
 
-  RenderPassId root_pass_id{1};
-  RenderPass* root_pass = cc::AddRenderPass(
+  AggregatedRenderPassId root_pass_id{1};
+  AggregatedRenderPass* root_pass = cc::AddRenderPass(
       &render_passes_in_draw_order_, root_pass_id, gfx::Rect(viewport_size),
       gfx::Transform(), cc::FilterOperations());
   root_pass->damage_rect = gfx::Rect(0, 0, 10, 10);
@@ -1987,7 +2006,7 @@ TEST_F(GLRendererSkipTest, SkipClippedQuads) {
   // tests.
   DrawBlackFrame(viewport_size);
 
-  RenderPassId root_pass_id{1};
+  AggregatedRenderPassId root_pass_id{1};
 
   auto* root_pass = cc::AddRenderPass(&render_passes_in_draw_order_,
                                       root_pass_id, gfx::Rect(viewport_size),
@@ -2030,8 +2049,8 @@ TEST_F(GLRendererTest, DrawFramePreservesFramebuffer) {
   gfx::Size viewport_size(100, 100);
   gfx::Rect quad_rect = gfx::Rect(20, 20, 20, 20);
 
-  RenderPassId root_pass_id{1};
-  RenderPass* root_pass = cc::AddRenderPass(
+  AggregatedRenderPassId root_pass_id{1};
+  AggregatedRenderPass* root_pass = cc::AddRenderPass(
       &render_passes_in_draw_order_, root_pass_id, gfx::Rect(viewport_size),
       gfx::Transform(), cc::FilterOperations());
   cc::AddClippedQuad(root_pass, quad_rect, SK_ColorGREEN);
@@ -2054,11 +2073,11 @@ TEST_F(GLRendererShaderTest, DrawRenderPassQuadShaderPermutations) {
   gfx::Size viewport_size(60, 75);
 
   gfx::Rect child_rect(50, 50);
-  RenderPassId child_pass_id{2};
-  RenderPass* child_pass;
+  AggregatedRenderPassId child_pass_id{2};
+  AggregatedRenderPass* child_pass;
 
-  RenderPassId root_pass_id{1};
-  RenderPass* root_pass;
+  AggregatedRenderPassId root_pass_id{1};
+  AggregatedRenderPass* root_pass;
 
   auto transfer_resource = TransferableResource::MakeGL(
       gpu::Mailbox::Generate(), GL_LINEAR, GL_TEXTURE_2D, gpu::SyncToken(),
@@ -2258,12 +2277,12 @@ TEST_F(GLRendererShaderTest, DrawRenderPassQuadShaderPermutations) {
 // project incorrectly by the given transform, because of w<0 clipping.
 TEST_F(GLRendererShaderTest, DrawRenderPassQuadSkipsAAForClippingTransform) {
   gfx::Rect child_rect(50, 50);
-  RenderPassId child_pass_id{2};
-  RenderPass* child_pass;
+  AggregatedRenderPassId child_pass_id{2};
+  AggregatedRenderPass* child_pass;
 
   gfx::Size viewport_size(100, 100);
-  RenderPassId root_pass_id{1};
-  RenderPass* root_pass;
+  AggregatedRenderPassId root_pass_id{1};
+  AggregatedRenderPass* root_pass;
 
   gfx::Transform transform_preventing_aa;
   transform_preventing_aa.ApplyPerspectiveDepth(40.0);
@@ -2299,8 +2318,8 @@ TEST_F(GLRendererShaderTest, DrawRenderPassQuadSkipsAAForClippingTransform) {
 TEST_F(GLRendererShaderTest, DrawSolidColorShader) {
   gfx::Size viewport_size(30, 30);  // Don't translate out of the viewport.
   gfx::Size quad_size(3, 3);
-  RenderPassId root_pass_id{1};
-  RenderPass* root_pass;
+  AggregatedRenderPassId root_pass_id{1};
+  AggregatedRenderPass* root_pass;
 
   gfx::Transform pixel_aligned_transform_causing_aa;
   pixel_aligned_transform_causing_aa.Translate(25.5f, 25.5f);
@@ -2415,8 +2434,8 @@ class MockOutputSurfaceTest : public GLRendererTest {
                  bool transparent) {
     gfx::BufferFormat format = transparent ? gfx::BufferFormat::RGBA_8888
                                            : gfx::BufferFormat::RGBX_8888;
-    RenderPassId render_pass_id{1};
-    RenderPass* render_pass = cc::AddRenderPass(
+    AggregatedRenderPassId render_pass_id{1};
+    AggregatedRenderPass* render_pass = cc::AddRenderPass(
         &render_passes_in_draw_order_, render_pass_id, gfx::Rect(viewport_size),
         gfx::Transform(), cc::FilterOperations());
     cc::AddQuad(render_pass, gfx::Rect(viewport_size), SK_ColorGREEN);
@@ -2468,7 +2487,7 @@ class MockDCLayerOverlayProcessor : public DCLayerOverlayProcessor {
   MOCK_METHOD5(Process,
                void(DisplayResourceProvider* resource_provider,
                     const gfx::RectF& display_rect,
-                    RenderPassList* render_passes,
+                    AggregatedRenderPassList* render_passes,
                     gfx::Rect* damage_rect,
                     DCLayerOverlayList* dc_layer_overlays));
 
@@ -2497,9 +2516,9 @@ class MockCALayerOverlayProcessor : public CALayerOverlayProcessor {
       bool(DisplayResourceProvider* resource_provider,
            const gfx::RectF& display_rect,
            const QuadList& quad_list,
-           const base::flat_map<RenderPassId, cc::FilterOperations*>&
+           const base::flat_map<AggregatedRenderPassId, cc::FilterOperations*>&
                render_pass_filters,
-           const base::flat_map<RenderPassId, cc::FilterOperations*>&
+           const base::flat_map<AggregatedRenderPassId, cc::FilterOperations*>&
                render_pass_backdrop_filters,
            CALayerOverlayList* ca_layer_overlays));
 };
@@ -2531,7 +2550,7 @@ class TestOverlayProcessor : public OverlayProcessorUsingStrategy {
              const OverlayProcessorInterface::FilterOperationsMap&
                  render_pass_backdrop_filters,
              DisplayResourceProvider* resource_provider,
-             RenderPassList* render_pass_list,
+             AggregatedRenderPassList* render_pass_list,
              const OverlayProcessorInterface::OutputSurfaceOverlayPlane*
                  primary_surface,
              OverlayCandidateList* candidates,
@@ -2640,9 +2659,9 @@ TEST_F(GLRendererTest, DontOverlayWithCopyRequests) {
 #endif
 
   gfx::Size viewport_size(1, 1);
-  RenderPass* root_pass = cc::AddRenderPass(
-      &render_passes_in_draw_order_, RenderPassId{1}, gfx::Rect(viewport_size),
-      gfx::Transform(), cc::FilterOperations());
+  AggregatedRenderPass* root_pass = cc::AddRenderPass(
+      &render_passes_in_draw_order_, AggregatedRenderPassId{1},
+      gfx::Rect(viewport_size), gfx::Transform(), cc::FilterOperations());
   root_pass->has_transparent_background = false;
   root_pass->copy_requests.push_back(CopyOutputRequest::CreateStubForTesting());
 
@@ -2686,9 +2705,9 @@ TEST_F(GLRendererTest, DontOverlayWithCopyRequests) {
 #endif
 
   // Without a copy request Attempt() should be called once.
-  root_pass = cc::AddRenderPass(&render_passes_in_draw_order_, RenderPassId{1},
-                                gfx::Rect(viewport_size), gfx::Transform(),
-                                cc::FilterOperations());
+  root_pass = cc::AddRenderPass(
+      &render_passes_in_draw_order_, AggregatedRenderPassId{1},
+      gfx::Rect(viewport_size), gfx::Transform(), cc::FilterOperations());
   root_pass->has_transparent_background = false;
 
   overlay_quad = root_pass->CreateAndAppendDrawQuad<TextureDrawQuad>();
@@ -2761,6 +2780,11 @@ class MockOverlayScheduler {
 };
 
 TEST_F(GLRendererTest, OverlaySyncTokensAreProcessed) {
+#if defined(USE_X11)
+  // TODO(1096425): Remove this.
+  if (!features::IsUsingOzonePlatform())
+    GTEST_SKIP();
+#endif
   auto gl_owned = std::make_unique<WaitSyncTokenCountingGLES2Interface>();
   WaitSyncTokenCountingGLES2Interface* gl = gl_owned.get();
 
@@ -2823,9 +2847,9 @@ TEST_F(GLRendererTest, OverlaySyncTokensAreProcessed) {
   renderer.SetVisible(true);
 
   gfx::Size viewport_size(1, 1);
-  RenderPass* root_pass = cc::AddRenderPass(
-      &render_passes_in_draw_order_, RenderPassId{1}, gfx::Rect(viewport_size),
-      gfx::Transform(), cc::FilterOperations());
+  AggregatedRenderPass* root_pass = cc::AddRenderPass(
+      &render_passes_in_draw_order_, AggregatedRenderPassId{1},
+      gfx::Rect(viewport_size), gfx::Transform(), cc::FilterOperations());
   root_pass->has_transparent_background = false;
 
   bool needs_blending = false;
@@ -2919,13 +2943,13 @@ TEST_F(GLRendererTest, OutputColorMatrixTest) {
   // Create a root and a child passes to test that the output color matrix is
   // registered only for the root pass.
   gfx::Size viewport_size(100, 100);
-  RenderPassId child_pass_id{2};
-  RenderPass* child_pass =
+  AggregatedRenderPassId child_pass_id{2};
+  AggregatedRenderPass* child_pass =
       cc::AddRenderPass(&render_passes_in_draw_order_, child_pass_id,
                         gfx::Rect(viewport_size) + gfx::Vector2d(1, 2),
                         gfx::Transform(), cc::FilterOperations());
-  RenderPassId root_pass_id{1};
-  RenderPass* root_pass = cc::AddRenderPass(
+  AggregatedRenderPassId root_pass_id{1};
+  AggregatedRenderPass* root_pass = cc::AddRenderPass(
       &render_passes_in_draw_order_, root_pass_id, gfx::Rect(viewport_size),
       gfx::Transform(), cc::FilterOperations());
   root_pass->damage_rect = gfx::Rect(0, 0, 25, 25);
@@ -2997,16 +3021,16 @@ TEST_F(GLRendererTest, GenerateMipmap) {
   renderer.SetVisible(true);
 
   gfx::Size viewport_size(100, 100);
-  RenderPassId child_pass_id{2};
+  AggregatedRenderPassId child_pass_id{2};
   // Create a child pass with mipmap to verify that npot texture is enabled.
-  RenderPass* child_pass =
+  AggregatedRenderPass* child_pass =
       cc::AddRenderPass(&render_passes_in_draw_order_, child_pass_id,
                         gfx::Rect(viewport_size) + gfx::Vector2d(1, 2),
                         gfx::Transform(), cc::FilterOperations());
   child_pass->generate_mipmap = true;
 
-  RenderPassId root_pass_id{1};
-  RenderPass* root_pass = cc::AddRenderPass(
+  AggregatedRenderPassId root_pass_id{1};
+  AggregatedRenderPass* root_pass = cc::AddRenderPass(
       &render_passes_in_draw_order_, root_pass_id, gfx::Rect(viewport_size),
       gfx::Transform(), cc::FilterOperations());
   root_pass->damage_rect = gfx::Rect(0, 0, 25, 25);
@@ -3080,8 +3104,8 @@ class GLRendererPartialSwapTest : public GLRendererTest {
       EXPECT_CALL(*gl, Scissor(0, 0, 100, 100)).Times(1);
     }
 
-    RenderPassId root_pass_id{1};
-    RenderPass* root_pass = cc::AddRenderPass(
+    AggregatedRenderPassId root_pass_id{1};
+    AggregatedRenderPass* root_pass = cc::AddRenderPass(
         &render_passes_in_draw_order_, root_pass_id, gfx::Rect(viewport_size),
         gfx::Transform(), cc::FilterOperations());
     root_pass->damage_rect = gfx::Rect(viewport_size);
@@ -3092,7 +3116,7 @@ class GLRendererPartialSwapTest : public GLRendererTest {
     Mock::VerifyAndClearExpectations(gl);
 
     for (int i = 0; i < 2; ++i) {
-      RenderPass* root_pass = cc::AddRenderPassWithDamage(
+      AggregatedRenderPass* root_pass = cc::AddRenderPassWithDamage(
           &render_passes_in_draw_order_, root_pass_id, root_pass_output_rect,
           root_pass_damage_rect, gfx::Transform(), cc::FilterOperations());
       cc::AddQuad(root_pass, gfx::Rect(root_pass_output_rect), SK_ColorGREEN);
@@ -3224,8 +3248,8 @@ TEST_F(GLRendererTest, DCLayerOverlaySwitch) {
   gfx::Size viewport_size(100, 100);
 
   for (int i = 0; i < 65; i++) {
-    RenderPassId root_pass_id{1};
-    RenderPass* root_pass = cc::AddRenderPass(
+    AggregatedRenderPassId root_pass_id{1};
+    AggregatedRenderPass* root_pass = cc::AddRenderPass(
         &render_passes_in_draw_order_, root_pass_id, gfx::Rect(viewport_size),
         gfx::Transform(), cc::FilterOperations());
     if (i == 0) {
@@ -3342,7 +3366,7 @@ class ContentBoundsOverlayProcessor : public OverlayProcessorUsingStrategy {
                  const OverlayProcessorInterface::FilterOperationsMap&
                      render_pass_backdrop_filters,
                  DisplayResourceProvider* resource_provider,
-                 RenderPassList* render_pass_list,
+                 AggregatedRenderPassList* render_pass_list,
                  const PrimaryPlane* primary_plane,
                  OverlayCandidateList* candidates,
                  std::vector<gfx::Rect>* content_bounds) override {
@@ -3413,7 +3437,7 @@ class GLRendererSwapWithBoundsTest : public GLRendererTest {
     gfx::Size viewport_size(100, 100);
 
     {
-      RenderPassId root_pass_id{1};
+      AggregatedRenderPassId root_pass_id{1};
       cc::AddRenderPass(&render_passes_in_draw_order_, root_pass_id,
                         gfx::Rect(viewport_size), gfx::Transform(),
                         cc::FilterOperations());
@@ -3514,9 +3538,9 @@ class CALayerGLRendererTest : public GLRendererTest {
   }
 
   void DrawBlackFrame(const gfx::Size& viewport_size) {
-    RenderPassId root_pass_id{1};
+    AggregatedRenderPassId root_pass_id{1};
 
-    RenderPass* root_pass = cc::AddRenderPass(
+    AggregatedRenderPass* root_pass = cc::AddRenderPass(
         &render_passes_in_draw_order_, root_pass_id, gfx::Rect(viewport_size),
         gfx::Transform(), cc::FilterOperations());
     cc::AddQuad(root_pass, gfx::Rect(viewport_size), SK_ColorBLACK);
@@ -3549,16 +3573,16 @@ TEST_F(CALayerGLRendererTest, CALayerOverlaysWithAllQuadsPromoted) {
   // Draw an empty frame to make sure output surface is reshaped before tests.
   DrawBlackFrame(viewport_size);
 
-  // This frame has a root pass with a RenderPassDrawQuad pointing to a child
-  // pass that is at 1,2 to make it identifiable.
-  RenderPassId child_pass_id{2};
-  RenderPassId root_pass_id{1};
+  // This frame has a root pass with a CompositorRenderPassDrawQuad pointing to
+  // a child pass that is at 1,2 to make it identifiable.
+  AggregatedRenderPassId child_pass_id{2};
+  AggregatedRenderPassId root_pass_id{1};
   {
-    RenderPass* child_pass =
+    AggregatedRenderPass* child_pass =
         cc::AddRenderPass(&render_passes_in_draw_order_, child_pass_id,
                           gfx::Rect(viewport_size) + gfx::Vector2d(1, 2),
                           gfx::Transform(), cc::FilterOperations());
-    RenderPass* root_pass = cc::AddRenderPass(
+    AggregatedRenderPass* root_pass = cc::AddRenderPass(
         &render_passes_in_draw_order_, root_pass_id, gfx::Rect(viewport_size),
         gfx::Transform(), cc::FilterOperations());
     cc::AddRenderPassQuad(root_pass, child_pass, 0, gfx::Transform(),
@@ -3577,7 +3601,7 @@ TEST_F(CALayerGLRendererTest, CALayerOverlaysWithAllQuadsPromoted) {
             Invoke([](GLuint contents_texture_id, const GLfloat* contents_rect,
                       GLuint background_color, GLuint edge_aa_mask,
                       const GLfloat* bounds_rect, GLuint filter) {
-              // This is the child RenderPassDrawQuad.
+              // This is the child CompositorRenderPassDrawQuad.
               EXPECT_EQ(1, bounds_rect[0]);
               EXPECT_EQ(2, bounds_rect[1]);
             }));
@@ -3593,11 +3617,11 @@ TEST_F(CALayerGLRendererTest, CALayerOverlaysWithAllQuadsPromoted) {
 
   // Frame number 2. Same inputs, except...
   {
-    RenderPass* child_pass =
+    AggregatedRenderPass* child_pass =
         cc::AddRenderPass(&render_passes_in_draw_order_, child_pass_id,
                           gfx::Rect(viewport_size) + gfx::Vector2d(1, 2),
                           gfx::Transform(), cc::FilterOperations());
-    RenderPass* root_pass = cc::AddRenderPass(
+    AggregatedRenderPass* root_pass = cc::AddRenderPass(
         &render_passes_in_draw_order_, root_pass_id, gfx::Rect(viewport_size),
         gfx::Transform(), cc::FilterOperations());
     cc::AddRenderPassQuad(root_pass, child_pass, 0, gfx::Transform(),
@@ -3609,12 +3633,12 @@ TEST_F(CALayerGLRendererTest, CALayerOverlaysWithAllQuadsPromoted) {
 
   renderer().DecideRenderPassAllocationsForFrame(render_passes_in_draw_order_);
 
-  // The child RenderPassDrawQuad gets promoted again, but importantly it
-  // did not itself have to be drawn this time as it can use the cached texture.
-  // Because we can skip the child pass, and the root pass (all quads were
-  // promoted), this exposes edge cases in GLRenderer if it assumes we draw
+  // The child CompositorRenderPassDrawQuad gets promoted again, but importantly
+  // it did not itself have to be drawn this time as it can use the cached
+  // texture. Because we can skip the child pass, and the root pass (all quads
+  // were promoted), this exposes edge cases in GLRenderer if it assumes we draw
   // at least one RenderPass. This still works, doesn't crash, etc, and the
-  // RenderPassDrawQuad is emitted.
+  // CompositorRenderPassDrawQuad is emitted.
   {
     InSequence sequence;
     EXPECT_CALL(gl(), ScheduleCALayerSharedStateCHROMIUM(_, _, _, _, _, _));
@@ -3633,12 +3657,12 @@ TEST_F(CALayerGLRendererTest, CALayerRoundRects) {
   DrawBlackFrame(viewport_size);
 
   for (size_t subtest = 0; subtest < 3; ++subtest) {
-    RenderPass* child_pass = cc::AddRenderPass(
-        &render_passes_in_draw_order_, RenderPassId{1}, gfx::Rect(250, 250),
-        gfx::Transform(), cc::FilterOperations());
+    AggregatedRenderPass* child_pass = cc::AddRenderPass(
+        &render_passes_in_draw_order_, AggregatedRenderPassId{1},
+        gfx::Rect(250, 250), gfx::Transform(), cc::FilterOperations());
 
-    RenderPassId root_pass_id{1};
-    RenderPass* root_pass = cc::AddRenderPass(
+    AggregatedRenderPassId root_pass_id{1};
+    AggregatedRenderPass* root_pass = cc::AddRenderPass(
         &render_passes_in_draw_order_, root_pass_id, gfx::Rect(viewport_size),
         gfx::Transform(), cc::FilterOperations());
     auto* quad = cc::AddRenderPassQuad(root_pass, child_pass);
@@ -3692,18 +3716,18 @@ TEST_F(CALayerGLRendererTest, CALayerOverlaysReusesTextureWithDifferentSizes) {
   // Draw an empty frame to make sure output surface is reshaped before tests.
   DrawBlackFrame(viewport_size);
 
-  // This frame has a root pass with a RenderPassDrawQuad pointing to a child
-  // pass that is at 1,2 to make it identifiable.
-  // The child's size is 250x251, but it will be rounded up to a multiple of 64
-  // in order to promote easier texture reuse. See https://crbug.com/146070.
-  RenderPassId child_pass_id{2};
-  RenderPassId root_pass_id{1};
+  // This frame has a root pass with a CompositorRenderPassDrawQuad pointing to
+  // a child pass that is at 1,2 to make it identifiable. The child's size is
+  // 250x251, but it will be rounded up to a multiple of 64 in order to promote
+  // easier texture reuse. See https://crbug.com/146070.
+  AggregatedRenderPassId child_pass_id{2};
+  AggregatedRenderPassId root_pass_id{1};
   {
-    RenderPass* child_pass =
+    AggregatedRenderPass* child_pass =
         cc::AddRenderPass(&render_passes_in_draw_order_, child_pass_id,
                           gfx::Rect(250, 251) + gfx::Vector2d(1, 2),
                           gfx::Transform(), cc::FilterOperations());
-    RenderPass* root_pass = cc::AddRenderPass(
+    AggregatedRenderPass* root_pass = cc::AddRenderPass(
         &render_passes_in_draw_order_, root_pass_id, gfx::Rect(viewport_size),
         gfx::Transform(), cc::FilterOperations());
     cc::AddRenderPassQuad(root_pass, child_pass, 0, gfx::Transform(),
@@ -3724,7 +3748,7 @@ TEST_F(CALayerGLRendererTest, CALayerOverlaysReusesTextureWithDifferentSizes) {
             Invoke([&](GLuint contents_texture_id, const GLfloat* contents_rect,
                        GLuint background_color, GLuint edge_aa_mask,
                        const GLfloat* bounds_rect, GLuint filter) {
-              // This is the child RenderPassDrawQuad.
+              // This is the child CompositorRenderPassDrawQuad.
               EXPECT_EQ(1, bounds_rect[0]);
               EXPECT_EQ(2, bounds_rect[1]);
               // The size is rounded to a multiple of 64.
@@ -3754,11 +3778,11 @@ TEST_F(CALayerGLRendererTest, CALayerOverlaysReusesTextureWithDifferentSizes) {
   // that our texture reuse heuristics will reuse the texture if it is free.
   // For now, it is not.
   {
-    RenderPass* child_pass =
+    AggregatedRenderPass* child_pass =
         cc::AddRenderPass(&render_passes_in_draw_order_, child_pass_id,
                           gfx::Rect(190, 191) + gfx::Vector2d(1, 2),
                           gfx::Transform(), cc::FilterOperations());
-    RenderPass* root_pass = cc::AddRenderPass(
+    AggregatedRenderPass* root_pass = cc::AddRenderPass(
         &render_passes_in_draw_order_, root_pass_id, gfx::Rect(viewport_size),
         gfx::Transform(), cc::FilterOperations());
     cc::AddRenderPassQuad(root_pass, child_pass, 0, gfx::Transform(),
@@ -3802,11 +3826,11 @@ TEST_F(CALayerGLRendererTest, CALayerOverlaysReusesTextureWithDifferentSizes) {
   // smaller than the next multiple of 64 from the released texture, but larger
   // than half of its size so that our texture reuse heuristics will kick in.
   {
-    RenderPass* child_pass =
+    AggregatedRenderPass* child_pass =
         cc::AddRenderPass(&render_passes_in_draw_order_, child_pass_id,
                           gfx::Rect(190, 191) + gfx::Vector2d(1, 2),
                           gfx::Transform(), cc::FilterOperations());
-    RenderPass* root_pass = cc::AddRenderPass(
+    AggregatedRenderPass* root_pass = cc::AddRenderPass(
         &render_passes_in_draw_order_, root_pass_id, gfx::Rect(viewport_size),
         gfx::Transform(), cc::FilterOperations());
     cc::AddRenderPassQuad(root_pass, child_pass, 0, gfx::Transform(),
@@ -3827,7 +3851,7 @@ TEST_F(CALayerGLRendererTest, CALayerOverlaysReusesTextureWithDifferentSizes) {
                        const GLfloat* bounds_rect, GLuint filter) {
               // The first texture is reused.
               EXPECT_EQ(saved_texture_id, contents_texture_id);
-              // This is the child RenderPassDrawQuad.
+              // This is the child CompositorRenderPassDrawQuad.
               EXPECT_EQ(1, bounds_rect[0]);
               EXPECT_EQ(2, bounds_rect[1]);
               // The size here is the size of the texture being used, not
@@ -3847,18 +3871,18 @@ TEST_F(CALayerGLRendererTest, CALayerOverlaysDontReuseTooBigTexture) {
   // Draw an empty frame to make sure output surface is reshaped before tests.
   DrawBlackFrame(viewport_size);
 
-  // This frame has a root pass with a RenderPassDrawQuad pointing to a child
-  // pass that is at 1,2 to make it identifiable.
-  // The child's size is 250x251, but it will be rounded up to a multiple of 64
-  // in order to promote easier texture reuse. See https://crbug.com/146070.
-  RenderPassId child_pass_id{2};
-  RenderPassId root_pass_id{1};
+  // This frame has a root pass with a CompositorRenderPassDrawQuad pointing to
+  // a child pass that is at 1,2 to make it identifiable. The child's size is
+  // 250x251, but it will be rounded up to a multiple of 64 in order to promote
+  // easier texture reuse. See https://crbug.com/146070.
+  AggregatedRenderPassId child_pass_id{2};
+  AggregatedRenderPassId root_pass_id{1};
   {
-    RenderPass* child_pass =
+    AggregatedRenderPass* child_pass =
         cc::AddRenderPass(&render_passes_in_draw_order_, child_pass_id,
                           gfx::Rect(250, 251) + gfx::Vector2d(1, 2),
                           gfx::Transform(), cc::FilterOperations());
-    RenderPass* root_pass = cc::AddRenderPass(
+    AggregatedRenderPass* root_pass = cc::AddRenderPass(
         &render_passes_in_draw_order_, root_pass_id, gfx::Rect(viewport_size),
         gfx::Transform(), cc::FilterOperations());
     cc::AddRenderPassQuad(root_pass, child_pass, 0, gfx::Transform(),
@@ -3879,7 +3903,7 @@ TEST_F(CALayerGLRendererTest, CALayerOverlaysDontReuseTooBigTexture) {
             Invoke([&](GLuint contents_texture_id, const GLfloat* contents_rect,
                        GLuint background_color, GLuint edge_aa_mask,
                        const GLfloat* bounds_rect, GLuint filter) {
-              // This is the child RenderPassDrawQuad.
+              // This is the child CompositorRenderPassDrawQuad.
               EXPECT_EQ(1, bounds_rect[0]);
               EXPECT_EQ(2, bounds_rect[1]);
               // The size is rounded to a multiple of 64.
@@ -3907,11 +3931,11 @@ TEST_F(CALayerGLRendererTest, CALayerOverlaysDontReuseTooBigTexture) {
   // Frame number 2. We change the size of the child RenderPass to be much
   // smaller.
   {
-    RenderPass* child_pass =
+    AggregatedRenderPass* child_pass =
         cc::AddRenderPass(&render_passes_in_draw_order_, child_pass_id,
                           gfx::Rect(20, 21) + gfx::Vector2d(1, 2),
                           gfx::Transform(), cc::FilterOperations());
-    RenderPass* root_pass = cc::AddRenderPass(
+    AggregatedRenderPass* root_pass = cc::AddRenderPass(
         &render_passes_in_draw_order_, root_pass_id, gfx::Rect(viewport_size),
         gfx::Transform(), cc::FilterOperations());
     cc::AddRenderPassQuad(root_pass, child_pass, 0, gfx::Transform(),
@@ -3954,11 +3978,11 @@ TEST_F(CALayerGLRendererTest, CALayerOverlaysDontReuseTooBigTexture) {
   // Frame number 3 looks just like frame number 2. The child RenderPass is
   // too small to reuse the old texture.
   {
-    RenderPass* child_pass =
+    AggregatedRenderPass* child_pass =
         cc::AddRenderPass(&render_passes_in_draw_order_, child_pass_id,
                           gfx::Rect(20, 21) + gfx::Vector2d(1, 2),
                           gfx::Transform(), cc::FilterOperations());
-    RenderPass* root_pass = cc::AddRenderPass(
+    AggregatedRenderPass* root_pass = cc::AddRenderPass(
         &render_passes_in_draw_order_, root_pass_id, gfx::Rect(viewport_size),
         gfx::Transform(), cc::FilterOperations());
     cc::AddRenderPassQuad(root_pass, child_pass, 0, gfx::Transform(),
@@ -3979,7 +4003,7 @@ TEST_F(CALayerGLRendererTest, CALayerOverlaysDontReuseTooBigTexture) {
                        const GLfloat* bounds_rect, GLuint filter) {
               // The first texture is not reused.
               EXPECT_NE(saved_texture_id, contents_texture_id);
-              // This is the child RenderPassDrawQuad.
+              // This is the child CompositorRenderPassDrawQuad.
               EXPECT_EQ(1, bounds_rect[0]);
               EXPECT_EQ(2, bounds_rect[1]);
               // The new texture has a smaller size.
@@ -3995,16 +4019,16 @@ TEST_F(CALayerGLRendererTest, CALayerOverlaysDontReuseTooBigTexture) {
 TEST_F(CALayerGLRendererTest, CALayerOverlaysReuseAfterNoSwapBuffers) {
   gfx::Size viewport_size(300, 300);
 
-  // This frame has a root pass with a RenderPassDrawQuad pointing to a child
-  // pass that is at 1,2 to make it identifiable.
-  RenderPassId child_pass_id{2};
-  RenderPassId root_pass_id{1};
+  // This frame has a root pass with a CompositorRenderPassDrawQuad pointing to
+  // a child pass that is at 1,2 to make it identifiable.
+  AggregatedRenderPassId child_pass_id{2};
+  AggregatedRenderPassId root_pass_id{1};
   {
-    RenderPass* child_pass =
+    AggregatedRenderPass* child_pass =
         cc::AddRenderPass(&render_passes_in_draw_order_, child_pass_id,
                           gfx::Rect(100, 100) + gfx::Vector2d(1, 2),
                           gfx::Transform(), cc::FilterOperations());
-    RenderPass* root_pass = cc::AddRenderPass(
+    AggregatedRenderPass* root_pass = cc::AddRenderPass(
         &render_passes_in_draw_order_, root_pass_id, gfx::Rect(viewport_size),
         gfx::Transform(), cc::FilterOperations());
     cc::AddRenderPassQuad(root_pass, child_pass, 0, gfx::Transform(),
@@ -4024,7 +4048,7 @@ TEST_F(CALayerGLRendererTest, CALayerOverlaysReuseAfterNoSwapBuffers) {
             Invoke([&](GLuint contents_texture_id, const GLfloat* contents_rect,
                        GLuint background_color, GLuint edge_aa_mask,
                        const GLfloat* bounds_rect, GLuint filter) {
-              // This is the child RenderPassDrawQuad.
+              // This is the child CompositorRenderPassDrawQuad.
               EXPECT_EQ(1, bounds_rect[0]);
               EXPECT_EQ(2, bounds_rect[1]);
               saved_texture_id = contents_texture_id;
@@ -4042,11 +4066,11 @@ TEST_F(CALayerGLRendererTest, CALayerOverlaysReuseAfterNoSwapBuffers) {
   // returned yet. We use a different size so we can control which texture gets
   // reused later.
   {
-    RenderPass* child_pass =
+    AggregatedRenderPass* child_pass =
         cc::AddRenderPass(&render_passes_in_draw_order_, child_pass_id,
                           gfx::Rect(200, 200) + gfx::Vector2d(1, 2),
                           gfx::Transform(), cc::FilterOperations());
-    RenderPass* root_pass = cc::AddRenderPass(
+    AggregatedRenderPass* root_pass = cc::AddRenderPass(
         &render_passes_in_draw_order_, root_pass_id, gfx::Rect(viewport_size),
         gfx::Transform(), cc::FilterOperations());
     cc::AddRenderPassQuad(root_pass, child_pass, 0, gfx::Transform(),
@@ -4088,11 +4112,11 @@ TEST_F(CALayerGLRendererTest, CALayerOverlaysReuseAfterNoSwapBuffers) {
 
   // Frame number 3 looks just like frame number 2.
   {
-    RenderPass* child_pass =
+    AggregatedRenderPass* child_pass =
         cc::AddRenderPass(&render_passes_in_draw_order_, child_pass_id,
                           gfx::Rect(200, 200) + gfx::Vector2d(1, 2),
                           gfx::Transform(), cc::FilterOperations());
-    RenderPass* root_pass = cc::AddRenderPass(
+    AggregatedRenderPass* root_pass = cc::AddRenderPass(
         &render_passes_in_draw_order_, root_pass_id, gfx::Rect(viewport_size),
         gfx::Transform(), cc::FilterOperations());
     cc::AddRenderPassQuad(root_pass, child_pass, 0, gfx::Transform(),
@@ -4113,7 +4137,7 @@ TEST_F(CALayerGLRendererTest, CALayerOverlaysReuseAfterNoSwapBuffers) {
                        const GLfloat* bounds_rect, GLuint filter) {
               // The second texture is reused.
               EXPECT_EQ(second_saved_texture_id, contents_texture_id);
-              // This is the child RenderPassDrawQuad.
+              // This is the child CompositorRenderPassDrawQuad.
               EXPECT_EQ(1, bounds_rect[0]);
               EXPECT_EQ(2, bounds_rect[1]);
             }));
@@ -4129,10 +4153,11 @@ TEST_F(CALayerGLRendererTest, CALayerOverlaysReuseManyIfReturnedSlowly) {
   // Draw an empty frame to make sure output surface is reshaped before tests.
   DrawBlackFrame(viewport_size);
 
-  // Each frame has a root pass with a RenderPassDrawQuad pointing to a child
-  // pass. We generate a bunch of frames and swap them, each with a different
-  // child RenderPass id, without getting any of the resources back from the OS.
-  RenderPassId root_pass_id{1};
+  // Each frame has a root pass with a CompositorRenderPassDrawQuad pointing to
+  // a child pass. We generate a bunch of frames and swap them, each with a
+  // different child RenderPass id, without getting any of the resources back
+  // from the OS.
+  AggregatedRenderPassId root_pass_id{1};
 
   // The number is at least 2 larger than the number of textures we expect to
   // reuse, so that we can leave one in the OS, and have 1 texture returned but
@@ -4140,11 +4165,11 @@ TEST_F(CALayerGLRendererTest, CALayerOverlaysReuseManyIfReturnedSlowly) {
   const int kNumSendManyTextureIds = 7;
   uint32_t sent_texture_ids[kNumSendManyTextureIds];
   for (int i = 0; i < kNumSendManyTextureIds; ++i) {
-    RenderPass* child_pass =
-        cc::AddRenderPass(&render_passes_in_draw_order_, RenderPassId{i + 2},
-                          gfx::Rect(250, 251) + gfx::Vector2d(1, 2),
-                          gfx::Transform(), cc::FilterOperations());
-    RenderPass* root_pass = cc::AddRenderPass(
+    AggregatedRenderPass* child_pass = cc::AddRenderPass(
+        &render_passes_in_draw_order_, AggregatedRenderPassId{i + 2},
+        gfx::Rect(250, 251) + gfx::Vector2d(1, 2), gfx::Transform(),
+        cc::FilterOperations());
+    AggregatedRenderPass* root_pass = cc::AddRenderPass(
         &render_passes_in_draw_order_, root_pass_id, gfx::Rect(viewport_size),
         gfx::Transform(), cc::FilterOperations());
     cc::AddRenderPassQuad(root_pass, child_pass, 0, gfx::Transform(),
@@ -4160,7 +4185,7 @@ TEST_F(CALayerGLRendererTest, CALayerOverlaysReuseManyIfReturnedSlowly) {
             Invoke([&](GLuint contents_texture_id, const GLfloat* contents_rect,
                        GLuint background_color, GLuint edge_aa_mask,
                        const GLfloat* bounds_rect, GLuint filter) {
-              // This is the child RenderPassDrawQuad.
+              // This is the child CompositorRenderPassDrawQuad.
               EXPECT_EQ(1, bounds_rect[0]);
               EXPECT_EQ(2, bounds_rect[1]);
               sent_texture_ids[i] = contents_texture_id;
@@ -4201,11 +4226,11 @@ TEST_F(CALayerGLRendererTest, CALayerOverlaysReuseManyIfReturnedSlowly) {
   for (int i = 0; i < kNumSendReusedTextures + 1; ++i) {
     // We use different RenderPass ids to ensure that the cache allows reuse
     // even if they don't match.
-    RenderPass* child_pass =
-        cc::AddRenderPass(&render_passes_in_draw_order_, RenderPassId{i + 100},
-                          gfx::Rect(250, 251) + gfx::Vector2d(1, 2),
-                          gfx::Transform(), cc::FilterOperations());
-    RenderPass* root_pass = cc::AddRenderPass(
+    AggregatedRenderPass* child_pass = cc::AddRenderPass(
+        &render_passes_in_draw_order_, AggregatedRenderPassId{i + 100},
+        gfx::Rect(250, 251) + gfx::Vector2d(1, 2), gfx::Transform(),
+        cc::FilterOperations());
+    AggregatedRenderPass* root_pass = cc::AddRenderPass(
         &render_passes_in_draw_order_, root_pass_id, gfx::Rect(viewport_size),
         gfx::Transform(), cc::FilterOperations());
     cc::AddRenderPassQuad(root_pass, child_pass, 0, gfx::Transform(),
@@ -4221,7 +4246,7 @@ TEST_F(CALayerGLRendererTest, CALayerOverlaysReuseManyIfReturnedSlowly) {
                              const GLfloat* contents_rect,
                              GLuint background_color, GLuint edge_aa_mask,
                              const GLfloat* bounds_rect, GLuint filter) {
-          // This is the child RenderPassDrawQuad.
+          // This is the child CompositorRenderPassDrawQuad.
           EXPECT_EQ(1, bounds_rect[0]);
           EXPECT_EQ(2, bounds_rect[1]);
 
@@ -4258,21 +4283,22 @@ TEST_F(CALayerGLRendererTest, CALayerOverlaysCachedTexturesAreFreed) {
   // Draw an empty frame to make sure output surface is reshaped before tests.
   DrawBlackFrame(viewport_size);
 
-  // Each frame has a root pass with a RenderPassDrawQuad pointing to a child
-  // pass. We generate a bunch of frames and swap them, each with a different
-  // child RenderPass id, without getting any of the resources back from the OS.
-  RenderPassId child_pass_id{2};
-  RenderPassId root_pass_id{1};
+  // Each frame has a root pass with a CompositorRenderPassDrawQuad pointing to
+  // a child pass. We generate a bunch of frames and swap them, each with a
+  // different child RenderPass id, without getting any of the resources back
+  // from the OS.
+  AggregatedRenderPassId child_pass_id{2};
+  AggregatedRenderPassId root_pass_id{1};
 
   // We send a whole bunch of textures as overlays to the OS.
   const int kNumSendManyTextureIds = 7;
   uint32_t sent_texture_ids[kNumSendManyTextureIds];
   for (int i = 0; i < kNumSendManyTextureIds; ++i) {
-    RenderPass* child_pass =
-        cc::AddRenderPass(&render_passes_in_draw_order_, RenderPassId{i + 2},
-                          gfx::Rect(250, 251) + gfx::Vector2d(1, 2),
-                          gfx::Transform(), cc::FilterOperations());
-    RenderPass* root_pass = cc::AddRenderPass(
+    AggregatedRenderPass* child_pass = cc::AddRenderPass(
+        &render_passes_in_draw_order_, AggregatedRenderPassId{i + 2},
+        gfx::Rect(250, 251) + gfx::Vector2d(1, 2), gfx::Transform(),
+        cc::FilterOperations());
+    AggregatedRenderPass* root_pass = cc::AddRenderPass(
         &render_passes_in_draw_order_, root_pass_id, gfx::Rect(viewport_size),
         gfx::Transform(), cc::FilterOperations());
     cc::AddRenderPassQuad(root_pass, child_pass, 0, gfx::Transform(),
@@ -4288,7 +4314,7 @@ TEST_F(CALayerGLRendererTest, CALayerOverlaysCachedTexturesAreFreed) {
             Invoke([&](GLuint contents_texture_id, const GLfloat* contents_rect,
                        GLuint background_color, GLuint edge_aa_mask,
                        const GLfloat* bounds_rect, GLuint filter) {
-              // This is the child RenderPassDrawQuad.
+              // This is the child CompositorRenderPassDrawQuad.
               EXPECT_EQ(1, bounds_rect[0]);
               EXPECT_EQ(2, bounds_rect[1]);
               sent_texture_ids[i] = contents_texture_id;
@@ -4322,7 +4348,7 @@ TEST_F(CALayerGLRendererTest, CALayerOverlaysCachedTexturesAreFreed) {
   // We generate a bunch of frames that don't use the cache, one less than the
   // number of textures returned.
   for (int i = 0; i < kNumSendManyTextureIds - 2; ++i) {
-    RenderPass* root_pass = cc::AddRenderPass(
+    AggregatedRenderPass* root_pass = cc::AddRenderPass(
         &render_passes_in_draw_order_, root_pass_id, gfx::Rect(viewport_size),
         gfx::Transform(), cc::FilterOperations());
     cc::AddQuad(root_pass, gfx::Rect(100, 100), SK_ColorRED);
@@ -4345,14 +4371,14 @@ TEST_F(CALayerGLRendererTest, CALayerOverlaysCachedTexturesAreFreed) {
 
   // By now the cache should be empty, to show that we don't keep cached
   // textures that won't be used forever. We generate a frame with a
-  // RenderPassDrawQuad and verify that it does not reuse a texture from the
-  // (empty) cache.
+  // CompositorRenderPassDrawQuad and verify that it does not reuse a texture
+  // from the (empty) cache.
   {
-    RenderPass* child_pass =
+    AggregatedRenderPass* child_pass =
         cc::AddRenderPass(&render_passes_in_draw_order_, child_pass_id,
                           gfx::Rect(250, 251) + gfx::Vector2d(1, 2),
                           gfx::Transform(), cc::FilterOperations());
-    RenderPass* root_pass = cc::AddRenderPass(
+    AggregatedRenderPass* root_pass = cc::AddRenderPass(
         &render_passes_in_draw_order_, root_pass_id, gfx::Rect(viewport_size),
         gfx::Transform(), cc::FilterOperations());
     cc::AddRenderPassQuad(root_pass, child_pass, 0, gfx::Transform(),
@@ -4368,7 +4394,7 @@ TEST_F(CALayerGLRendererTest, CALayerOverlaysCachedTexturesAreFreed) {
                            const GLfloat* contents_rect,
                            GLuint background_color, GLuint edge_aa_mask,
                            const GLfloat* bounds_rect, GLuint filter) {
-        // This is the child RenderPassDrawQuad.
+        // This is the child CompositorRenderPassDrawQuad.
         EXPECT_EQ(1, bounds_rect[0]);
         EXPECT_EQ(2, bounds_rect[1]);
 
@@ -4401,7 +4427,8 @@ class FramebufferWatchingGLRenderer : public FakeRendererGL {
     FakeRendererGL::BindFramebufferToOutputSurface();
   }
 
-  void BindFramebufferToTexture(const RenderPassId render_pass_id) override {
+  void BindFramebufferToTexture(
+      const AggregatedRenderPassId render_pass_id) override {
     ++bind_child_framebuffer_calls_;
     FakeRendererGL::BindFramebufferToTexture(render_pass_id);
   }
@@ -4453,14 +4480,14 @@ TEST_F(GLRendererTest, UndamagedRenderPassStillDrawnWhenNoPartialSwap) {
     gfx::Rect child_rect(10, 10);
 
     // First frame, the child and root RenderPass each have damage.
-    RenderPass* child_pass =
-        cc::AddRenderPass(&render_passes_in_draw_order_, RenderPassId{2},
-                          child_rect, gfx::Transform(), cc::FilterOperations());
+    AggregatedRenderPass* child_pass = cc::AddRenderPass(
+        &render_passes_in_draw_order_, AggregatedRenderPassId{2}, child_rect,
+        gfx::Transform(), cc::FilterOperations());
     cc::AddQuad(child_pass, child_rect, SK_ColorGREEN);
     child_pass->damage_rect = child_rect;
 
-    RenderPass* root_pass = cc::AddRenderPass(
-        &render_passes_in_draw_order_, RenderPassId{1},
+    AggregatedRenderPass* root_pass = cc::AddRenderPass(
+        &render_passes_in_draw_order_, AggregatedRenderPassId{1},
         gfx::Rect(viewport_size), gfx::Transform(), cc::FilterOperations());
     cc::AddQuad(root_pass, gfx::Rect(viewport_size), SK_ColorRED);
     cc::AddRenderPassQuad(root_pass, child_pass, 0, gfx::Transform(),
@@ -4475,24 +4502,24 @@ TEST_F(GLRendererTest, UndamagedRenderPassStillDrawnWhenNoPartialSwap) {
 
     // We had to draw the root, and the child.
     EXPECT_EQ(1, renderer.bind_child_framebuffer_calls());
-    // When the RenderPassDrawQuad in the root is drawn, we may re-bind the root
-    // framebuffer. So it can be bound more than once.
+    // When the CompositorRenderPassDrawQuad in the root is drawn, we may
+    // re-bind the root framebuffer. So it can be bound more than once.
     EXPECT_GE(renderer.bind_root_framebuffer_calls(), 1);
 
     // Reset counting.
     renderer.ResetBindCalls();
 
     // Second frame, the child RenderPass has no damage in it.
-    child_pass =
-        cc::AddRenderPass(&render_passes_in_draw_order_, RenderPassId{2},
-                          child_rect, gfx::Transform(), cc::FilterOperations());
+    child_pass = cc::AddRenderPass(&render_passes_in_draw_order_,
+                                   AggregatedRenderPassId{2}, child_rect,
+                                   gfx::Transform(), cc::FilterOperations());
     cc::AddQuad(child_pass, child_rect, SK_ColorGREEN);
     child_pass->damage_rect = gfx::Rect();
 
     // Root RenderPass has some damage that doesn't intersect the child.
-    root_pass = cc::AddRenderPass(&render_passes_in_draw_order_,
-                                  RenderPassId{1}, gfx::Rect(viewport_size),
-                                  gfx::Transform(), cc::FilterOperations());
+    root_pass = cc::AddRenderPass(
+        &render_passes_in_draw_order_, AggregatedRenderPassId{1},
+        gfx::Rect(viewport_size), gfx::Transform(), cc::FilterOperations());
     cc::AddQuad(root_pass, gfx::Rect(viewport_size), SK_ColorRED);
     cc::AddRenderPassQuad(root_pass, child_pass, 0, gfx::Transform(),
                           SkBlendMode::kSrcOver);
@@ -4513,9 +4540,9 @@ TEST_F(GLRendererTest, UndamagedRenderPassStillDrawnWhenNoPartialSwap) {
       // Without partial swap, we have to draw the child still, this means
       // the child is bound as the framebuffer.
       EXPECT_EQ(1, renderer.bind_child_framebuffer_calls());
-      // When the RenderPassDrawQuad in the root is drawn, as it must be since
-      // we must draw the entire output, we may re-bind the root framebuffer. So
-      // it can be bound more than once.
+      // When the CompositorRenderPassDrawQuad in the root is drawn, as it must
+      // be since we must draw the entire output, we may re-bind the root
+      // framebuffer. So it can be bound more than once.
       EXPECT_GE(renderer.bind_root_framebuffer_calls(), 1);
     }
   }
@@ -4592,9 +4619,9 @@ class GLRendererWithGpuFenceTest : public GLRendererTest {
 
 TEST_F(GLRendererWithGpuFenceTest, GpuFenceIdIsUsedWithRootRenderPassOverlay) {
   gfx::Size viewport_size(100, 100);
-  RenderPass* root_pass = cc::AddRenderPass(
-      &render_passes_in_draw_order_, RenderPassId{1}, gfx::Rect(viewport_size),
-      gfx::Transform(), cc::FilterOperations());
+  AggregatedRenderPass* root_pass = cc::AddRenderPass(
+      &render_passes_in_draw_order_, AggregatedRenderPassId{1},
+      gfx::Rect(viewport_size), gfx::Transform(), cc::FilterOperations());
   root_pass->has_transparent_background = false;
 
   EXPECT_CALL(overlay_scheduler_,
@@ -4606,10 +4633,15 @@ TEST_F(GLRendererWithGpuFenceTest, GpuFenceIdIsUsedWithRootRenderPassOverlay) {
 
 TEST_F(GLRendererWithGpuFenceTest,
        GpuFenceIdIsUsedOnlyForRootRenderPassOverlay) {
+#if defined(USE_X11)
+  // TODO(1096425): Remove this.
+  if (!features::IsUsingOzonePlatform())
+    GTEST_SKIP();
+#endif
   gfx::Size viewport_size(100, 100);
-  RenderPass* root_pass = cc::AddRenderPass(
-      &render_passes_in_draw_order_, RenderPassId{1}, gfx::Rect(viewport_size),
-      gfx::Transform(), cc::FilterOperations());
+  AggregatedRenderPass* root_pass = cc::AddRenderPass(
+      &render_passes_in_draw_order_, AggregatedRenderPassId{1},
+      gfx::Rect(viewport_size), gfx::Transform(), cc::FilterOperations());
   root_pass->has_transparent_background = false;
 
   bool needs_blending = false;

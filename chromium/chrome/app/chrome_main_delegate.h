@@ -11,12 +11,17 @@
 #include "base/macros.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/startup_data.h"
 #include "chrome/common/chrome_content_client.h"
 #include "content/public/app/content_main_delegate.h"
 
 namespace base {
 class CommandLine;
+}
+
+namespace chromeos {
+class LacrosChromeServiceImpl;
 }
 
 namespace tracing {
@@ -53,7 +58,6 @@ class ChromeMainDelegate : public content::ContentMainDelegate {
                           delegates) override;
   void ZygoteForked() override;
 #endif
-  service_manager::ProcessType OverrideProcessType() override;
   void PreCreateMainMessageLoop() override;
   void PostEarlyInitialization(bool is_running_tests) override;
   bool ShouldCreateFeatureList() override;
@@ -82,6 +86,10 @@ class ChromeMainDelegate : public content::ContentMainDelegate {
   // The controller schedules UMA heap profiles collections and forwarding down
   // the reporting pipeline.
   std::unique_ptr<HeapProfilerController> heap_profiler_controller_;
+
+#if BUILDFLAG(IS_LACROS)
+  std::unique_ptr<chromeos::LacrosChromeServiceImpl> lacros_chrome_service_;
+#endif
 
   DISALLOW_COPY_AND_ASSIGN(ChromeMainDelegate);
 };

@@ -5,6 +5,7 @@
 module page_load_metrics.mojom;
 
 import "ui/gfx/geometry/mojom/geometry.mojom";
+import "mojo/public/mojom/base/shared_memory.mojom";
 import "mojo/public/mojom/base/time.mojom";
 import "third_party/blink/public/mojom/web_feature/web_feature.mojom";
 import "third_party/blink/public/mojom/use_counter/css_property_id.mojom";
@@ -319,21 +320,6 @@ struct InputTiming {
   uint64 num_input_events = 0;
 };
 
-struct PercentOptional {
-  int8 percent;
-};
-
-// The throughput data for this page.
-struct ThroughputUkmData {
-  // The source id for the ukm.
-  int64 source_id;
-  // The throughput of the page of different threads: main, compositor, and the
-  // aggregated throughput of main && compositor thread.
-  int8 aggregated_throughput_percent;
-  int8 impl_throughput_percent;
-  PercentOptional? main_throughput_percent;
-};
-
 // Sent from renderer to browser process when the PageLoadTiming for the
 // associated frame changed.
 interface PageLoadMetrics {
@@ -350,12 +336,11 @@ interface PageLoadMetrics {
                DeferredResourceCounts new_deferred_resource_data,
                InputTiming input_timing_delta);
 
-  // The renderer submit throughput data to the browser process. The browser
-  // process aggregates these data, and reports the aggregated value to UKM when
-  // the page shuts down or navigates away.
-  // TODO(xidachen): The interface exists for every frame, but this method is
-  // only called for LocalRoots. Should limit the visibility to LocalRoots only.
-  SubmitThroughputData(ThroughputUkmData throughput_data);
+  // Set up a shared memory used to transfer smoothness data from the renderer
+  // to the browser. The structure is defined in
+  // //cc/metrics/ukm_smoothness_data.h
+  SetUpSharedMemoryForSmoothness(
+      mojo_base.mojom.ReadOnlySharedMemoryRegion shared_memory);
 };
 
 // TimeDelta below relative to the navigation start of the navigation restoring

@@ -5,15 +5,15 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "cc/test/pixel_comparator.h"
-#include "cc/test/pixel_test.h"
 #include "components/viz/common/frame_sinks/begin_frame_args.h"
 #include "components/viz/common/quads/compositor_frame.h"
-#include "components/viz/common/quads/render_pass.h"
+#include "components/viz/common/quads/compositor_render_pass.h"
 #include "components/viz/common/quads/solid_color_draw_quad.h"
 #include "components/viz/common/quads/surface_draw_quad.h"
-#include "components/viz/common/surfaces/aggregated_frame.h"
 #include "components/viz/common/surfaces/parent_local_surface_id_allocator.h"
+#include "components/viz/service/display/aggregated_frame.h"
 #include "components/viz/service/display/surface_aggregator.h"
+#include "components/viz/service/display/viz_pixel_test.h"
 #include "components/viz/service/display_embedder/server_shared_bitmap_manager.h"
 #include "components/viz/service/frame_sinks/compositor_frame_sink_support.h"
 #include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
@@ -34,8 +34,7 @@ constexpr FrameSinkId kArbitraryRightFrameSinkId(4, 4);
 constexpr bool kIsRoot = true;
 constexpr bool kIsChildRoot = false;
 
-template <typename RendererType>
-class SurfaceAggregatorPixelTest : public cc::RendererPixelTest<RendererType> {
+class SurfaceAggregatorPixelTest : public VizPixelTestWithParam {
  public:
   SurfaceAggregatorPixelTest()
       : manager_(&shared_bitmap_manager_),
@@ -61,21 +60,13 @@ class SurfaceAggregatorPixelTest : public cc::RendererPixelTest<RendererType> {
       base::TimeTicks() + base::TimeDelta::FromSeconds(1);
 };
 
-using RendererTypes = ::testing::Types<GLRenderer,
-                                       SkiaRenderer
-#ifdef ENABLE_VIZ_VULKAN_TESTS
-                                       ,
-                                       cc::VulkanSkiaRenderer
-#endif
-#ifdef ENABLE_VIZ_DAWN_TESTS
-                                       ,
-                                       cc::DawnSkiaRenderer
-#endif
-                                       >;
-TYPED_TEST_SUITE(SurfaceAggregatorPixelTest, RendererTypes);
+INSTANTIATE_TEST_SUITE_P(,
+                         SurfaceAggregatorPixelTest,
+                         testing::ValuesIn(GetGpuRendererTypes()),
+                         testing::PrintToStringParamName());
 
 SharedQuadState* CreateAndAppendTestSharedQuadState(
-    RenderPass* render_pass,
+    CompositorRenderPass* render_pass,
     const gfx::Transform& transform,
     const gfx::Size& size) {
   const gfx::Rect layer_rect = gfx::Rect(size);
@@ -94,10 +85,10 @@ SharedQuadState* CreateAndAppendTestSharedQuadState(
 }
 
 // Draws a very simple frame with no surface references.
-TYPED_TEST(SurfaceAggregatorPixelTest, DrawSimpleFrame) {
+TEST_P(SurfaceAggregatorPixelTest, DrawSimpleFrame) {
   gfx::Rect rect(this->device_viewport_size_);
-  RenderPassId id{1};
-  auto pass = RenderPass::Create();
+  CompositorRenderPassId id{1};
+  auto pass = CompositorRenderPass::Create();
   pass->SetNew(id, rect, rect, gfx::Transform());
 
   CreateAndAppendTestSharedQuadState(pass.get(), gfx::Transform(),
@@ -112,14 +103,10 @@ TYPED_TEST(SurfaceAggregatorPixelTest, DrawSimpleFrame) {
       CompositorFrameBuilder().AddRenderPass(std::move(pass)).Build();
 
   this->root_allocator_.GenerateId();
-  SurfaceId root_surface_id(
-      this->support_->frame_sink_id(),
-      this->root_allocator_.GetCurrentLocalSurfaceIdAllocation()
-          .local_surface_id());
+  SurfaceId root_surface_id(this->support_->frame_sink_id(),
+                            this->root_allocator_.GetCurrentLocalSurfaceId());
   this->support_->SubmitCompositorFrame(
-      this->root_allocator_.GetCurrentLocalSurfaceIdAllocation()
-          .local_surface_id(),
-      std::move(root_frame));
+      this->root_allocator_.GetCurrentLocalSurfaceId(), std::move(root_frame));
 
   SurfaceAggregator aggregator(this->manager_.surface_manager(),
                                this->resource_provider_.get(), true, false);
@@ -128,14 +115,14 @@ TYPED_TEST(SurfaceAggregatorPixelTest, DrawSimpleFrame) {
 
   bool discard_alpha = false;
   cc::ExactPixelComparator pixel_comparator(discard_alpha);
-  RenderPassList* pass_list = &aggregated_frame.render_pass_list;
+  auto* pass_list = &aggregated_frame.render_pass_list;
   EXPECT_TRUE(this->RunPixelTest(pass_list,
                                  base::FilePath(FILE_PATH_LITERAL("green.png")),
                                  pixel_comparator));
 }
 
 // Draws a frame with simple surface embedding.
-TYPED_TEST(SurfaceAggregatorPixelTest, DrawSimpleAggregatedFrame) {
+TEST_P(SurfaceAggregatorPixelTest, DrawSimpleAggregatedFrame) {
   gfx::Size child_size(200, 100);
   auto child_support = std::make_unique<CompositorFrameSinkSupport>(
       nullptr, &this->manager_, kArbitraryChildFrameSinkId, kIsChildRoot);
@@ -143,20 +130,19 @@ TYPED_TEST(SurfaceAggregatorPixelTest, DrawSimpleAggregatedFrame) {
   ParentLocalSurfaceIdAllocator child_allocator;
   child_allocator.GenerateId();
   LocalSurfaceId child_local_surface_id =
-      child_allocator.GetCurrentLocalSurfaceIdAllocation().local_surface_id();
+      child_allocator.GetCurrentLocalSurfaceId();
   SurfaceId child_surface_id(child_support->frame_sink_id(),
                              child_local_surface_id);
   this->root_allocator_.GenerateId();
   LocalSurfaceId root_local_surface_id =
-      this->root_allocator_.GetCurrentLocalSurfaceIdAllocation()
-          .local_surface_id();
+      this->root_allocator_.GetCurrentLocalSurfaceId();
   SurfaceId root_surface_id(this->support_->frame_sink_id(),
                             root_local_surface_id);
 
   {
     gfx::Rect rect(this->device_viewport_size_);
-    RenderPassId id{1};
-    auto pass = RenderPass::Create();
+    CompositorRenderPassId id{1};
+    auto pass = CompositorRenderPass::Create();
     pass->SetNew(id, rect, rect, gfx::Transform());
 
     CreateAndAppendTestSharedQuadState(pass.get(), gfx::Transform(),
@@ -182,8 +168,8 @@ TYPED_TEST(SurfaceAggregatorPixelTest, DrawSimpleAggregatedFrame) {
 
   {
     gfx::Rect rect(child_size);
-    RenderPassId id{1};
-    auto pass = RenderPass::Create();
+    CompositorRenderPassId id{1};
+    auto pass = CompositorRenderPass::Create();
     pass->SetNew(id, rect, rect, gfx::Transform());
 
     CreateAndAppendTestSharedQuadState(pass.get(), gfx::Transform(),
@@ -208,15 +194,14 @@ TYPED_TEST(SurfaceAggregatorPixelTest, DrawSimpleAggregatedFrame) {
 
   bool discard_alpha = false;
   cc::ExactPixelComparator pixel_comparator(discard_alpha);
-  RenderPassList* pass_list = &aggregated_frame.render_pass_list;
+  auto* pass_list = &aggregated_frame.render_pass_list;
   EXPECT_TRUE(this->RunPixelTest(
       pass_list, base::FilePath(FILE_PATH_LITERAL("blue_yellow.png")),
       pixel_comparator));
 }
 
 // Tests a surface quad that has a non-identity transform into its pass.
-TYPED_TEST(SurfaceAggregatorPixelTest,
-           DrawAggregatedFrameWithSurfaceTransforms) {
+TEST_P(SurfaceAggregatorPixelTest, DrawAggregatedFrameWithSurfaceTransforms) {
   gfx::Size child_size(100, 200);
   gfx::Size quad_size(100, 100);
   // Structure:
@@ -233,27 +218,24 @@ TYPED_TEST(SurfaceAggregatorPixelTest,
   ParentLocalSurfaceIdAllocator left_child_allocator;
   left_child_allocator.GenerateId();
   LocalSurfaceId left_child_local_id =
-      left_child_allocator.GetCurrentLocalSurfaceIdAllocation()
-          .local_surface_id();
+      left_child_allocator.GetCurrentLocalSurfaceId();
   SurfaceId left_child_id(left_support->frame_sink_id(), left_child_local_id);
   ParentLocalSurfaceIdAllocator right_child_allocator;
   right_child_allocator.GenerateId();
   LocalSurfaceId right_child_local_id =
-      right_child_allocator.GetCurrentLocalSurfaceIdAllocation()
-          .local_surface_id();
+      right_child_allocator.GetCurrentLocalSurfaceId();
   SurfaceId right_child_id(right_support->frame_sink_id(),
                            right_child_local_id);
   this->root_allocator_.GenerateId();
   LocalSurfaceId root_local_surface_id =
-      this->root_allocator_.GetCurrentLocalSurfaceIdAllocation()
-          .local_surface_id();
+      this->root_allocator_.GetCurrentLocalSurfaceId();
   SurfaceId root_surface_id(this->support_->frame_sink_id(),
                             root_local_surface_id);
 
   {
     gfx::Rect rect(this->device_viewport_size_);
-    RenderPassId id{1};
-    auto pass = RenderPass::Create();
+    CompositorRenderPassId id{1};
+    auto pass = CompositorRenderPass::Create();
     pass->SetNew(id, rect, rect, gfx::Transform());
 
     gfx::Transform surface_transform;
@@ -285,8 +267,8 @@ TYPED_TEST(SurfaceAggregatorPixelTest,
 
   {
     gfx::Rect rect(child_size);
-    RenderPassId id{1};
-    auto pass = RenderPass::Create();
+    CompositorRenderPassId id{1};
+    auto pass = CompositorRenderPass::Create();
     pass->SetNew(id, rect, rect, gfx::Transform());
 
     CreateAndAppendTestSharedQuadState(pass.get(), gfx::Transform(),
@@ -313,8 +295,8 @@ TYPED_TEST(SurfaceAggregatorPixelTest,
 
   {
     gfx::Rect rect(child_size);
-    RenderPassId id{1};
-    auto pass = RenderPass::Create();
+    CompositorRenderPassId id{1};
+    auto pass = CompositorRenderPass::Create();
     pass->SetNew(id, rect, rect, gfx::Transform());
 
     CreateAndAppendTestSharedQuadState(pass.get(), gfx::Transform(),
@@ -346,7 +328,7 @@ TYPED_TEST(SurfaceAggregatorPixelTest,
 
   bool discard_alpha = false;
   cc::ExactPixelComparator pixel_comparator(discard_alpha);
-  RenderPassList* pass_list = &aggregated_frame.render_pass_list;
+  auto* pass_list = &aggregated_frame.render_pass_list;
   EXPECT_TRUE(this->RunPixelTest(
       pass_list,
       base::FilePath(FILE_PATH_LITERAL("four_blue_green_checkers.png")),

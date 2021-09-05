@@ -39,6 +39,7 @@
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/color_utils.h"
 #include "ui/gfx/paint_vector_icon.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/bubble/bubble_frame_view.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/button/image_button_factory.h"
@@ -198,7 +199,7 @@ std::unique_ptr<views::ToggleImageButton> CreatePasswordViewButton(
   auto button = std::make_unique<views::ToggleImageButton>(listener);
   button->SetFocusForPlatform();
   button->SetInstallFocusRingOnFocus(true);
-  button->set_request_focus_on_press(true);
+  button->SetRequestFocusOnPress(true);
   button->SetTooltipText(
       l10n_util::GetStringUTF16(IDS_MANAGE_PASSWORDS_SHOW_PASSWORD));
   button->SetToggledTooltipText(
@@ -312,6 +313,18 @@ std::unique_ptr<views::View> CreateHeaderImage(int image_id) {
   return image_view;
 }
 
+base::TimeDelta GetRegularIPHTimeout() {
+  return base::TimeDelta::FromSeconds(base::GetFieldTrialParamByFeatureAsInt(
+      feature_engagement::kIPHPasswordsAccountStorageFeature,
+      "account_storage_iph_timeout_seconds_regular", 30));
+}
+
+base::TimeDelta GetShortIPHTimeout() {
+  return base::TimeDelta::FromSeconds(base::GetFieldTrialParamByFeatureAsInt(
+      feature_engagement::kIPHPasswordsAccountStorageFeature,
+      "account_storage_iph_timeout_seconds_short", 10));
+}
+
 }  // namespace
 
 // TODO(crbug.com/1077706): come up with a more general solution for this.
@@ -364,7 +377,9 @@ PasswordSaveUpdateWithAccountStoreView::PasswordSaveUpdateWithAccountStoreView(
         controller_.GetPrimaryAccountEmail(),
         controller_.GetPrimaryAccountAvatar(ComboboxIconSize()),
         controller_.IsUsingAccountStore());
-    destination_dropdown->set_listener(this);
+    destination_dropdown->set_callback(base::BindRepeating(
+        &PasswordSaveUpdateWithAccountStoreView::DestinationChanged,
+        base::Unretained(this)));
     destination_dropdown_ = destination_dropdown.get();
   }
   const autofill::PasswordForm& password_form = controller_.pending_password();
@@ -453,6 +468,13 @@ PasswordSaveUpdateWithAccountStoreView::PasswordSaveUpdateWithAccountStoreView(
     // The account picker is only visible in Save bubbble, not Update bubble.
     if (destination_dropdown_)
       destination_dropdown_->SetVisible(!controller_.IsCurrentStateUpdate());
+
+    // Only non-federated credentials bubble has a username field and can
+    // change states between Save and Update. Therefore, we need to have the
+    // `accessibility_alert_` to inform screen readers about thatchange.
+    accessibility_alert_ =
+        root_view->AddChildView(std::make_unique<views::View>());
+    AddChildView(accessibility_alert_);
   }
 
   {
@@ -471,6 +493,7 @@ PasswordSaveUpdateWithAccountStoreView::PasswordSaveUpdateWithAccountStoreView(
         is_update_bubble_ ? &Controller::OnNopeUpdateClicked
                           : &Controller::OnNeverForThisSiteClicked));
   }
+  SetShowIcon(false);
 
   UpdateBubbleUIElements();
 }
@@ -503,10 +526,12 @@ void PasswordSaveUpdateWithAccountStoreView::ButtonPressed(
   TogglePasswordVisibility();
 }
 
-void PasswordSaveUpdateWithAccountStoreView::OnPerformAction(
-    views::Combobox* combobox) {
-  bool is_account_store_selected = combobox->GetSelectedIndex() == 0;
+void PasswordSaveUpdateWithAccountStoreView::DestinationChanged() {
+  bool is_account_store_selected =
+      destination_dropdown_->GetSelectedIndex() == 0;
   controller_.OnToggleAccountStore(is_account_store_selected);
+  // Saving in account and local stores have different header images.
+  UpdateHeaderImage();
   // If the user explicitly switched to "save on this device only", record this
   // with the IPH tracker (so it can decide not to show the IPH again).
   if (!is_account_store_selected) {
@@ -571,10 +596,6 @@ gfx::ImageSkia PasswordSaveUpdateWithAccountStoreView::GetWindowIcon() {
   return gfx::ImageSkia();
 }
 
-bool PasswordSaveUpdateWithAccountStoreView::ShouldShowWindowIcon() const {
-  return false;
-}
-
 bool PasswordSaveUpdateWithAccountStoreView::ShouldShowCloseButton() const {
   return true;
 }
@@ -591,10 +612,7 @@ void PasswordSaveUpdateWithAccountStoreView::AddedToWidget() {
 
 void PasswordSaveUpdateWithAccountStoreView::OnThemeChanged() {
   PasswordBubbleViewBase::OnThemeChanged();
-  int id = color_utils::IsDark(GetBubbleFrameView()->GetBackgroundColor())
-               ? IDR_SAVE_PASSWORD_DARK
-               : IDR_SAVE_PASSWORD;
-  GetBubbleFrameView()->SetHeaderView(CreateHeaderImage(id));
+  UpdateHeaderImage();
   if (password_view_button_) {
     auto* theme = GetNativeTheme();
     const SkColor icon_color =
@@ -646,16 +664,25 @@ void PasswordSaveUpdateWithAccountStoreView::
 
 void PasswordSaveUpdateWithAccountStoreView::UpdateBubbleUIElements() {
   SetButtons((ui::DIALOG_BUTTON_OK | ui::DIALOG_BUTTON_CANCEL));
-  SetButtonLabel(
-      ui::DIALOG_BUTTON_OK,
-      l10n_util::GetStringUTF16(controller_.IsCurrentStateUpdate()
-                                    ? IDS_PASSWORD_MANAGER_UPDATE_BUTTON
-                                    : IDS_PASSWORD_MANAGER_SAVE_BUTTON));
+  base::string16 ok_button_text;
+  if (controller_.IsAccountStorageOptInRequired()) {
+    ok_button_text = l10n_util::GetStringUTF16(
+        IDS_PASSWORD_MANAGER_SAVE_BUBBLE_OPT_IN_BUTTON);
+  } else {
+    ok_button_text = l10n_util::GetStringUTF16(
+        controller_.IsCurrentStateUpdate() ? IDS_PASSWORD_MANAGER_UPDATE_BUTTON
+                                           : IDS_PASSWORD_MANAGER_SAVE_BUTTON);
+  }
+  SetButtonLabel(ui::DIALOG_BUTTON_OK, ok_button_text);
   SetButtonLabel(
       ui::DIALOG_BUTTON_CANCEL,
       l10n_util::GetStringUTF16(
           is_update_bubble_ ? IDS_PASSWORD_MANAGER_CANCEL_BUTTON
                             : IDS_PASSWORD_MANAGER_BUBBLE_BLOCKLIST_BUTTON));
+  // If the title is going to change, we should announce it to the screen
+  // readers.
+  bool should_announce_save_update_change =
+      GetWindowTitle() != controller_.GetTitle();
 
   SetTitle(controller_.GetTitle());
 
@@ -663,10 +690,16 @@ void PasswordSaveUpdateWithAccountStoreView::UpdateBubbleUIElements() {
   if (!GetWidget())
     return;
 
+  if (should_announce_save_update_change)
+    AnnounceSaveUpdateChange();
+
   // Nothing else to do if the account picker hasn't been created.
   if (!destination_dropdown_)
     return;
 
+  // Saving and updating are using different headers depending on the affected
+  // store.
+  UpdateHeaderImage();
   // If it's not a save bubble anymore, close the IPH because the account picker
   // will disappear. If it has become a save bubble, the IPH will get triggered
   // after the animation finishes.
@@ -674,6 +707,17 @@ void PasswordSaveUpdateWithAccountStoreView::UpdateBubbleUIElements() {
     CloseIPHBubbleIfOpen();
 
   destination_dropdown_->SetVisible(!controller_.IsCurrentStateUpdate());
+}
+
+void PasswordSaveUpdateWithAccountStoreView::UpdateHeaderImage() {
+  bool is_dark_mode =
+      color_utils::IsDark(GetBubbleFrameView()->GetBackgroundColor());
+  int id = controller_.IsCurrentStateAffectingTheAccountStore()
+               ? (is_dark_mode ? IDR_SAVE_PASSWORD_MULTI_DEVICE_DARK
+                               : IDR_SAVE_PASSWORD_MULTI_DEVICE)
+               : (is_dark_mode ? IDR_SAVE_PASSWORD_ONE_DEVICE_DARK
+                               : IDR_SAVE_PASSWORD_ONE_DEVICE);
+  GetBubbleFrameView()->SetHeaderView(CreateHeaderImage(id));
 }
 
 bool PasswordSaveUpdateWithAccountStoreView::ShouldShowRegularIPH() {
@@ -731,8 +775,10 @@ void PasswordSaveUpdateWithAccountStoreView::ShowIPH(IPHType type) {
   bubble_params.anchor_view = destination_dropdown_;
   bubble_params.arrow = views::BubbleBorder::RIGHT_CENTER;
   bubble_params.preferred_width = kAccountStoragePromoWidth;
-  bubble_params.activation_action =
-      FeaturePromoBubbleParams::ActivationAction::ACTIVATE;
+  bubble_params.allow_focus = true;
+  bubble_params.persist_on_blur = false;
+  bubble_params.timeout_default = GetRegularIPHTimeout();
+  bubble_params.timeout_short = GetShortIPHTimeout();
 
   account_storage_promo_ =
       FeaturePromoBubbleView::Create(std::move(bubble_params));
@@ -746,6 +792,27 @@ void PasswordSaveUpdateWithAccountStoreView::CloseIPHBubbleIfOpen() {
   if (!account_storage_promo_)
     return;
   account_storage_promo_->CloseBubble();
+}
+
+void PasswordSaveUpdateWithAccountStoreView::AnnounceSaveUpdateChange() {
+  // Federated credentials bubbles don't change the state between Update and
+  // Save, and hence they don't have an `accessibility_alert_` view created.
+  if (!accessibility_alert_)
+    return;
+
+  base::string16 accessibility_alert_text = GetWindowTitle();
+  if (destination_dropdown_ && !controller_.IsCurrentStateUpdate()) {
+    // For Save bubbles, if the `destination_dropdown_` exists (for account
+    // store users), we use the labels in the `destination_dropdown_` instead.
+    accessibility_alert_text = destination_dropdown_->GetTextForRow(
+        destination_dropdown_->GetSelectedIndex());
+  }
+
+  views::ViewAccessibility& ax = accessibility_alert_->GetViewAccessibility();
+  ax.OverrideRole(ax::mojom::Role::kAlert);
+  ax.OverrideName(accessibility_alert_text);
+  accessibility_alert_->NotifyAccessibilityEvent(ax::mojom::Event::kAlert,
+                                                 true);
 }
 
 void PasswordSaveUpdateWithAccountStoreView::OnContentChanged() {

@@ -35,7 +35,7 @@
 #include "base/time/time.h"
 #include "base/values.h"
 #include "build/build_config.h"
-#include "build/lacros_buildflags.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_result_codes.h"
 #include "chrome/common/chrome_version.h"
@@ -95,7 +95,16 @@ const char* const kDesktopSwitches[] = {
     // After completion of the migration, we should remove this.
     // See crbug.com/911943 for detail.
     "enable-blink-features=ShadowDOMV0",
+    "no-service-autorun",
 };
+
+#if defined(OS_WIN)
+
+const char* const kWindowsDesktopSwitches[] = {
+    "disable-backgrounding-occluded-windows",
+};
+
+#endif
 
 const char* const kAndroidSwitches[] = {
     "disable-fre", "enable-remote-debugging",
@@ -140,6 +149,10 @@ Status PrepareDesktopCommandLine(const Capabilities& capabilities,
     switches.SetUnparsedSwitch(common_switch);
   for (auto* desktop_switch : kDesktopSwitches)
     switches.SetUnparsedSwitch(desktop_switch);
+#if defined(OS_WIN)
+  for (auto* win_desktop_switch : kWindowsDesktopSwitches)
+    switches.SetUnparsedSwitch(win_desktop_switch);
+#endif
 
   // Chrome logs are normally sent to a file (whose location can be controlled
   // via the logPath capability). We expose a flag, --enable-chrome-logs, that
@@ -472,11 +485,11 @@ Status LaunchDesktopChrome(network::mojom::URLLoaderFactory* factory,
 
 #if defined(OS_WIN)
     // EnvironmentMap uses wide string
-    options.environment[L"CHROME_HEADLESS"] = 1;
+    options.environment[L"CHROME_HEADLESS"] = L"1";
     options.environment[L"BREAKPAD_DUMP_LOCATION"] =
         base::SysUTF8ToWide(capabilities.minidump_path);
 #else
-    options.environment["CHROME_HEADLESS"] = 1;
+    options.environment["CHROME_HEADLESS"] = "1";
     options.environment["BREAKPAD_DUMP_LOCATION"] = capabilities.minidump_path;
 #endif
 
@@ -683,7 +696,7 @@ Status LaunchAndroidChrome(network::mojom::URLLoaderFactory* factory,
                            std::unique_ptr<Chrome>* chrome) {
   Status status(kOk);
   std::unique_ptr<Device> device;
-  int devtools_port;
+  int devtools_port = capabilities.android_devtools_port;
   if (capabilities.android_device_serial.empty()) {
     status = device_manager->AcquireDevice(&device);
   } else {

@@ -26,6 +26,14 @@ class XRWebGLLayer;
 // pose information for a given XRDevice.
 class XRFrameProvider final : public GarbageCollected<XRFrameProvider> {
  public:
+  // Class
+  class ImmersiveSessionObserver : public GarbageCollectedMixin {
+   public:
+    virtual void OnImmersiveSessionStart() = 0;
+    virtual void OnImmersiveSessionEnd() = 0;
+    virtual void OnImmersiveFrame() = 0;
+  };
+
   explicit XRFrameProvider(XRSystem*);
 
   XRSession* immersive_session() const { return immersive_session_; }
@@ -53,6 +61,10 @@ class XRFrameProvider final : public GarbageCollected<XRFrameProvider> {
   device::mojom::blink::XRFrameDataProvider* GetImmersiveDataProvider() {
     return immersive_data_provider_.get();
   }
+
+  // Adds an ImmersiveSessionObserver. Observers will be automatically removed
+  // by Oilpan when they are destroyed, and their WeakMember becomes null.
+  void AddImmersiveSessionObserver(ImmersiveSessionObserver*);
 
   virtual void Trace(Visitor*) const;
 
@@ -104,6 +116,10 @@ class XRFrameProvider final : public GarbageCollected<XRFrameProvider> {
       immersive_presentation_provider_;
   device::mojom::blink::VRPosePtr immersive_frame_pose_;
   bool is_immersive_frame_position_emulated_ = false;
+
+  // Note: Oilpan automatically removes destroyed observers from
+  // |immersive_observers_| and does not need an explicit removal.
+  HeapHashSet<WeakMember<ImmersiveSessionObserver>> immersive_observers_;
 
   // Time the first immersive frame has arrived - used to align the monotonic
   // clock the devices use with the base::TimeTicks.

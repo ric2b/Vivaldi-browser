@@ -13,6 +13,7 @@
 #include "base/observer_list_types.h"
 #include "base/optional.h"
 #include "chrome/browser/nearby_sharing/proto/rpc_resources.pb.h"
+#include "chrome/browser/ui/webui/nearby_share/public/mojom/nearby_share_settings.mojom.h"
 
 // Manages local device data related to the UpdateDevice RPC such as the device
 // ID, name, and icon url; provides the user's full name and icon URL returned
@@ -45,10 +46,9 @@ class NearbyShareLocalDeviceDataManager {
   // differentiate a user's devices when communicating with the Nearby server.
   virtual std::string GetId() = 0;
 
-  // Returns the name of the local device, typically in the format of
-  // "UserName's DeviceType". This can be modified by SetDeviceName(). Returns
-  // base::nullopt if the device name have not been set yet.
-  virtual base::Optional<std::string> GetDeviceName() const = 0;
+  // Returns the name of the local device, for example, "Josh's Chromebook."
+  // This can be modified by SetDeviceName().
+  virtual std::string GetDeviceName() const = 0;
 
   // Returns the user's full name, for example, "Barack Obama". Returns
   // base::nullopt if the name has not yet been set from an UpdateDevice RPC
@@ -59,10 +59,18 @@ class NearbyShareLocalDeviceDataManager {
   // not yet been set from an UpdateDevice RPC response.
   virtual base::Optional<std::string> GetIconUrl() const = 0;
 
-  // Uses the UpdateDevice RPC to change the local device name in the Nearby
-  // Share server and in local storage. Must be UTF-8. Observers are notified
-  // via OnLocalDeviceDataChanged() if the device name changes.
-  virtual void SetDeviceName(const std::string& name) = 0;
+  // Validates the provided device name and returns an error if validation
+  // fails. This is just a check and the device name is not persisted.
+  virtual nearby_share::mojom::DeviceNameValidationResult ValidateDeviceName(
+      const std::string& name) = 0;
+
+  // Sets and persists the device name in prefs. The device name is first
+  // validated and if validation fails and error is returned and the device name
+  // is not persisted. The device name is *not* uploaded to the Nearby Share
+  // server; the UpdateDevice proto device_name field in an artifact. Observers
+  // are notified via OnLocalDeviceDataChanged() if the device name changes.
+  virtual nearby_share::mojom::DeviceNameValidationResult SetDeviceName(
+      const std::string& name) = 0;
 
   // Makes an UpdateDevice RPC call to the Nearby Share server to retrieve all
   // available device data, which includes the full name and icon URL for now.

@@ -154,8 +154,7 @@ PinRequestViewState PinRequestView::TestApi::state() const {
 // static
 SkColor PinRequestView::GetChildUserDialogColor(bool using_blur) {
   SkColor color = AshColorProvider::Get()->GetBaseLayerColor(
-      AshColorProvider::BaseLayerType::kOpaque,
-      AshColorProvider::AshColorMode::kDark);
+      AshColorProvider::BaseLayerType::kOpaque);
 
   SkColor extracted_color =
       Shell::Get()->wallpaper_controller()->GetProminentColor(
@@ -182,6 +181,12 @@ PinRequestView::PinRequestView(PinRequest request, Delegate* delegate)
       default_accessible_title_(request.accessible_title.empty()
                                     ? request.title
                                     : request.accessible_title) {
+  // MODAL_TYPE_SYSTEM is used to get a semi-transparent background behind the
+  // pin request view, when it is used directly on a widget. The overlay
+  // consumes all the inputs from the user, so that they can only interact with
+  // the pin request view while it is visible.
+  SetModalType(ui::MODAL_TYPE_SYSTEM);
+
   // Main view contains all other views aligned vertically and centered.
   auto layout = std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kVertical,
@@ -405,14 +410,6 @@ void PinRequestView::RequestFocus() {
 
 gfx::Size PinRequestView::CalculatePreferredSize() const {
   return GetPinRequestViewSize();
-}
-
-ui::ModalType PinRequestView::GetModalType() const {
-  // MODAL_TYPE_SYSTEM is used to get a semi-transparent background behind the
-  // pin request view, when it is used directly on a widget. The overlay
-  // consumes all the inputs from the user, so that they can only interact with
-  // the pin request view while it is visible.
-  return ui::MODAL_TYPE_SYSTEM;
 }
 
 views::View* PinRequestView::GetInitiallyFocusedView() {

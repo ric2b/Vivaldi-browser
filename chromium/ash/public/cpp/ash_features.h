@@ -28,6 +28,9 @@ ASH_PUBLIC_EXPORT extern const base::Feature kCaptureMode;
 // Enables contextual nudges for gesture education.
 ASH_PUBLIC_EXPORT extern const base::Feature kContextualNudges;
 
+// Enables dark/light mode feature.
+ASH_PUBLIC_EXPORT extern const base::Feature kDarkLightMode;
+
 // Enables indicators to hint where displays are connected.
 ASH_PUBLIC_EXPORT extern const base::Feature kDisplayAlignAssist;
 
@@ -42,6 +45,11 @@ ASH_PUBLIC_EXPORT extern const base::Feature kDockedMagnifier;
 // Enables dragging and snapping an overview window in clamshell mode.
 // TODO(crbug.com/890029): Remove this when the feature is fully launched.
 ASH_PUBLIC_EXPORT extern const base::Feature kDragToSnapInClamshellMode;
+
+// Enables chaining of keyboard and touchpad swipe induced desk animations.
+// Enables continuous touchpad swiping to switch desks.
+// TODO(crbug.com/1111445): Remove this when the feature is fully launched.
+ASH_PUBLIC_EXPORT extern const base::Feature kEnhancedDeskAnimations;
 
 // Limits the windows listed in Alt-Tab to the ones in the currently active
 // desk.
@@ -68,6 +76,11 @@ ASH_PUBLIC_EXPORT extern const base::Feature kLockScreenMediaControls;
 // is because they will be replaced by native media session notifications.
 // TODO(beccahughes): Remove after launch. (https://crbug.com/897836)
 ASH_PUBLIC_EXPORT extern const base::Feature kHideArcMediaNotifications;
+
+// Enables more ways to interact with the window cycle list, i.e. mouse, touch,
+// gestures, and alternate keys.
+// TODO(chinsenj): Remove this when the feature is fully launched.
+ASH_PUBLIC_EXPORT extern const base::Feature kInteractiveWindowCycleList;
 
 // Enables the redesigned managed device info UI in the system tray.
 ASH_PUBLIC_EXPORT extern const base::Feature kManagedDeviceUIRedesign;
@@ -140,6 +153,12 @@ ASH_PUBLIC_EXPORT extern const base::Feature kEnableBackgroundBlur;
 // preferences, or policy).
 ASH_PUBLIC_EXPORT extern const base::Feature kHideShelfControlsInTabletMode;
 
+// When enabled, the overivew and desk reverse scrolling behaviors are changed
+// and if the user performs the old gestures, a notification or toast will show
+// up.
+// TODO(https://crbug.com/1107183): Remove this after the feature is launched.
+ASH_PUBLIC_EXPORT extern const base::Feature kReverseScrollGestures;
+
 // Enables sliders for setting mic gain levels in the more audio settings
 // section in the system tray.
 ASH_PUBLIC_EXPORT extern const base::Feature kSystemTrayMicGainSetting;
@@ -175,11 +194,17 @@ ASH_PUBLIC_EXPORT bool IsAutoNightLightEnabled();
 
 ASH_PUBLIC_EXPORT bool IsCaptureModeEnabled();
 
+ASH_PUBLIC_EXPORT bool IsDarkLightModeEnabled();
+
+ASH_PUBLIC_EXPORT bool IsEnhancedDeskAnimations();
+
 ASH_PUBLIC_EXPORT bool IsHideArcMediaNotificationsEnabled();
 
 ASH_PUBLIC_EXPORT bool IsKeyboardShortcutViewerAppEnabled();
 
 ASH_PUBLIC_EXPORT bool IsLockScreenNotificationsEnabled();
+
+ASH_PUBLIC_EXPORT bool IsInteractiveWindowCycleListEnabled();
 
 ASH_PUBLIC_EXPORT bool IsManagedDeviceUIRedesignEnabled();
 
@@ -208,6 +233,8 @@ ASH_PUBLIC_EXPORT bool IsDragFromShelfToHomeOrOverviewEnabled();
 ASH_PUBLIC_EXPORT bool IsReduceDisplayNotificationsEnabled();
 
 ASH_PUBLIC_EXPORT bool IsHideShelfControlsInTabletModeEnabled();
+
+ASH_PUBLIC_EXPORT bool IsReverseScrollGesturesEnabled();
 
 ASH_PUBLIC_EXPORT bool AreContextualNudgesEnabled();
 

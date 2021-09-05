@@ -37,6 +37,8 @@ class StatusIndicatorMediator
             new HashSet<>();
     private Supplier<Integer> mStatusBarWithoutIndicatorColorSupplier;
     private Runnable mOnShowAnimationEnd;
+    private Runnable mRegisterResource;
+    private Runnable mUnregisterResource;
     private Supplier<Boolean> mCanAnimateNativeBrowserControls;
     private Callback<Runnable> mInvalidateCompositorView;
     private Runnable mRequestLayout;
@@ -52,7 +54,6 @@ class StatusIndicatorMediator
 
     /**
      * Constructs the status indicator mediator.
-     * @param model The {@link PropertyModel} for the status indicator.
      * @param browserControlsStateProvider The {@link BrowserControlsStateProvider} to listen to
      *                                     for the changes in controls offsets.
      * @param statusBarWithoutIndicatorColorSupplier A supplier that will get the status bar color
@@ -62,18 +63,30 @@ class StatusIndicatorMediator
      *                                        browser controls can be animated. This will be false
      *                                        where we can't have a reliable cc::BCOM instance, e.g.
      *                                        tab switcher.
-     * @param invalidateCompositorView Callback to invalidate the compositor texture.
-     * @param requestLayout Runnable to request layout for the view.
      */
-    StatusIndicatorMediator(PropertyModel model,
-            BrowserControlsStateProvider browserControlsStateProvider,
+    StatusIndicatorMediator(BrowserControlsStateProvider browserControlsStateProvider,
             Supplier<Integer> statusBarWithoutIndicatorColorSupplier,
-            Supplier<Boolean> canAnimateNativeBrowserControls,
-            Callback<Runnable> invalidateCompositorView, Runnable requestLayout) {
-        mModel = model;
+            Supplier<Boolean> canAnimateNativeBrowserControls) {
         mBrowserControlsStateProvider = browserControlsStateProvider;
         mStatusBarWithoutIndicatorColorSupplier = statusBarWithoutIndicatorColorSupplier;
         mCanAnimateNativeBrowserControls = canAnimateNativeBrowserControls;
+    }
+
+    /**
+     * Initialize the mediator before first #animateShow().
+     * @param model The {@link PropertyModel} for the status indicator.
+     * @param registerResource A {@link Runnable} to register the view resource for the compositor
+     *                         view.
+     * @param unregisterResource A {@link Runnable} to unregister the view resource for the
+     *                           compositor view.
+     * @param invalidateCompositorView Callback to invalidate the compositor texture.
+     * @param requestLayout Runnable to request layout for the view.
+     */
+    void initialize(PropertyModel model, Runnable registerResource, Runnable unregisterResource,
+            Callback<Runnable> invalidateCompositorView, Runnable requestLayout) {
+        mModel = model;
+        mRegisterResource = registerResource;
+        mUnregisterResource = unregisterResource;
         mInvalidateCompositorView = invalidateCompositorView;
         mRequestLayout = requestLayout;
     }
@@ -100,6 +113,7 @@ class StatusIndicatorMediator
         if (mTextFadeInAnimation != null) mTextFadeInAnimation.cancel();
         if (mUpdateAnimatorSet != null)  mUpdateAnimatorSet.cancel();
         if (mHideAnimatorSet != null) mHideAnimatorSet.cancel();
+        mBrowserControlsStateProvider.removeObserver(this);
     }
 
     void addObserver(StatusIndicatorCoordinator.StatusIndicatorObserver observer) {
@@ -137,6 +151,15 @@ class StatusIndicatorMediator
      */
     void animateShow(@NonNull String statusText, Drawable statusIcon, @ColorInt int backgroundColor,
             @ColorInt int textColor, @ColorInt int iconTint) {
+        mRegisterResource.run();
+
+        // TODO(sinansahin): Look into returning back to the right state earlier, ideally in
+        // #onOffsetChanged after the view is hidden. It's currently challenging if the status
+        // indicator is shown while a tab modal dialog is showing because the compositor
+        // animation is blocked, and we don't get any signal to know if the indicator is hidden.
+        mIsHiding = false;
+        mJavaLayoutHeight = 0;
+
         Runnable initializeProperties = () -> {
             mModel.set(StatusIndicatorProperties.STATUS_TEXT, statusText);
             mModel.set(StatusIndicatorProperties.STATUS_ICON, statusIcon);
@@ -169,27 +192,32 @@ class StatusIndicatorMediator
             @Override
             public void onEnd(Animator animation) {
                 initializeProperties.run();
+                mStatusBarAnimation = null;
             }
         });
         mStatusBarAnimation.start();
     }
 
     private void animateTextFadeIn() {
-        if (mTextFadeInAnimation == null) {
-            mTextFadeInAnimation = ValueAnimator.ofFloat(0.f, 1.f);
-            mTextFadeInAnimation.setInterpolator(Interpolators.FAST_OUT_SLOW_IN_INTERPOLATOR);
-            mTextFadeInAnimation.setDuration(FADE_TEXT_DURATION_MS);
-            mTextFadeInAnimation.addUpdateListener((anim -> {
-                final float currentAlpha = (float) anim.getAnimatedValue();
-                mModel.set(StatusIndicatorProperties.TEXT_ALPHA, currentAlpha);
-            }));
-            mTextFadeInAnimation.addListener(new CancelAwareAnimatorListener() {
-                @Override
-                public void onStart(Animator animation) {
-                    mRequestLayout.run();
-                }
-            });
-        }
+        mTextFadeInAnimation = ValueAnimator.ofFloat(0.f, 1.f);
+        mTextFadeInAnimation.setInterpolator(Interpolators.FAST_OUT_SLOW_IN_INTERPOLATOR);
+        mTextFadeInAnimation.setDuration(FADE_TEXT_DURATION_MS);
+        mTextFadeInAnimation.addUpdateListener((anim -> {
+            final float currentAlpha = (float) anim.getAnimatedValue();
+            mModel.set(StatusIndicatorProperties.TEXT_ALPHA, currentAlpha);
+        }));
+        mTextFadeInAnimation.addListener(new CancelAwareAnimatorListener() {
+            @Override
+            public void onStart(Animator animation) {
+                mRequestLayout.run();
+            }
+
+            @Override
+            public void onEnd(Animator animator) {
+                mTextFadeInAnimation = null;
+                notifyShowAnimationEnd();
+            }
+        });
         mTextFadeInAnimation.start();
     }
 
@@ -274,6 +302,7 @@ class StatusIndicatorMediator
             @Override
             public void onEnd(Animator animation) {
                 animationCompleteCallback.run();
+                mUpdateAnimatorSet = null;
             }
         });
         mUpdateAnimatorSet.start();
@@ -328,6 +357,7 @@ class StatusIndicatorMediator
                 } else {
                     updateVisibility(true);
                 }
+                mHideAnimatorSet = null;
             }
         });
         mHideAnimatorSet.start();
@@ -344,6 +374,12 @@ class StatusIndicatorMediator
     private void notifyColorChange(@ColorInt int color) {
         for (StatusIndicatorCoordinator.StatusIndicatorObserver observer : mObservers) {
             observer.onStatusIndicatorColorChanged(color);
+        }
+    }
+
+    private void notifyShowAnimationEnd() {
+        for (StatusIndicatorCoordinator.StatusIndicatorObserver observer : mObservers) {
+            observer.onStatusIndicatorShowAnimationEnd();
         }
     }
 
@@ -373,7 +409,8 @@ class StatusIndicatorMediator
 
         mModel.set(StatusIndicatorProperties.CURRENT_VISIBLE_HEIGHT, topControlsMinHeightOffset);
 
-        final boolean isCompletelyShown = topControlsMinHeightOffset == mIndicatorHeight;
+        final boolean isCompletelyShown =
+                indicatorVisible && topControlsMinHeightOffset == mIndicatorHeight;
         // If we're running the animations in native, the Android view should only be visible when
         // the indicator is fully shown. Otherwise, the Android view will be visible if it's within
         // screen boundaries.
@@ -391,9 +428,13 @@ class StatusIndicatorMediator
 
         final boolean doneHiding = !indicatorVisible && mIsHiding;
         if (doneHiding) {
+            // This block is currently never executed if the status indicator is shown and hidden
+            // while a modal dialog is visible. |mIsHiding| and |mJavaLayoutHeight| are also reset
+            // in #animateShow as a precaution in case this happens.
             mBrowserControlsStateProvider.removeObserver(this);
             mIsHiding = false;
             mJavaLayoutHeight = 0;
+            mUnregisterResource.run();
         }
     }
 

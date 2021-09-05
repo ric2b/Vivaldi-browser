@@ -21,11 +21,11 @@
 #include "ash/public/cpp/assistant/assistant_state.h"
 #include "ash/public/cpp/assistant/controller/assistant_ui_controller.h"
 #include "ash/public/cpp/view_shadow.h"
+#include "ash/search_box/search_box_constants.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/chromeos/search_box/search_box_constants.h"
 #include "ui/compositor/animation_throughput_reporter.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
 #include "ui/compositor_extra/shadow.h"
@@ -427,7 +427,7 @@ void AssistantPageView::InitLayout() {
 
   view_shadow_ = std::make_unique<ViewShadow>(this, kShadowElevation);
   view_shadow_->SetRoundedCornerRadius(
-      search_box::kSearchBoxBorderCornerRadiusSearchResult);
+      kSearchBoxBorderCornerRadiusSearchResult);
 
   SetBackground(views::CreateSolidBackground(SK_ColorWHITE));
   SetLayoutManager(std::make_unique<AssistantPageViewLayout>(this));

@@ -173,6 +173,15 @@ public class TabBuilder {
         // |onInitialized| of TabObserver they register.
         tab.initialize(mParent, mCreationType, mLoadUrlParams, mWebContents, mDelegateFactory,
                 mInitiallyHidden, mTabState, mSerializedCriticalPersistedTabData);
+        if (mParent != null) {
+            if (mParent.getAddApi2TransitionToFutureNavigations()) {
+                tab.setAddApi2TransitionToFutureNavigations(true);
+            }
+            if (mParent.getHideFutureNavigations()) {
+                tab.setHideFutureNavigations(true);
+            }
+        }
+
         return tab;
     }
 

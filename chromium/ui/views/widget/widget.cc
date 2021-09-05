@@ -97,12 +97,10 @@ class DefaultWidgetDelegate : public WidgetDelegate {
     // In most situations where a Widget is used without a delegate the Widget
     // is used as a container, so that we want focus to advance to the top-level
     // widget. A good example of this is the find bar.
+    SetOwnedByWidget(true);
     SetFocusTraversesOut(true);
   }
   ~DefaultWidgetDelegate() override = default;
-
-  // WidgetDelegate:
-  void DeleteDelegate() override { delete this; }
 
  private:
   DISALLOW_COPY_AND_ASSIGN(DefaultWidgetDelegate);
@@ -247,6 +245,12 @@ void Widget::GetAllOwnedWidgets(gfx::NativeView native_view, Widgets* owned) {
 void Widget::ReparentNativeView(gfx::NativeView native_view,
                                 gfx::NativeView new_parent) {
   internal::NativeWidgetPrivate::ReparentNativeView(native_view, new_parent);
+
+  Widget* child_widget = GetWidgetForNativeView(native_view);
+  Widget* parent_widget =
+      new_parent ? GetWidgetForNativeView(new_parent) : nullptr;
+  if (child_widget)
+    child_widget->parent_ = parent_widget;
 }
 
 // static
@@ -283,6 +287,8 @@ void Widget::Init(InitParams params) {
   if (params.name.empty() && params.delegate &&
       params.delegate->GetContentsView())
     params.name = params.delegate->GetContentsView()->GetClassName();
+
+  parent_ = params.parent ? GetWidgetForNativeView(params.parent) : nullptr;
 
   params.child |= (params.type == InitParams::TYPE_CONTROL);
   is_top_level_ = !params.child;
@@ -336,11 +342,9 @@ void Widget::Init(InitParams params) {
   if (type == InitParams::TYPE_MENU)
     is_mouse_button_pressed_ = native_widget_->IsMouseButtonDown();
   if (RequiresNonClientView(type)) {
-    non_client_view_ = new NonClientView;
+    non_client_view_ =
+        new NonClientView(widget_delegate_->CreateClientView(this));
     non_client_view_->SetFrameView(CreateNonClientFrameView());
-    // Create the ClientView, add it to the NonClientView and add the
-    // NonClientView to the RootView. This will cause everything to be parented.
-    non_client_view_->set_client_view(widget_delegate_->CreateClientView(this));
     non_client_view_->SetOverlayView(widget_delegate_->CreateOverlayView());
 
     // Bypass the Layout() that happens in Widget::SetContentsView(). Layout()
@@ -368,7 +372,7 @@ void Widget::Init(InitParams params) {
       saved_show_state_ = ui::SHOW_STATE_MINIMIZED;
     }
   } else if (delegate) {
-    SetContentsView(delegate->GetContentsView());
+    SetContentsView(delegate->TransferOwnershipOfContentsView());
     SetInitialBoundsForFramelessWindow(bounds);
   }
 
@@ -1599,22 +1603,17 @@ bool Widget::GetSavedWindowPlacement(gfx::Rect* bounds,
   // a window is restored from maximized state, so we can't more accurately
   // track maximized state independently of sizing information.
 
-  // Restore the window's placement from the controller.
-  if (widget_delegate_->GetSavedWindowPlacement(this, bounds, show_state)) {
-    if (!widget_delegate_->ShouldRestoreWindowSize()) {
-      bounds->set_size(non_client_view_->GetPreferredSize());
-    } else {
-      gfx::Size minimum_size = GetMinimumSize();
-      // Make sure the bounds are at least the minimum size.
-      if (bounds->width() < minimum_size.width())
-        bounds->set_width(minimum_size.width());
+  if (!widget_delegate_->GetSavedWindowPlacement(this, bounds, show_state))
+    return false;
 
-      if (bounds->height() < minimum_size.height())
-        bounds->set_height(minimum_size.height());
-    }
-    return true;
-  }
-  return false;
+  gfx::Size minimum_size = GetMinimumSize();
+  // Make sure the bounds are at least the minimum size.
+  if (bounds->width() < minimum_size.width())
+    bounds->set_width(minimum_size.width());
+
+  if (bounds->height() < minimum_size.height())
+    bounds->set_height(minimum_size.height());
+  return true;
 }
 
 const View::Views& Widget::GetViewsWithLayers() {

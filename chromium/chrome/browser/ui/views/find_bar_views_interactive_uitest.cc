@@ -626,6 +626,8 @@ IN_PROC_BROWSER_TEST_F(FindInPageTest, SelectionDuringFind) {
 
   WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
+  auto* host_view = web_contents->GetRenderWidgetHostView();
+  auto* host = host_view->GetRenderWidgetHost();
 
   WebContentsFocusChangedWatcher watcher(web_contents);
 
@@ -635,16 +637,64 @@ IN_PROC_BROWSER_TEST_F(FindInPageTest, SelectionDuringFind) {
 
   watcher.Wait();
 
-  browser()->GetFindBarController()->Show();
+  auto* find_bar_controller = browser()->GetFindBarController();
+  find_bar_controller->Show();
   EXPECT_TRUE(IsViewFocused(browser(), VIEW_ID_FIND_IN_PAGE_TEXT_FIELD));
 
   // Verify the text matches the selection
   EXPECT_EQ(ASCIIToUTF16("text"), GetFindBarText());
   find_in_page::FindNotificationDetails details = WaitForFindResult();
-  // Verify the correct match is highlighted (the one corresponding to the
-  // text that was selected). See http://crbug.com/1043550
-  EXPECT_EQ(2, details.active_match_ordinal());
+  // We don't ever want the page to (potentially) scroll just from opening the
+  // find bar, so the active match should always be 0 at this point.
+  // See http://crbug.com/1043550
+  EXPECT_EQ(0, details.active_match_ordinal());
   EXPECT_EQ(5, details.number_of_matches());
+
+  // Make sure pressing an arrow key doesn't result in a find request.
+  // See https://crbug.com/1127666
+  auto* helper = find_in_page::FindTabHelper::FromWebContents(web_contents);
+  int find_request_id = helper->current_find_request_id();
+  ASSERT_TRUE(ui_test_utils::SendKeyPressSync(browser(), ui::VKEY_LEFT, false,
+                                              false, false, false));
+  content::RunUntilInputProcessed(host);
+  EXPECT_EQ(find_request_id, helper->current_find_request_id());
+
+  // Make sure calling Show while the findbar is already showing doesn't result
+  // in a find request. It's wasted work, could cause some flicker in the
+  // results, and was previously triggering another bug that caused an endless
+  // loop of searching and flickering results. See http://crbug.com/1129756
+  find_bar_controller->Show(false /*find_next*/);
+  EXPECT_EQ(find_request_id, helper->current_find_request_id());
+
+  // Find the next match and verify the correct match is highlighted (the
+  // one after text that was selected).
+  find_bar_controller->Show(true /*find_next*/);
+  details = WaitForFindResult();
+  EXPECT_EQ(3, details.active_match_ordinal());
+  EXPECT_EQ(5, details.number_of_matches());
+
+  // Start a new find without a selection and verify we still get find results.
+  // See https://crbug.com/1124605
+  ASSERT_TRUE(ui_test_utils::SendKeyPressSync(browser(), ui::VKEY_ESCAPE, false,
+                                              false, false, false));
+  // Wait until the focus settles.
+  content::RunUntilInputProcessed(host);
+
+  // Shift-tab back to the input box, then clear the text (and selection).
+  // Doing it this way in part because there's a bug with non-input-based
+  // selection changes not affecting GetSelectedText().
+  ASSERT_TRUE(ui_test_utils::SendKeyPressSync(browser(), ui::VKEY_TAB, false,
+                                              true, false, false));
+  ASSERT_TRUE(ui_test_utils::SendKeyPressSync(browser(), ui::VKEY_DELETE, false,
+                                              false, false, false));
+  content::RunUntilInputProcessed(host);
+  EXPECT_EQ(base::string16(), host_view->GetSelectedText());
+
+  find_bar_controller->Show();
+  details = WaitForFindResult();
+  EXPECT_EQ(0, details.active_match_ordinal());
+  // One less than before because we deleted the text in the input box.
+  EXPECT_EQ(4, details.number_of_matches());
 }
 
 IN_PROC_BROWSER_TEST_F(FindInPageTest, GlobalEscapeClosesFind) {

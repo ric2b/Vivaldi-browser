@@ -41,7 +41,6 @@
 #include "ui/views/controls/link.h"
 #include "ui/views/controls/scroll_view.h"
 #include "ui/views/controls/separator.h"
-#include "ui/views/controls/styled_label.h"
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/layout/flex_layout.h"
 #include "ui/views/layout/flex_layout_types.h"
@@ -62,6 +61,9 @@ constexpr int kMaxImageSize = ProfileMenuViewBase::kIdentityImageSize;
 constexpr int kDefaultMargin = 8;
 constexpr int kBadgeSize = 16;
 constexpr int kCircularImageButtonSize = 28;
+// TODO(crbug.com/1128499): Remove this constant by extracting art height from
+// |avatar_header_art|.
+constexpr int kHeaderArtHeight = 72;
 constexpr int kIdentityImageBorder = 2;
 constexpr int kIdentityImageSizeInclBorder =
     ProfileMenuViewBase::kIdentityImageSize + 2 * kIdentityImageBorder;
@@ -189,7 +191,7 @@ class CircularImageButton : public views::ImageButton {
         ImageForMenu(icon_, kShortcutIconToImageRatio, icon_color);
     SetImage(views::Button::STATE_NORMAL,
              SizeImage(image, kCircularImageButtonSize));
-    set_ink_drop_base_color(icon_color);
+    SetInkDropBaseColor(icon_color);
 
     if (show_border_) {
       const SkColor separator_color = GetNativeTheme()->GetSystemColor(
@@ -255,11 +257,6 @@ class AvatarImageView : public views::ImageView {
   AvatarImageView(const ui::ImageModel& avatar_image,
                   const ProfileMenuViewBase* root_view)
       : avatar_image_(avatar_image), root_view_(root_view) {
-    if (base::FeatureList::IsEnabled(features::kNewProfilePicker)) {
-      SetBorder(views::CreateRoundedRectBorder(
-          kIdentityImageBorder, /*radius=*/(kIdentityImageSizeInclBorder) / 2,
-          GetBackgroundColor()));
-    }
     if (avatar_image_.IsEmpty()) {
       // This can happen if the account image hasn't been fetched yet, if there
       // is no image, or in tests.
@@ -277,7 +274,11 @@ class AvatarImageView : public views::ImageView {
     gfx::ImageSkia sized_avatar_image =
         SizeImageModel(avatar_image_, GetNativeTheme(),
                        ProfileMenuViewBase::kIdentityImageSize);
-
+    if (base::FeatureList::IsEnabled(features::kNewProfilePicker)) {
+      sized_avatar_image =
+          AddCircularBackground(sized_avatar_image, GetBackgroundColor(),
+                                kIdentityImageSizeInclBorder);
+    }
     gfx::ImageSkia sized_badge = AddCircularBackground(
         SizeImage(root_view_->GetSyncIcon(), kBadgeSize), GetBackgroundColor(),
         kBadgeSize + 2 * kBadgePadding);
@@ -362,7 +363,8 @@ void BuildProfileBackgroundContainer(
     base::Optional<SkColor> background_color,
     int corner_radius,
     std::unique_ptr<views::View> avatar_image_view,
-    std::unique_ptr<views::View> edit_button) {
+    std::unique_ptr<views::View> edit_button,
+    const ui::ThemedVectorIcon& avatar_header_art) {
   constexpr int kExtraMarginInsideProfileBackground = 2;
 
   views::View* profile_background_container =
@@ -391,7 +393,22 @@ void BuildProfileBackgroundContainer(
         views::CreateBackgroundFromPainter(
             views::Painter::CreateSolidRoundRectPainter(
                 background_color.value(), corner_radius, background_insets)));
+  } else {
+    profile_background_container->SetBackground(
+        views::CreateThemedVectorIconBackground(profile_background_container,
+                                                avatar_header_art));
   }
+
+  // |avatar_margin| is derived from |avatar_header_art| asset height, it
+  // increases margin for the avatar icon to make |avatar_header_art| visible
+  // above the center of the avatar icon.
+  // Subtracting |kIdentityImageBorder| from the height as it isn't part of the
+  // actual image and shouldn't affect the margin.
+  const int avatar_margin =
+      avatar_header_art.empty()
+          ? kDefaultMargin
+          : kHeaderArtHeight - kIdentityImageBorder -
+                ProfileMenuViewBase::kIdentityImageSize / 2;
 
   // The |heading_and_image_container| is on the left and it stretches almost
   // the full width. It contains the profile heading and the avatar image.
@@ -408,12 +425,14 @@ void BuildProfileBackgroundContainer(
       ->SetOrientation(views::LayoutOrientation::kVertical)
       .SetMainAxisAlignment(views::LayoutAlignment::kCenter)
       .SetCrossAxisAlignment(views::LayoutAlignment::kCenter)
-      .SetInteriorMargin(gfx::Insets(/*top=*/kDefaultMargin, 0, 0, 0));
+      .SetInteriorMargin(gfx::Insets(/*top=*/avatar_margin, 0, 0, 0));
   if (heading_label) {
+    DCHECK(avatar_header_art.empty());
     heading_label->SetBorder(
         views::CreateEmptyBorder(gfx::Insets(/*vertical=*/kDefaultMargin, 0)));
     heading_and_image_container->AddChildView(std::move(heading_label));
   }
+
   heading_and_image_container->AddChildView(std::move(avatar_image_view));
 
   // The |edit_button| is on the right and has fixed width.
@@ -430,6 +449,19 @@ void BuildProfileBackgroundContainer(
 }  // namespace
 
 // ProfileMenuViewBase ---------------------------------------------------------
+
+ProfileMenuViewBase::EditButtonParams::EditButtonParams(
+    const gfx::VectorIcon* edit_icon,
+    const base::string16& edit_tooltip_text,
+    base::RepeatingClosure edit_action)
+    : edit_icon(edit_icon),
+      edit_tooltip_text(edit_tooltip_text),
+      edit_action(edit_action) {}
+
+ProfileMenuViewBase::EditButtonParams::~EditButtonParams() = default;
+
+ProfileMenuViewBase::EditButtonParams::EditButtonParams(
+    const EditButtonParams&) = default;
 
 // static
 void ProfileMenuViewBase::ShowBubble(
@@ -473,19 +505,6 @@ ProfileMenuViewBase* ProfileMenuViewBase::GetBubbleForTesting() {
   return g_profile_bubble_;
 }
 
-ProfileMenuViewBase::EditButtonParams::EditButtonParams(
-    const gfx::VectorIcon* edit_icon,
-    const base::string16& edit_tooltip_text,
-    base::RepeatingClosure edit_action)
-    : edit_icon(edit_icon),
-      edit_tooltip_text(edit_tooltip_text),
-      edit_action(edit_action) {}
-
-ProfileMenuViewBase::EditButtonParams::~EditButtonParams() = default;
-
-ProfileMenuViewBase::EditButtonParams::EditButtonParams(
-    const EditButtonParams&) = default;
-
 ProfileMenuViewBase::ProfileMenuViewBase(views::Button* anchor_button,
                                          Browser* browser)
     : BubbleDialogDelegateView(anchor_button, views::BubbleBorder::TOP_RIGHT),
@@ -522,7 +541,8 @@ void ProfileMenuViewBase::SetProfileIdentityInfo(
     base::Optional<EditButtonParams> edit_button_params,
     const ui::ImageModel& image_model,
     const base::string16& title,
-    const base::string16& subtitle) {
+    const base::string16& subtitle,
+    const ui::ThemedVectorIcon& avatar_header_art) {
   constexpr int kBottomMargin = kDefaultMargin;
   const bool new_design =
       base::FeatureList::IsEnabled(features::kNewProfilePicker);
@@ -605,7 +625,7 @@ void ProfileMenuViewBase::SetProfileIdentityInfo(
       /*parent=*/identity_info_container_, std::move(heading_label),
       background_color,
       GetCornerRadius(),  // Use the same radius as the bubble has.
-      std::move(avatar_image_view), std::move(edit_button));
+      std::move(avatar_image_view), std::move(edit_button), avatar_header_art);
   BuildProfileTitleAndSubtitle(/*parent=*/identity_info_container_, title,
                                subtitle);
 }
@@ -831,58 +851,6 @@ void ProfileMenuViewBase::RecordClick(ActionableItem item) {
   base::UmaHistogramEnumeration("Profile.Menu.ClickedActionableItem", item);
 }
 
-ax::mojom::Role ProfileMenuViewBase::GetAccessibleWindowRole() {
-  // Return |ax::mojom::Role::kDialog| which will make screen readers announce
-  // the following in the listed order:
-  // the title of the dialog, labels (if any), the focused View within the
-  // dialog (if any)
-  return ax::mojom::Role::kDialog;
-}
-
-void ProfileMenuViewBase::OnThemeChanged() {
-  views::BubbleDialogDelegateView::OnThemeChanged();
-  SetBackground(views::CreateSolidBackground(GetNativeTheme()->GetSystemColor(
-      ui::NativeTheme::kColorId_DialogBackground)));
-  UpdateSyncInfoContainerBackground();
-}
-
-bool ProfileMenuViewBase::HandleContextMenu(
-    content::RenderFrameHost* render_frame_host,
-    const content::ContextMenuParams& params) {
-  // Suppresses the context menu because some features, such as inspecting
-  // elements, are not appropriate in a bubble.
-  return true;
-}
-
-void ProfileMenuViewBase::Init() {
-  Reset();
-  BuildMenu();
-}
-
-void ProfileMenuViewBase::WindowClosing() {
-  DCHECK_EQ(g_profile_bubble_, this);
-  if (anchor_button())
-    anchor_button()->AnimateInkDrop(views::InkDropState::DEACTIVATED, nullptr);
-  g_profile_bubble_ = nullptr;
-}
-
-void ProfileMenuViewBase::ButtonPressed(views::Button* button,
-                                        const ui::Event& event) {
-  OnClick(button);
-}
-
-void ProfileMenuViewBase::StyledLabelLinkClicked(views::StyledLabel* link,
-                                                 const gfx::Range& range,
-                                                 int event_flags) {
-  OnClick(link);
-}
-
-void ProfileMenuViewBase::OnClick(views::View* clickable_view) {
-  DCHECK(!click_actions_[clickable_view].is_null());
-  signin_ui_util::RecordProfileMenuClick(browser()->profile());
-  click_actions_[clickable_view].Run();
-}
-
 int ProfileMenuViewBase::GetMaxHeight() const {
   gfx::Rect anchor_rect = GetAnchorRect();
   gfx::Rect screen_space =
@@ -963,6 +931,53 @@ void ProfileMenuViewBase::Reset() {
   layout->AddView(std::move(scroll_view));
 }
 
+void ProfileMenuViewBase::FocusButtonOnKeyboardOpen() {
+  if (first_profile_button_)
+    first_profile_button_->RequestFocus();
+}
+
+void ProfileMenuViewBase::Init() {
+  Reset();
+  BuildMenu();
+}
+
+void ProfileMenuViewBase::WindowClosing() {
+  DCHECK_EQ(g_profile_bubble_, this);
+  if (anchor_button())
+    anchor_button()->AnimateInkDrop(views::InkDropState::DEACTIVATED, nullptr);
+  g_profile_bubble_ = nullptr;
+}
+
+void ProfileMenuViewBase::OnThemeChanged() {
+  views::BubbleDialogDelegateView::OnThemeChanged();
+  SetBackground(views::CreateSolidBackground(GetNativeTheme()->GetSystemColor(
+      ui::NativeTheme::kColorId_DialogBackground)));
+  UpdateSyncInfoContainerBackground();
+}
+
+ax::mojom::Role ProfileMenuViewBase::GetAccessibleWindowRole() {
+  // Return |ax::mojom::Role::kDialog| which will make screen readers announce
+  // the following in the listed order:
+  // the title of the dialog, labels (if any), the focused View within the
+  // dialog (if any)
+  return ax::mojom::Role::kDialog;
+}
+
+bool ProfileMenuViewBase::HandleContextMenu(
+    content::RenderFrameHost* render_frame_host,
+    const content::ContextMenuParams& params) {
+  // Suppresses the context menu because some features, such as inspecting
+  // elements, are not appropriate in a bubble.
+  return true;
+}
+
+void ProfileMenuViewBase::ButtonPressed(views::Button* button,
+                                        const ui::Event& event) {
+  DCHECK(!click_actions_[button].is_null());
+  signin_ui_util::RecordProfileMenuClick(browser()->profile());
+  click_actions_[button].Run();
+}
+
 void ProfileMenuViewBase::RegisterClickAction(views::View* clickable_view,
                                               base::RepeatingClosure action) {
   DCHECK(click_actions_.count(clickable_view) == 0);
@@ -988,9 +1003,4 @@ void ProfileMenuViewBase::UpdateSyncInfoContainerBackground() {
       GetNativeTheme()->GetSystemColor(bg_color),
       views::LayoutProvider::Get()->GetCornerRadiusMetric(
           views::EMPHASIS_HIGH)));
-}
-
-void ProfileMenuViewBase::FocusButtonOnKeyboardOpen() {
-  if (first_profile_button_)
-    first_profile_button_->RequestFocus();
 }

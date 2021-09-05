@@ -29,7 +29,9 @@
 #include "chrome/browser/component_updater/sth_set_component_remover.h"
 #include "chrome/browser/google/google_brand_chromeos.h"
 #include "chrome/browser/net/nss_context.h"
+#include "chrome/browser/ui/ash/clipboard_image_model_factory_impl.h"
 #include "chrome/common/pref_names.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/network/network_cert_loader.h"
 #include "chromeos/tpm/install_attributes.h"
 #include "components/prefs/pref_service.h"
@@ -97,7 +99,7 @@ void UserSessionInitializer::OnUserProfileLoaded(const AccountId& account_id) {
   if (user_manager::UserManager::Get()->GetPrimaryUser() == user) {
     InitRlz(profile);
     InitializeCerts(profile);
-    InitializeCRLSetFetcher(user);
+    InitializeCRLSetFetcher();
     InitializeCertificateTransparencyComponents(user);
     InitializePrimaryProfileServices(profile, user);
 
@@ -150,17 +152,11 @@ void UserSessionInitializer::InitializeCerts(Profile* profile) {
   }
 }
 
-void UserSessionInitializer::InitializeCRLSetFetcher(
-    const user_manager::User* user) {
-  const std::string username_hash = user->username_hash();
-  if (!username_hash.empty()) {
-    base::FilePath path =
-        ProfileHelper::GetProfilePathByUserIdHash(username_hash);
-    component_updater::ComponentUpdateService* cus =
-        g_browser_process->component_updater();
-    if (cus)
-      component_updater::RegisterCRLSetComponent(cus, path);
-  }
+void UserSessionInitializer::InitializeCRLSetFetcher() {
+  component_updater::ComponentUpdateService* cus =
+      g_browser_process->component_updater();
+  if (cus)
+    component_updater::RegisterCRLSetComponent(cus);
 }
 
 void UserSessionInitializer::InitializeCertificateTransparencyComponents(
@@ -199,6 +195,11 @@ void UserSessionInitializer::InitializePrimaryProfileServices(
       crostini::CrostiniManager::GetForProfile(profile);
   if (crostini_manager)
     crostini_manager->MaybeUpdateCrostini();
+
+  if (chromeos::features::IsClipboardHistoryEnabled()) {
+    clipboard_image_model_factory_impl_ =
+        std::make_unique<ClipboardImageModelFactoryImpl>(profile);
+  }
 
   g_browser_process->platform_part()->InitializePrimaryProfileServices(profile);
 }

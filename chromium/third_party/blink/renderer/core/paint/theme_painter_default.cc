@@ -47,12 +47,24 @@ namespace {
 
 const unsigned kDefaultButtonBackgroundColor = 0xffdddddd;
 
-WebThemeEngine::State GetWebThemeState(const Node* node) {
-  if (!LayoutTheme::IsEnabled(node))
+bool IsIndeterminate(const Element& element) {
+  if (const auto* input = DynamicTo<HTMLInputElement>(element))
+    return input->ShouldAppearIndeterminate();
+  return false;
+}
+
+bool IsChecked(const Element& element) {
+  if (const auto* input = DynamicTo<HTMLInputElement>(element))
+    return input->ShouldAppearChecked();
+  return false;
+}
+
+WebThemeEngine::State GetWebThemeState(const Element& element) {
+  if (element.IsDisabledFormControl())
     return WebThemeEngine::kStateDisabled;
-  if (LayoutTheme::IsPressed(node))
+  if (element.IsActive())
     return WebThemeEngine::kStatePressed;
-  if (LayoutTheme::IsHovered(node))
+  if (element.IsHovered())
     return WebThemeEngine::kStateHover;
 
   return WebThemeEngine::kStateNormal;
@@ -138,7 +150,7 @@ IntRect ConvertToPaintingRect(const LayoutObject& input_layout_object,
 ThemePainterDefault::ThemePainterDefault(LayoutThemeDefault& theme)
     : ThemePainter(), theme_(theme) {}
 
-bool ThemePainterDefault::PaintCheckbox(const Node* node,
+bool ThemePainterDefault::PaintCheckbox(const Element& element,
                                         const Document&,
                                         const ComputedStyle& style,
                                         const PaintInfo& paint_info,
@@ -146,8 +158,8 @@ bool ThemePainterDefault::PaintCheckbox(const Node* node,
   WebThemeEngine::ExtraParams extra_params;
   cc::PaintCanvas* canvas = paint_info.context.Canvas();
   extra_params.button = WebThemeEngine::ButtonExtraParams();
-  extra_params.button.checked = LayoutTheme::IsChecked(node);
-  extra_params.button.indeterminate = LayoutTheme::IsIndeterminate(node);
+  extra_params.button.checked = IsChecked(element);
+  extra_params.button.indeterminate = IsIndeterminate(element);
 
   float zoom_level = style.EffectiveZoom();
   extra_params.button.zoom = zoom_level;
@@ -163,12 +175,12 @@ bool ThemePainterDefault::PaintCheckbox(const Node* node,
   }
 
   Platform::Current()->ThemeEngine()->Paint(
-      canvas, WebThemeEngine::kPartCheckbox, GetWebThemeState(node),
+      canvas, WebThemeEngine::kPartCheckbox, GetWebThemeState(element),
       WebRect(unzoomed_rect), &extra_params, style.UsedColorScheme());
   return false;
 }
 
-bool ThemePainterDefault::PaintRadio(const Node* node,
+bool ThemePainterDefault::PaintRadio(const Element& element,
                                      const Document&,
                                      const ComputedStyle& style,
                                      const PaintInfo& paint_info,
@@ -176,15 +188,15 @@ bool ThemePainterDefault::PaintRadio(const Node* node,
   WebThemeEngine::ExtraParams extra_params;
   cc::PaintCanvas* canvas = paint_info.context.Canvas();
   extra_params.button = WebThemeEngine::ButtonExtraParams();
-  extra_params.button.checked = LayoutTheme::IsChecked(node);
+  extra_params.button.checked = IsChecked(element);
 
   Platform::Current()->ThemeEngine()->Paint(
-      canvas, WebThemeEngine::kPartRadio, GetWebThemeState(node), WebRect(rect),
-      &extra_params, style.UsedColorScheme());
+      canvas, WebThemeEngine::kPartRadio, GetWebThemeState(element),
+      WebRect(rect), &extra_params, style.UsedColorScheme());
   return false;
 }
 
-bool ThemePainterDefault::PaintButton(const Node* node,
+bool ThemePainterDefault::PaintButton(const Element& element,
                                       const Document&,
                                       const ComputedStyle& style,
                                       const PaintInfo& paint_info,
@@ -199,12 +211,12 @@ bool ThemePainterDefault::PaintButton(const Node* node,
         style.VisitedDependentColor(GetCSSPropertyBackgroundColor()).Rgb();
   }
   Platform::Current()->ThemeEngine()->Paint(
-      canvas, WebThemeEngine::kPartButton, GetWebThemeState(node),
+      canvas, WebThemeEngine::kPartButton, GetWebThemeState(element),
       WebRect(rect), &extra_params, style.UsedColorScheme());
   return false;
 }
 
-bool ThemePainterDefault::PaintTextField(const Node* node,
+bool ThemePainterDefault::PaintTextField(const Element& element,
                                          const ComputedStyle& style,
                                          const PaintInfo& paint_info,
                                          const IntRect& rect) {
@@ -219,8 +231,7 @@ bool ThemePainterDefault::PaintTextField(const Node* node,
   // incorrectly (e.g. https://crbug.com/937872).
   // TODO(gilmanmh): Implement a more permanent solution that allows use of
   // native dark themes.
-  if (paint_info.context.dark_mode_settings().mode !=
-      DarkModeInversionAlgorithm::kOff)
+  if (paint_info.context.IsDarkModeEnabled())
     return true;
 
   ControlPart part = style.EffectiveAppearance();
@@ -236,15 +247,15 @@ bool ThemePainterDefault::PaintTextField(const Node* node,
       style.VisitedDependentColor(GetCSSPropertyBackgroundColor());
   extra_params.text_field.background_color = background_color.Rgb();
   extra_params.text_field.auto_complete_active =
-      DynamicTo<HTMLFormControlElement>(node)->IsAutofilled();
+      DynamicTo<HTMLFormControlElement>(element)->IsAutofilled();
 
   Platform::Current()->ThemeEngine()->Paint(
-      canvas, WebThemeEngine::kPartTextField, GetWebThemeState(node),
+      canvas, WebThemeEngine::kPartTextField, GetWebThemeState(element),
       WebRect(rect), &extra_params, style.UsedColorScheme());
   return false;
 }
 
-bool ThemePainterDefault::PaintMenuList(const Node* node,
+bool ThemePainterDefault::PaintMenuList(const Element& element,
                                         const Document& document,
                                         const ComputedStyle& style,
                                         const PaintInfo& i,
@@ -273,12 +284,12 @@ bool ThemePainterDefault::PaintMenuList(const Node* node,
 
   cc::PaintCanvas* canvas = i.context.Canvas();
   Platform::Current()->ThemeEngine()->Paint(
-      canvas, WebThemeEngine::kPartMenuList, GetWebThemeState(node),
+      canvas, WebThemeEngine::kPartMenuList, GetWebThemeState(element),
       WebRect(rect), &extra_params, style.UsedColorScheme());
   return false;
 }
 
-bool ThemePainterDefault::PaintMenuListButton(const Node* node,
+bool ThemePainterDefault::PaintMenuListButton(const Element& element,
                                               const Document& document,
                                               const ComputedStyle& style,
                                               const PaintInfo& paint_info,
@@ -292,7 +303,7 @@ bool ThemePainterDefault::PaintMenuListButton(const Node* node,
 
   cc::PaintCanvas* canvas = paint_info.context.Canvas();
   Platform::Current()->ThemeEngine()->Paint(
-      canvas, WebThemeEngine::kPartMenuList, GetWebThemeState(node),
+      canvas, WebThemeEngine::kPartMenuList, GetWebThemeState(element),
       WebRect(rect), &extra_params, style.UsedColorScheme());
   return false;
 }
@@ -324,7 +335,8 @@ void ThemePainterDefault::SetupMenuListArrow(
       style.VisitedDependentColor(GetCSSPropertyColor()).Rgb();
 }
 
-bool ThemePainterDefault::PaintSliderTrack(const LayoutObject& o,
+bool ThemePainterDefault::PaintSliderTrack(const Element& element,
+                                           const LayoutObject& o,
                                            const PaintInfo& i,
                                            const IntRect& rect) {
   WebThemeEngine::ExtraParams extra_params;
@@ -348,14 +360,14 @@ bool ThemePainterDefault::PaintSliderTrack(const LayoutObject& o,
     i.context.Translate(-unzoomed_rect.X(), -unzoomed_rect.Y());
   }
 
-  auto* input = DynamicTo<HTMLInputElement>(o.GetNode());
+  auto* input = DynamicTo<HTMLInputElement>(element);
   extra_params.slider.thumb_x = 0;
   extra_params.slider.thumb_y = 0;
   extra_params.slider.right_to_left = !o.StyleRef().IsLeftToRightDirection();
   if (input) {
     Element* thumb_element = input->UserAgentShadowRoot()
                                  ? input->UserAgentShadowRoot()->getElementById(
-                                       shadow_element_names::SliderThumb())
+                                       shadow_element_names::kIdSliderThumb)
                                  : nullptr;
     LayoutBox* thumb = thumb_element ? thumb_element->GetLayoutBox() : nullptr;
     LayoutBox* input_box = input->GetLayoutBox();
@@ -382,12 +394,12 @@ bool ThemePainterDefault::PaintSliderTrack(const LayoutObject& o,
   }
 
   Platform::Current()->ThemeEngine()->Paint(
-      canvas, WebThemeEngine::kPartSliderTrack, GetWebThemeState(o.GetNode()),
+      canvas, WebThemeEngine::kPartSliderTrack, GetWebThemeState(element),
       WebRect(unzoomed_rect), &extra_params, o.StyleRef().UsedColorScheme());
   return false;
 }
 
-bool ThemePainterDefault::PaintSliderThumb(const Node* node,
+bool ThemePainterDefault::PaintSliderThumb(const Element& element,
                                            const ComputedStyle& style,
                                            const PaintInfo& paint_info,
                                            const IntRect& rect) {
@@ -395,7 +407,7 @@ bool ThemePainterDefault::PaintSliderThumb(const Node* node,
   cc::PaintCanvas* canvas = paint_info.context.Canvas();
   extra_params.slider.vertical =
       style.EffectiveAppearance() == kSliderThumbVerticalPart;
-  extra_params.slider.in_drag = LayoutTheme::IsPressed(node);
+  extra_params.slider.in_drag = element.IsActive();
 
   float zoom_level = style.EffectiveZoom();
   extra_params.slider.zoom = zoom_level;
@@ -411,12 +423,12 @@ bool ThemePainterDefault::PaintSliderThumb(const Node* node,
   }
 
   Platform::Current()->ThemeEngine()->Paint(
-      canvas, WebThemeEngine::kPartSliderThumb, GetWebThemeState(node),
+      canvas, WebThemeEngine::kPartSliderThumb, GetWebThemeState(element),
       WebRect(unzoomed_rect), &extra_params, style.UsedColorScheme());
   return false;
 }
 
-bool ThemePainterDefault::PaintInnerSpinButton(const Node* node,
+bool ThemePainterDefault::PaintInnerSpinButton(const Element& element,
                                                const ComputedStyle& style,
                                                const PaintInfo& paint_info,
                                                const IntRect& rect) {
@@ -424,21 +436,26 @@ bool ThemePainterDefault::PaintInnerSpinButton(const Node* node,
   cc::PaintCanvas* canvas = paint_info.context.Canvas();
 
   bool spin_up = false;
-  if (const auto* element = DynamicTo<SpinButtonElement>(node)) {
-    if (element->GetUpDownState() == SpinButtonElement::kUp)
-      spin_up = node->IsHovered() || node->IsActive();
+  if (const auto* spin_buttom = DynamicTo<SpinButtonElement>(element)) {
+    if (spin_buttom->GetUpDownState() == SpinButtonElement::kUp)
+      spin_up = element.IsHovered() || element.IsActive();
   }
 
+  bool read_only = false;
+  if (const auto* control = DynamicTo<HTMLFormControlElement>(element))
+    read_only = control->IsReadOnly();
+
   extra_params.inner_spin.spin_up = spin_up;
-  extra_params.inner_spin.read_only = LayoutTheme::IsReadOnlyControl(node);
+  extra_params.inner_spin.read_only = read_only;
 
   Platform::Current()->ThemeEngine()->Paint(
-      canvas, WebThemeEngine::kPartInnerSpinButton, GetWebThemeState(node),
+      canvas, WebThemeEngine::kPartInnerSpinButton, GetWebThemeState(element),
       WebRect(rect), &extra_params, style.UsedColorScheme());
   return false;
 }
 
-bool ThemePainterDefault::PaintProgressBar(const LayoutObject& o,
+bool ThemePainterDefault::PaintProgressBar(const Element& element,
+                                           const LayoutObject& o,
                                            const PaintInfo& i,
                                            const IntRect& rect) {
   if (!o.IsProgress())
@@ -457,23 +474,23 @@ bool ThemePainterDefault::PaintProgressBar(const LayoutObject& o,
   DirectionFlippingScope scope(o, i, rect);
   cc::PaintCanvas* canvas = i.context.Canvas();
   Platform::Current()->ThemeEngine()->Paint(
-      canvas, WebThemeEngine::kPartProgressBar, GetWebThemeState(o.GetNode()),
+      canvas, WebThemeEngine::kPartProgressBar, GetWebThemeState(element),
       WebRect(rect), &extra_params, o.StyleRef().UsedColorScheme());
   return false;
 }
 
-bool ThemePainterDefault::PaintTextArea(const Node* node,
+bool ThemePainterDefault::PaintTextArea(const Element& element,
                                         const ComputedStyle& style,
                                         const PaintInfo& paint_info,
                                         const IntRect& rect) {
-  return PaintTextField(node, style, paint_info, rect);
+  return PaintTextField(element, style, paint_info, rect);
 }
 
-bool ThemePainterDefault::PaintSearchField(const Node* node,
+bool ThemePainterDefault::PaintSearchField(const Element& element,
                                            const ComputedStyle& style,
                                            const PaintInfo& paint_info,
                                            const IntRect& rect) {
-  return PaintTextField(node, style, paint_info, rect);
+  return PaintTextField(element, style, paint_info, rect);
 }
 
 bool ThemePainterDefault::PaintSearchFieldCancelButton(
@@ -481,8 +498,6 @@ bool ThemePainterDefault::PaintSearchFieldCancelButton(
     const PaintInfo& paint_info,
     const IntRect& r) {
   // Get the layoutObject of <input> element.
-  if (!cancel_button_object.GetNode())
-    return false;
   Node* input = cancel_button_object.GetNode()->OwnerShadowHost();
   const LayoutObject& base_layout_object = input && input->GetLayoutObject()
                                                ? *input->GetLayoutObject()
@@ -507,15 +522,25 @@ bool ThemePainterDefault::PaintSearchFieldCancelButton(
       cancel_button_size, cancel_button_size);
   IntRect painting_rect = ConvertToPaintingRect(
       input_layout_box, cancel_button_object, cancel_button_rect, r);
-
+  ColorScheme color_scheme = cancel_button_object.StyleRef().UsedColorScheme();
   DEFINE_STATIC_REF(Image, cancel_image,
                     (Image::LoadPlatformResource(IDR_SEARCH_CANCEL)));
   DEFINE_STATIC_REF(Image, cancel_pressed_image,
                     (Image::LoadPlatformResource(IDR_SEARCH_CANCEL_PRESSED)));
+  DEFINE_STATIC_REF(Image, cancel_image_dark_mode,
+                    (Image::LoadPlatformResource(IDR_SEARCH_CANCEL_DARK_MODE)));
+  DEFINE_STATIC_REF(
+      Image, cancel_pressed_image_dark_mode,
+      (Image::LoadPlatformResource(IDR_SEARCH_CANCEL_PRESSED_DARK_MODE)));
+  Image* color_scheme_adjusted_cancel_image =
+      color_scheme == kLight ? cancel_image : cancel_image_dark_mode;
+  Image* color_scheme_adjusted_cancel_pressed_image =
+      color_scheme == kLight ? cancel_pressed_image
+                             : cancel_pressed_image_dark_mode;
   paint_info.context.DrawImage(
-      LayoutTheme::IsPressed(cancel_button_object.GetNode())
-          ? cancel_pressed_image
-          : cancel_image,
+      To<Element>(cancel_button_object.GetNode())->IsActive()
+          ? color_scheme_adjusted_cancel_pressed_image
+          : color_scheme_adjusted_cancel_image,
       Image::kSyncDecode, FloatRect(painting_rect));
   return false;
 }

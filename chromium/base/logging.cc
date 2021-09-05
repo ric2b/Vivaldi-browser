@@ -18,6 +18,8 @@
 #include <limits.h>
 #include <stdint.h>
 
+#include <vector>
+
 #include "base/pending_task.h"
 #include "base/stl_util.h"
 #include "base/task/common/task_annotator.h"
@@ -116,6 +118,7 @@ typedef FILE* FileHandle;
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/lock.h"
+#include "base/test/scoped_logging_settings.h"
 #include "base/threading/platform_thread.h"
 #include "base/vlog.h"
 
@@ -153,6 +156,11 @@ int g_min_log_level = 0;
 // Specifies the process' logging sink(s), represented as a combination of
 // LoggingDestination values joined by bitwise OR.
 int g_logging_destination = LOG_DEFAULT;
+
+#if defined(OS_CHROMEOS)
+// Specifies the format of log header for chrome os.
+LogFormat g_log_format = LogFormat::LOG_FORMAT_SYSLOG;
+#endif
 
 // For LOG_ERROR and above, always print to stderr.
 const int kAlwaysPrintErrorLevel = LOG_ERROR;
@@ -355,6 +363,10 @@ bool BaseInitLoggingImpl(const LoggingSettings& settings) {
   // Can log only to the system debug log and stderr.
   CHECK_EQ(settings.logging_dest & ~(LOG_TO_SYSTEM_DEBUG_LOG | LOG_TO_STDERR),
            0u);
+#endif
+
+#if defined(OS_CHROMEOS)
+  g_log_format = settings.log_format;
 #endif
 
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
@@ -628,26 +640,28 @@ LogMessage::~LogMessage() {
        public:
         explicit ASLClient(const std::string& facility)
             : client_(asl_open(nullptr, facility.c_str(), ASL_OPT_NO_DELAY)) {}
+        ASLClient(const ASLClient&) = delete;
+        ASLClient& operator=(const ASLClient&) = delete;
         ~ASLClient() { asl_close(client_); }
 
         aslclient get() const { return client_; }
 
        private:
         aslclient client_;
-        DISALLOW_COPY_AND_ASSIGN(ASLClient);
       } asl_client(main_bundle_id.empty() ? main_bundle_id
                                           : "com.apple.console");
 
       const class ASLMessage {
        public:
         ASLMessage() : message_(asl_new(ASL_TYPE_MSG)) {}
+        ASLMessage(const ASLMessage&) = delete;
+        ASLMessage& operator=(const ASLMessage&) = delete;
         ~ASLMessage() { asl_free(message_); }
 
         aslmsg get() const { return message_; }
 
        private:
         aslmsg message_;
-        DISALLOW_COPY_AND_ASSIGN(ASLMessage);
       } asl_message;
 
       // By default, messages are only readable by the admin group. Explicitly
@@ -690,6 +704,8 @@ LogMessage::~LogMessage() {
         explicit OSLog(const char* subsystem)
             : os_log_(subsystem ? os_log_create(subsystem, "chromium_logging")
                                 : OS_LOG_DEFAULT) {}
+        OSLog(const OSLog&) = delete;
+        OSLog& operator=(const OSLog&) = delete;
         ~OSLog() {
           if (os_log_ != OS_LOG_DEFAULT) {
             os_release(os_log_);
@@ -699,7 +715,6 @@ LogMessage::~LogMessage() {
 
        private:
         os_log_t os_log_;
-        DISALLOW_COPY_AND_ASSIGN(OSLog);
       } log(main_bundle_id.empty() ? nullptr : main_bundle_id.c_str());
       const os_log_type_t os_log_type = [](LogSeverity severity) {
         switch (severity) {
@@ -825,17 +840,8 @@ LogMessage::~LogMessage() {
     if (tracker)
       tracker->RecordLogMessage(str_newline);
 
-    // Ensure the first characters of the string are on the stack so they
-    // are contained in minidumps for diagnostic purposes. We place start
-    // and end marker values at either end, so we can scan captured stacks
-    // for the data easily.
-    struct {
-      uint32_t start_marker = 0xbedead01;
-      char data[1024];
-      uint32_t end_marker = 0x5050dead;
-    } str_stack;
-    base::strlcpy(str_stack.data, str_newline.data(),
-                  base::size(str_stack.data));
+    char str_stack[1024];
+    base::strlcpy(str_stack, str_newline.data(), base::size(str_stack));
     base::debug::Alias(&str_stack);
 
     if (!GetLogAssertHandlerStack().empty()) {
@@ -882,60 +888,66 @@ void LogMessage::Init(const char* file, int line) {
   // Stores the base name as the null-terminated suffix substring of |filename|.
   file_basename_ = filename.data();
 
-  // TODO(darin): It might be nice if the columns were fixed width.
-
-  stream_ <<  '[';
-  if (g_log_prefix)
-    stream_ << g_log_prefix << ':';
-  if (g_log_process_id)
-    stream_ << base::GetUniqueIdForProcess() << ':';
-  if (g_log_thread_id)
-    stream_ << base::PlatformThread::CurrentId() << ':';
-  if (g_log_timestamp) {
+#if defined(OS_CHROMEOS)
+  if (g_log_format == LogFormat::LOG_FORMAT_SYSLOG) {
+    InitWithSyslogPrefix(
+        filename, line, TickCount(), log_severity_name(severity_), g_log_prefix,
+        g_log_process_id, g_log_thread_id, g_log_timestamp, g_log_tickcount);
+  } else
+#endif  // defined(OS_CHROMEOS)
+  {
+    // TODO(darin): It might be nice if the columns were fixed width.
+    stream_ << '[';
+    if (g_log_prefix)
+      stream_ << g_log_prefix << ':';
+    if (g_log_process_id)
+      stream_ << base::GetUniqueIdForProcess() << ':';
+    if (g_log_thread_id)
+      stream_ << base::PlatformThread::CurrentId() << ':';
+    if (g_log_timestamp) {
 #if defined(OS_WIN)
-    SYSTEMTIME local_time;
-    GetLocalTime(&local_time);
-    stream_ << std::setfill('0')
-            << std::setw(2) << local_time.wMonth
-            << std::setw(2) << local_time.wDay
-            << '/'
-            << std::setw(2) << local_time.wHour
-            << std::setw(2) << local_time.wMinute
-            << std::setw(2) << local_time.wSecond
-            << '.'
-            << std::setw(3)
-            << local_time.wMilliseconds
-            << ':';
+      SYSTEMTIME local_time;
+      GetLocalTime(&local_time);
+      stream_ << std::setfill('0')
+              << std::setw(2) << local_time.wMonth
+              << std::setw(2) << local_time.wDay
+              << '/'
+              << std::setw(2) << local_time.wHour
+              << std::setw(2) << local_time.wMinute
+              << std::setw(2) << local_time.wSecond
+              << '.'
+              << std::setw(3) << local_time.wMilliseconds
+              << ':';
 #elif defined(OS_POSIX) || defined(OS_FUCHSIA)
-    timeval tv;
-    gettimeofday(&tv, nullptr);
-    time_t t = tv.tv_sec;
-    struct tm local_time;
-    localtime_r(&t, &local_time);
-    struct tm* tm_time = &local_time;
-    stream_ << std::setfill('0')
-            << std::setw(2) << 1 + tm_time->tm_mon
-            << std::setw(2) << tm_time->tm_mday
-            << '/'
-            << std::setw(2) << tm_time->tm_hour
-            << std::setw(2) << tm_time->tm_min
-            << std::setw(2) << tm_time->tm_sec
-            << '.'
-            << std::setw(6) << tv.tv_usec
-            << ':';
+      timeval tv;
+      gettimeofday(&tv, nullptr);
+      time_t t = tv.tv_sec;
+      struct tm local_time;
+      localtime_r(&t, &local_time);
+      struct tm* tm_time = &local_time;
+      stream_ << std::setfill('0')
+              << std::setw(2) << 1 + tm_time->tm_mon
+              << std::setw(2) << tm_time->tm_mday
+              << '/'
+              << std::setw(2) << tm_time->tm_hour
+              << std::setw(2) << tm_time->tm_min
+              << std::setw(2) << tm_time->tm_sec
+              << '.'
+              << std::setw(6) << tv.tv_usec
+              << ':';
 #else
 #error Unsupported platform
 #endif
+    }
+    if (g_log_tickcount)
+      stream_ << TickCount() << ':';
+    if (severity_ >= 0) {
+      stream_ << log_severity_name(severity_);
+    } else {
+      stream_ << "VERBOSE" << -severity_;
+    }
+    stream_ << ":" << filename << "(" << line << ")] ";
   }
-  if (g_log_tickcount)
-    stream_ << TickCount() << ':';
-  if (severity_ >= 0)
-    stream_ << log_severity_name(severity_);
-  else
-    stream_ << "VERBOSE" << -severity_;
-
-  stream_ << ":" << filename << "(" << line << ")] ";
-
   message_start_ = stream_.str().length();
 }
 
@@ -1030,6 +1042,38 @@ FILE* DuplicateLogFILE() {
   return duplicate;
 }
 #endif
+
+// Used for testing. Declared in test/scoped_logging_settings.h.
+ScopedLoggingSettings::ScopedLoggingSettings()
+    : enable_process_id_(g_log_process_id),
+      enable_thread_id_(g_log_thread_id),
+      enable_timestamp_(g_log_timestamp),
+      enable_tickcount_(g_log_tickcount),
+      min_log_level_(GetMinLogLevel()),
+      message_handler_(GetLogMessageHandler()) {
+#if defined(OS_CHROMEOS)
+  log_format_ = g_log_format;
+#endif  // defined(OS_CHROMEOS)
+}
+
+ScopedLoggingSettings::~ScopedLoggingSettings() {
+  g_log_process_id = enable_process_id_;
+  g_log_thread_id = enable_thread_id_;
+  g_log_timestamp = enable_timestamp_;
+  g_log_tickcount = enable_tickcount_;
+  SetMinLogLevel(min_log_level_);
+  SetLogMessageHandler(message_handler_);
+
+#if defined(OS_CHROMEOS)
+  g_log_format = log_format_;
+#endif  // defined(OS_CHROMEOS)
+}
+
+#if defined(OS_CHROMEOS)
+void ScopedLoggingSettings::SetLogFormat(LogFormat log_format) const {
+  g_log_format = log_format;
+}
+#endif  // defined(OS_CHROMEOS)
 
 void RawLog(int level, const char* message) {
   if (level >= g_min_log_level && message) {

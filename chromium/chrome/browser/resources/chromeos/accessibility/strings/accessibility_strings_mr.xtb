@@ -52,6 +52,7 @@
 <translation id="1291286136605998134">टॉगल बटण</translation>
 <translation id="1299774449519412690">फिकट आकाशी</translation>
 <translation id="1303806948938513162">ChromeVox मेनूमध्ये एंटर करण्यासाठी चार बोटांनी टॅप करा</translation>
+<translation id="1313373992684326101">मागील विभागात जा. उदाहरणांमध्ये स्टेटस ट्रे आणि लाँचरचा समावेश आहे.</translation>
 <translation id="1325363694295259631"><ph name="NAME" /> या मेनू आयटम रेडिओ बटणाची निवड रद्द केली</translation>
 <translation id="1325946044405407859">बदामी</translation>
 <translation id="1331702245475014624"><ph name="TOTAL" /> पैकी <ph name="INDEX" /></translation>
@@ -79,6 +80,7 @@
 <translation id="1506187449813838456">पीच वाढवा</translation>
 <translation id="151784044608172266">पुढील वाक्य</translation>
 <translation id="1524531499102321782">ब्रेल पुढील रेखा</translation>
+<translation id="1542513807034338907">मागील पेजवर स्क्रोल करा</translation>
 <translation id="1546370775711804143">स्‍क्रोल बार</translation>
 <translation id="1555130319947370107">निळा</translation>
 <translation id="1559739829547075274">मागे नेव्हीगेट करा</translation>
@@ -171,7 +173,7 @@
 <translation id="2311237334957139798">ग्रॅन्युलॅरिटीवर मागीलवर हलवा</translation>
 <translation id="2314393392395134769">सबस्क्रिप्ट नाही</translation>
 <translation id="2318372665160196757">मुख्य</translation>
-<translation id="2329324941084714723">टॅब पॅनेल</translation>
+<translation id="2329324941084714723">टॅब पॅनल</translation>
 <translation id="2347456970887948350">एक लिंक</translation>
 <translation id="2381733276052567791">भाषण सुरू किंवा बंद करा</translation>
 <translation id="2390264819538553347">पुढे जाण्यासाठी, एंटर दाबा; मागे जाण्यासाठी, बॅकस्पेस दाबा.</translation>
@@ -280,6 +282,7 @@
 <translation id="3103579948980282461">मध्यम जांभळा लाल</translation>
 <translation id="3104705064753753826">alrt dlg</translation>
 <translation id="3109724472072898302">संकुचित केलेले</translation>
+<translation id="311015743332597320">चार बोटांनी उजवीकडे स्वाइप करा</translation>
 <translation id="3112457281078985179">ChromeVox सुरू किंवा बंद करण्यासाठी, Control+Alt+Z वापरा.</translation>
 <translation id="3131002934070407451">संख्या याप्रमाणे वाचा:</translation>
 <translation id="3134461040845705080">rdonly</translation>
@@ -345,6 +348,7 @@
 <translation id="3549141990712742152"><ph name="TEXT" /> कट करा.</translation>
 <translation id="3549680091535286226">बोलणे तात्पुरते थांबवण्यासाठी दोन बोटांनी टॅप करा</translation>
 <translation id="3564729643041517261">सध्याची डिस्प्ले शैली शेजारी-शेजारी आहे</translation>
+<translation id="3587482841069643663">सर्व</translation>
 <translation id="3589661172894441357">शब्दावली</translation>
 <translation id="3591784666823501596">चमकदार निळा</translation>
 <translation id="3594207934078151302">मध्यम निळसर हिरवा</translation>
@@ -436,6 +440,7 @@
 <translation id="4278486392851938658">मागील भेट दिलेली लिंक नाही</translation>
 <translation id="4281245629646759298">फिकट पिवळा</translation>
 <translation id="4289540628985791613">विहंगावलोकन</translation>
+<translation id="4294967782363273192">चढत्या क्रमाने लावा</translation>
 <translation id="4300318234632215983">लिंकमागील URL घोषित करा</translation>
 <translation id="4322625298640984693">लालसर तपकिरी</translation>
 <translation id="4342180618051828363">{COUNT,plural, =1{टिंब}=3{पदलोप}other{# टिंब}}</translation>
@@ -447,6 +452,7 @@
 <translation id="4384583879834880242">प्रश्नोत्तरे</translation>
 <translation id="4391478986194775161">cntntinfo</translation>
 <translation id="4402014469255336455">गडद आकाशी निळा</translation>
+<translation id="4406249099130339147">विरामचिन्हाचा इको:</translation>
 <translation id="4432457053224379116">लाल</translation>
 <translation id="4437615272777527928">मेनू शोधण्यासाठी टाइप करा. परिणामांवर जाण्यासाठी अप आणि डाउन ॲरो वापरा. मजकूर कॅरेट ॲडजस्ट करण्यासाठी आणि मेनूदरम्यान हलवण्यासाठी डावा आणि उजवा ॲरो वापरा.</translation>
 <translation id="4457472090507035117">विद्यमान आवाज निवडा:</translation>
@@ -481,6 +487,7 @@
 <translation id="4763480195061959176">व्हिडिओ</translation>
 <translation id="4764692524839457597">डीफॉल्ट</translation>
 <translation id="4772771694153161212">अधोरेखित नाही</translation>
+<translation id="4780458943471935919">पुढील पेजवर स्क्रोल करा</translation>
 <translation id="4784215347943747396">फक्त एक किंवा दोन स्विचसोबत डिव्हाइस नियंत्रित करा</translation>
 <translation id="4786285211967466855">मागील पातळी एक शीर्षक नाही</translation>
 <translation id="4787577491510559358">सध्याचा आयटम फॉरमॅट केला असल्याचे सूचित करा</translation>
@@ -522,7 +529,7 @@
 <translation id="5020651427400641814">स्पीच लॉगिंग सुरू करा</translation>
 <translation id="5041394372352067729">ब्रेल डिस्प्ले पेजच्या सर्वात वर हलवा</translation>
 <translation id="5042770794184672516">बोलण्‍याचा आवाज वाढवा</translation>
-<translation id="5042992464904238023">वेब सामग्री</translation>
+<translation id="5042992464904238023">वेब आशय</translation>
 <translation id="5050015258024679800">मागील स्तर 4 शीर्षक</translation>
 <translation id="5054047268577924192">मागील सूची आयटम</translation>
 <translation id="5085453135206054947">फिकट जांभळट लाल</translation>
@@ -644,6 +651,7 @@
 <translation id="5999630716831179808">व्हॉइस</translation>
 <translation id="6006050241733874051">फॉर्म</translation>
 <translation id="6006064078185310784">{COUNT,plural, =1{बॅकस्लॅश}other{# बॅकस्लॅश}}</translation>
+<translation id="6010616110396250088">उतरत्या क्रमाने लावा</translation>
 <translation id="6017514345406065928">हिरवा</translation>
 <translation id="602001110135236999">डावीकडे स्‍क्रोल करा</translation>
 <translation id="6034000775414344507">फिकट राखाडी</translation>
@@ -815,6 +823,7 @@
 <translation id="744163271241493234">pwded</translation>
 <translation id="7484805699335881122">घटक प्रकार आणि कोट केलेला, हटवलेला, ठळक केलेला, कंसात लिहिलेला किंवा कॅपिटलाइझ केलेला मजकूर बोलताना पिच बदला.</translation>
 <translation id="7491962110804786152">टॅब</translation>
+<translation id="7492497529767769458">पुढील विभागात जा. उदाहरणांमध्ये स्टेटस ट्रे आणि लाँचरचा समावेश आहे.</translation>
 <translation id="7505149250476994901">अक्षरापूर्वी "कॅप" म्हणा</translation>
 <translation id="7518543783849163354">तात्पुरते ChromeVox चे बोलणे थांबविण्यासाठी, Control की दाबा.</translation>
 <translation id="7533226154149229506">फिकट सोनेरी गडद पिवळा</translation>
@@ -822,6 +831,7 @@
 <translation id="7552432549459840808">उपयोगी Chrome शॉर्टकट</translation>
 <translation id="7569983096843329377">काळा</translation>
 <translation id="7579911500627256166">बिंदू <ph name="DOT" /></translation>
+<translation id="7592060599656252486">काही</translation>
 <translation id="7595446402663080101">मागील टेबल नाही</translation>
 <translation id="7596131838331109045">फिकट तांबूस पिवळा</translation>
 <translation id="7604026522577407655">वर्तमान स्तंभाच्या सुरुवातीस जा</translation>
@@ -841,6 +851,7 @@
 <translation id="7684431668231950609">मजकूर, URL प्रविष्टी संपादित करा</translation>
 <translation id="7685589220304187312">tlbar</translation>
 <translation id="7693840228159394336">मागील रेडिओ बटण</translation>
+<translation id="7701040980221191251">काहीही नाही</translation>
 <translation id="7701196182766842984">autolst</translation>
 <translation id="7714340021005120797">पुढील कॉम्‍बो बॉक्‍स नाही</translation>
 <translation id="772146615414628379">अभिनंदन! ChromeVox यशस्वीरीत्या वापरण्यासाठी अत्यावश्यक असलेल्या गोष्टी तुम्ही जाणून घेतल्या आहेत. लक्षात ठेवा की, Search+Period दाबून तुम्ही कधीही ChromeVox कमांड मेनू उघडू शकता. ChromeVox आणि Chrome OS यांबद्दल आणखी जास्त जाणून घेण्यासाठी, पुढील लेख वाचा.
@@ -899,7 +910,9 @@
 <translation id="812886159861361726"><ph name="FILE_NAME" /> चे डाउनलोड थांबले</translation>
 <translation id="8129445297241948503">वर सेल नाही</translation>
 <translation id="8138880386467279117">स्पर्श करा</translation>
+<translation id="8173092779156526980">चार बोटांनी डावीकडे स्वाइप करा</translation>
 <translation id="817440585505441544">{COUNT,plural, =1{अंडरस्कोअर}other{# अंडरस्कोअर}}</translation>
+<translation id="8179976553408161302">Enter</translation>
 <translation id="8184828902145951186">पंक्ती</translation>
 <translation id="8186185314313222077">फुल स्क्रीन टॉगल करा</translation>
 <translation id="8199231515320852133">सध्‍याच्या सेलची शीर्षके घोषित करा</translation>
@@ -948,7 +961,7 @@
 <translation id="8584721346566392021">h5</translation>
 <translation id="8587549812518406253">पुढील सूची आयटम</translation>
 <translation id="8591343418134616947">मागील पातळी सहा शीर्षक नाही</translation>
-<translation id="8603071050456974042">ChromeVox पॅनेल</translation>
+<translation id="8603071050456974042">ChromeVox पॅनल</translation>
 <translation id="8606621670302093223">तारीख नियंत्रण</translation>
 <translation id="8613709718990529335">हिरवट निळा</translation>
 <translation id="8625173877182443267">पुढील पातळी सहा शीर्षक नाही</translation>
@@ -985,6 +998,7 @@
 <translation id="8946628535652548639">पं<ph name="TABLECELLROWINDEX" />स्तं<ph name="TABLECELLCOLUMNINDEX" /></translation>
 <translation id="8952400011684167587">मागील रेडिओ बटण नाही</translation>
 <translation id="8970172509886453271">मागील निवड नाही</translation>
+<translation id="89720367119469899">Escape</translation>
 <translation id="8978496506222343566">tltip</translation>
 <translation id="8986362086234534611">विसरा</translation>
 <translation id="9040132695316389094">मथळा 1</translation>

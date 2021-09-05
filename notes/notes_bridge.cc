@@ -904,3 +904,29 @@ void NotesBridge::NotesNodeRemoved(vivaldi::NotesModel* model,
   std::set<GURL> urls = {};
   NoteNodeRemoved(model, parent, old_index, node, urls);
 }
+
+
+void NotesBridge::ReorderChildren(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
+    const JavaParamRef<jobject>& j_note_id_obj,
+    jlongArray arr) {
+  DCHECK(IsLoaded());
+  // get the NoteNode* for the "parent" note parameter
+  const long note_id = JavaNoteIdGetId(env, j_note_id_obj);
+  const int note_type = JavaNoteIdGetType(env, j_note_id_obj);
+
+  const NoteNode* note_node = GetNodeByID(note_id, note_type);
+
+  // populate a vector
+  std::vector<const NoteNode*> ordered_nodes;
+  jsize arraySize = env->GetArrayLength(arr);
+  jlong* elements = env->GetLongArrayElements(arr, 0);
+
+  // iterate through array, adding the NoteNode*s of the objects
+  for (int i = 0; i < arraySize; ++i) {
+    ordered_nodes.push_back(GetNodeByID(elements[i], 0));
+  }
+
+  notes_model_->ReorderChildren(note_node, ordered_nodes);
+}

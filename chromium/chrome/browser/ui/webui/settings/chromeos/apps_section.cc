@@ -8,6 +8,7 @@
 #include "base/no_destructor.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
+#include "chrome/browser/chromeos/plugin_vm/plugin_vm_features.h"
 #include "chrome/browser/chromeos/plugin_vm/plugin_vm_pref_names.h"
 #include "chrome/browser/chromeos/plugin_vm/plugin_vm_util.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_utils.h"
@@ -136,7 +137,7 @@ void AddAppManagementStrings(content::WebUIDataSource* html_source) {
 bool ShowPluginVm(const Profile* profile, const PrefService& pref_service) {
   // Even if not allowed, we still want to show Plugin VM if the VM image is on
   // disk, so that users are still able to delete the image at will.
-  return plugin_vm::IsPluginVmAllowedForProfile(profile) ||
+  return plugin_vm::PluginVmFeatures::Get()->IsAllowed(profile) ||
          pref_service.GetBoolean(plugin_vm::prefs::kPluginVmImageExists);
 }
 
@@ -237,7 +238,14 @@ std::string AppsSection::GetSectionPath() const {
   return mojom::kAppsSectionPath;
 }
 
+bool AppsSection::LogMetric(mojom::Setting setting, base::Value& value) const {
+  // Unimplemented.
+  return false;
+}
+
 void AppsSection::RegisterHierarchy(HierarchyGenerator* generator) const {
+  generator->RegisterTopLevelSetting(mojom::Setting::kTurnOnPlayStore);
+
   // Manage apps.
   generator->RegisterTopLevelSubpage(IDS_SETTINGS_APPS_LINK_TEXT,
                                      mojom::Subpage::kAppManagement,
@@ -256,6 +264,12 @@ void AppsSection::RegisterHierarchy(HierarchyGenerator* generator) const {
                                    mojom::SearchResultIcon::kAppsGrid,
                                    mojom::SearchResultDefaultRank::kMedium,
                                    mojom::kPluginVmSharedPathsSubpagePath);
+  generator->RegisterNestedSubpage(
+      IDS_SETTINGS_APPS_PLUGIN_VM_SHARED_USB_DEVICES_LABEL,
+      mojom::Subpage::kPluginVmUsbPreferences, mojom::Subpage::kAppManagement,
+      mojom::SearchResultIcon::kAppsGrid,
+      mojom::SearchResultDefaultRank::kMedium,
+      mojom::kPluginVmUsbPreferencesSubpagePath);
 
   // Google Play Store.
   generator->RegisterTopLevelSubpage(IDS_SETTINGS_ANDROID_APPS_LABEL,
@@ -266,10 +280,11 @@ void AppsSection::RegisterHierarchy(HierarchyGenerator* generator) const {
   static constexpr mojom::Setting kGooglePlayStoreSettings[] = {
       mojom::Setting::kManageAndroidPreferences,
       mojom::Setting::kRemovePlayStore,
-      mojom::Setting::kTurnOnPlayStore,
   };
   RegisterNestedSettingBulk(mojom::Subpage::kGooglePlayStore,
                             kGooglePlayStoreSettings, generator);
+  generator->RegisterTopLevelAltSetting(
+      mojom::Setting::kManageAndroidPreferences);
 }
 
 void AppsSection::OnAppRegistered(const std::string& app_id,
@@ -316,8 +331,26 @@ void AppsSection::AddPluginVmLoadTimeData(
        IDS_SETTINGS_APPS_PLUGIN_VM_SHARED_PATHS_INSTRUCTIONS_REMOVE},
       {"pluginVmSharedPathsRemoveSharing",
        IDS_SETTINGS_APPS_PLUGIN_VM_SHARED_PATHS_REMOVE_SHARING},
+      {"pluginVmSharedPathsRemoveFailureDialogMessage",
+       IDS_SETTINGS_APPS_PLUGIN_VM_SHARED_PATHS_REMOVE_FAILURE_DIALOG_MESSAGE},
+      {"pluginVmSharedPathsRemoveFailureDialogTitle",
+       IDS_SETTINGS_APPS_PLUGIN_VM_SHARED_PATHS_REMOVE_FAILURE_DIALOG_TITLE},
+      {"pluginVmSharedPathsRemoveFailureTryAgain",
+       IDS_SETTINGS_APPS_PLUGIN_VM_SHARED_PATHS_REMOVE_FAILURE_TRY_AGAIN},
       {"pluginVmSharedPathsListEmptyMessage",
        IDS_SETTINGS_APPS_PLUGIN_VM_SHARED_PATHS_LIST_EMPTY_MESSAGE},
+      {"pluginVmSharedUsbDevicesLabel",
+       IDS_SETTINGS_APPS_PLUGIN_VM_SHARED_USB_DEVICES_LABEL},
+      {"pluginVmSharedUsbDevicesDescription",
+       IDS_SETTINGS_APPS_PLUGIN_VM_SHARED_USB_DEVICES_DESCRIPTION},
+      {"pluginVmSharedUsbDevicesExtraDescription",
+       IDS_SETTINGS_APPS_PLUGIN_VM_SHARED_USB_DEVICES_EXTRA_DESCRIPTION},
+      {"pluginVmSharedUsbDevicesListEmptyMessage",
+       IDS_SETTINGS_APPS_PLUGIN_VM_SHARED_USB_DEVICES_LIST_EMPTY_MESSAGE},
+      {"pluginVmSharedUsbDevicesInUse",
+       IDS_SETTINGS_APPS_PLUGIN_VM_SHARED_USB_DEVICES_IN_USE},
+      {"pluginVmSharedUsbDevicesReassign",
+       IDS_SETTINGS_APPS_PLUGIN_VM_SHARED_USB_DEVICES_REASSIGN},
       {"pluginVmPermissionDialogCameraLabel",
        IDS_SETTINGS_APPS_PLUGIN_VM_PERMISSION_DIALOG_CAMERA_LABEL},
       {"pluginVmPermissionDialogMicrophoneLabel",

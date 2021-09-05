@@ -22,6 +22,7 @@
 #include "third_party/blink/renderer/modules/webgpu/gpu_compute_pipeline.h"
 #include "third_party/blink/renderer/modules/webgpu/gpu_device_lost_info.h"
 #include "third_party/blink/renderer/modules/webgpu/gpu_pipeline_layout.h"
+#include "third_party/blink/renderer/modules/webgpu/gpu_query_set.h"
 #include "third_party/blink/renderer/modules/webgpu/gpu_queue.h"
 #include "third_party/blink/renderer/modules/webgpu/gpu_render_bundle_encoder.h"
 #include "third_party/blink/renderer/modules/webgpu/gpu_render_pipeline.h"
@@ -68,11 +69,16 @@ GPUDevice::GPUDevice(ExecutionContext* execution_context,
           GetProcs().deviceGetDefaultQueue(GetHandle()))),
       lost_property_(MakeGarbageCollected<LostProperty>(execution_context)),
       error_callback_(BindRepeatingDawnCallback(&GPUDevice::OnUncapturedError,
-                                                WrapWeakPersistent(this))) {
+                                                WrapWeakPersistent(this))),
+      lost_callback_(BindDawnCallback(&GPUDevice::OnDeviceLostError,
+                                      WrapWeakPersistent(this))) {
   DCHECK(dawn_control_client->GetInterface()->GetDevice(client_id));
   GetProcs().deviceSetUncapturedErrorCallback(
       GetHandle(), error_callback_->UnboundRepeatingCallback(),
       error_callback_->AsUserdata());
+  GetProcs().deviceSetDeviceLostCallback(GetHandle(),
+                                         lost_callback_->UnboundCallback(),
+                                         lost_callback_->AsUserdata());
 
   if (extension_name_list_.Contains("textureCompressionBC")) {
     AddConsoleWarning(
@@ -112,15 +118,9 @@ void GPUDevice::AddConsoleWarning(const char* message) {
 void GPUDevice::OnUncapturedError(WGPUErrorType errorType,
                                   const char* message) {
   DCHECK_NE(errorType, WGPUErrorType_NoError);
+  DCHECK_NE(errorType, WGPUErrorType_DeviceLost);
   LOG(ERROR) << "GPUDevice: " << message;
   AddConsoleWarning(message);
-
-  // TODO: Use device lost callback instead of uncaptured error callback.
-  if (errorType == WGPUErrorType_DeviceLost &&
-      lost_property_->GetState() == LostProperty::kPending) {
-    auto* device_lost_info = MakeGarbageCollected<GPUDeviceLostInfo>(message);
-    lost_property_->Resolve(device_lost_info);
-  }
 
   GPUUncapturedErrorEventInit* init = GPUUncapturedErrorEventInit::Create();
   if (errorType == WGPUErrorType_Validation) {
@@ -137,6 +137,15 @@ void GPUDevice::OnUncapturedError(WGPUErrorType errorType,
   }
   this->DispatchEvent(*GPUUncapturedErrorEvent::Create(
       event_type_names::kUncapturederror, init));
+}
+
+void GPUDevice::OnDeviceLostError(const char* message) {
+  AddConsoleWarning(message);
+
+  if (lost_property_->GetState() == LostProperty::kPending) {
+    auto* device_lost_info = MakeGarbageCollected<GPUDeviceLostInfo>(message);
+    lost_property_->Resolve(device_lost_info);
+  }
 }
 
 GPUAdapter* GPUDevice::adapter() const {
@@ -212,6 +221,11 @@ GPURenderBundleEncoder* GPUDevice::createRenderBundleEncoder(
   return GPURenderBundleEncoder::Create(this, descriptor);
 }
 
+GPUQuerySet* GPUDevice::createQuerySet(
+    const GPUQuerySetDescriptor* descriptor) {
+  return GPUQuerySet::Create(this, descriptor);
+}
+
 void GPUDevice::pushErrorScope(const WTF::String& filter) {
   GetProcs().devicePushErrorScope(GetHandle(),
                                   AsDawnEnum<WGPUErrorFilter>(filter));
@@ -234,11 +248,9 @@ ScriptPromise GPUDevice::popErrorScope(ScriptState* script_state) {
     return promise;
   }
 
-  // WebGPU guarantees callbacks complete in finite time. Flush now so that
-  // commands reach the GPU process. TODO(enga): This should happen at the end
-  // of the task.
-  GetInterface()->FlushCommands();
-
+  // WebGPU guarantees that promises are resolved in finite time so we
+  // need to ensure commands are flushed.
+  EnsureFlush();
   return promise;
 }
 

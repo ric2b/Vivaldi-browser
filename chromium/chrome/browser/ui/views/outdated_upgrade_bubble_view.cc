@@ -150,8 +150,8 @@ void OutdatedUpgradeBubbleView::ShowBubble(views::View* anchor_view,
               l10n_util::GetStringUTF16(auto_update_enabled
                                             ? IDS_REINSTALL_APP
                                             : IDS_REENABLE_UPDATES))
-          .AddBodyText(l10n_util::GetStringUTF16(IDS_UPGRADE_BUBBLE_TEXT),
-                       ui::DialogModelBodyText::Params().SetIsSecondary())
+          .AddBodyText(
+              ui::DialogModelLabel(IDS_UPGRADE_BUBBLE_TEXT).set_is_secondary())
           .SetWindowClosingCallback(
               base::BindOnce(&OutdatedUpgradeBubbleDelegate::OnWindowClosing,
                              base::Unretained(g_upgrade_bubble)))
@@ -160,11 +160,9 @@ void OutdatedUpgradeBubbleView::ShowBubble(views::View* anchor_view,
               base::UserMetricsAction("OutdatedUpgradeBubble.Later")))
           .Build();
 
-  auto bubble =
-      std::make_unique<views::BubbleDialogModelHost>(std::move(dialog_model));
-  bubble->SetAnchorView(anchor_view);
-  bubble->SetArrow(views::BubbleBorder::TOP_RIGHT);
-  views::BubbleDialogDelegateView::CreateBubble(bubble.release())->Show();
+  auto bubble = std::make_unique<views::BubbleDialogModelHost>(
+      std::move(dialog_model), anchor_view, views::BubbleBorder::TOP_RIGHT);
+  views::BubbleDialogDelegateView::CreateBubble(std::move(bubble))->Show();
 
   chrome::RecordDialogCreation(chrome::DialogIdentifier::OUTDATED_UPGRADE);
 

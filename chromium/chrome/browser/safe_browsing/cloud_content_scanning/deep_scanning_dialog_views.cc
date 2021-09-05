@@ -27,6 +27,7 @@
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/text_constants.h"
 #include "ui/native_theme/native_theme.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/background.h"
 #include "ui/views/border.h"
 #include "ui/views/bubble/bubble_frame_view.h"
@@ -187,6 +188,8 @@ DeepScanningDialogViews::DeepScanningDialogViews(
       web_contents_(web_contents),
       access_point_(std::move(access_point)),
       files_count_(files_count) {
+  SetOwnedByWidget(true);
+
   if (observer_for_testing)
     observer_for_testing->ConstructorCalled(this, base::TimeTicks::Now());
 
@@ -276,10 +279,6 @@ const views::Widget* DeepScanningDialogViews::GetWidget() const {
   return contents_view_->GetWidget();
 }
 
-void DeepScanningDialogViews::DeleteDelegate() {
-  delete this;
-}
-
 ui::ModalType DeepScanningDialogViews::GetModalType() const {
   return ui::MODAL_TYPE_CHILD;
 }
@@ -353,8 +352,11 @@ void DeepScanningDialogViews::UpdateDialog() {
   // Update the buttons.
   SetupButtons();
 
-  // Update the message's text.
-  message_->SetText(GetDialogMessage());
+  // Update the message's text, and send an alert for screen readers since the
+  // text changed.
+  base::string16 new_message = GetDialogMessage();
+  message_->SetText(new_message);
+  message_->GetViewAccessibility().AnnounceText(std::move(new_message));
 
   // Resize the dialog's height. This is needed since the text might take more
   // lines after changing.

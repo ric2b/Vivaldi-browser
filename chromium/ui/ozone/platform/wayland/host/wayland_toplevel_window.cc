@@ -4,9 +4,11 @@
 
 #include "ui/ozone/platform/wayland/host/wayland_toplevel_window.h"
 
+#include <aura-shell-client-protocol.h>
+
 #include "base/run_loop.h"
 #include "base/unguessable_token.h"
-#include "build/lacros_buildflags.h"
+#include "build/chromeos_buildflags.h"
 #include "ui/base/dragdrop/drag_drop_types.h"
 #include "ui/base/dragdrop/os_exchange_data.h"
 #include "ui/base/hit_test.h"
@@ -21,6 +23,12 @@
 #include "ui/ozone/platform/wayland/host/wayland_window_drag_controller.h"
 #include "ui/platform_window/extensions/wayland_extension.h"
 #include "ui/platform_window/wm/wm_drop_handler.h"
+
+#if BUILDFLAG(IS_LACROS)
+// TODO(jamescook): The nogncheck is to work around false-positive failures on
+// the code search bot. Remove after https://crrev.com/c/2432137 lands.
+#include "chromeos/crosapi/cpp/crosapi_constants.h"  // nogncheck
+#endif
 
 namespace ui {
 
@@ -336,13 +344,19 @@ bool WaylandToplevelWindow::OnInitialize(
     PlatformWindowInitProperties properties) {
 #if BUILDFLAG(IS_LACROS)
   auto token = base::UnguessableToken::Create();
-  window_unique_id_ = "org.chromium.lacros." + token.ToString();
+  window_unique_id_ =
+      std::string(crosapi::kLacrosAppIdPrefix) + token.ToString();
 #else
   wm_class_class_ = properties.wm_class_class;
 #endif
   SetWaylandExtension(this, static_cast<WaylandExtension*>(this));
   SetWmMoveLoopHandler(this, static_cast<WmMoveLoopHandler*>(this));
+  InitializeAuraShell();
   return true;
+}
+
+bool WaylandToplevelWindow::IsActive() const {
+  return is_active_;
 }
 
 bool WaylandToplevelWindow::RunMoveLoop(const gfx::Vector2d& drag_offset) {
@@ -413,6 +427,16 @@ void WaylandToplevelWindow::SetOrResetRestoredBounds() {
     SetRestoredBoundsInPixels({});
   } else if (GetRestoredBoundsInPixels().IsEmpty()) {
     SetRestoredBoundsInPixels(GetBounds());
+  }
+}
+
+void WaylandToplevelWindow::InitializeAuraShell() {
+  if (connection()->aura_shell()) {
+    DCHECK(!aura_surface_);
+    aura_surface_.reset(zaura_shell_get_aura_surface(
+        connection()->aura_shell(), root_surface()->surface()));
+    zaura_surface_set_fullscreen_mode(aura_surface_.get(),
+                                      ZAURA_SURFACE_FULLSCREEN_MODE_IMMERSIVE);
   }
 }
 

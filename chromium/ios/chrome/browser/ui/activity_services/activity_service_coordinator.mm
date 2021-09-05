@@ -15,12 +15,14 @@
 #import "ios/chrome/browser/ui/activity_services/canonical_url_retriever.h"
 #import "ios/chrome/browser/ui/activity_services/data/chrome_activity_image_source.h"
 #import "ios/chrome/browser/ui/activity_services/data/chrome_activity_item_source.h"
+#import "ios/chrome/browser/ui/activity_services/data/chrome_activity_text_source.h"
 #import "ios/chrome/browser/ui/activity_services/data/chrome_activity_url_source.h"
 #import "ios/chrome/browser/ui/activity_services/data/share_image_data.h"
 #import "ios/chrome/browser/ui/activity_services/data/share_to_data.h"
 #import "ios/chrome/browser/ui/activity_services/data/share_to_data_builder.h"
 #import "ios/chrome/browser/ui/activity_services/requirements/activity_service_positioner.h"
 #import "ios/chrome/browser/ui/activity_services/requirements/activity_service_presentation.h"
+#import "ios/chrome/browser/ui/commands/bookmarks_commands.h"
 #import "ios/chrome/browser/ui/commands/command_dispatcher.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
@@ -78,6 +80,7 @@ const char kSharePageLatencyHistogram[] = "IOS.SharePageLatency";
       ios::BookmarkModelFactory::GetForBrowserState(browserState);
   self.mediator =
       [[ActivityServiceMediator alloc] initWithHandler:self.handler
+                                      bookmarksHandler:self.scopedHandler
                                    qrGenerationHandler:self.scopedHandler
                                            prefService:browserState->GetPrefs()
                                          bookmarkModel:bookmarkModel];
@@ -118,9 +121,10 @@ const char kSharePageLatencyHistogram[] = "IOS.SharePageLatency";
 
   // Set-up popover positioning (for iPad).
   DCHECK(self.positionProvider);
-  UIView* inView = [self.positionProvider shareButtonView];
-  self.viewController.popoverPresentationController.sourceView = inView;
-  self.viewController.popoverPresentationController.sourceRect = inView.bounds;
+  self.viewController.popoverPresentationController.sourceView =
+      self.positionProvider.sourceView;
+  self.viewController.popoverPresentationController.sourceRect =
+      self.positionProvider.sourceRect;
 
   // Set completion callback.
   __weak __typeof(self) weakSelf = self;
@@ -200,12 +204,13 @@ const char kSharePageLatencyHistogram[] = "IOS.SharePageLatency";
 #pragma mark - Private Methods: Share URL
 
 // Configures activities and items for a URL and its title, and shows
-// an activity view.
+// an activity view. Also adds another activity item for additional text, if
+// there is any.
 - (void)shareURL {
-  ShareToData* data =
-      activity_services::ShareToDataForURL(self.params.URL, self.params.title);
+  ShareToData* data = activity_services::ShareToDataForURL(
+      self.params.URL, self.params.title, self.params.additionalText);
 
-  NSArray<ChromeActivityURLSource*>* items =
+  NSArray<id<ChromeActivityItemSource>>* items =
       [self.mediator activityItemsForData:data];
   NSArray* activities = [self.mediator applicationActivitiesForData:data];
 

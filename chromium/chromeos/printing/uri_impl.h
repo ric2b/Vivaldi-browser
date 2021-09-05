@@ -5,7 +5,6 @@
 #ifndef CHROMEOS_PRINTING_URI_IMPL_H_
 #define CHROMEOS_PRINTING_URI_IMPL_H_
 
-#include <map>
 #include <string>
 #include <utility>
 #include <vector>
@@ -22,9 +21,6 @@ using Iter = std::string::const_iterator;
 
 class Uri::Pim {
  public:
-  // The map with pairs scheme -> default_port.
-  static const std::map<std::string, int> kDefaultPorts;
-
   Pim();
   Pim(const Pim&);
   ~Pim();

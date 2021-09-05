@@ -10,10 +10,10 @@
 #include "base/bind.h"
 #include "base/no_destructor.h"
 #include "base/numerics/safe_conversions.h"
+#include "base/optional.h"
 #include "pdf/pdfium/pdfium_api_string_buffer_adapter.h"
 #include "pdf/pdfium/pdfium_mem_buffer_file_write.h"
 #include "pdf/pdfium/pdfium_print.h"
-#include "pdf/ppapi_migration/geometry_conversions.h"
 #include "printing/nup_parameters.h"
 #include "printing/units.h"
 #include "third_party/pdfium/public/cpp/fpdf_scopers.h"
@@ -23,6 +23,7 @@
 #include "third_party/pdfium/public/fpdfview.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/gfx/geometry/size_f.h"
 #include "ui/gfx/geometry/vector2d.h"
 
 using printing::ConvertUnitDouble;
@@ -34,13 +35,15 @@ namespace {
 
 int CalculatePosition(FPDF_PAGE page,
                       const PDFiumEngineExports::RenderingSettings& settings,
-                      pp::Rect* dest) {
+                      gfx::Rect* dest) {
   // settings.bounds is in terms of the max DPI. Convert page sizes to match.
-  int dpi = std::max(settings.dpi_x, settings.dpi_y);
+  const int dpi_x = settings.dpi.width();
+  const int dpi_y = settings.dpi.height();
+  const int dpi = std::max(dpi_x, dpi_y);
   int page_width = static_cast<int>(
-      ConvertUnitDouble(FPDF_GetPageWidth(page), kPointsPerInch, dpi));
+      ConvertUnitDouble(FPDF_GetPageWidthF(page), kPointsPerInch, dpi));
   int page_height = static_cast<int>(
-      ConvertUnitDouble(FPDF_GetPageHeight(page), kPointsPerInch, dpi));
+      ConvertUnitDouble(FPDF_GetPageHeightF(page), kPointsPerInch, dpi));
 
   // Start by assuming that we will draw exactly to the bounds rect
   // specified.
@@ -88,16 +91,16 @@ int CalculatePosition(FPDF_PAGE page,
   }
 
   // Scale the bounds to device units if DPI is rectangular.
-  if (settings.dpi_x != settings.dpi_y) {
-    dest->set_width(dest->width() * settings.dpi_x / dpi);
-    dest->set_height(dest->height() * settings.dpi_y / dpi);
+  if (dpi_x != dpi_y) {
+    dest->set_width(dest->width() * dpi_x / dpi);
+    dest->set_height(dest->height() * dpi_y / dpi);
   }
 
   if (settings.center_in_bounds) {
     gfx::Vector2d offset(
-        (settings.bounds.width() * settings.dpi_x / dpi - dest->width()) / 2,
-        (settings.bounds.height() * settings.dpi_y / dpi - dest->height()) / 2);
-    dest->Offset(PPPointFromVector(offset));
+        (settings.bounds.width() * dpi_x / dpi - dest->width()) / 2,
+        (settings.bounds.height() * dpi_y / dpi - dest->height()) / 2);
+    dest->Offset(offset);
   }
   return rotate;
 }
@@ -132,6 +135,16 @@ bool IsValidPrintableArea(const gfx::Size& page_size,
          printable_area.y() >= 0 &&
          printable_area.right() <= page_size.width() &&
          printable_area.bottom() <= page_size.height();
+}
+
+int GetRenderFlagsFromSettings(
+    const PDFiumEngineExports::RenderingSettings& settings) {
+  int flags = FPDF_ANNOT;
+  if (!settings.use_color)
+    flags |= FPDF_GRAYSCALE;
+  if (settings.render_for_printing)
+    flags |= FPDF_PRINTING;
+  return flags;
 }
 
 base::Value RecursiveGetStructTree(FPDF_STRUCTELEMENT struct_elem) {
@@ -182,24 +195,24 @@ base::Value RecursiveGetStructTree(FPDF_STRUCTELEMENT struct_elem) {
 
 }  // namespace
 
-PDFEngineExports::RenderingSettings::RenderingSettings(int dpi_x,
-                                                       int dpi_y,
-                                                       const pp::Rect& bounds,
+PDFEngineExports::RenderingSettings::RenderingSettings(const gfx::Size& dpi,
+                                                       const gfx::Rect& bounds,
                                                        bool fit_to_bounds,
                                                        bool stretch_to_bounds,
                                                        bool keep_aspect_ratio,
                                                        bool center_in_bounds,
                                                        bool autorotate,
-                                                       bool use_color)
-    : dpi_x(dpi_x),
-      dpi_y(dpi_y),
+                                                       bool use_color,
+                                                       bool render_for_printing)
+    : dpi(dpi),
       bounds(bounds),
       fit_to_bounds(fit_to_bounds),
       stretch_to_bounds(stretch_to_bounds),
       keep_aspect_ratio(keep_aspect_ratio),
       center_in_bounds(center_in_bounds),
       autorotate(autorotate),
-      use_color(use_color) {}
+      use_color(use_color),
+      render_for_printing(render_for_printing) {}
 
 PDFEngineExports::RenderingSettings::RenderingSettings(
     const RenderingSettings& that) = default;
@@ -238,12 +251,12 @@ bool PDFiumEngineExports::RenderPDFPageToDC(
 
   RenderingSettings new_settings = settings;
   // calculate the page size
-  if (new_settings.dpi_x == -1)
-    new_settings.dpi_x = GetDeviceCaps(dc, LOGPIXELSX);
-  if (new_settings.dpi_y == -1)
-    new_settings.dpi_y = GetDeviceCaps(dc, LOGPIXELSY);
+  if (new_settings.dpi.width() == -1)
+    new_settings.dpi.set_width(GetDeviceCaps(dc, LOGPIXELSX));
+  if (new_settings.dpi.height() == -1)
+    new_settings.dpi.set_height(GetDeviceCaps(dc, LOGPIXELSY));
 
-  pp::Rect dest;
+  gfx::Rect dest;
   int rotate = CalculatePosition(page.get(), new_settings, &dest);
 
   int save_state = SaveDC(dc);
@@ -254,9 +267,7 @@ bool PDFiumEngineExports::RenderPDFPageToDC(
                     settings.bounds.x() + settings.bounds.width(),
                     settings.bounds.y() + settings.bounds.height());
 
-  int flags = FPDF_ANNOT | FPDF_PRINTING;
-  if (!settings.use_color)
-    flags |= FPDF_GRAYSCALE;
+  int flags = GetRenderFlagsFromSettings(settings);
 
   // A "temporary" hack. Some PDFs seems to render very slowly if
   // FPDF_RenderPage() is directly used on a printer DC. I suspect it is
@@ -322,7 +333,7 @@ bool PDFiumEngineExports::RenderPDFPageToBitmap(
   if (!page)
     return false;
 
-  pp::Rect dest;
+  gfx::Rect dest;
   int rotate = CalculatePosition(page.get(), settings, &dest);
 
   ScopedFPDFBitmap bitmap(FPDFBitmap_CreateEx(
@@ -332,14 +343,11 @@ bool PDFiumEngineExports::RenderPDFPageToBitmap(
   FPDFBitmap_FillRect(bitmap.get(), 0, 0, settings.bounds.width(),
                       settings.bounds.height(), 0xFFFFFFFF);
   // Shift top-left corner of bounds to (0, 0) if it's not there.
-  dest.set_point(dest.point() - settings.bounds.point());
-
-  int flags = FPDF_ANNOT | FPDF_PRINTING;
-  if (!settings.use_color)
-    flags |= FPDF_GRAYSCALE;
+  dest.set_origin(dest.origin() - settings.bounds.OffsetFromOrigin());
 
   FPDF_RenderPageBitmap(bitmap.get(), page.get(), dest.x(), dest.y(),
-                        dest.width(), dest.height(), rotate, flags);
+                        dest.width(), dest.height(), rotate,
+                        GetRenderFlagsFromSettings(settings));
   return true;
 }
 
@@ -377,7 +385,7 @@ std::vector<uint8_t> PDFiumEngineExports::ConvertPdfDocumentToNupPdf(
 
 bool PDFiumEngineExports::GetPDFDocInfo(base::span<const uint8_t> pdf_buffer,
                                         int* page_count,
-                                        double* max_page_width) {
+                                        float* max_page_width) {
   ScopedFPDFDocument doc = LoadPdfData(pdf_buffer);
   if (!doc)
     return false;
@@ -392,12 +400,10 @@ bool PDFiumEngineExports::GetPDFDocInfo(base::span<const uint8_t> pdf_buffer,
   if (max_page_width) {
     *max_page_width = 0;
     for (int page_number = 0; page_number < page_count_local; page_number++) {
-      double page_width = 0;
-      double page_height = 0;
-      FPDF_GetPageSizeByIndex(doc.get(), page_number, &page_width,
-                              &page_height);
-      if (page_width > *max_page_width) {
-        *max_page_width = page_width;
+      FS_SIZEF page_size;
+      if (FPDF_GetPageSizeByIndexF(doc.get(), page_number, &page_size) &&
+          page_size.width > *max_page_width) {
+        *max_page_width = page_size.width;
       }
     }
   }
@@ -441,15 +447,18 @@ base::Value PDFiumEngineExports::GetPDFStructTreeForPage(
   return RecursiveGetStructTree(struct_root_elem);
 }
 
-bool PDFiumEngineExports::GetPDFPageSizeByIndex(
+base::Optional<gfx::SizeF> PDFiumEngineExports::GetPDFPageSizeByIndex(
     base::span<const uint8_t> pdf_buffer,
-    int page_number,
-    double* width,
-    double* height) {
+    int page_number) {
   ScopedFPDFDocument doc = LoadPdfData(pdf_buffer);
   if (!doc)
-    return false;
-  return FPDF_GetPageSizeByIndex(doc.get(), page_number, width, height) != 0;
+    return base::nullopt;
+
+  FS_SIZEF size;
+  if (!FPDF_GetPageSizeByIndexF(doc.get(), page_number, &size))
+    return base::nullopt;
+
+  return gfx::SizeF(size.width, size.height);
 }
 
 }  // namespace chrome_pdf

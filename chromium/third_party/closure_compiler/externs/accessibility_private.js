@@ -187,6 +187,14 @@ chrome.accessibilityPrivate.FocusType = {
 chrome.accessibilityPrivate.FocusRingInfo;
 
 /**
+ * @enum {string}
+ */
+chrome.accessibilityPrivate.AcceleratorAction = {
+  FOCUS_PREVIOUS_PANE: 'focusPreviousPane',
+  FOCUS_NEXT_PANE: 'focusNextPane',
+};
+
+/**
  * Called to translate localeCodeToTranslate into human-readable string in the
  * locale specified by displayLocaleCode
  * @param {string} localeCodeToTranslate
@@ -295,16 +303,24 @@ chrome.accessibilityPrivate.sendSyntheticMouseEvent = function(mouseEvent) {};
  * states, between selecting with the mouse, speaking, and inactive.
  * @param {!chrome.accessibilityPrivate.SelectToSpeakState} state
  */
-chrome.accessibilityPrivate.onSelectToSpeakStateChanged = function(state) {};
+chrome.accessibilityPrivate.setSelectToSpeakState = function(state) {};
 
 /**
  * Called by the Accessibility Common extension when
- * findScrollableBoundsForPoint has found a scrolling container. |rect| will be
+ * onScrollableBoundsForPointRequested has found a scrolling container. |rect| will be
  * the bounds of the nearest scrollable ancestor of the node at the point
- * requested using findScrollableBoundsForPoint.
+ * requested using onScrollableBoundsForPointRequested.
  * @param {!chrome.accessibilityPrivate.ScreenRect} rect
  */
-chrome.accessibilityPrivate.onScrollableBoundsForPointFound = function(rect) {};
+chrome.accessibilityPrivate.handleScrollableBoundsForPointFound = function(rect) {};
+
+/**
+ * Called by the Accessibility Common extension to update the magnifier viewport
+ * (e.g. when focus has changed).
+ * @param {!chrome.accessibilityPrivate.ScreenRect} rect Rect to ensure visible
+ *     in the magnified viewport.
+ */
+chrome.accessibilityPrivate.moveMagnifierToRect = function(rect) {};
 
 /**
  * Toggles dictation between active and inactive states.
@@ -324,6 +340,12 @@ chrome.accessibilityPrivate.setVirtualKeyboardVisible = function(isVisible) {};
  * @param {string} subpage
  */
 chrome.accessibilityPrivate.openSettingsSubpage = function(subpage) {};
+
+/**
+ * Performs an accelerator action.
+ * @param {!chrome.accessibilityPrivate.AcceleratorAction} acceleratorAction
+ */
+chrome.accessibilityPrivate.performAcceleratorAction = function(acceleratorAction) {};
 
 /**
  * Fired whenever ChromeVox should output introduction.
@@ -380,7 +402,7 @@ chrome.accessibilityPrivate.onAnnounceForAccessibility;
  * Clicks.
  * @type {!ChromeEvent}
  */
-chrome.accessibilityPrivate.findScrollableBoundsForPoint;
+chrome.accessibilityPrivate.onScrollableBoundsForPointRequested;
 
 /**
  * Fired when a custom spoken feedback on the active window gets enabled or

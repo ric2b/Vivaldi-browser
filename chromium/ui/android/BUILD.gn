@@ -125,7 +125,6 @@ java_strings_grd("ui_strings_grd") {
 }
 
 android_resources("ui_java_resources") {
-  create_srcjar = false
   sources = [
     "java/res/color/blue_when_enabled.xml",
     "java/res/color/chip_background_color.xml",
@@ -205,22 +204,19 @@ java_group("ui_java") {
 # unused JNI functions.
 android_library("ui_utils_java") {
   sources = [
-    "java/src/org/chromium/ui/ContactsPickerListener.java",
     "java/src/org/chromium/ui/KeyboardVisibilityDelegate.java",
     "java/src/org/chromium/ui/UiUtils.java",
   ]
   deps = [
     "//base:base_java",
-    "//components/payments/mojom:mojom_java",
     "//third_party/android_deps:androidx_annotation_annotation_java",
     "//third_party/android_deps:androidx_appcompat_appcompat_java",
     "//third_party/android_deps:androidx_appcompat_appcompat_resources_java",
     "//third_party/android_deps:androidx_core_core_java",
-    "//third_party/blink/public/mojom:mojom_platform_java",
   ]
 }
 
-android_library("ui_full_java") {
+android_library("ui_no_recycler_view_java") {
   sources = [
     "java/src/org/chromium/ui/AsyncViewProvider.java",
     "java/src/org/chromium/ui/AsyncViewStub.java",
@@ -254,6 +250,7 @@ android_library("ui_full_java") {
     "java/src/org/chromium/ui/base/IntentWindowAndroid.java",
     "java/src/org/chromium/ui/base/LocalizationUtils.java",
     "java/src/org/chromium/ui/base/PermissionCallback.java",
+    "java/src/org/chromium/ui/base/PhotoPicker.java",
     "java/src/org/chromium/ui/base/PhotoPickerDelegate.java",
     "java/src/org/chromium/ui/base/PhotoPickerListener.java",
     "java/src/org/chromium/ui/base/ResourceBundle.java",
@@ -298,11 +295,7 @@ android_library("ui_full_java") {
     "java/src/org/chromium/ui/modelutil/PropertyModel.java",
     "java/src/org/chromium/ui/modelutil/PropertyModelChangeProcessor.java",
     "java/src/org/chromium/ui/modelutil/PropertyObservable.java",
-    "java/src/org/chromium/ui/modelutil/RecyclerViewAdapter.java",
     "java/src/org/chromium/ui/modelutil/SimpleList.java",
-    "java/src/org/chromium/ui/modelutil/SimpleRecyclerViewAdapter.java",
-    "java/src/org/chromium/ui/modelutil/SimpleRecyclerViewMcp.java",
-    "java/src/org/chromium/ui/modelutil/SimpleRecyclerViewMcpBase.java",
     "java/src/org/chromium/ui/resources/HandleViewResources.java",
     "java/src/org/chromium/ui/resources/LayoutResource.java",
     "java/src/org/chromium/ui/resources/Resource.java",
@@ -349,16 +342,39 @@ android_library("ui_full_java") {
     ":ui_utils_java",
     "//base:base_java",
     "//base:jni_java",
-    "//third_party/android_deps:android_support_v7_appcompat_java",
     "//third_party/android_deps:androidx_annotation_annotation_java",
+    "//third_party/android_deps:androidx_appcompat_appcompat_java",
     "//third_party/android_deps:androidx_appcompat_appcompat_resources_java",
     "//third_party/android_deps:androidx_asynclayoutinflater_asynclayoutinflater_java",
-    "//third_party/android_deps:androidx_recyclerview_recyclerview_java",
+    "//third_party/android_deps:androidx_core_core_java",
+    "//third_party/android_deps:androidx_vectordrawable_vectordrawable_animated_java",
     "//ui/base/cursor/mojom:cursor_type_java",
   ]
   annotation_processor_deps = [ "//base/android/jni_generator:jni_processor" ]
   srcjar_deps = [ ":java_enums_srcjar" ]
   resources_package = "org.chromium.ui"
+}
+
+android_library("ui_recycler_view_java") {
+  sources = [
+    "java/src/org/chromium/ui/modelutil/RecyclerViewAdapter.java",
+    "java/src/org/chromium/ui/modelutil/SimpleRecyclerViewAdapter.java",
+    "java/src/org/chromium/ui/modelutil/SimpleRecyclerViewMcp.java",
+    "java/src/org/chromium/ui/modelutil/SimpleRecyclerViewMcpBase.java",
+  ]
+  annotation_processor_deps = [ "//base/android/jni_generator:jni_processor" ]
+  deps = [
+    ":ui_no_recycler_view_java",
+    "//third_party/android_deps:androidx_annotation_annotation_java",
+    "//third_party/android_deps:androidx_recyclerview_recyclerview_java",
+  ]
+}
+
+java_group("ui_full_java") {
+  deps = [
+    ":ui_no_recycler_view_java",
+    ":ui_recycler_view_java",
+  ]
 }
 
 android_library("ui_java_test_support") {
@@ -389,7 +405,6 @@ android_library("ui_java_test_support") {
 
 android_resources("ui_javatest_resources") {
   testonly = true
-  create_srcjar = false
   sources = [
     "junit/res/layout/inflated_view.xml",
     "junit/res/layout/layout_view_builder_test.xml",

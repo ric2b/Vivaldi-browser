@@ -7,11 +7,13 @@
 #include <memory>
 #include <utility>
 
+#include "ash/public/cpp/ash_features.h"
 #include "base/feature_list.h"
 #include "base/strings/stringprintf.h"
 #include "chrome/browser/chromeos/crostini/crostini_features.h"
 #include "chrome/browser/chromeos/file_manager/file_manager_string_util.h"
 #include "chrome/browser/chromeos/login/demo_mode/demo_session.h"
+#include "chrome/browser/chromeos/plugin_vm/plugin_vm_features.h"
 #include "chrome/browser/chromeos/plugin_vm/plugin_vm_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/chrome_features.h"
@@ -41,10 +43,16 @@ ExtensionFunction::ResponseAction FileManagerPrivateGetStringsFunction::Run() {
                    crostini::CrostiniFeatures::Get()->IsEnabled(
                        Profile::FromBrowserContext(browser_context())));
   dict->SetBoolean("PLUGIN_VM_ENABLED",
-                   plugin_vm::IsPluginVmEnabled(
+                   plugin_vm::PluginVmFeatures::Get()->IsEnabled(
                        Profile::FromBrowserContext(browser_context())));
+  dict->SetBoolean(
+      "FILES_CAMERA_FOLDER_ENABLED",
+      base::FeatureList::IsEnabled(chromeos::features::kFilesCameraFolder));
   dict->SetBoolean("FILES_NG_ENABLED",
                    base::FeatureList::IsEnabled(chromeos::features::kFilesNG));
+  dict->SetBoolean("COPY_IMAGE_ENABLED",
+                   base::FeatureList::IsEnabled(
+                       chromeos::features::kEnableFilesAppCopyImage));
   dict->SetBoolean(
       "UNIFIED_MEDIA_VIEW_ENABLED",
       base::FeatureList::IsEnabled(chromeos::features::kUnifiedMediaView));
@@ -62,10 +70,11 @@ ExtensionFunction::ResponseAction FileManagerPrivateGetStringsFunction::Run() {
   dict->SetBoolean(
       "FILTERS_IN_RECENTS_ENABLED",
       base::FeatureList::IsEnabled(chromeos::features::kFiltersInRecents));
-  dict->SetBoolean(
-      "DRIVE_BIDIRECTIONAL_NATIVE_MESSAGING_ENABLED",
-      base::FeatureList::IsEnabled(
-          chromeos::features::kDriveFsBidirectionalNativeMessaging));
+  dict->SetBoolean("HOLDING_SPACE_ENABLED",
+                   ash::features::IsTemporaryHoldingSpaceEnabled());
+  dict->SetBoolean("FILES_SINGLE_PARTITION_FORMAT_ENABLED",
+                   base::FeatureList::IsEnabled(
+                       chromeos::features::kFilesSinglePartitionFormat));
 
   dict->SetString("UI_LOCALE", extension_l10n_util::CurrentLocaleOrDefault());
 

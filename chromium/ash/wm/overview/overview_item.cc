@@ -8,6 +8,7 @@
 #include <utility>
 #include <vector>
 
+#include "ash/accessibility/accessibility_controller_impl.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/public/cpp/window_properties.h"
 #include "ash/public/cpp/window_state_type.h"
@@ -35,6 +36,7 @@
 #include "ash/wm/window_preview_view.h"
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_transient_descendant_iterator.h"
+#include "ash/wm/window_util.h"
 #include "ash/wm/wm_event.h"
 #include "base/auto_reset.h"
 #include "base/bind.h"
@@ -1049,8 +1051,21 @@ void OverviewItem::OnWindowDestroying(aura::Window* window) {
     overview_session_->window_drag_controller()->ResetGesture();
   }
 
-  overview_grid_->RemoveItem(this, /*item_destroying=*/true,
-                             /*reposition=*/!animating_to_close_);
+  // Remove the item from the session which will remove it from the grid in
+  // addition to updating accessibility states. If the session is not available
+  // then remove it from the grid directly.
+  if (overview_session_) {
+    overview_session_->RemoveItem(this, /*item_destroying=*/true,
+                                  /*reposition=*/!animating_to_close_);
+  } else {
+    overview_grid()->RemoveItem(this, /*item_destroying=*/true,
+                                /*reposition=*/!animating_to_close_);
+  }
+
+  Shell::Get()
+      ->accessibility_controller()
+      ->TriggerAccessibilityAlertWithMessage(l10n_util::GetStringFUTF8(
+          IDS_ASH_OVERVIEW_WINDOW_CLOSING_A11Y_ALERT, window->GetTitle()));
 }
 
 void OverviewItem::OnPreWindowStateTypeChange(WindowState* window_state,
@@ -1167,7 +1182,8 @@ void OverviewItem::PerformItemSpawnedAnimation(
   transform_window_.SetOpacity(kInitialScaler);
 
   ScopedOverviewTransformWindow::ScopedAnimationSettings animation_settings;
-  for (auto* window_iter : GetVisibleTransientTreeIterator(window)) {
+  for (auto* window_iter :
+       window_util::GetVisibleTransientTreeIterator(window)) {
     auto settings = std::make_unique<ScopedOverviewAnimationSettings>(
         OVERVIEW_ANIMATION_SPAWN_ITEM_IN_OVERVIEW, window_iter);
     settings->DeferPaint();
@@ -1285,8 +1301,8 @@ void OverviewItem::CreateItemWidget() {
   item_widget_->GetLayer()->Add(shadow_->layer());
 
   overview_item_view_ =
-      new OverviewItemView(this, GetWindow(), transform_window_.IsMinimized());
-  item_widget_->SetContentsView(overview_item_view_);
+      item_widget_->SetContentsView(std::make_unique<OverviewItemView>(
+          this, GetWindow(), transform_window_.IsMinimized()));
   item_widget_->Show();
   item_widget_->SetOpacity(0.f);
   item_widget_->GetLayer()->SetMasksToBounds(false);

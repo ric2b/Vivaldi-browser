@@ -155,7 +155,7 @@ Resource* CachedResource(LocalFrame* frame,
   }
   if (!cached_resource) {
     cached_resource = GetMemoryCache()->ResourceForURL(
-        url, document->Fetcher()->GetCacheIdentifier());
+        url, document->Fetcher()->GetCacheIdentifier(url));
   }
   if (!cached_resource)
     cached_resource = loader->ResourceForURL(url);
@@ -857,13 +857,14 @@ scoped_refptr<DOMWrapperWorld> InspectorPageAgent::EnsureDOMWrapperWorld(
   auto world_it = frame_worlds.find(world_name);
   if (world_it != frame_worlds.end())
     return world_it->value;
+  LocalDOMWindow* window = frame->DomWindow();
   scoped_refptr<DOMWrapperWorld> world =
-      frame->GetScriptController().CreateNewInspectorIsolatedWorld(world_name);
+      window->GetScriptController().CreateNewInspectorIsolatedWorld(world_name);
   if (!world)
     return nullptr;
   frame_worlds.Set(world_name, world);
   scoped_refptr<SecurityOrigin> security_origin =
-      frame->GetSecurityContext()->GetSecurityOrigin()->IsolatedCopy();
+      window->GetSecurityOrigin()->IsolatedCopy();
   if (grant_universal_access)
     security_origin->GrantUniversalAccess();
   DOMWrapperWorld::SetIsolatedWorldSecurityOrigin(world->GetWorldId(),
@@ -1051,13 +1052,11 @@ void InspectorPageAgent::PageLayoutInvalidated(bool resized) {
     client_->PageLayoutInvalidated(resized);
 }
 
-void InspectorPageAgent::WindowOpen(Document* document,
-                                    const String& url,
+void InspectorPageAgent::WindowOpen(const KURL& url,
                                     const AtomicString& window_name,
                                     const WebWindowFeatures& window_features,
                                     bool user_gesture) {
-  KURL completed_url = url.IsEmpty() ? BlankURL() : document->CompleteURL(url);
-  GetFrontend()->windowOpen(completed_url.GetString(), window_name,
+  GetFrontend()->windowOpen(url.IsEmpty() ? BlankURL() : url, window_name,
                             GetEnabledWindowFeatures(window_features),
                             user_gesture);
   GetFrontend()->flush();
@@ -1079,7 +1078,7 @@ protocol::Page::SecureContextType CreateProtocolSecureContextType(
 }
 protocol::Page::CrossOriginIsolatedContextType
 CreateProtocolCrossOriginIsolatedContextType(ExecutionContext* context) {
-  if (context->IsCrossOriginIsolated()) {
+  if (context->CrossOriginIsolatedCapability()) {
     return protocol::Page::CrossOriginIsolatedContextTypeEnum::Isolated;
   } else if (context->IsFeatureEnabled(
                  mojom::blink::FeaturePolicyFeature::kCrossOriginIsolated)) {
@@ -1309,7 +1308,7 @@ protocol::Response InspectorPageAgent::createIsolatedWorld(
     return Response::ServerError("Could not create isolated world");
 
   LocalWindowProxy* isolated_world_window_proxy =
-      frame->GetScriptController().WindowProxy(*world);
+      frame->DomWindow()->GetScriptController().WindowProxy(*world);
   v8::HandleScope handle_scope(V8PerIsolateData::MainThreadIsolate());
   *execution_context_id = v8_inspector::V8ContextInfo::executionContextId(
       isolated_world_window_proxy->ContextIfInitialized());

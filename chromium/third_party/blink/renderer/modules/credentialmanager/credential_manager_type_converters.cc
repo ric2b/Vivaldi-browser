@@ -25,6 +25,7 @@
 #include "third_party/blink/renderer/modules/credentialmanager/password_credential.h"
 #include "third_party/blink/renderer/modules/credentialmanager/public_key_credential.h"
 #include "third_party/blink/renderer/platform/bindings/enumeration_base.h"
+#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 
 namespace mojo {
 
@@ -40,19 +41,20 @@ using blink::mojom::blink::CableRegistration;
 using blink::mojom::blink::CableRegistrationPtr;
 using blink::mojom::blink::CredentialInfo;
 using blink::mojom::blink::CredentialInfoPtr;
-using blink::mojom::blink::CredentialType;
 using blink::mojom::blink::CredentialManagerError;
+using blink::mojom::blink::CredentialType;
 using blink::mojom::blink::PublicKeyCredentialCreationOptionsPtr;
 using blink::mojom::blink::PublicKeyCredentialDescriptor;
 using blink::mojom::blink::PublicKeyCredentialDescriptorPtr;
-using blink::mojom::blink::PublicKeyCredentialRpEntity;
-using blink::mojom::blink::PublicKeyCredentialRpEntityPtr;
-using blink::mojom::blink::PublicKeyCredentialUserEntity;
-using blink::mojom::blink::PublicKeyCredentialUserEntityPtr;
 using blink::mojom::blink::PublicKeyCredentialParameters;
 using blink::mojom::blink::PublicKeyCredentialParametersPtr;
 using blink::mojom::blink::PublicKeyCredentialRequestOptionsPtr;
+using blink::mojom::blink::PublicKeyCredentialRpEntity;
+using blink::mojom::blink::PublicKeyCredentialRpEntityPtr;
 using blink::mojom::blink::PublicKeyCredentialType;
+using blink::mojom::blink::PublicKeyCredentialUserEntity;
+using blink::mojom::blink::PublicKeyCredentialUserEntityPtr;
+using blink::mojom::blink::ResidentKeyRequirement;
 using blink::mojom::blink::UserVerificationRequirement;
 
 namespace {
@@ -145,8 +147,7 @@ TypeConverter<CredentialManagerError, AuthenticatorStatus>::Convert(
       return CredentialManagerError::ANDROID_ALGORITHM_UNSUPPORTED;
     case blink::mojom::blink::AuthenticatorStatus::EMPTY_ALLOW_CREDENTIALS:
       return CredentialManagerError::ANDROID_EMPTY_ALLOW_CREDENTIALS;
-    case blink::mojom::blink::AuthenticatorStatus::
-        ANDROID_NOT_SUPPORTED_ERROR:
+    case blink::mojom::blink::AuthenticatorStatus::ANDROID_NOT_SUPPORTED_ERROR:
       return CredentialManagerError::ANDROID_NOT_SUPPORTED_ERROR;
     case blink::mojom::blink::AuthenticatorStatus::
         USER_VERIFICATION_UNSUPPORTED:
@@ -249,6 +250,23 @@ String TypeConverter<String, AuthenticatorTransport>::Convert(
 }
 
 // static
+base::Optional<blink::mojom::blink::ResidentKeyRequirement>
+TypeConverter<base::Optional<blink::mojom::blink::ResidentKeyRequirement>,
+              String>::Convert(const String& requirement) {
+  if (requirement == "discouraged")
+    return ResidentKeyRequirement::DISCOURAGED;
+  if (requirement == "preferred")
+    return ResidentKeyRequirement::PREFERRED;
+  if (requirement == "required")
+    return ResidentKeyRequirement::REQUIRED;
+
+  // AuthenticatorSelection.resident_key is defined as DOMString expressing a
+  // ResidentKeyRequirement and unknown values must be treated as if the
+  // property were unset.
+  return base::nullopt;
+}
+
+// static
 UserVerificationRequirement
 TypeConverter<UserVerificationRequirement, String>::Convert(
     const String& requirement) {
@@ -304,7 +322,18 @@ TypeConverter<AuthenticatorSelectionCriteriaPtr,
     attachment = criteria.authenticatorAttachment();
   mojo_criteria->authenticator_attachment =
       ConvertTo<AuthenticatorAttachment>(attachment);
-  mojo_criteria->require_resident_key = criteria.requireResidentKey();
+  base::Optional<ResidentKeyRequirement> resident_key;
+  if (criteria.hasResidentKey()) {
+    resident_key = ConvertTo<base::Optional<ResidentKeyRequirement>>(
+        criteria.residentKey());
+  }
+  if (resident_key) {
+    mojo_criteria->resident_key = *resident_key;
+  } else {
+    mojo_criteria->resident_key = criteria.requireResidentKey()
+                                      ? ResidentKeyRequirement::REQUIRED
+                                      : ResidentKeyRequirement::DISCOURAGED;
+  }
   mojo_criteria->user_verification = UserVerificationRequirement::PREFERRED;
   if (criteria.hasUserVerification()) {
     mojo_criteria->user_verification = ConvertTo<UserVerificationRequirement>(
@@ -513,6 +542,11 @@ TypeConverter<PublicKeyCredentialCreationOptionsPtr,
     if (extensions->hasEnforceCredentialProtectionPolicy() &&
         extensions->enforceCredentialProtectionPolicy()) {
       mojo_options->enforce_protection_policy = true;
+    }
+    if (extensions->credProps()) {
+      DCHECK(blink::RuntimeEnabledFeatures::
+                 WebAuthenticationResidentKeyRequirementEnabled());
+      mojo_options->cred_props = true;
     }
   }
 

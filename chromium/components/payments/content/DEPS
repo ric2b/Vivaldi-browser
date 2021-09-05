@@ -4,6 +4,7 @@ include_rules = [
   "+components/autofill",
   "+components/keyed_service/content",
   "+components/keyed_service/core",
+  "+components/page_info",
   "+components/prefs",
   "+components/strings",
   "+components/ukm/content",

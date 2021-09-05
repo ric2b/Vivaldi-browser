@@ -7,6 +7,7 @@
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/strings/sys_string_conversions.h"
+#import "ios/chrome/app/application_delegate/app_state.h"
 #include "ios/chrome/browser/application_context.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/crash_report/crash_report_helper.h"
@@ -16,7 +17,6 @@
 #import "ios/chrome/browser/main/browser_list_factory.h"
 #import "ios/chrome/browser/sessions/session_restoration_browser_agent.h"
 #import "ios/chrome/browser/snapshots/snapshot_browser_agent.h"
-#import "ios/chrome/browser/snapshots/snapshot_cache.h"
 #import "ios/chrome/browser/tabs/tab_model.h"
 #import "ios/chrome/browser/ui/browser_view/browser_coordinator.h"
 #import "ios/chrome/browser/ui/browser_view/browser_view_controller.h"
@@ -165,14 +165,24 @@
 
   [self dispatchToEndpointsForBrowser:_mainBrowser.get()];
 
-  SnapshotCache* snapshotCache =
-      SnapshotBrowserAgent::FromBrowser(_mainBrowser.get())->GetSnapshotCache();
-  [snapshotCache setUniqueIdentifier:self.sessionID];
+  std::string sessionID = base::SysNSStringToUTF8(self.sessionID);
+  SnapshotBrowserAgent::FromBrowser(_mainBrowser.get())
+      ->SetSessionID(sessionID);
 
-  SessionRestorationBrowserAgent::FromBrowser(_mainBrowser.get())
-      ->SetSessionID(base::SysNSStringToUTF8(self.sessionID));
-  SessionRestorationBrowserAgent::FromBrowser(_mainBrowser.get())
-      ->RestoreSession();
+  // If the OS doesn't support multiple scenes, use the previous run scene ID
+  // for the session restoration.
+  NSString* restoreSessionID = self.sessionID;
+  if (_sceneState.appState.previousSingleWindowSessionID) {
+    restoreSessionID = _sceneState.appState.previousSingleWindowSessionID;
+  }
+  SessionRestorationBrowserAgent* restorationAgent =
+      SessionRestorationBrowserAgent::FromBrowser(_mainBrowser.get());
+  restorationAgent->SetSessionID(base::SysNSStringToUTF8(restoreSessionID));
+  restorationAgent->RestoreSession();
+  restorationAgent->SetSessionID(sessionID);
+  if (base::SysNSStringToUTF8(restoreSessionID) != sessionID) {
+    restorationAgent->SaveSession(true);
+  }
   breakpad::MonitorTabStateForWebStateList(_mainBrowser->GetWebStateList());
   // Follow loaded URLs in the main tab model to send those in case of
   // crashes.
@@ -392,16 +402,14 @@
       BrowserListFactory::GetForBrowserState(browser->GetBrowserState());
   browserList->AddIncognitoBrowser(browser.get());
   [self dispatchToEndpointsForBrowser:browser.get()];
+  std::string sessionID = base::SysNSStringToUTF8(self.sessionID);
+  SnapshotBrowserAgent::FromBrowser(browser.get())->SetSessionID(sessionID);
   SessionRestorationBrowserAgent::FromBrowser(browser.get())
-      ->SetSessionID(base::SysNSStringToUTF8(self.sessionID));
+      ->SetSessionID(sessionID);
   if (restorePersistedState) {
     SessionRestorationBrowserAgent::FromBrowser(browser.get())
         ->RestoreSession();
   }
-
-  SnapshotCache* snapshotCache =
-      SnapshotBrowserAgent::FromBrowser(browser.get())->GetSnapshotCache();
-  [snapshotCache setUniqueIdentifier:self.sessionID];
 
   // Associate the same SceneState with the new OTR browser as is associated
   // with the main browser.

@@ -406,14 +406,12 @@ bool MockRenderProcessHost::IsKeepAliveRefCountDisabled() {
   return false;
 }
 
-void MockRenderProcessHost::Resume() {}
-
 mojom::Renderer* MockRenderProcessHost::GetRendererInterface() {
   if (!renderer_interface_) {
     renderer_interface_ =
         std::make_unique<mojo::AssociatedRemote<mojom::Renderer>>();
-    ignore_result(renderer_interface_
-                      ->BindNewEndpointAndPassDedicatedReceiverForTesting());
+    ignore_result(
+        renderer_interface_->BindNewEndpointAndPassDedicatedReceiver());
   }
   return renderer_interface_->get();
 }
@@ -457,10 +455,10 @@ void MockRenderProcessHost::SetProcessLock(
     is_renderer_locked_to_site_ = true;
 }
 
-bool MockRenderProcessHost::IsProcessLockedForTesting() {
+bool MockRenderProcessHost::IsProcessLockedToSiteForTesting() {
   ProcessLock lock =
       ChildProcessSecurityPolicyImpl::GetInstance()->GetProcessLock(GetID());
-  return !lock.is_empty();
+  return lock.is_locked_to_site();
 }
 
 void MockRenderProcessHost::BindCacheStorage(

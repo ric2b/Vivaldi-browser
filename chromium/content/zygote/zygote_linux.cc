@@ -32,7 +32,11 @@
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
+#include "content/common/set_process_title.h"
 #include "content/common/zygote/zygote_commands_linux.h"
+#include "content/public/common/content_descriptors.h"
+#include "content/public/common/content_switches.h"
+#include "content/public/common/result_codes.h"
 #include "content/public/common/zygote/send_zygote_child_ping_linux.h"
 #include "content/public/common/zygote/zygote_fork_delegate_linux.h"
 #include "ipc/ipc_channel.h"
@@ -40,10 +44,6 @@
 #include "sandbox/linux/services/namespace_sandbox.h"
 #include "sandbox/policy/linux/sandbox_linux.h"
 #include "sandbox/policy/sandbox.h"
-#include "services/service_manager/embedder/descriptors.h"
-#include "services/service_manager/embedder/result_codes.h"
-#include "services/service_manager/embedder/set_process_title.h"
-#include "services/service_manager/embedder/switches.h"
 #include "third_party/icu/source/i18n/unicode/timezone.h"
 
 // See
@@ -128,7 +128,7 @@ bool Zygote::ProcessRequests() {
     // right after the process starts and it may fail to send zygote magic
     // number to browser process.
     if (!r)
-      _exit(service_manager::RESULT_CODE_NORMAL_EXIT);
+      _exit(RESULT_CODE_NORMAL_EXIT);
 #else
     CHECK(r) << "Sending zygote magic failed";
 #endif
@@ -377,7 +377,7 @@ void Zygote::HandleGetTerminationStatus(int fd, base::PickleIterator iter) {
     // it terminated normally.
     NOTREACHED();
     status = base::TERMINATION_STATUS_NORMAL_TERMINATION;
-    exit_code = service_manager::RESULT_CODE_NORMAL_EXIT;
+    exit_code = RESULT_CODE_NORMAL_EXIT;
   }
 
   base::Pickle write_pickle;
@@ -391,7 +391,6 @@ void Zygote::HandleGetTerminationStatus(int fd, base::PickleIterator iter) {
 
 int Zygote::ForkWithRealPid(const std::string& process_type,
                             const base::GlobalDescriptors::Mapping& fd_mapping,
-                            const std::string& channel_id,
                             base::ScopedFD pid_oracle,
                             std::string* uma_name,
                             int* uma_sample,
@@ -407,8 +406,7 @@ int Zygote::ForkWithRealPid(const std::string& process_type,
   base::ScopedFD read_pipe, write_pipe;
   base::ProcessId pid = 0;
   if (helper) {
-    int mojo_channel_fd =
-        LookUpFd(fd_mapping, service_manager::kMojoIPCChannel);
+    int mojo_channel_fd = LookUpFd(fd_mapping, kMojoIPCChannel);
     if (mojo_channel_fd < 0) {
       DLOG(ERROR) << "Failed to find kMojoIPCChannel in FD mapping";
       return -1;
@@ -416,7 +414,7 @@ int Zygote::ForkWithRealPid(const std::string& process_type,
     std::vector<int> fds;
     fds.push_back(mojo_channel_fd);   // kBrowserFDIndex
     fds.push_back(pid_oracle.get());  // kPIDOracleFDIndex
-    pid = helper->Fork(process_type, fds, channel_id);
+    pid = helper->Fork(process_type, fds, /*channel_id=*/std::string());
 
     // Helpers should never return in the child process.
     CHECK_NE(pid, 0);
@@ -539,10 +537,6 @@ base::ProcessId Zygote::ReadArgsAndFork(base::PickleIterator iter,
   int numfds = 0;
   base::GlobalDescriptors::Mapping mapping;
   std::string process_type;
-  std::string channel_id;
-  const std::string channel_id_prefix =
-      std::string("--") +
-      service_manager::switches::kServiceRequestChannelToken + std::string("=");
 
   if (!iter.ReadString(&process_type))
     return -1;
@@ -554,8 +548,6 @@ base::ProcessId Zygote::ReadArgsAndFork(base::PickleIterator iter,
     if (!iter.ReadString(&arg))
       return -1;
     args.push_back(arg);
-    if (arg.compare(0, channel_id_prefix.length(), channel_id_prefix) == 0)
-      channel_id = arg.substr(channel_id_prefix.length());
   }
 
   // timezone_id is obtained from ICU in zygote host so that it can't be
@@ -589,8 +581,8 @@ base::ProcessId Zygote::ReadArgsAndFork(base::PickleIterator iter,
 
   // Returns twice, once per process.
   base::ProcessId child_pid =
-      ForkWithRealPid(process_type, mapping, channel_id, std::move(pid_oracle),
-                      uma_name, uma_sample, uma_boundary_value);
+      ForkWithRealPid(process_type, mapping, std::move(pid_oracle), uma_name,
+                      uma_sample, uma_boundary_value);
   if (!child_pid) {
     // This is the child process.
 
@@ -610,7 +602,7 @@ base::ProcessId Zygote::ReadArgsAndFork(base::PickleIterator iter,
     // Update the process title. The argv was already cached by the call to
     // SetProcessTitleFromCommandLine in ChromeMain, so we can pass NULL here
     // (we don't have the original argv at this point).
-    service_manager::SetProcessTitleFromCommandLine(nullptr);
+    SetProcessTitleFromCommandLine(nullptr);
   } else if (child_pid < 0) {
     LOG(ERROR) << "Zygote could not fork: process_type " << process_type
                << " numfds " << numfds << " child_pid " << child_pid;

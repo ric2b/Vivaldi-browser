@@ -149,11 +149,6 @@ class SpellcheckServiceBrowserTest : public InProcessBrowserTest,
     spellcheck->OnCustomDictionaryChanged(change);
   }
 
-  void SetSingleLanguageDictionary(const std::string& single_dictionary) {
-    prefs_->SetString(spellcheck::prefs::kSpellCheckDictionary,
-                      single_dictionary);
-  }
-
   void SetMultiLingualDictionaries(const std::string& multiple_dictionaries) {
     base::ListValue dictionaries_value;
     dictionaries_value.AppendStrings(
@@ -322,6 +317,28 @@ class SpellcheckServiceHostBrowserTest : public SpellcheckServiceBrowserTest {
 
   DISALLOW_COPY_AND_ASSIGN(SpellcheckServiceHostBrowserTest);
 };
+
+// Disable spell check should disable spelling service
+IN_PROC_BROWSER_TEST_F(SpellcheckServiceBrowserTest,
+                       DisableSpellcheckDisableSpellingService) {
+  InitSpellcheck(true, "", "en-US");
+  GetPrefs()->SetBoolean(spellcheck::prefs::kSpellCheckUseSpellingService,
+                         true);
+
+  EnableSpellcheck(false);
+  EXPECT_FALSE(
+      GetPrefs()->GetBoolean(spellcheck::prefs::kSpellCheckUseSpellingService));
+}
+
+#if !defined(OS_MAC)
+IN_PROC_BROWSER_TEST_F(SpellcheckServiceBrowserTest,
+                       DisableSpellcheckIfDictionaryIsEmpty) {
+  InitSpellcheck(true, "", "en-US");
+  SetMultiLingualDictionaries("");
+
+  EXPECT_FALSE(GetPrefs()->GetBoolean(spellcheck::prefs::kSpellCheckEnable));
+}
+#endif  // !defined(OS_MAC)
 
 // Removing a spellcheck language from accept languages should remove it from
 // spellcheck languages list as well.

@@ -6,6 +6,7 @@
 
 #include "third_party/blink/public/mojom/frame/intrinsic_sizing_info.mojom.h"
 #include "third_party/blink/public/mojom/input/touch_event.mojom.h"
+#include "third_party/blink/public/mojom/page/drag.mojom.h"
 
 namespace content {
 
@@ -18,9 +19,8 @@ FakeRenderWidgetHost::BindNewFrameWidgetInterfaces() {
   frame_widget_host_receiver_.reset();
   frame_widget_remote_.reset();
   return std::make_pair(
-      frame_widget_host_receiver_
-          .BindNewEndpointAndPassDedicatedRemoteForTesting(),
-      frame_widget_remote_.BindNewEndpointAndPassDedicatedReceiverForTesting());
+      frame_widget_host_receiver_.BindNewEndpointAndPassDedicatedRemote(),
+      frame_widget_remote_.BindNewEndpointAndPassDedicatedReceiver());
 }
 
 std::pair<mojo::PendingAssociatedRemote<blink::mojom::WidgetHost>,
@@ -29,8 +29,8 @@ FakeRenderWidgetHost::BindNewWidgetInterfaces() {
   widget_host_receiver_.reset();
   widget_remote_.reset();
   return std::make_pair(
-      widget_host_receiver_.BindNewEndpointAndPassDedicatedRemoteForTesting(),
-      widget_remote_.BindNewEndpointAndPassDedicatedReceiverForTesting());
+      widget_host_receiver_.BindNewEndpointAndPassDedicatedRemote(),
+      widget_remote_.BindNewEndpointAndPassDedicatedReceiver());
 }
 
 void FakeRenderWidgetHost::AnimateDoubleTapZoomInMainFrame(
@@ -94,6 +94,13 @@ void FakeRenderWidgetHost::AutoscrollFling(const gfx::Vector2dF& position) {}
 void FakeRenderWidgetHost::AutoscrollEnd() {}
 
 void FakeRenderWidgetHost::DidFirstVisuallyNonEmptyPaint() {}
+
+void FakeRenderWidgetHost::StartDragging(
+    blink::mojom::DragDataPtr drag_data,
+    blink::DragOperationsMask operations_allowed,
+    const SkBitmap& bitmap,
+    const gfx::Vector2d& bitmap_offset_in_dip,
+    blink::mojom::DragEventSourceInfoPtr event_info) {}
 
 blink::mojom::WidgetInputHandler*
 FakeRenderWidgetHost::GetWidgetInputHandler() {

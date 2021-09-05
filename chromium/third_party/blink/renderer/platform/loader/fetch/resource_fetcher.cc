@@ -368,14 +368,17 @@ ResourceFetcherInit::ResourceFetcherInit(
     DetachableResourceFetcherProperties& properties,
     FetchContext* context,
     scoped_refptr<base::SingleThreadTaskRunner> task_runner,
-    ResourceFetcher::LoaderFactory* loader_factory)
+    ResourceFetcher::LoaderFactory* loader_factory,
+    ContextLifecycleNotifier* context_lifecycle_notifier)
     : properties(&properties),
       context(context),
       task_runner(std::move(task_runner)),
-      loader_factory(loader_factory) {
+      loader_factory(loader_factory),
+      context_lifecycle_notifier(context_lifecycle_notifier) {
   DCHECK(context);
   DCHECK(this->task_runner);
   DCHECK(loader_factory || properties.IsDetached());
+  DCHECK(context_lifecycle_notifier || properties.IsDetached());
 }
 
 mojom::RequestContextType ResourceFetcher::DetermineRequestContext(
@@ -591,7 +594,8 @@ ResourceFetcher::ResourceFetcher(const ResourceFetcherInit& init)
           init.throttle_option_override,
           *properties_,
           init.frame_or_worker_scheduler,
-          *console_logger_)),
+          *console_logger_,
+          init.loading_behavior_observer)),
       archive_(init.archive),
       resource_timing_report_timer_(
           task_runner_,
@@ -601,7 +605,7 @@ ResourceFetcher::ResourceFetcher(const ResourceFetcherInit& init)
           init.frame_or_worker_scheduler
               ? init.frame_or_worker_scheduler->GetWeakPtr()
               : nullptr),
-      blob_registry_remote_(nullptr),
+      blob_registry_remote_(init.context_lifecycle_notifier),
       auto_load_images_(true),
       images_enabled_(true),
       allow_stale_resources_(false),
@@ -706,7 +710,7 @@ Resource* ResourceFetcher::ResourceForStaticData(
   if (!archive_ && factory.GetType() == ResourceType::kRaw)
     return nullptr;
 
-  const String cache_identifier = GetCacheIdentifier();
+  const String cache_identifier = GetCacheIdentifier(url);
   // Most off-main-thread resource fetches use Resource::kRaw and don't reach
   // this point, but off-main-thread module fetches might.
   if (IsMainThread()) {
@@ -972,29 +976,8 @@ base::Optional<ResourceRequestBlockedReason> ResourceFetcher::PrepareRequest(
   if (!params.Url().IsValid())
     return ResourceRequestBlockedReason::kOther;
 
-  if (!RuntimeEnabledFeatures::OutOfBlinkCorsEnabled() &&
-      options.cors_handling_by_resource_fetcher ==
-          kEnableCorsHandlingByResourceFetcher) {
-    const scoped_refptr<const SecurityOrigin> origin =
-        resource_request.RequestorOrigin();
-    DCHECK(!options.cors_flag);
-    params.MutableOptions().cors_flag =
-        cors::CalculateCorsFlag(params.Url(), origin.get(),
-                                resource_request.IsolatedWorldOrigin().get(),
-                                resource_request.GetMode());
-    // TODO(yhirano): Reject requests for non CORS-enabled schemes.
-    // See https://crrev.com/c/1298828.
-    resource_request.SetAllowStoredCredentials(cors::CalculateCredentialsFlag(
-        resource_request.GetCredentialsMode(),
-        cors::CalculateResponseTainting(
-            params.Url(), resource_request.GetMode(), origin.get(),
-            resource_request.IsolatedWorldOrigin().get(),
-            params.Options().cors_flag ? CorsFlag::Set : CorsFlag::Unset)));
-  }
-
-  if (RuntimeEnabledFeatures::OutOfBlinkCorsEnabled() &&
-      resource_request.GetCredentialsMode() ==
-          network::mojom::CredentialsMode::kOmit) {
+  if (resource_request.GetCredentialsMode() ==
+      network::mojom::CredentialsMode::kOmit) {
     // See comments at network::ResourceRequest::credentials_mode.
     resource_request.SetAllowStoredCredentials(false);
   }
@@ -1049,12 +1032,6 @@ Resource* ResourceFetcher::RequestResource(FetchParameters& params,
 
   const ResourceType resource_type = factory.GetType();
 
-  if (!RuntimeEnabledFeatures::OutOfBlinkCorsEnabled() &&
-      resource_request.RequestorOrigin()) {
-    resource_request.SetHttpOriginIfNeeded(
-        resource_request.RequestorOrigin().get());
-  }
-
   WebScopedVirtualTimePauser pauser;
 
   base::Optional<ResourceRequestBlockedReason> blocked_reason =
@@ -1093,8 +1070,8 @@ Resource* ResourceFetcher::RequestResource(FetchParameters& params,
       // found, we may need to make it block the onload event.
       MakePreloadedResourceBlockOnloadIfNeeded(resource, params);
     } else if (IsMainThread()) {
-      resource =
-          GetMemoryCache()->ResourceForURL(params.Url(), GetCacheIdentifier());
+      resource = GetMemoryCache()->ResourceForURL(
+          params.Url(), GetCacheIdentifier(params.Url()));
       if (resource) {
         policy = DetermineRevalidationPolicy(resource_type, params, *resource,
                                              is_static_data);
@@ -1184,6 +1161,9 @@ Resource* ResourceFetcher::RequestResource(FetchParameters& params,
   LoadBlockingPolicy load_blocking_policy = LoadBlockingPolicy::kDefault;
   if (resource->GetType() == ResourceType::kImage) {
     image_resources_.insert(resource);
+#if DCHECK_IS_ON()
+    DCHECK(!not_loaded_image_resources_is_being_iterated_);
+#endif
     not_loaded_image_resources_.insert(resource);
     if (params.GetImageRequestBehavior() ==
         FetchParameters::kNonBlockingImage) {
@@ -1216,6 +1196,14 @@ Resource* ResourceFetcher::RequestResource(FetchParameters& params,
   }
 
   return resource;
+}
+
+void ResourceFetcher::MarkFirstPaint() {
+  scheduler_->MarkFirstPaint();
+}
+
+void ResourceFetcher::MarkFirstContentfulPaint() {
+  scheduler_->MarkFirstContentfulPaint();
 }
 
 void ResourceFetcher::ResourceTimingReportTimerFired(TimerBase* timer) {
@@ -1265,7 +1253,7 @@ void ResourceFetcher::InitializeRevalidation(
 }
 
 std::unique_ptr<WebURLLoader> ResourceFetcher::CreateURLLoader(
-    const ResourceRequest& request,
+    const ResourceRequestHead& request,
     const ResourceLoaderOptions& options) {
   DCHECK(!GetProperties().IsDetached());
   DCHECK(loader_factory_);
@@ -1276,9 +1264,13 @@ std::unique_ptr<WebURLLoader> ResourceFetcher::CreateURLLoader(
     new_options.url_loader_factory = base::MakeRefCounted<base::RefCountedData<
         mojo::PendingRemote<network::mojom::blink::URLLoaderFactory>>>(
         bundle->GetURLLoaderFactory());
-    return loader_factory_->CreateURLLoader(request, new_options, task_runner_);
+    // TODO(yoichio): CreateURLLoader take a ResourceRequestHead instead of
+    // ResourceRequest.
+    return loader_factory_->CreateURLLoader(ResourceRequest(request),
+                                            new_options, task_runner_);
   }
-  return loader_factory_->CreateURLLoader(request, options, task_runner_);
+  return loader_factory_->CreateURLLoader(ResourceRequest(request), options,
+                                          task_runner_);
 }
 
 std::unique_ptr<WebCodeCacheLoader> ResourceFetcher::CreateCodeCacheLoader() {
@@ -1298,7 +1290,8 @@ void ResourceFetcher::AddToMemoryCacheIfNeeded(const FetchParameters& params,
 Resource* ResourceFetcher::CreateResourceForLoading(
     const FetchParameters& params,
     const ResourceFactory& factory) {
-  const String cache_identifier = GetCacheIdentifier();
+  const String cache_identifier =
+      GetCacheIdentifier(params.GetResourceRequest().Url());
   DCHECK(!IsMainThread() || params.IsStaleRevalidation() ||
          !GetMemoryCache()->ResourceForURL(params.GetResourceRequest().Url(),
                                            cache_identifier));
@@ -1741,6 +1734,11 @@ bool ResourceFetcher::ShouldDeferImageLoad(const KURL& url) const {
 }
 
 void ResourceFetcher::ReloadImagesIfNotDeferred() {
+#if DCHECK_IS_ON()
+  DCHECK(!not_loaded_image_resources_is_being_iterated_);
+  base::AutoReset<bool> is_being_modified_resetter(
+      &not_loaded_image_resources_is_being_iterated_, true);
+#endif
   for (Resource* resource : not_loaded_image_resources_) {
     DCHECK_EQ(resource->GetType(), ResourceType::kImage);
     if (resource->StillNeedsLoad() && !ShouldDeferImageLoad(resource->Url()))
@@ -2088,6 +2086,11 @@ void ResourceFetcher::UpdateAllImageResourcePriorities() {
       "ResourceLoadPriorityOptimizer::updateAllImageResourcePriorities");
 
   HeapVector<Member<Resource>> to_be_removed;
+#if DCHECK_IS_ON()
+  DCHECK(!not_loaded_image_resources_is_being_iterated_);
+  base::AutoReset<bool> is_being_modified_resetter(
+      &not_loaded_image_resources_is_being_iterated_, true);
+#endif
   for (Resource* resource : not_loaded_image_resources_) {
     DCHECK_EQ(resource->GetType(), ResourceType::kImage);
     if (resource->IsLoaded()) {
@@ -2129,13 +2132,19 @@ void ResourceFetcher::UpdateAllImageResourcePriorities() {
   to_be_removed.clear();
 }
 
-String ResourceFetcher::GetCacheIdentifier() const {
+String ResourceFetcher::GetCacheIdentifier(const KURL& url) const {
   if (properties_->GetControllerServiceWorkerMode() !=
       mojom::ControllerServiceWorkerMode::kNoController) {
     return String::Number(properties_->ServiceWorkerId());
   }
   if (properties_->WebBundlePhysicalUrl().IsValid())
     return properties_->WebBundlePhysicalUrl().GetString();
+
+  for (auto& bundle : subresource_web_bundles_) {
+    if (bundle->CanHandleRequest(url))
+      return bundle->GetCacheIdentifier();
+  }
+
   return MemoryCache::DefaultCacheIdentifier();
 }
 

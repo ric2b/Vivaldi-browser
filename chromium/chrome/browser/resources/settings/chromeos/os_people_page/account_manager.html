@@ -11,6 +11,7 @@
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-flex-layout/iron-flex-layout-classes.html">
 <link rel="import" href="../localized_link/localized_link.html">
 <link rel="import" href="../../i18n_setup.html">
+<link rel="import" href="../deep_linking_behavior.html">
 <link rel="import" href="../os_route.html">
 <link rel="import" href="../../router.html">
 <link rel="import" href="../../settings_shared_css.html">
@@ -44,6 +45,11 @@
       #outer {
         margin-inline-end: var(--cr-section-padding);
         margin-inline-start: 60px;
+      }
+
+      .middle .secondary {
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
 
       .secondary-accounts-policy-indicator {
@@ -108,6 +114,12 @@
 
       .management-status {
         color: var(--cr-secondary-text-color);
+        max-width: 18ch;
+        min-width: 90px;
+        overflow: hidden;
+        text-align: end;
+        text-overflow: ellipsis;
+        width: min-content;
       }
 
       .edu-account-label {
@@ -148,7 +160,8 @@
         <h2>$i18n{accountListHeader}</h2>
       </div>
       <cr-button disabled="[[!isSecondaryGoogleAccountSigninAllowed_]]"
-          id="add-account-button" on-tap="addAccount_">
+          id="add-account-button" on-tap="addAccount_"
+          deep-link-focus-id$="[[Setting.kAddAccount]]">
         <div id="add-account-icon"></div>
         [[getAddAccountLabel_(isChildUser_,
             isSecondaryGoogleAccountSigninAllowed_)]]
@@ -224,7 +237,8 @@
                 aria-label="[[getMoreActionsTitle_(item)]]"
                 aria-describedby$="fullName-[[index]]
                                    edu-account-label-[[index]]"
-                on-click="onAccountActionsMenuButtonTap_">
+                on-click="onAccountActionsMenuButtonTap_"
+                deep-link-focus-id$="[[Setting.kRemoveAccount]]">
             </cr-icon-button>
           </template>
         </div>

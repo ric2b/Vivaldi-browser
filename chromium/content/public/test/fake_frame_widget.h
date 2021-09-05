@@ -29,11 +29,12 @@ class FakeFrameWidget : public blink::mojom::FrameWidget {
   void operator=(const FakeFrameWidget&) = delete;
 
   base::i18n::TextDirection GetTextDirection() const;
+  base::Optional<bool> GetActive() const;
 
  private:
   void DragTargetDragOver(const gfx::PointF& point_in_viewport,
                           const gfx::PointF& screen_point,
-                          blink::WebDragOperationsMask operations_allowed,
+                          blink::DragOperationsMask operations_allowed,
                           uint32_t modifiers,
                           DragTargetDragOverCallback callback) override {}
   void DragTargetDragLeave(const gfx::PointF& point_in_viewport,
@@ -44,10 +45,11 @@ class FakeFrameWidget : public blink::mojom::FrameWidget {
                       uint32_t key_modifiers) override {}
   void DragSourceEndedAt(const gfx::PointF& client_point,
                          const gfx::PointF& screen_point,
-                         blink::WebDragOperation operation) override {}
+                         blink::DragOperation operation) override {}
   void DragSourceSystemDragEnded() override {}
   void SetBackgroundOpaque(bool value) override {}
   void SetTextDirection(base::i18n::TextDirection direction) override;
+  void SetActive(bool active) override;
   void SetInheritedEffectiveTouchActionForSubFrame(
       const cc::TouchAction touch_action) override {}
   void UpdateRenderThrottlingStatusForSubFrame(
@@ -66,10 +68,13 @@ class FakeFrameWidget : public blink::mojom::FrameWidget {
   void BindWidgetCompositor(
       mojo::PendingReceiver<blink::mojom::WidgetCompositor> receiver) override {
   }
+  void BindInputTargetClient(
+      mojo::PendingReceiver<viz::mojom::InputTargetClient> receiver) override {}
 
   mojo::AssociatedReceiver<blink::mojom::FrameWidget> receiver_;
   base::i18n::TextDirection text_direction_ =
       base::i18n::TextDirection::UNKNOWN_DIRECTION;
+  base::Optional<bool> active_;
 };
 
 }  // namespace content

@@ -692,7 +692,7 @@ int HeadlessShellMain(int argc, const char** argv) {
 
     // Renderer flags
     command_line.AppendSwitch(cc::switches::kDisableThreadedAnimation);
-    command_line.AppendSwitch(::switches::kDisableThreadedScrolling);
+    command_line.AppendSwitch(blink::switches::kDisableThreadedScrolling);
     command_line.AppendSwitch(cc::switches::kDisableCheckerImaging);
   }
 
@@ -715,7 +715,7 @@ int HeadlessShellMain(int argc, const char** argv) {
       address =
           command_line.GetSwitchValueASCII(switches::kRemoteDebuggingAddress);
       net::IPAddress parsed_address;
-      if (!net::ParseURLHostnameToAddress(address, &parsed_address)) {
+      if (!parsed_address.AssignFromIPLiteral(address)) {
         LOG(ERROR) << "Invalid devtools server address";
         return EXIT_FAILURE;
       }
@@ -772,7 +772,7 @@ int HeadlessShellMain(int argc, const char** argv) {
 
   if (command_line.HasSwitch(switches::kHideScrollbars)) {
     builder.SetOverrideWebPreferencesCallback(
-        base::BindRepeating([](WebPreferences* preferences) {
+        base::BindRepeating([](blink::web_pref::WebPreferences* preferences) {
           preferences->hide_scrollbars = true;
         }));
   }

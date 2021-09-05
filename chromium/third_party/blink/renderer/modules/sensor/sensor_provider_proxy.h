@@ -34,6 +34,8 @@ class MODULES_EXPORT SensorProviderProxy final
 
   SensorProxy* CreateSensorProxy(device::mojom::blink::SensorType, Page*);
   SensorProxy* GetSensorProxy(device::mojom::blink::SensorType);
+  void GetSensor(device::mojom::blink::SensorType,
+                 device::mojom::blink::SensorProviderProxy::GetSensorCallback);
 
   void set_inspector_mode(bool flag) { inspector_mode_ = flag; }
   bool inspector_mode() const { return inspector_mode_; }
@@ -44,19 +46,13 @@ class MODULES_EXPORT SensorProviderProxy final
   friend class SensorProxy;
 
   // For SensorProviderProxy friends' use.
-  device::mojom::blink::SensorProvider* sensor_provider() const {
-    return sensor_provider_.get();
-  }
   void RemoveSensorProxy(SensorProxy* proxy);
-  using SensorsSet = HeapHashSet<WeakMember<SensorProxy>>;
-  const SensorsSet& sensor_proxies() const { return sensor_proxies_; }
 
   // For SensorProviderProxy personal use.
   void InitializeIfNeeded();
-  bool IsInitialized() const { return sensor_provider_.is_bound(); }
   void OnSensorProviderConnectionError();
-  SensorsSet sensor_proxies_;
 
+  HeapHashSet<WeakMember<SensorProxy>> sensor_proxies_;
   HeapMojoRemote<device::mojom::blink::SensorProvider,
                  HeapMojoWrapperMode::kWithoutContextObserver>
       sensor_provider_;

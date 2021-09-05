@@ -8,9 +8,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
-#include "chrome/browser/media/router/media_router_dialog_controller.h"
 #include "chrome/browser/media/router/media_router_feature.h"
-#include "chrome/browser/media/router/media_router_metrics.h"
 #include "chrome/browser/prefs/browser_prefs.h"
 #include "chrome/browser/renderer_context_menu/render_view_context_menu_test_util.h"
 #include "chrome/browser/ui/browser.h"
@@ -27,6 +25,8 @@
 #include "chrome/common/url_constants.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/media_router/browser/media_router_dialog_controller.h"
+#include "components/media_router/browser/media_router_metrics.h"
 #include "content/public/browser/context_menu_params.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/web_contents.h"
@@ -39,8 +39,8 @@
 
 namespace media_router {
 
-// Base class containing setup code and test cases shared between WebUI and
-// Views dialog tests.
+// Base class containing setup code and test cases shared between Views dialog
+// tests.
 class MediaRouterUIBrowserTest : public InProcessBrowserTest {
  public:
   MediaRouterUIBrowserTest()
@@ -78,6 +78,7 @@ class MediaRouterUIBrowserTest : public InProcessBrowserTest {
     GetCastIcon()->OnMousePressed(
         ui::MouseEvent(ui::ET_MOUSE_PRESSED, gfx::Point(0, 0), gfx::Point(0, 0),
                        ui::EventTimeForNow(), ui::EF_LEFT_MOUSE_BUTTON, 0));
+    base::RunLoop().RunUntilIdle();
   }
 
   bool ToolbarIconExists() {
@@ -231,8 +232,18 @@ IN_PROC_BROWSER_TEST_F(MediaRouterUIBrowserTest,
   EXPECT_TRUE(ToolbarIconExists());
 }
 
+// TODO(https://crbug.com/1124982): Fix flake on linux-lacros-rel and re-enable
+// this test.
+#if defined(OS_LINUX)
+#define MAYBE_OpenDialogWithMediaRouterAction \
+  DISABLED_OpenDialogWithMediaRouterAction
+#else
+#define MAYBE_OpenDialogWithMediaRouterAction \
+  OpenDialogWithMediaRouterAction
+#endif
+
 IN_PROC_BROWSER_TEST_F(MediaRouterUIBrowserTest,
-                       OpenDialogWithMediaRouterAction) {
+                       MAYBE_OpenDialogWithMediaRouterAction) {
   MediaRouterDialogController* dialog_controller = GetDialogController();
   // We start off at about:blank page.
   // Make sure there is 1 tab and media router is enabled.

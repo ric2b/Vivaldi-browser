@@ -19,14 +19,43 @@ namespace web_app {
 
 class FileUtilsWrapper;
 
-base::Optional<ExternalInstallOptions> ParseConfig(
-    FileUtilsWrapper& file_utils,
-    const base::FilePath& dir,
-    const base::FilePath& file,
-    const std::string& user_type,
-    const base::Value& app_config);
+struct ExternalConfigParseResult {
+  enum Type {
+    kEnabled,
+    kDisabled,
+    kError,
+  };
 
-WebApplicationInfoFactory ParseOfflineManifest(
+  static ExternalConfigParseResult Enabled(ExternalInstallOptions options);
+  static ExternalConfigParseResult Disabled();
+  static ExternalConfigParseResult Error();
+
+  ~ExternalConfigParseResult();
+  ExternalConfigParseResult(const ExternalConfigParseResult&) = delete;
+  ExternalConfigParseResult(ExternalConfigParseResult&&);
+  ExternalConfigParseResult& operator=(const ExternalConfigParseResult&) =
+      delete;
+
+  const Type type;
+
+  // Set iff kEnabled.
+  const base::Optional<ExternalInstallOptions> options;
+
+ private:
+  ExternalConfigParseResult(Type type,
+                            base::Optional<ExternalInstallOptions> options);
+};
+
+// TODO(https://crbug.com/1128801): Record and log parsing errors more
+// effectively. At the moment they're indistinguishable from disabled apps to
+// the caller.
+ExternalConfigParseResult ParseConfig(FileUtilsWrapper& file_utils,
+                                      const base::FilePath& dir,
+                                      const base::FilePath& file,
+                                      const std::string& user_type,
+                                      const base::Value& app_config);
+
+base::Optional<WebApplicationInfoFactory> ParseOfflineManifest(
     FileUtilsWrapper& file_utils,
     const base::FilePath& dir,
     const base::FilePath& file,

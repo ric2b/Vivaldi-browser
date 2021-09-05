@@ -149,7 +149,7 @@ class IsolatedPrerenderTabHelperTest : public ChromeRenderViewHostTestHarness {
         SetDataSaverEnabledForTesting(profile()->GetPrefs(), enabled);
   }
 
-  void MakeNavigationPrediction(const content::WebContents* web_contents,
+  void MakeNavigationPrediction(content::WebContents* web_contents,
                                 const GURL& doc_url,
                                 const std::vector<GURL>& predicted_urls) {
     NavigationPredictorKeyedServiceFactory::GetForProfile(profile())
@@ -243,7 +243,7 @@ class IsolatedPrerenderTabHelperTest : public ChromeRenderViewHostTestHarness {
 
   void NavigateAndVerifyPrefetchStatus(
       const GURL& url,
-      IsolatedPrerenderTabHelper::PrefetchStatus expected_status) {
+      IsolatedPrerenderPrefetchStatus expected_status) {
     // Navigate to trigger an after-srp page load where the status for the given
     // url should be placed into the after srp metrics.
     Navigate(url);
@@ -409,10 +409,11 @@ TEST_F(IsolatedPrerenderTabHelperTest, FeatureDisabled) {
   EXPECT_FALSE(HasAfterSRPMetrics());
 }
 
-TEST_F(IsolatedPrerenderTabHelperTest, DataSaverDisabled) {
+TEST_F(IsolatedPrerenderTabHelperTest, DataSaverDisabled_Required) {
   base::HistogramTester histogram_tester;
   base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(features::kIsolatePrerenders);
+  scoped_feature_list.InitAndEnableFeatureWithParameters(
+      features::kIsolatePrerenders, {{"lite_mode_only", "true"}});
 
   SetDataSaverEnabled(false);
 
@@ -444,6 +445,28 @@ TEST_F(IsolatedPrerenderTabHelperTest, DataSaverDisabled) {
       "IsolatedPrerender.Prefetch.Mainframe.TotalRedirects", 0);
 
   EXPECT_FALSE(HasAfterSRPMetrics());
+}
+
+TEST_F(IsolatedPrerenderTabHelperTest, DataSaverDisabled_NotRequired) {
+  base::HistogramTester histogram_tester;
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeatureWithParameters(
+      features::kIsolatePrerenders, {{"lite_mode_only", "false"}});
+
+  SetDataSaverEnabled(false);
+
+  NavigateSomewhere();
+  GURL doc_url("https://www.google.com/search?q=cats");
+  GURL prediction_url("https://www.cat-food.com/");
+  MakeNavigationPrediction(web_contents(), doc_url, {prediction_url});
+
+  EXPECT_EQ(RequestCount(), 1);
+  EXPECT_EQ(predicted_urls_count(), 1U);
+  EXPECT_EQ(prefetch_eligible_count(), 1U);
+  EXPECT_EQ(prefetch_attempted_count(), 1U);
+  EXPECT_EQ(prefetch_successful_count(), 0U);
+  EXPECT_EQ(prefetch_total_redirect_count(), 0U);
+  EXPECT_TRUE(navigation_to_prefetch_start().has_value());
 }
 
 TEST_F(IsolatedPrerenderTabHelperTest, GoogleSRPOnly) {
@@ -543,9 +566,9 @@ TEST_F(IsolatedPrerenderTabHelperTest, HTTPSPredictionsOnly) {
   histogram_tester.ExpectTotalCount(
       "IsolatedPrerender.Prefetch.Mainframe.ConnectTime", 0);
 
-  NavigateAndVerifyPrefetchStatus(prediction_url,
-                                  IsolatedPrerenderTabHelper::PrefetchStatus::
-                                      kPrefetchNotEligibleSchemeIsNotHttps);
+  NavigateAndVerifyPrefetchStatus(
+      prediction_url,
+      IsolatedPrerenderPrefetchStatus::kPrefetchNotEligibleSchemeIsNotHttps);
   EXPECT_EQ(after_srp_prefetch_eligible_count(), 0U);
   EXPECT_EQ(base::Optional<size_t>(0), after_srp_clicked_link_srp_position());
 
@@ -580,9 +603,9 @@ TEST_F(IsolatedPrerenderTabHelperTest, DontFetchGoogleLinks) {
   histogram_tester.ExpectTotalCount(
       "IsolatedPrerender.Prefetch.Mainframe.ConnectTime", 0);
 
-  NavigateAndVerifyPrefetchStatus(prediction_url,
-                                  IsolatedPrerenderTabHelper::PrefetchStatus::
-                                      kPrefetchNotEligibleGoogleDomain);
+  NavigateAndVerifyPrefetchStatus(
+      prediction_url,
+      IsolatedPrerenderPrefetchStatus::kPrefetchNotEligibleGoogleDomain);
   EXPECT_EQ(after_srp_prefetch_eligible_count(), 0U);
   EXPECT_EQ(base::Optional<size_t>(0), after_srp_clicked_link_srp_position());
 
@@ -617,9 +640,9 @@ TEST_F(IsolatedPrerenderTabHelperTest, DontFetchIPAddresses) {
   histogram_tester.ExpectTotalCount(
       "IsolatedPrerender.Prefetch.Mainframe.ConnectTime", 0);
 
-  NavigateAndVerifyPrefetchStatus(prediction_url,
-                                  IsolatedPrerenderTabHelper::PrefetchStatus::
-                                      kPrefetchNotEligibleHostIsIPAddress);
+  NavigateAndVerifyPrefetchStatus(
+      prediction_url,
+      IsolatedPrerenderPrefetchStatus::kPrefetchNotEligibleHostIsIPAddress);
   EXPECT_EQ(after_srp_prefetch_eligible_count(), 0U);
   EXPECT_EQ(base::Optional<size_t>(0), after_srp_clicked_link_srp_position());
 
@@ -714,9 +737,9 @@ TEST_F(IsolatedPrerenderTabHelperTest, NoCookies) {
   histogram_tester.ExpectTotalCount(
       "IsolatedPrerender.Prefetch.Mainframe.ConnectTime", 0);
 
-  NavigateAndVerifyPrefetchStatus(prediction_url,
-                                  IsolatedPrerenderTabHelper::PrefetchStatus::
-                                      kPrefetchNotEligibleUserHasCookies);
+  NavigateAndVerifyPrefetchStatus(
+      prediction_url,
+      IsolatedPrerenderPrefetchStatus::kPrefetchNotEligibleUserHasCookies);
   EXPECT_EQ(after_srp_prefetch_eligible_count(), 0U);
   EXPECT_EQ(base::Optional<size_t>(0), after_srp_clicked_link_srp_position());
 
@@ -759,8 +782,7 @@ TEST_F(IsolatedPrerenderTabHelperTest, 2XXOnly) {
       1);
 
   NavigateAndVerifyPrefetchStatus(
-      prediction_url,
-      IsolatedPrerenderTabHelper::PrefetchStatus::kPrefetchFailedNon2XX);
+      prediction_url, IsolatedPrerenderPrefetchStatus::kPrefetchFailedNon2XX);
   EXPECT_EQ(after_srp_prefetch_eligible_count(), 1U);
   EXPECT_EQ(base::Optional<size_t>(0), after_srp_clicked_link_srp_position());
 
@@ -802,8 +824,7 @@ TEST_F(IsolatedPrerenderTabHelperTest, NetErrorOKOnly) {
       "IsolatedPrerender.Prefetch.Mainframe.ConnectTime", 0);
 
   NavigateAndVerifyPrefetchStatus(
-      prediction_url,
-      IsolatedPrerenderTabHelper::PrefetchStatus::kPrefetchFailedNetError);
+      prediction_url, IsolatedPrerenderPrefetchStatus::kPrefetchFailedNetError);
   EXPECT_EQ(after_srp_prefetch_eligible_count(), 1U);
   EXPECT_EQ(base::Optional<size_t>(0), after_srp_clicked_link_srp_position());
 
@@ -846,8 +867,7 @@ TEST_F(IsolatedPrerenderTabHelperTest, ResponseBodyLimit) {
       "IsolatedPrerender.Prefetch.Mainframe.ConnectTime", 0);
 
   NavigateAndVerifyPrefetchStatus(
-      prediction_url,
-      IsolatedPrerenderTabHelper::PrefetchStatus::kPrefetchFailedNetError);
+      prediction_url, IsolatedPrerenderPrefetchStatus::kPrefetchFailedNetError);
   EXPECT_EQ(after_srp_prefetch_eligible_count(), 1U);
   EXPECT_EQ(base::Optional<size_t>(0), after_srp_clicked_link_srp_position());
 
@@ -890,8 +910,7 @@ TEST_F(IsolatedPrerenderTabHelperTest, NonHTML) {
       1);
 
   NavigateAndVerifyPrefetchStatus(
-      prediction_url,
-      IsolatedPrerenderTabHelper::PrefetchStatus::kPrefetchFailedNotHTML);
+      prediction_url, IsolatedPrerenderPrefetchStatus::kPrefetchFailedNotHTML);
   EXPECT_EQ(after_srp_prefetch_eligible_count(), 1U);
   EXPECT_EQ(base::Optional<size_t>(0), after_srp_clicked_link_srp_position());
 
@@ -991,8 +1010,7 @@ TEST_F(IsolatedPrerenderTabHelperTest, IgnoreSameDocNavigations) {
       1);
 
   NavigateAndVerifyPrefetchStatus(
-      prediction_url,
-      IsolatedPrerenderTabHelper::PrefetchStatus::kPrefetchSuccessful);
+      prediction_url, IsolatedPrerenderPrefetchStatus::kPrefetchSuccessful);
   EXPECT_EQ(after_srp_prefetch_eligible_count(), 1U);
   EXPECT_EQ(base::Optional<size_t>(0), after_srp_clicked_link_srp_position());
 
@@ -1047,8 +1065,7 @@ TEST_F(IsolatedPrerenderTabHelperTest, SuccessCase) {
       1);
 
   NavigateAndVerifyPrefetchStatus(
-      prediction_url,
-      IsolatedPrerenderTabHelper::PrefetchStatus::kPrefetchSuccessful);
+      prediction_url, IsolatedPrerenderPrefetchStatus::kPrefetchSuccessful);
   EXPECT_EQ(after_srp_prefetch_eligible_count(), 1U);
   EXPECT_EQ(base::Optional<size_t>(0), after_srp_clicked_link_srp_position());
 
@@ -1092,7 +1109,7 @@ TEST_F(IsolatedPrerenderTabHelperTest, AfterSRPLinkNotOnSRP) {
 
   NavigateAndVerifyPrefetchStatus(
       GURL("https://wasnt-on-srp.com"),
-      IsolatedPrerenderTabHelper::PrefetchStatus::kNavigatedToLinkNotOnSRP);
+      IsolatedPrerenderPrefetchStatus::kNavigatedToLinkNotOnSRP);
   EXPECT_EQ(after_srp_prefetch_eligible_count(), 1U);
   EXPECT_EQ(base::nullopt, after_srp_clicked_link_srp_position());
 
@@ -1130,8 +1147,7 @@ TEST_F(IsolatedPrerenderTabHelperTest, LimitedNumberOfPrefetches_Zero) {
       "IsolatedPrerender.Prefetch.Mainframe.ConnectTime", 0);
 
   NavigateAndVerifyPrefetchStatus(
-      prediction_url,
-      IsolatedPrerenderTabHelper::PrefetchStatus::kPrefetchNotStarted);
+      prediction_url, IsolatedPrerenderPrefetchStatus::kPrefetchNotStarted);
   EXPECT_EQ(after_srp_prefetch_eligible_count(), 1U);
   EXPECT_EQ(base::Optional<size_t>(0), after_srp_clicked_link_srp_position());
 
@@ -1194,8 +1210,7 @@ TEST_F(IsolatedPrerenderTabHelperTest,
       2);
 
   NavigateAndVerifyPrefetchStatus(
-      prediction_url_3,
-      IsolatedPrerenderTabHelper::PrefetchStatus::kPrefetchSuccessful);
+      prediction_url_3, IsolatedPrerenderPrefetchStatus::kPrefetchSuccessful);
   EXPECT_EQ(after_srp_prefetch_eligible_count(), 3U);
   EXPECT_EQ(base::Optional<size_t>(2), after_srp_clicked_link_srp_position());
 
@@ -1249,8 +1264,7 @@ TEST_F(IsolatedPrerenderTabHelperTest, ConcurrentPrefetches) {
       2);
 
   NavigateAndVerifyPrefetchStatus(
-      prediction_url_2,
-      IsolatedPrerenderTabHelper::PrefetchStatus::kPrefetchSuccessful);
+      prediction_url_2, IsolatedPrerenderPrefetchStatus::kPrefetchSuccessful);
   EXPECT_EQ(after_srp_prefetch_eligible_count(), 2U);
   EXPECT_EQ(base::Optional<size_t>(1), after_srp_clicked_link_srp_position());
 
@@ -1338,8 +1352,7 @@ TEST_F(IsolatedPrerenderTabHelperTest, NumberOfPrefetches_UnlimitedByCmdLine) {
       2);
 
   NavigateAndVerifyPrefetchStatus(
-      prediction_url_1,
-      IsolatedPrerenderTabHelper::PrefetchStatus::kPrefetchSuccessful);
+      prediction_url_1, IsolatedPrerenderPrefetchStatus::kPrefetchSuccessful);
   EXPECT_EQ(after_srp_prefetch_eligible_count(), 3U);
   EXPECT_EQ(base::Optional<size_t>(0), after_srp_clicked_link_srp_position());
 
@@ -1526,7 +1539,7 @@ TEST_F(IsolatedPrerenderTabHelperTest, ServiceWorkerRegistered) {
   EXPECT_FALSE(navigation_to_prefetch_start().has_value());
 
   NavigateAndVerifyPrefetchStatus(prediction_url,
-                                  IsolatedPrerenderTabHelper::PrefetchStatus::
+                                  IsolatedPrerenderPrefetchStatus::
                                       kPrefetchNotEligibleUserHasServiceWorker);
   EXPECT_EQ(after_srp_prefetch_eligible_count(), 0U);
   EXPECT_EQ(base::Optional<size_t>(0), after_srp_clicked_link_srp_position());
@@ -1661,9 +1674,9 @@ TEST_F(IsolatedPrerenderTabHelperRedirectTest, NoRedirect_Cookies) {
   EXPECT_EQ(prefetch_total_redirect_count(), 1U);
   EXPECT_TRUE(navigation_to_prefetch_start().has_value());
 
-  NavigateAndVerifyPrefetchStatus(site_with_cookies,
-                                  IsolatedPrerenderTabHelper::PrefetchStatus::
-                                      kPrefetchNotEligibleUserHasCookies);
+  NavigateAndVerifyPrefetchStatus(
+      site_with_cookies,
+      IsolatedPrerenderPrefetchStatus::kPrefetchNotEligibleUserHasCookies);
   EXPECT_EQ(after_srp_prefetch_eligible_count(), 1U);
   EXPECT_EQ(base::Optional<size_t>(0), after_srp_clicked_link_srp_position());
 }
@@ -1684,9 +1697,9 @@ TEST_F(IsolatedPrerenderTabHelperRedirectTest, NoRedirect_Insecure) {
   EXPECT_EQ(prefetch_total_redirect_count(), 1U);
   EXPECT_TRUE(navigation_to_prefetch_start().has_value());
 
-  NavigateAndVerifyPrefetchStatus(url,
-                                  IsolatedPrerenderTabHelper::PrefetchStatus::
-                                      kPrefetchNotEligibleSchemeIsNotHttps);
+  NavigateAndVerifyPrefetchStatus(
+      url,
+      IsolatedPrerenderPrefetchStatus::kPrefetchNotEligibleSchemeIsNotHttps);
   EXPECT_EQ(after_srp_prefetch_eligible_count(), 1U);
   EXPECT_EQ(base::Optional<size_t>(0), after_srp_clicked_link_srp_position());
 }
@@ -1722,9 +1735,9 @@ TEST_F(IsolatedPrerenderTabHelperRedirectTest, NoRedirect_Insecure_Continued) {
 
   ASSERT_TRUE(tab_helper()->after_srp_metrics().has_value());
   ASSERT_TRUE(tab_helper()->after_srp_metrics()->prefetch_status_.has_value());
-  EXPECT_EQ(IsolatedPrerenderTabHelper::PrefetchStatus::
-                kPrefetchNotEligibleSchemeIsNotHttps,
-            tab_helper()->after_srp_metrics()->prefetch_status_.value());
+  EXPECT_EQ(
+      IsolatedPrerenderPrefetchStatus::kPrefetchNotEligibleSchemeIsNotHttps,
+      tab_helper()->after_srp_metrics()->prefetch_status_.value());
 
   EXPECT_EQ(after_srp_prefetch_eligible_count(), 1U);
   EXPECT_EQ(base::Optional<size_t>(0), after_srp_clicked_link_srp_position());
@@ -1746,9 +1759,8 @@ TEST_F(IsolatedPrerenderTabHelperRedirectTest, NoRedirect_Google) {
   EXPECT_EQ(prefetch_total_redirect_count(), 1U);
   EXPECT_TRUE(navigation_to_prefetch_start().has_value());
 
-  NavigateAndVerifyPrefetchStatus(url,
-                                  IsolatedPrerenderTabHelper::PrefetchStatus::
-                                      kPrefetchNotEligibleGoogleDomain);
+  NavigateAndVerifyPrefetchStatus(
+      url, IsolatedPrerenderPrefetchStatus::kPrefetchNotEligibleGoogleDomain);
   EXPECT_EQ(after_srp_prefetch_eligible_count(), 1U);
   EXPECT_EQ(base::Optional<size_t>(0), after_srp_clicked_link_srp_position());
 }
@@ -1773,7 +1785,7 @@ TEST_F(IsolatedPrerenderTabHelperRedirectTest, NoRedirect_ServiceWorker) {
   EXPECT_TRUE(navigation_to_prefetch_start().has_value());
 
   NavigateAndVerifyPrefetchStatus(site_with_worker,
-                                  IsolatedPrerenderTabHelper::PrefetchStatus::
+                                  IsolatedPrerenderPrefetchStatus::
                                       kPrefetchNotEligibleUserHasServiceWorker);
   EXPECT_EQ(after_srp_prefetch_eligible_count(), 1U);
   EXPECT_EQ(base::Optional<size_t>(0), after_srp_clicked_link_srp_position());
@@ -1828,8 +1840,7 @@ TEST_F(IsolatedPrerenderTabHelperRedirectTest, SuccessfulRedirect) {
       1);
 
   NavigateAndVerifyPrefetchStatus(
-      redirect_url,
-      IsolatedPrerenderTabHelper::PrefetchStatus::kPrefetchSuccessful);
+      redirect_url, IsolatedPrerenderPrefetchStatus::kPrefetchSuccessful);
   EXPECT_EQ(after_srp_prefetch_eligible_count(), 2U);
   EXPECT_EQ(base::Optional<size_t>(0), after_srp_clicked_link_srp_position());
 

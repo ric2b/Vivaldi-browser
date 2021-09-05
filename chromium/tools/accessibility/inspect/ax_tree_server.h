@@ -7,6 +7,7 @@
 
 #include <string>
 
+#include "base/callback.h"
 #include "build/build_config.h"
 #include "content/public/browser/accessibility_tree_formatter.h"
 
@@ -21,14 +22,26 @@ class AXTreeServer final {
   AXTreeServer(gfx::AcceleratedWidget widget,
                const base::FilePath& filters_path,
                bool use_json);
-  AXTreeServer(const base::StringPiece& pattern,
+  AXTreeServer(const AccessibilityTreeFormatter::TreeSelector& selector,
                const base::FilePath& filters_path,
                bool use_json);
 
  private:
+  using BuildTree = base::OnceCallback<std::unique_ptr<base::DictionaryValue>(
+      AccessibilityTreeFormatter*)>;
+
+  // Builds and formats the accessible tree.
+  void Run(BuildTree build_tree,
+           const base::FilePath& filters_path,
+           bool use_json);
+
+  // Generates property filters.
+  std::vector<AccessibilityTreeFormatter::PropertyFilter> GetPropertyFilters(
+      const base::FilePath& filters_path);
+
+  // Formats and dumps into console the tree.
   void Format(AccessibilityTreeFormatter& formatter,
               const base::DictionaryValue& dict,
-              const base::FilePath& filters_path,
               bool use_json);
 
 #if defined(OS_WIN)

@@ -118,8 +118,14 @@
 - (void)locationBarDidBecomeFirstResponder {
   [self.contentSuggestionsCoordinator locationBarDidBecomeFirstResponder];
 }
+
 - (void)locationBarDidResignFirstResponder {
   [self.contentSuggestionsCoordinator locationBarDidResignFirstResponder];
+}
+
+- (void)constrainDiscoverHeaderMenuButtonNamedGuide {
+  [self.contentSuggestionsCoordinator
+          constrainDiscoverHeaderMenuButtonNamedGuide];
 }
 
 #pragma mark - LogoAnimationControllerOwnerOwner

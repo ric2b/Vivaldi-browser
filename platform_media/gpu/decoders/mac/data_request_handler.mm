@@ -55,13 +55,7 @@ void DataRequestHandler::Init(ipc_data_source::Info source_info,
                               dispatch_queue_t ipc_queue) {
   // This can only be called once.
   DCHECK(!can_read_);
-  if (source_info.buffer.IsReadError()) {
-    // An empty source that we use during warmup to force a early read error
-    // from the handler, see AVFMediaReaderRunner::WarmUp.
-    return;
-  }
   can_read_ = true;
-
   source_buffer_ = std::move(source_info.buffer);
   is_streaming_ = source_info.is_streaming;
   data_size_ = source_info.size;
@@ -142,6 +136,14 @@ void DataRequestHandler::Load(AVAssetResourceLoadingRequest* request) {
   if (!data_request) {
     VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
             << " No data request.";
+    CloseRequest(request, Status::kBadRequest);
+    return;
+  }
+
+  if (data_size_ == 0) {
+    // This is a sandbox initialization and we already reported 0 size to
+    // contentInformationRequest and should not be called again.
+    VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " empty read attempt";
     CloseRequest(request, Status::kBadRequest);
     return;
   }

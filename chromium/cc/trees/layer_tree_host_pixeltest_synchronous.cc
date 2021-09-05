@@ -9,6 +9,7 @@
 #include "cc/test/fake_content_layer_client.h"
 #include "cc/test/layer_tree_pixel_test.h"
 #include "cc/test/pixel_comparator.h"
+#include "components/viz/test/test_types.h"
 
 #if !defined(OS_ANDROID)
 
@@ -17,7 +18,7 @@ namespace {
 
 class LayerTreeHostSynchronousPixelTest
     : public LayerTreePixelTest,
-      public ::testing::WithParamInterface<TestRendererType> {
+      public ::testing::WithParamInterface<viz::RendererType> {
  protected:
   LayerTreeHostSynchronousPixelTest() : LayerTreePixelTest(renderer_type()) {}
 
@@ -26,7 +27,7 @@ class LayerTreeHostSynchronousPixelTest
     settings->single_thread_proxy_scheduler = false;
   }
 
-  TestRendererType renderer_type() const { return GetParam(); }
+  viz::RendererType renderer_type() const { return GetParam(); }
 
   void BeginTest() override {
     LayerTreePixelTest::BeginTest();
@@ -50,20 +51,10 @@ class LayerTreeHostSynchronousPixelTest
   }
 };
 
-TestRendererType const kRendererTypesGpu[] = {
-    TestRendererType::kGL,
-    TestRendererType::kSkiaGL,
-#if defined(ENABLE_CC_VULKAN_TESTS)
-    TestRendererType::kSkiaVk,
-#endif  // defined(ENABLE_CC_VULKAN_TESTS)
-#if defined(ENABLE_CC_DAWN_TESTS)
-    TestRendererType::kSkiaDawn,
-#endif  // defined(ENABLE_CC_DAWN_TESTS)
-};
-
 INSTANTIATE_TEST_SUITE_P(All,
                          LayerTreeHostSynchronousPixelTest,
-                         ::testing::ValuesIn(kRendererTypesGpu));
+                         ::testing::ValuesIn(viz::GetGpuRendererTypes()),
+                         ::testing::PrintToStringParamName());
 
 TEST_P(LayerTreeHostSynchronousPixelTest, OneContentLayerZeroCopy) {
   set_raster_type(TestRasterType::kZeroCopy);

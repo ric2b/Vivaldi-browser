@@ -13,12 +13,14 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 
+import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.ObserverList;
 import org.chromium.base.TraceEvent;
+import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
-import org.chromium.base.supplier.Supplier;
+import org.chromium.chrome.browser.ActivityTabProvider;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsUtils;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsVisibilityManager;
@@ -34,12 +36,17 @@ import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
 import org.chromium.chrome.browser.compositor.layouts.eventfilter.EdgeSwipeHandler;
 import org.chromium.chrome.browser.compositor.layouts.eventfilter.EventFilter;
 import org.chromium.chrome.browser.compositor.overlays.SceneOverlay;
+import org.chromium.chrome.browser.compositor.overlays.strip.StripLayoutHelperManager;
 import org.chromium.chrome.browser.compositor.overlays.toolbar.TopToolbarOverlayCoordinator;
 import org.chromium.chrome.browser.compositor.scene_layer.SceneLayer;
+import org.chromium.chrome.browser.compositor.scene_layer.SceneOverlayLayer;
+import org.chromium.chrome.browser.compositor.scene_layer.ScrollingBottomViewSceneLayer;
 import org.chromium.chrome.browser.contextualsearch.ContextualSearchManagementDelegate;
 import org.chromium.chrome.browser.device.DeviceClassManager;
 import org.chromium.chrome.browser.fullscreen.BrowserControlsManager;
+import org.chromium.chrome.browser.gesturenav.HistoryNavigationCoordinator;
 import org.chromium.chrome.browser.native_page.NativePageFactory;
+import org.chromium.chrome.browser.status_indicator.StatusIndicatorCoordinator;
 import org.chromium.chrome.browser.tab.SadTab;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabBrowserControlsConstraintsHelper;
@@ -65,11 +72,15 @@ import org.chromium.ui.resources.ResourceManager;
 import org.chromium.ui.resources.dynamics.DynamicResourceLoader;
 import org.chromium.ui.util.TokenHolder;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.chromium.chrome.browser.ChromeApplication;
 import org.chromium.chrome.browser.night_mode.NightModeUtils;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
+import org.vivaldi.browser.common.VivaldiUtils;
 import org.vivaldi.browser.preferences.VivaldiPreferences;
 
 /**
@@ -102,7 +113,7 @@ public class LayoutManager implements LayoutUpdateHost, LayoutProvider,
 
     // Layouts
     /** A {@link Layout} used for showing a normal web page. */
-    protected final StaticLayout mStaticLayout;
+    protected StaticLayout mStaticLayout;
 
     private final ViewGroup mContentContainer;
 
@@ -133,7 +144,6 @@ public class LayoutManager implements LayoutUpdateHost, LayoutProvider,
     private ContextualSearchPanel mContextualSearchPanel;
     private final OverlayPanelManager mOverlayPanelManager;
     private TopToolbarOverlayCoordinator mToolbarOverlay;
-    private SceneOverlay mStatusIndicatorSceneOverlay;
     private SceneOverlay mGestureNavigationOverscrollGlow;
 
     /** A delegate for interacting with the Contextual Search manager. */
@@ -157,21 +167,18 @@ public class LayoutManager implements LayoutUpdateHost, LayoutProvider,
     /** The animation handler responsible for updating all the browser compositor's animations. */
     private final CompositorAnimationHandler mAnimationHandler;
 
-    /**
-     * Current tab to provide Toolbar overlay with. Unlike TabModelSelector#getCurrentTab
-     * which returns null right after a tab is closed, this keeps the reference until
-     * TabModelObserver#didCloseTab is triggered for Toolbar overlay to have a chance
-     * to retrieve the right textbox color from it.
-     */
-    private ObservableSupplierImpl<Tab> mCurrentTabSupplier;
-
     private final ObservableSupplierImpl<TabModelSelector> mTabModelSelectorSupplier =
             new ObservableSupplierImpl<>();
-    private final ObservableSupplierImpl<TabContentManager> mTabContentManagerSupplier =
-            new ObservableSupplierImpl<>();
+    private final ObservableSupplier<TabContentManager> mTabContentManagerSupplier;
     private final ObservableSupplierImpl<BrowserControlsStateProvider>
             mBrowserControlsStateProviderSupplier = new ObservableSupplierImpl<>();
     private final CompositorModelChangeProcessor.FrameRequestSupplier mFrameRequestSupplier;
+
+    /** The overlays that can be drawn on top of the active layout. */
+    protected final List<SceneOverlay> mSceneOverlays = new ArrayList<>();
+
+    /** A map of {@link SceneOverlay} to its position relative to the others. */
+    private Map<Class, Integer> mOverlayOrderMap = new HashMap<>();
 
     /**
      * Protected class to handle {@link TabModelObserver} related tasks. Extending classes will
@@ -184,7 +191,6 @@ public class LayoutManager implements LayoutUpdateHost, LayoutProvider,
             } else if (tab.getId() != lastId) {
                 tabSelected(tab.getId(), lastId, tab.isIncognito());
             }
-            mCurrentTabSupplier.set(tab);
         }
 
         @Override
@@ -227,8 +233,6 @@ public class LayoutManager implements LayoutUpdateHost, LayoutProvider,
         @Override
         public void didCloseTab(int tabId, boolean incognito) {
             tabClosed(tabId, incognito, false);
-            mCurrentTabSupplier.set(
-                    getTabModelSelector() != null ? getTabModelSelector().getCurrentTab() : null);
         }
 
         @Override
@@ -251,16 +255,31 @@ public class LayoutManager implements LayoutUpdateHost, LayoutProvider,
      * Creates a {@link LayoutManager} instance.
      * @param host A {@link LayoutManagerHost} instance.
      * @param contentContainer A {@link ViewGroup} for Android views to be bound to.
+     * @param tabContentManagerSupplier Supplier of the {@link TabContentManager} instance.
      */
-    public LayoutManager(LayoutManagerHost host, ViewGroup contentContainer) {
+    public LayoutManager(LayoutManagerHost host, ViewGroup contentContainer,
+            ObservableSupplier<TabContentManager> tabContentManagerSupplier) {
         mHost = host;
         mPxToDp = 1.f / mHost.getContext().getResources().getDisplayMetrics().density;
         mAndroidViewShownSupplier = new ObservableSupplierImpl<>();
         mAndroidViewShownSupplier.set(true);
-        mCurrentTabSupplier = new ObservableSupplierImpl<>();
+        mTabContentManagerSupplier = tabContentManagerSupplier;
 
         mContext = host.getContext();
         LayoutRenderHost renderHost = host.getLayoutRenderHost();
+
+        // clang-format off
+        // Overlays are ordered back (closest to the web content) to front.
+        Class[] overlayOrder = new Class[] {
+                HistoryNavigationCoordinator.getSceneOverlayClass(),
+                TopToolbarOverlayCoordinator.class,
+                ScrollingBottomViewSceneLayer.class,
+                StripLayoutHelperManager.class,
+                StatusIndicatorCoordinator.getSceneOverlayClass(),
+                ContextualSearchPanel.class};
+        // clang-format off
+
+        for (int i = 0; i < overlayOrder.length; i++) mOverlayOrderMap.put(overlayOrder[i], i);
 
         assert contentContainer != null;
         mContentContainer = contentContainer;
@@ -270,17 +289,6 @@ public class LayoutManager implements LayoutUpdateHost, LayoutProvider,
         mOverlayPanelManager = new OverlayPanelManager();
 
         mFrameRequestSupplier = new CompositorModelChangeProcessor.FrameRequestSupplier(this);
-
-        // TODO(crbug.com/1070281): Move this to #init.
-        // Build Layouts
-        mStaticLayout = new StaticLayout(mContext, this, renderHost, mHost, mFrameRequestSupplier,
-                mTabModelSelectorSupplier, mTabContentManagerSupplier,
-                mBrowserControlsStateProviderSupplier);
-
-        // Set up layout parameters
-        mStaticLayout.setLayoutHandlesTabLifecycles(true);
-
-        setNextLayout(null);
     }
 
     /**
@@ -320,8 +328,35 @@ public class LayoutManager implements LayoutUpdateHost, LayoutProvider,
 
         PointF offsets = getMotionOffsets(e);
 
-        EventFilter layoutFilter =
-                mActiveLayout.findInterceptingEventFilter(e, offsets, isKeyboardShowing);
+        // The last added overlay will be drawn on top of everything else, therefore the last
+        // filter added should have the first chance to intercept any touch events.
+        EventFilter layoutFilter = null;
+        for (int i = mSceneOverlays.size() - 1; i >= 0; i--) {
+            if (!mSceneOverlays.get(i).isSceneOverlayTreeShowing()) continue;
+            EventFilter eventFilter = mSceneOverlays.get(i).getEventFilter();
+            if (eventFilter == null) continue;
+            if (offsets != null) eventFilter.setCurrentMotionEventOffsets(offsets.x, offsets.y);
+            // Note(david@vivaldi.com): Since the tab strip can be a the bottom we need to apply
+            // the window viewport height to the y-value for that particular overlay.
+            if (mSceneOverlays.get(i) instanceof StripLayoutHelperManager) {
+                if (((StripLayoutHelperManager) mSceneOverlays.get(i)).isSceneOffScreen())
+                    continue;
+                if (!VivaldiUtils.isTopToolbarOn())
+                    e = MotionEvent.obtain(e.getDownTime(), e.getEventTime(), e.getAction(),
+                            e.getX(), mCachedWindowViewport.height() - e.getY(),
+                            e.getMetaState());
+            }
+            if (eventFilter.onInterceptTouchEvent(e, isKeyboardShowing)) {
+                layoutFilter = eventFilter;
+                break;
+            }
+        }
+
+        // If no overlay's filter took the event, check the layout.
+        if (layoutFilter == null) {
+            layoutFilter = mActiveLayout.findInterceptingEventFilter(e, offsets, isKeyboardShowing);
+        }
+
         mIsNewEventFilter = layoutFilter != mActiveEventFilter;
         mActiveEventFilter = layoutFilter;
 
@@ -407,9 +442,15 @@ public class LayoutManager implements LayoutUpdateHost, LayoutProvider,
         // TODO(crbug.com/1070281): Remove after the FrameRequestSupplier migrates to the animation
         //  system.
         final Layout layout = getActiveLayout();
+
         if (layout != null && layout.onUpdate(timeMs, dtMs) && layout.isHiding()
                 && areAnimatorsComplete) {
             layout.doneHiding();
+        }
+
+        // TODO(1100332): Once overlays are MVC, this should no longer be needed.
+        for (int i = 0; i < mSceneOverlays.size(); i++) {
+            mSceneOverlays.get(i).updateOverlay(timeMs, dtMs);
         }
 
         mFrameRequestSupplier.set(timeMs);
@@ -420,28 +461,32 @@ public class LayoutManager implements LayoutUpdateHost, LayoutProvider,
      * Initializes the {@link LayoutManager}.  Must be called before using this object.
      * @param selector                 A {@link TabModelSelector} instance.
      * @param creator                  A {@link TabCreatorManager} instance.
-     * @param content                  A {@link TabContentManager} instance.
      * @param controlContainer         A {@link ControlContainer} for browser controls' layout.
      * @param contextualSearchDelegate A {@link ContextualSearchManagementDelegate} instance.
      * @param dynamicResourceLoader    A {@link DynamicResourceLoader} instance.
      */
     public void init(TabModelSelector selector, TabCreatorManager creator,
-            TabContentManager content, ControlContainer controlContainer,
+            @Nullable ControlContainer controlContainer,
             ContextualSearchManagementDelegate contextualSearchDelegate,
-            DynamicResourceLoader dynamicResourceLoader) {
+            DynamicResourceLoader dynamicResourceLoader, ActivityTabProvider tabProvider) {
         LayoutRenderHost renderHost = mHost.getLayoutRenderHost();
-        mCurrentTabSupplier.set(selector.getCurrentTab());
+
+        // Build Layouts
+        mStaticLayout = new StaticLayout(mContext, this, renderHost, mHost, mFrameRequestSupplier,
+                selector, mTabContentManagerSupplier.get(), mBrowserControlsStateProviderSupplier);
+
+        // Set up layout parameters
+        mStaticLayout.setLayoutHandlesTabLifecycles(true);
+
+        setNextLayout(null);
 
         // If fullscreen is disabled, don't bother creating this overlay; only the android view will
         // ever be shown.
         if (DeviceClassManager.enableFullscreen()) {
-            Supplier<Integer> viewportModeSupplier = ()
-                    -> getActiveLayout() != null ? getActiveLayout().getViewportMode()
-                                                 : Layout.ViewportMode.ALWAYS_FULLSCREEN;
             mToolbarOverlay = new TopToolbarOverlayCoordinator(mContext, mFrameRequestSupplier,
-                    this, controlContainer, mCurrentTabSupplier, getBrowserControlsManager(),
-                    viewportModeSupplier, mAndroidViewShownSupplier,
-                    () -> renderHost.getResourceManager());
+                    this, controlContainer, tabProvider, getBrowserControlsManager(),
+                    mAndroidViewShownSupplier, () -> renderHost.getResourceManager());
+            addSceneOverlay(mToolbarOverlay);
         }
 
         // Initialize Layouts
@@ -449,16 +494,12 @@ public class LayoutManager implements LayoutUpdateHost, LayoutProvider,
 
         // Contextual Search scene overlay.
         mContextualSearchPanel = new ContextualSearchPanel(mContext, this, mOverlayPanelManager);
-
-        // Add any SceneOverlays to a layout.
-        addAllSceneOverlays();
+        addSceneOverlay(mContextualSearchPanel);
 
         // Save state
         mContextualSearchDelegate = contextualSearchDelegate;
 
         // Initialize Layouts
-        mStaticLayout.setTabModelSelector(selector, content);
-        mTabContentManagerSupplier.set(content);
         mBrowserControlsStateProviderSupplier.set(mHost.getBrowserControlsManager());
 
         // Initialize Contextual Search Panel
@@ -473,15 +514,18 @@ public class LayoutManager implements LayoutUpdateHost, LayoutProvider,
         mOverlayPanelManager.setDynamicResourceLoader(dynamicResourceLoader);
         mOverlayPanelManager.setContainerView(mContentContainer);
 
-        if (mTabModelSelector != selector) {
+        // The {@link setTabModelSelector} should be called after all of the initialization above
+        // complete. See https://crbug.com/1132948.
+        if (mTabModelSelector == null) {
             setTabModelSelector(selector);
         }
     }
 
+    // TODO(hanxi): Passes the TabModelSelectorSupplier in the constructor since the
+    // mTabModelSelector should only be set once.
     public void setTabModelSelector(TabModelSelector selector) {
         mTabModelSelector = selector;
         mTabModelSelectorSupplier.set(selector);
-        mCurrentTabSupplier.set(selector.getCurrentTab());
         mTabModelSelectorTabObserver = new TabModelSelectorTabObserver(mTabModelSelector) {
             @Override
             public void onShown(Tab tab, @TabSelectionType int type) {
@@ -542,7 +586,6 @@ public class LayoutManager implements LayoutUpdateHost, LayoutProvider,
             getTabModelSelector().getTabModelFilterProvider().removeTabModelFilterObserver(
                     mTabModelFilterObserver);
         }
-        mCurrentTabSupplier.set(null);
     }
 
     /**
@@ -566,8 +609,27 @@ public class LayoutManager implements LayoutUpdateHost, LayoutProvider,
         updateControlsHidingState(browserControlsManager);
         getViewportPixel(mCachedVisibleViewport);
         mHost.getWindowViewport(mCachedWindowViewport);
-        return mActiveLayout.getUpdatedSceneLayer(mCachedWindowViewport, mCachedVisibleViewport,
-                layerTitleCache, tabContentManager, resourceManager, browserControlsManager);
+        SceneLayer layer = mActiveLayout.getUpdatedSceneLayer(mCachedWindowViewport,
+                mCachedVisibleViewport, layerTitleCache, tabContentManager, resourceManager,
+                browserControlsManager);
+
+        float offsetPx = mBrowserControlsStateProviderSupplier.get() == null
+                ? 0
+                : mBrowserControlsStateProviderSupplier.get().getTopControlOffset();
+
+        for (int i = 0; i < mSceneOverlays.size(); i++) {
+            // If the SceneOverlay is not showing, don't bother adding it to the tree.
+            if (!mSceneOverlays.get(i).isSceneOverlayTreeShowing()) continue;
+
+            SceneOverlayLayer overlayLayer = mSceneOverlays.get(i).getUpdatedSceneOverlayTree(
+                    mCachedWindowViewport, mCachedVisibleViewport, layerTitleCache, resourceManager,
+                    offsetPx * mPxToDp);
+
+            overlayLayer.setContentTree(layer);
+            layer = overlayLayer;
+        }
+
+        return layer;
     }
 
     private void updateControlsHidingState(
@@ -575,7 +637,17 @@ public class LayoutManager implements LayoutUpdateHost, LayoutProvider,
         if (controlsVisibilityManager == null) {
             return;
         }
-        if (mActiveLayout.forceHideBrowserControlsAndroidView()) {
+
+        boolean overlayHidesControls = false;
+        for (int i = 0; i < mSceneOverlays.size(); i++) {
+            // If any overlay wants to hide tha Android version of the browser controls, hide them.
+            if (mSceneOverlays.get(i).shouldHideAndroidBrowserControls()) {
+                overlayHidesControls = true;
+                break;
+            }
+        }
+
+        if (overlayHidesControls || mActiveLayout.forceHideBrowserControlsAndroidView()) {
             mControlsHidingToken = controlsVisibilityManager.hideAndroidControlsAndClearOldToken(
                     mControlsHidingToken);
             mAndroidViewShownSupplier.set(false);
@@ -597,11 +669,29 @@ public class LayoutManager implements LayoutUpdateHost, LayoutProvider,
      */
     public void onViewportChanged() {
         if (getActiveLayout() != null) {
+            float previousWidth = getActiveLayout().getWidth();
+            float previousHeight = getActiveLayout().getHeight();
+
             mHost.getWindowViewport(mCachedWindowViewport);
             mHost.getVisibleViewport(mCachedVisibleViewport);
             getActiveLayout().sizeChanged(mCachedVisibleViewport, mCachedWindowViewport,
                     mHost.getTopControlsHeightPixels(), mHost.getBottomControlsHeightPixels(),
                     getOrientation());
+
+            float width = mCachedWindowViewport.width() * mPxToDp;
+            float height = mCachedWindowViewport.height() * mPxToDp;
+            if (width != previousWidth || height != previousHeight) {
+                for (int i = 0; i < mSceneOverlays.size(); i++) {
+                    // Note(david@vivaldi.com): When toolbar is at the bottom we apply
+                    // |mCachedVisibleViewport.bottom|
+                    if (!VivaldiUtils.isTopToolbarOn()) {
+                        mSceneOverlays.get(i).onSizeChanged(
+                                width, height, mCachedVisibleViewport.bottom, getOrientation());
+                    } else
+                    mSceneOverlays.get(i).onSizeChanged(
+                            width, height, mCachedVisibleViewport.top, getOrientation());
+                }
+            }
         }
 
         for (int i = 0; i < mTabCache.size(); i++) {
@@ -961,56 +1051,44 @@ public class LayoutManager implements LayoutUpdateHost, LayoutProvider,
      * @return Whether or not the back button was consumed by the active {@link Layout}.
      */
     public boolean onBackPressed() {
+        for (int i = 0; i < mSceneOverlays.size(); i++) {
+            if (!mSceneOverlays.get(i).isSceneOverlayTreeShowing()) continue;
+
+            // If the back button was consumed by any overlays, return true.
+            if (mSceneOverlays.get(i).onBackPressed()) return true;
+        }
         return getActiveLayout() != null && getActiveLayout().onBackPressed();
     }
 
     /**
-     * Set the status indicator {@link SceneOverlay} to be added to the layout.
-     * @param overlay The {@link SceneOverlay} to set.
+     * Add a {@link SceneOverlay} to be drawn on the composited layer of the active layout.
+     * @param overlay The overlay to add.
      */
-    public void setStatusIndicatorSceneOverlay(SceneOverlay overlay) {
-        mStatusIndicatorSceneOverlay = overlay;
-    }
+    public void addSceneOverlay(SceneOverlay overlay) {
+        if (mSceneOverlays.contains(overlay)) throw new RuntimeException("Overlay already added!");
 
-    /**
-     * Adds the {@link SceneOverlay} across all {@link Layout}s owned by this class.
-     * @param helper A {@link SceneOverlay} instance.
-     */
-    protected void addGlobalSceneOverlay(SceneOverlay helper) {
-        mStaticLayout.addSceneOverlay(helper);
-    }
-
-    /**
-     * Add any {@link SceneOverlay}s to the layout. This can be used to add the overlays in a
-     * particular order.
-     * Classes that override this method should be careful about the order that
-     * overlays are added and when super is called (i.e. cases where one overlay needs to be
-     * on top of another positioned.
-     */
-    protected void addAllSceneOverlays() {
-        addGlobalSceneOverlay(mToolbarOverlay);
-        if (mStatusIndicatorSceneOverlay != null) {
-            addGlobalSceneOverlay(mStatusIndicatorSceneOverlay);
+        if (!mOverlayOrderMap.containsKey(overlay.getClass())) {
+            throw new RuntimeException("Please add overlay to order list in constructor.");
         }
-        mStaticLayout.addSceneOverlay(mContextualSearchPanel);
+
+        int overlayPosition = mOverlayOrderMap.get(overlay.getClass());
+
+        int index;
+        for (index = 0; index < mSceneOverlays.size(); index++) {
+            if (overlayPosition < mOverlayOrderMap.get(mSceneOverlays.get(index).getClass())) break;
+        }
+
+        mSceneOverlays.add(index, overlay);
     }
 
-    /**
-     * Add a {@link SceneOverlay} to the front of the list. This means the overlay will be drawn
-     * last and therefore above all other overlays currently in the list.
-     * @param overlay The overlay to be added to the back of the list.
-     */
-    public void addSceneOverlayToFront(SceneOverlay overlay) {
-        mStaticLayout.addSceneOverlay(overlay);
+    @VisibleForTesting
+    void setSceneOverlayOrderForTesting(Map<Class, Integer> order) {
+        mOverlayOrderMap = order;
     }
 
-    /**
-     * Add a {@link SceneOverlay} to the back of the list. This means the overlay will be drawn
-     * first and therefore behind all other overlays currently in the list.
-     * @param overlay The overlay to be added to the back of the list.
-     */
-    public void addSceneOverlayToBack(SceneOverlay overlay) {
-        mStaticLayout.addSceneOverlayToBack(overlay);
+    @VisibleForTesting
+    List<SceneOverlay> getSceneOverlaysForTesting() {
+        return mSceneOverlays;
     }
 
     /**

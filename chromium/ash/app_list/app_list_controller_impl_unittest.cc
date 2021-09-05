@@ -51,6 +51,7 @@
 #include "base/test/with_feature_override.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "chromeos/constants/chromeos_switches.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/message_center/message_center.h"
@@ -460,9 +461,18 @@ TEST_F(AppListControllerImplTest, CheckAppListViewBoundsWhenDismissVKeyboard) {
             GetAppListViewNativeWindow()->bounds());
 }
 
+#if defined(ADDRESS_SANITIZER)
+#define MAYBE_CloseNotificationWithAppListShown \
+  DISABLED_CloseNotificationWithAppListShown
+#else
+#define MAYBE_CloseNotificationWithAppListShown \
+  CloseNotificationWithAppListShown
+#endif
+
 // Verifies that closing notification by gesture should not dismiss the AppList.
 // (see https://crbug.com/948344)
-TEST_F(AppListControllerImplTest, CloseNotificationWithAppListShown) {
+// TODO(crbug.com/1120501): Test is flaky on ASAN builds.
+TEST_F(AppListControllerImplTest, MAYBE_CloseNotificationWithAppListShown) {
   ShowAppListNow();
 
   // Add one notification.
@@ -639,6 +649,84 @@ TEST_F(AppListControllerImplTest,
   GetAppListTestHelper()->CheckVisibility(false);
   ASSERT_TRUE(GetAppListView()->GetWidget());
   EXPECT_FALSE(GetAppListView()->GetWidget()->GetNativeWindow()->IsVisible());
+}
+
+// Tests that swapping out an AppListModel (simulating a profile swap with
+// multiprofile enabled) drops all references to previous folders (see
+// https://crbug.com/1130901).
+TEST_F(AppListControllerImplTest, SimulateProfileSwapNoCrashOnDestruct) {
+  // Add a folder, whose AppListItemList the AppListModel will observe.
+  const std::string folder_id("folder_1");
+  auto folder = std::make_unique<AppListFolderItem>(folder_id);
+  AppListModel* model = Shell::Get()->app_list_controller()->GetModel();
+  model->AddItem(std::move(folder));
+
+  for (int i = 0; i < 2; ++i) {
+    auto item = std::make_unique<AppListItem>(base::StringPrintf("app_%d", i));
+    model->AddItemToFolder(std::move(item), folder_id);
+  }
+
+  // Set a new model, simulating profile switching in multi-profile mode. This
+  // should cleanly drop the reference to the folder added earlier.
+  Shell::Get()->app_list_controller()->SetModelData(
+      /*profile_id=*/12, /*apps=*/{}, /*is_search_engine_google=*/false);
+
+  // Test that there is no crash on ~AppListModel() when the test finishes.
+}
+
+class AppListControllerImplTestWithNotificationBadging
+    : public AppListControllerImplTest {
+ public:
+  AppListControllerImplTestWithNotificationBadging() {
+    scoped_features_.InitWithFeatures({::features::kNotificationIndicator}, {});
+  }
+  AppListControllerImplTestWithNotificationBadging(
+      const AppListControllerImplTestWithNotificationBadging& other) = delete;
+  AppListControllerImplTestWithNotificationBadging& operator=(
+      const AppListControllerImplTestWithNotificationBadging& other) = delete;
+  ~AppListControllerImplTestWithNotificationBadging() override = default;
+
+  void UpdateAppHasBadge(const std::string& app_id, bool app_has_badge) {
+    AppListControllerImpl* controller = Shell::Get()->app_list_controller();
+    AccountId account_id = AccountId::FromUserEmail("test@gmail.com");
+
+    apps::mojom::App test_app;
+    test_app.app_id = app_id;
+    if (app_has_badge)
+      test_app.has_badge = apps::mojom::OptionalBool::kTrue;
+    else
+      test_app.has_badge = apps::mojom::OptionalBool::kFalse;
+
+    apps::AppUpdate test_update(nullptr, &test_app /* delta */, account_id);
+    static_cast<apps::AppRegistryCache::Observer*>(controller)
+        ->OnAppUpdate(test_update);
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_features_;
+};
+
+// Tests that when an app has an update to its notification badge, the change
+// gets propagated to the corresponding AppListItemView.
+TEST_F(AppListControllerImplTestWithNotificationBadging,
+       NotificationBadgeUpdateTest) {
+  PopulateItem(1);
+  ShowAppListNow();
+
+  test::AppsGridViewTestApi apps_grid_view_test_api(GetAppsGridView());
+  const AppListItemView* item_view =
+      apps_grid_view_test_api.GetViewAtIndex(GridIndex(0, 0));
+  ASSERT_TRUE(item_view);
+
+  const std::string app_id = item_view->item()->id();
+
+  EXPECT_FALSE(item_view->IsNotificationIndicatorShownForTest());
+
+  UpdateAppHasBadge(app_id, /*has_badge=*/true);
+  EXPECT_TRUE(item_view->IsNotificationIndicatorShownForTest());
+
+  UpdateAppHasBadge(app_id, /*has_badge=*/false);
+  EXPECT_FALSE(item_view->IsNotificationIndicatorShownForTest());
 }
 
 class AppListControllerImplTestWithoutHotseat

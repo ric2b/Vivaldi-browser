@@ -99,7 +99,7 @@ class ImageWithBadge : public views::View {
 };
 
 ImageWithBadge::ImageWithBadge(const gfx::ImageSkia& main_image) {
-  set_can_process_events_within_subtree(false);
+  SetCanProcessEventsWithinSubtree(false);
   auto main_view = std::make_unique<ImageViewWithPlaceForBadge>();
   main_view->SetImage(main_image);
   main_view->SizeToPreferredSize();
@@ -108,7 +108,7 @@ ImageWithBadge::ImageWithBadge(const gfx::ImageSkia& main_image) {
 }
 
 ImageWithBadge::ImageWithBadge(const gfx::VectorIcon& main_image) {
-  set_can_process_events_within_subtree(false);
+  SetCanProcessEventsWithinSubtree(false);
   auto main_view = std::make_unique<VectorIconView>(main_image, kImageSize);
   main_view->SizeToPreferredSize();
   AddChildView(std::move(main_view));
@@ -156,7 +156,7 @@ std::unique_ptr<views::View> CreateHeaderImage(int image_id) {
 std::unique_ptr<views::Label> CreateDescription() {
   auto description = std::make_unique<views::Label>(
       l10n_util::GetStringUTF16(IDS_PASSWORD_MANAGER_MOVE_HINT),
-      ChromeTextContext::CONTEXT_BODY_TEXT_LARGE, views::style::STYLE_HINT);
+      views::style::CONTEXT_DIALOG_BODY_TEXT, views::style::STYLE_HINT);
   description->SetMultiLine(true);
   description->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   return description;
@@ -273,8 +273,8 @@ void MoveToAccountStoreBubbleView::OnThemeChanged() {
   PasswordBubbleViewBase::OnThemeChanged();
   GetBubbleFrameView()->SetHeaderView(CreateHeaderImage(
       color_utils::IsDark(GetBubbleFrameView()->GetBackgroundColor())
-          ? IDR_SAVE_PASSWORD_DARK
-          : IDR_SAVE_PASSWORD));
+          ? IDR_SAVE_PASSWORD_MULTI_DEVICE_DARK
+          : IDR_SAVE_PASSWORD_MULTI_DEVICE));
 }
 
 gfx::Size MoveToAccountStoreBubbleView::CalculatePreferredSize() const {

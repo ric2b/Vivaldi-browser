@@ -32,10 +32,10 @@
 
 namespace views {
 
-LabelButton::LabelButton(ButtonListener* listener,
+LabelButton::LabelButton(PressedCallback callback,
                          const base::string16& text,
                          int button_context)
-    : Button(listener),
+    : Button(std::move(callback)),
       cached_normal_font_list_(
           style::GetFont(button_context, style::STYLE_PRIMARY)),
       cached_default_button_font_list_(
@@ -44,7 +44,7 @@ LabelButton::LabelButton(ButtonListener* listener,
   ink_drop_container_->SetVisible(false);
 
   image_ = AddChildView(std::make_unique<ImageView>());
-  image_->set_can_process_events_within_subtree(false);
+  image_->SetCanProcessEventsWithinSubtree(false);
 
   label_ = AddChildView(
       std::make_unique<internal::LabelButtonLabel>(text, button_context));
@@ -54,6 +54,11 @@ LabelButton::LabelButton(ButtonListener* listener,
   SetAnimationDuration(base::TimeDelta::FromMilliseconds(170));
   SetTextInternal(text);
 }
+
+LabelButton::LabelButton(ButtonListener* listener,
+                         const base::string16& text,
+                         int button_context)
+    : LabelButton(PressedCallback(listener, this), text, button_context) {}
 
 LabelButton::~LabelButton() = default;
 
@@ -558,9 +563,16 @@ gfx::Size LabelButton::GetUnclampedSizeWithoutLabel() const {
 
 Button::ButtonState LabelButton::GetVisualState() const {
   const auto* widget = GetWidget();
-  if (PlatformStyle::kInactiveWidgetControlsAppearDisabled && widget &&
-      widget->CanActivate() && !widget->ShouldPaintAsActive())
+  if (!widget || !widget->CanActivate() ||
+      !PlatformStyle::kInactiveWidgetControlsAppearDisabled)
+    return GetState();
+
+  // Paint as inactive if neither this widget nor its parent should paint as
+  // active.
+  if (!widget->ShouldPaintAsActive() &&
+      !(widget->parent() && widget->parent()->ShouldPaintAsActive()))
     return STATE_DISABLED;
+
   return GetState();
 }
 
@@ -603,17 +615,14 @@ Button::ButtonState LabelButton::ImageStateForState(
                                                          : for_state;
 }
 
-BEGIN_METADATA(LabelButton)
-METADATA_PARENT_CLASS(Button)
-ADD_PROPERTY_METADATA(LabelButton, base::string16, Text)
-ADD_PROPERTY_METADATA(LabelButton,
-                      gfx::HorizontalAlignment,
-                      HorizontalAlignment)
-ADD_PROPERTY_METADATA(LabelButton, gfx::Size, MinSize)
-ADD_PROPERTY_METADATA(LabelButton, gfx::Size, MaxSize)
-ADD_PROPERTY_METADATA(LabelButton, bool, IsDefault)
-ADD_PROPERTY_METADATA(LabelButton, int, ImageLabelSpacing)
-ADD_PROPERTY_METADATA(LabelButton, bool, ImageCentered)
-END_METADATA()
+BEGIN_METADATA(LabelButton, Button)
+ADD_PROPERTY_METADATA(base::string16, Text)
+ADD_PROPERTY_METADATA(gfx::HorizontalAlignment, HorizontalAlignment)
+ADD_PROPERTY_METADATA(gfx::Size, MinSize)
+ADD_PROPERTY_METADATA(gfx::Size, MaxSize)
+ADD_PROPERTY_METADATA(bool, IsDefault)
+ADD_PROPERTY_METADATA(int, ImageLabelSpacing)
+ADD_PROPERTY_METADATA(bool, ImageCentered)
+END_METADATA
 
 }  // namespace views

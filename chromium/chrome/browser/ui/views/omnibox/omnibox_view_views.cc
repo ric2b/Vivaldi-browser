@@ -45,7 +45,6 @@
 #include "components/omnibox/browser/omnibox_field_trial.h"
 #include "components/omnibox/browser/omnibox_popup_model.h"
 #include "components/omnibox/browser/omnibox_prefs.h"
-#include "components/omnibox/common/omnibox_features.h"
 #include "components/prefs/pref_service.h"
 #include "components/security_state/core/security_state.h"
 #include "components/strings/grit/components_strings.h"
@@ -803,23 +802,23 @@ void OmniboxViewViews::ExecuteCommand(int command_id, int event_flags) {
   }
 }
 
-void OmniboxViewViews::OnInputMethodChanged() {
-#if defined(OS_WIN)
+ui::TextInputType OmniboxViewViews::GetTextInputType() const {
+  ui::TextInputType input_type = views::Textfield::GetTextInputType();
   // We'd like to set the text input type to TEXT_INPUT_TYPE_URL, because this
   // triggers URL-specific layout in software keyboards, e.g. adding top-level
   // "/" and ".com" keys for English.  However, this also causes IMEs to default
   // to Latin character mode, which makes entering search queries difficult for
   // IME users. Therefore, we try to guess whether an IME will be used based on
   // the input language, and set the input type accordingly.
-  if (location_bar_view_) {
+#if defined(OS_WIN)
+  if (input_type != ui::TEXT_INPUT_TYPE_NONE && location_bar_view_) {
     ui::InputMethod* input_method =
         location_bar_view_->GetWidget()->GetInputMethod();
     if (input_method && input_method->IsInputLocaleCJK())
-      SetTextInputType(ui::TEXT_INPUT_TYPE_SEARCH);
-    else
-      SetTextInputType(ui::TEXT_INPUT_TYPE_URL);
+      return ui::TEXT_INPUT_TYPE_SEARCH;
   }
 #endif
+  return input_type;
 }
 
 void OmniboxViewViews::AddedToWidget() {
@@ -884,16 +883,14 @@ void OmniboxViewViews::SetTextAndSelectedRanges(
   static const uint32_t kPadTrailing = 30;
   static const uint32_t kPadLeading = 10;
 
-  // We use SetTextAndScrollAndSelectRange instead of SetText and
-  // SetSelectedRange in order to avoid triggering accessibility events multiple
-  // times.
-  SetTextAndScrollAndSelectRange(
-      text, ranges[0].end(),
-      {0, std::min<size_t>(ranges[0].end() + kPadTrailing, text.size()),
-       ranges[0].end() - std::min(kPadLeading, ranges[0].end())},
-      ranges[0]);
-  for (size_t i = 1; i < ranges.size(); i++)
-    SetSelectedRange(ranges[i], false);
+  // We use SetTextWithoutCaretBoundsChangeNotification() in order to avoid
+  // triggering accessibility events multiple times.
+  SetTextWithoutCaretBoundsChangeNotification(text, ranges[0].end());
+  Scroll({0, std::min<size_t>(ranges[0].end() + kPadTrailing, text.size()),
+          ranges[0].end() - std::min(kPadLeading, ranges[0].end())});
+  // Setting the primary selected range will also fire an appropriate final
+  // accessibility event after the changes above.
+  SetSelectedRanges(ranges);
 
   // Clear the additional text.
   SetAdditionalText(base::string16());
@@ -907,7 +904,7 @@ void OmniboxViewViews::SetSelectedRanges(
 
   SetSelectedRange(ranges[0]);
   for (size_t i = 1; i < ranges.size(); i++)
-    SetSelectedRange(ranges[i], false);
+    AddSecondarySelectedRange(ranges[i]);
 }
 
 base::string16 OmniboxViewViews::GetSelectedText() const {
@@ -1482,11 +1479,13 @@ const char* OmniboxViewViews::GetClassName() const {
 }
 
 bool OmniboxViewViews::OnMousePressed(const ui::MouseEvent& event) {
-  if (model()->popup_model()) {  // Can be null in tests.
+  // Clear focus of buttons, but do not clear keyword mode.
+  if (model()->popup_model() && model()->popup_model()->selected_line_state() !=
+                                    OmniboxPopupModel::KEYWORD_MODE) {
     model()->popup_model()->SetSelectedLineState(OmniboxPopupModel::NORMAL);
   }
-  is_mouse_pressed_ = true;
 
+  is_mouse_pressed_ = true;
   select_all_on_mouse_release_ =
       (event.IsOnlyLeftMouseButton() || event.IsOnlyRightMouseButton()) &&
       (!HasFocus() || (model()->focus_state() == OMNIBOX_FOCUS_INVISIBLE));
@@ -1997,13 +1996,26 @@ void OmniboxViewViews::DidFinishNavigation(
   if (!navigation->IsInMainFrame())
     return;
 
+  // If the navigation didn't commit, and it was renderer-initiated, then no
+  // action is needed, as the URL won't have been updated. But if it was
+  // browser-initiated, then the URL would have been updated to show the URL of
+  // the in-progress navigation; in this case, reset to show the full URL now
+  // that the navigation has finished without committing.
+  if (!navigation->HasCommitted()) {
+    if (navigation->IsRendererInitiated()) {
+      return;
+    }
+    ResetToHideOnInteraction();
+    return;
+  }
+
   // Once a navigation finishes that changes the visible URL (besides just the
   // ref), unelide and reset state so that we'll show the simplified domain on
   // interaction. Same-document navigations that only change the ref are treated
   // specially and don't cause the elision/unelision state to be altered. This
   // is to avoid frequent eliding/uneliding within single-page apps that do
   // frequent fragment navigations.
-  if (!navigation->IsSameDocument() ||
+  if (navigation->IsErrorPage() || !navigation->IsSameDocument() ||
       !navigation->GetPreviousURL().EqualsIgnoringRef(navigation->GetURL())) {
     ResetToHideOnInteraction();
   }
@@ -2421,14 +2433,12 @@ void OmniboxViewViews::UpdateContextMenu(ui::SimpleMenuModel* menu_contents) {
   menu_contents->AddItemWithStringId(IDC_EDIT_SEARCH_ENGINES,
                                      IDS_EDIT_SEARCH_ENGINES);
 
-  if (base::FeatureList::IsEnabled(omnibox::kOmniboxContextMenuShowFullUrls)) {
-    const PrefService::Preference* show_full_urls_pref =
-        location_bar_view_->profile()->GetPrefs()->FindPreference(
-            omnibox::kPreventUrlElisionsInOmnibox);
-    if (!show_full_urls_pref->IsManaged()) {
-      menu_contents->AddCheckItemWithStringId(IDC_SHOW_FULL_URLS,
-                                              IDS_CONTEXT_MENU_SHOW_FULL_URLS);
-    }
+  const PrefService::Preference* show_full_urls_pref =
+      location_bar_view_->profile()->GetPrefs()->FindPreference(
+          omnibox::kPreventUrlElisionsInOmnibox);
+  if (!show_full_urls_pref->IsManaged()) {
+    menu_contents->AddCheckItemWithStringId(IDC_SHOW_FULL_URLS,
+                                            IDS_CONTEXT_MENU_SHOW_FULL_URLS);
   }
 }
 

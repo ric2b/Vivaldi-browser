@@ -147,6 +147,11 @@ const char kDisableDirectCompositionVideoOverlays[] =
 // only used on Windows, as LUID is a Windows specific structure.
 const char kUseAdapterLuid[] = "use-adapter-luid";
 
+// Enable kDirectCompositionForceFullDamage feature regardless of overlay
+// support.
+const char kDirectCompositionForceFullDamageForTesting[] =
+    "direct-composition-force-full-damage-for-testing";
+
 // This is the list of switches passed from this file that are passed from the
 // GpuProcessHost to the GPU Process. Add your switch to this list if you need
 // to read it in the GPU process, else don't add it.
@@ -167,6 +172,7 @@ const char* const kGLSwitchesCopiedFromGpuProcessHost[] = {
     kDisableDirectComposition,
     kEnableDirectCompositionVideoOverlays,
     kDisableDirectCompositionVideoOverlays,
+    kDirectCompositionForceFullDamageForTesting,
 };
 const int kGLSwitchesCopiedFromGpuProcessHostNumSwitches =
     base::size(kGLSwitchesCopiedFromGpuProcessHost);
@@ -209,6 +215,10 @@ const base::Feature kDirectCompositionUseNV12DecodeSwapChain{
 // Default to using ANGLE's OpenGL backend
 const base::Feature kDefaultANGLEOpenGL{"DefaultANGLEOpenGL",
                                         base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Default to using ANGLE's Metal backend.
+const base::Feature kDefaultANGLEMetal{"DefaultANGLEMetal",
+                                       base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Track current program's shaders at glUseProgram() call for crash report
 // purpose. Only effective on Windows because the attached shaders may only

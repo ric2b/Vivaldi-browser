@@ -133,9 +133,6 @@ public final class EventConstants {
     public static final String PARTNER_HOME_PAGE_BUTTON_PRESSED =
             "partner_home_page_button_pressed";
 
-    /** The user used a button in the bottom toolbar. */
-    public static final String CHROME_DUET_USED_BOTTOM_TOOLBAR = "chrome_duet_used_bottom_toolbar";
-
     /** The homepage button in the toolbar was clicked. */
     public static final String HOMEPAGE_BUTTON_CLICKED = "homepage_button_clicked";
 
@@ -160,6 +157,9 @@ public final class EventConstants {
     public static final String KEYBOARD_ACCESSORY_PAYMENT_AUTOFILLED =
             "keyboard_accessory_payment_suggestion_accepted";
 
+    /** The keyboard accessory was swiped to reveal more suggestions. */
+    public static final String KEYBOARD_ACCESSORY_BAR_SWIPED = "keyboard_accessory_bar_swiped";
+
     /** The Explore Sites tile was tapped. */
     public static final String EXPLORE_SITES_TILE_TAPPED = "explore_sites_tile_tapped";
 
@@ -177,6 +177,15 @@ public final class EventConstants {
     public static final String HOMEPAGE_PROMO_SEEN = "homepage_promo_seen";
     public static final String NTP_SHOWN = "ntp_shown";
     public static final String NTP_HOME_BUTTON_CLICKED = "ntp_homebutton_clicked";
+
+    /** Video tutorial related events. */
+    public static final String VIDEO_TUTORIAL_DISMISSED_DOWNLOAD =
+            "video_tutorial_iph_dismissed_download";
+    public static final String VIDEO_TUTORIAL_DISMISSED_SEARCH =
+            "video_tutorial_iph_dismissed_search";
+    public static final String VIDEO_TUTORIAL_CLICKED_DOWNLOAD =
+            "video_tutorial_iph_clicked_download";
+    public static final String VIDEO_TUTORIAL_CLICKED_SEARCH = "video_tutorial_iph_clicked_search";
 
     /** Reengagement events. */
     public static final String STARTED_FROM_MAIN_INTENT = "started_from_main_intent";

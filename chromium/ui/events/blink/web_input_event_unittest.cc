@@ -8,6 +8,7 @@
 #include <stdint.h>
 
 #include "base/stl_util.h"
+#include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/ui_base_features.h"
@@ -25,6 +26,7 @@
 #include "ui/events/test/events_test_utils_x11.h"  // nogncheck
 #include "ui/events/x/x11_event_translation.h"     // nogncheck
 #include "ui/gfx/x/event.h"                        // nogncheck
+#include "ui/gfx/x/keysyms/keysyms.h"              // nogncheck
 #include "ui/gfx/x/x11.h"                          // nogncheck
 #include "ui/gfx/x/x11_types.h"                    // nogncheck
 #include "ui/gfx/x/xproto.h"                       // nogncheck
@@ -97,7 +99,8 @@ TEST(WebInputEventTest, TestMakeWebKeyboardEvent) {
   }
   {
     // Release Ctrl.
-    xev.InitKeyEvent(ET_KEY_RELEASED, VKEY_CONTROL, ControlMask);
+    xev.InitKeyEvent(ET_KEY_RELEASED, VKEY_CONTROL,
+                     static_cast<uint32_t>(x11::KeyButMask::Control));
     auto event = ui::BuildKeyEventFromXEvent(*xev);
     blink::WebKeyboardEvent webkit_event = MakeWebKeyboardEvent(*event);
     // However, modifier bit for Control in |webkit_event| shouldn't be set.
@@ -475,6 +478,26 @@ TEST(WebInputEventTest, TestMakeWebMouseWheelEvent) {
     EXPECT_EQ(321, webkit_event.PositionInWidget().y());
   }
 }
+
+#if !defined(OS_MAC)
+TEST(WebInputEventTest, TestPercentMouseWheelScroll) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(features::kPercentBasedScrolling);
+
+  base::TimeTicks timestamp = EventTimeForNow();
+  MouseWheelEvent ui_event(gfx::Vector2d(0, -MouseWheelEvent::kWheelDelta),
+                           gfx::Point(123, 321), gfx::Point(123, 321),
+                           timestamp, 0, 0);
+  blink::WebMouseWheelEvent webkit_event = MakeWebMouseWheelEvent(ui_event);
+
+  EXPECT_EQ(ui::ScrollGranularity::kScrollByPercentage,
+            webkit_event.delta_units);
+  EXPECT_FLOAT_EQ(0.f, webkit_event.delta_x);
+  EXPECT_FLOAT_EQ(-0.05, webkit_event.delta_y);
+  EXPECT_FLOAT_EQ(0.f, webkit_event.wheel_ticks_x);
+  EXPECT_FLOAT_EQ(-1.f, webkit_event.wheel_ticks_y);
+}
+#endif
 
 TEST(WebInputEventTest, KeyEvent) {
   ui::ScopedKeyboardLayout keyboard_layout(ui::KEYBOARD_LAYOUT_ENGLISH_US);

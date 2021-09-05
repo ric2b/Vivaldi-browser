@@ -72,14 +72,16 @@ class WebLocalFrameImpl;
 class WebPointerEvent;
 
 class InspectorOverlayAgent;
+class GridHighlightTool;
 
 using OverlayFrontend = protocol::Overlay::Metainfo::FrontendClass;
 
 class CORE_EXPORT InspectTool : public GarbageCollected<InspectTool> {
  public:
+  InspectTool(InspectorOverlayAgent* overlay, OverlayFrontend* frontend)
+      : overlay_(overlay), frontend_(frontend) {}
   virtual ~InspectTool() = default;
 
-  void Init(InspectorOverlayAgent* overlay, OverlayFrontend* frontend);
   virtual int GetDataResourceId();
   virtual bool HandleInputEvent(LocalFrameView* frame_view,
                                 const WebInputEvent& input_event,
@@ -94,16 +96,14 @@ class CORE_EXPORT InspectTool : public GarbageCollected<InspectTool> {
   virtual bool HandlePointerEvent(const WebPointerEvent&);
   virtual bool HandleKeyboardEvent(const WebKeyboardEvent&);
   virtual bool ForwardEventsToOverlay();
+  virtual bool SupportsPersistentOverlays();
   virtual void Draw(float scale) {}
   virtual void Dispatch(const String& message) {}
   virtual void Trace(Visitor* visitor) const;
-  virtual void Dispose() {}
   virtual bool HideOnHideHighlight();
   virtual bool HideOnMouseMove();
 
  protected:
-  InspectTool() = default;
-  virtual void DoInit() {}
   Member<InspectorOverlayAgent> overlay_;
   OverlayFrontend* frontend_ = nullptr;
 };
@@ -129,7 +129,6 @@ class CORE_EXPORT Hinge final : public GarbageCollected<Hinge> {
 
 class CORE_EXPORT InspectorOverlayAgent final
     : public InspectorBaseAgent<protocol::Overlay::Metainfo>,
-      public InspectorDOMAgent::DOMListener,
       public InspectorOverlayHost::Delegate {
  public:
   static std::unique_ptr<InspectorGridHighlightConfig> ToGridHighlightConfig(
@@ -211,6 +210,7 @@ class CORE_EXPORT InspectorOverlayAgent final
   void Dispose() override;
 
   void Inspect(Node*);
+  void EnsureAXContext(Node*);
   void DispatchBufferedTouchEvents();
   WebInputEventResult HandleInputEvent(const WebInputEvent&);
   WebInputEventResult HandleInputEventInOverlay(const WebInputEvent&);
@@ -236,12 +236,6 @@ class CORE_EXPORT InspectorOverlayAgent final
 
   // InspectorOverlayHost::Delegate implementation.
   void Dispatch(const String& message) override;
-
-  // InspectorDOMAgent::DOMListener implementation
-  void DidAddDocument(Document*) override;
-  void DidRemoveDocument(Document*) override;
-  void WillRemoveDOMNode(Node*) override;
-  void DidModifyDOMAttr(Element*) override;
 
   bool IsEmpty();
 
@@ -281,10 +275,11 @@ class CORE_EXPORT InspectorOverlayAgent final
   Member<InspectorDOMAgent> dom_agent_;
   std::unique_ptr<FrameOverlay> frame_overlay_;
   Member<InspectTool> inspect_tool_;
+  Member<GridHighlightTool> persistent_tool_;
   Member<Hinge> hinge_;
   // The agent needs to keep AXContext because it enables caching of
   // a11y attributes shown in the inspector overlay.
-  HeapHashMap<Member<Document>, std::unique_ptr<AXContext>>
+  HeapHashMap<WeakMember<Document>, std::unique_ptr<AXContext>>
       document_to_ax_context_;
   bool swallow_next_mouse_up_;
   DOMNodeId backend_node_id_to_inspect_;
@@ -300,8 +295,6 @@ class CORE_EXPORT InspectorOverlayAgent final
   InspectorAgentState::String paused_in_debugger_message_;
   InspectorAgentState::String inspect_mode_;
   InspectorAgentState::Bytes inspect_mode_protocol_config_;
-  base::Time last_paint_time_;
-  bool backend_node_id_changed_;
 
   DISALLOW_COPY_AND_ASSIGN(InspectorOverlayAgent);
 };

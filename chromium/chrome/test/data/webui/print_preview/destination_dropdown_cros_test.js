@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {Destination, DestinationConnectionStatus, DestinationOrigin, DestinationType, PrinterState, PrinterStatusReason, PrinterStatusSeverity} from 'chrome://print/print_preview.js';
+import {Destination, DestinationConnectionStatus, DestinationOrigin, DestinationType} from 'chrome://print/print_preview.js';
 import {assert} from 'chrome://resources/js/assert.m.js';
 import {keyDownOn, move} from 'chrome://resources/polymer/v3_0/iron-test-helpers/mock-interactions.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
@@ -26,8 +26,6 @@ destination_dropdown_cros_test.TestNames = {
   EnterOpensCloses: 'enter opens and closes dropdown',
   HighlightedFollowsMouse: 'highlighted follows mouse',
   Disabled: 'disabled',
-  NewStatusUpdatesDestinationIcon: 'new status updates destination icon',
-  ChangingDestinationUpdatesIcon: 'changing destination updates icon',
   HighlightedWhenOpened: 'highlighted when opened',
 };
 
@@ -262,52 +260,6 @@ suite(destination_dropdown_cros_test.suiteName, function() {
     assertEquals(
         '0', dropdown.$$('#destination-dropdown').getAttribute('tabindex'));
   });
-
-  test(
-      assert(destination_dropdown_cros_test.TestNames
-                 .NewStatusUpdatesDestinationIcon),
-      function() {
-        const destinationBadge = dropdown.$$('#destination-badge');
-        dropdown.value = createDestination('One', DestinationOrigin.CROS);
-
-        dropdown.value.printerStatusReason = PrinterStatusReason.NO_ERROR;
-        dropdown.notifyPath(`value.printerStatusReason`);
-        assertEquals(PrinterState.GOOD, destinationBadge.printerState);
-
-        dropdown.value.printerStatusReason = PrinterStatusReason.OUT_OF_INK;
-        dropdown.notifyPath(`value.printerStatusReason`);
-        assertEquals(PrinterState.ERROR, destinationBadge.printerState);
-
-        dropdown.value.printerStatusReason = PrinterStatusReason.UNKNOWN_REASON;
-        dropdown.notifyPath(`value.printerStatusReason`);
-        assertEquals(PrinterState.UNKNOWN, destinationBadge.printerState);
-      });
-
-  test(
-      assert(destination_dropdown_cros_test.TestNames
-                 .ChangingDestinationUpdatesIcon),
-      function() {
-        const goodDestination =
-            createDestination('One', DestinationOrigin.CROS);
-        goodDestination.printerStatusReason = PrinterStatusReason.NO_ERROR;
-        const errorDestination =
-            createDestination('Two', DestinationOrigin.CROS);
-        errorDestination.printerStatusReason = PrinterStatusReason.OUT_OF_INK;
-        const unknownDestination =
-            createDestination('Three', DestinationOrigin.CROS);
-        unknownDestination.printerStatusReason =
-            PrinterStatusReason.UNKNOWN_REASON;
-        const destinationBadge = dropdown.$$('#destination-badge');
-
-        dropdown.value = goodDestination;
-        assertEquals(PrinterState.GOOD, destinationBadge.printerState);
-
-        dropdown.value = errorDestination;
-        assertEquals(PrinterState.ERROR, destinationBadge.printerState);
-
-        dropdown.value = unknownDestination;
-        assertEquals(PrinterState.UNKNOWN, destinationBadge.printerState);
-      });
 
   test(
       assert(destination_dropdown_cros_test.TestNames.HighlightedWhenOpened),

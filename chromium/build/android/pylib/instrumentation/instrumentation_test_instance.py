@@ -389,7 +389,7 @@ def _GetTestsFromProguard(jar_path):
 
 
 def _GetTestsFromDexdump(test_apk):
-  dump = dexdump.Dump(test_apk)
+  dex_dumps = dexdump.Dump(test_apk)
   tests = []
 
   def get_test_methods(methods):
@@ -401,15 +401,16 @@ def _GetTestsFromDexdump(test_apk):
           'annotations': {'MediumTest': None},
         } for m in methods if m.startswith('test')]
 
-  for package_name, package_info in dump.iteritems():
-    for class_name, class_info in package_info['classes'].iteritems():
-      if class_name.endswith('Test'):
-        tests.append({
-            'class': '%s.%s' % (package_name, class_name),
-            'annotations': {},
-            'methods': get_test_methods(class_info['methods']),
-            'superclass': class_info['superclass'],
-        })
+  for dump in dex_dumps:
+    for package_name, package_info in dump.iteritems():
+      for class_name, class_info in package_info['classes'].iteritems():
+        if class_name.endswith('Test'):
+          tests.append({
+              'class': '%s.%s' % (package_name, class_name),
+              'annotations': {},
+              'methods': get_test_methods(class_info['methods']),
+              'superclass': class_info['superclass'],
+          })
   return tests
 
 def SaveTestsToPickle(pickle_path, tests):
@@ -555,6 +556,9 @@ class InstrumentationTestInstance(test_instance.TestInstance):
 
     self._replace_system_package = None
     self._initializeReplaceSystemPackageAttributes(args)
+
+    self._system_packages_to_remove = None
+    self._initializeSystemPackagesToRemoveAttributes(args)
 
     self._use_webview_provider = None
     self._initializeUseWebviewProviderAttributes(args)
@@ -767,6 +771,12 @@ class InstrumentationTestInstance(test_instance.TestInstance):
       return
     self._replace_system_package = args.replace_system_package
 
+  def _initializeSystemPackagesToRemoveAttributes(self, args):
+    if (not hasattr(args, 'system_packages_to_remove')
+        or not args.system_packages_to_remove):
+      return
+    self._system_packages_to_remove = args.system_packages_to_remove
+
   def _initializeUseWebviewProviderAttributes(self, args):
     if (not hasattr(args, 'use_webview_provider')
         or not args.use_webview_provider):
@@ -871,6 +881,10 @@ class InstrumentationTestInstance(test_instance.TestInstance):
   @property
   def symbolizer(self):
     return self._symbolizer
+
+  @property
+  def system_packages_to_remove(self):
+    return self._system_packages_to_remove
 
   @property
   def test_apk(self):

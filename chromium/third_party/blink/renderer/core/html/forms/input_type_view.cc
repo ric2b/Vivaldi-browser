@@ -180,6 +180,12 @@ void InputTypeView::SubtreeHasChanged() {
 
 void InputTypeView::ListAttributeTargetChanged() {}
 
+void InputTypeView::CapsLockStateMayHaveChanged() {}
+
+bool InputTypeView::ShouldDrawCapsLockIndicator() const {
+  return false;
+}
+
 void InputTypeView::UpdateClearButtonVisibility() {}
 
 void InputTypeView::UpdatePlaceholderText() {}
@@ -210,10 +216,6 @@ bool InputTypeView::HasBadInput() const {
 void ClickHandlingState::Trace(Visitor* visitor) const {
   visitor->Trace(checked_radio_button);
   EventDispatchHandlingState::Trace(visitor);
-}
-
-String InputTypeView::RawValue() const {
-  return g_empty_string;
 }
 
 }  // namespace blink

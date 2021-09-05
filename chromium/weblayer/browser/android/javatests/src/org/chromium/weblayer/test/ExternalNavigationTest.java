@@ -539,7 +539,7 @@ public class ExternalNavigationTest {
      */
     @Test
     @SmallTest
-    @MinWebLayerVersion(86)
+    @MinWebLayerVersion(87)
     public void testDisableIntentProcessing() throws Throwable {
         InstrumentationActivity activity = mActivityTestRule.launchShellWithUrl(ABOUT_BLANK_URL);
         IntentInterceptor intentInterceptor = new IntentInterceptor();

@@ -30,15 +30,14 @@
 #include "base/macros.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
+#include "third_party/blink/public/common/web_preferences/image_animation_policy.h"
 #include "third_party/blink/renderer/platform/geometry/float_point.h"
 #include "third_party/blink/renderer/platform/geometry/float_size.h"
 #include "third_party/blink/renderer/platform/geometry/int_rect.h"
 #include "third_party/blink/renderer/platform/graphics/graphics_types.h"
-#include "third_party/blink/renderer/platform/graphics/image_animation_policy.h"
 #include "third_party/blink/renderer/platform/graphics/image_observer.h"
 #include "third_party/blink/renderer/platform/graphics/image_orientation.h"
 #include "third_party/blink/renderer/platform/graphics/paint/paint_image.h"
-#include "third_party/blink/renderer/platform/graphics/paint/paint_record.h"
 #include "third_party/blink/renderer/platform/heap/persistent.h"
 #include "third_party/blink/renderer/platform/platform_export.h"
 #include "third_party/blink/renderer/platform/wtf/forward.h"
@@ -60,9 +59,9 @@ namespace blink {
 class FloatRect;
 class GraphicsContext;
 class Image;
-class KURL;
 class WebGraphicsContext3DProvider;
 class WebGraphicsContext3DProviderWrapper;
+class DarkModeImageCache;
 
 class PLATFORM_EXPORT Image : public ThreadSafeRefCounted<Image> {
   friend class GeneratedImage;
@@ -156,9 +155,9 @@ class PLATFORM_EXPORT Image : public ThreadSafeRefCounted<Image> {
   virtual bool MaybeAnimated() { return false; }
 
   // Set animationPolicy
-  virtual void SetAnimationPolicy(ImageAnimationPolicy) {}
-  virtual ImageAnimationPolicy AnimationPolicy() {
-    return kImageAnimationPolicyAllowed;
+  virtual void SetAnimationPolicy(web_pref::ImageAnimationPolicy) {}
+  virtual web_pref::ImageAnimationPolicy AnimationPolicy() {
+    return web_pref::kImageAnimationPolicyAllowed;
   }
 
   // Advances an animated image. For BitmapImage (e.g., animated gifs) this
@@ -249,19 +248,12 @@ class PLATFORM_EXPORT Image : public ThreadSafeRefCounted<Image> {
     return nullptr;
   }
 
-  virtual sk_sp<PaintRecord> PaintRecordForContainer(
-      const KURL& url,
-      const IntSize& container_size,
-      const IntRect& draw_src_rect,
-      const IntRect& draw_dst_rect,
-      bool flip_y) {
-    return nullptr;
-  }
-
   PaintImage::Id paint_image_id() const { return stable_image_id_; }
 
   // Returns an SkBitmap that is a copy of the image's current frame.
   SkBitmap AsSkBitmapForCurrentFrame(RespectImageOrientationEnum);
+
+  DarkModeImageCache* GetDarkModeImageCache();
 
  protected:
   Image(ImageObserver* = nullptr, bool is_multipart = false);
@@ -295,6 +287,7 @@ class PLATFORM_EXPORT Image : public ThreadSafeRefCounted<Image> {
   WeakPersistent<ImageObserver> image_observer_;
   PaintImage::Id stable_image_id_;
   const bool is_multipart_;
+  std::unique_ptr<DarkModeImageCache> dark_mode_image_cache_;
   DISALLOW_COPY_AND_ASSIGN(Image);
 };
 

@@ -54,6 +54,7 @@ class EventDatabase {
   bool MigrateCalendarToVersion4();
   bool MigrateCalendarToVersion6();
   bool MigrateCalendarToVersion8();
+  bool MigrateCalendarToVersion9();
 
  private:
   DISALLOW_COPY_AND_ASSIGN(EventDatabase);
@@ -67,7 +68,8 @@ class EventDatabase {
   " id, calendar_id, alarm_id, title, description, start, end, all_day, "    \
   "is_recurring, start_recurring, end_recurring, location, url, etag, href," \
   "uid, event_type_id, task, complete, trash, trash_time, sequence, ical, "  \
-  " rrule, organizer, timezone "
+  "rrule, organizer, timezone, due, priority, status, percentage_complete, " \
+  "categories, component_class, attachment, completed "
 
 }  // namespace calendar
 

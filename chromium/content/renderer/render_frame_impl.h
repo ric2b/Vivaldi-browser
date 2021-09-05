@@ -21,6 +21,7 @@
 #include "base/files/file_path.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
+#include "base/memory/read_only_shared_memory_region.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
@@ -37,7 +38,6 @@
 #include "content/common/navigation_params.mojom.h"
 #include "content/common/render_accessibility.mojom.h"
 #include "content/common/renderer.mojom.h"
-#include "content/common/unique_name_helper.h"
 #include "content/common/web_ui.mojom.h"
 #include "content/public/common/browser_controls_state.h"
 #include "content/public/common/fullscreen_video_element.mojom.h"
@@ -49,7 +49,6 @@
 #include "content/public/renderer/websocket_handshake_throttle_provider.h"
 #include "content/renderer/content_security_policy_util.h"
 #include "content/renderer/frame_blame_context.h"
-#include "content/renderer/input/input_target_client_impl.h"
 #include "content/renderer/loader/child_url_loader_factory_bundle.h"
 #include "content/renderer/media/media_factory.h"
 #include "content/renderer/render_widget.h"
@@ -79,6 +78,7 @@
 #include "third_party/blink/public/common/loader/loading_behavior_flag.h"
 #include "third_party/blink/public/common/loader/previews_state.h"
 #include "third_party/blink/public/common/navigation/triggering_event_info.h"
+#include "third_party/blink/public/common/unique_name/unique_name_helper.h"
 #include "third_party/blink/public/mojom/autoplay/autoplay.mojom.h"
 #include "third_party/blink/public/mojom/choosers/file_chooser.mojom.h"
 #include "third_party/blink/public/mojom/commit_result/commit_result.mojom.h"
@@ -143,16 +143,13 @@ namespace service_manager {
 class InterfaceProvider;
 }
 
-namespace ui {
-class Cursor;
-}
-
 namespace url {
 class Origin;
 }
 
 namespace content {
 
+class AgentSchedulingGroup;
 class BlinkInterfaceRegistryImpl;
 class CompositorDependencies;
 class DocumentState;
@@ -182,6 +179,7 @@ class CONTENT_EXPORT RenderFrameImpl
  public:
   // Creates a new RenderFrame as the main frame of |render_view|.
   static RenderFrameImpl* CreateMainFrame(
+      AgentSchedulingGroup& agent_scheduling_group,
       RenderViewImpl* render_view,
       CompositorDependencies* compositor_deps,
       blink::WebFrame* opener,
@@ -211,13 +209,14 @@ class CONTENT_EXPORT RenderFrameImpl
   // to IPC message from the browser process. All other frame creation is driven
   // through Blink and Create.
   static void CreateFrame(
+      AgentSchedulingGroup& agent_scheduling_group,
       int routing_id,
       mojo::PendingRemote<service_manager::mojom::InterfaceProvider>
           interface_provider,
       mojo::PendingRemote<blink::mojom::BrowserInterfaceBroker>
           browser_interface_broker,
       int previous_routing_id,
-      const base::UnguessableToken& opener_frame_token,
+      const base::Optional<base::UnguessableToken>& opener_frame_token,
       int parent_routing_id,
       int previous_sibling_routing_id,
       const base::UnguessableToken& frame_token,
@@ -236,7 +235,8 @@ class CONTENT_EXPORT RenderFrameImpl
 
   // Constructor parameters are bundled into a struct.
   struct CONTENT_EXPORT CreateParams {
-    CreateParams(RenderViewImpl* render_view,
+    CreateParams(AgentSchedulingGroup& agent_scheduling_group,
+                 RenderViewImpl* render_view,
                  int32_t routing_id,
                  mojo::PendingRemote<service_manager::mojom::InterfaceProvider>
                      interface_provider,
@@ -248,6 +248,7 @@ class CONTENT_EXPORT RenderFrameImpl
     CreateParams(CreateParams&&);
     CreateParams& operator=(CreateParams&&);
 
+    AgentSchedulingGroup* agent_scheduling_group;
     RenderViewImpl* render_view;
     int32_t routing_id;
     mojo::PendingRemote<service_manager::mojom::InterfaceProvider>
@@ -283,13 +284,6 @@ class CONTENT_EXPORT RenderFrameImpl
 
   ~RenderFrameImpl() override;
 
-  // Called by RenderWidget when meaningful layout has happened.
-  // See RenderFrameObserver::DidMeaningfulLayout declaration for details.
-  void DidMeaningfulLayout(blink::WebMeaningfulLayout layout_type);
-
-  // Draw commands have been issued by blink::LayerTreeView.
-  void DidCommitAndDrawCompositorFrame();
-
   // Returns the unique name of the RenderFrame.
   const std::string& unique_name() const { return unique_name_helper_.value(); }
 
@@ -312,11 +306,7 @@ class CONTENT_EXPORT RenderFrameImpl
   // depend on the frame being at its proper spot.
   //
   // Virtual for web tests to inject their own behaviour into the WebLocalFrame.
-  virtual void Initialize();
-
-  // Notifications from RenderWidget.
-  void WasHidden();
-  void WasShown();
+  virtual void Initialize(blink::WebFrame* parent);
 
   // Start/Stop loading notifications.
   // TODO(nasko): Those are page-level methods at this time and come from
@@ -349,24 +339,9 @@ class CONTENT_EXPORT RenderFrameImpl
                          blink::WebNavigationPolicy policy,
                          const gfx::Rect& initial_rect);
 
-  // Called when this frame's widget is focused.
-  void RenderWidgetSetFocus(bool enable);
-
-  // Called when the widget receives a mouse event.
-  void RenderWidgetWillHandleMouseEvent();
-
 #if BUILDFLAG(ENABLE_PLUGINS)
   // Notification that a PPAPI plugin has been created.
   void PepperPluginCreated(RendererPpapiHost* host);
-
-  // Notifies that |instance| has changed the cursor.
-  // This will update the cursor appearance if it is currently over the plugin
-  // instance.
-  void PepperDidChangeCursor(PepperPluginInstanceImpl* instance,
-                             const ui::Cursor& cursor);
-
-  // Notifies that |instance| has received a mouse event.
-  void PepperDidReceiveMouseEvent(PepperPluginInstanceImpl* instance);
 
   // Informs the render view that a PPAPI plugin has changed text input status.
   void PepperTextInputTypeChanged(PepperPluginInstanceImpl* instance);
@@ -428,7 +403,7 @@ class CONTENT_EXPORT RenderFrameImpl
   std::unique_ptr<AXTreeSnapshotter> CreateAXTreeSnapshotter() override;
   int GetRoutingID() override;
   blink::WebLocalFrame* GetWebFrame() override;
-  const WebPreferences& GetWebkitPreferences() override;
+  const blink::web_pref::WebPreferences& GetBlinkPreferences() override;
   int ShowContextMenu(ContextMenuClient* client,
                       const UntrustworthyContextMenuParams& params) override;
   void CancelContextMenu(int request_id) override;
@@ -587,6 +562,12 @@ class CONTENT_EXPORT RenderFrameImpl
       mojo::PendingAssociatedRemote<blink::mojom::DevToolsAgentHost> host,
       mojo::PendingAssociatedReceiver<blink::mojom::DevToolsAgent> receiver)
       override;
+  void JavaScriptMethodExecuteRequest(
+      const base::string16& object_name,
+      const base::string16& method_name,
+      base::Value arguments,
+      bool wants_result,
+      JavaScriptMethodExecuteRequestCallback callback) override;
   void JavaScriptExecuteRequest(
       const base::string16& javascript,
       bool wants_result,
@@ -678,7 +659,6 @@ class CONTENT_EXPORT RenderFrameImpl
   void WillSendSubmitEvent(const blink::WebFormElement& form) override;
   void DidCreateDocumentLoader(
       blink::WebDocumentLoader* document_loader) override;
-  void WillFailCommitNavigation(CommitFailureReason) override;
   void DidCommitNavigation(const blink::WebHistoryItem& item,
                            blink::WebHistoryCommitType commit_type,
                            bool should_reset_browser_interface_broker) override;
@@ -734,6 +714,7 @@ class CONTENT_EXPORT RenderFrameImpl
                                 int world_id) override;
   void DidChangeScrollOffset() override;
   blink::WebMediaStreamDeviceObserver* MediaStreamDeviceObserver() override;
+  bool AllowRTCLegacyTLSProtocols() override;
   blink::WebEncryptedMediaClient* EncryptedMediaClient() override;
   blink::WebString UserAgentOverride() override;
   base::Optional<blink::UserAgentMetadata> UserAgentMetadataOverride() override;
@@ -749,12 +730,12 @@ class CONTENT_EXPORT RenderFrameImpl
       blink::WebSetSinkIdCompleteCallback callback) override;
   std::unique_ptr<blink::WebURLLoaderFactory> CreateURLLoaderFactory() override;
   void OnStopLoading() override;
+  void MaybeProxyURLLoaderFactory(
+      blink::CrossVariantMojoReceiver<
+          network::mojom::URLLoaderFactoryInterfaceBase>* factory_receiver)
+      override;
   void DraggableRegionsChanged() override;
   blink::BrowserInterfaceBrokerProxy* GetBrowserInterfaceBroker() override;
-  void SubmitThroughputData(ukm::SourceId source_id,
-                            int aggregated_percent,
-                            int impl_percent,
-                            base::Optional<int> main_percent) override;
   // Dispatches the current state of selection on the webpage to the browser if
   // it has changed.
   // TODO(varunjain): delete this method once we figure out how to keep
@@ -762,6 +743,24 @@ class CONTENT_EXPORT RenderFrameImpl
   void SyncSelectionIfRequired() override;
   void ScrollFocusedEditableElementIntoRect(const gfx::Rect& rect) override;
   void ResetHasScrolledFocusedEditableIntoView() override;
+  void CreateAudioInputStream(
+      blink::CrossVariantMojoRemote<
+          blink::mojom::RendererAudioInputStreamFactoryClientInterfaceBase>
+          client,
+      const base::UnguessableToken& session_id,
+      const media::AudioParameters& params,
+      bool automatic_gain_control,
+      uint32_t shared_memory_count) override;
+  void AssociateInputAndOutputForAec(
+      const base::UnguessableToken& input_stream_id,
+      const std::string& output_device_id) override;
+  void DidMeaningfulLayout(blink::WebMeaningfulLayout layout_type) override;
+  void DidCommitAndDrawCompositorFrame() override;
+  void WasHidden() override;
+  void WasShown() override;
+
+  void SetUpSharedMemoryForSmoothness(
+      base::ReadOnlySharedMemoryRegion shared_memory);
 
   // Binds to the fullscreen service in the browser.
   void BindFullscreen(
@@ -793,21 +792,6 @@ class CONTENT_EXPORT RenderFrameImpl
 
   media::MediaPermission* GetMediaPermission();
 
-  // Proxies the call to set the prefer compositing flag over to the
-  // RenderViewImpl. Meant to be called by the |render_widget_| in order to get
-  // access to the RenderViewImpl.
-  void SetPreferCompositingToLCDTextEnabledOnRenderView(bool prefer);
-  // Proxies the call to set the device scale factor over to the RenderViewImpl.
-  // Meant to be called by the |render_widget_| in order to get access to the
-  // RenderViewImpl.
-  void SetDeviceScaleFactorOnRenderView(bool use_zoom_for_dsf,
-                                        float device_scale_factor);
-  // Proxies the call to set the visible viewport size over to the
-  // RenderViewImpl. Meant to be called by the |render_widget_| in order to get
-  // access to the RenderViewImpl.
-  void SetVisibleViewportSizeForChildLocalRootOnRenderView(
-      const gfx::Size& visible_viewport_size);
-
   // Sends the current frame's navigation state to the browser.
   void SendUpdateState();
 
@@ -825,13 +809,6 @@ class CONTENT_EXPORT RenderFrameImpl
   PepperPluginInstanceImpl* focused_pepper_plugin() {
     return focused_pepper_plugin_;
   }
-  PepperPluginInstanceImpl* pepper_last_mouse_event_target() {
-    return pepper_last_mouse_event_target_;
-  }
-  void set_pepper_last_mouse_event_target(PepperPluginInstanceImpl* plugin) {
-    pepper_last_mouse_event_target_ = plugin;
-  }
-
   // Indicates that the given instance has been created.
   void PepperInstanceCreated(PepperPluginInstanceImpl* instance);
 
@@ -952,6 +929,7 @@ class CONTENT_EXPORT RenderFrameImpl
   // BrowserInterfaceBroker through which services are exposed to the
   // RenderFrame.
   static RenderFrameImpl* Create(
+      AgentSchedulingGroup& agent_scheduling_group,
       RenderViewImpl* render_view,
       int32_t routing_id,
       mojo::PendingRemote<service_manager::mojom::InterfaceProvider>
@@ -1103,9 +1081,6 @@ class CONTENT_EXPORT RenderFrameImpl
                      std::string* data,
                      GURL* base_url);
 
-  bool ShouldDisplayErrorPageForFailedLoad(int error_code,
-                                           const GURL& unreachable_url);
-
   // |transition_type| corresponds to the document which triggered this request.
   void WillSendRequestInternal(blink::WebURLRequest& request,
                                bool for_main_frame,
@@ -1252,12 +1227,15 @@ class CONTENT_EXPORT RenderFrameImpl
   // case of the main frame, but not subframes).
   blink::WebNavigationControl* frame_ = nullptr;
 
+  // The `AgentSchedulingGroup` this frame is associated with.
+  AgentSchedulingGroup& agent_scheduling_group_;
+
   // Boolean value indicating whether this RenderFrameImpl object is for the
   // main frame or not. It remains accurate during destruction, even when
   // |frame_| has been invalidated.
   bool is_main_frame_;
 
-  class UniqueNameFrameAdapter : public UniqueNameHelper::FrameAdapter {
+  class UniqueNameFrameAdapter : public blink::UniqueNameHelper::FrameAdapter {
    public:
     explicit UniqueNameFrameAdapter(RenderFrameImpl* render_frame);
     ~UniqueNameFrameAdapter() override;
@@ -1278,7 +1256,7 @@ class CONTENT_EXPORT RenderFrameImpl
     RenderFrameImpl* render_frame_;
   };
   UniqueNameFrameAdapter unique_name_frame_adapter_;
-  UniqueNameHelper unique_name_helper_;
+  blink::UniqueNameHelper unique_name_helper_;
 
   // Indicates whether the frame has been inserted into the frame tree yet or
   // not.
@@ -1395,12 +1373,6 @@ class CONTENT_EXPORT RenderFrameImpl
 
   // Whether or not the focus is on a PPAPI plugin
   PepperPluginInstanceImpl* focused_pepper_plugin_;
-
-  // The plugin instance that received the last mouse event. It is set to NULL
-  // if the last mouse event went to elements other than Pepper plugins.
-  // |pepper_last_mouse_event_target_| is not owned by this class. We depend on
-  // the RenderFrameImpl to NULL it out when it destructs.
-  PepperPluginInstanceImpl* pepper_last_mouse_event_target_;
 #endif
 
   using AutoplayOriginAndFlags = std::pair<url::Origin, int32_t>;
@@ -1468,8 +1440,6 @@ class CONTENT_EXPORT RenderFrameImpl
 
   // AndroidOverlay routing token from the browser, if we have one yet.
   base::Optional<base::UnguessableToken> overlay_routing_token_;
-
-  InputTargetClientImpl input_target_client_impl_;
 
   // Used for devtools instrumentation and trace-ability. This token is
   // used to tag calls and requests in order to attribute them to the context

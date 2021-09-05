@@ -21,6 +21,7 @@
 #include "ash/app_list/views/apps_grid_view.h"
 #include "ash/app_list/views/contents_view.h"
 #include "ash/app_list/views/expand_arrow_view.h"
+#include "ash/app_list/views/privacy_container_view.h"
 #include "ash/app_list/views/search_box_view.h"
 #include "ash/app_list/views/search_result_actions_view.h"
 #include "ash/app_list/views/search_result_base_view.h"
@@ -32,6 +33,7 @@
 #include "ash/keyboard/keyboard_controller_impl.h"
 #include "ash/keyboard/ui/keyboard_ui_controller.h"
 #include "ash/keyboard/ui/test/keyboard_test_util.h"
+#include "ash/public/cpp/app_list/app_list_color_provider.h"
 #include "ash/public/cpp/app_list/app_list_config.h"
 #include "ash/public/cpp/app_list/app_list_features.h"
 #include "ash/public/cpp/app_list/app_list_switches.h"
@@ -487,6 +489,16 @@ TEST_F(AppListPresenterDelegateZeroStateTest, ClickSearchBoxInTabletMode) {
 TEST_F(AppListPresenterDelegateZeroStateTest,
        RemoveSuggestionShowsConfirmDialog) {
   ShowZeroStateSearchInHalfState();
+
+  // Mark the privacy notices as dismissed so that they do not interfere with
+  // the layout.
+  Shell::Get()->app_list_controller()->MarkAssistantPrivacyInfoDismissed();
+  Shell::Get()->app_list_controller()->MarkSuggestedContentInfoDismissed();
+  GetAppListView()
+      ->app_list_main_view()
+      ->contents_view()
+      ->privacy_container_view()
+      ->Update();
 
   // Add a zero state suggestion results - the result that will be tested is in
   // the second place.
@@ -3787,10 +3799,11 @@ TEST_P(AppListPresenterDelegateHomeLauncherTest, BackgroundOpacity) {
 
   // The opacity should be set on the color, not the layer. Setting opacity on
   // the layer will change the opacity of the blur effect, which is not desired.
-  const U8CPU clamshell_background_opacity = static_cast<U8CPU>(255 * 0.74);
-  EXPECT_EQ(SkColorSetA(AppListView::kDefaultBackgroundColor,
-                        clamshell_background_opacity),
-            GetAppListView()->GetAppListBackgroundShieldColorForTest());
+  const U8CPU clamshell_background_opacity = static_cast<U8CPU>(255 * 0.8);
+  EXPECT_EQ(
+      SkColorSetA(AppListColorProvider::Get()->GetAppListBackgroundColor(),
+                  clamshell_background_opacity),
+      GetAppListView()->GetAppListBackgroundShieldColorForTest());
   EXPECT_EQ(1, GetAppListView()
                    ->GetAppListBackgroundShieldForTest()
                    ->layer()
@@ -3800,9 +3813,10 @@ TEST_P(AppListPresenterDelegateHomeLauncherTest, BackgroundOpacity) {
   EnableTabletMode(true);
 
   const U8CPU tablet_background_opacity = static_cast<U8CPU>(0);
-  EXPECT_EQ(SkColorSetA(AppListView::kDefaultBackgroundColor,
-                        tablet_background_opacity),
-            GetAppListView()->GetAppListBackgroundShieldColorForTest());
+  EXPECT_EQ(
+      SkColorSetA(AppListColorProvider::Get()->GetAppListBackgroundColor(),
+                  tablet_background_opacity),
+      GetAppListView()->GetAppListBackgroundShieldColorForTest());
   EXPECT_EQ(1, GetAppListView()
                    ->GetAppListBackgroundShieldForTest()
                    ->layer()
@@ -4040,7 +4054,7 @@ TEST_P(AppListPresenterDelegateHomeLauncherTest,
   // kHideShelfControlsInTabletMode enabled.
   // TODO(https://crbug.com/1050544) Use the a11y feature specific to showing
   // navigation buttons in tablet mode once it lands.
-  Shell::Get()->accessibility_controller()->SetAutoclickEnabled(true);
+  Shell::Get()->accessibility_controller()->autoclick().SetEnabled(true);
 
   // Enter text in the searchbox, the app list should transition to fullscreen
   // search.

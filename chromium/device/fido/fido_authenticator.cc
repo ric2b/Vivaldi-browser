@@ -73,19 +73,19 @@ FidoAuthenticator::WillNeedPINToGetAssertion(
 }
 
 void FidoAuthenticator::GetCredentialsMetadata(
-    base::span<const uint8_t> pin_token,
+    const pin::TokenResponse& pin_token,
     GetCredentialsMetadataCallback callback) {
   NOTREACHED();
 }
 
 void FidoAuthenticator::EnumerateCredentials(
-    base::span<const uint8_t> pin_token,
+    const pin::TokenResponse& pin_token,
     EnumerateCredentialsCallback callback) {
   NOTREACHED();
 }
 
 void FidoAuthenticator::DeleteCredential(
-    base::span<const uint8_t> pin_token,
+    const pin::TokenResponse& pin_token,
     const PublicKeyCredentialDescriptor& credential_id,
     DeleteCredentialCallback callback) {
   NOTREACHED();
@@ -125,6 +125,21 @@ void FidoAuthenticator::BioEnrollRename(const pin::TokenResponse&,
 void FidoAuthenticator::BioEnrollDelete(const pin::TokenResponse&,
                                         std::vector<uint8_t>,
                                         BioEnrollmentCallback) {
+  NOTREACHED();
+}
+
+void FidoAuthenticator::WriteLargeBlob(
+    const std::vector<uint8_t>& large_blob,
+    const LargeBlobKey& large_blob_key,
+    const base::Optional<pin::TokenResponse> pin_uv_auth_token,
+    base::OnceCallback<void(CtapDeviceResponseCode)> callback) {
+  NOTREACHED();
+}
+
+void FidoAuthenticator::ReadLargeBlob(
+    const std::vector<LargeBlobKey>& large_blob_keys,
+    const base::Optional<pin::TokenResponse> pin_uv_auth_token,
+    LargeBlobReadCallback callback) {
   NOTREACHED();
 }
 

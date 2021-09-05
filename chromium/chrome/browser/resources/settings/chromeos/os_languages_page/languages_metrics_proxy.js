@@ -19,7 +19,7 @@ cr.define('settings', function() {
   /* #export */ const LanguagesPageInteraction = {
     SWITCH_SYSTEM_LANGUAGE: 0,
     RESTART: 1,
-    RESTART_NOW: 2,
+    SWITCH_INPUT_METHOD: 2,
     RESTART_LATER: 3,
     OPEN_CUSTOM_SPELL_CHECK: 4,
   };
@@ -59,6 +59,13 @@ cr.define('settings', function() {
      * @param {boolean} value
      */
     recordToggleTranslate(value) {}
+
+    /**
+     * Records when users check/uncheck "Offer to translate pages in this
+     * language" checkbox.
+     * @param {boolean} value
+     */
+    recordTranslateCheckboxChanged(value) {}
   }
 
   /** @implements {settings.LanguagesMetricsProxy} */
@@ -104,6 +111,12 @@ cr.define('settings', function() {
     recordToggleTranslate(value) {
       chrome.metricsPrivate.recordBoolean(
           'ChromeOS.Settings.Languages.Toggle.Translate', value);
+    }
+
+    /** @override */
+    recordTranslateCheckboxChanged(value) {
+      chrome.metricsPrivate.recordBoolean(
+          'ChromeOS.Settings.Languages.OfferToTranslateCheckbox', value);
     }
   }
 

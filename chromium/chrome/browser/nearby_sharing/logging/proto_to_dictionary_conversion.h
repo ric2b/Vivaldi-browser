@@ -23,16 +23,6 @@ base::Value PublicCertificateToReadableDictionary(
     const nearbyshare::proto::PublicCertificate& certificate);
 base::Value TimestampToReadableDictionary(
     const nearbyshare::proto::Timestamp& timestamp);
-base::Value CheckContactReachabilityRequestToReadableDictionary(
-    const nearbyshare::proto::CheckContactsReachabilityRequest& request);
-base::Value ReachableContactToReadableDictionary(
-    const nearbyshare::proto::CheckContactsReachabilityRequest::
-        ReachableContact& contact);
-base::Value CheckContactReachabilityResponseToReadableDictionary(
-    const nearbyshare::proto::CheckContactsReachabilityResponse& response);
-base::Value ResultToReadableDictionary(
-    const nearbyshare::proto::CheckContactsReachabilityResponse::Result&
-        result);
 base::Value ListContactPeopleRequestToReadableDictionary(
     const nearbyshare::proto::ListContactPeopleRequest& request);
 base::Value ListContactPeopleResponseToReadableDictionary(

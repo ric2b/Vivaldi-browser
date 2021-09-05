@@ -184,7 +184,7 @@ class TranslateLanguageBrowserTest : public InProcessBrowserTest {
 
   void Revert() { test_utils::PressRevert(browser_); }
 
-  LanguageState& GetLanguageState() {
+  const LanguageState& GetLanguageState() {
     auto* const client = ChromeTranslateClient::FromWebContents(
         browser_->tab_strip_model()->GetActiveWebContents());
     CHECK(client);
@@ -219,7 +219,9 @@ class TranslateLanguageBrowserTest : public InProcessBrowserTest {
   DISALLOW_COPY_AND_ASSIGN(TranslateLanguageBrowserTest);
 };
 
-IN_PROC_BROWSER_TEST_F(TranslateLanguageBrowserTest, LanguageModelLogSucceed) {
+// Flaky failures & timeouts: https://crbug.com/1131622
+IN_PROC_BROWSER_TEST_F(TranslateLanguageBrowserTest,
+                       DISABLED_LanguageModelLogSucceed) {
   InitInIncognitoMode(false);
 
   for (int i = 0; i < 10; ++i) {
@@ -293,8 +295,10 @@ class TranslateLanguageBrowserTestWithTranslateRecentTarget
   base::test::ScopedFeatureList feature_list_;
 };
 
+// The test is flakily crahing on Linux, Windows, and ChromeOS:
+// crbug.com/1122170
 IN_PROC_BROWSER_TEST_F(TranslateLanguageBrowserTestWithTranslateRecentTarget,
-                       RecentTargetLanguage) {
+                       DISABLED_RecentTargetLanguage) {
   InitInIncognitoMode(false);
 
   // Before browsing: set auto translate from French to Chinese.

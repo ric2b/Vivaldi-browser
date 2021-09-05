@@ -60,17 +60,23 @@ source_set("cast_runner_core") {
     "cast/cast_component.h",
     "cast/cast_runner.cc",
     "cast/cast_runner.h",
+    "cast/cast_runner_switches.cc",
+    "cast/cast_runner_switches.h",
     "cast/cast_streaming.cc",
     "cast/cast_streaming.h",
-    "cast/named_message_port_connector.cc",
-    "cast/named_message_port_connector.h",
+    "cast/named_message_port_connector_fuchsia.cc",
+    "cast/named_message_port_connector_fuchsia.h",
     "cast/pending_cast_component.cc",
     "cast/pending_cast_component.h",
   ]
-  data_deps = [ "//chromecast/bindings:named_message_port_connector_resources" ]
-  data = [ "cast/data" ]
+  data = [
+    "cast/data/receiver.html",
+    rebase_path(
+        "//components/cast/named_message_port_connector/named_message_port_connector.js"),
+  ]
   deps = [
     "//base",
+    "//components/cast/named_message_port_connector:named_message_port_connector",
     "//fuchsia/base",
     "//fuchsia/base:modular",
     "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.modular",
@@ -78,6 +84,11 @@ source_set("cast_runner_core") {
     "//third_party/fuchsia-sdk/sdk/pkg/sys_cpp",
     "//url",
   ]
+
+  # TODO(crbug.com/1131102): Remove dep when MessagePortProxy lands, and add assertions to ensure
+  # that Blink indirect deps don't creep back in.
+  deps += [ "//fuchsia/base:message_port" ]
+
   public_deps = [
     ":common",
     "//fuchsia:cast_fidl",
@@ -95,7 +106,11 @@ executable("cast_runner_exe") {
     ":common",
     "//base",
     "//fuchsia/base",
+    "//mojo/core/embedder",  # TODO(crbug.com/1126571): Remove when
+                             # MessagePortProxy lands.
   ]
+
+  data_deps = [ ":cast_runner_core" ]
   visibility = [ ":*" ]
 }
 
@@ -103,6 +118,18 @@ cr_fuchsia_package("cast_runner_pkg") {
   binary = ":cast_runner_exe"
   package_name_override = "cast_runner"
   manifest = "cast/cast_runner.cmx"
+
+  # TODO(crbug.com/1131102): Remove these exclusions when MessagePortProxy lands.
+  excluded_files = [
+    "lib/libEGL.so",
+    "lib/libfuchsia_egl.so",
+    "lib/libGLESv2.so",
+    "lib/libswiftshader_libEGL.so",
+    "lib/libswiftshader_libGLESv2.so",
+    "lib/libtrace-engine.so",
+    "lib/libvulkan.so",
+    "lib/VkLayer_image_pipe_swapchain.so",
+  ]
 }
 
 fuchsia_package_runner("cast_runner") {
@@ -147,6 +174,7 @@ test("cast_runner_unittests") {
     "//testing/gtest",
     "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.web",
   ]
+  data_deps = [ ":cast_runner_core" ]
 }
 
 test("cast_runner_integration_tests") {
@@ -158,6 +186,8 @@ test("cast_runner_integration_tests") {
     "//base/test:run_all_unittests",
     "//base/test:test_support",
     "//fuchsia/base:test_support",
+    "//mojo/core/embedder",  # TODO(crbug.com/1126571): Remove when
+                             # MessagePortProxy lands.
     "//net:test_support",
     "//testing/gtest",
     "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.camera3",
@@ -166,16 +196,24 @@ test("cast_runner_integration_tests") {
     "//third_party/fuchsia-sdk/sdk/pkg/scenic_cpp",
     "//third_party/fuchsia-sdk/sdk/pkg/sys_cpp",
   ]
-  package_deps = [ [
-        "//fuchsia/engine:web_engine",
-        "web_engine",
-      ] ]
+  data_deps = [ ":cast_runner_core" ]
+  package_deps = [
+    [
+      ":cast_runner_pkg",
+      "cast_runner",
+    ],
+    [
+      "//fuchsia/engine:web_engine",
+      "web_engine",
+    ],
+  ]
+  manifest = "runners_integration_tests.test-cmx"
 }
 
 test("cast_runner_browsertests") {
   sources = [
     "cast/api_bindings_client_browsertest.cc",
-    "cast/named_message_port_connector_browsertest.cc",
+    "cast/named_message_port_connector_fuchsia_browsertest.cc",
   ]
   defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
   data = [ "cast/testdata" ]
@@ -186,6 +224,7 @@ test("cast_runner_browsertests") {
     "//content/public/browser",
     "//content/test:test_support",
     "//fuchsia/base",
+    "//fuchsia/base:message_port",
     "//fuchsia/base:test_support",
     "//fuchsia/engine:browsertest_core",
     "//testing/gmock",
@@ -242,6 +281,7 @@ test("web_runner_integration_tests") {
       "web_runner",
     ],
   ]
+  manifest = "runners_integration_tests.test-cmx"
 }
 
 if (is_official_build) {

@@ -2,7 +2,7 @@
 
 #include "components/request_filter/adblock_filter/adblock_known_sources_handler.h"
 
-#include "components/request_filter/adblock_filter/adblock_rule_service.h"
+#include "components/request_filter/adblock_filter/adblock_rule_service_impl.h"
 
 namespace adblock_filter {
 
@@ -79,8 +79,6 @@ const std::vector<PresetSourceInfo> kPresetAdBlockSources = {
      "9bd24163-31fe-4889-b7e3-99e5bf742150"},
     {"https://www.void.gr/kargig/void-gr-filters.txt",
      "9cc5cd12-945e-4948-8ae4-266a21c9165c"},
-    {"https://280blocker.net/files/280blocker_adblock.txt",
-     "a09783cf-ccc7-473d-84cd-08e255a4b0e8"},
     {"https://raw.githubusercontent.com/k2jp/abp-japanese-filters/master/"
      "abpjf.txt",
      "2450843a-66fb-4e8c-9c65-bdc530623690"},
@@ -107,8 +105,8 @@ const std::vector<PresetSourceInfo> kPresetAdBlockSources = {
      "finnish-easylist-addition/master/Finland_adb.txt",
      "c43fb9ca-bf75-4f07-ad52-1c79cd67a454"}};
 
-const std::array<const std::vector<PresetSourceInfo>*, kRuleGroupCount> kPresetRuleSources = {
-    nullptr, &kPresetAdBlockSources};
+const std::array<const std::vector<PresetSourceInfo>*, kRuleGroupCount>
+    kPresetRuleSources = {nullptr, &kPresetAdBlockSources};
 
 }  // namespace
 
@@ -123,12 +121,15 @@ KnownRuleSource::KnownRuleSource(const KnownRuleSource&) = default;
 KnownRuleSourcesHandler::Observer::~Observer() = default;
 
 KnownRuleSourcesHandler::KnownRuleSourcesHandler(
-    RuleService* rule_service,
+    RuleServiceImpl* rule_service,
     int storage_version,
     const std::array<std::vector<KnownRuleSource>, kRuleGroupCount>&
         known_sources,
+    std::array<std::set<std::string>, kRuleGroupCount> deleted_presets,
     base::RepeatingClosure schedule_save)
-    : rule_service_(rule_service), schedule_save_(std::move(schedule_save)) {
+    : rule_service_(rule_service),
+      deleted_presets_(std::move(deleted_presets)),
+      schedule_save_(std::move(schedule_save)) {
   for (const auto& url : kPermanentKnownTrackingSources) {
     KnownRuleSource source(GURL(url), RuleGroup::kTrackingRules);
     source.removable = false;
@@ -145,13 +146,27 @@ KnownRuleSourcesHandler::KnownRuleSourcesHandler(
 
   for (auto group : {RuleGroup::kTrackingRules, RuleGroup::kAdBlockingRules}) {
     for (const auto& source : known_sources[static_cast<size_t>(group)]) {
-      known_sources_[static_cast<size_t>(group)].insert(
-          {source.id, source});
+      known_sources_[static_cast<size_t>(group)].insert({source.id, source});
     }
   }
 
   if (storage_version < 2)
     ResetPresetSources(RuleGroup::kAdBlockingRules);
+  else
+    UpdateSourcesFromPresets(RuleGroup::kAdBlockingRules, false,
+                             storage_version < 4);
+
+  if (rule_service->delegate() && storage_version < 5 &&
+      (rule_service->delegate()->GetLocaleForDefaultLists() == "ru" ||
+       rule_service->delegate()->GetLocaleForDefaultLists() == "be" ||
+       rule_service->delegate()->GetLocaleForDefaultLists() == "uk")) {
+    EnableSource(
+        RuleGroup::kAdBlockingRules,
+        RuleSource(
+            GURL("https://easylist-downloads.adblockplus.org/advblock.txt"),
+            RuleGroup::kAdBlockingRules)
+            .id);
+  }
 }
 
 KnownRuleSourcesHandler::~KnownRuleSourcesHandler() = default;
@@ -168,6 +183,11 @@ const KnownRuleSources& KnownRuleSourcesHandler::GetSourceMap(
 const KnownRuleSources& KnownRuleSourcesHandler::GetSources(
     RuleGroup group) const {
   return GetSourceMap(group);
+}
+
+const std::set<std::string>& KnownRuleSourcesHandler::GetDeletedPresets(
+    RuleGroup group) const {
+  return deleted_presets_[static_cast<size_t>(group)];
 }
 
 base::Optional<uint32_t> KnownRuleSourcesHandler::AddSourceFromUrl(
@@ -232,7 +252,11 @@ bool KnownRuleSourcesHandler::RemoveSource(RuleGroup group,
     return false;
 
   DisableSource(group, source_id);
+  if (!known_source->second.preset_id.empty())
+    deleted_presets_[static_cast<size_t>(group)].insert(
+        known_source->second.preset_id);
   known_sources.erase(known_source);
+
   schedule_save_.Run();
 
   for (Observer& observer : observers_)
@@ -286,7 +310,19 @@ bool KnownRuleSourcesHandler::IsSourceEnabled(RuleGroup group,
 }
 
 void KnownRuleSourcesHandler::ResetPresetSources(RuleGroup group) {
+  UpdateSourcesFromPresets(group, true, false);
+}
+
+void KnownRuleSourcesHandler::UpdateSourcesFromPresets(
+    RuleGroup group,
+    bool add_deleted_presets,
+    bool store_missing_as_deleted) {
+  // Doesn't make sense to do both at the same time.
+  DCHECK(!add_deleted_presets || !store_missing_as_deleted);
   auto& known_sources = GetSourceMap(group);
+
+  if (add_deleted_presets)
+    deleted_presets_[static_cast<size_t>(group)].clear();
 
   std::map<std::string, uint32_t> known_presets;
 
@@ -304,22 +340,55 @@ void KnownRuleSourcesHandler::ResetPresetSources(RuleGroup group) {
     auto known_source = known_sources.find(preset_source.id);
     // We already have a rule source with that URL
     if (known_source != known_sources.end()) {
-      // Keep the |preset_id| up to date.
-      known_source->second.preset_id = preset.id;
-      known_presets.erase(preset.id);
+      // It wasn't added manually
+      if (!known_source->second.preset_id.empty()) {
+        // Keep the |preset_id| up to date if needed. This should only ever do
+        // something if there was an issue with storage.
+        known_source->second.preset_id = preset.id;
+
+        known_presets.erase(preset.id);
+      }
+      // If it was added manually, but we had another source with this preset's
+      // ID, it probably means we've updated a preset to a new URL but that
+      // the user added that same URL in the meantime. In that case, if the old
+      // preset source is still present, it will be erased below as it will
+      // remain part of the leftovers in |knows_presets|.
       continue;
     }
     preset_source.preset_id = preset.id;
 
-    bool enable = false;
     const auto& known_preset = known_presets.find(preset.id);
     if (known_preset != known_presets.end()) {
-      if (IsSourceEnabled(group, known_preset->second))
-        enable = true;
-      RemoveSource(group, known_preset->second);
-    }
+      // If there was a source with a URL matching this preset, it would have
+      // been handled above.
+      DCHECK(known_preset->second != preset_source.id);
 
-    AddSource(preset_source, enable);
+      bool enable = IsSourceEnabled(group, known_preset->second);
+      RemoveSource(group, known_preset->second);
+      known_presets.erase(known_preset);
+      AddSource(preset_source, enable);
+    } else if (store_missing_as_deleted) {
+      // NOTE(julien): We weren't keeping track of deleted presets before
+      // this allows us to remedy that for people who had old setups.
+      // This will break addition of new presets for those people, so we
+      // shouldn't add new presets too soon after this.
+      deleted_presets_[static_cast<size_t>(group)].insert(preset.id);
+    } else if (deleted_presets_[static_cast<size_t>(group)].count(preset.id) ==
+               0) {
+      AddSource(preset_source, false);
+    }
+  }
+
+  for (auto& known_preset : known_presets) {
+    // Get rid of sources that come from a removed preset, unless they are
+    // enabled. We do this because we expect that preset removal is done either
+    // because a list has died out or because we were specifically asked to
+    // remove support for it.
+    // Clear the preset id before removal, so it doesn't end up being stored
+    // in the list of deleted presets.
+    known_sources.at(known_preset.second).preset_id.clear();
+    if (!IsSourceEnabled(group, known_preset.second))
+      RemoveSource(group, known_preset.second);
   }
 
   schedule_save_.Run();

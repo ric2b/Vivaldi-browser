@@ -98,7 +98,7 @@
     {
       name: "editingBehaviorType",
       initial: "EditingBehaviorTypeForPlatform()",
-      type: "EditingBehaviorType",
+      type: "web_pref::EditingBehaviorType",
     },
 
     {
@@ -501,8 +501,8 @@
     },
     {
       name: "imageAnimationPolicy",
-      initial: "kImageAnimationPolicyAllowed",
-      type: "ImageAnimationPolicy",
+      initial: "web_pref::kImageAnimationPolicyAllowed",
+      type: "web_pref::ImageAnimationPolicy",
     },
 
     // Html preload scanning is a fast, early scan of HTML documents to find loadable
@@ -612,8 +612,8 @@
     // V8 supports different types of caching. Used by V8 bindings.
     {
       name: "v8CacheOptions",
-      initial: "kV8CacheOptionsDefault",
-      type: "V8CacheOptions",
+      initial: "mojom::blink::V8CacheOptions::kDefault",
+      type: "mojom::blink::V8CacheOptions",
     },
 
     // These values are bit fields for the properties of available pointing devices
@@ -621,13 +621,13 @@
     // has pointerType coarse *and* fine).
     {
       name: "availablePointerTypes",
-      initial: "kPointerTypeNone",
+      initial: "ui::POINTER_TYPE_NONE",
       invalidate: "MediaQuery",
       type: "int",
     },
     {
       name: "availableHoverTypes",
-      initial: "kHoverTypeNone",
+      initial: "ui::HOVER_TYPE_NONE",
       invalidate: "MediaQuery",
       type: "int",
     },
@@ -635,15 +635,15 @@
     // These values specify properties of the user's primary pointing device only.
     {
       name: "primaryPointerType",
-      initial: "kPointerTypeNone",
+      initial: "ui::POINTER_TYPE_NONE",
       invalidate: "MediaQuery",
-      type: "PointerType",
+      type: "ui::PointerType",
     },
     {
       name: "primaryHoverType",
-      initial: "kHoverTypeNone",
+      initial: "ui::HOVER_TYPE_NONE",
       invalidate: "MediaQuery",
-      type: "HoverType",
+      type: "ui::HoverType",
     },
 
     // If true, the value in password fields is exposed to assistive technologies.
@@ -715,9 +715,9 @@
     // used by content embedders to specify custom style on certain platforms.
     {
       name: "viewportStyle",
-      initial: "WebViewportStyle::kDefault",
+      initial: "web_pref::ViewportStyle::kDefault",
       invalidate: "ViewportRule",
-      type: "WebViewportStyle",
+      type: "web_pref::ViewportStyle",
     },
 
     // Automatic track selection is performed based on user preference for track kind specified
@@ -887,53 +887,7 @@
       initial: false,
       invalidate: "ForceDark",
     },
-    {
-      name: "forceDarkModeInversionAlgorithm",
-      initial: "DarkModeInversionAlgorithm::kInvertLightnessLAB",
-      type: "DarkModeInversionAlgorithm",
-      invalidate: "ForceDark",
-    },
-    {
-      name: "forceDarkModeGrayscale",
-      initial: false,
-      invalidate: "ForceDark",
-    },
-    {
-      name: "forceDarkModeContrast",
-      initial: 0,
-      type: "double",
-      invalidate: "ForceDark",
-    },
-    {
-      name: "forceDarkModeImagePolicy",
-      initial: "DarkModeImagePolicy::kFilterNone",
-      type: "DarkModeImagePolicy",
-      invalidate: "ForceDark",
-    },
-    {
-      name: "forceDarkModePagePolicy",
-      initial: "DarkModePagePolicy::kFilterByBackground",
-      type: "DarkModePagePolicy",
-      invalidate: "ForceDark",
-    },
-    {
-      name: "forceDarkModeTextBrightnessThreshold",
-      initial: "150",
-      type: "int",
-      invalidate: "ForceDark",
-    },
-    {
-      name: "forceDarkModeBackgroundBrightnessThreshold",
-      initial: "205",
-      type: "int",
-      invalidate: "ForceDark",
-    },
-    {
-      name: "forceDarkModeImageGrayscale",
-      initial: "0.0",
-      type: "float",
-      invalidate: "ForceDark",
-    },
+
     {
       name: "navigatorPlatformOverride",
       type: "String",
@@ -1102,6 +1056,11 @@
     },
     {
       name: "selectionClipboardBufferAvailable",
+      initial: false,
+      type: "bool",
+    },
+    {
+      name: "accessibilityIncludeSvgGElement",
       initial: false,
       type: "bool",
     },

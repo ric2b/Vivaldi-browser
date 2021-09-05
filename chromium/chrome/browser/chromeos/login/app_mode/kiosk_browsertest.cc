@@ -1106,7 +1106,8 @@ IN_PROC_BROWSER_TEST_F(KioskTest, LaunchAppNetworkPortal) {
   WaitForAppLaunchSuccess();
 }
 
-IN_PROC_BROWSER_TEST_F(KioskTest, LaunchAppUserCancel) {
+// TODO(crbug.com/964333): Flaky seg faults
+IN_PROC_BROWSER_TEST_F(KioskTest, DISABLED_LaunchAppUserCancel) {
   StartAppLaunchFromLoginScreen(
       NetworkPortalDetector::CAPTIVE_PORTAL_STATUS_ONLINE);
   OobeScreenWaiter splash_waiter(AppLaunchSplashScreenView::kScreenId);
@@ -1294,12 +1295,11 @@ IN_PROC_BROWSER_TEST_F(KioskTest, KioskEnableAfter2ndSigninScreen) {
   OobeScreenWaiter(KioskEnableScreenView::kScreenId).Wait();
 }
 
-// crbug.com/766169
+// TODO(https://crbug.com/934109): Fix kiosk launch when the device is
+// untrusted.
 #if defined(ADDRESS_SANITIZER)
 #define MAYBE_DoNotLaunchWhenUntrusted DISABLED_DoNotLaunchWhenUntrusted
 #else
-// TODO(https://crbug.com/934109): Fix kiosk launch when the device is
-// untrusted.
 #define MAYBE_DoNotLaunchWhenUntrusted DISABLED_DoNotLaunchWhenUntrusted
 #endif
 IN_PROC_BROWSER_TEST_F(KioskTest, MAYBE_DoNotLaunchWhenUntrusted) {
@@ -1326,17 +1326,9 @@ IN_PROC_BROWSER_TEST_F(KioskTest, MAYBE_DoNotLaunchWhenUntrusted) {
       &ignored));
 }
 
-// crbug.com/766169
-#if defined(ADDRESS_SANITIZER)
-#define MAYBE_NoConsumerAutoLaunchWhenUntrusted \
-  DISABLED_NoConsumerAutoLaunchWhenUntrusted
-#else
-#define MAYBE_NoConsumerAutoLaunchWhenUntrusted \
-  NoConsumerAutoLaunchWhenUntrusted
-#endif
 // Verifies that a consumer device does not auto-launch kiosk mode when cros
 // settings are untrusted.
-IN_PROC_BROWSER_TEST_F(KioskTest, MAYBE_NoConsumerAutoLaunchWhenUntrusted) {
+IN_PROC_BROWSER_TEST_F(KioskTest, NoConsumerAutoLaunchWhenUntrusted) {
   EnableConsumerKioskMode();
 
   // Wait for and confirm the auto-launch warning.
@@ -1393,7 +1385,7 @@ IN_PROC_BROWSER_TEST_F(KioskTest, SettingsWindow) {
   const GURL page2_sub("https://page2.com/sub");
   const GURL page3("https://page3.com/");
 
-  // Replace the settings whitelist with |settings_pages|.
+  // Replace the settings allowlist with |settings_pages|.
   ScopedSettingsPages pages(&settings_pages);
   AppSession* app_session = KioskAppManager::Get()->app_session();
 
@@ -2032,15 +2024,12 @@ IN_PROC_BROWSER_TEST_F(KioskUpdateTest, LaunchOfflineEnabledAppNoUpdate) {
   EXPECT_EQ(extensions::Manifest::EXTERNAL_PREF, GetInstalledAppLocation());
 }
 
-// TODO(crbug.com/949490): is flaky on ChromeOS rel AND deb.
-IN_PROC_BROWSER_TEST_F(KioskUpdateTest,
-                       DISABLED_PRE_LaunchOfflineEnabledAppHasUpdate) {
+IN_PROC_BROWSER_TEST_F(KioskUpdateTest, PRE_LaunchOfflineEnabledAppHasUpdate) {
   PreCacheAndLaunchApp(kTestOfflineEnabledKioskApp, "1.0.0",
                        std::string(kTestOfflineEnabledKioskApp) + "_v1.crx");
 }
 
-IN_PROC_BROWSER_TEST_F(KioskUpdateTest,
-                       DISABLED_LaunchOfflineEnabledAppHasUpdate) {
+IN_PROC_BROWSER_TEST_F(KioskUpdateTest, LaunchOfflineEnabledAppHasUpdate) {
   set_test_app_id(kTestOfflineEnabledKioskApp);
   fake_cws()->SetUpdateCrx(test_app_id(),
                            "iiigpodgfihagabpagjehoocpakbnclp.crx", "2.0.0");
@@ -2087,7 +2076,7 @@ IN_PROC_BROWSER_TEST_F(KioskUpdateTest, PRE_UsbStickUpdateAppNoNetwork) {
 }
 
 // Restart the device, verify the app has been updated to v2.
-IN_PROC_BROWSER_TEST_F(KioskUpdateTest, DISABLED_UsbStickUpdateAppNoNetwork) {
+IN_PROC_BROWSER_TEST_F(KioskUpdateTest, UsbStickUpdateAppNoNetwork) {
   // Verify the kiosk app has been updated to v2.
   set_test_app_id(kTestOfflineEnabledKioskApp);
   StartUIForAppLaunch();
@@ -2748,7 +2737,12 @@ class KioskVirtualKeyboardTest : public KioskTest,
 };
 
 // Flaky. crbug.com/1094809
-IN_PROC_BROWSER_TEST_F(KioskVirtualKeyboardTest, DISABLED_RestrictFeatures) {
+#ifdef NDEBUG
+#define MAYBE_RestrictFeatures RestrictFeatures
+#else
+#define MAYBE_RestrictFeatures DISABLED_RestrictFeatures
+#endif
+IN_PROC_BROWSER_TEST_F(KioskVirtualKeyboardTest, MAYBE_RestrictFeatures) {
   set_test_app_id(kTestVirtualKeyboardKioskApp);
   set_test_app_version("0.1");
   set_test_crx_file(test_app_id() + ".crx");

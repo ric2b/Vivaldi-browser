@@ -8,9 +8,6 @@
 ### external/wpt/service-workers/service-worker/
 crbug.com/901056 external/wpt/service-workers/service-worker/xhr-response-url.https.html [ Crash ]
 
-### virtual/cache-storage-eager-reading/external/wpt/service-workers/service-worker/
-crbug.com/901056 virtual/cache-storage-eager-reading/external/wpt/service-workers/service-worker/xhr-response-url.https.html [ Crash ]
-
 ### virtual/cache-storage-sequence/external/wpt/service-workers/service-worker/
 crbug.com/901056 virtual/cache-storage-sequence/external/wpt/service-workers/service-worker/xhr-response-url.https.html [ Crash ]
 
@@ -38,8 +35,8 @@ crbug.com/901056 scrollingcoordinator/donot-compute-non-fast-scrollable-region-f
 ### virtual/composite-after-paint/scrollingcoordinator/
 crbug.com/901056 virtual/composite-after-paint/scrollingcoordinator/donot-compute-non-fast-scrollable-region-for-hidden-frames.html [ Timeout ]
 
-### virtual/sxg-subresource/external/wpt/signed-exchange/subresource/
-crbug.com/901056 virtual/sxg-subresource/external/wpt/signed-exchange/subresource/sxg-subresource.tentative.html [ Timeout ]
+### external/wpt/signed-exchange/subresource/
+crbug.com/901056 external/wpt/signed-exchange/subresource/sxg-subresource.tentative.html [ Timeout ]
 
 ### http/tests/devtools/sources/debugger/
 crbug.com/1063051 http/tests/devtools/sources/debugger/debug-inlined-scripts-fragment-id.js [ Timeout ]
@@ -64,9 +61,6 @@ crbug.com/901056 virtual/gpu/fast/canvas/canvas-drawImage-live-video.html [ Time
 # Most of these failures are due to layout viewport issues
 ### external/wpt/preload/
 crbug.com/901056 external/wpt/preload/link-header-preload-imagesrcset.html [ Failure ]
-
-### fast/css/
-crbug.com/901056 fast/css/font-face-unicode-range-ligatures.html [ Failure ]
 
 ### http/tests/htmlimports/
 # Known failure, but won't fix because HTML imports are going away fairly soon
@@ -100,16 +94,6 @@ crbug.com/901056 fast/hidpi/image-srcset-png-canvas.html [ Failure ]
 #
 ### fast/block/float
 crbug.com/901056 fast/block/float/4145535Crash.html [ Failure Pass ]
-
-### fast/css/
-# Issue seems to affect relative events involving fonts (investigation needed).
-crbug.com/901056 fast/css/focus-display-block-inline.html [ Failure ]
-crbug.com/901056 fast/css/font-face-unicode-range-overlap-load.html [ Failure ]
-crbug.com/901056 fast/css/fontfaceset-events.html [ Failure ]
-crbug.com/901056 fast/css/fontfaceset-loadingdone.html [ Failure ]
-crbug.com/901056 fast/css/fontfaceset-multiple-faces-download-error.html [ Failure ]
-crbug.com/901056 fast/css/fontfaceset-multiple-faces.html [ Failure ]
-crbug.com/901056 fast/css/fontfaceset-multiple-families.html [ Failure ]
 
 ### fast/preloader/
 # Two new subtests fail (investigation required)

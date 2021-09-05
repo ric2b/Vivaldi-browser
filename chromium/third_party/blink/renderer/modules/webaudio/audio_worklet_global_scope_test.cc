@@ -8,6 +8,7 @@
 
 #include "base/synchronization/waitable_event.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/mojom/v8_cache_options.mojom-blink.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/public/platform/web_url_request.h"
 #include "third_party/blink/renderer/bindings/core/v8/module_record.h"
@@ -18,7 +19,6 @@
 #include "third_party/blink/renderer/bindings/core/v8/to_v8_for_core.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_testing.h"
-#include "third_party/blink/renderer/bindings/core/v8/v8_cache_options.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_gc_controller.h"
 #include "third_party/blink/renderer/bindings/core/v8/worker_or_worklet_script_controller.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
@@ -35,7 +35,7 @@
 #include "third_party/blink/renderer/modules/webaudio/audio_buffer.h"
 #include "third_party/blink/renderer/modules/webaudio/audio_worklet_processor.h"
 #include "third_party/blink/renderer/modules/webaudio/audio_worklet_processor_definition.h"
-#include "third_party/blink/renderer/modules/webaudio/audio_worklet_thread.h"
+#include "third_party/blink/renderer/modules/webaudio/offline_audio_worklet_thread.h"
 #include "third_party/blink/renderer/platform/audio/audio_bus.h"
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
 #include "third_party/blink/renderer/platform/bindings/v8_binding_macros.h"
@@ -52,18 +52,19 @@ static const size_t kRenderQuantumFrames = 128;
 
 }  // namespace
 
+// The test uses OfflineAudioWorkletThread because the test does not have a
+// strict real-time constraint.
 class AudioWorkletGlobalScopeTest : public PageTestBase {
  public:
   void SetUp() override {
-    AudioWorkletThread::EnsureSharedBackingThread();
     PageTestBase::SetUp(IntSize());
     NavigateTo(KURL("https://example.com/"));
     reporting_proxy_ = std::make_unique<WorkerReportingProxy>();
   }
 
-  std::unique_ptr<AudioWorkletThread> CreateAudioWorkletThread() {
-    std::unique_ptr<AudioWorkletThread> thread =
-        AudioWorkletThread::Create(*reporting_proxy_);
+  std::unique_ptr<OfflineAudioWorkletThread> CreateAudioWorkletThread() {
+    std::unique_ptr<OfflineAudioWorkletThread> thread =
+        std::make_unique<OfflineAudioWorkletThread>(*reporting_proxy_);
     LocalDOMWindow* window = GetFrame().DomWindow();
     thread->Start(
         std::make_unique<GlobalScopeCreationParams>(
@@ -76,7 +77,7 @@ class AudioWorkletGlobalScopeTest : public PageTestBase {
             nullptr /* worker_clients */, nullptr /* content_settings_client */,
             window->AddressSpace(), OriginTrialContext::GetTokens(window).get(),
             base::UnguessableToken::Create(), nullptr /* worker_settings */,
-            kV8CacheOptionsDefault,
+            mojom::blink::V8CacheOptions::kDefault,
             MakeGarbageCollected<WorkletModuleResponsesMap>(),
             mojo::NullRemote() /* browser_interface_broker */,
             BeginFrameProviderParams(), nullptr /* parent_feature_policy */,
@@ -147,9 +148,10 @@ class AudioWorkletGlobalScopeTest : public PageTestBase {
         ModuleRecord::Instantiate(script_state, module, js_url);
     EXPECT_TRUE(exception.IsEmpty());
 
-    ModuleEvaluationResult result =
+    ScriptEvaluationResult result =
         ModuleRecord::Evaluate(script_state, module, js_url);
-    return result.IsSuccess();
+    return result.GetResultType() ==
+           ScriptEvaluationResult::ResultType::kSuccess;
   }
 
   // Test if AudioWorkletGlobalScope and V8 components (ScriptState, Isolate)
@@ -373,28 +375,32 @@ class AudioWorkletGlobalScopeTest : public PageTestBase {
 };
 
 TEST_F(AudioWorkletGlobalScopeTest, Basic) {
-  std::unique_ptr<AudioWorkletThread> thread = CreateAudioWorkletThread();
+  std::unique_ptr<OfflineAudioWorkletThread> thread
+      = CreateAudioWorkletThread();
   RunBasicTest(thread.get());
   thread->Terminate();
   thread->WaitForShutdownForTesting();
 }
 
 TEST_F(AudioWorkletGlobalScopeTest, Parsing) {
-  std::unique_ptr<AudioWorkletThread> thread = CreateAudioWorkletThread();
+  std::unique_ptr<OfflineAudioWorkletThread> thread
+      = CreateAudioWorkletThread();
   RunParsingTest(thread.get());
   thread->Terminate();
   thread->WaitForShutdownForTesting();
 }
 
 TEST_F(AudioWorkletGlobalScopeTest, BufferProcessing) {
-  std::unique_ptr<AudioWorkletThread> thread = CreateAudioWorkletThread();
+  std::unique_ptr<OfflineAudioWorkletThread> thread
+      = CreateAudioWorkletThread();
   RunSimpleProcessTest(thread.get());
   thread->Terminate();
   thread->WaitForShutdownForTesting();
 }
 
 TEST_F(AudioWorkletGlobalScopeTest, ParsingParameterDescriptor) {
-  std::unique_ptr<AudioWorkletThread> thread = CreateAudioWorkletThread();
+  std::unique_ptr<OfflineAudioWorkletThread> thread
+      = CreateAudioWorkletThread();
   RunParsingParameterDescriptorTest(thread.get());
   thread->Terminate();
   thread->WaitForShutdownForTesting();

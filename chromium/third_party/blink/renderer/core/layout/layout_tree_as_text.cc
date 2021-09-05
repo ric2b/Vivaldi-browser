@@ -26,6 +26,7 @@
 #include "third_party/blink/renderer/core/layout/layout_tree_as_text.h"
 
 #include "third_party/blink/renderer/core/css/css_property_value_set.h"
+#include "third_party/blink/renderer/core/css/css_value_id_mappings.h"
 #include "third_party/blink/renderer/core/display_lock/display_lock_context.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/pseudo_element.h"
@@ -72,40 +73,7 @@ namespace blink {
 
 static void PrintBorderStyle(WTF::TextStream& ts,
                              const EBorderStyle border_style) {
-  switch (border_style) {
-    case EBorderStyle::kNone:
-      ts << "none";
-      break;
-    case EBorderStyle::kHidden:
-      ts << "hidden";
-      break;
-    case EBorderStyle::kInset:
-      ts << "inset";
-      break;
-    case EBorderStyle::kGroove:
-      ts << "groove";
-      break;
-    case EBorderStyle::kRidge:
-      ts << "ridge";
-      break;
-    case EBorderStyle::kOutset:
-      ts << "outset";
-      break;
-    case EBorderStyle::kDotted:
-      ts << "dotted";
-      break;
-    case EBorderStyle::kDashed:
-      ts << "dashed";
-      break;
-    case EBorderStyle::kSolid:
-      ts << "solid";
-      break;
-    case EBorderStyle::kDouble:
-      ts << "double";
-      break;
-  }
-
-  ts << " ";
+  ts << getValueName(PlatformEnumToCSSValueID(border_style)) << " ";
 }
 
 static String GetTagName(Node* n) {
@@ -361,7 +329,7 @@ void LayoutTreeAsText::WriteLayoutObject(WTF::TextStream& ts,
       ts << ")";
   }
 
-  if (o.LayoutBlockedByDisplayLock(DisplayLockLifecycleTarget::kChildren))
+  if (o.ChildLayoutBlockedByDisplayLock())
     ts << " (display-locked)";
 }
 
@@ -596,7 +564,7 @@ void Write(WTF::TextStream& ts,
     }
   }
 
-  if (!o.LayoutBlockedByDisplayLock(DisplayLockLifecycleTarget::kChildren)) {
+  if (!o.ChildLayoutBlockedByDisplayLock()) {
     for (LayoutObject* child = o.SlowFirstChild(); child;
          child = child->NextSibling()) {
       if (child->HasLayer())
@@ -664,7 +632,7 @@ static void Write(WTF::TextStream& ts,
   if (layer.IsTransparent())
     ts << " transparent";
 
-  if (layer.GetLayoutObject().HasOverflowClip()) {
+  if (layer.GetLayoutObject().IsScrollContainer()) {
     PaintLayerScrollableArea* scrollable_area = layer.GetScrollableArea();
     ScrollOffset adjusted_scroll_offset =
         scrollable_area->GetScrollOffset() +
@@ -773,8 +741,7 @@ void LayoutTreeAsText::WriteLayers(WTF::TextStream& ts,
 #endif
 
   bool should_paint_children =
-      !layer->GetLayoutObject().LayoutBlockedByDisplayLock(
-          DisplayLockLifecycleTarget::kChildren);
+      !layer->GetLayoutObject().ChildLayoutBlockedByDisplayLock();
 
   const auto& neg_list = ChildLayers(layer, kNegativeZOrderChildren);
   bool paints_background_separately = !neg_list.IsEmpty();

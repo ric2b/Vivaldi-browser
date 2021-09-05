@@ -4,6 +4,7 @@
 
 #include "third_party/blink/renderer/core/html/canvas/canvas_async_blob_creator.h"
 
+#include "components/ukm/test_ukm_recorder.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/platform/platform.h"
@@ -35,7 +36,8 @@ class MockCanvasAsyncBlobCreator : public CanvasAsyncBlobCreator {
             nullptr,
             base::TimeTicks(),
             document->GetExecutionContext(),
-            base::make_optional<UkmParameters>(),
+            UkmParameters{document->UkmRecorder(), document->UkmSourceID()},
+            0,
             nullptr) {
     if (fail_encoder_initialization)
       fail_encoder_initialization_for_test_ = true;
@@ -127,10 +129,12 @@ class CanvasAsyncBlobCreatorTest : public PageTestBase {
   MockCanvasAsyncBlobCreator* AsyncBlobCreator() {
     return async_blob_creator_.Get();
   }
+  ukm::UkmRecorder* UkmRecorder() { return &ukm_recorder_; }
   void TearDown() override;
 
  private:
   Persistent<MockCanvasAsyncBlobCreator> async_blob_creator_;
+  ukm::TestUkmRecorder ukm_recorder_;
 };
 
 CanvasAsyncBlobCreatorTest::CanvasAsyncBlobCreatorTest() = default;
@@ -297,7 +301,7 @@ TEST_F(CanvasAsyncBlobCreatorTest, ColorManagedConvertToBlob) {
                   CanvasAsyncBlobCreator::ToBlobFunctionType::
                       kHTMLCanvasConvertToBlobPromise,
                   base::TimeTicks(), GetFrame().DomWindow(),
-                  base::make_optional<UkmParameters>(), nullptr);
+                  UkmParameters{UkmRecorder(), 0}, 0, nullptr);
           ASSERT_TRUE(async_blob_creator->EncodeImageForConvertToBlobTest());
 
           sk_sp<SkData> sk_data = SkData::MakeWithCopy(
@@ -316,7 +320,7 @@ TEST_F(CanvasAsyncBlobCreatorTest, ColorManagedConvertToBlob) {
               source_bitmap_image->ConvertToColorSpace(expected_color_space,
                                                        expected_color_type);
           sk_sp<SkImage> ref_image =
-              ref_bitmap->PaintImageForCurrentFrame().GetSkImage();
+              ref_bitmap->PaintImageForCurrentFrame().GetSwSkImage();
 
           // Jpeg does not support transparent images.
           bool compare_alpha = (blob_mime_type != "image/jpeg");

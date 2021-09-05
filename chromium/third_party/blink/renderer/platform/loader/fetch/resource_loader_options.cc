@@ -42,11 +42,9 @@ ResourceLoaderOptions::ResourceLoaderOptions(
       content_security_policy_option(network::mojom::CSPDisposition::CHECK),
       request_initiator_context(kDocumentContext),
       synchronous_policy(kRequestAsynchronously),
-      cors_handling_by_resource_fetcher(kEnableCorsHandlingByResourceFetcher),
-      cors_flag(false),
       parser_disposition(kParserInserted),
       cache_aware_loading_enabled(kNotCacheAwareLoadingEnabled),
-      world(std::move(world)) {}
+      world_for_csp(std::move(world)) {}
 
 ResourceLoaderOptions::ResourceLoaderOptions(
     const ResourceLoaderOptions& other) = default;

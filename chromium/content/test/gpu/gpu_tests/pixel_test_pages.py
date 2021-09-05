@@ -5,8 +5,11 @@
 # This is more akin to a .pyl/JSON file, so it's expected to be long.
 # pylint: disable=too-many-lines
 
+import os
+
 from gpu_tests import common_browser_args as cba
 from gpu_tests import skia_gold_matching_algorithms as algo
+from gpu_tests import path_util
 
 CRASH_TYPE_GPU = 'gpu'
 
@@ -40,9 +43,7 @@ class PixelTestPage(object):
       url,
       name,
       test_rect,
-      tolerance=2,
       browser_args=None,
-      expected_colors=None,
       gpu_process_disabled=False,
       optional_action=None,
       restart_browser_after_test=False,
@@ -54,15 +55,7 @@ class PixelTestPage(object):
     self.url = url
     self.name = name
     self.test_rect = test_rect
-    # The tolerance when comparing against the reference image.
-    self.tolerance = tolerance
     self.browser_args = browser_args
-    # The expected colors can be specified as a list of dictionaries,
-    # in which case these specific pixels will be sampled instead of
-    # comparing the entire image snapshot. The format is only defined
-    # by contract with _CompareScreenshotSamples in
-    # cloud_storage_integration_test_base.py.
-    self.expected_colors = expected_colors
     # Only a couple of tests run with the GPU process completely
     # disabled. To prevent regressions, only allow the GPU information
     # to be incomplete in these cases.
@@ -99,14 +92,13 @@ class PixelTestPage(object):
 
   def CopyWithNewBrowserArgsAndSuffix(self, browser_args, suffix):
     return PixelTestPage(self.url, self.name + suffix, self.test_rect,
-                         self.tolerance, browser_args, self.expected_colors)
+                         browser_args)
 
   def CopyWithNewBrowserArgsAndPrefix(self, browser_args, prefix):
     # Assuming the test name is 'Pixel'.
     split = self.name.split('_', 1)
     return PixelTestPage(self.url, split[0] + '_' + prefix + split[1],
-                         self.test_rect, self.tolerance, browser_args,
-                         self.expected_colors)
+                         self.test_rect, browser_args)
 
 
 def CopyPagesWithNewBrowserArgsAndSuffix(pages, browser_args, suffix):
@@ -121,42 +113,12 @@ def CopyPagesWithNewBrowserArgsAndPrefix(pages, browser_args, prefix):
   ]
 
 
-# TODO(kbr): consider refactoring this into pixel_integration_test.py.
-SCALE_FACTOR_OVERRIDES = {
-    "comment":
-    "scale factor overrides",
-    "scale_factor_overrides": [
-        {
-            "device_type": "Nexus 5",
-            "scale_factor": 1.105
-        },
-        {
-            "device_type": "Nexus 5X",
-            "scale_factor": 1.105
-        },
-        {
-            "device_type": "Nexus 6",
-            "scale_factor": 1.47436
-        },
-        {
-            "device_type": "Nexus 6P",
-            "scale_factor": 1.472
-        },
-        {
-            "device_type": "Nexus 9",
-            "scale_factor": 1.566
-        },
-        {
-            "comment": "NVIDIA Shield",
-            "device_type": "sb_na_wf",
-            "scale_factor": 1.226
-        },
-        {
-            "device_type": "Pixel 2",
-            "scale_factor": 1.1067
-        },
-    ]
-}
+def GetMediaStreamTestBrowserArgs(media_stream_source_relpath):
+  return [
+      '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream',
+      '--use-file-for-fake-video-capture=' +
+      os.path.join(path_util.GetChromiumSrcDir(), media_stream_source_relpath)
+  ]
 
 
 class PixelTestPages(object):
@@ -273,6 +235,13 @@ class PixelTestPages(object):
                           max_different_pixels=31100,
                           pixel_delta_threshold=30,
                           edge_threshold=250)),
+        PixelTestPage(
+            'pixel_video_media_stream_incompatible_stride.html',
+            base_name + '_Video_Media_Stream_Incompatible_Stride',
+            browser_args=GetMediaStreamTestBrowserArgs(
+                'media/test/data/four-colors-incompatible-stride.y4m'),
+            test_rect=[0, 0, 240, 135],
+            matching_algorithm=VERY_PERMISSIVE_SOBEL_ALGO),
 
         # The MP4 contains H.264 which is primarily hardware decoded on bots.
         PixelTestPage(
@@ -361,7 +330,7 @@ class PixelTestPages(object):
   @staticmethod
   def GpuRasterizationPages(base_name):
     browser_args = [
-        cba.FORCE_GPU_RASTERIZATION,
+        cba.ENABLE_GPU_RASTERIZATION,
         cba.DISABLE_SOFTWARE_COMPOSITING_FALLBACK,
     ]
     return [
@@ -530,6 +499,14 @@ class PixelTestPages(object):
         PixelTestPage('pixel_canvas_low_latency_2d_image_data.html',
                       base_name + '_CanvasLowLatency2DImageData',
                       test_rect=[0, 0, 200, 100]),
+        PixelTestPage('pixel_canvas_low_latency_webgl_rounded_corners.html',
+                      base_name + '_CanvasLowLatencyWebGLRoundedCorners',
+                      test_rect=[0, 0, 100, 100],
+                      other_args={'no_overlay': True}),
+        PixelTestPage('pixel_canvas_low_latency_webgl_occluded.html',
+                      base_name + '_CanvasLowLatencyWebGLOccluded',
+                      test_rect=[0, 0, 100, 100],
+                      other_args={'no_overlay': True}),
     ]
 
   # Only add these tests on platforms where SwiftShader is enabled.
@@ -639,7 +616,6 @@ class PixelTestPages(object):
         PixelTestPage('filter_effects.html',
                       base_name + '_CSSFilterEffects_NoOverlays',
                       test_rect=[0, 0, 300, 300],
-                      tolerance=10,
                       browser_args=no_overlays_args,
                       matching_algorithm=filter_effect_fuzzy_algo),
 
@@ -848,4 +824,19 @@ class PixelTestPages(object):
             base_name + '_Canvas2DRedBoxHdr10',
             test_rect=[0, 0, 300, 300],
             browser_args=['--force-color-profile=hdr10']),
+    ]
+
+  @staticmethod
+  def ForceFullDamagePages(base_name):
+    return [
+        PixelTestPage('wait_for_compositing.html',
+                      base_name + '_ForceFullDamage',
+                      test_rect=[0, 0, 0, 0],
+                      other_args={'full_damage': True},
+                      browser_args=[cba.ENABLE_FORCE_FULL_DAMAGE]),
+        PixelTestPage('wait_for_compositing.html',
+                      base_name + '_ForcePartialDamage',
+                      test_rect=[0, 0, 0, 0],
+                      other_args={'full_damage': False},
+                      browser_args=[cba.DISABLE_FORCE_FULL_DAMAGE]),
     ]

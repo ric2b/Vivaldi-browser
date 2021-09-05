@@ -116,6 +116,7 @@ nqe::internal::NetworkID DoGetCurrentNetworkID(
       case NetworkChangeNotifier::ConnectionType::CONNECTION_2G:
       case NetworkChangeNotifier::ConnectionType::CONNECTION_3G:
       case NetworkChangeNotifier::ConnectionType::CONNECTION_4G:
+      case NetworkChangeNotifier::ConnectionType::CONNECTION_5G:
 #if defined(OS_ANDROID)
         network_id.id = android::GetTelephonyNetworkOperator();
 #endif
@@ -637,10 +638,19 @@ NetworkQualityEstimator::GetCurrentSignalStrengthWithThrottling() {
   if (!params_->get_signal_strength_and_detailed_network_id())
     return base::nullopt;
 
-  // Do not call more than once per 30 seconds.
+  if (params_->weight_multiplier_per_signal_strength_level() >= 1.0)
+    return base::nullopt;
+
+  if ((current_network_id_.type != NetworkChangeNotifier::CONNECTION_WIFI) &&
+      !NetworkChangeNotifier::IsConnectionCellular(current_network_id_.type)) {
+    return base::nullopt;
+  }
+
+  // Do not call more than once per |wifi_signal_strength_query_interval|
+  // duration.
   if (last_signal_strength_check_timestamp_.has_value() &&
       (tick_clock_->NowTicks() - last_signal_strength_check_timestamp_.value() <
-       base::TimeDelta::FromSeconds(30)) &&
+       params_->wifi_signal_strength_query_interval()) &&
       (last_signal_strength_check_timestamp_.value() >
        last_connection_change_)) {
     return base::nullopt;
@@ -648,15 +658,22 @@ NetworkQualityEstimator::GetCurrentSignalStrengthWithThrottling() {
 
   last_signal_strength_check_timestamp_ = tick_clock_->NowTicks();
 
-#if defined(OS_ANDROID)
-  if (params_->weight_multiplier_per_signal_strength_level() >= 1.0)
-    return INT32_MIN;
-  if (NetworkChangeNotifier::IsConnectionCellular(current_network_id_.type))
-    return android::cellular_signal_strength::GetSignalStrengthLevel().value_or(
-        INT32_MIN);
-#endif  // OS_ANDROID
+  if (current_network_id_.type == NetworkChangeNotifier::CONNECTION_WIFI) {
+    UMA_HISTOGRAM_BOOLEAN("NQE.SignalStrengthQueried.WiFi", true);
 
-  return INT32_MIN;
+#if defined(OS_ANDROID)
+    return android::GetWifiSignalLevel();
+#endif  // OS_ANDROID
+  }
+
+  if (NetworkChangeNotifier::IsConnectionCellular(current_network_id_.type)) {
+    UMA_HISTOGRAM_BOOLEAN("NQE.SignalStrengthQueried.Cellular", true);
+#if defined(OS_ANDROID)
+    return android::cellular_signal_strength::GetSignalStrengthLevel();
+#endif  // OS_ANDROID
+  }
+
+  return base::nullopt;
 }
 
 void NetworkQualityEstimator::UpdateSignalStrength() {
@@ -959,6 +976,7 @@ NetworkQualityEstimator::GetCappedECTBasedOnSignalStrength() const {
         return std::min(effective_connection_type_,
                         EFFECTIVE_CONNECTION_TYPE_SLOW_2G);
       case NetworkChangeNotifier::CONNECTION_4G:
+      case NetworkChangeNotifier::CONNECTION_5G:
       case NetworkChangeNotifier::CONNECTION_WIFI:
         return std::min(effective_connection_type_,
                         EFFECTIVE_CONNECTION_TYPE_2G);
@@ -977,6 +995,7 @@ NetworkQualityEstimator::GetCappedECTBasedOnSignalStrength() const {
         return std::min(effective_connection_type_,
                         EFFECTIVE_CONNECTION_TYPE_2G);
       case NetworkChangeNotifier::CONNECTION_4G:
+      case NetworkChangeNotifier::CONNECTION_5G:
       case NetworkChangeNotifier::CONNECTION_WIFI:
         return std::min(effective_connection_type_,
                         EFFECTIVE_CONNECTION_TYPE_3G);
@@ -995,6 +1014,7 @@ NetworkQualityEstimator::GetCappedECTBasedOnSignalStrength() const {
         return std::min(effective_connection_type_,
                         EFFECTIVE_CONNECTION_TYPE_3G);
       case NetworkChangeNotifier::CONNECTION_4G:
+      case NetworkChangeNotifier::CONNECTION_5G:
       case NetworkChangeNotifier::CONNECTION_WIFI:
         return std::min(effective_connection_type_,
                         EFFECTIVE_CONNECTION_TYPE_4G);

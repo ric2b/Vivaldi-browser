@@ -68,7 +68,7 @@ class ToggleButton::ThumbView : public InkDropHostView {
 
  protected:
   // views::View:
-  bool CanProcessEventsWithinSubtree() const override {
+  bool GetCanProcessEventsWithinSubtree() const override {
     // Make the thumb behave as part of the parent for event handling.
     return false;
   }
@@ -120,7 +120,8 @@ class ToggleButton::ThumbView : public InkDropHostView {
   DISALLOW_COPY_AND_ASSIGN(ThumbView);
 };
 
-ToggleButton::ToggleButton(ButtonListener* listener) : Button(listener) {
+ToggleButton::ToggleButton(PressedCallback callback)
+    : Button(std::move(callback)) {
   slide_animation_.SetSlideDuration(base::TimeDelta::FromMilliseconds(80));
   slide_animation_.SetTweenType(gfx::Tween::LINEAR);
   thumb_view_ = AddChildView(std::make_unique<ThumbView>());
@@ -131,8 +132,11 @@ ToggleButton::ToggleButton(ButtonListener* listener) : Button(listener) {
   // regression in crbug.com/1031983, but a matching FocusRing would probably be
   // desirable.
   SetInstallFocusRingOnFocus(false);
-  set_has_ink_drop_action_on_click(true);
+  SetHasInkDropActionOnClick(true);
 }
+
+ToggleButton::ToggleButton(ButtonListener* listener)
+    : ToggleButton(PressedCallback(listener, this)) {}
 
 ToggleButton::~ToggleButton() {
   // Destroying ink drop early allows ink drop layer to be properly removed,
@@ -350,14 +354,13 @@ void ToggleButton::AnimationProgressed(const gfx::Animation* animation) {
   Button::AnimationProgressed(animation);
 }
 
-BEGIN_METADATA(ToggleButton)
-METADATA_PARENT_CLASS(Button)
-ADD_PROPERTY_METADATA(ToggleButton, bool, IsOn)
-ADD_PROPERTY_METADATA(ToggleButton, bool, AcceptsEvents)
-ADD_PROPERTY_METADATA(ToggleButton, base::Optional<SkColor>, ThumbOnColor)
-ADD_PROPERTY_METADATA(ToggleButton, base::Optional<SkColor>, ThumbOffColor)
-ADD_PROPERTY_METADATA(ToggleButton, base::Optional<SkColor>, TrackOnColor)
-ADD_PROPERTY_METADATA(ToggleButton, base::Optional<SkColor>, TrackOffColor)
-END_METADATA()
+BEGIN_METADATA(ToggleButton, Button)
+ADD_PROPERTY_METADATA(bool, IsOn)
+ADD_PROPERTY_METADATA(bool, AcceptsEvents)
+ADD_PROPERTY_METADATA(base::Optional<SkColor>, ThumbOnColor)
+ADD_PROPERTY_METADATA(base::Optional<SkColor>, ThumbOffColor)
+ADD_PROPERTY_METADATA(base::Optional<SkColor>, TrackOnColor)
+ADD_PROPERTY_METADATA(base::Optional<SkColor>, TrackOffColor)
+END_METADATA
 
 }  // namespace views

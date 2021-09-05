@@ -195,23 +195,6 @@ void SetProperty(x11::Window window,
   SetArrayProperty(window, name, type, std::vector<T>{value});
 }
 
-template <typename T>
-x11::Future<void> SendEvent(const T& event,
-                            x11::Window target,
-                            x11::EventMask mask) {
-  static_assert(T::type_id > 0, "T must be an x11::*Event type");
-  auto write_buffer = x11::Write(event);
-  DCHECK_EQ(write_buffer.GetBuffers().size(), 1ul);
-  auto& first_buffer = write_buffer.GetBuffers()[0];
-  DCHECK_LE(first_buffer->size(), 32ul);
-  std::vector<uint8_t> event_bytes(32);
-  memcpy(event_bytes.data(), first_buffer->data(), first_buffer->size());
-
-  x11::SendEventRequest send_event{false, target, mask};
-  std::copy(event_bytes.begin(), event_bytes.end(), send_event.event.begin());
-  return x11::Connection::Get()->SendEvent(send_event);
-}
-
 COMPONENT_EXPORT(UI_BASE_X)
 void DeleteProperty(x11::Window window, x11::Atom name);
 
@@ -265,9 +248,6 @@ COMPONENT_EXPORT(UI_BASE_X) bool IsXInput2Available();
 // Return true iff the display supports MIT-SHM.
 COMPONENT_EXPORT(UI_BASE_X) bool QueryShmSupport();
 
-// Returns the first event ID for the MIT-SHM extension, if available.
-COMPONENT_EXPORT(UI_BASE_X) int ShmEventBase();
-
 // Coalesce all pending motion events (touch or mouse) that are at the top of
 // the queue, and return the number eliminated, storing the last one in
 // |last_event|.
@@ -297,9 +277,6 @@ enum HideTitlebarWhenMaximized : uint32_t {
 COMPONENT_EXPORT(UI_BASE_X)
 void SetHideTitlebarWhenMaximizedProperty(x11::Window window,
                                           HideTitlebarWhenMaximized property);
-
-// Clears all regions of X11's default root window by filling black pixels.
-COMPONENT_EXPORT(UI_BASE_X) void ClearX11DefaultRootWindow();
 
 // Returns true if |window| is visible.
 COMPONENT_EXPORT(UI_BASE_X) bool IsWindowVisible(x11::Window window);
@@ -546,6 +523,9 @@ COMPONENT_EXPORT(UI_BASE_X) void SetDefaultX11ErrorHandlers();
 // Returns true if a given window is in full-screen mode.
 COMPONENT_EXPORT(UI_BASE_X) bool IsX11WindowFullScreen(x11::Window window);
 
+// Suspends or resumes the X screen saver.  Must be called on the UI thread.
+COMPONENT_EXPORT(UI_BASE_X) void SuspendX11ScreenSaver(bool suspend);
+
 // Returns true if the window manager supports the given hint.
 COMPONENT_EXPORT(UI_BASE_X) bool WmSupportsHint(x11::Atom atom);
 
@@ -570,32 +550,6 @@ x11::Future<void> SendClientMessage(
     x11::EventMask event_mask = x11::EventMask::SubstructureNotify |
                                 x11::EventMask::SubstructureRedirect);
 
-// Manages a piece of X11 allocated memory as a RefCountedMemory segment. This
-// object takes ownership over the passed in memory and will free it with the
-// X11 allocator when done.
-class COMPONENT_EXPORT(UI_BASE_X) XRefcountedMemory
-    : public base::RefCountedMemory {
- public:
-  XRefcountedMemory(unsigned char* x11_data, size_t length);
-
-  // Overridden from RefCountedMemory:
-  const unsigned char* front() const override;
-  size_t size() const override;
-
- private:
-  ~XRefcountedMemory() override;
-
-  gfx::XScopedPtr<unsigned char> x11_data_;
-  size_t length_;
-
-  DISALLOW_COPY_AND_ASSIGN(XRefcountedMemory);
-};
-
-struct COMPONENT_EXPORT(UI_BASE_X) XImageDeleter {
-  void operator()(XImage* image) const;
-};
-using XScopedImage = std::unique_ptr<XImage, XImageDeleter>;
-
 // --------------------------------------------------------------------------
 // X11 error handling.
 // Sets the X Error Handlers. Passing NULL for either will enable the default
@@ -604,12 +558,8 @@ COMPONENT_EXPORT(UI_BASE_X)
 void SetX11ErrorHandlers(XErrorHandler error_handler,
                          XIOErrorHandler io_error_handler);
 
-// NOTE: This function should not be called directly from the
-// X11 Error handler because it queries the server to decode the
-// error message, which may trigger other errors. A suitable workaround
-// is to post a task in the error handler to call this function.
-COMPONENT_EXPORT(UI_BASE_X)
-void LogErrorEventDescription(Display* dpy, const XErrorEvent& error_event);
+// Return true if VulkanSurface is supported.
+COMPONENT_EXPORT(UI_BASE_X) bool IsVulkanSurfaceSupported();
 
 // --------------------------------------------------------------------------
 // Selects a visual with a preference for alpha support on compositing window
@@ -687,6 +637,16 @@ class COMPONENT_EXPORT(UI_BASE_X) XVisualManager {
   bool have_gpu_argb_visual_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(XVisualManager);
+};
+
+class COMPONENT_EXPORT(UI_BASE_X) ScopedUnsetDisplay {
+ public:
+  ScopedUnsetDisplay();
+  ~ScopedUnsetDisplay();
+
+ private:
+  base::Optional<std::string> display_;
+  DISALLOW_COPY_AND_ASSIGN(ScopedUnsetDisplay);
 };
 
 }  // namespace ui

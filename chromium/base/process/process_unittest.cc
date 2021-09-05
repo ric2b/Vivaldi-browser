@@ -14,7 +14,7 @@
 #include "base/threading/platform_thread.h"
 #include "base/threading/thread_local.h"
 #include "build/build_config.h"
-#include "build/lacros_buildflags.h"
+#include "build/chromeos_buildflags.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/multiprocess_func_list.h"
 
@@ -139,22 +139,21 @@ MULTIPROCESS_TEST_MAIN(SleepyChildProcess) {
 
 // TODO(https://crbug.com/726484): Enable these tests on Fuchsia when
 // CreationTime() is implemented.
-//
-// Disabled on Android because Process::CreationTime() is not supported.
-// https://issuetracker.google.com/issues/37140047
-#if !defined(OS_FUCHSIA) && !defined(OS_ANDROID)
+#if !defined(OS_FUCHSIA)
 TEST_F(ProcessTest, CreationTimeCurrentProcess) {
   // The current process creation time should be less than or equal to the
   // current time.
   EXPECT_LE(Process::Current().CreationTime(), Time::Now());
 }
 
+#if !defined(OS_ANDROID)  // Cannot read other processes' creation time on
+                          // Android.
 TEST_F(ProcessTest, CreationTimeOtherProcess) {
   // The creation time of a process should be between a time recorded before it
   // was spawned and a time recorded after it was spawned. However, since the
   // base::Time and process creation clocks don't match, tolerate some error.
   constexpr base::TimeDelta kTolerance =
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
       // On Linux, process creation time is relative to boot time which has a
       // 1-second resolution. Tolerate 1 second for the imprecise boot time and
       // 100 ms for the imprecise clock.
@@ -178,6 +177,7 @@ TEST_F(ProcessTest, CreationTimeOtherProcess) {
   EXPECT_LE(creation, after_creation + kTolerance);
   EXPECT_TRUE(process.Terminate(kDummyExitCode, true));
 }
+#endif  // !defined(OS_ANDROID)
 #endif  // !defined(OS_FUCHSIA)
 
 TEST_F(ProcessTest, Terminate) {

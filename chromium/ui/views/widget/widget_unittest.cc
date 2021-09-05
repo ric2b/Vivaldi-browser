@@ -203,6 +203,19 @@ TEST_F(WidgetTest, NativeWindowProperty) {
   EXPECT_EQ(nullptr, widget->GetNativeWindowProperty(key));
 }
 
+TEST_F(WidgetTest, GetParent) {
+  // Create a hierarchy of native widgets.
+  WidgetAutoclosePtr toplevel(CreateTopLevelPlatformWidget());
+  Widget* child = CreateChildPlatformWidget(toplevel->GetNativeView());
+  Widget* grandchild = CreateChildPlatformWidget(child->GetNativeView());
+
+  EXPECT_EQ(nullptr, toplevel->parent());
+  EXPECT_EQ(child, grandchild->parent());
+  EXPECT_EQ(toplevel.get(), child->parent());
+
+  // children should be automatically destroyed with |toplevel|.
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // Widget::GetTopLevelWidget tests.
 
@@ -241,6 +254,12 @@ TEST_F(WidgetTest, ChangeActivation) {
 
 // Tests visibility of child widgets.
 TEST_F(WidgetTest, Visibility) {
+#if defined(OS_MAC)
+  if (base::mac::IsAtLeastOS11()) {
+    GTEST_SKIP() << "Window visibility notifications aren't delivered on "
+                    "macOS 11. See https://crbug.com/1114243.";
+  }
+#endif
   WidgetAutoclosePtr toplevel(CreateTopLevelPlatformWidget());
   gfx::NativeView parent = toplevel->GetNativeView();
   Widget* child = CreateChildPlatformWidget(parent);
@@ -964,6 +983,12 @@ TEST_F(DesktopWidgetObserverTest, OnWidgetMovedWhenOriginChangesNative) {
 // Test correct behavior when widgets close themselves in response to visibility
 // changes.
 TEST_F(WidgetObserverTest, ClosingOnHiddenParent) {
+#if defined(OS_MAC)
+  if (base::mac::IsAtLeastOS11()) {
+    GTEST_SKIP() << "Window visibility notifications aren't delivered on "
+                    "macOS 11. See https://crbug.com/1114243.";
+  }
+#endif
   WidgetAutoclosePtr parent(NewWidget());
   Widget* child = CreateChildPlatformWidget(parent->GetNativeView());
 
@@ -1476,10 +1501,9 @@ TEST_F(WidgetTest, EventHandlersOnRootView) {
   WidgetAutoclosePtr widget(CreateTopLevelNativeWidget());
   View* root_view = widget->GetRootView();
 
-  std::unique_ptr<EventCountView> view(new EventCountView());
-  view->set_owned_by_client();
+  EventCountView* view =
+      root_view->AddChildView(std::make_unique<EventCountView>());
   view->SetBounds(0, 0, 20, 20);
-  root_view->AddChildView(view.get());
 
   EventCountHandler h1;
   root_view->AddPreTargetHandler(&h1);
@@ -3799,25 +3823,6 @@ TEST_F(WidgetShadowTest, MAYBE_ShadowsInRootWindow) {
 
 #if defined(OS_WIN)
 
-namespace {
-
-// Provides functionality to create a window modal dialog.
-class ModalDialogDelegate : public DialogDelegateView {
- public:
-  explicit ModalDialogDelegate(ui::ModalType type) : type_(type) {}
-  ~ModalDialogDelegate() override = default;
-
-  // WidgetDelegate overrides.
-  ui::ModalType GetModalType() const override { return type_; }
-
- private:
-  const ui::ModalType type_;
-
-  DISALLOW_COPY_AND_ASSIGN(ModalDialogDelegate);
-};
-
-}  // namespace
-
 // Tests the case where an intervening owner popup window is destroyed out from
 // under the currently active modal top-level window. In this instance, the
 // remaining top-level windows should be re-enabled.
@@ -3830,7 +3835,8 @@ TEST_F(DesktopWidgetTest, WindowModalOwnerDestroyedEnabledTest) {
   const auto create_params = [this](Widget* widget, gfx::NativeView parent) {
     Widget::InitParams init_params =
         CreateParamsForTestWidget(Widget::InitParams::TYPE_WINDOW);
-    init_params.delegate = new ModalDialogDelegate(ui::MODAL_TYPE_WINDOW);
+    init_params.delegate = new WidgetDelegate();
+    init_params.delegate->SetModalType(ui::MODAL_TYPE_WINDOW);
     init_params.parent = parent;
     init_params.native_widget =
         new test::TestPlatformNativeWidget<DesktopNativeWidgetAura>(

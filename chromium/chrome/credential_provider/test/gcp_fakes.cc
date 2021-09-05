@@ -7,6 +7,7 @@
 #include <windows.h>
 
 #include <lm.h>
+#include <process.h>
 #include <sddl.h>
 
 #include <atlcomcli.h>
@@ -645,12 +646,18 @@ FakeWinHttpUrlFetcherFactory::Response::~Response() = default;
 
 FakeWinHttpUrlFetcherFactory::FakeWinHttpUrlFetcherFactory()
     : original_creator_(*WinHttpUrlFetcher::GetCreatorFunctionStorage()) {
-  *WinHttpUrlFetcher::GetCreatorFunctionStorage() = base::BindRepeating(
-      &FakeWinHttpUrlFetcherFactory::Create, base::Unretained(this));
+  fake_creator_ = base::BindRepeating(&FakeWinHttpUrlFetcherFactory::Create,
+                                      base::Unretained(this));
+  *WinHttpUrlFetcher::GetCreatorFunctionStorage() = fake_creator_;
 }
 
 FakeWinHttpUrlFetcherFactory::~FakeWinHttpUrlFetcherFactory() {
   *WinHttpUrlFetcher::GetCreatorFunctionStorage() = original_creator_;
+}
+
+WinHttpUrlFetcher::CreatorCallback
+FakeWinHttpUrlFetcherFactory::GetCreatorCallback() {
+  return fake_creator_;
 }
 
 void FakeWinHttpUrlFetcherFactory::SetFakeResponse(
@@ -1164,6 +1171,11 @@ uint64_t FakeEventLogsUploadManager::GetNumLogsUploaded() {
 
 ///////////////////////////////////////////////////////////////////////////////
 
+FakeUserPoliciesManager::FakeUserPoliciesManager()
+    : original_manager_(*GetInstanceStorage()) {
+  *GetInstanceStorage() = this;
+}
+
 FakeUserPoliciesManager::FakeUserPoliciesManager(bool cloud_policies_enabled)
     : original_manager_(*GetInstanceStorage()) {
   *GetInstanceStorage() = this;
@@ -1186,16 +1198,31 @@ HRESULT FakeUserPoliciesManager::FetchAndStoreCloudUserPolicies(
 void FakeUserPoliciesManager::SetUserPolicies(const base::string16& sid,
                                               const UserPolicies& policies) {
   user_policies_[sid] = policies;
+  user_policies_stale_[sid] = false;
 }
 
 bool FakeUserPoliciesManager::GetUserPolicies(const base::string16& sid,
-                                              UserPolicies* policies) {
+                                              UserPolicies* policies) const {
   if (user_policies_.find(sid) != user_policies_.end()) {
-    *policies = user_policies_[sid];
+    *policies = user_policies_.at(sid);
     return true;
   }
 
   return false;
+}
+
+void FakeUserPoliciesManager::SetUserPolicyStaleOrMissing(
+    const base::string16& sid,
+    bool status) {
+  user_policies_stale_[sid] = status;
+}
+
+bool FakeUserPoliciesManager::IsUserPolicyStaleOrMissing(
+    const base::string16& sid) const {
+  if (user_policies_stale_.find(sid) != user_policies_stale_.end())
+    return user_policies_stale_.at(sid);
+
+  return true;
 }
 
 int FakeUserPoliciesManager::GetNumTimesFetchAndStoreCalled() const {
@@ -1268,6 +1295,13 @@ FakeOSServiceManager::~FakeOSServiceManager() {
   *GetInstanceStorage() = os_service_manager_;
 }
 
+unsigned __stdcall ServiceLauncher(void* service_main) {
+  LPSERVICE_MAIN_FUNCTION sm = (LPSERVICE_MAIN_FUNCTION)service_main;
+  DWORD flags = 0;
+  (*sm)(flags, nullptr);
+  return 0;
+}
+
 DWORD FakeOSServiceManager::StartServiceCtrlDispatcher(
     LPSERVICE_MAIN_FUNCTION service_main) {
   if (service_lookup_from_name_.find(extension::kGCPWExtensionServiceName) ==
@@ -1275,12 +1309,9 @@ DWORD FakeOSServiceManager::StartServiceCtrlDispatcher(
     return ERROR_INVALID_DATA;
   }
   LOGFN(INFO);
-  // Windows calls the service main by creating a new thread. This is simulated
-  // in the test by creating a new thread.
-  base::Thread t("ServiceMain Thread");
-  t.Start();
-  t.task_runner()->PostTask(FROM_HERE,
-                            base::BindOnce(service_main, 0, nullptr));
+
+  uintptr_t wait_thread =
+      _beginthreadex(0, 0, ServiceLauncher, (void*)service_main, 0, 0);
 
   while (true) {
     // Service looks for control requests so that it calls the service's control
@@ -1296,6 +1327,7 @@ DWORD FakeOSServiceManager::StartServiceCtrlDispatcher(
     service_lookup_from_name_[extension::kGCPWExtensionServiceName]
         .control_handler_cb_(control_request);
   }
+  ::CloseHandle(reinterpret_cast<HANDLE>(wait_thread));
 
   return ERROR_SUCCESS;
 }
@@ -1357,6 +1389,61 @@ DWORD FakeOSServiceManager::GetServiceStatus(SERVICE_STATUS* service_status) {
 DWORD FakeOSServiceManager::DeleteService() {
   service_lookup_from_name_.erase(extension::kGCPWExtensionServiceName);
   return ERROR_SUCCESS;
+}
+
+DWORD FakeOSServiceManager::ChangeServiceConfig(DWORD dwServiceType,
+                                                DWORD dwStartType,
+                                                DWORD dwErrorControl) {
+  return ERROR_SUCCESS;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+FakeTaskManager::FakeTaskManager()
+    : task_manager_(*GetInstanceStorage()), num_of_times_executed_(0) {
+  *GetInstanceStorage() = this;
+}
+
+FakeTaskManager::~FakeTaskManager() {
+  *GetInstanceStorage() = task_manager_;
+}
+
+void FakeTaskManager::RunTasksInternal() {
+  if (start_time_.is_null()) {
+    start_time_ = base::Time::Now();
+  }
+
+  int64_t start_hour = start_time_.ToDeltaSinceWindowsEpoch().InHours();
+  num_of_times_executed_++;
+
+  int64_t current = base::Time::Now().ToDeltaSinceWindowsEpoch().InHours();
+
+  ASSERT_EQ(current - start_hour, (num_of_times_executed_ - 1) * 1)
+      << (current - start_hour) << " hours since first run";
+
+  TaskManager::RunTasksInternal();
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+FakeTokenGenerator::FakeTokenGenerator()
+    : token_generator_(*GetInstanceStorage()) {
+  *GetInstanceStorage() = this;
+}
+
+FakeTokenGenerator::~FakeTokenGenerator() {
+  *GetInstanceStorage() = token_generator_;
+}
+
+std::string FakeTokenGenerator::GenerateToken() {
+  auto token = test_tokens_.front();
+  test_tokens_.erase(test_tokens_.begin());
+  return token;
+}
+
+void FakeTokenGenerator::SetTokensForTesting(
+    const std::vector<std::string>& test_tokens) {
+  test_tokens_ = test_tokens;
 }
 
 }  // namespace credential_provider

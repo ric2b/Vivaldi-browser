@@ -13,9 +13,11 @@
 <translation id="1211441953136645838">endnote</translation>
 <translation id="1281252709823657822">dialogue</translation>
 <translation id="1306460908038601864">Off</translation>
+<translation id="1311894908970423688">Value must be <ph name="VALUE_DATE_OR_TIME" />.</translation>
 <translation id="1335095011850992622">credits</translation>
 <translation id="1342835525016946179">article</translation>
 <translation id="1359897965706325498">banner</translation>
+<translation id="145015347812617860"><ph name="COUNT" /> items</translation>
 <translation id="1480676835519562650">multiselectable, <ph name="SELECTED" /> of <ph name="COUNT" /> selected.</translation>
 <translation id="1589122976691792535">region</translation>
 <translation id="1591562245178063882">This month</translation>
@@ -45,6 +47,7 @@
 <translation id="2247351761944213033">Week <ph name="WEEKNUMBER" />, <ph name="YEAR" /></translation>
 <translation id="2277199496770840904">Track <ph name="NUMBER" /></translation>
 <translation id="2291999235780842123">Tick box</translation>
+<translation id="2307576640803031502">in list, item <ph name="INDEX" /> of <ph name="COUNT" /></translation>
 <translation id="2311842470354187719">page break</translation>
 <translation id="2335594187091864976">date and time picker</translation>
 <translation id="2393030564806080191">Hexadecimal colour value</translation>
@@ -155,9 +158,11 @@
 <translation id="5677946354068040947">more options</translation>
 <translation id="576709008726043716">introduction</translation>
 <translation id="57838592816432529">Mute</translation>
+<translation id="5860033963881614850">Off</translation>
 <translation id="588258955323874662">Full screen</translation>
 <translation id="5888666972993069672">Now casting to <ph name="DEVICE_FRIENDLY_NAME" /></translation>
 <translation id="591047860372322273">search box</translation>
+<translation id="5916664084637901428">On</translation>
 <translation id="5939518447894949180">Reset</translation>
 <translation id="5966707198760109579">Week</translation>
 <translation id="5987525920412732405">spin button</translation>
@@ -185,6 +190,7 @@
 <translation id="6643016212128521049">Clear</translation>
 <translation id="668171684555832681">Other...</translation>
 <translation id="6692633176391053278">stepper</translation>
+<translation id="6709093583001123835">Value must be <ph name="VALUE" />.</translation>
 <translation id="6709570249143506788">Poor playback quality</translation>
 <translation id="6755330956360078551">tooltip</translation>
 <translation id="6790428901817661496">Play</translation>
@@ -285,6 +291,7 @@
 <translation id="9155987714137265666"><ph name="WEEK" />, starting on <ph name="WEEK_START_DATE" /></translation>
 <translation id="916607977885256133">Picture in Picture</translation>
 <translation id="9168329111483466115">footnote</translation>
+<translation id="945780513535800434">Partially ticked</translation>
 <translation id="954003015749068518">enter picture-in-picture</translation>
 <translation id="966787709310836684">menu</translation>
 </translationbundle>

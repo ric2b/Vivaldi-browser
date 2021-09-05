@@ -172,6 +172,9 @@ const char* ToTriggerSource(AssistantEntryPoint entry_point) {
       return kEntryPointProactiveSuggestions;
     case AssistantEntryPoint::kLauncherChip:
       return kEntryPointLauncherChip;
+    case AssistantEntryPoint::kBloom:
+      return kEntryPointUnspecified;  // TODO(jeroendh): Use Bloom specific
+                                      // entrypoint
   }
 }
 
@@ -459,6 +462,7 @@ void AssistantManagerServiceImpl::UpdateInternalMediaPlayerStatus(
     case MediaSessionAction::kScrubTo:
     case MediaSessionAction::kEnterPictureInPicture:
     case MediaSessionAction::kExitPictureInPicture:
+    case MediaSessionAction::kSwitchAudioDevice:
       NOTIMPLEMENTED();
       break;
   }

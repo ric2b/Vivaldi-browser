@@ -117,11 +117,6 @@ class WidgetBaseClient {
 
   virtual void WillBeginMainFrame() {}
   virtual void DidCompletePageScaleAnimation() {}
-
-  virtual void SubmitThroughputData(ukm::SourceId source_id,
-                                    int aggregated_percent,
-                                    int impl_percent,
-                                    base::Optional<int> main_percent) {}
   virtual void FocusChangeComplete() {}
 
   virtual WebInputEventResult DispatchBufferedTouchEvents() = 0;
@@ -152,7 +147,7 @@ class WidgetBaseClient {
   virtual blink::FrameWidget* FrameWidget() { return nullptr; }
 
   // Called to inform the Widget that it has gained or lost keyboard focus.
-  virtual void FocusChanged(bool) = 0;
+  virtual void FocusChanged(bool) {}
 
   // Call to schedule an animation.
   virtual void ScheduleAnimation() {}
@@ -165,19 +160,34 @@ class WidgetBaseClient {
   virtual void UpdateVisualProperties(
       const VisualProperties& visual_properties) = 0;
 
-  // Apply the updated screen rects.
-  virtual void UpdateScreenRects(const gfx::Rect& widget_screen_rect,
-                                 const gfx::Rect& window_screen_rect) = 0;
+  // A callback to apply the updated screen rects, return true if it
+  // was handled. If not handled WidgetBase will apply the screen
+  // rects as the new values.
+  virtual bool UpdateScreenRects(const gfx::Rect& widget_screen_rect,
+                                 const gfx::Rect& window_screen_rect) {
+    return false;
+  }
 
+  // Convert screen coordinates to device emulated coordinates (scaled
+  // coordinates when devtools is used). This occurs for popups where their
+  // window bounds are emulated.
+  virtual void ScreenRectToEmulated(gfx::Rect& screen_rect) {}
+  virtual void EmulatedToScreenRect(gfx::Rect& screen_rect) {}
+
+  // Signal the orientation has changed.
   virtual void OrientationChanged() {}
 
-  virtual ScreenInfo GetOriginalScreenInfo() = 0;
+  // Return the original (non-emulated) screen info.
+  virtual const ScreenInfo& GetOriginalScreenInfo() = 0;
 
-  virtual void UpdatedSurfaceAndScreen(
+  // Indication that the surface and screen were updated.
+  virtual void DidUpdateSurfaceAndScreen(
       const ScreenInfo& previous_original_screen_info) {}
 
+  // Return the viewport visible rect.
   virtual gfx::Rect ViewportVisibleRect() = 0;
 
+  // The screen orientation override.
   virtual base::Optional<mojom::blink::ScreenOrientation>
   ScreenOrientationOverride() {
     return base::nullopt;
@@ -188,6 +198,12 @@ class WidgetBaseClient {
 
   // Test-specific methods below this point.
   virtual void ScheduleAnimationForWebTests() {}
+
+  // Inform the widget that it was hidden.
+  virtual void WasHidden() {}
+
+  // Inform the widget that it was shown.
+  virtual void WasShown(bool was_evicted) {}
 };
 
 }  // namespace blink

@@ -5,10 +5,10 @@
 <translation id="1056898198331236512">Rabhadh</translation>
 <translation id="1165039591588034296">Mearachd</translation>
 <translation id="1175364870820465910">&amp;Clò-bhuail...</translation>
-<translation id="1177863135347784049">Gnàthaichte</translation>
 <translation id="1181037720776840403">Thoir air falbh</translation>
 <translation id="1221825588892235038">An taghadh a-mhàin</translation>
 <translation id="1244303850296295656">Mearachd san leudachan</translation>
+<translation id="125220115284141797">Bun-roghainn</translation>
 <translation id="1297175357211070620">Ceann-uidhe</translation>
 <translation id="1303101771013849280">Faidhle HTML nan comharran-lìn</translation>
 <translation id="1430915738399379752">Clò-bhuail</translation>
@@ -19,7 +19,9 @@
 <translation id="1603914832182249871">(Incognito)</translation>
 <translation id="1708338024780164500">(Neo-ghnìomhach)</translation>
 <translation id="1729533290416704613">Tha smachd aige cuideachd air an duilleag a chì thu nuair a nì thu lorg on Omnibox.</translation>
+<translation id="174123615272205933">Gnàthaichte</translation>
 <translation id="1744108098763830590">duilleag a’ chùlaibh</translation>
+<translation id="1779468444204342338">As lugha</translation>
 <translation id="1828901632669367785">Dèan clò-bhualaidh a’ cleachdadh còmhradh an t-siostaim...</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
 <translation id="2050339315714019657">Portraid</translation>
@@ -40,7 +42,6 @@
 <translation id="2378982052244864789">Tagh pasgan nan leudachan.</translation>
 <translation id="2379281330731083556">Dèan clò-bhualaidh a' cleachdadh còmhradh an t-siostaim... <ph name="SHORTCUT_KEY" /></translation>
 <translation id="241082044617551207">Plugan neo-aithnichte</translation>
-<translation id="2436707352762155834">As lugha</translation>
 <translation id="2439110203301358333">Chuir prògram eile air a’ choimpiutair agad leudachan ris aig a bheil buaidh air obrachadh Vivaldi ma dh’fhaoidte.</translation>
 <translation id="2445081178310039857">Tha feum air pasgan root an leudachain.</translation>
 <translation id="2470702053775288986">Chaidh leudachain ris nach eil taic a chur à comas</translation>
@@ -124,6 +125,7 @@
 <translation id="5317780077021120954">Sàbhail</translation>
 <translation id="5355926466126177564">Dh’atharraich an leudachan “<ph name="EXTENSION_NAME" />” an duilleag a chì thu nuair a nì thu lorg on Omnibox.</translation>
 <translation id="5362741141255528695">Tagh faidhle na h-iuchrach phrìobhaideach.</translation>
+<translation id="536638840841140142">Chan eil gin</translation>
 <translation id="5370819323174483825">&amp;Ath-luchdaich</translation>
 <translation id="5398572795982417028">Reifreans duilleige a tha taobh a-muigh nan crìochan, ’s e <ph name="MAXIMUM_PAGE" /> a’ chrìoch</translation>
 <translation id="5431318178759467895">Dath</translation>
@@ -183,7 +185,6 @@
 <translation id="7576690715254076113">Collaidich</translation>
 <translation id="7629827748548208700">Taba: <ph name="TAB_NAME" /></translation>
 <translation id="7663719505383602579">Faightear: <ph name="ARC_PROCESS_NAME" /></translation>
-<translation id="7701040980221191251">Chan eil gin</translation>
 <translation id="7704305437604973648">Saothair</translation>
 <translation id="7710568461918838723">&amp;Tilg...</translation>
 <translation id="7760004034676677601">A bheil thu dhen bheachd gur e seo an duilleag-tòiseachaidh ris an robh dùil agad?</translation>
@@ -217,7 +218,6 @@ Cum am faidhle iuchrach agad ann an àite sàbhailte. Bi agad ri tionndadh ùr a
 <translation id="8757090071857742562">Cha ghabh an deasg a thilgeil.  Dèan cinnteach gun do dh’aontaich thu co-roinneadh na sgrìn agad nuair a dh’fhaighnicheadh dhìot.</translation>
 <translation id="8774934320277480003">Am marghan aig a’ bharr</translation>
 <translation id="8783093612333542422">Tha &lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; airson an clò-bhualadair &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; a cho-roinneadh leat.</translation>
-<translation id="8798099450830957504">Bun-roghainn</translation>
 <translation id="8800004011501252845">A’ sealltainn cinn-uidhe airson</translation>
 <translation id="8808478386290700967">Am Bùth-lìn</translation>
 <translation id="8859174528519900719">Fo-fhrèam: <ph name="SUBFRAME_SITE" /></translation>

@@ -14,6 +14,8 @@
 Polymer({
   is: 'nearby-visibility-page',
 
+  behaviors: [I18nBehavior],
+
   properties: {
     /** @type {?nearby_share.NearbySettings} */
     settings: {
@@ -22,18 +24,21 @@ Polymer({
     }
   },
 
-  onNextTap_() {
+  listeners: {
+    'next': 'onNext_',
+    'manage-contacts': 'onManageContacts_'
+  },
+
+  /** @private */
+  onNext_() {
     this.set('settings.enabled', true);
-    this.fire('change-page', {page: 'discovery'});
+    this.fire('onboarding-complete');
   },
 
-  onCloseTap_() {
-    this.fire('close');
-  },
-
-  onManageContactsTap_() {
+  /** @private */
+  onManageContacts_() {
     // TODO(vecore): this is not a final link
-    window.open('https://contacts.google.com');
+    window.open('https://contacts.google.com', '_blank');
   },
 
 });

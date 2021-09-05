@@ -215,13 +215,6 @@ AccessibilityTreeFormatterBlink::BuildAccessibilityTree(
 }
 
 std::unique_ptr<base::DictionaryValue>
-AccessibilityTreeFormatterBlink::BuildAccessibilityTreeForProcess(
-    base::ProcessId pid) {
-  NOTREACHED();
-  return nullptr;
-}
-
-std::unique_ptr<base::DictionaryValue>
 AccessibilityTreeFormatterBlink::BuildAccessibilityTreeForWindow(
     gfx::AcceleratedWidget widget) {
   NOTREACHED();
@@ -229,8 +222,8 @@ AccessibilityTreeFormatterBlink::BuildAccessibilityTreeForWindow(
 }
 
 std::unique_ptr<base::DictionaryValue>
-AccessibilityTreeFormatterBlink::BuildAccessibilityTreeForPattern(
-    const base::StringPiece& pattern) {
+AccessibilityTreeFormatterBlink::BuildAccessibilityTreeForSelector(
+    const TreeSelector& selector) {
   NOTREACHED();
   return nullptr;
 }
@@ -413,22 +406,22 @@ void AccessibilityTreeFormatterBlink::AddProperties(
     dict->SetString("actions", base::JoinString(actions_strings, ","));
 }
 
-base::string16 AccessibilityTreeFormatterBlink::ProcessTreeForOutput(
+std::string AccessibilityTreeFormatterBlink::ProcessTreeForOutput(
     const base::DictionaryValue& dict,
     base::DictionaryValue* filtered_dict_result) {
-  base::string16 error_value;
+  std::string error_value;
   if (dict.GetString("error", &error_value))
     return error_value;
 
-  base::string16 line;
+  std::string line;
 
   if (show_ids()) {
     int id_value;
     dict.GetInteger("id", &id_value);
-    WriteAttribute(true, base::NumberToString16(id_value), &line);
+    WriteAttribute(true, base::NumberToString(id_value), &line);
   }
 
-  base::string16 role_value;
+  std::string role_value;
   dict.GetString("internalRole", &role_value);
   WriteAttribute(true, role_value, &line);
 

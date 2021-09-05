@@ -314,6 +314,15 @@ class FileTransferController {
 
     clipboardData.setData(
         'fs/missingFileContents', missingFileContents.toString());
+
+    if(util.isCopyImageEnabled()) {
+      if ((entries.length == 1) && FileType.isImage(entries[0])) {
+        chrome.fileManagerPrivate.copyImageToClipboard(entries[0],
+          () => {
+            console.log("Image is being copied!");
+        });
+      }
+    }
   }
 
   /**
@@ -1223,7 +1232,8 @@ class FileTransferController {
   }
 
   /**
-   * @return {boolean} Returns true if the current directory is not read only.
+   * @return {boolean} Returns true if the current directory is not read only,
+   *     or any of the selected entries isn't read-only.
    * @public
    */
   canCutOrDrag() {
@@ -1238,6 +1248,13 @@ class FileTransferController {
     if (metadata.some(item => item.canDelete === false)) {
       return false;
     }
+
+    for (let i = 0; i < entries.length; i++) {
+      if (util.isNonModifiable(this.volumeManager_, entries[i])) {
+        return false;
+      }
+    }
+
     return true;
   }
 

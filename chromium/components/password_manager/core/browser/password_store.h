@@ -20,13 +20,15 @@
 #include "base/observer_list_threadsafe.h"
 #include "base/sequenced_task_runner.h"
 #include "base/time/time.h"
+#include "base/util/type_safety/strong_alias.h"
 #include "build/build_config.h"
 #include "components/keyed_service/core/refcounted_keyed_service.h"
 #include "components/password_manager/core/browser/compromised_credentials_table.h"
+#include "components/password_manager/core/browser/password_form_forward.h"
 #include "components/password_manager/core/browser/password_store_change.h"
 #include "components/password_manager/core/browser/password_store_sync.h"
 
-#if defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
+#if defined(PASSWORD_REUSE_DETECTION_ENABLED)
 #include "components/password_manager/core/browser/hash_password_manager.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
 #include "components/password_manager/core/browser/password_reuse_detector.h"
@@ -37,7 +39,6 @@ class PrefService;
 
 namespace autofill {
 struct FormData;
-struct PasswordForm;
 }  // namespace autofill
 
 namespace syncer {
@@ -50,7 +51,9 @@ using StateSubscription =
 
 namespace password_manager {
 
-#if defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
+using IsAccountStore = util::StrongAlias<class IsAccountStoreTag, bool>;
+
+#if defined(PASSWORD_REUSE_DETECTION_ENABLED)
 using metrics_util::GaiaPasswordHashChange;
 #endif
 
@@ -63,7 +66,7 @@ struct FieldInfo;
 struct InteractionsStats;
 struct CompromisedCredentials;
 
-#if defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
+#if defined(PASSWORD_REUSE_DETECTION_ENABLED)
 using PasswordHashDataList = base::Optional<std::vector<PasswordHashData>>;
 #endif
 
@@ -111,6 +114,13 @@ class PasswordStore : protected PasswordStoreSync,
     // Will be called from the UI thread.
     virtual void OnCompromisedCredentialsChanged() = 0;
 
+    // Like OnCompromisedCredentialsChanged(), but also receives the originating
+    // PasswordStore as a parameter. This is useful for observers that observe
+    // changes in both the profile-scoped and the account-scoped store. The
+    // default implementation simply calls OnCompromisedCredentialsChanged(), so
+    // observers that don't care about the store can just ignore this.
+    virtual void OnCompromisedCredentialsChangedIn(PasswordStore* store);
+
    protected:
     virtual ~DatabaseCompromisedCredentialsObserver() = default;
   };
@@ -119,26 +129,27 @@ class PasswordStore : protected PasswordStoreSync,
   class UnsyncedCredentialsDeletionNotifier {
    public:
     // Should be called from the UI thread.
-    virtual void Notify(std::vector<autofill::PasswordForm>) = 0;
+    virtual void Notify(std::vector<PasswordForm>) = 0;
     virtual ~UnsyncedCredentialsDeletionNotifier() = default;
     virtual base::WeakPtr<UnsyncedCredentialsDeletionNotifier> GetWeakPtr() = 0;
   };
 
-  // Represents a subset of autofill::PasswordForm needed for credential
+  // Represents a subset of PasswordForm needed for credential
   // retrievals.
   struct FormDigest {
-    FormDigest(autofill::PasswordForm::Scheme scheme,
+    FormDigest(PasswordForm::Scheme scheme,
                const std::string& signon_realm,
                const GURL& url);
-    explicit FormDigest(const autofill::PasswordForm& form);
+    explicit FormDigest(const PasswordForm& form);
     explicit FormDigest(const autofill::FormData& form);
     FormDigest(const FormDigest& other);
     FormDigest(FormDigest&& other);
     FormDigest& operator=(const FormDigest& other);
     FormDigest& operator=(FormDigest&& other);
     bool operator==(const FormDigest& other) const;
+    bool operator!=(const FormDigest& other) const;
 
-    autofill::PasswordForm::Scheme scheme;
+    PasswordForm::Scheme scheme;
     std::string signon_realm;
     GURL url;
   };
@@ -165,20 +176,19 @@ class PasswordStore : protected PasswordStoreSync,
   }
 
   // Adds the given PasswordForm to the secure password store asynchronously.
-  virtual void AddLogin(const autofill::PasswordForm& form);
+  virtual void AddLogin(const PasswordForm& form);
 
   // Updates the matching PasswordForm in the secure password store (async).
   // If any of the primary key fields (signon_realm, url, username_element,
   // username_value, password_element) are updated, then the second version of
   // the method must be used that takes |old_primary_key|, i.e., the old values
   // for the primary key fields (the rest of the fields are ignored).
-  virtual void UpdateLogin(const autofill::PasswordForm& form);
-  virtual void UpdateLoginWithPrimaryKey(
-      const autofill::PasswordForm& new_form,
-      const autofill::PasswordForm& old_primary_key);
+  virtual void UpdateLogin(const PasswordForm& form);
+  virtual void UpdateLoginWithPrimaryKey(const PasswordForm& new_form,
+                                         const PasswordForm& old_primary_key);
 
   // Removes the matching PasswordForm from the secure password store (async).
-  virtual void RemoveLogin(const autofill::PasswordForm& form);
+  virtual void RemoveLogin(const PasswordForm& form);
 
   // Remove all logins whose origins match the given filter and that were
   // created in the given date range. |completion| will be posted to the
@@ -369,7 +379,7 @@ class PasswordStore : protected PasswordStoreSync,
 
   void SetSyncTaskTimeoutForTest(base::TimeDelta timeout);
 
-#if defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
+#if defined(PASSWORD_REUSE_DETECTION_ENABLED)
   // Immediately called after |Init()| to retrieve password hash data for
   // reuse detection.
   void PreparePasswordHashData(const std::string& sync_username,
@@ -443,7 +453,7 @@ class PasswordStore : protected PasswordStoreSync,
  protected:
   friend class base::RefCountedThreadSafe<PasswordStore>;
 
-#if defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
+#if defined(PASSWORD_REUSE_DETECTION_ENABLED)
   // Represents a single CheckReuse() request. Implements functionality to
   // listen to reuse events and propagate them to |consumer| on the sequence on
   // which CheckReuseRequest is created.
@@ -454,7 +464,8 @@ class PasswordStore : protected PasswordStoreSync,
     ~CheckReuseRequest() override;
 
     // PasswordReuseDetectorConsumer
-    void OnReuseFound(
+    void OnReuseCheckDone(
+        bool is_reuse_found,
         size_t password_length,
         base::Optional<PasswordHashData> reused_protected_password_hash,
         const std::vector<MatchingReusedCredential>&
@@ -522,41 +533,38 @@ class PasswordStore : protected PasswordStoreSync,
 
   // Synchronous implementation provided by subclasses to add the given login.
   virtual PasswordStoreChangeList AddLoginImpl(
-      const autofill::PasswordForm& form,
+      const PasswordForm& form,
       AddLoginError* error = nullptr) = 0;
 
   // Synchronous implementation provided by subclasses to update the given
   // login.
   virtual PasswordStoreChangeList UpdateLoginImpl(
-      const autofill::PasswordForm& form,
+      const PasswordForm& form,
       UpdateLoginError* error = nullptr) = 0;
 
   // Synchronous implementation provided by subclasses to remove the given
   // login.
-  virtual PasswordStoreChangeList RemoveLoginImpl(
-      const autofill::PasswordForm& form) = 0;
+  virtual PasswordStoreChangeList RemoveLoginImpl(const PasswordForm& form) = 0;
 
   // Finds and returns all PasswordForms with the same signon_realm as |form|,
   // or with a signon_realm that is a PSL-match to that of |form|.
-  virtual std::vector<std::unique_ptr<autofill::PasswordForm>>
-  FillMatchingLogins(const FormDigest& form) = 0;
+  virtual std::vector<std::unique_ptr<PasswordForm>> FillMatchingLogins(
+      const FormDigest& form) = 0;
 
   // Finds and returns all not-blacklisted PasswordForms with the specified
   // |plain_text_password| stored in the credential database.
-  virtual std::vector<std::unique_ptr<autofill::PasswordForm>>
+  virtual std::vector<std::unique_ptr<PasswordForm>>
   FillMatchingLoginsByPassword(const base::string16& plain_text_password) = 0;
 
   // Overwrites |forms| with all stored non-blacklisted credentials. Returns
   // true on success.
   virtual bool FillAutofillableLogins(
-      std::vector<std::unique_ptr<autofill::PasswordForm>>* forms)
-      WARN_UNUSED_RESULT = 0;
+      std::vector<std::unique_ptr<PasswordForm>>* forms) WARN_UNUSED_RESULT = 0;
 
   // Overwrites |forms| with all stored blacklisted credentials. Returns true on
   // success.
   virtual bool FillBlacklistLogins(
-      std::vector<std::unique_ptr<autofill::PasswordForm>>* forms)
-      WARN_UNUSED_RESULT = 0;
+      std::vector<std::unique_ptr<PasswordForm>>* forms) WARN_UNUSED_RESULT = 0;
 
   // Synchronous implementation for manipulating with statistics.
   virtual void AddSiteStatsImpl(const InteractionsStats& stats) = 0;
@@ -599,12 +607,11 @@ class PasswordStore : protected PasswordStoreSync,
   virtual bool IsEmpty() = 0;
 
   // PasswordStoreSync:
-  PasswordStoreChangeList AddLoginSync(const autofill::PasswordForm& form,
+  PasswordStoreChangeList AddLoginSync(const PasswordForm& form,
                                        AddLoginError* error) override;
-  PasswordStoreChangeList UpdateLoginSync(const autofill::PasswordForm& form,
+  PasswordStoreChangeList UpdateLoginSync(const PasswordForm& form,
                                           UpdateLoginError* error) override;
-  PasswordStoreChangeList RemoveLoginSync(
-      const autofill::PasswordForm& form) override;
+  PasswordStoreChangeList RemoveLoginSync(const PasswordForm& form) override;
 
   // Called by *Internal() methods once the underlying data-modifying operation
   // has been performed. Notifies observers that password store data may have
@@ -614,14 +621,14 @@ class PasswordStore : protected PasswordStoreSync,
   void NotifyDeletionsHaveSynced(bool success) override;
 
   void NotifyUnsyncedCredentialsWillBeDeleted(
-      std::vector<autofill::PasswordForm> unsynced_credentials) override;
+      std::vector<PasswordForm> unsynced_credentials) override;
 
   // Invokes callback and notifies observers if there was a change to the list
   // of compromised passwords.
   void InvokeAndNotifyAboutCompromisedPasswordsChange(
       base::OnceCallback<bool()> callback);
 
-#if defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
+#if defined(PASSWORD_REUSE_DETECTION_ENABLED)
   // Saves |username| and a hash of |password| for password reuse checking.
   // |is_gaia_password| indicates if it is a Gaia account. |event| is used for
   // metric logging. |is_primary_account| is whether account belong to the
@@ -678,7 +685,7 @@ class PasswordStore : protected PasswordStoreSync,
   FRIEND_TEST_ALL_PREFIXES(PasswordStoreTest,
                            UpdatePasswordsStoredForAffiliatedWebsites);
 
-  using LoginsResult = std::vector<std::unique_ptr<autofill::PasswordForm>>;
+  using LoginsResult = std::vector<std::unique_ptr<PasswordForm>>;
   using LoginsTask = base::OnceCallback<LoginsResult()>;
   using LoginsReply = base::OnceCallback<void(LoginsResult)>;
   using LoginsResultProcessor =
@@ -729,12 +736,11 @@ class PasswordStore : protected PasswordStoreSync,
   // The following methods notify observers that the password store may have
   // been modified via NotifyLoginsChanged(). Note that there is no guarantee
   // that the called method will actually modify the password store data.
-  void AddLoginInternal(const autofill::PasswordForm& form);
-  void UpdateLoginInternal(const autofill::PasswordForm& form);
-  void RemoveLoginInternal(const autofill::PasswordForm& form);
-  void UpdateLoginWithPrimaryKeyInternal(
-      const autofill::PasswordForm& new_form,
-      const autofill::PasswordForm& old_primary_key);
+  void AddLoginInternal(const PasswordForm& form);
+  void UpdateLoginInternal(const PasswordForm& form);
+  void RemoveLoginInternal(const PasswordForm& form);
+  void UpdateLoginWithPrimaryKeyInternal(const PasswordForm& new_form,
+                                         const PasswordForm& old_primary_key);
   void RemoveLoginsByURLAndTimeInternal(
       const base::RepeatingCallback<bool(const GURL&)>& url_filter,
       base::Time delete_begin,
@@ -770,23 +776,22 @@ class PasswordStore : protected PasswordStoreSync,
   // PSL-match to that of |form|, and takes care of notifying the consumer with
   // the results when done.
   // Note: subclasses should implement FillMatchingLogins() instead.
-  std::vector<std::unique_ptr<autofill::PasswordForm>> GetLoginsImpl(
+  std::vector<std::unique_ptr<PasswordForm>> GetLoginsImpl(
       const FormDigest& form);
 
   // Finds all credentials with the specified |plain_text_password|.
   // Note: subclasses should implement FillMatchingLoginsByPassword() instead.
-  std::vector<std::unique_ptr<autofill::PasswordForm>> GetLoginsByPasswordImpl(
+  std::vector<std::unique_ptr<PasswordForm>> GetLoginsByPasswordImpl(
       const base::string16& plain_text_password);
 
   // Finds all non-blacklist PasswordForms and returns the result.
-  std::vector<std::unique_ptr<autofill::PasswordForm>>
-  GetAutofillableLoginsImpl();
+  std::vector<std::unique_ptr<PasswordForm>> GetAutofillableLoginsImpl();
 
   // Finds all blacklist PasswordForms and returns the result.
-  std::vector<std::unique_ptr<autofill::PasswordForm>> GetBlacklistLoginsImpl();
+  std::vector<std::unique_ptr<PasswordForm>> GetBlacklistLoginsImpl();
 
   // Finds all PasswordForms and returns the result.
-  std::vector<std::unique_ptr<autofill::PasswordForm>> GetAllLoginsImpl();
+  std::vector<std::unique_ptr<PasswordForm>> GetAllLoginsImpl();
 
   // Extended version of GetLoginsImpl that also returns credentials stored for
   // the specified affiliated Android applications. That is, it finds all
@@ -795,8 +800,7 @@ class PasswordStore : protected PasswordStoreSync,
   //  * is a PSL-match to the realm of |form|,
   //  * is one of those in |additional_android_realms|,
   // and returns the result.
-  std::vector<std::unique_ptr<autofill::PasswordForm>>
-  GetLoginsWithAffiliationsImpl(
+  std::vector<std::unique_ptr<PasswordForm>> GetLoginsWithAffiliationsImpl(
       const FormDigest& form,
       const std::vector<std::string>& additional_android_realms);
 
@@ -832,27 +836,26 @@ class PasswordStore : protected PasswordStoreSync,
   // |form|, that is, with the same signon_realm, url, username_element,
   // username_value and password_element attributes. To be called on the
   // background sequence.
-  std::unique_ptr<autofill::PasswordForm> GetLoginImpl(
-      const autofill::PasswordForm& primary_key);
+  std::unique_ptr<PasswordForm> GetLoginImpl(const PasswordForm& primary_key);
 
   // Called when a password is added or updated for an Android application, and
   // triggers finding web sites affiliated with the Android application and
   // propagating the new password to credentials for those web sites, if any.
   // Called on the main sequence.
   void FindAndUpdateAffiliatedWebLogins(
-      const autofill::PasswordForm& added_or_updated_android_form);
+      const PasswordForm& added_or_updated_android_form);
 
   // Posts FindAndUpdateAffiliatedWebLogins() to the main sequence. Should be
   // called from the background sequence.
   void ScheduleFindAndUpdateAffiliatedWebLogins(
-      const autofill::PasswordForm& added_or_updated_android_form);
+      const PasswordForm& added_or_updated_android_form);
 
   // Called when a password is added or updated for an Android application, and
   // propagates these changes to credentials stored for |affiliated_web_realms|
   // under the same username, if there are any. Called on the background
   // sequence.
   void UpdateAffiliatedWebLoginsImpl(
-      const autofill::PasswordForm& updated_android_form,
+      const PasswordForm& updated_android_form,
       const std::vector<std::string>& affiliated_web_realms);
 
   // Returns the sync controller delegate for syncing passwords. It must be
@@ -863,7 +866,7 @@ class PasswordStore : protected PasswordStoreSync,
   // Schedules UpdateAffiliatedWebLoginsImpl() to run on the background
   // sequence. Should be called from the main sequence.
   void ScheduleUpdateAffiliatedWebLoginsImpl(
-      const autofill::PasswordForm& updated_android_form,
+      const PasswordForm& updated_android_form,
       const std::vector<std::string>& affiliated_web_realms);
 
   // Deletes object that should be destroyed on the background sequence.
@@ -891,7 +894,7 @@ class PasswordStore : protected PasswordStoreSync,
   std::unique_ptr<AffiliatedMatchHelper> affiliated_match_helper_;
 
   PrefService* prefs_ = nullptr;
-#if defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
+#if defined(PASSWORD_REUSE_DETECTION_ENABLED)
   // PasswordReuseDetector can be only destroyed on the background sequence. It
   // can't be owned by PasswordStore because PasswordStore can be destroyed on
   // the UI thread and DestroyOnBackgroundThread isn't guaranteed to be called.

@@ -8,6 +8,7 @@
 
 #include "ash/accessibility/default_accessibility_delegate.h"
 #include "ash/capture_mode/test_capture_mode_delegate.h"
+#include "ash/public/cpp/test/test_nearby_share_delegate.h"
 #include "ash/system/tray/system_tray_notifier.h"
 #include "ash/test_screenshot_delegate.h"
 #include "ash/wm/gestures/back_gesture/test_back_gesture_contextual_nudge_delegate.h"
@@ -47,6 +48,10 @@ bool TestShellDelegate::CanGoBack(gfx::NativeWindow window) const {
   return can_go_back_;
 }
 
+void TestShellDelegate::SetTabScrubberEnabled(bool enabled) {
+  tab_scrubber_enabled_ = enabled;
+}
+
 bool TestShellDelegate::ShouldWaitForTouchPressAck(gfx::NativeWindow window) {
   return should_wait_for_touch_ack_;
 }
@@ -68,6 +73,12 @@ void TestShellDelegate::SetCanGoBack(bool can_go_back) {
 void TestShellDelegate::SetShouldWaitForTouchAck(
     bool should_wait_for_touch_ack) {
   should_wait_for_touch_ack_ = should_wait_for_touch_ack;
+}
+
+std::unique_ptr<NearbyShareDelegate>
+TestShellDelegate::CreateNearbyShareDelegate(
+    NearbyShareController* controller) const {
+  return std::make_unique<TestNearbyShareDelegate>();
 }
 
 }  // namespace ash

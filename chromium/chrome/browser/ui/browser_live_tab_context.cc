@@ -81,8 +81,8 @@ std::string BrowserLiveTabContext::GetAppName() const {
   return browser_->app_name();
 }
 
-std::string BrowserLiveTabContext::GetExtData() const {
-  return browser_->ext_data();
+std::string BrowserLiveTabContext::GetUserTitle() const {
+  return browser_->user_title();
 }
 
 sessions::LiveTab* BrowserLiveTabContext::GetLiveTabAt(int index) const {
@@ -238,6 +238,7 @@ sessions::LiveTabContext* BrowserLiveTabContext::Create(
     const gfx::Rect& bounds,
     ui::WindowShowState show_state,
     const std::string& workspace,
+    const std::string& user_title,
     const std::string& ext_data) {
   std::unique_ptr<Browser::CreateParams> create_params;
   if (ShouldCreateAppWindowForAppName(profile, app_name)) {
@@ -256,6 +257,7 @@ sessions::LiveTabContext* BrowserLiveTabContext::Create(
 
   create_params->initial_show_state = show_state;
   create_params->initial_workspace = workspace;
+  create_params->user_title = user_title;
   Browser* browser = new Browser(*create_params.get());
   return browser->live_tab_context();
 }
@@ -280,4 +282,8 @@ sessions::LiveTabContext* BrowserLiveTabContext::FindContextWithGroup(
     Profile* profile) {
   Browser* browser = chrome::FindBrowserWithGroup(group, profile);
   return browser ? browser->live_tab_context() : nullptr;
+}
+
+std::string BrowserLiveTabContext::GetExtData() const {
+  return browser_->ext_data();
 }

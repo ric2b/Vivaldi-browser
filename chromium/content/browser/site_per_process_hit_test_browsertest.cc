@@ -36,7 +36,6 @@
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/use_zoom_for_dsf_policy.h"
-#include "content/public/common/web_preferences.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test_utils.h"
@@ -45,6 +44,8 @@
 #include "content/public/test/test_utils.h"
 #include "content/shell/common/shell_switches.h"
 #include "content/test/mock_overscroll_observer.h"
+#include "third_party/blink/public/common/switches.h"
+#include "third_party/blink/public/common/web_preferences/web_preferences.h"
 #include "third_party/blink/public/mojom/frame/user_activation_update_types.mojom.h"
 #include "third_party/blink/public/mojom/input/input_handler.mojom-test-utils.h"
 #include "third_party/blink/public/mojom/page/widget.mojom-test-utils.h"
@@ -789,7 +790,8 @@ class SitePerProcessInternalsHitTestBrowserTest
     command_line->AppendSwitch(switches::kExposeInternalsForTesting);
     // Needed to guarantee the scrollable div we're testing with is not given
     // its own compositing layer.
-    command_line->AppendSwitch(switches::kDisablePreferCompositingToLCDText);
+    command_line->AppendSwitch(
+        blink::switches::kDisablePreferCompositingToLCDText);
     command_line->AppendSwitchASCII(
         switches::kForceDeviceScaleFactor,
         base::StringPrintf("%f", std::get<0>(GetParam())));
@@ -2172,11 +2174,18 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest,
   RenderWidgetHostViewChildFrame* rwhv_child =
       static_cast<RenderWidgetHostViewChildFrame*>(
           child_node->current_frame_host()->GetRenderWidgetHost()->GetView());
+  RenderFrameSubmissionObserver child_render_frame_submission_observer(
+      child_node);
 
   WaitForHitTestData(child_node->current_frame_host());
 
-  ASSERT_TRUE(rwhv_root->IsScrollOffsetAtTop());
-  ASSERT_TRUE(rwhv_child->IsScrollOffsetAtTop());
+  const cc::RenderFrameMetadata& last_root_metadata =
+      render_frame_submission_observer.LastRenderFrameMetadata();
+  const cc::RenderFrameMetadata& last_child_metadata =
+      child_render_frame_submission_observer.LastRenderFrameMetadata();
+
+  ASSERT_TRUE(last_root_metadata.is_scroll_offset_at_top);
+  ASSERT_TRUE(last_child_metadata.is_scroll_offset_at_top);
 
   RenderWidgetHostInputEventRouter* router =
       static_cast<WebContentsImpl*>(shell()->web_contents())
@@ -5582,7 +5591,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest,
 
   WebContentsImpl* contents = web_contents();
 
-  WebPreferences prefs = contents->GetOrCreateWebPreferences();
+  blink::web_pref::WebPreferences prefs = contents->GetOrCreateWebPreferences();
   prefs.double_tap_to_zoom_enabled = true;
   contents->SetWebPreferences(prefs);
 
@@ -6451,16 +6460,17 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessGestureHitTestBrowserTest,
 }
 #endif  // defined(USE_AURA)
 
-// Test that MouseDown and MouseUp to the same coordinates do not result in
-// different coordinates after routing. See bug https://crbug.com/670253.
-#if defined(OS_ANDROID)
 // Android uses fixed scale factor, which makes this test unnecessary.
+// MacOSX does not have fractional device scales.
+#if defined(OS_ANDROID) || defined(OS_MAC)
 #define MAYBE_MouseClickWithNonIntegerScaleFactor \
   DISABLED_MouseClickWithNonIntegerScaleFactor
 #else
 #define MAYBE_MouseClickWithNonIntegerScaleFactor \
   MouseClickWithNonIntegerScaleFactor
 #endif
+// Test that MouseDown and MouseUp to the same coordinates do not result in
+// different coordinates after routing. See bug https://crbug.com/670253.
 IN_PROC_BROWSER_TEST_F(SitePerProcessNonIntegerScaleFactorHitTestBrowserTest,
                        MAYBE_MouseClickWithNonIntegerScaleFactor) {
   GURL initial_url(embedded_test_server()->GetURL("a.com", "/title1.html"));
@@ -6511,8 +6521,14 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessNonIntegerScaleFactorHitTestBrowserTest,
               event_monitor.event().PositionInWidget().y(), kHitTestTolerance);
 }
 
+// MacOSX does not have fractional device scales.
+#if defined(OS_MAC)
+#define MAYBE_NestedSurfaceHitTestTest DISABLED_NestedSurfaceHitTestTest
+#else
+#define MAYBE_NestedSurfaceHitTestTest NestedSurfaceHitTestTest
+#endif
 IN_PROC_BROWSER_TEST_F(SitePerProcessNonIntegerScaleFactorHitTestBrowserTest,
-                       NestedSurfaceHitTestTest) {
+                       MAYBE_NestedSurfaceHitTestTest) {
   NestedSurfaceHitTestTestHelper(shell(), embedded_test_server());
 }
 
@@ -6665,16 +6681,20 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest, HitTestNestedFrames) {
     gfx::PointF returned_point;
     base::OnceClosure quit_closure =
         content::GetDeferredQuitTaskForRunLoop(&run_loop);
-    DCHECK_NE(child_node->current_frame_host()->GetInputTargetClient(),
-              nullptr);
-    child_node->current_frame_host()->GetInputTargetClient()->FrameSinkIdAt(
-        point_in_child, 0,
-        base::BindLambdaForTesting(
-            [&](const viz::FrameSinkId& id, const gfx::PointF& point) {
-              received_frame_sink_id = id;
-              returned_point = point;
-              std::move(quit_closure).Run();
-            }));
+    DCHECK(child_node->current_frame_host()
+               ->GetRenderWidgetHost()
+               ->input_target_client());
+    child_node->current_frame_host()
+        ->GetRenderWidgetHost()
+        ->input_target_client()
+        ->FrameSinkIdAt(
+            point_in_child, 0,
+            base::BindLambdaForTesting(
+                [&](const viz::FrameSinkId& id, const gfx::PointF& point) {
+                  received_frame_sink_id = id;
+                  returned_point = point;
+                  std::move(quit_closure).Run();
+                }));
     content::RunThisRunLoop(&run_loop);
     // |point_in_child| should hit test to the view for |child_node|.
     ASSERT_EQ(rwhv_child->GetFrameSinkId(), received_frame_sink_id);
@@ -6688,16 +6708,20 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest, HitTestNestedFrames) {
     gfx::PointF returned_point;
     base::OnceClosure quit_closure =
         content::GetDeferredQuitTaskForRunLoop(&run_loop);
-    DCHECK_NE(child_node->current_frame_host()->GetInputTargetClient(),
-              nullptr);
-    child_node->current_frame_host()->GetInputTargetClient()->FrameSinkIdAt(
-        point_in_nested_child_transformed, 0,
-        base::BindLambdaForTesting(
-            [&](const viz::FrameSinkId& id, const gfx::PointF& point) {
-              received_frame_sink_id = id;
-              returned_point = point;
-              std::move(quit_closure).Run();
-            }));
+    DCHECK(child_node->current_frame_host()
+               ->GetRenderWidgetHost()
+               ->input_target_client());
+    child_node->current_frame_host()
+        ->GetRenderWidgetHost()
+        ->input_target_client()
+        ->FrameSinkIdAt(
+            point_in_nested_child_transformed, 0,
+            base::BindLambdaForTesting(
+                [&](const viz::FrameSinkId& id, const gfx::PointF& point) {
+                  received_frame_sink_id = id;
+                  returned_point = point;
+                  std::move(quit_closure).Run();
+                }));
     content::RunThisRunLoop(&run_loop);
     // |point_in_nested_child_transformed| should hit test to |rwhv_grandchild|.
     ASSERT_EQ(rwhv_grandchild->GetFrameSinkId(), received_frame_sink_id);
@@ -6751,13 +6775,16 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest,
     gfx::PointF point_in_border = child_origin + gfx::Vector2dF(-30, -30);
     base::RunLoop run_loop;
     viz::FrameSinkId received_frame_sink_id;
-    root->current_frame_host()->GetInputTargetClient()->FrameSinkIdAt(
-        point_in_border, 0,
-        base::BindLambdaForTesting(
-            [&](const viz::FrameSinkId& id, const gfx::PointF& point) {
-              received_frame_sink_id = id;
-              run_loop.Quit();
-            }));
+    root->current_frame_host()
+        ->GetRenderWidgetHost()
+        ->input_target_client()
+        ->FrameSinkIdAt(
+            point_in_border, 0,
+            base::BindLambdaForTesting(
+                [&](const viz::FrameSinkId& id, const gfx::PointF& point) {
+                  received_frame_sink_id = id;
+                  run_loop.Quit();
+                }));
     run_loop.Run();
     EXPECT_EQ(rwhv_parent->GetFrameSinkId(), received_frame_sink_id);
   }
@@ -6766,13 +6793,16 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest,
     gfx::PointF point_in_padding = child_origin + gfx::Vector2dF(-10, -10);
     base::RunLoop run_loop;
     viz::FrameSinkId received_frame_sink_id;
-    root->current_frame_host()->GetInputTargetClient()->FrameSinkIdAt(
-        point_in_padding, 0,
-        base::BindLambdaForTesting(
-            [&](const viz::FrameSinkId& id, const gfx::PointF& point) {
-              received_frame_sink_id = id;
-              run_loop.Quit();
-            }));
+    root->current_frame_host()
+        ->GetRenderWidgetHost()
+        ->input_target_client()
+        ->FrameSinkIdAt(
+            point_in_padding, 0,
+            base::BindLambdaForTesting(
+                [&](const viz::FrameSinkId& id, const gfx::PointF& point) {
+                  received_frame_sink_id = id;
+                  run_loop.Quit();
+                }));
     run_loop.Run();
     EXPECT_EQ(rwhv_parent->GetFrameSinkId(), received_frame_sink_id);
   }
@@ -6781,13 +6811,16 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest,
     gfx::PointF point_in_content_box = child_origin + gfx::Vector2dF(10, 10);
     base::RunLoop run_loop;
     viz::FrameSinkId received_frame_sink_id;
-    root->current_frame_host()->GetInputTargetClient()->FrameSinkIdAt(
-        point_in_content_box, 0,
-        base::BindLambdaForTesting(
-            [&](const viz::FrameSinkId& id, const gfx::PointF& point) {
-              received_frame_sink_id = id;
-              run_loop.Quit();
-            }));
+    root->current_frame_host()
+        ->GetRenderWidgetHost()
+        ->input_target_client()
+        ->FrameSinkIdAt(
+            point_in_content_box, 0,
+            base::BindLambdaForTesting(
+                [&](const viz::FrameSinkId& id, const gfx::PointF& point) {
+                  received_frame_sink_id = id;
+                  run_loop.Quit();
+                }));
     run_loop.Run();
     EXPECT_EQ(rwhv_child->GetFrameSinkId(), received_frame_sink_id);
   }

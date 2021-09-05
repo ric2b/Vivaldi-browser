@@ -15,11 +15,11 @@
 #include "base/observer_list.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/request_filter/adblock_filter/adblock_metadata.h"
+#include "components/request_filter/adblock_filter/adblock_resources.h"
 #include "components/request_filter/adblock_filter/adblock_rule_service.h"
 #include "components/request_filter/adblock_filter/adblock_rule_service_storage.h"
 #include "components/request_filter/adblock_filter/adblock_rules_index_manager.h"
 #include "components/request_filter/adblock_filter/blocked_urls_reporter.h"
-#include "components/request_filter/adblock_filter/adblock_resources.h"
 
 namespace base {
 class SequencedTaskRunner;
@@ -39,8 +39,10 @@ class RuleServiceImpl : public RuleService {
   ~RuleServiceImpl() override;
 
   void Load();
+  Delegate* delegate() { return delegate_; }
 
   // Implementing RuleService
+  void SetDelegate(Delegate* delegate) override;
   bool IsLoaded() const override;
   bool IsRuleGroupEnabled(RuleGroup group) const override;
   void SetRuleGroupEnabled(RuleGroup group, bool enabled) override;
@@ -64,8 +66,9 @@ class RuleServiceImpl : public RuleService {
                                 ExceptionsList list,
                                 const std::string& domain) override;
   void RemoveAllExceptions(RuleGroup group, ExceptionsList list) override;
-  std::vector<std::string> GetExceptions(RuleGroup group,
-                                         ExceptionsList list) const override;
+  const std::set<std::string>& GetExceptions(
+      RuleGroup group,
+      ExceptionsList list) const override;
   bool IsExemptOfFiltering(RuleGroup group, url::Origin origin) const override;
   bool IsDocumentBlocked(RuleGroup group,
                          content::RenderFrameHost* frame,
@@ -89,6 +92,8 @@ class RuleServiceImpl : public RuleService {
   void OnRulesIndexChanged();
   void OnRulesIndexLoaded(RuleGroup group);
   void OnRulesBufferReadFailCallback(RuleGroup rule_group, uint32_t source_id);
+
+  Delegate* delegate_ = nullptr;
 
   std::map<int64_t, std::unique_ptr<RuleSourceHandler>>& GetSourceMap(
       RuleGroup group);

@@ -2,7 +2,8 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-# Statically-defined (not runtime-generated) IDL files in 'core' component.
+# Statically-defined (not runtime-generated) IDL files in 'core' component
+# for production.
 #
 # CAUTION: static_idl_files_in_core is used only by a new V8 bindings generator,
 # which is under development.  You have to update core/core_idl_files.gni in
@@ -257,7 +258,6 @@ static_idl_files_in_core = get_path_info(
           "//third_party/blink/renderer/core/frame/history.idl",
           "//third_party/blink/renderer/core/frame/intervention_report_body.idl",
           "//third_party/blink/renderer/core/frame/is_input_pending_options.idl",
-          "//third_party/blink/renderer/core/frame/is_input_pending_options_init.idl",
           "//third_party/blink/renderer/core/frame/location.idl",
           "//third_party/blink/renderer/core/frame/navigator.idl",
           "//third_party/blink/renderer/core/frame/navigator_automation_information.idl",
@@ -631,6 +631,7 @@ static_idl_files_in_core = get_path_info(
           "//third_party/blink/renderer/core/timing/profiler_stack.idl",
           "//third_party/blink/renderer/core/timing/profiler_trace.idl",
           "//third_party/blink/renderer/core/timing/task_attribution_timing.idl",
+          "//third_party/blink/renderer/core/timing/visibility_state_entry.idl",
           "//third_party/blink/renderer/core/timing/window_performance.idl",
           "//third_party/blink/renderer/core/timing/worker_global_scope_performance.idl",
           "//third_party/blink/renderer/core/trustedtypes/trusted_html.idl",

@@ -22,6 +22,14 @@ void OnFinished(base::android::ScopedJavaGlobalRef<jobject> java_lite_service,
                                                static_cast<int>(state));
 }
 
+void OnScriptRunning(
+    base::android::ScopedJavaGlobalRef<jobject> java_lite_service,
+    bool ui_shown) {
+  JNIEnv* env = base::android::AttachCurrentThread();
+  Java_AutofillAssistantLiteService_onScriptRunning(env, java_lite_service,
+                                                    ui_shown);
+}
+
 // static
 jlong JNI_AutofillAssistantLiteService_CreateLiteService(
     JNIEnv* env,
@@ -45,7 +53,10 @@ jlong JNI_AutofillAssistantLiteService_CreateLiteService(
                                     /* auth_enabled = */ false),
       base::android::ConvertJavaStringToUTF8(env, jtrigger_script_path),
       base::BindOnce(&OnFinished, base::android::ScopedJavaGlobalRef<jobject>(
-                                      java_lite_service))));
+                                      java_lite_service)),
+      base::BindRepeating(
+          &OnScriptRunning,
+          base::android::ScopedJavaGlobalRef<jobject>(java_lite_service))));
 }
 
 }  // namespace autofill_assistant

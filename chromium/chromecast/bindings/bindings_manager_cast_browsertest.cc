@@ -112,7 +112,7 @@ class TitleChangeObserver : public CastWebContents::Observer {
 // Test class for communicating with connector.html.
 class TestBindingBackend : public blink::WebMessagePort::MessageReceiver {
  public:
-  TestBindingBackend(bindings::BindingsManager* bindings_manager)
+  TestBindingBackend(bindings::BindingsManagerCast* bindings_manager)
       : bindings_manager_(bindings_manager) {
     constexpr char kPortName[] = "hello";
     bindings_manager_->RegisterPortHandler(
@@ -266,7 +266,6 @@ class BindingsManagerCastBrowserTest : public content::BrowserTestBase {
     BrowserTestBase::SetUp();
   }
   void SetUpCommandLine(base::CommandLine* command_line) final {
-    command_line->AppendSwitch(switches::kNoWifi);
     command_line->AppendSwitchASCII(switches::kTestType, "browser");
   }
 

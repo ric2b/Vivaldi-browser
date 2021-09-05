@@ -8,6 +8,7 @@
 #include <memory>
 #include <string>
 
+#include "components/sync/invalidations/interested_data_types_manager.h"
 #include "components/sync/invalidations/sync_invalidations_service.h"
 
 namespace gcm {
@@ -27,23 +28,29 @@ class SyncInvalidationsServiceImpl : public SyncInvalidationsService {
  public:
   SyncInvalidationsServiceImpl(
       gcm::GCMDriver* gcm_driver,
-      instance_id::InstanceIDDriver* instance_id_driver,
-      const std::string& sender_id,
-      const std::string& app_id);
+      instance_id::InstanceIDDriver* instance_id_driver);
   ~SyncInvalidationsServiceImpl() override;
 
   // SyncInvalidationsService implementation.
+  void SetActive(bool active) override;
   void AddListener(InvalidationsListener* listener) override;
   void RemoveListener(InvalidationsListener* listener) override;
   void AddTokenObserver(FCMRegistrationTokenObserver* observer) override;
   void RemoveTokenObserver(FCMRegistrationTokenObserver* observer) override;
   const std::string& GetFCMRegistrationToken() const override;
+  void SetInterestedDataTypesHandler(
+      InterestedDataTypesHandler* handler) override;
+  const ModelTypeSet& GetInterestedDataTypes() const override;
+  void SetInterestedDataTypes(
+      const ModelTypeSet& data_types,
+      InterestedDataTypesAppliedCallback callback) override;
 
   // KeyedService overrides.
   void Shutdown() override;
 
  private:
   std::unique_ptr<FCMHandler> fcm_handler_;
+  InterestedDataTypesManager data_types_manager_;
 };
 
 }  // namespace syncer

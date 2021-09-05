@@ -34,9 +34,7 @@ public class PrefetchConfiguration {
      */
     public static boolean isServiceManagerForBackgroundPrefetchEnabled() {
         return CachedFeatureFlags.isEnabled(
-                       ChromeFeatureList.SERVICE_MANAGER_FOR_BACKGROUND_PREFETCH)
-                && CachedFeatureFlags.isEnabled(
-                        ChromeFeatureList.INTEREST_FEED_CONTENT_SUGGESTIONS);
+                ChromeFeatureList.SERVICE_MANAGER_FOR_BACKGROUND_PREFETCH);
     }
 
     /**

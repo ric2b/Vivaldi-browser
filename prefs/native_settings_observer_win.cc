@@ -31,11 +31,11 @@ NativeSettingsObserverWin::NativeSettingsObserverWin(Profile* profile)
 void NativeSettingsObserverWin::OnThemeColorUpdated() {
   DWORD ubr = 0;
   vivaldiprefs::SystemDesktopThemeColorValues theme_color =
-      vivaldiprefs::SystemDesktopThemeColorValues::LIGHT;
+      vivaldiprefs::SystemDesktopThemeColorValues::kLight;
   if (theme_key_->ReadValueDW(L"AppsUseLightTheme", &ubr) == ERROR_SUCCESS) {
     if (ubr == 0) {
       // 0 is dark.
-      theme_color = vivaldiprefs::SystemDesktopThemeColorValues::DARK;
+      theme_color = vivaldiprefs::SystemDesktopThemeColorValues::kDark;
     }
   }
   SetPref(vivaldiprefs::kSystemDesktopThemeColor,

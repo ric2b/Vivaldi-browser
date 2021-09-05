@@ -9,7 +9,9 @@
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/strings/pattern.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_split.h"
 #include "base/threading/scoped_blocking_call.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
@@ -94,6 +96,9 @@ void InitializePlatformOverlaySettings(GPUInfo* gpu_info,
           gpu::ENABLE_BGRA8_OVERLAYS_WITH_YUV_OVERLAY_SUPPORT)) {
     gl::DirectCompositionSurfaceWin::EnableBGRA8OverlaysWithYUVOverlaySupport();
   }
+  if (gpu_feature_info.IsWorkaroundEnabled(gpu::FORCE_NV12_OVERLAY_SUPPORT)) {
+    gl::DirectCompositionSurfaceWin::ForceNV12OverlaySupport();
+  }
   DCHECK(gpu_info);
   CollectHardwareOverlayInfo(&gpu_info->overlay_info);
 #elif defined(OS_ANDROID)
@@ -143,6 +148,18 @@ void DisableInProcessGpuVulkan(GpuFeatureInfo* gpu_feature_info,
       gpu_preferences->gr_context_type = GrContextType::kGL;
   }
 }
+
+#if BUILDFLAG(ENABLE_VULKAN)
+bool MatchGLRenderer(const GPUInfo& gpu_info, const std::string& patterns) {
+  auto pattern_strings = base::SplitString(patterns, "|", base::TRIM_WHITESPACE,
+                                           base::SPLIT_WANT_ALL);
+  for (const auto& pattern : pattern_strings) {
+    if (base::MatchPattern(gpu_info.gl_renderer, pattern))
+      return true;
+  }
+  return false;
+}
+#endif  // !BUILDFLAG(ENABLE_VULKAN)
 
 }  // namespace
 
@@ -788,6 +805,15 @@ bool GpuInit::InitializeVulkan() {
 
   if (!vulkan_implementation_)
     return false;
+
+  auto disable_patterns = base::GetFieldTrialParamValueByFeature(
+      features::kVulkan, "disable_by_gl_renderer");
+  if (MatchGLRenderer(gpu_info_, disable_patterns))
+    return false;
+
+  auto enable_patterns = base::GetFieldTrialParamValueByFeature(
+      features::kVulkan, "force_enable_by_gl_renderer");
+  forced_native |= MatchGLRenderer(gpu_info_, enable_patterns);
 
   if (!use_swiftshader && !forced_native &&
       !CheckVulkanCompabilities(

@@ -21,7 +21,6 @@
 #include "components/viz/common/frame_sinks/begin_frame_source.h"
 #include "components/viz/common/surfaces/frame_sink_id.h"
 #include "components/viz/common/surfaces/local_surface_id.h"
-#include "components/viz/common/surfaces/local_surface_id_allocation.h"
 #include "components/viz/common/surfaces/parent_local_surface_id_allocator.h"
 #include "components/viz/host/host_frame_sink_client.h"
 #include "components/viz/host/host_frame_sink_manager.h"
@@ -147,10 +146,6 @@ class CONTENT_EXPORT CompositorImpl
       override;
   void NotifyThroughputTrackerResults(
       cc::CustomTrackerResults results) override {}
-  void SubmitThroughputData(ukm::SourceId source_id,
-                            int aggregated_percent,
-                            int impl_percent,
-                            base::Optional<int> main_percent) override {}
   void DidObserveFirstScrollDelay(
       base::TimeDelta first_scroll_delay,
       base::TimeTicks first_scroll_timestamp) override {}
@@ -202,7 +197,7 @@ class CONTENT_EXPORT CompositorImpl
 
   // Returns a new surface ID when in surface-synchronization mode. Otherwise
   // returns an empty surface.
-  viz::LocalSurfaceIdAllocation GenerateLocalSurfaceId();
+  viz::LocalSurfaceId GenerateLocalSurfaceId();
 
   // Tears down the display for both Viz and non-Viz, unregistering the root
   // frame sink ID in the process.

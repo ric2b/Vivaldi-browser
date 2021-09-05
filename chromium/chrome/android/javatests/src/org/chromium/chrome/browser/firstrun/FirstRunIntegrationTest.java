@@ -46,11 +46,11 @@ import org.chromium.chrome.browser.privacy.settings.PrivacyPreferencesManager;
 import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.MultiActivityTestRule;
+import org.chromium.components.policy.AbstractAppRestrictionsProvider;
 import org.chromium.components.search_engines.TemplateUrl;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.content_public.browser.test.util.Criteria;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
-import org.chromium.policy.AbstractAppRestrictionsProvider;
 
 import java.util.HashMap;
 import java.util.List;
@@ -69,7 +69,7 @@ public class FirstRunIntegrationTest {
     @Mock
     public FirstRunAppRestrictionInfo mMockAppRestrictionInfo;
     @Mock
-    public EnterpriseInfo mEntepriseInfo;
+    public EnterpriseInfo mEnterpriseInfo;
 
     private final Set<Class> mSupportedActivities =
             CollectionUtil.newHashSet(ChromeLauncherActivity.class, FirstRunActivity.class,
@@ -85,6 +85,7 @@ public class FirstRunIntegrationTest {
     public void setUp() {
         MockitoAnnotations.initMocks(this);
         FirstRunActivity.setObserverForTest(mTestObserver);
+        ToSAndUMAFirstRunFragment.setShowUmaCheckBoxForTesting(true);
 
         mInstrumentation = InstrumentationRegistry.getInstrumentation();
         mContext = mInstrumentation.getTargetContext();
@@ -98,6 +99,7 @@ public class FirstRunIntegrationTest {
     @After
     public void tearDown() {
         FirstRunAppRestrictionInfo.setInitializedInstanceForTest(null);
+        ToSAndUMAFirstRunFragment.setShowUmaCheckBoxForTesting(false);
         EnterpriseInfo.setInstanceForTest(null);
         if (mLastActivity != null) mLastActivity.finish();
     }
@@ -133,9 +135,17 @@ public class FirstRunIntegrationTest {
                    callback.onResult(new EnterpriseInfo.OwnedState(true, false));
                    return null;
                })
-                .when(mEntepriseInfo)
+                .when(mEnterpriseInfo)
                 .getDeviceEnterpriseInfo(any());
-        EnterpriseInfo.setInstanceForTest(mEntepriseInfo);
+        EnterpriseInfo.setInstanceForTest(mEnterpriseInfo);
+    }
+
+    private void skipTosDialogViaPolicy() {
+        setHasAppRestrictionForMock();
+        Bundle restrictions = new Bundle();
+        restrictions.putInt("TosDialogBehavior", TosDialogBehavior.SKIP);
+        AbstractAppRestrictionsProvider.setTestRestrictions(restrictions);
+        setDeviceOwnedForMock();
     }
 
     @Test
@@ -188,6 +198,14 @@ public class FirstRunIntegrationTest {
     @Test
     @MediumTest
     public void testDefaultSearchEngine_ShowExisting() throws Exception {
+        runSearchEnginePromptTest(LocaleManager.SearchEnginePromoType.SHOW_EXISTING);
+    }
+
+    @Test
+    @MediumTest
+    public void testDefaultSearchEngine_WithCctPolicy() throws Exception {
+        skipTosDialogViaPolicy();
+
         runSearchEnginePromptTest(LocaleManager.SearchEnginePromoType.SHOW_EXISTING);
     }
 
@@ -269,11 +287,7 @@ public class FirstRunIntegrationTest {
     @Test
     @MediumTest
     public void testExitFirstRunWithPolicy() {
-        setHasAppRestrictionForMock();
-        Bundle restrictions = new Bundle();
-        restrictions.putBoolean("CCTToSDialogEnabled", false);
-        AbstractAppRestrictionsProvider.setTestRestrictions(restrictions);
-        setDeviceOwnedForMock();
+        skipTosDialogViaPolicy();
 
         Intent intent =
                 CustomTabsTestUtils.createMinimalCustomTabIntent(mContext, "https://test.com");
@@ -287,9 +301,34 @@ public class FirstRunIntegrationTest {
                 "native never initialized.");
 
         waitForActivity(CustomTabActivity.class);
-
         Assert.assertFalse("Usage and crash reporting pref was set to true after skip",
                 PrivacyPreferencesManager.getInstance().isUsageAndCrashReportingPermittedByUser());
+        Assert.assertTrue(
+                "FRE should be skipped for CCT.", FirstRunStatus.isEphemeralSkipFirstRun());
+    }
+
+    @Test
+    @MediumTest
+    // TODO(https://crbug.com/1111490): Change this test case when policy can handle cases when ToS
+    // is accepted in Browser App.
+    public void testSkipTosPage_WithCctPolicy() throws Exception {
+        skipTosDialogViaPolicy();
+        FirstRunStatus.setSkipWelcomePage(true);
+
+        Intent intent =
+                CustomTabsTestUtils.createMinimalCustomTabIntent(mContext, "https://test.com");
+        mContext.startActivity(intent);
+
+        FirstRunActivity freActivity = waitForActivity(FirstRunActivity.class);
+        CriteriaHelper.pollUiThread(
+                () -> freActivity.getSupportFragmentManager().getFragments().size() > 0);
+
+        // A page skip should happen, while we are still staying at FRE.
+        mTestObserver.jumpToPageCallback.waitForCallback("Welcome page should be skipped.", 0);
+        Assert.assertFalse(
+                "FRE should not be skipped for CCT.", FirstRunStatus.isEphemeralSkipFirstRun());
+        Assert.assertFalse(
+                "FreActivity should still be alive.", freActivity.isActivityFinishingOrDestroyed());
     }
 
     @Test

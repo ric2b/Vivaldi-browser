@@ -33,12 +33,14 @@ class MediaClientImpl;
 class MobileDataNotifications;
 class NetworkConnectDelegateChromeOS;
 class NightLightClient;
+class QuickAnswersBrowserClientImpl;
 class ScreenOrientationDelegateChromeos;
 class SessionControllerClientImpl;
 class SystemTrayClient;
 class TabletModePageBehavior;
 class VpnListForwarder;
 class WallpaperControllerClient;
+class MediaNotificationProviderImpl;
 
 #if BUILDFLAG(ENABLE_WAYLAND_SERVER)
 class ExoParts;
@@ -70,6 +72,7 @@ class ChromeBrowserMainExtraPartsAsh : public ChromeBrowserMainExtraParts {
   std::unique_ptr<NetworkConnectDelegateChromeOS> network_connect_delegate_;
   std::unique_ptr<CastConfigControllerMediaRouter>
       cast_config_controller_media_router_;
+  std::unique_ptr<MediaNotificationProviderImpl> media_notification_provider_;
 
   // Initialized in PreProfileInit if ash config != MASH:
   std::unique_ptr<AshShellInit> ash_shell_init_;
@@ -110,6 +113,7 @@ class ChromeBrowserMainExtraPartsAsh : public ChromeBrowserMainExtraParts {
   std::unique_ptr<MobileDataNotifications> mobile_data_notifications_;
   std::unique_ptr<NightLightClient> night_light_client_;
   std::unique_ptr<AmbientClientImpl> ambient_client_;
+  std::unique_ptr<QuickAnswersBrowserClientImpl> quick_answers_browser_client_;
 
   DISALLOW_COPY_AND_ASSIGN(ChromeBrowserMainExtraPartsAsh);
 };

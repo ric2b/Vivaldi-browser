@@ -38,9 +38,10 @@ scoped_refptr<StaticBitmapImage> MakeAccelerated(
 
   auto paint_image = source->PaintImageForCurrentFrame();
   auto provider = CanvasResourceProvider::CreateSharedImageProvider(
-      source->Size(), context_provider_wrapper, kLow_SkFilterQuality,
-      CanvasColorParams(paint_image.GetSkImage()->imageInfo()),
-      source->IsOriginTopLeft(), RasterMode::kGPU,
+      source->Size(), kLow_SkFilterQuality,
+      CanvasColorParams(paint_image.GetSkImageInfo()),
+      CanvasResourceProvider::ShouldInitialize::kNo, context_provider_wrapper,
+      RasterMode::kGPU, source->IsOriginTopLeft(),
       gpu::SHARED_IMAGE_USAGE_DISPLAY);
   if (!provider || !provider->IsAccelerated())
     return nullptr;
@@ -94,8 +95,7 @@ void ImageLayerBridge::SetImage(scoped_refptr<StaticBitmapImage> image) {
       // m_image->EnsureMailbox() call of
       // ImageLayerBridge::PrepareTransferableResource. To prevent a potential
       // memory leak we must flush the GrContext here.
-      image_->PaintImageForCurrentFrame().GetSkImage()->getBackendTexture(
-          true);  // GrContext flush.
+      image_->PaintImageForCurrentFrame().FlushPendingSkiaOps();
     }
   }
   has_presented_since_last_set_image_ = false;

@@ -25,7 +25,6 @@
 #include "ppapi/cpp/image_data.h"
 #include "ppapi/cpp/instance.h"
 #include "ppapi/cpp/private/find_private.h"
-#include "ppapi/cpp/url_loader.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 
 namespace gfx {
@@ -44,6 +43,8 @@ namespace chrome_pdf {
 class Graphics;
 class PaintReadyRect;
 class PDFiumEngine;
+class Thumbnail;
+class UrlLoader;
 
 class OutOfProcessInstance : public PdfViewPluginBase,
                              public pp::Instance,
@@ -57,26 +58,26 @@ class OutOfProcessInstance : public PdfViewPluginBase,
   OutOfProcessInstance& operator=(const OutOfProcessInstance&) = delete;
   ~OutOfProcessInstance() override;
 
-  // pp::Instance implementation.
+  // pp::Instance:
   bool Init(uint32_t argc, const char* argn[], const char* argv[]) override;
   void HandleMessage(const pp::Var& message) override;
   bool HandleInputEvent(const pp::InputEvent& event) override;
   void DidChangeView(const pp::View& view) override;
   void DidChangeFocus(bool has_focus) override;
 
-  // pp::Find_Private implementation.
+  // pp::Find_Private:
   bool StartFind(const std::string& text, bool case_sensitive) override;
   void SelectFindResult(bool forward) override;
   void StopFind() override;
 
-  // pp::PaintManager::Client implementation.
+  // pp::PaintManager::Client:
   std::unique_ptr<Graphics> CreatePaintGraphics(const gfx::Size& size) override;
   bool BindPaintGraphics(Graphics& graphics) override;
   void OnPaint(const std::vector<gfx::Rect>& paint_rects,
                std::vector<PaintReadyRect>* ready,
                std::vector<gfx::Rect>* pending) override;
 
-  // pp::Printing_Dev implementation.
+  // pp::Printing_Dev:
   uint32_t QuerySupportedPrintOutputFormats() override;
   int32_t PrintBegin(const PP_PrintSettings_Dev& print_settings) override;
   pp::Resource PrintPages(const PP_PrintPageNumberRange_Dev* page_ranges,
@@ -84,7 +85,7 @@ class OutOfProcessInstance : public PdfViewPluginBase,
   void PrintEnd() override;
   bool IsPrintScalingDisabled() override;
 
-  // pp::Private implementation.
+  // pp::Private:
   pp::Var GetLinkAtPosition(const pp::Point& point);
   void GetPrintPresetOptionsFromDocument(PP_PdfPrintPresetOptions_Dev* options);
   void EnableAccessibility();
@@ -105,12 +106,10 @@ class OutOfProcessInstance : public PdfViewPluginBase,
                         const PP_PdfPrintSettings_Dev* pdf_print_settings);
 
   void FlushCallback(int32_t result);
-  void DidOpen(int32_t result);
-  void DidOpenPreview(int32_t result);
 
-  // PdfViewPluginBase implementation.
+  // PdfViewPluginBase:
   void ProposeDocumentLayout(const DocumentLayout& layout) override;
-  void Invalidate(const pp::Rect& rect) override;
+  void Invalidate(const gfx::Rect& rect) override;
   void DidScroll(const gfx::Vector2d& offset) override;
   void ScrollToX(int x_in_screen_coords) override;
   void ScrollToY(int y_in_screen_coords, bool compensate_for_toolbar) override;
@@ -123,7 +122,7 @@ class OutOfProcessInstance : public PdfViewPluginBase,
                              const float* y,
                              const float* zoom) override;
   void UpdateCursor(PP_CursorType_Dev cursor) override;
-  void UpdateTickMarks(const std::vector<pp::Rect>& tickmarks) override;
+  void UpdateTickMarks(const std::vector<gfx::Rect>& tickmarks) override;
   void NotifyNumberOfFindResultsChanged(int total, bool final_result) override;
   void NotifySelectedFindResultChanged(int current_find_index) override;
   void NotifyTouchSelectionOccurred() override;
@@ -144,7 +143,7 @@ class OutOfProcessInstance : public PdfViewPluginBase,
   void SubmitForm(const std::string& url,
                   const void* data,
                   int length) override;
-  pp::URLLoader CreateURLLoader() override;
+  std::unique_ptr<UrlLoader> CreateUrlLoader() override;
   std::vector<SearchStringResult> SearchString(const base::char16* string,
                                                const base::char16* term,
                                                bool case_sensitive) override;
@@ -158,12 +157,12 @@ class OutOfProcessInstance : public PdfViewPluginBase,
   bool IsPrintPreview() override;
   uint32_t GetBackgroundColor() override;
   void IsSelectingChanged(bool is_selecting) override;
-  void SelectionChanged(const pp::Rect& left, const pp::Rect& right) override;
+  void SelectionChanged(const gfx::Rect& left, const gfx::Rect& right) override;
   void EnteredEditMode() override;
   float GetToolbarHeightInScreenCoords() override;
   void DocumentFocusChanged(bool document_has_focus) override;
 
-  // PreviewModeClient::Client implementation.
+  // PreviewModeClient::Client:
   void PreviewDocumentLoadComplete() override;
   void PreviewDocumentLoadFailed() override;
 
@@ -175,6 +174,14 @@ class OutOfProcessInstance : public PdfViewPluginBase,
   // for testing.
   static std::string GetFileNameFromUrl(const std::string& url);
 
+ protected:
+  // PdfViewPluginBase:
+  base::WeakPtr<PdfViewPluginBase> GetWeakPtr() override;
+  std::unique_ptr<UrlLoader> CreateUrlLoaderInternal() override;
+  void DidOpen(std::unique_ptr<UrlLoader> loader, int32_t result) override;
+  void DidOpenPreview(std::unique_ptr<UrlLoader> loader,
+                      int32_t result) override;
+
  private:
   // Message handlers.
   void HandleBackgroundColorChangedMessage(const pp::VarDictionary& dict);
@@ -182,6 +189,7 @@ class OutOfProcessInstance : public PdfViewPluginBase,
   void HandleGetNamedDestinationMessage(const pp::VarDictionary& dict);
   void HandleGetPasswordCompleteMessage(const pp::VarDictionary& dict);
   void HandleGetSelectedTextMessage(const pp::VarDictionary& dict);
+  void HandleGetThumbnailMessage(const pp::VarDictionary& dict);
   void HandleLoadPreviewPageMessage(const pp::VarDictionary& dict);
   void HandleResetPrintPreviewModeMessage(const pp::VarDictionary& dict);
   void HandleSaveAttachmentMessage(const pp::VarDictionary& dict);
@@ -203,6 +211,14 @@ class OutOfProcessInstance : public PdfViewPluginBase,
   // aren't painted by the PDF engine).
   void CalculateBackgroundParts();
 
+  // Returns a VarArray of Attachments. Each Attachment is a VarDictionary
+  // which contains the following key/values:
+  // - "name" - a string Var.
+  // - "size" - an int Var (-1 indicates the attachment file is too big to be
+  // downloaded).
+  // - "readable" a bool Var.
+  pp::VarArray GetDocumentAttachments();
+
   // Computes document width/height in device pixels, based on current zoom and
   // device scale
   int GetDocumentPixelWidth() const;
@@ -210,12 +226,6 @@ class OutOfProcessInstance : public PdfViewPluginBase,
 
   // Draws a rectangle with the specified dimensions and color in our buffer.
   void FillRect(const pp::Rect& rect, uint32_t color);
-
-  void LoadUrl(const std::string& url, bool is_print_preview);
-
-  // Creates a URL loader and allows it to access all urls, i.e. not just the
-  // frame's origin.
-  pp::URLLoader CreateURLLoaderInternal();
 
   bool CanSaveEdits() const;
   void SaveToFile(const std::string& token);
@@ -272,12 +282,15 @@ class OutOfProcessInstance : public PdfViewPluginBase,
   // Send a notification that the print preview has loaded.
   void SendPrintPreviewLoadedNotification();
 
-  // Send document metadata. (e.g. PDF title and bookmarks.)
+  // Send document metadata. (e.g. PDF title, attachments and bookmarks.)
   void SendDocumentMetadata();
 
   // Send the loading progress, where |percentage| represents the progress, or
   // -1 for loading error.
   void SendLoadingProgress(double percentage);
+
+  // Sends the thumbnail image data.
+  void SendThumbnail(const std::string& message_id, Thumbnail thumbnail);
 
   // Bound the given scroll offset to the document.
   pp::FloatPoint BoundScrollOffsetToDocument(
@@ -322,13 +335,12 @@ class OutOfProcessInstance : public PdfViewPluginBase,
   // Callback to do invalidation after painting finishes.
   void InvalidateAfterPaintDone(int32_t /*unused_but_required*/);
 
+  // Helper for HandleInputEvent(). Returns whether engine() handled the event
+  // or not.
+  bool SendInputEventToEngine(const pp::InputEvent& event);
+
   pp::ImageData image_data_;
   SkBitmap skia_image_data_;  // Must be kept in sync with |image_data_|.
-
-  // Used when the plugin is embedded in a page and we have to create the loader
-  // ourself.
-  pp::URLLoader embed_loader_;
-  pp::URLLoader embed_preview_loader_;
 
   // The current cursor.
   PP_CursorType_Dev cursor_ = PP_CURSORTYPE_POINTER;
@@ -343,6 +355,8 @@ class OutOfProcessInstance : public PdfViewPluginBase,
   // Size of entire document in pixels (i.e. if each page is 800 pixels high and
   // there are 10 pages, the height will be 8000).
   pp::Size document_size_;
+  // Positional offset, in CSS pixels, of the plugin rectangle.
+  pp::Point plugin_offset_;
   // The scroll offset in CSS pixels.
   pp::Point scroll_offset_;
 
@@ -380,7 +394,7 @@ class OutOfProcessInstance : public PdfViewPluginBase,
   // Whether OnPaint() is in progress or not.
   bool in_paint_ = false;
   // Deferred invalidates while |in_paint_| is true.
-  std::vector<pp::Rect> deferred_invalidates_;
+  std::vector<gfx::Rect> deferred_invalidates_;
 
   struct BackgroundPart {
     pp::Rect location;
@@ -422,7 +436,7 @@ class OutOfProcessInstance : public PdfViewPluginBase,
   std::string url_;
 
   // Used for submitting forms.
-  pp::URLLoader form_loader_;
+  std::unique_ptr<UrlLoader> form_loader_;
 
   // The callback for receiving the password from the page.
   base::OnceCallback<void(const std::string&)> password_callback_;

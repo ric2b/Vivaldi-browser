@@ -17,6 +17,7 @@
 #include "build/build_config.h"
 #include "chrome/updater/action_handler.h"
 #include "chrome/updater/constants.h"
+#include "chrome/updater/policy_service.h"
 #include "chrome/updater/util.h"
 #include "components/crx_file/crx_verifier.h"
 #include "components/update_client/update_client_errors.h"
@@ -63,6 +64,7 @@ update_client::CrxComponent Installer::MakeCrxComponent() {
   const auto pv = persisted_data_->GetProductVersion(app_id_);
   if (pv.IsValid()) {
     pv_ = pv;
+    checker_path_ = persisted_data_->GetExistenceCheckerPath(app_id_);
     fingerprint_ = persisted_data_->GetFingerprint(app_id_);
   } else {
     pv_ = base::Version(kNullVersion);
@@ -78,6 +80,13 @@ update_client::CrxComponent Installer::MakeCrxComponent() {
   component.name = app_id_;
   component.version = pv_;
   component.fingerprint = fingerprint_;
+
+  // In case we fail at getting the target channel, make sure that
+  // |component.channel| is an empty string. Possible failure cases are if the
+  // machine is not managed, the policy was not set or any other unexpected
+  // error.
+  if (!GetUpdaterPolicyService()->GetTargetChannel(app_id_, &component.channel))
+    component.channel.clear();
   return component;
 }
 
@@ -236,12 +245,12 @@ base::FilePath Installer::GetCurrentInstallDir() const {
   return GetAppInstallDir(app_id_).AppendASCII(pv_.GetString());
 }
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
 int Installer::RunApplicationInstaller(const base::FilePath& app_installer,
                                        const std::string& arguments) {
   NOTREACHED();
   return -1;
 }
-#endif  // OS_LINUX
+#endif  // defined(OS_LINUX) || defined(OS_CHROMEOS)
 
 }  // namespace updater

@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_NEARBY_SHARING_NEARBY_NOTIFICATION_MANAGER_H_
 
 #include "base/containers/flat_map.h"
+#include "base/memory/weak_ptr.h"
 #include "base/optional.h"
 #include "base/time/time.h"
 #include "chrome/browser/nearby_sharing/nearby_notification_delegate.h"
@@ -17,6 +18,8 @@
 class NearbySharingService;
 class NotificationDisplayService;
 class PrefService;
+class Profile;
+class SkBitmap;
 
 // Manages notifications shown for Nearby Share. Only a single notification will
 // be shown as simultaneous connections are not supported. All methods should be
@@ -27,10 +30,25 @@ class NearbyNotificationManager : public TransferUpdateCallback,
   static constexpr base::TimeDelta kOnboardingDismissedTimeout =
       base::TimeDelta::FromMinutes(15);
 
+  enum class SuccessNotificationAction {
+    kNone,
+    kCopyText,
+    kCopyImage,
+    kOpenDownloads,
+  };
+
+  // Type of content we received that determines the actions we provide.
+  enum class ReceivedContentType {
+    kText,         // Arbitrary text content
+    kSingleImage,  // One image that will be shown as a preview
+    kFiles,        // One or more generic files
+  };
+
   NearbyNotificationManager(
       NotificationDisplayService* notification_display_service,
       NearbySharingService* nearby_service,
-      PrefService* pref_service);
+      PrefService* pref_service,
+      Profile* profile);
   ~NearbyNotificationManager() override;
 
   // TransferUpdateCallback:
@@ -90,10 +108,20 @@ class NearbyNotificationManager : public TransferUpdateCallback,
   // another one for a certain time period after this.
   void OnOnboardingDismissed();
 
+  void CloseSuccessNotification();
+
+  void SetOnSuccessClickedForTesting(
+      base::OnceCallback<void(SuccessNotificationAction)> callback);
+
  private:
+  void ShowIncomingSuccess(const ShareTarget& share_target,
+                           ReceivedContentType type,
+                           const SkBitmap& image);
+
   NotificationDisplayService* notification_display_service_;
   NearbySharingService* nearby_service_;
   PrefService* pref_service_;
+  Profile* profile_;
 
   // Maps notification ids to notification delegates.
   base::flat_map<std::string, std::unique_ptr<NearbyNotificationDelegate>>
@@ -101,6 +129,11 @@ class NearbyNotificationManager : public TransferUpdateCallback,
 
   // ShareTarget of the current transfer.
   base::Optional<ShareTarget> share_target_;
+
+  base::OnceCallback<void(SuccessNotificationAction)>
+      success_action_test_callback_;
+
+  base::WeakPtrFactory<NearbyNotificationManager> weak_ptr_factory_{this};
 };
 
 #endif  // CHROME_BROWSER_NEARBY_SHARING_NEARBY_NOTIFICATION_MANAGER_H_

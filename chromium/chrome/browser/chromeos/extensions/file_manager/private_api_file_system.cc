@@ -9,11 +9,14 @@
 
 #include <algorithm>
 #include <cctype>
+#include <memory>
 #include <utility>
 
 #include "base/bind.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
+#include "base/memory/ref_counted_memory.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/posix/eintr_wrapper.h"
 #include "base/strings/strcat.h"
@@ -27,6 +30,7 @@
 #include "chrome/browser/chromeos/extensions/file_manager/event_router.h"
 #include "chrome/browser/chromeos/extensions/file_manager/event_router_factory.h"
 #include "chrome/browser/chromeos/extensions/file_manager/file_stream_md5_digester.h"
+#include "chrome/browser/chromeos/extensions/file_manager/file_stream_string_converter.h"
 #include "chrome/browser/chromeos/extensions/file_manager/private_api_util.h"
 #include "chrome/browser/chromeos/file_manager/fileapi_util.h"
 #include "chrome/browser/chromeos/file_manager/path_util.h"
@@ -35,9 +39,11 @@
 #include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/ui/ash/clipboard_util.h"
 #include "chrome/common/extensions/api/file_manager_private.h"
 #include "chrome/common/extensions/api/file_manager_private_internal.h"
 #include "chromeos/constants/chromeos_features.h"
+#include "chromeos/disks/disk.h"
 #include "chromeos/disks/disk_mount_manager.h"
 #include "components/drive/event_logger.h"
 #include "components/drive/file_system_core_util.h"
@@ -260,6 +266,14 @@ void ComputeChecksumRespondOnUIThread(
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   content::GetUIThreadTaskRunner({})->PostTask(
       FROM_HERE, base::BindOnce(std::move(callback), std::move(hash)));
+}
+
+void CopyImageRespondOnUIThread(
+    base::OnceCallback<void(scoped_refptr<base::RefCountedString>)> callback,
+    scoped_refptr<base::RefCountedString> bytes) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  content::GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE, base::BindOnce(std::move(callback), std::move(bytes)));
 }
 
 // Calls a response callback on the UI thread.
@@ -688,6 +702,44 @@ FileManagerPrivateFormatVolumeFunction::Run() {
 }
 
 ExtensionFunction::ResponseAction
+FileManagerPrivateSinglePartitionFormatFunction::Run() {
+  using extensions::api::file_manager_private::SinglePartitionFormat::Params;
+  const std::unique_ptr<Params> params(Params::Create(*args_));
+  EXTENSION_FUNCTION_VALIDATE(params);
+
+  const ChromeExtensionFunctionDetails chrome_details(this);
+
+  const DiskMountManager::DiskMap& disks =
+      DiskMountManager::GetInstance()->disks();
+
+  chromeos::disks::Disk* device_disk;
+  DiskMountManager::DiskMap::const_iterator it;
+
+  for (it = disks.begin(); it != disks.end(); ++it) {
+    if (it->second->storage_device_path() == params->device_storage_path &&
+        it->second->is_parent()) {
+      device_disk = it->second.get();
+      break;
+    }
+  }
+
+  if (it == disks.end()) {
+    return RespondNow(Error("Device not found"));
+  }
+
+  if (!device_disk->on_removable_device() || device_disk->on_boot_device() ||
+      device_disk->is_read_only()) {
+    return RespondNow(Error("Invalid device"));
+  }
+
+  DiskMountManager::GetInstance()->SinglePartitionFormatDevice(
+      device_disk->device_path(),
+      ApiFormatFileSystemToChromeEnum(params->filesystem),
+      params->volume_label);
+  return RespondNow(NoArguments());
+}
+
+ExtensionFunction::ResponseAction
 FileManagerPrivateRenameVolumeFunction::Run() {
   using extensions::api::file_manager_private::RenameVolume::Params;
   const std::unique_ptr<Params> params(Params::Create(*args_));
@@ -886,6 +938,67 @@ void FileManagerPrivateInternalStartCopyFunction::RunAfterStartCopy(
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   Respond(OneArgument(std::make_unique<base::Value>(operation_id)));
+}
+
+FileManagerPrivateInternalCopyImageToClipboardFunction::
+    FileManagerPrivateInternalCopyImageToClipboardFunction()
+    : chrome_details_(this),
+      converter_(std::make_unique<storage::FileStreamStringConverter>()) {}
+
+FileManagerPrivateInternalCopyImageToClipboardFunction::
+    ~FileManagerPrivateInternalCopyImageToClipboardFunction() = default;
+
+ExtensionFunction::ResponseAction
+FileManagerPrivateInternalCopyImageToClipboardFunction::Run() {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
+  using extensions::api::file_manager_private_internal::CopyImageToClipboard::
+      Params;
+  const std::unique_ptr<Params> params(Params::Create(*args_));
+  EXTENSION_FUNCTION_VALIDATE(params);
+
+  if (params->url.empty()) {
+    return RespondNow(Error("Image file URL must be provided."));
+  }
+
+  scoped_refptr<storage::FileSystemContext> file_system_context =
+      file_manager::util::GetFileSystemContextForRenderFrameHost(
+          chrome_details_.GetProfile(), render_frame_host());
+
+  FileSystemURL file_system_url(
+      file_system_context->CrackURL(GURL(params->url)));
+  if (!file_system_url.is_valid()) {
+    return RespondNow(Error("Image file URL was invalid"));
+  }
+
+  std::unique_ptr<storage::FileStreamReader> reader =
+      file_system_context->CreateFileStreamReader(
+          file_system_url, 0, storage::kMaximumLength, base::Time());
+
+  storage::FileStreamStringConverter::ResultCallback result_callback =
+      base::BindOnce(
+          &CopyImageRespondOnUIThread,
+          base::BindOnce(
+              &FileManagerPrivateInternalCopyImageToClipboardFunction::
+                  RespondWith,
+              this));
+
+  content::GetIOThreadTaskRunner({})->PostTask(
+      FROM_HERE,
+      base::BindOnce(
+          &storage::FileStreamStringConverter::ConvertFileStreamToString,
+          base::Unretained(converter_.get()), std::move(reader),
+          std::move(result_callback)));
+
+  return RespondLater();
+}
+
+void FileManagerPrivateInternalCopyImageToClipboardFunction::RespondWith(
+    scoped_refptr<base::RefCountedString> bytes) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  clipboard_util::DecodeImageFileAndCopyToClipboard(std::move(bytes));
+  // Copy image to clipboard is async, this responds before copy is finished.
+  Respond(NoArguments());
 }
 
 ExtensionFunction::ResponseAction FileManagerPrivateCancelCopyFunction::Run() {

@@ -719,6 +719,24 @@
             "description": "If true, the tab operation that triggered the dialog has been allowed to proceed."
           }
         ]
+      },
+      {
+        "name": "onNavigationUrlChanged",
+        "type": "function",
+        "description": "Fired when the url has changed and the url bar should be updated.",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "tabId",
+            "minimum": 0,
+            "description": "The tab Id."
+          },
+          {
+            "type": "string",
+            "name": "url",
+            "description": "The new url to display."
+          }
+        ]
       }
     ]
   }

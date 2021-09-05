@@ -70,6 +70,12 @@ struct TimeZoneResponseData;
 // interacts with screen controllers to move the user between screens.
 class WizardController {
  public:
+  class ScreenObserver : public base::CheckedObserver {
+   public:
+    virtual void OnCurrentScreenChanged(BaseScreen* new_screen) = 0;
+    virtual void OnShutdown() = 0;
+  };
+
   WizardController();
   ~WizardController();
 
@@ -104,14 +110,21 @@ class WizardController {
   // Zero-Touch Hands-Off Enrollment Flow.
   static bool UsingHandsOffEnrollment();
 
+  static bool IsBrandedBuildForTesting() { return is_branded_build_; }
+
   bool is_initialized() { return is_initialized_; }
 
   // Shows the first screen defined by |first_screen| or by default if the
   // parameter is empty.
   void Init(OobeScreenId first_screen);
 
-  // Advances to screen defined by |screen| and shows it.
+  // Advances to screen defined by |screen| and shows it. Might show HID
+  // detection screen in case HID connection is needed and screen_id ==
+  // OobeScreen::SCREEN_UNKNOWN.
   void AdvanceToScreen(OobeScreenId screen_id);
+
+  // Advances to screen defined by |screen| and shows it.
+  void AdvanceToScreenAfterHIDDetection(OobeScreenId first_screen);
 
   // Returns |true| if accelerator |action| was handled by current screen
   // or WizardController itself.
@@ -191,6 +204,13 @@ class WizardController {
 
   // Returns true if we are in user creation screen or gaia signin screen.
   static bool IsSigninScreen(OobeScreenId screen_id);
+
+  OobeScreenId first_screen_for_testing() const {
+    return first_screen_for_testing_;
+  }
+
+  void AddObserver(ScreenObserver* obs);
+  void RemoveObserver(ScreenObserver* obs);
 
  private:
   // Create BaseScreen instances. These are owned by |screen_manager_|.
@@ -334,8 +354,6 @@ class WizardController {
     local_state_for_testing_ = local_state;
   }
 
-  OobeScreenId first_screen() const { return first_screen_; }
-
   // Starts a network request to resolve the timezone. Skips the request
   // completely when the timezone is overridden through the command line.
   void StartNetworkTimezoneResolve();
@@ -364,9 +382,7 @@ class WizardController {
   // attestation-based enrollment if appropriate.
   void StartEnrollmentScreen(bool force_interactive);
 
-  void OnConfigurationLoaded(
-      OobeScreenId first_screen,
-      std::unique_ptr<base::DictionaryValue> configuration);
+  void NotifyScreenChanged();
 
   // Returns auto enrollment controller (lazily initializes one if it doesn't
   // exist already).
@@ -395,7 +411,7 @@ class WizardController {
   bool is_out_of_box_ = false;
 
   // Value of the screen name that WizardController was started with.
-  OobeScreenId first_screen_ = OobeScreen::SCREEN_UNKNOWN;
+  OobeScreenId first_screen_for_testing_ = OobeScreen::SCREEN_UNKNOWN;
 
   // The prescribed enrollment configuration for the device.
   policy::EnrollmentConfig prescribed_enrollment_config_;
@@ -452,6 +468,8 @@ class WizardController {
   base::Closure on_timezone_resolved_for_testing_;
 
   bool is_initialized_ = false;
+
+  base::ObserverList<ScreenObserver> screen_observers_;
 
   base::WeakPtrFactory<WizardController> weak_factory_{this};
 

@@ -26,17 +26,58 @@ class DiagnosticsService : public health::mojom::DiagnosticsService {
   ~DiagnosticsService() override;
 
  private:
+  // Ensures that |service_| created and connected to the
+  // CrosHealthdDiagnosticsService.
+  cros_healthd::mojom::CrosHealthdDiagnosticsService* GetService();
+
+  void OnDisconnect();
+
   void GetAvailableRoutines(GetAvailableRoutinesCallback callback) override;
   void GetRoutineUpdate(int32_t id,
                         health::mojom::DiagnosticRoutineCommandEnum command,
                         bool include_output,
                         GetRoutineUpdateCallback callback) override;
-
-  // Ensures that |service_| created and connected to the
-  // CrosHealthdProbeService.
-  cros_healthd::mojom::CrosHealthdDiagnosticsService* GetService();
-
-  void OnDisconnect();
+  void RunBatteryCapacityRoutine(
+      uint32_t low_mah,
+      uint32_t high_mah,
+      RunBatteryCapacityRoutineCallback callback) override;
+  void RunBatteryHealthRoutine(
+      uint32_t maximum_cycle_count,
+      uint32_t percent_battery_wear_allowed,
+      RunBatteryHealthRoutineCallback callback) override;
+  void RunSmartctlCheckRoutine(
+      RunSmartctlCheckRoutineCallback callback) override;
+  void RunAcPowerRoutine(health::mojom::AcPowerStatusEnum expected_status,
+                         const base::Optional<std::string>& expected_power_type,
+                         RunAcPowerRoutineCallback callback) override;
+  void RunCpuCacheRoutine(uint32_t length_seconds,
+                          RunCpuCacheRoutineCallback callback) override;
+  void RunCpuStressRoutine(uint32_t length_seconds,
+                           RunCpuStressRoutineCallback callback) override;
+  void RunFloatingPointAccuracyRoutine(
+      uint32_t length_seconds,
+      RunFloatingPointAccuracyRoutineCallback callback) override;
+  void RunNvmeWearLevelRoutine(
+      uint32_t wear_level_threshold,
+      RunNvmeWearLevelRoutineCallback callback) override;
+  void RunNvmeSelfTestRoutine(
+      health::mojom::NvmeSelfTestTypeEnum nvme_self_test_type,
+      RunNvmeSelfTestRoutineCallback callback) override;
+  void RunDiskReadRoutine(health::mojom::DiskReadRoutineTypeEnum type,
+                          uint32_t length_seconds,
+                          uint32_t file_size_mb,
+                          RunDiskReadRoutineCallback callback) override;
+  void RunPrimeSearchRoutine(uint32_t length_seconds,
+                             uint64_t max_num,
+                             RunPrimeSearchRoutineCallback callback) override;
+  void RunBatteryDischargeRoutine(
+      uint32_t length_seconds,
+      uint32_t maximum_discharge_percent_allowed,
+      RunBatteryDischargeRoutineCallback callback) override;
+  void RunBatteryChargeRoutine(
+      uint32_t length_seconds,
+      uint32_t minimum_charge_percent_required,
+      RunBatteryChargeRoutineCallback callback) override;
 
   // Pointer to real implementation.
   mojo::Remote<cros_healthd::mojom::CrosHealthdDiagnosticsService> service_;

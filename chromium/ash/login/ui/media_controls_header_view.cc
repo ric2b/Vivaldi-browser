@@ -72,8 +72,7 @@ MediaControlsHeaderView::MediaControlsHeaderView(
   app_name_view->SetFontList(font_list);
   app_name_view->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   app_name_view->SetEnabledColor(AshColorProvider::Get()->GetContentLayerColor(
-      AshColorProvider::ContentLayerType::kTextColorSecondary,
-      AshColorProvider::AshColorMode::kDark));
+      AshColorProvider::ContentLayerType::kTextColorSecondary));
   app_name_view->SetAutoColorReadabilityEnabled(false);
   app_name_view->SetBorder(views::CreateEmptyBorder(kAppNamePadding));
   app_name_view->SetPreferredSize(kAppNamePreferredSize);
@@ -93,7 +92,7 @@ MediaControlsHeaderView::MediaControlsHeaderView(
   base::string16 close_button_label(
       l10n_util::GetStringUTF16(IDS_ASH_LOCK_SCREEN_MEDIA_CONTROLS_CLOSE));
   close_button->SetAccessibleName(close_button_label);
-  close_button->set_ink_drop_base_color(
+  close_button->SetInkDropBaseColor(
       color_utils::DeriveDefaultIconColor(gfx::kGoogleGrey700));
   close_button_ = AddChildView(std::move(close_button));
 }

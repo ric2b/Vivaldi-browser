@@ -309,8 +309,8 @@ StyleBuilderConverter::ConvertFontVariationSettings(
 }
 
 float MathScriptScaleFactor(StyleResolverState& state) {
-  int a = state.ParentStyle()->MathScriptLevel();
-  int b = state.Style()->MathScriptLevel();
+  int a = state.ParentStyle()->MathDepth();
+  int b = state.Style()->MathDepth();
   if (b == a)
     return 1.0;
   bool invertScaleFactor = false;
@@ -323,37 +323,37 @@ float MathScriptScaleFactor(StyleResolverState& state) {
   float defaultScaleDown = 0.71;
   int exponent = b - a;
   float scaleFactor = 1.0;
-  HarfBuzzFace* parent_harfbuzz_face = state.ParentStyle()
-                                           ->GetFont()
-                                           .PrimaryFont()
-                                           ->PlatformData()
-                                           .GetHarfBuzzFace();
-  if (OpenTypeMathSupport::HasMathData(parent_harfbuzz_face)) {
-    float scriptPercentScaleDown =
-        OpenTypeMathSupport::MathConstant(
-            parent_harfbuzz_face,
-            OpenTypeMathSupport::MathConstants::kScriptPercentScaleDown)
-            .value_or(0);
-    // Note: zero can mean both zero for the math constant and the fallback.
-    if (!scriptPercentScaleDown)
-      scriptPercentScaleDown = defaultScaleDown;
-    float scriptScriptPercentScaleDown =
-        OpenTypeMathSupport::MathConstant(
-            parent_harfbuzz_face,
-            OpenTypeMathSupport::MathConstants::kScriptScriptPercentScaleDown)
-            .value_or(0);
-    // Note: zero can mean both zero for the math constant and the fallback.
-    if (!scriptScriptPercentScaleDown)
-      scriptScriptPercentScaleDown = defaultScaleDown * defaultScaleDown;
-    if (a <= 0 && b >= 2) {
-      scaleFactor *= scriptScriptPercentScaleDown;
-      exponent -= 2;
-    } else if (a == 1) {
-      scaleFactor *= scriptScriptPercentScaleDown / scriptPercentScaleDown;
-      exponent--;
-    } else if (b == 1) {
-      scaleFactor *= scriptPercentScaleDown;
-      exponent--;
+  if (const SimpleFontData* font_data =
+          state.ParentStyle()->GetFont().PrimaryFont()) {
+    HarfBuzzFace* parent_harfbuzz_face =
+        font_data->PlatformData().GetHarfBuzzFace();
+    if (OpenTypeMathSupport::HasMathData(parent_harfbuzz_face)) {
+      float scriptPercentScaleDown =
+          OpenTypeMathSupport::MathConstant(
+              parent_harfbuzz_face,
+              OpenTypeMathSupport::MathConstants::kScriptPercentScaleDown)
+              .value_or(0);
+      // Note: zero can mean both zero for the math constant and the fallback.
+      if (!scriptPercentScaleDown)
+        scriptPercentScaleDown = defaultScaleDown;
+      float scriptScriptPercentScaleDown =
+          OpenTypeMathSupport::MathConstant(
+              parent_harfbuzz_face,
+              OpenTypeMathSupport::MathConstants::kScriptScriptPercentScaleDown)
+              .value_or(0);
+      // Note: zero can mean both zero for the math constant and the fallback.
+      if (!scriptScriptPercentScaleDown)
+        scriptScriptPercentScaleDown = defaultScaleDown * defaultScaleDown;
+      if (a <= 0 && b >= 2) {
+        scaleFactor *= scriptScriptPercentScaleDown;
+        exponent -= 2;
+      } else if (a == 1) {
+        scaleFactor *= scriptScriptPercentScaleDown / scriptPercentScaleDown;
+        exponent--;
+      } else if (b == 1) {
+        scaleFactor *= scriptPercentScaleDown;
+        exponent--;
+      }
     }
   }
   scaleFactor *= pow(defaultScaleDown, exponent);
@@ -423,35 +423,6 @@ FontDescription::Size StyleBuilderConverterBase::ConvertFontSize(
       is_absolute);
 }
 
-static FontDescription::Size ConvertScriptLevelFontSize(
-    StyleResolverState& state,
-    const FontDescription::Size& parent_size,
-    const CSSFunctionValue& function_value) {
-  SECURITY_DCHECK(function_value.length() == 1);
-  const auto& css_value = function_value.Item(0);
-  if (const auto* list = DynamicTo<CSSValueList>(css_value)) {
-    DCHECK_EQ(list->length(), 1U);
-    const auto& relative_value = To<CSSPrimitiveValue>(list->Item(0));
-    state.Style()->SetMathScriptLevel(state.ParentStyle()->MathScriptLevel() +
-                                      relative_value.GetIntValue());
-  } else if (auto* identifier_value =
-                 DynamicTo<CSSIdentifierValue>(css_value)) {
-    DCHECK(identifier_value->GetValueID() == CSSValueID::kAuto);
-    unsigned level = 0;
-    if (state.ParentStyle()->MathStyle() == EMathStyle::kInline)
-      level += 1;
-    state.Style()->SetMathScriptLevel(state.ParentStyle()->MathScriptLevel() +
-                                      level);
-  } else if (DynamicTo<CSSPrimitiveValue>(css_value)) {
-    state.Style()->SetMathScriptLevel(
-        To<CSSPrimitiveValue>(css_value).GetIntValue());
-  }
-  auto scale_factor = MathScriptScaleFactor(state);
-  state.Style()->SetHasGlyphRelativeUnits();
-  return FontDescription::Size(0, (scale_factor * parent_size.value),
-                               parent_size.is_absolute);
-}
-
 FontDescription::Size StyleBuilderConverter::ConvertFontSize(
     StyleResolverState& state,
     const CSSValue& value) {
@@ -460,8 +431,13 @@ FontDescription::Size StyleBuilderConverter::ConvertFontSize(
                          ? state.ParentFontDescription().GetSize()
                          : FontDescription::Size(0, 0.0f, false);
 
-  if (const auto* function_value = DynamicTo<CSSFunctionValue>(value))
-    return ConvertScriptLevelFontSize(state, parent_size, *function_value);
+  auto* identifier_value = DynamicTo<CSSIdentifierValue>(value);
+  if (identifier_value && identifier_value->GetValueID() == CSSValueID::kMath) {
+    auto scale_factor = MathScriptScaleFactor(state);
+    state.Style()->SetHasGlyphRelativeUnits();
+    return FontDescription::Size(0, (scale_factor * parent_size.value),
+                                 parent_size.is_absolute);
+  }
 
   return StyleBuilderConverterBase::ConvertFontSize(
       value, state.FontSizeConversionData(), parent_size);
@@ -1383,8 +1359,10 @@ scoped_refptr<QuotesData> StyleBuilderConverter::ConvertQuotes(
     }
     return quotes;
   }
-  DCHECK_EQ(To<CSSIdentifierValue>(value).GetValueID(), CSSValueID::kNone);
-  return QuotesData::Create();
+  if (To<CSSIdentifierValue>(value).GetValueID() == CSSValueID::kNone)
+    return QuotesData::Create();
+  DCHECK_EQ(To<CSSIdentifierValue>(value).GetValueID(), CSSValueID::kAuto);
+  return nullptr;
 }
 
 LengthSize StyleBuilderConverter::ConvertRadius(StyleResolverState& state,
@@ -1548,19 +1526,15 @@ StyleColor StyleBuilderConverter::ConvertStyleColor(StyleResolverState& state,
       return StyleColor::CurrentColor();
     if (StyleColor::IsSystemColor(value_id)) {
       CountSystemColorComputeToSelfUsage(state);
-      if (RuntimeEnabledFeatures::CSSSystemColorComputeToSelfEnabled())
-        return StyleColor(value_id);
+      return StyleColor(
+          state.GetDocument().GetTextLinkColors().ColorFromCSSValue(
+              value, Color(), state.Style()->UsedColorScheme(),
+              for_visited_link),
+          value_id);
     }
   }
   return StyleColor(state.GetDocument().GetTextLinkColors().ColorFromCSSValue(
       value, Color(), state.Style()->UsedColorScheme(), for_visited_link));
-}
-
-CSSValueID StyleBuilderConverter::ConvertCSSValueID(StyleResolverState& state,
-                                                    const CSSValue& value) {
-  auto* identifier_value = DynamicTo<CSSIdentifierValue>(value);
-  DCHECK(identifier_value);
-  return identifier_value->GetValueID();
 }
 
 StyleAutoColor StyleBuilderConverter::ConvertStyleAutoColor(
@@ -1956,8 +1930,8 @@ static const CSSValue& ComputeRegisteredPropertyValue(
     if (value_id == CSSValueID::kCurrentcolor)
       return value;
     if (StyleColor::IsColorKeyword(value_id)) {
-      WebColorScheme scheme =
-          state ? state->Style()->UsedColorScheme() : WebColorScheme::kLight;
+      ColorScheme scheme =
+          state ? state->Style()->UsedColorScheme() : ColorScheme::kLight;
       Color color = document.GetTextLinkColors().ColorFromCSSValue(
           value, Color(), scheme, false);
       return *cssvalue::CSSColorValue::Create(color.Rgb());
@@ -2031,17 +2005,56 @@ LengthSize StyleBuilderConverter::ConvertIntrinsicSize(
   return LengthSize(width, height);
 }
 
-base::Optional<IntSize> StyleBuilderConverter::ConvertAspectRatio(
+namespace {
+FloatSize GetRatioFromList(const CSSValueList& list) {
+  auto* ratio_list = DynamicTo<CSSValueList>(list.Item(0));
+  if (!ratio_list) {
+    DCHECK_EQ(list.length(), 2u);
+    ratio_list = DynamicTo<CSSValueList>(list.Item(1));
+  }
+  DCHECK(ratio_list);
+  DCHECK_GE(ratio_list->length(), 1u);
+  DCHECK_LE(ratio_list->length(), 2u);
+  float width = To<CSSPrimitiveValue>(ratio_list->Item(0)).GetFloatValue();
+  float height = 1;
+  if (ratio_list->length() == 2u)
+    height = To<CSSPrimitiveValue>(ratio_list->Item(1)).GetFloatValue();
+  if (width == 0 && height == 0)
+    width = 1;
+  return FloatSize(width, height);
+}
+
+bool ListHasAuto(const CSSValueList& list) {
+  // If there's only one entry, it needs to be a ratio.
+  // (A single auto is handled separately)
+  if (list.length() == 1u)
+    return false;
+  auto* auto_value = DynamicTo<CSSIdentifierValue>(list.Item(0));
+  if (!auto_value)
+    auto_value = DynamicTo<CSSIdentifierValue>(list.Item(1));
+  DCHECK(auto_value) << "If we have two items, one of them must be auto";
+  DCHECK_EQ(auto_value->GetValueID(), CSSValueID::kAuto);
+  return true;
+}
+}  // namespace
+
+StyleAspectRatio StyleBuilderConverter::ConvertAspectRatio(
     StyleResolverState& state,
     const CSSValue& value) {
   auto* identifier_value = DynamicTo<CSSIdentifierValue>(value);
   if (identifier_value && identifier_value->GetValueID() == CSSValueID::kAuto)
-    return base::nullopt;
+    return StyleAspectRatio(EAspectRatioType::kAuto, FloatSize());
+
+  // (auto, (1, 2)) or ((1, 2), auto) or ((1, 2))
   const CSSValueList& list = To<CSSValueList>(value);
-  DCHECK_EQ(list.length(), 2u);
-  int width = To<CSSPrimitiveValue>(list.Item(0)).GetIntValue();
-  int height = To<CSSPrimitiveValue>(list.Item(1)).GetIntValue();
-  return IntSize(width, height);
+  DCHECK_GE(list.length(), 1u);
+  DCHECK_LE(list.length(), 2u);
+
+  bool has_auto = ListHasAuto(list);
+  EAspectRatioType type =
+      has_auto ? EAspectRatioType::kAutoAndRatio : EAspectRatioType::kRatio;
+  FloatSize ratio = GetRatioFromList(list);
+  return StyleAspectRatio(type, ratio);
 }
 
 bool StyleBuilderConverter::ConvertInternalEmptyLineHeight(

@@ -205,7 +205,7 @@ void OnDefaultProtocolClientWorkerFinished(
   }
 #endif
 
-#if !defined(OS_ANDROID) && !defined(OFFICIAL_BUILD)
+#if !defined(OS_ANDROID)
   if (!vivaldi::IsVivaldiRunning() || escaped_url.scheme() != "mailto")
 #endif
   if (chrome_is_default_handler) {

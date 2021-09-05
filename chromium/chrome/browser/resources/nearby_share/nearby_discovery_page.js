@@ -15,8 +15,11 @@ import './nearby_device.js';
 import './nearby_preview.js';
 import './nearby_share_target_types.mojom-lite.js';
 import './nearby_share.mojom-lite.js';
+import './shared/nearby_page_template.m.js';
+import './strings.m.js';
 
 import {assert} from 'chrome://resources/js/assert.m.js';
+import {I18nBehavior} from 'chrome://resources/js/i18n_behavior.m.js';
 import {html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {getDiscoveryManager} from './discovery_manager.js';
@@ -42,9 +45,20 @@ function tokensEqual(a, b) {
 Polymer({
   is: 'nearby-discovery-page',
 
+  behaviors: [I18nBehavior],
+
   _template: html`{__html_template__}`,
 
   properties: {
+    /**
+     * The description of the attachments
+     * @type {?string}
+     */
+    attachmentsDescription: {
+      type: String,
+      value: null,
+    },
+
     /**
      * ConfirmationManager interface for the currently selected share target.
      * @type {?nearbyShare.mojom.ConfirmationManagerInterface}
@@ -56,12 +70,12 @@ Polymer({
     },
 
     /**
-     * Token to show to the user to confirm the selected share target.
-     * @type {?string}
+     * TransferUpdateListener interface for the currently selected share target.
+     * @type {?nearbyShare.mojom.TransferUpdateListenerPendingReceiver}
      */
-    confirmationToken: {
+    transferUpdateListener: {
       notify: true,
-      type: String,
+      type: Object,
       value: null,
     },
 
@@ -85,7 +99,13 @@ Polymer({
     },
   },
 
-  /** @private {nearbyShare.mojom.ShareTargetListenerCallbackRouter} */
+  listeners: {
+    'next': 'onNext_',
+    'view-enter-start': 'onViewEnterStart_',
+    'view-exit-finish': 'onViewExitFinish_',
+  },
+
+  /** @private {?nearbyShare.mojom.ShareTargetListenerCallbackRouter} */
   mojoEventTarget_: null,
 
   /** @private {Array<number>} */
@@ -97,27 +117,54 @@ Polymer({
   /** @private {?nearbyShare.mojom.ShareTarget} */
   lastSelectedShareTarget_: null,
 
+  /** @type {ResizeObserver} used to observer size changes to this element */
+  resizeObserver_: null,
+
   /** @override */
   attached() {
-    // TODO(knollr): Remove this once prototyping is done.
-    this.shareTargets_ = [
-      {
-        id: {high: 0, low: 1},
-        name: 'Alyssa\'s Pixel',
-        type: nearbyShare.mojom.ShareTargetType.kTablet,
-      },
-      {
-        id: {high: 0, low: 2},
-        name: 'Shangela\'s Pixel 2XL',
-        type: nearbyShare.mojom.ShareTargetType.kPhone,
-      },
-      {
-        id: {high: 0, low: 3},
-        name: 'Mira\'s Chromebook',
-        type: nearbyShare.mojom.ShareTargetType.kLaptop,
-      }
-    ];
     this.shareTargetMap_ = new Map();
+    this.clearShareTargets_();
+
+    // This is a required work around to get the iron-list to display on first
+    // view. Currently iron-list won't generate item elements on attach if the
+    // element is not visible. Because we are hosted in a cr-view-manager for
+    // on-boarding, this component is not visible when the items are bound. To
+    // fix this issue, we listen for resize events (which happen when display is
+    // switched from none to block by the view manager) and manually call
+    // notifyResize on the iron-list
+    this.resizeObserver_ = new ResizeObserver(entries => {
+      const deviceList =
+          /** @type {IronListElement} */ (this.$$('#deviceList'));
+      if (deviceList) {
+        deviceList.notifyResize();
+      }
+    });
+    this.resizeObserver_.observe(this);
+  },
+
+  /** @override */
+  detached() {
+    this.stopDiscovery_();
+    this.resizeObserver_.disconnect();
+  },
+
+  /** @private */
+  onViewEnterStart_() {
+    this.startDiscovery_();
+  },
+
+  /** @private */
+  onViewExitFinish_() {
+    this.stopDiscovery_();
+  },
+
+  /** @private */
+  startDiscovery_() {
+    if (this.mojoEventTarget_) {
+      return;
+    }
+
+    this.clearShareTargets_();
 
     this.mojoEventTarget_ =
         new nearbyShare.mojom.ShareTargetListenerCallbackRouter();
@@ -129,22 +176,40 @@ Polymer({
           this.onShareTargetLost_.bind(this)),
     ];
 
-    // TODO(knollr): Only do this when the discovery page is actually shown.
+    getDiscoveryManager().getSendPreview().then(result => {
+      this.attachmentsDescription = result.sendPreview.description;
+      // TODO (vecore): Setup icon and handle case of more than one attachment.
+    });
+
     getDiscoveryManager()
         .startDiscovery(this.mojoEventTarget_.$.bindNewPipeAndPassRemote())
         .then(response => {
           if (!response.success) {
-            // TODO(knollr): Show error.
+            // TODO(crbug.com/1123934): Show error.
             return;
           }
         });
   },
 
-  /** @override */
-  detached() {
+  /** @private */
+  stopDiscovery_() {
+    if (!this.mojoEventTarget_) {
+      return;
+    }
+
+    this.clearShareTargets_();
     this.listenerIds_.forEach(
         id => assert(this.mojoEventTarget_.removeListener(id)));
     this.mojoEventTarget_.$.close();
+    this.mojoEventTarget_ = null;
+  },
+
+  /** @private */
+  clearShareTargets_() {
+    this.shareTargetMap_.clear();
+    this.lastSelectedShareTarget_ = null;
+    this.selectedShareTarget = null;
+    this.shareTargets_ = [];
   },
 
   /**
@@ -179,7 +244,7 @@ Polymer({
   },
 
   /** @private */
-  onNextTap_() {
+  onNext_() {
     if (!this.selectedShareTarget) {
       return;
     }
@@ -187,19 +252,16 @@ Polymer({
     getDiscoveryManager()
         .selectShareTarget(this.selectedShareTarget.id)
         .then(response => {
-          const {result, token, confirmationManager} = response;
+          const {result, transferUpdateListener, confirmationManager} =
+              response;
           if (result !== nearbyShare.mojom.SelectShareTargetResult.kOk) {
-            // TODO(knollr): Show error.
+            // TODO(crbug.com/crbug.com/1123934): Show error.
             return;
           }
 
-          if (confirmationManager) {
-            this.confirmationManager = confirmationManager;
-            this.confirmationToken = token;
-            this.fire('change-page', {page: 'confirmation'});
-          } else {
-            // TODO(knollr): Close dialog as send is now in progress.
-          }
+          this.confirmationManager = confirmationManager;
+          this.transferUpdateListener = transferUpdateListener;
+          this.fire('change-page', {page: 'confirmation'});
         });
   },
 
@@ -223,7 +285,7 @@ Polymer({
   },
 
   /**
-   * Updates the selected share tagrget to |shareTarget| if its id matches |id|.
+   * Updates the selected share target to |shareTarget| if its id matches |id|.
    * @param {!mojoBase.mojom.UnguessableToken} id
    * @param {?nearbyShare.mojom.ShareTarget} shareTarget
    * @private
@@ -234,5 +296,5 @@ Polymer({
       this.lastSelectedShareTarget_ = shareTarget;
       this.selectedShareTarget = shareTarget;
     }
-  }
+  },
 });

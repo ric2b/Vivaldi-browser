@@ -37,7 +37,6 @@
 #include "components/autofill/core/browser/form_parsing/field_candidates.h"
 #include "components/autofill/core/browser/form_parsing/form_field.h"
 #include "components/autofill/core/browser/logging/log_manager.h"
-#include "components/autofill/core/browser/proto/legacy_proto_bridge.h"
 #include "components/autofill/core/browser/randomized_encoder.h"
 #include "components/autofill/core/browser/rationalization_util.h"
 #include "components/autofill/core/browser/validation.h"
@@ -80,6 +79,21 @@ constexpr char kDefaultSection[] = "-default";
 // fields.
 constexpr int kCommonNamePrefixRemovalFieldThreshold = 3;
 constexpr int kMinCommonNamePrefixLength = 16;
+
+// Affix removal configuration. Only remove short affixes if they are common
+// to all field names and there is at least the minimum number of fields.
+// If no affix common to all field names is found, search for a long
+// prefix common to a subset of the fields. This case helps include cases of
+// prefixes prepended by web frameworks.
+//
+// Minimum required number of available fields for trying to remove affixes.
+constexpr int kCommonNameAffixRemovalFieldNumberThreshold = 3;
+// Minimum required length for affixes common to all field names.
+constexpr int kMinCommonNameAffixLength = 3;
+// Minimum required length for prefixes common to a subset of the field names.
+constexpr int kMinCommonNameLongPrefixLength = 16;
+// Regex for checking if |parseable_name| is valid after stripping affixes.
+constexpr char kParseableNameValidationRe[] = "\\D";
 
 // Returns true if the scheme given by |url| is one for which autofill is
 // allowed to activate. By default this only returns true for HTTP and HTTPS.
@@ -364,15 +378,6 @@ HtmlFieldType FieldTypeFromAutocompleteAttributeValue(
   return HTML_TYPE_UNRECOGNIZED;
 }
 
-std::ostream& operator<<(
-    std::ostream& out,
-    const autofill::AutofillQueryResponseContents& response) {
-  for (const auto& field : response.field()) {
-    out << "\nautofill_type: " << field.overall_type_prediction();
-  }
-  return out;
-}
-
 std::ostream& operator<<(std::ostream& out,
                          const autofill::AutofillQueryResponse& response) {
   for (const auto& form : response.form_suggestions()) {
@@ -653,8 +658,8 @@ void FormStructure::DetermineHeuristicTypes(LogManager* log_manager) {
   // proper <form> or a <form>-less checkout, run the heuristics and server
   // prediction routines.
   if (ShouldRunHeuristics()) {
-    const FieldCandidatesMap field_type_map =
-        FormField::ParseFormFields(fields_, is_form_tag_, log_manager);
+    const FieldCandidatesMap field_type_map = FormField::ParseFormFields(
+        fields_, page_language_, is_form_tag_, log_manager);
     for (const auto& field : fields_) {
       const auto iter = field_type_map.find(field->unique_name());
       if (iter != field_type_map.end()) {
@@ -695,7 +700,7 @@ bool FormStructure::EncodeUploadRequest(
     const std::string& login_form_signature,
     bool observed_submission,
     AutofillUploadContents* upload,
-    FormAndFieldSignatures* encoded_signatures) const {
+    std::vector<FormSignature>* encoded_signatures) const {
   DCHECK(AllTypesCaptured(*this, available_field_types));
   encoded_signatures->clear();
 
@@ -752,11 +757,11 @@ bool FormStructure::EncodeUploadRequest(
 // static
 bool FormStructure::EncodeQueryRequest(
     const std::vector<FormStructure*>& forms,
-    AutofillQueryContents* query,
-    FormAndFieldSignatures* encoded_signatures) {
-  DCHECK(encoded_signatures);
-  encoded_signatures->clear();
-  encoded_signatures->reserve(forms.size());
+    AutofillPageQueryRequest* query,
+    std::vector<FormSignature>* queried_form_signatures) {
+  DCHECK(queried_form_signatures);
+  queried_form_signatures->clear();
+  queried_form_signatures->reserve(forms.size());
 
   query->set_client_version(kClientVersion);
 
@@ -776,36 +781,17 @@ bool FormStructure::EncodeQueryRequest(
     if (form->IsMalformed())
       continue;
 
-    form->EncodeFormForQuery(query->add_form(), encoded_signatures);
+    form->EncodeFormForQuery(query->add_forms(), queried_form_signatures);
   }
 
-  return !encoded_signatures->empty();
+  return !queried_form_signatures->empty();
 }
 
 // static
-void FormStructure::ParseQueryResponse(
-    std::string payload,
-    const std::vector<FormStructure*>& forms,
-    const FormAndFieldSignatures& encoded_signatures,
-    AutofillMetrics::FormInteractionsUkmLogger* form_interactions_ukm_logger) {
-  AutofillMetrics::LogServerQueryMetric(
-      AutofillMetrics::QUERY_RESPONSE_RECEIVED);
-
-  // Parse the response.
-  AutofillQueryResponseContents response;
-  if (!response.ParseFromString(payload))
-    return;
-
-  VLOG(1) << "Autofill query response was successfully parsed:\n" << response;
-
-  ProcessQueryResponse(response, forms, encoded_signatures,
-                       form_interactions_ukm_logger);
-}
-
 void FormStructure::ParseApiQueryResponse(
     base::StringPiece payload,
     const std::vector<FormStructure*>& forms,
-    const FormAndFieldSignatures& encoded_signatures,
+    const std::vector<FormSignature>& queried_form_signatures,
     AutofillMetrics::FormInteractionsUkmLogger* form_interactions_ukm_logger) {
   AutofillMetrics::LogServerQueryMetric(
       AutofillMetrics::QUERY_RESPONSE_RECEIVED);
@@ -824,39 +810,35 @@ void FormStructure::ParseApiQueryResponse(
   VLOG(1) << "Autofill query response from API was successfully parsed: "
           << response;
 
-  ProcessQueryResponse(CreateLegacyResponseFromApiResponse(response), forms,
-                       encoded_signatures, form_interactions_ukm_logger);
+  ProcessQueryResponse(response, forms, queried_form_signatures,
+                       form_interactions_ukm_logger);
 }
 
 // static
 void FormStructure::ProcessQueryResponse(
-    const AutofillQueryResponseContents& response,
+    const AutofillQueryResponse& response,
     const std::vector<FormStructure*>& forms,
-    const FormAndFieldSignatures& encoded_signatures,
+    const std::vector<FormSignature>& queried_form_signatures,
     AutofillMetrics::FormInteractionsUkmLogger* form_interactions_ukm_logger) {
   AutofillMetrics::LogServerQueryMetric(AutofillMetrics::QUERY_RESPONSE_PARSED);
 
   bool heuristics_detected_fillable_field = false;
   bool query_response_overrode_heuristics = false;
 
-  // Align the server response to the |encoded_signatures|.
-  auto field_types = [&response, &encoded_signatures] {
-    std::map<std::pair<FormSignature, FieldSignature>,
-             ::autofill::AutofillQueryResponseContents_Field>
-        field_types;
-    auto current_field = response.field().begin();
-    for (const auto& form_and_fields : encoded_signatures) {
-      FormSignature form = form_and_fields.first;
-      for (const auto& field : form_and_fields.second) {
-        // In some cases *successful* response does not return all the
-        // fields.
-        if (current_field == response.field().end())
-          return field_types;
-        field_types[std::make_pair(form, field)] = *current_field++;
-      }
+  std::map<std::pair<FormSignature, FieldSignature>,
+           AutofillQueryResponse::FormSuggestion::FieldSuggestion>
+      field_types;
+  for (int form_idx = 0;
+       form_idx < std::min(response.form_suggestions_size(),
+                           static_cast<int>(queried_form_signatures.size()));
+       ++form_idx) {
+    FormSignature form_sig = queried_form_signatures.at(form_idx);
+    for (const auto& field :
+         response.form_suggestions(form_idx).field_suggestions()) {
+      FieldSignature field_sig(field.field_signature());
+      field_types[std::make_pair(form_sig, field_sig)] = field;
     }
-    return field_types;
-  }();
+  }
 
   // Copy the field types into the actual form.
   for (FormStructure* form : forms) {
@@ -870,7 +852,7 @@ void FormStructure::ProcessQueryResponse(
       const auto& current_field = it->second;
 
       ServerFieldType field_type =
-          static_cast<ServerFieldType>(current_field.overall_type_prediction());
+          static_cast<ServerFieldType>(current_field.primary_type_prediction());
       query_response_has_no_server_data &= field_type == NO_SERVER_DATA;
 
       ServerFieldType heuristic_type = field->heuristic_type();
@@ -878,10 +860,12 @@ void FormStructure::ProcessQueryResponse(
         heuristics_detected_fillable_field = true;
 
       field->set_server_type(field_type);
-      std::vector<AutofillQueryResponseContents::Field::FieldPrediction>
+      std::vector<AutofillQueryResponse::FormSuggestion::FieldSuggestion::
+                      FieldPrediction>
           server_predictions;
       if (current_field.predictions_size() == 0) {
-        AutofillQueryResponseContents::Field::FieldPrediction field_prediction;
+        AutofillQueryResponse::FormSuggestion::FieldSuggestion::FieldPrediction
+            field_prediction;
         field_prediction.set_type(field_type);
         server_predictions.push_back(field_prediction);
       } else {
@@ -889,6 +873,8 @@ void FormStructure::ProcessQueryResponse(
                                   current_field.predictions().end());
       }
       field->set_server_predictions(std::move(server_predictions));
+      field->set_may_use_prefilled_placeholder(
+          current_field.may_use_prefilled_placeholder());
 
       if (heuristic_type != field->Type().GetStorableType())
         query_response_overrode_heuristics = true;
@@ -1098,6 +1084,30 @@ void FormStructure::RetrieveFromCache(
       const auto& it = cached_fields_by_name.find(field->unique_name());
       if (it != cached_fields_by_name.end())
         cached_field = it->second;
+    }
+
+    // If the unique renderer id (or the name) is not stable due to some Java
+    // Script magic in the website, use the field signature as a fallback
+    // solution to find the field in the cached form.
+    // TODO(crbug.com/1125624): Remove feature check once trial ended.
+    if (!cached_field &&
+        base::FeatureList::IsEnabled(
+            features::kAutofillRetrieveFromCacheWithFieldSignatureAsFallback)) {
+      // Iterates over the fields to find the field with the same form
+      // signature.
+      for (size_t i = 0; i < cached_form.field_count(); ++i) {
+        auto* const cfield = cached_form.field(i);
+        if (field->GetFieldSignature() == cfield->GetFieldSignature()) {
+          // If there are multiple matches, do not retrieve the field and stop
+          // the process.
+          if (cached_field) {
+            cached_field = nullptr;
+            break;
+          } else {
+            cached_field = cfield;
+          }
+        }
+      }
     }
 
     if (cached_field) {
@@ -1863,15 +1873,17 @@ void FormStructure::RationalizeAddressStateCountry(
 
 void FormStructure::OverrideServerPredictionsWithHeuristics() {
   if (!base::FeatureList::IsEnabled(
-          features::kAutofillEnableSupportForMoreStructureInNames)) {
+          features::kAutofillEnableSupportForMoreStructureInNames) &&
+      !base::FeatureList::IsEnabled(
+          features::kAutofillEnableSupportForMoreStructureInAddresses)) {
     return;
   }
   for (const auto& field : fields_) {
-    // If the heuristic type is |LAST_NAME_SECOND| or |LAST_NAME_FIRST|
-    // unconditionally use this prediction.
     switch (field->heuristic_type()) {
       case NAME_LAST_SECOND:
       case NAME_LAST_FIRST:
+      case ADDRESS_HOME_STREET_NAME:
+      case ADDRESS_HOME_HOUSE_NUMBER:
         field->SetTypeTo(AutofillType(field->heuristic_type()));
         break;
       default: {
@@ -1941,33 +1953,31 @@ void FormStructure::RationalizeFieldTypePredictions() {
 }
 
 void FormStructure::EncodeFormForQuery(
-    AutofillQueryContents::Form* query_form,
-    FormAndFieldSignatures* encoded_signatures) const {
+    AutofillPageQueryRequest::Form* query_form,
+    std::vector<FormSignature>* queried_form_signatures) const {
   DCHECK(!IsMalformed());
 
   query_form->set_signature(form_signature().value());
-  encoded_signatures->emplace_back();
-  encoded_signatures->back().first = form_signature();
+  queried_form_signatures->push_back(form_signature());
 
   if (is_rich_query_enabled_) {
-    EncodeFormMetadataForQuery(*this, query_form->mutable_form_metadata());
+    EncodeFormMetadataForQuery(*this, query_form->mutable_metadata());
   }
 
   for (const auto& field : fields_) {
     if (ShouldSkipField(*field))
       continue;
 
-    AutofillQueryContents::Form::Field* added_field = query_form->add_field();
+    AutofillPageQueryRequest::Form::Field* added_field =
+        query_form->add_fields();
     added_field->set_signature(field->GetFieldSignature().value());
-    encoded_signatures->back().second.push_back(field->GetFieldSignature());
 
     if (is_rich_query_enabled_) {
-      EncodeFieldMetadataForQuery(*field,
-                                  added_field->mutable_field_metadata());
+      EncodeFieldMetadataForQuery(*field, added_field->mutable_metadata());
     }
 
     if (IsAutofillFieldMetadataEnabled()) {
-      added_field->set_type(field->form_control_type);
+      added_field->set_control_type(field->form_control_type);
 
       if (!field->name.empty())
         added_field->set_name(base::UTF16ToUTF8(field->name));
@@ -1977,11 +1987,10 @@ void FormStructure::EncodeFormForQuery(
 
 void FormStructure::EncodeFormForUpload(
     AutofillUploadContents* upload,
-    FormAndFieldSignatures* encoded_signatures) const {
+    std::vector<FormSignature>* encoded_signatures) const {
   DCHECK(!IsMalformed());
 
-  encoded_signatures->emplace_back();
-  encoded_signatures->back().first = form_signature();
+  encoded_signatures->push_back(form_signature());
 
   if (randomized_encoder_) {
     PopulateRandomizedFormMetadata(*randomized_encoder_, *this,
@@ -1998,7 +2007,6 @@ void FormStructure::EncodeFormForUpload(
       continue;
 
     auto* added_field = upload->add_field();
-    encoded_signatures->back().second.push_back(field->GetFieldSignature());
 
     for (const auto& field_type : field->possible_types()) {
       added_field->add_autofill_type(field_type);
@@ -2078,6 +2086,9 @@ void FormStructure::IdentifySections(bool has_author_specified_sections) {
 
   const bool is_enabled_autofill_new_sectioning =
       base::FeatureList::IsEnabled(features::kAutofillUseNewSectioningMethod);
+  const bool is_enabled_autofill_redundant_name_sectioning =
+      base::FeatureList::IsEnabled(
+          features::kAutofillSectionUponRedundantNameInfo);
 
   if (!has_author_specified_sections || is_enabled_autofill_new_sectioning) {
     // Name sections after the first field in the section.
@@ -2109,6 +2120,14 @@ void FormStructure::IdentifySections(bool has_author_specified_sections) {
       // little off.  Hence, ignore this field type as a signal here.
       if (AutofillType(current_type).group() == PHONE_HOME)
         already_saw_current_type = false;
+
+      if (is_enabled_autofill_redundant_name_sectioning) {
+        // Forms sometimes have a different format of inputting names in
+        // different sections. If we believe a new name is being entered, assume
+        // it is a new section (unless there are two identical inputs in a row).
+        if (current_type == NAME_FULL)
+          already_saw_current_type |= (seen_types.count(NAME_LAST) > 0);
+      }
 
       bool ignored_field = !field->IsVisible();
 
@@ -2241,6 +2260,57 @@ bool FormStructure::ShouldSkipField(const FormFieldData& field) const {
 }
 
 void FormStructure::ProcessExtractedFields() {
+  if (base::FeatureList::IsEnabled(
+          autofill::features::kAutofillLabelAffixRemoval)) {
+    // Updates the field name parsed by heuristics if several criteria are met.
+    // Several fields must be present in the form.
+    if (field_count() < kCommonNameAffixRemovalFieldNumberThreshold)
+      return;
+
+    std::vector<base::StringPiece16> names;
+    names.reserve(field_count());
+    for (const auto& field : *this)
+      names.push_back(field->name);
+
+    int longest_prefix_length = FindLongestCommonAffixLength(names, false);
+    int longest_suffix_length = FindLongestCommonAffixLength(names, true);
+
+    // Don't remove the common affix if it's not long enough.
+    if (longest_prefix_length < kMinCommonNameAffixLength)
+      longest_prefix_length = 0;
+
+    if (longest_suffix_length < kMinCommonNameAffixLength)
+      longest_suffix_length = 0;
+
+    bool success =
+        SetStrippedParseableNames(longest_prefix_length, longest_suffix_length);
+
+    // Don't search for inconsistent prefix if valid affixes are found.
+    if (success && longest_prefix_length + longest_suffix_length > 0)
+      return;
+
+    // Functionality for stripping a prefix only common to a subset
+    // of field names.
+    // This is needed because an exceptional field may be missing a prefix
+    // which is otherwise consistently applied--for instance, a framework
+    // may only apply a prefix to those fields which are bound when POSTing.
+    names.clear();
+    for (const auto& field : *this)
+      if (field->name.size() > kMinCommonNameLongPrefixLength)
+        names.push_back(field->name);
+
+    if (names.size() < kCommonNamePrefixRemovalFieldThreshold)
+      return;
+
+    const int longest_long_prefix_length =
+        FindLongestCommonAffixLength(names, false);
+
+    if (longest_long_prefix_length >= kMinCommonNameLongPrefixLength)
+      SetStrippedParseableNames(longest_long_prefix_length, 0);
+
+    return;
+  }
+
   // Update the field name parsed by heuristics if several criteria are met.
   // Several fields must be present in the form.
   if (field_count() < kCommonNamePrefixRemovalFieldThreshold)
@@ -2263,6 +2333,70 @@ void FormStructure::ProcessExtractedFields() {
           field->name.substr(longest_prefix.size(), field->name.size()));
     }
   }
+}
+
+bool FormStructure::SetStrippedParseableNames(size_t offset_left,
+                                              size_t offset_right) {
+  // Keeps track if all stripped strings are valid according to
+  // |IsValidParseableName()|. If at least one string is invalid,
+  // all |parseable_name| are reset to |name|.
+  bool should_keep = true;
+  for (auto& field : *this) {
+    // This check allows to only strip affixes from long enough strings.
+    if (field->name.size() > offset_right + offset_left) {
+      field->set_parseable_name(field->name.substr(
+          offset_left, field->name.size() - offset_right - offset_left));
+    } else {
+      field->set_parseable_name(field->name);
+    }
+
+    should_keep &= IsValidParseableName(field->parseable_name());
+    if (!should_keep)
+      break;
+  }
+
+  // Reset if some stripped string was invalid.
+  if (!should_keep) {
+    for (auto& field : *this)
+      field->set_parseable_name(field->name);
+  }
+
+  return should_keep;
+}
+
+bool FormStructure::IsValidParseableName(
+    base::string16 candidateParseableName) {
+  static const base::string16 kParseableNameValidationPattern =
+      base::UTF8ToUTF16(kParseableNameValidationRe);
+  if (MatchesPattern(candidateParseableName, kParseableNameValidationPattern))
+    return true;
+
+  return false;
+}
+
+// static
+size_t FormStructure::FindLongestCommonAffixLength(
+    const std::vector<base::StringPiece16>& strings,
+    bool findCommonSuffix) {
+  if (strings.empty())
+    return 0;
+
+  // Go through each character of the first string until there is a mismatch at
+  // the same position in any other string. Adapted from http://goo.gl/YGukMM.
+  for (size_t affix_len = 0; affix_len < strings[0].size(); affix_len++) {
+    size_t base_string_index =
+        findCommonSuffix ? strings[0].size() - affix_len - 1 : affix_len;
+    for (size_t i = 1; i < strings.size(); i++) {
+      size_t compared_string_index =
+          findCommonSuffix ? strings[i].size() - affix_len - 1 : affix_len;
+      if (affix_len >= strings[i].size() ||
+          strings[i][compared_string_index] != strings[0][base_string_index]) {
+        // Mismatch found.
+        return affix_len;
+      }
+    }
+  }
+  return strings[0].size();
 }
 
 // static

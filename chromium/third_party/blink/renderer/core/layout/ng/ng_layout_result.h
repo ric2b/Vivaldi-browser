@@ -47,6 +47,11 @@ class CORE_EXPORT NGLayoutResult : public RefCounted<NGLayoutResult> {
     // large enough to store.
   };
 
+  // Creates a copy of |other| but uses the "post-layout" fragments to ensure
+  // fragment-tree consistency.
+  static scoped_refptr<const NGLayoutResult> CloneWithPostLayoutFragments(
+      const NGLayoutResult& other);
+
   // Create a copy of NGLayoutResult with |BfcBlockOffset| replaced by the given
   // parameter. Note, when |bfc_block_offset| is |nullopt|, |BfcBlockOffset| is
   // still replaced with |nullopt|.
@@ -185,22 +190,15 @@ class CORE_EXPORT NGLayoutResult : public RefCounted<NGLayoutResult> {
   }
 
   LayoutUnit MinimalSpaceShortage() const {
-    if (!HasRareData())
+    if (!HasRareData() || rare_data_->minimal_space_shortage == kIndefiniteSize)
       return LayoutUnit::Max();
-#if DCHECK_IS_ON()
-    // This field shares storage with another field.
-    DCHECK(!rare_data_->has_tallest_unbreakable_block_size);
-#endif
     return rare_data_->minimal_space_shortage;
   }
 
   LayoutUnit TallestUnbreakableBlockSize() const {
-    if (!HasRareData())
+    if (!HasRareData() ||
+        rare_data_->tallest_unbreakable_block_size == kIndefiniteSize)
       return LayoutUnit();
-#if DCHECK_IS_ON()
-    // This field shares storage with another field.
-    DCHECK(rare_data_->has_tallest_unbreakable_block_size);
-#endif
     return rare_data_->tallest_unbreakable_block_size;
   }
 
@@ -347,6 +345,11 @@ class CORE_EXPORT NGLayoutResult : public RefCounted<NGLayoutResult> {
  private:
   friend class MutableForOutOfFlow;
 
+  // Creates a copy of NGLayoutResult with a new (but "identical") fragment.
+  NGLayoutResult(
+      const NGLayoutResult& other,
+      scoped_refptr<const NGPhysicalContainerFragment> physical_fragment);
+
   // We don't need the copy constructor, move constructor, copy
   // assigmnment-operator, or move assignment-operator today.
   // Delete these to clarify that they will not work because a |RefCounted|
@@ -400,7 +403,7 @@ class CORE_EXPORT NGLayoutResult : public RefCounted<NGLayoutResult> {
       // couldn't fit all the content, and we're allowed to stretch columns
       // further, we'll perform another pass with the column block-size
       // increased by this amount.
-      LayoutUnit minimal_space_shortage = LayoutUnit::Max();
+      LayoutUnit minimal_space_shortage = kIndefiniteSize;
     };
     NGExclusionSpace exclusion_space;
     scoped_refptr<SerializedScriptValue> custom_layout_data;
@@ -408,10 +411,6 @@ class CORE_EXPORT NGLayoutResult : public RefCounted<NGLayoutResult> {
     LayoutUnit overflow_block_size = kIndefiniteSize;
     LayoutUnit annotation_overflow;
     LayoutUnit block_end_annotation_space;
-
-#if DCHECK_IS_ON()
-    bool has_tallest_unbreakable_block_size = false;
-#endif
     bool is_single_use = false;
     int lines_until_clamp = 0;
     wtf_size_t table_column_count_ = 0;

@@ -42,8 +42,22 @@ StoragePartitionConfig StoragePartitionConfig::CopyWithInMemorySet() const {
   if (in_memory_)
     return *this;
 
-  return StoragePartitionConfig(partition_domain_, partition_name_,
-                                true /* in_memory */);
+  auto result = StoragePartitionConfig(partition_domain_, partition_name_,
+                                       true /* in_memory */);
+  result.set_fallback_to_partition_domain_for_blob_urls(
+      fallback_to_partition_domain_for_blob_urls_);
+  return result;
+}
+
+base::Optional<StoragePartitionConfig>
+StoragePartitionConfig::GetFallbackForBlobUrls() const {
+  if (fallback_to_partition_domain_for_blob_urls_ == FallbackMode::kNone)
+    return base::nullopt;
+
+  return StoragePartitionConfig(
+      partition_domain_, "",
+      /*in_memory=*/fallback_to_partition_domain_for_blob_urls_ ==
+          FallbackMode::kFallbackPartitionInMemory);
 }
 
 bool StoragePartitionConfig::operator<(
@@ -57,13 +71,22 @@ bool StoragePartitionConfig::operator<(
   if (in_memory_ != rhs.in_memory_)
     return in_memory_ < rhs.in_memory_;
 
+  if (fallback_to_partition_domain_for_blob_urls_ !=
+      rhs.fallback_to_partition_domain_for_blob_urls_) {
+    return fallback_to_partition_domain_for_blob_urls_ <
+           rhs.fallback_to_partition_domain_for_blob_urls_;
+  }
+
   return false;
 }
 
 bool StoragePartitionConfig::operator==(
     const StoragePartitionConfig& rhs) const {
   return partition_domain_ == rhs.partition_domain_ &&
-         partition_name_ == rhs.partition_name_ && in_memory_ == rhs.in_memory_;
+         partition_name_ == rhs.partition_name_ &&
+         in_memory_ == rhs.in_memory_ &&
+         fallback_to_partition_domain_for_blob_urls_ ==
+             rhs.fallback_to_partition_domain_for_blob_urls_;
 }
 
 bool StoragePartitionConfig::operator!=(

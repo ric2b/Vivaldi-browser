@@ -230,18 +230,21 @@ void V4L2StatefulVideoDecoderBackend::ScheduleDecodeWork() {
                                 weak_this_));
 }
 
+void V4L2StatefulVideoDecoderBackend::ProcessEventQueue() {
+  while (base::Optional<struct v4l2_event> ev = device_->DequeueEvent()) {
+    if (ev->type == V4L2_EVENT_SOURCE_CHANGE &&
+        (ev->u.src_change.changes & V4L2_EVENT_SRC_CH_RESOLUTION)) {
+      ChangeResolution();
+    }
+  }
+}
+
 void V4L2StatefulVideoDecoderBackend::OnServiceDeviceTask(bool event) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DVLOGF(3);
 
-  if (event) {
-    while (base::Optional<struct v4l2_event> ev = device_->DequeueEvent()) {
-      if (ev->type == V4L2_EVENT_SOURCE_CHANGE &&
-          (ev->u.src_change.changes & V4L2_EVENT_SRC_CH_RESOLUTION)) {
-        ChangeResolution();
-      }
-    }
-  }
+  if (event)
+    ProcessEventQueue();
 
   // We can enqueue dequeued output buffers immediately.
   EnqueueOutputBuffers();
@@ -255,12 +258,19 @@ void V4L2StatefulVideoDecoderBackend::EnqueueOutputBuffers() {
   DVLOGF(3);
   const v4l2_memory mem_type = output_queue_->GetMemoryType();
 
-  while (base::Optional<V4L2WritableBufferRef> buffer =
-             output_queue_->GetFreeBuffer()) {
+  while (true) {
     bool ret = false;
+    bool no_buffer = false;
 
+    base::Optional<V4L2WritableBufferRef> buffer;
     switch (mem_type) {
       case V4L2_MEMORY_MMAP:
+        buffer = output_queue_->GetFreeBuffer();
+        if (!buffer) {
+          no_buffer = true;
+          break;
+        }
+
         ret = std::move(*buffer).QueueMMap();
         break;
       case V4L2_MEMORY_DMABUF: {
@@ -269,12 +279,23 @@ void V4L2StatefulVideoDecoderBackend::EnqueueOutputBuffers() {
         // once frames are available.
         if (!video_frame)
           return;
+        buffer = output_queue_->GetFreeBufferForFrame(*video_frame);
+        if (!buffer) {
+          no_buffer = true;
+          break;
+        }
+
         ret = std::move(*buffer).QueueDMABuf(std::move(video_frame));
         break;
       }
       default:
         NOTREACHED();
     }
+
+    // Running out of V4L2 buffers is not an error, so just exit the loop
+    // gracefully.
+    if (no_buffer)
+      break;
 
     if (!ret)
       client_->OnBackendError();
@@ -384,11 +405,16 @@ void V4L2StatefulVideoDecoderBackend::OnOutputBufferDequeued(
   // The order here is important! A flush event may come after a resolution
   // change event (but not the opposite), so we must make sure both events
   // are processed in the correct order.
-  if (buffer->IsLast() && resolution_change_cb_) {
-    std::move(resolution_change_cb_).Run();
-  } else if (buffer->IsLast() && flush_cb_) {
-    // We were waiting for a flush to complete, and received the last buffer.
-    CompleteFlush();
+  if (buffer->IsLast()){
+    if (!resolution_change_cb_ && !flush_cb_)
+      ProcessEventQueue();
+
+    if (resolution_change_cb_) {
+      std::move(resolution_change_cb_).Run();
+    } else if (flush_cb_) {
+      // We were waiting for a flush to complete, and received the last buffer.
+      CompleteFlush();
+    }
   }
 
   EnqueueOutputBuffers();
@@ -490,7 +516,7 @@ void V4L2StatefulVideoDecoderBackend::ChangeResolution() {
   }
 
   auto ctrl = device_->GetCtrl(V4L2_CID_MIN_BUFFERS_FOR_CAPTURE);
-  constexpr size_t DEFAULT_NUM_OUTPUT_BUFFERS = 12;
+  constexpr size_t DEFAULT_NUM_OUTPUT_BUFFERS = 7;
   const size_t num_output_buffers =
       ctrl ? ctrl->value : DEFAULT_NUM_OUTPUT_BUFFERS;
   if (!ctrl)

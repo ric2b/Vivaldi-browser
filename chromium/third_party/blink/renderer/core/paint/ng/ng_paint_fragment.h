@@ -174,8 +174,14 @@ class CORE_EXPORT NGPaintFragment : public RefCounted<NGPaintFragment>,
 
   // TODO(layout-dev): Implement when we have oveflow support.
   // TODO(eae): Switch to using NG geometry types.
-  bool HasOverflowClip() const { return PhysicalFragment().HasOverflowClip(); }
-  bool ShouldClipOverflow() const;
+  bool HasNonVisibleOverflow() const {
+    return PhysicalFragment().HasNonVisibleOverflow();
+  }
+
+  bool IsScrollContainer() const {
+    return PhysicalFragment().IsScrollContainer();
+  }
+  bool ShouldClipOverflowAlongEitherAxis() const;
   bool HasSelfPaintingLayer() const;
 
   // Set ShouldDoFullPaintInvalidation flag in the corresponding LayoutObject.

@@ -193,10 +193,10 @@ guestMessagePipe.registerHandler(Message.RENAME_FILE, async (message) => {
       await directory.getFileHandle(renameMsg.newFilename, {create: true});
   // Copy file data over to the new file.
   const writer = await renamedFileHandle.createWritable();
-  // TODO(b/153021155): Use originalFile.stream().
-  await writer.write(await originalFile.arrayBuffer());
-  await writer.truncate(originalFile.size);
-  await writer.close();
+  const sink = /** @type {!WritableStream<*>} */ (writer);
+  const source =
+      /** @type {{stream: function(): !ReadableStream}} */ (originalFile);
+  await source.stream().pipeTo(sink);
 
   // Remove the old file since the new file has all the data & the new name.
   // Note even though removing an entry that doesn't exist is considered
@@ -245,7 +245,16 @@ guestMessagePipe.registerHandler(Message.REQUEST_SAVE_FILE, async (message) => {
       /** @type {!RequestSaveFileMessage} */ (message);
   const handle = await pickWritableFile(suggestedName, mimeType);
   /** @type {!RequestSaveFileResponse} */
-  const response = {token: generateToken(handle)};
+  const response = {
+    pickedFileContext: {
+      token: generateToken(handle),
+      file: assertCast(await handle.getFile()),
+      name: handle.name,
+      error: '',
+      canDelete: false,
+      canRename: false,
+    }
+  };
   return response;
 });
 
@@ -599,7 +608,8 @@ async function getFileFromHandle(fileSystemHandle) {
 function isVideoOrImage(file) {
   // Check for .mkv explicitly because it is not a web-supported type, but is in
   // common use on ChromeOS.
-  return /^(image)|(video)\//.test(file.type) || /\.mkv$/.test(file.name);
+  return /^(image)|(video)\//.test(file.type) ||
+      /\.mkv$/.test(file.name.toLowerCase());
 }
 
 /**
@@ -687,7 +697,9 @@ async function processOtherFilesInDirectory(
 
   // Iteration order is not guaranteed using `directory.entries()`, so we
   // sort it afterwards by modification time to ensure a consistent and logical
-  // order. More recent (i.e. higher timestamp) files should appear first.
+  // order. More recent (i.e. higher timestamp) files should appear first. In
+  // the case where timestamps are equal, the files will be sorted
+  // lexicographically according to their names.
   relatedFiles.sort((a, b) => {
     // Sort null files last if they racily appear.
     if (!a.file && !b.file) {

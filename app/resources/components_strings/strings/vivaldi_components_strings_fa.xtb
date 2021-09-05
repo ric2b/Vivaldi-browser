@@ -33,7 +33,7 @@
 <translation id="2292556288342944218">دسترسی شما به اینترنت مسدود است</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" /> به یک نام کاربری و رمز عبور نیاز دارد.</translation>
 <translation id="2337852623177822836">تنظیمات توسط مدیرتان کنترل می‌گردد</translation>
-<translation id="2344028582131185878">بارگیری‌های خودکار</translation>
+<translation id="2344028582131185878">دانلودهای خودکار</translation>
 <translation id="2355395290879513365">مهاجمین ممکن است بتوانند تصاویری را که در این سایت می‌بینید مشاهده کنند و با دست‌کاری آن‌ها شما را فریب دهند.</translation>
 <translation id="2356070529366658676">سؤال شود</translation>
 <translation id="2359808026110333948">ادامه</translation>
@@ -153,6 +153,7 @@
 <translation id="6165508094623778733">بیشتر بدانید</translation>
 <translation id="6177128806592000436">اتصال شما به این سایت امن نیست</translation>
 <translation id="6203231073485539293">اتصال اینترنتتان را بررسی کنید</translation>
+<translation id="6225522625585012689">‏برای دیدن فهرست نشانی‌های اینترنتی مسدودشده و دیگر خط‌مشی‌های اعمال‌شده توسط سرپرست سیستم خود، از &lt;strong&gt;vivaldi://policy&lt;/strong&gt; بازدید کنید.</translation>
 <translation id="625755898061068298">انتخاب کرده‌اید که اخطارهای امنیتی برای این سایت غیرفعال شود.</translation>
 <translation id="6264485186158353794">بازگشت به ایمنی</translation>
 <translation id="6305205051461490394">دسترسی به <ph name="URL" /> امکان‌پذیر نیست.</translation>
@@ -202,7 +203,6 @@
 <translation id="8041940743680923270">استفاده از پیش‌فرض سراسری (سؤال شود)</translation>
 <translation id="808894953321890993">تغییر رمز عبور</translation>
 <translation id="8119307142152921512">ردیاب‌ها و تبلیغات</translation>
-<translation id="8142868475871995937">‏برای مشاهده فهرست نشانی‌های وب ممنوع و سایر خط‌مشی‌های اجباری براساس تصمیم سرپرست سیستم خود از &lt;strong&gt;vivaldi://policy&lt;/strong&gt; بازدید نمایید.</translation>
 <translation id="8149426793427495338">رایانه‌تان به حالت خواب رفته است.</translation>
 <translation id="8150722005171944719">این فایل در <ph name="URL" /> قابل خواندن نیست. ممکن است حذف شده، جابجا شده باشد و یا مجوزهای فایل از دسترسی جلوگیری می‌کنند.</translation>
 <translation id="8184538546369750125">استفاده از پیش‌فرض سراسری (مجاز)</translation>

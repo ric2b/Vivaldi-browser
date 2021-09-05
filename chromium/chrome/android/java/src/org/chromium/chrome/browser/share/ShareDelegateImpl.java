@@ -17,14 +17,19 @@ import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.feature_engagement.ScreenshotTabObserver;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.offlinepages.OfflinePageUtils;
 import org.chromium.chrome.browser.printing.PrintShareActivity;
 import org.chromium.chrome.browser.printing.TabPrinter;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.send_tab_to_self.SendTabToSelfShareActivity;
+import org.chromium.chrome.browser.settings.SettingsLauncherImpl;
 import org.chromium.chrome.browser.share.share_sheet.ShareSheetCoordinator;
 import org.chromium.chrome.browser.share.share_sheet.ShareSheetPropertyModelBuilder;
+import org.chromium.chrome.browser.sync.AndroidSyncSettings;
 import org.chromium.chrome.browser.tab.SadTab;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.ui.favicon.LargeIconBridge;
 import org.chromium.chrome.browser.util.ChromeFileProvider;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.browser_ui.share.ShareImageFileUtils;
@@ -48,10 +53,11 @@ public class ShareDelegateImpl implements ShareDelegate {
     static final String CANONICAL_URL_RESULT_HISTOGRAM = "Mobile.CanonicalURLResult";
 
     private final BottomSheetController mBottomSheetController;
-    private final ShareSheetDelegate mDelegate;
+    private final ActivityLifecycleDispatcher mLifecycleDispatcher;
     private final Supplier<Tab> mTabProvider;
+    private final ShareSheetDelegate mDelegate;
+    private final boolean mIsCustomTab;
     private long mShareStartTime;
-    private boolean mIsCustomTab;
 
     private static boolean sScreenshotCaptureSkippedForTesting;
 
@@ -59,15 +65,19 @@ public class ShareDelegateImpl implements ShareDelegate {
      * Constructs a new {@link ShareDelegateImpl}.
      *
      * @param controller The BottomSheetController for the current activity.
+     * @param lifecycleDispatcher Dispatcher for activity lifecycle events, e.g. configuration
+     * changes.
      * @param tabProvider Supplier for the current activity tab.
      * @param delegate The ShareSheetDelegate for the current activity.
      * @param isCustomTab This share delegate is associated with a CCT.
      */
-    public ShareDelegateImpl(BottomSheetController controller, Supplier<Tab> tabProvider,
+    public ShareDelegateImpl(BottomSheetController controller,
+            ActivityLifecycleDispatcher lifecycleDispatcher, Supplier<Tab> tabProvider,
             ShareSheetDelegate delegate, boolean isCustomTab) {
         mBottomSheetController = controller;
-        mDelegate = delegate;
+        mLifecycleDispatcher = lifecycleDispatcher;
         mTabProvider = tabProvider;
+        mDelegate = delegate;
         mIsCustomTab = isCustomTab;
     }
 
@@ -77,8 +87,9 @@ public class ShareDelegateImpl implements ShareDelegate {
         if (mShareStartTime == 0L) {
             mShareStartTime = System.currentTimeMillis();
         }
-        mDelegate.share(params, chromeShareExtras, mBottomSheetController, mTabProvider,
-                this::printTab, mShareStartTime, isSharingHubV1Enabled());
+        mDelegate.share(params, chromeShareExtras, mBottomSheetController, mLifecycleDispatcher,
+                mTabProvider, this::printTab, AndroidSyncSettings.get().isSyncEnabled(),
+                mShareStartTime, isSharingHubV1Enabled());
         mShareStartTime = 0;
     }
 
@@ -286,18 +297,21 @@ public class ShareDelegateImpl implements ShareDelegate {
          * Trigger the share action for the specified params.
          */
         void share(ShareParams params, ChromeShareExtras chromeShareExtras,
-                BottomSheetController controller, Supplier<Tab> tabProvider,
-                Callback<Tab> printCallback, long shareStartTime, boolean sharingHubEnabled) {
+                BottomSheetController controller, ActivityLifecycleDispatcher lifecycleDispatcher,
+                Supplier<Tab> tabProvider, Callback<Tab> printCallback, boolean isSyncEnabled,
+                long shareStartTime, boolean sharingHubEnabled) {
             if (chromeShareExtras.shareDirectly()) {
                 ShareHelper.shareWithLastUsedComponent(params);
-            } else if (sharingHubEnabled && !chromeShareExtras.sharingTabGroup()) {
+            } else if (sharingHubEnabled && !chromeShareExtras.sharingTabGroup()
+                    && tabProvider.get() != null) {
                 // TODO(crbug.com/1085078): Sharing hub is suppressed for tab group sharing.
                 // Re-enable it when tab group sharing is supported by sharing hub.
-                ShareSheetCoordinator coordinator =
-                        new ShareSheetCoordinator(controller, tabProvider,
-                                new ShareSheetPropertyModelBuilder(controller,
-                                        ContextUtils.getApplicationContext().getPackageManager()),
-                                printCallback);
+                ShareSheetCoordinator coordinator = new ShareSheetCoordinator(controller,
+                        lifecycleDispatcher, tabProvider,
+                        new ShareSheetPropertyModelBuilder(controller,
+                                ContextUtils.getApplicationContext().getPackageManager()),
+                        printCallback, new LargeIconBridge(Profile.getLastUsedRegularProfile()),
+                        new SettingsLauncherImpl(), isSyncEnabled);
                 // TODO(crbug/1009124): open custom share sheet.
                 coordinator.showShareSheet(params, chromeShareExtras, shareStartTime);
             } else {

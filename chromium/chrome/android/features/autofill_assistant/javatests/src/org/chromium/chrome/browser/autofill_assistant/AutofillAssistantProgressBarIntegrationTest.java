@@ -44,6 +44,7 @@ import org.chromium.chrome.browser.autofill_assistant.proto.PromptProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.PromptProto.Choice;
 import org.chromium.chrome.browser.autofill_assistant.proto.ShowProgressBarProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.ShowProgressBarProto.StepProgressBarConfiguration;
+import org.chromium.chrome.browser.autofill_assistant.proto.ShowProgressBarProto.StepProgressBarIcon;
 import org.chromium.chrome.browser.autofill_assistant.proto.SupportedScriptProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.SupportedScriptProto.PresentationProto;
 import org.chromium.chrome.browser.customtabs.CustomTabActivityTestRule;
@@ -82,6 +83,28 @@ public class AutofillAssistantProgressBarIntegrationTest {
                 mTestRule.getTestServer().getURL(TEST_PAGE)));
     }
 
+    private StepProgressBarConfiguration getDefaultStepProgressBarConfiguration() {
+        return (StepProgressBarConfiguration) StepProgressBarConfiguration.newBuilder()
+                .setUseStepProgressBar(true)
+                .addAnnotatedStepIcons(StepProgressBarIcon.newBuilder()
+                                               .setIcon(DrawableProto.newBuilder().setIcon(
+                                                       Icon.PROGRESSBAR_DEFAULT_INITIAL_STEP))
+                                               .setIdentifier("icon_1"))
+                .addAnnotatedStepIcons(StepProgressBarIcon.newBuilder()
+                                               .setIcon(DrawableProto.newBuilder().setIcon(
+                                                       Icon.PROGRESSBAR_DEFAULT_DATA_COLLECTION))
+                                               .setIdentifier("icon_2"))
+                .addAnnotatedStepIcons(StepProgressBarIcon.newBuilder()
+                                               .setIcon(DrawableProto.newBuilder().setIcon(
+                                                       Icon.PROGRESSBAR_DEFAULT_PAYMENT))
+                                               .setIdentifier("icon_3"))
+                .addAnnotatedStepIcons(StepProgressBarIcon.newBuilder()
+                                               .setIcon(DrawableProto.newBuilder().setIcon(
+                                                       Icon.PROGRESSBAR_DEFAULT_FINAL_STEP))
+                                               .setIdentifier("icon_4"))
+                .build();
+    }
+
     @Test
     @MediumTest
     public void testSwitchingProgressBar() {
@@ -104,16 +127,7 @@ public class AutofillAssistantProgressBarIntegrationTest {
         list.add((ActionProto) ActionProto.newBuilder()
                          .setShowProgressBar(
                                  ShowProgressBarProto.newBuilder().setStepProgressBarConfiguration(
-                                         StepProgressBarConfiguration.newBuilder()
-                                                 .setUseStepProgressBar(true)
-                                                 .addStepIcons(DrawableProto.newBuilder().setIcon(
-                                                         Icon.PROGRESSBAR_DEFAULT_INITIAL_STEP))
-                                                 .addStepIcons(DrawableProto.newBuilder().setIcon(
-                                                         Icon.PROGRESSBAR_DEFAULT_DATA_COLLECTION))
-                                                 .addStepIcons(DrawableProto.newBuilder().setIcon(
-                                                         Icon.PROGRESSBAR_DEFAULT_PAYMENT))
-                                                 .addStepIcons(DrawableProto.newBuilder().setIcon(
-                                                         Icon.PROGRESSBAR_DEFAULT_FINAL_STEP))))
+                                         getDefaultStepProgressBarConfiguration()))
                          .build());
         list.add((ActionProto) ActionProto.newBuilder()
                          .setPrompt(PromptProto.newBuilder()
@@ -167,16 +181,7 @@ public class AutofillAssistantProgressBarIntegrationTest {
         list.add((ActionProto) ActionProto.newBuilder()
                          .setShowProgressBar(
                                  ShowProgressBarProto.newBuilder().setStepProgressBarConfiguration(
-                                         StepProgressBarConfiguration.newBuilder()
-                                                 .setUseStepProgressBar(true)
-                                                 .addStepIcons(DrawableProto.newBuilder().setIcon(
-                                                         Icon.PROGRESSBAR_DEFAULT_INITIAL_STEP))
-                                                 .addStepIcons(DrawableProto.newBuilder().setIcon(
-                                                         Icon.PROGRESSBAR_DEFAULT_DATA_COLLECTION))
-                                                 .addStepIcons(DrawableProto.newBuilder().setIcon(
-                                                         Icon.PROGRESSBAR_DEFAULT_PAYMENT))
-                                                 .addStepIcons(DrawableProto.newBuilder().setIcon(
-                                                         Icon.PROGRESSBAR_DEFAULT_FINAL_STEP))))
+                                         getDefaultStepProgressBarConfiguration()))
                          .build());
         list.add((ActionProto) ActionProto.newBuilder()
                          .setPrompt(PromptProto.newBuilder()
@@ -184,9 +189,11 @@ public class AutofillAssistantProgressBarIntegrationTest {
                                             .addChoices(Choice.newBuilder().setChip(
                                                     ChipProto.newBuilder().setText("Next"))))
                          .build());
-        list.add((ActionProto) ActionProto.newBuilder()
-                         .setShowProgressBar(ShowProgressBarProto.newBuilder().setActiveStep(1))
-                         .build());
+        list.add(
+                (ActionProto) ActionProto.newBuilder()
+                        .setShowProgressBar(
+                                ShowProgressBarProto.newBuilder().setActiveStepIdentifier("icon_2"))
+                        .build());
         list.add((ActionProto) ActionProto.newBuilder()
                          .setPrompt(PromptProto.newBuilder()
                                             .setMessage("Next Step")
@@ -258,16 +265,7 @@ public class AutofillAssistantProgressBarIntegrationTest {
         list.add((ActionProto) ActionProto.newBuilder()
                          .setShowProgressBar(
                                  ShowProgressBarProto.newBuilder().setStepProgressBarConfiguration(
-                                         StepProgressBarConfiguration.newBuilder()
-                                                 .setUseStepProgressBar(true)
-                                                 .addStepIcons(DrawableProto.newBuilder().setIcon(
-                                                         Icon.PROGRESSBAR_DEFAULT_INITIAL_STEP))
-                                                 .addStepIcons(DrawableProto.newBuilder().setIcon(
-                                                         Icon.PROGRESSBAR_DEFAULT_DATA_COLLECTION))
-                                                 .addStepIcons(DrawableProto.newBuilder().setIcon(
-                                                         Icon.PROGRESSBAR_DEFAULT_PAYMENT))
-                                                 .addStepIcons(DrawableProto.newBuilder().setIcon(
-                                                         Icon.PROGRESSBAR_DEFAULT_FINAL_STEP))))
+                                         getDefaultStepProgressBarConfiguration()))
                          .build());
         list.add((ActionProto) ActionProto.newBuilder()
                          .setPrompt(PromptProto.newBuilder()
@@ -350,21 +348,80 @@ public class AutofillAssistantProgressBarIntegrationTest {
 
     @Test
     @MediumTest
+    public void testStepProgressBarErrorOnlyAction() {
+        ArrayList<ActionProto> list = new ArrayList<>();
+        list.add((ActionProto) ActionProto.newBuilder()
+                         .setShowProgressBar(
+                                 ShowProgressBarProto.newBuilder().setStepProgressBarConfiguration(
+                                         getDefaultStepProgressBarConfiguration()))
+                         .build());
+        list.add((ActionProto) ActionProto.newBuilder()
+                         .setPrompt(PromptProto.newBuilder()
+                                            .setMessage("Initial Step")
+                                            .addChoices(Choice.newBuilder().setChip(
+                                                    ChipProto.newBuilder().setText("Next"))))
+                         .build());
+        list.add((ActionProto) ActionProto.newBuilder()
+                         .setShowProgressBar(ShowProgressBarProto.newBuilder().setActiveStep(3))
+                         .build());
+        list.add((ActionProto) ActionProto.newBuilder()
+                         .setShowProgressBar(ShowProgressBarProto.newBuilder().setErrorState(true))
+                         .build());
+        list.add((ActionProto) ActionProto.newBuilder()
+                         .setPrompt(PromptProto.newBuilder()
+                                            .setMessage("Error State")
+                                            .addChoices(Choice.newBuilder().setChip(
+                                                    ChipProto.newBuilder().setText("Next"))))
+                         .build());
+
+        AutofillAssistantTestScript script = new AutofillAssistantTestScript(
+                (SupportedScriptProto) SupportedScriptProto.newBuilder()
+                        .setPath("form_target_website.html")
+                        .setPresentation(PresentationProto.newBuilder().setAutostart(true).setChip(
+                                ChipProto.newBuilder().setText("Autostart")))
+                        .build(),
+                list);
+        runScript(script);
+
+        waitUntilViewMatchesCondition(withText("Initial Step"), isCompletelyDisplayed());
+        for (int i = 0; i < 4; ++i) {
+            onView(withTagValue(is(String.format(
+                           Locale.getDefault(), AssistantTagsForTesting.PROGRESSBAR_ICON_TAG, i))))
+                    .check(matches(isDisplayed()));
+            onView(allOf(isDescendantOfA(withTagValue(is(String.format(Locale.getDefault(),
+                                 AssistantTagsForTesting.PROGRESSBAR_ICON_TAG, i)))),
+                           withClassName(is(ChromeImageView.class.getName()))))
+                    .check(matches(allOf(
+                            not(isEnabled()), hasTintColor(R.color.modern_grey_800_alpha_38))));
+        }
+        for (int i = 0; i < 3; ++i) {
+            onView(withTagValue(is(String.format(
+                           Locale.getDefault(), AssistantTagsForTesting.PROGRESSBAR_LINE_TAG, i))))
+                    .check(matches(isDisplayed()));
+        }
+        onView(withText("Next")).perform(click());
+
+        waitUntilViewMatchesCondition(withText("Error State"), isCompletelyDisplayed());
+        for (int i = 0; i < 3; ++i) {
+            onView(allOf(isDescendantOfA(withTagValue(is(String.format(Locale.getDefault(),
+                                 AssistantTagsForTesting.PROGRESSBAR_ICON_TAG, i)))),
+                           withClassName(is(ChromeImageView.class.getName()))))
+                    .check(matches(allOf(isEnabled(), hasTintColor(R.color.modern_blue_600))));
+        }
+        onView(allOf(isDescendantOfA(withTagValue(is(String.format(Locale.getDefault(),
+                             AssistantTagsForTesting.PROGRESSBAR_ICON_TAG, 3)))),
+                       withClassName(is(ChromeImageView.class.getName()))))
+                .check(matches(allOf(not(isEnabled()), hasTintColor(R.color.default_red))));
+    }
+
+    @Test
+    @MediumTest
     public void testStepProgressBarErrorAfterCompletion() {
         ArrayList<ActionProto> list = new ArrayList<>();
         list.add((ActionProto) ActionProto.newBuilder()
                          .setShowProgressBar(
                                  ShowProgressBarProto.newBuilder().setStepProgressBarConfiguration(
-                                         StepProgressBarConfiguration.newBuilder()
-                                                 .setUseStepProgressBar(true)
-                                                 .addStepIcons(DrawableProto.newBuilder().setIcon(
-                                                         Icon.PROGRESSBAR_DEFAULT_INITIAL_STEP))
-                                                 .addStepIcons(DrawableProto.newBuilder().setIcon(
-                                                         Icon.PROGRESSBAR_DEFAULT_DATA_COLLECTION))
-                                                 .addStepIcons(DrawableProto.newBuilder().setIcon(
-                                                         Icon.PROGRESSBAR_DEFAULT_PAYMENT))
-                                                 .addStepIcons(DrawableProto.newBuilder().setIcon(
-                                                         Icon.PROGRESSBAR_DEFAULT_FINAL_STEP))))
+                                         getDefaultStepProgressBarConfiguration()))
                          .build());
         list.add((ActionProto) ActionProto.newBuilder()
                          .setPrompt(PromptProto.newBuilder()
@@ -472,16 +529,7 @@ public class AutofillAssistantProgressBarIntegrationTest {
         list.add((ActionProto) ActionProto.newBuilder()
                          .setShowProgressBar(
                                  ShowProgressBarProto.newBuilder().setStepProgressBarConfiguration(
-                                         StepProgressBarConfiguration.newBuilder()
-                                                 .setUseStepProgressBar(true)
-                                                 .addStepIcons(DrawableProto.newBuilder().setIcon(
-                                                         Icon.PROGRESSBAR_DEFAULT_INITIAL_STEP))
-                                                 .addStepIcons(DrawableProto.newBuilder().setIcon(
-                                                         Icon.PROGRESSBAR_DEFAULT_DATA_COLLECTION))
-                                                 .addStepIcons(DrawableProto.newBuilder().setIcon(
-                                                         Icon.PROGRESSBAR_DEFAULT_PAYMENT))
-                                                 .addStepIcons(DrawableProto.newBuilder().setIcon(
-                                                         Icon.PROGRESSBAR_DEFAULT_FINAL_STEP))))
+                                         getDefaultStepProgressBarConfiguration()))
                          .build());
         list.add((ActionProto) ActionProto.newBuilder()
                          .setPrompt(PromptProto.newBuilder().setMessage("Updated").addChoices(

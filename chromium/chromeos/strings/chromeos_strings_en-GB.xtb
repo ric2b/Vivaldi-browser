@@ -5,6 +5,7 @@
 <translation id="1195447618553298278">Unknown error.</translation>
 <translation id="1413240736185167732">Failed – Filter failed</translation>
 <translation id="1468664791493211953">Offers</translation>
+<translation id="1478594628797167447">Scanner</translation>
 <translation id="1482734542997480527"><ph name="ENROLLMENT_DOMAIN" /> manages this device and may be able to monitor your activity.</translation>
 <translation id="150962533380566081">Invalid PUK.</translation>
 <translation id="1510238584712386396">Launcher</translation>
@@ -19,10 +20,12 @@
 <translation id="2161394479394250669">Cancel print job</translation>
 <translation id="2338501278241028356">Turn on Bluetooth to discover nearby devices</translation>
 <translation id="2375079107209812402"><ph name="ATTEMPTS_LEFT" /> attempts left</translation>
+<translation id="2517472476991765520">Scan</translation>
 <translation id="2805756323405976993">Apps</translation>
 <translation id="2872961005593481000">Shut down</translation>
 <translation id="3008341117444806826">REFRESH</translation>
 <translation id="3091839911843451378">Failed – Stopped</translation>
+<translation id="3246869037381808805">Print jobs older than 1 day will be removed</translation>
 <translation id="3268178239013324452">Failed – Door open</translation>
 <translation id="3369013195428705271">Are you sure you want to clear all print history? Your ongoing print jobs will not be cleared.</translation>
 <translation id="3456078764689556234">Printed page <ph name="PRINTED_PAGES" /> out of <ph name="TOTAL_PAGES" />.</translation>
@@ -33,13 +36,13 @@
 <translation id="38114475217616659">Clear all history</translation>
 <translation id="3820172043799983114">Invalid PIN.</translation>
 <translation id="3838338534323494292">New password</translation>
+<translation id="39823212440917567">Print jobs older than <ph name="NUMBER_OF_DAYS" /> days will be removed</translation>
 <translation id="4003259559679196451"><ph name="ENROLLMENT_DOMAIN" /> manages this device and has access to all user activity, including web pages visited, passwords and email.</translation>
 <translation id="4003384961948020559">Failed – Output full</translation>
 <translation id="4027485274696301677">This <ph name="DEVICE_TYPE" /> is managed by <ph name="ENROLLMENT_DOMAIN" />. Administrators may remotely configure the device.</translation>
 <translation id="4034824040120875894">Printer</translation>
 <translation id="4227825898293920515">Password expires in <ph name="TIME" /></translation>
 <translation id="4238516577297848345">No print jobs in progress</translation>
-<translation id="428217921675623177">Print jobs older than 90 days will be removed</translation>
 <translation id="4297501883039923494">Stopped – unknown error</translation>
 <translation id="4429881212383817840">Kerberos ticket expires soon</translation>
 <translation id="445059817448385655">Old password</translation>
@@ -52,6 +55,7 @@
 <translation id="4890353053343094602">Choose a new one immediately</translation>
 <translation id="4917889632206600977">Stopped – out of paper</translation>
 <translation id="4932733599132424254">Date</translation>
+<translation id="520299634122159966">No available scanners</translation>
 <translation id="5212543919916444558">I can't find anything on your screen that I can help with.
 Try tapping the mic to ask me anything.</translation>
 <translation id="5222676887888702881">Sign out</translation>
@@ -71,6 +75,7 @@ Try tapping the mic to ask me anything.</translation>
 <translation id="649050271426829538">Stopped – paper jam</translation>
 <translation id="6517239166834772319">Explore</translation>
 <translation id="6564646048574748301">Failed – Printer unreachable</translation>
+<translation id="6620487321149975369">Print jobs will appear in history unless they are removed manually</translation>
 <translation id="6643016212128521049">Clear</translation>
 <translation id="6747215703636344499">Stopped – output full</translation>
 <translation id="7162487448488904999">Gallery</translation>
@@ -81,7 +86,9 @@ Try tapping the mic to ask me anything.</translation>
 <translation id="7805768142964895445">Status</translation>
 <translation id="808894953321890993">Change password</translation>
 <translation id="8208861521865154048">Perks</translation>
+<translation id="8294431847097064396">Source</translation>
 <translation id="8347227221149377169">Print jobs</translation>
+<translation id="8352772353338965963">Add an account to multiple sign-in. All signed-in accounts can be accessed without a password, so this feature should only be used with trusted accounts.</translation>
 <translation id="8701136875688985581"><ph name="ENROLLMENT_DOMAIN" /> manages this user. It may remotely manage settings and monitor user activity.</translation>
 <translation id="871560550817059752">Failed – Out of ink</translation>
 <translation id="8726019395068607495">Stopped – door open</translation>

@@ -239,7 +239,10 @@ bool ElementInternals::HasState(const AtomicString& state) const {
 }
 
 ShadowRoot* ElementInternals::shadowRoot() const {
-  return Target().AuthorShadowRoot();
+  if (ShadowRoot* shadow_root = Target().AuthorShadowRoot()) {
+    return shadow_root->IsAvailableToElementInternals() ? shadow_root : nullptr;
+  }
+  return nullptr;
 }
 
 const AtomicString& ElementInternals::FastGetAttribute(
@@ -329,10 +332,11 @@ bool ElementInternals::IsTargetFormAssociated() const {
   if (Target().IsFormAssociatedCustomElement())
     return true;
   // Custom element could be in the process of upgrading here, during which
-  // it will have state kFailed according to:
+  // it will have state kFailed or kPreCustomized according to:
   // https://html.spec.whatwg.org/multipage/custom-elements.html#upgrades
   if (Target().GetCustomElementState() != CustomElementState::kUndefined &&
-      Target().GetCustomElementState() != CustomElementState::kFailed) {
+      Target().GetCustomElementState() != CustomElementState::kFailed &&
+      Target().GetCustomElementState() != CustomElementState::kPreCustomized) {
     return false;
   }
   // An element is in "undefined" state in its constructor JavaScript code.

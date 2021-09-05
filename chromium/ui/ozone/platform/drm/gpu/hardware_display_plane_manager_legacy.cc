@@ -20,7 +20,6 @@
 #include "ui/ozone/platform/drm/gpu/drm_device.h"
 #include "ui/ozone/platform/drm/gpu/drm_framebuffer.h"
 #include "ui/ozone/platform/drm/gpu/hardware_display_plane.h"
-#include "ui/ozone/platform/drm/gpu/hardware_display_plane_dummy.h"
 #include "ui/ozone/platform/drm/gpu/page_flip_request.h"
 
 namespace ui {
@@ -47,25 +46,43 @@ HardwareDisplayPlaneManagerLegacy::HardwareDisplayPlaneManagerLegacy(
 HardwareDisplayPlaneManagerLegacy::~HardwareDisplayPlaneManagerLegacy() =
     default;
 
-bool HardwareDisplayPlaneManagerLegacy::Modeset(
-    uint32_t crtc_id,
-    uint32_t framebuffer_id,
-    uint32_t connector_id,
-    const drmModeModeInfo& mode,
-    const HardwareDisplayPlaneList&) {
-  return drm_->SetCrtc(crtc_id, framebuffer_id,
-                       std::vector<uint32_t>(1, connector_id), mode);
-}
+bool HardwareDisplayPlaneManagerLegacy::Commit(CommitRequest commit_request,
+                                               uint32_t flags) {
+  if (flags & DRM_MODE_ATOMIC_TEST_ONLY)
+    // Legacy DRM does not support testing.
+    return true;
 
-bool HardwareDisplayPlaneManagerLegacy::DisableModeset(uint32_t crtc_id,
-                                                       uint32_t connector) {
-  return drm_->DisableCrtc(crtc_id);
+  bool status = true;
+  for (const auto& crtc_request : commit_request) {
+    if (crtc_request.should_enable()) {
+      // Overlays are not supported in legacy hence why we're only looking at
+      // the primary plane.
+      uint32_t fb_id = DrmOverlayPlane::GetPrimaryPlane(crtc_request.overlays())
+                           ->buffer->opaque_framebuffer_id();
+      status &=
+          drm_->SetCrtc(crtc_request.crtc_id(), fb_id,
+                        std::vector<uint32_t>(1, crtc_request.connector_id()),
+                        crtc_request.mode());
+    } else {
+      drm_->DisableCrtc(crtc_request.crtc_id());
+    }
+  }
+
+  if (status)
+    UpdateCrtcAndPlaneStatesAfterModeset(commit_request);
+
+  return status;
 }
 
 bool HardwareDisplayPlaneManagerLegacy::Commit(
     HardwareDisplayPlaneList* plane_list,
+    bool should_modeset,
     scoped_refptr<PageFlipRequest> page_flip_request,
     std::unique_ptr<gfx::GpuFence>* out_fence) {
+  // Legacy Modeset should not call Commit. Ensure the separation between both
+  // Atomic and Legacy and nothing trickles in.
+  DCHECK(!should_modeset);
+
   bool test_only = !page_flip_request;
   if (test_only) {
     for (HardwareDisplayPlane* plane : plane_list->plane_list) {
@@ -114,7 +131,7 @@ bool HardwareDisplayPlaneManagerLegacy::DisableOverlayPlanes(
   DCHECK(std::find_if(plane_list->old_plane_list.begin(),
                       plane_list->old_plane_list.end(),
                       [](HardwareDisplayPlane* plane) {
-                        return plane->type() == HardwareDisplayPlane::kOverlay;
+                        return plane->type() == DRM_PLANE_TYPE_OVERLAY;
                       }) == plane_list->old_plane_list.end());
   return true;
 }
@@ -161,29 +178,10 @@ bool HardwareDisplayPlaneManagerLegacy::InitializePlanes() {
 
     // Overlays are not supported on the legacy path, so ignore all overlay
     // planes.
-    if (plane->type() == HardwareDisplayPlane::kOverlay)
+    if (plane->type() == DRM_PLANE_TYPE_OVERLAY)
       continue;
 
     planes_.push_back(std::move(plane));
-  }
-
-  // https://crbug.com/464085: if driver reports no primary planes for a crtc,
-  // create a dummy plane for which we can assign exactly one overlay.
-  if (!has_universal_planes_) {
-    for (size_t i = 0; i < crtc_state_.size(); ++i) {
-      uint32_t id = crtc_state_[i].properties.id - 1;
-      if (std::find_if(
-              planes_.begin(), planes_.end(),
-              [id](const std::unique_ptr<HardwareDisplayPlane>& plane) {
-                return plane->id() == id;
-              }) == planes_.end()) {
-        std::unique_ptr<HardwareDisplayPlane> dummy_plane(
-            new HardwareDisplayPlaneDummy(id, 1 << i));
-        if (dummy_plane->Initialize(drm_)) {
-          planes_.push_back(std::move(dummy_plane));
-        }
-      }
-    }
   }
 
   return true;
@@ -201,9 +199,8 @@ bool HardwareDisplayPlaneManagerLegacy::SetPlaneData(
 
   if (plane_list->legacy_page_flips.empty() ||
       plane_list->legacy_page_flips.back().crtc_id != crtc_id) {
-    plane_list->legacy_page_flips.push_back(
-        HardwareDisplayPlaneList::PageFlipInfo(
-            crtc_id, overlay.buffer->opaque_framebuffer_id()));
+    plane_list->legacy_page_flips.emplace_back(
+        crtc_id, overlay.buffer->opaque_framebuffer_id());
   } else {
     return false;
   }
@@ -215,7 +212,7 @@ bool HardwareDisplayPlaneManagerLegacy::IsCompatible(
     HardwareDisplayPlane* plane,
     const DrmOverlayPlane& overlay,
     uint32_t crtc_index) const {
-  if (plane->type() == HardwareDisplayPlane::kCursor ||
+  if (plane->type() == DRM_PLANE_TYPE_CURSOR ||
       !plane->CanUseForCrtc(crtc_index))
     return false;
 

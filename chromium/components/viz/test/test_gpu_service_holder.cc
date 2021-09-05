@@ -148,16 +148,9 @@ TestGpuServiceHolder::TestGpuServiceHolder(
   base::Thread::Options gpu_thread_options;
 #if defined(USE_OZONE)
   if (features::IsUsingOzonePlatform()) {
-    base::MessagePumpType message_pump_type_for_gpu =
-        ui::OzonePlatform::GetInstance()
-            ->GetPlatformProperties()
-            .message_pump_type_for_gpu;
-    // X11 platform uses UI thread for GPU main, but 2 UI threads is
-    // causing crashes in linux-ozone-rel.
-    // TODO(crbug.com/1078392): Investigate and fix.
-    if (message_pump_type_for_gpu != base::MessagePumpType::UI) {
-      gpu_thread_options.message_pump_type = message_pump_type_for_gpu;
-    }
+    gpu_thread_options.message_pump_type = ui::OzonePlatform::GetInstance()
+                                               ->GetPlatformProperties()
+                                               .message_pump_type_for_gpu;
   }
 #endif
 
@@ -229,7 +222,7 @@ void TestGpuServiceHolder::InitializeOnGpuThread(
 #endif
   }
 
-  // Always enable gpu and oop raster, regardless of platform and blacklist.
+  // Always enable gpu and oop raster, regardless of platform and blocklist.
   // The latter instructs GpuChannelManager::GetSharedContextState to create a
   // GrContext, which is required by SkiaRenderer as well as OOP-R.
   gpu::GPUInfo gpu_info;

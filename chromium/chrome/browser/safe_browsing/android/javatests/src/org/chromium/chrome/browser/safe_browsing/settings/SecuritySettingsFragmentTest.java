@@ -37,8 +37,8 @@ import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.components.browser_ui.settings.TextMessagePreference;
 import org.chromium.components.browser_ui.widget.RadioButtonWithDescription;
 import org.chromium.components.browser_ui.widget.RadioButtonWithDescriptionAndAuxButton;
+import org.chromium.components.policy.test.annotations.Policies;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
-import org.chromium.policy.test.annotations.Policies;
 
 /**
  * Tests for {@link SecuritySettingsFragment}.
@@ -300,6 +300,55 @@ public class SecuritySettingsFragmentTest {
             // To disclose information, aux buttons should be enabled under managed mode.
             Assert.assertTrue(getEnhancedProtectionButton().getAuxButtonForTests().isEnabled());
             Assert.assertTrue(getStandardProtectionButton().getAuxButtonForTests().isEnabled());
+        });
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"SafeBrowsing"})
+    @Features.EnableFeatures(ChromeFeatureList.SAFE_BROWSING_ENHANCED_PROTECTION_ENABLED)
+    @Policies.Add({ @Policies.Item(key = "SafeBrowsingProtectionLevel", string = "2") })
+    public void testSafeBrowsingProtectionLevelManagedEnhanced() {
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> { ChromeBrowserInitializer.getInstance().handleSynchronousStartup(); });
+        launchSettingsActivity();
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            Assert.assertTrue(SafeBrowsingBridge.isSafeBrowsingManaged());
+            Assert.assertTrue(mManagedTextPreference.isVisible());
+            Assert.assertFalse(getEnhancedProtectionButton().isEnabled());
+            Assert.assertFalse(getStandardProtectionButton().isEnabled());
+            Assert.assertFalse(getNoProtectionButton().isEnabled());
+            Assert.assertEquals(SafeBrowsingState.ENHANCED_PROTECTION, getSafeBrowsingState());
+        });
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"SafeBrowsing"})
+    @Features.EnableFeatures(ChromeFeatureList.SAFE_BROWSING_ENHANCED_PROTECTION_ENABLED)
+    @Policies.Add({ @Policies.Item(key = "SafeBrowsingProtectionLevel", string = "1") })
+    public void testSafeBrowsingProtectionLevelManagedStandard() {
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> { ChromeBrowserInitializer.getInstance().handleSynchronousStartup(); });
+        launchSettingsActivity();
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            Assert.assertTrue(SafeBrowsingBridge.isSafeBrowsingManaged());
+            Assert.assertEquals(SafeBrowsingState.STANDARD_PROTECTION, getSafeBrowsingState());
+        });
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"SafeBrowsing"})
+    @Features.EnableFeatures(ChromeFeatureList.SAFE_BROWSING_ENHANCED_PROTECTION_ENABLED)
+    @Policies.Add({ @Policies.Item(key = "SafeBrowsingProtectionLevel", string = "0") })
+    public void testSafeBrowsingProtectionLevelManagedDisabled() {
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> { ChromeBrowserInitializer.getInstance().handleSynchronousStartup(); });
+        launchSettingsActivity();
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            Assert.assertTrue(SafeBrowsingBridge.isSafeBrowsingManaged());
+            Assert.assertEquals(SafeBrowsingState.NO_SAFE_BROWSING, getSafeBrowsingState());
         });
     }
 

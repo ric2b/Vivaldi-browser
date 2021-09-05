@@ -31,6 +31,8 @@ content::WebUIDataSource* CreateGameUIDataSource() {
   html_source->OverrideContentSecurityPolicy(
       network::mojom::CSPDirectiveName::WorkerSrc, "worker-src chrome://game;");
 
+  html_source->DisableTrustedTypesCSP();
+
   return html_source;
 }
 

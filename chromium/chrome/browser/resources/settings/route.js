@@ -45,11 +45,9 @@ function addPrivacyChildRoutes(r) {
   r.SITE_SETTINGS_SITE_DATA = r.COOKIES.createChild('/siteData');
   r.SITE_SETTINGS_DATA_DETAILS =
       r.SITE_SETTINGS_SITE_DATA.createChild('/cookies/detail');
+  r.SITE_SETTINGS_IDLE_DETECTION = r.SITE_SETTINGS.createChild('idleDetection');
   r.SITE_SETTINGS_IMAGES = r.SITE_SETTINGS.createChild('images');
-  if (loadTimeData.getBoolean('enableInsecureContentContentSetting')) {
-    r.SITE_SETTINGS_MIXEDSCRIPT =
-        r.SITE_SETTINGS.createChild('insecureContent');
-  }
+  r.SITE_SETTINGS_MIXEDSCRIPT = r.SITE_SETTINGS.createChild('insecureContent');
   r.SITE_SETTINGS_JAVASCRIPT = r.SITE_SETTINGS.createChild('javascript');
   r.SITE_SETTINGS_SOUND = r.SITE_SETTINGS.createChild('sound');
   r.SITE_SETTINGS_SENSORS = r.SITE_SETTINGS.createChild('sensors');
@@ -83,10 +81,7 @@ function addPrivacyChildRoutes(r) {
     r.SITE_SETTINGS_WINDOW_PLACEMENT =
         r.SITE_SETTINGS.createChild('windowPlacement');
   }
-  if (loadTimeData.getBoolean('enableFileSystemWriteContentSetting')) {
-    r.SITE_SETTINGS_FILE_SYSTEM_WRITE =
-        r.SITE_SETTINGS.createChild('filesystem');
-  }
+  r.SITE_SETTINGS_FILE_SYSTEM_WRITE = r.SITE_SETTINGS.createChild('filesystem');
   if (loadTimeData.getBoolean('enableFontAccessContentSetting')) {
     r.SITE_SETTINGS_FONT_ACCESS = r.SITE_SETTINGS.createChild('fontAccess');
   }
@@ -132,13 +127,10 @@ function createBrowserSettingsRoutes() {
   if (visibility.autofill !== false) {
     r.AUTOFILL = r.BASIC.createSection('/autofill', 'autofill');
     r.PASSWORDS = r.AUTOFILL.createChild('/passwords');
+    r.CHECK_PASSWORDS = r.PASSWORDS.createChild('check');
 
     if (loadTimeData.getBoolean('enableAccountStorage')) {
       r.DEVICE_PASSWORDS = r.PASSWORDS.createChild('device');
-    }
-
-    if (loadTimeData.getBoolean('enablePasswordCheck')) {
-      r.CHECK_PASSWORDS = r.PASSWORDS.createChild('check');
     }
 
     r.PAYMENTS = r.AUTOFILL.createChild('/payments');

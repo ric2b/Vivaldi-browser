@@ -18,6 +18,7 @@
 #include "components/autofill/core/browser/autofill_data_util.h"
 #include "components/autofill/core/browser/autofill_field.h"
 #include "components/autofill/core/browser/autofill_type.h"
+#include "components/autofill/core/browser/data_model/autofill_offer_data.h"
 #include "components/autofill/core/browser/data_model/credit_card.h"
 #include "components/autofill/core/browser/form_structure.h"
 #include "components/autofill/core/browser/form_types.h"
@@ -25,6 +26,7 @@
 #include "components/autofill/core/common/autofill_prefs.h"
 #include "components/autofill/core/common/autofill_tick_clock.h"
 #include "components/autofill/core/common/form_data.h"
+#include "components/language_usage_metrics/language_usage_metrics.h"
 #include "services/metrics/public/cpp/metrics_utils.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 
@@ -1800,6 +1802,26 @@ void AutofillMetrics::LogStoredCreditCardMetrics(
 }
 
 // static
+void AutofillMetrics::LogStoredOfferMetrics(
+    const std::vector<std::unique_ptr<AutofillOfferData>>& offers) {
+  base::UmaHistogramCounts1000("Autofill.Offer.StoredOfferCount",
+                               offers.size());
+
+  for (const std::unique_ptr<AutofillOfferData>& offer : offers) {
+    base::UmaHistogramCounts1000(
+        "Autofill.Offer.StoredOfferRelatedMerchantCount",
+        offer->merchant_domain.size());
+    base::UmaHistogramCounts1000("Autofill.Offer.StoredOfferRelatedCardCount",
+                                 offer->eligible_instrument_id.size());
+  }
+}
+
+// static
+void AutofillMetrics::LogSyncedOfferDataBeingValid(bool valid) {
+  base::UmaHistogramBoolean("Autofill.Offer.SyncedOfferDataBeingValid", valid);
+}
+
+// static
 void AutofillMetrics::LogNumberOfCreditCardsSuppressedForDisuse(
     size_t num_cards) {
   UMA_HISTOGRAM_COUNTS_1000("Autofill.CreditCardsSuppressedForDisuse",
@@ -2446,6 +2468,20 @@ void AutofillMetrics::
 void AutofillMetrics::LogAddressFormImportStatustMetric(
     AutofillMetrics::AddressProfileImportStatusMetric metric) {
   base::UmaHistogramEnumeration("Autofill.AddressProfileImportStatus", metric);
+}
+
+// static
+void AutofillMetrics::LogFieldParsingPageTranslationStatusMetric(bool metric) {
+  base::UmaHistogramBoolean("Autofill.ParsedFieldTypesWasPageTranslated",
+                            metric);
+}
+
+// static
+void AutofillMetrics::LogFieldParsingTranslatedFormLanguageMetric(
+    base::StringPiece locale) {
+  base::UmaHistogramSparse(
+      "Autofill.ParsedFieldTypesUsingTranslatedPageLanguage",
+      language_usage_metrics::LanguageUsageMetrics::ToLanguageCode(locale));
 }
 
 // static

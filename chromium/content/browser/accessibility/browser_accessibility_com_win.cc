@@ -1602,6 +1602,9 @@ LONG BrowserAccessibilityComWin::FindStartOfStyle(
   DCHECK_LE(start_offset, text_length);
 
   switch (direction) {
+    case ax::mojom::MoveDirection::kNone:
+      NOTREACHED();
+      return start_offset;
     case ax::mojom::MoveDirection::kBackward: {
       if (offset_to_text_attributes().empty())
         return 0;
@@ -1628,26 +1631,6 @@ BrowserAccessibilityComWin* BrowserAccessibilityComWin::GetFromID(
   if (!owner())
     return nullptr;
   return ToBrowserAccessibilityComWin(Manager()->GetFromID(id));
-}
-
-bool BrowserAccessibilityComWin::IsListBoxOptionOrMenuListOption() {
-  if (!owner()->PlatformGetParent())
-    return false;
-
-  ax::mojom::Role role = owner()->GetRole();
-  ax::mojom::Role parent_role = owner()->PlatformGetParent()->GetRole();
-
-  if (role == ax::mojom::Role::kListBoxOption &&
-      parent_role == ax::mojom::Role::kListBox) {
-    return true;
-  }
-
-  if (role == ax::mojom::Role::kMenuListOption &&
-      parent_role == ax::mojom::Role::kMenuListPopup) {
-    return true;
-  }
-
-  return false;
 }
 
 void BrowserAccessibilityComWin::FireNativeEvent(LONG win_event_type) const {

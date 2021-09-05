@@ -39,6 +39,8 @@
 #include "extensions/browser/event_router_factory.h"
 #include "extensions/browser/extension_message_filter.h"
 #include "extensions/browser/extension_prefs_factory.h"
+#include "extensions/browser/extension_protocols.h"
+#include "extensions/browser/guest_view/extensions_guest_view_message_filter.h"
 #include "extensions/browser/process_manager_factory.h"
 #include "extensions/browser/renderer_startup_helper.h"
 #include "extensions/browser/updater/update_service_factory.h"
@@ -82,8 +84,10 @@ void EnsureBrowserContextKeyedServiceFactoriesBuilt() {
   declarative_net_request::RulesMonitorService::GetFactoryInstance();
   DeclarativeUserScriptManagerFactory::GetInstance();
   DisplaySourceEventRouterFactory::GetInstance();
+  EnsureExtensionURLLoaderFactoryShutdownNotifierFactoryBuilt();
   EventRouterFactory::GetInstance();
   ExtensionMessageFilter::EnsureShutdownNotifierFactoryBuilt();
+  ExtensionsGuestViewMessageFilter::EnsureShutdownNotifierFactoryBuilt();
   ExtensionPrefsFactory::GetInstance();
   FeedbackPrivateAPI::GetFactoryInstance();
   HidDeviceManager::GetFactoryInstance();

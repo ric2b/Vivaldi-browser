@@ -40,6 +40,7 @@ class BrowserLiveTabContext : public sessions::LiveTabContext {
   int GetSelectedIndex() const override;
   std::string GetExtData() const override;
   std::string GetAppName() const override;
+  std::string GetUserTitle() const override;
   sessions::LiveTab* GetLiveTabAt(int index) const override;
   sessions::LiveTab* GetActiveLiveTab() const override;
   bool IsTabPinned(int index) const override;
@@ -84,6 +85,7 @@ class BrowserLiveTabContext : public sessions::LiveTabContext {
                                           const gfx::Rect& bounds,
                                           ui::WindowShowState show_state,
                                           const std::string& workspace,
+                                          const std::string& user_title,
                                           const std::string& ext_data);
 
   // see browser::FindBrowserForWebContents

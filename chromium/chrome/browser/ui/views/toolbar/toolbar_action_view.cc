@@ -14,7 +14,6 @@
 #include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/toolbar/toolbar_action_view_controller.h"
-#include "chrome/browser/ui/toolbar/toolbar_actions_bar.h"
 #include "chrome/browser/ui/view_ids.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/extensions/extension_context_menu_controller.h"
@@ -59,9 +58,9 @@ ToolbarActionView::ToolbarActionView(
     ToolbarActionView::Delegate* delegate)
     : MenuButton(this), view_controller_(view_controller), delegate_(delegate) {
   SetInkDropMode(InkDropMode::ON);
-  set_has_ink_drop_action_on_click(true);
-  set_hide_ink_drop_when_showing_context_menu(false);
-  set_show_ink_drop_when_hot_tracked(true);
+  SetHasInkDropActionOnClick(true);
+  SetHideInkDropWhenShowingContextMenu(false);
+  SetShowInkDropWhenHotTracked(true);
   SetID(VIEW_ID_BROWSER_ACTION);
   view_controller_->SetDelegate(this);
   SetHorizontalAlignment(gfx::ALIGN_CENTER);
@@ -78,7 +77,7 @@ ToolbarActionView::ToolbarActionView(
 
   InstallToolbarButtonHighlightPathGenerator(this);
 
-  set_ink_drop_visible_opacity(kToolbarInkDropVisibleOpacity);
+  SetInkDropVisibleOpacity(kToolbarInkDropVisibleOpacity);
 
   UpdateState();
 }

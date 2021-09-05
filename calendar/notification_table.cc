@@ -141,6 +141,21 @@ void NotificationTable::FillNotificationRow(const sql::Statement& s,
   notification->delay = delay;
 }
 
+bool NotificationTable::GetNotificationRow(NotificationID notification_id,
+                                           NotificationRow* out_notification) {
+  sql::Statement statement(GetDB().GetCachedStatement(
+      SQL_FROM_HERE, "SELECT" CALENDAR_NOTIFICATION_ROW_FIELDS
+                     "FROM notifications WHERE id=?"));
+  statement.BindInt64(0, notification_id);
+
+  if (!statement.Step())
+    return false;
+
+  FillNotificationRow(statement, out_notification);
+
+  return true;
+}
+
 bool NotificationTable::DeleteNotification(NotificationID notification_id) {
   sql::Statement statement(GetDB().GetCachedStatement(
       SQL_FROM_HERE, "DELETE from notifications WHERE id=?"));
@@ -165,6 +180,20 @@ bool NotificationTable::DeleteNotificationsForEvent(EventID event_id) {
   sql::Statement statement(GetDB().GetCachedStatement(
       SQL_FROM_HERE, "DELETE from notifications WHERE event_id=?"));
   statement.BindInt64(0, event_id);
+
+  return statement.Run();
+}
+
+bool NotificationTable::DeleteNotificationsForCalendar(CalendarID calendar_id) {
+  sql::Statement statement(
+      GetDB().GetCachedStatement(SQL_FROM_HERE,
+                                 "DELETE from notifications \
+        WHERE event_id IN( \
+          select n.event_id from notifications n \
+            inner join events e on(e.id = n.event_id) \
+            where e.calendar_id = ?)"));
+
+  statement.BindInt64(0, calendar_id);
 
   return statement.Run();
 }

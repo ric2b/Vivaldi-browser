@@ -569,13 +569,13 @@ RenderWidgetTargetResult RenderWidgetHostInputEventRouter::FindViewAtLocation(
   float device_scale_factor = root_view->GetDeviceScaleFactor();
   DCHECK_GT(device_scale_factor, 0.0f);
   gfx::PointF point_in_pixels =
-      gfx::ConvertPointToPixel(device_scale_factor, point);
+      gfx::ConvertPointToPixels(point, device_scale_factor);
   viz::Target target = query->FindTargetForLocationStartingFrom(
       source, point_in_pixels, root_view->GetFrameSinkId());
   frame_sink_id = target.frame_sink_id;
   if (frame_sink_id.is_valid()) {
     *transformed_point =
-        gfx::ConvertPointToDIP(device_scale_factor, target.location_in_target);
+        gfx::ConvertPointToDips(target.location_in_target, device_scale_factor);
   } else {
     *transformed_point = point;
   }
@@ -605,11 +605,8 @@ void RenderWidgetHostInputEventRouter::RouteMouseEvent(
     RenderWidgetHostViewBase* root_view,
     blink::WebMouseEvent* event,
     const ui::LatencyInfo& latency) {
-  if (::vivaldi::IsVivaldiRunning()) {
-    VivaldiEventHooks* h = VivaldiEventHooks::FromRootView(root_view);
-    if (h && h->HandleMouseEvent(root_view, *event))
-      return;
-  }
+  if (VivaldiEventHooks::HandleMouseEvent(root_view, *event))
+    return;
   event_targeter_->FindTargetAndDispatch(root_view, *event, latency);
 }
 
@@ -690,11 +687,8 @@ void RenderWidgetHostInputEventRouter::RouteMouseWheelEvent(
     RenderWidgetHostViewBase* root_view,
     blink::WebMouseWheelEvent* event,
     const ui::LatencyInfo& latency) {
-  if (::vivaldi::IsVivaldiRunning()) {
-    VivaldiEventHooks* h = VivaldiEventHooks::FromRootView(root_view);
-    if (h && h->HandleWheelEvent(root_view, *event, latency))
-      return;
-  }
+  if (VivaldiEventHooks::HandleWheelEvent(root_view, *event, latency))
+    return;
   event_targeter_->FindTargetAndDispatch(root_view, *event, latency);
 }
 
@@ -744,22 +738,17 @@ void RenderWidgetHostInputEventRouter::DispatchMouseWheelEvent(
         mouse_wheel_event.PositionInWidget());
   }
   event.SetPositionInWidget(point_in_target.x(), point_in_target.y());
-  bool skip_process_call = false;
-  if (::vivaldi::IsVivaldiRunning() && target == root_view) {
-    VivaldiEventHooks* h = VivaldiEventHooks::FromRootView(root_view);
-    if (h &&
-        h->HandleWheelEventAfterChild(root_view, nullptr, mouse_wheel_event)) {
-      root_view->WheelEventAck(mouse_wheel_event,
-                               blink::mojom::InputEventResultState::kConsumed);
-      skip_process_call = true;
-    }
-  }
-  if (!skip_process_call) {
-    // clang-format off
-  target->ProcessMouseWheelEvent(event, latency);
-    // clang-format on
+
+  if (target == root_view && VivaldiEventHooks::HandleWheelEventAfterChild(
+                                 root_view, mouse_wheel_event)) {
+    root_view->WheelEventAck(mouse_wheel_event,
+                             blink::mojom::InputEventResultState::kConsumed);
+    goto vivaldi_after_process_event;
   }
 
+  target->ProcessMouseWheelEvent(event, latency);
+
+vivaldi_after_process_event:
   if (mouse_wheel_event.phase == blink::WebMouseWheelEvent::kPhaseEnded ||
       mouse_wheel_event.momentum_phase ==
           blink::WebMouseWheelEvent::kPhaseEnded) {

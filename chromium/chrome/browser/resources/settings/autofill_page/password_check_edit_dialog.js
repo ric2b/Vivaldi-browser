@@ -36,7 +36,7 @@ Polymer({
   properties: {
     /**
      * The password that the user is interacting with now.
-     * @type {?PasswordManagerProxy.CompromisedCredential}
+     * @type {?PasswordManagerProxy.InsecureCredential}
      */
     item: Object,
 
@@ -88,8 +88,7 @@ Polymer({
     this.passwordManager_.recordPasswordCheckInteraction(
         PasswordManagerProxy.PasswordCheckInteraction.EDIT_PASSWORD);
     this.passwordManager_
-        .changeCompromisedCredential(
-            assert(this.item), this.$.passwordInput.value)
+        .changeInsecureCredential(assert(this.item), this.$.passwordInput.value)
         .finally(() => {
           this.close();
         });

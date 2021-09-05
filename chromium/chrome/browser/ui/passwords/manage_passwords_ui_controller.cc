@@ -526,6 +526,7 @@ void ManagePasswordsUIController::SavePassword(const base::string16& username,
             username);
     post_save_compromised_helper_->AnalyzeLeakedCredentials(
         passwords_data_.client()->GetProfilePasswordStore(),
+        passwords_data_.client()->GetAccountPasswordStore(),
         Profile::FromBrowserContext(web_contents()->GetBrowserContext())
             ->GetPrefs(),
         base::Bind(
@@ -615,15 +616,8 @@ void ManagePasswordsUIController::NavigateToPasswordManagerAccountDashboard(
 
 void ManagePasswordsUIController::NavigateToPasswordCheckup(
     password_manager::PasswordCheckReferrer referrer) {
-  if (base::FeatureList::IsEnabled(
-          password_manager::features::kPasswordCheck)) {
-    chrome::ShowPasswordCheck(
-        chrome::FindBrowserWithWebContents(web_contents()));
-    password_manager::LogPasswordCheckReferrer(referrer);
-  } else {
-    NavigateToPasswordCheckupPage(
-        Profile::FromBrowserContext(web_contents()->GetBrowserContext()));
-  }
+  chrome::ShowPasswordCheck(chrome::FindBrowserWithWebContents(web_contents()));
+  password_manager::LogPasswordCheckReferrer(referrer);
 }
 
 void ManagePasswordsUIController::EnableSync(const AccountInfo& account,

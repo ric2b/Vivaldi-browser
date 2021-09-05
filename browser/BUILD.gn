@@ -82,10 +82,6 @@ static_library("browser") {
     ]
   }
   sources = [
-    "stats_reporter_impl_android.cc",
-    "stats_reporter_impl_linux.cc",
-    "stats_reporter_impl_mac.mm",
-    "stats_reporter_impl_win.cc",
     "stats_reporter_impl.cc",
     "stats_reporter_impl.h",
     "stats_reporter.cc",
@@ -95,6 +91,26 @@ static_library("browser") {
     "vivaldi_default_bookmarks.cc",
     "vivaldi_default_bookmarks.h",
   ]
+  if (is_android) {
+    sources += [
+      "stats_reporter_impl_android.cc",
+    ]
+  }
+  if (is_linux) {
+    sources += [
+      "stats_reporter_impl_linux.cc",
+    ]
+  }
+  if (is_mac) {
+    sources += [
+      "stats_reporter_impl_mac.mm",
+    ]
+  }
+  if (is_win) {
+    sources += [
+      "stats_reporter_impl_win.cc",
+    ]
+  }
   if (!is_android) {
     sources += [
       "../app/vivaldi_command_controller.cpp",

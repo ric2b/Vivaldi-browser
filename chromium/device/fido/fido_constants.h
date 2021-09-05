@@ -40,6 +40,10 @@ constexpr size_t kClientDataHashLength = 32;
 // https://www.w3.org/TR/webauthn/#sec-authenticator-data
 constexpr size_t kRpIdHashLength = 32;
 
+// Length of the key used to encrypt large blobs.
+// TODO(nsatragno): add a link to the spec once it's published.
+constexpr size_t kLargeBlobKeyLength = 32;
+
 // Max length for the user handle:
 // https://www.w3.org/TR/webauthn/#user-handle
 constexpr size_t kUserHandleMaxLength = 64;
@@ -84,7 +88,7 @@ enum class CtapDeviceResponseCode : uint8_t {
   kCtap2ErrLimitExceeded = 0x15,
   kCtap2ErrUnsupportedExtension = 0x16,
   kCtap2ErrTooManyElements = 0x17,
-  kCtap2ErrExtensionNotSupported = 0x18,
+  kCtap2ErrLargeBlobStorageFull = 0x18,
   kCtap2ErrCredentialExcluded = 0x19,
   kCtap2ErrProcesssing = 0x21,
   kCtap2ErrInvalidCredential = 0x22,
@@ -112,6 +116,8 @@ enum class CtapDeviceResponseCode : uint8_t {
   kCtap2ErrPinTokenExpired = 0x38,
   kCtap2ErrRequestTooLarge = 0x39,
   kCtap2ErrUvBlocked = 0x3C,
+  kCtap2ErrIntegrityFailure = 0x3D,
+  kCtap2ErrUvInvalid = 0x3F,
   kCtap2ErrOther = 0x7F,
   kCtap2ErrSpecLast = 0xDF,
   kCtap2ErrExtensionFirst = 0xE0,
@@ -120,57 +126,59 @@ enum class CtapDeviceResponseCode : uint8_t {
   kCtap2ErrVendorLast = 0xFF
 };
 
-constexpr std::array<CtapDeviceResponseCode, 49> GetCtapResponseCodeList() {
-  return {CtapDeviceResponseCode::kSuccess,
-          CtapDeviceResponseCode::kCtap1ErrInvalidCommand,
-          CtapDeviceResponseCode::kCtap1ErrInvalidParameter,
-          CtapDeviceResponseCode::kCtap1ErrInvalidLength,
-          CtapDeviceResponseCode::kCtap1ErrInvalidSeq,
-          CtapDeviceResponseCode::kCtap1ErrTimeout,
-          CtapDeviceResponseCode::kCtap1ErrChannelBusy,
-          CtapDeviceResponseCode::kCtap1ErrLockRequired,
-          CtapDeviceResponseCode::kCtap1ErrInvalidChannel,
-          CtapDeviceResponseCode::kCtap2ErrCBORUnexpectedType,
-          CtapDeviceResponseCode::kCtap2ErrInvalidCBOR,
-          CtapDeviceResponseCode::kCtap2ErrMissingParameter,
-          CtapDeviceResponseCode::kCtap2ErrLimitExceeded,
-          CtapDeviceResponseCode::kCtap2ErrUnsupportedExtension,
-          CtapDeviceResponseCode::kCtap2ErrTooManyElements,
-          CtapDeviceResponseCode::kCtap2ErrExtensionNotSupported,
-          CtapDeviceResponseCode::kCtap2ErrCredentialExcluded,
-          CtapDeviceResponseCode::kCtap2ErrProcesssing,
-          CtapDeviceResponseCode::kCtap2ErrInvalidCredential,
-          CtapDeviceResponseCode::kCtap2ErrUserActionPending,
-          CtapDeviceResponseCode::kCtap2ErrOperationPending,
-          CtapDeviceResponseCode::kCtap2ErrNoOperations,
-          CtapDeviceResponseCode::kCtap2ErrUnsupportedAlgorithm,
-          CtapDeviceResponseCode::kCtap2ErrOperationDenied,
-          CtapDeviceResponseCode::kCtap2ErrKeyStoreFull,
-          CtapDeviceResponseCode::kCtap2ErrNotBusy,
-          CtapDeviceResponseCode::kCtap2ErrNoOperationPending,
-          CtapDeviceResponseCode::kCtap2ErrUnsupportedOption,
-          CtapDeviceResponseCode::kCtap2ErrInvalidOption,
-          CtapDeviceResponseCode::kCtap2ErrKeepAliveCancel,
-          CtapDeviceResponseCode::kCtap2ErrNoCredentials,
-          CtapDeviceResponseCode::kCtap2ErrUserActionTimeout,
-          CtapDeviceResponseCode::kCtap2ErrNotAllowed,
-          CtapDeviceResponseCode::kCtap2ErrPinInvalid,
-          CtapDeviceResponseCode::kCtap2ErrPinBlocked,
-          CtapDeviceResponseCode::kCtap2ErrPinAuthInvalid,
-          CtapDeviceResponseCode::kCtap2ErrPinAuthBlocked,
-          CtapDeviceResponseCode::kCtap2ErrPinNotSet,
-          CtapDeviceResponseCode::kCtap2ErrPinRequired,
-          CtapDeviceResponseCode::kCtap2ErrPinPolicyViolation,
-          CtapDeviceResponseCode::kCtap2ErrPinTokenExpired,
-          CtapDeviceResponseCode::kCtap2ErrRequestTooLarge,
-          CtapDeviceResponseCode::kCtap2ErrUvBlocked,
-          CtapDeviceResponseCode::kCtap2ErrOther,
-          CtapDeviceResponseCode::kCtap2ErrSpecLast,
-          CtapDeviceResponseCode::kCtap2ErrExtensionFirst,
-          CtapDeviceResponseCode::kCtap2ErrExtensionLast,
-          CtapDeviceResponseCode::kCtap2ErrVendorFirst,
-          CtapDeviceResponseCode::kCtap2ErrVendorLast};
-}
+constexpr std::array<CtapDeviceResponseCode, 51> kCtapResponseCodeList{
+    CtapDeviceResponseCode::kSuccess,
+    CtapDeviceResponseCode::kCtap1ErrInvalidCommand,
+    CtapDeviceResponseCode::kCtap1ErrInvalidParameter,
+    CtapDeviceResponseCode::kCtap1ErrInvalidLength,
+    CtapDeviceResponseCode::kCtap1ErrInvalidSeq,
+    CtapDeviceResponseCode::kCtap1ErrTimeout,
+    CtapDeviceResponseCode::kCtap1ErrChannelBusy,
+    CtapDeviceResponseCode::kCtap1ErrLockRequired,
+    CtapDeviceResponseCode::kCtap1ErrInvalidChannel,
+    CtapDeviceResponseCode::kCtap2ErrCBORUnexpectedType,
+    CtapDeviceResponseCode::kCtap2ErrInvalidCBOR,
+    CtapDeviceResponseCode::kCtap2ErrMissingParameter,
+    CtapDeviceResponseCode::kCtap2ErrLimitExceeded,
+    CtapDeviceResponseCode::kCtap2ErrUnsupportedExtension,
+    CtapDeviceResponseCode::kCtap2ErrTooManyElements,
+    CtapDeviceResponseCode::kCtap2ErrLargeBlobStorageFull,
+    CtapDeviceResponseCode::kCtap2ErrCredentialExcluded,
+    CtapDeviceResponseCode::kCtap2ErrProcesssing,
+    CtapDeviceResponseCode::kCtap2ErrInvalidCredential,
+    CtapDeviceResponseCode::kCtap2ErrUserActionPending,
+    CtapDeviceResponseCode::kCtap2ErrOperationPending,
+    CtapDeviceResponseCode::kCtap2ErrNoOperations,
+    CtapDeviceResponseCode::kCtap2ErrUnsupportedAlgorithm,
+    CtapDeviceResponseCode::kCtap2ErrOperationDenied,
+    CtapDeviceResponseCode::kCtap2ErrKeyStoreFull,
+    CtapDeviceResponseCode::kCtap2ErrNotBusy,
+    CtapDeviceResponseCode::kCtap2ErrNoOperationPending,
+    CtapDeviceResponseCode::kCtap2ErrUnsupportedOption,
+    CtapDeviceResponseCode::kCtap2ErrInvalidOption,
+    CtapDeviceResponseCode::kCtap2ErrKeepAliveCancel,
+    CtapDeviceResponseCode::kCtap2ErrNoCredentials,
+    CtapDeviceResponseCode::kCtap2ErrUserActionTimeout,
+    CtapDeviceResponseCode::kCtap2ErrNotAllowed,
+    CtapDeviceResponseCode::kCtap2ErrPinInvalid,
+    CtapDeviceResponseCode::kCtap2ErrPinBlocked,
+    CtapDeviceResponseCode::kCtap2ErrPinAuthInvalid,
+    CtapDeviceResponseCode::kCtap2ErrPinAuthBlocked,
+    CtapDeviceResponseCode::kCtap2ErrPinNotSet,
+    CtapDeviceResponseCode::kCtap2ErrPinRequired,
+    CtapDeviceResponseCode::kCtap2ErrPinPolicyViolation,
+    CtapDeviceResponseCode::kCtap2ErrPinTokenExpired,
+    CtapDeviceResponseCode::kCtap2ErrRequestTooLarge,
+    CtapDeviceResponseCode::kCtap2ErrUvBlocked,
+    CtapDeviceResponseCode::kCtap2ErrIntegrityFailure,
+    CtapDeviceResponseCode::kCtap2ErrUvInvalid,
+    CtapDeviceResponseCode::kCtap2ErrOther,
+    CtapDeviceResponseCode::kCtap2ErrSpecLast,
+    CtapDeviceResponseCode::kCtap2ErrExtensionFirst,
+    CtapDeviceResponseCode::kCtap2ErrExtensionLast,
+    CtapDeviceResponseCode::kCtap2ErrVendorFirst,
+    CtapDeviceResponseCode::kCtap2ErrVendorLast,
+};
 
 // Commands supported by CTAPHID device as specified in
 // https://fidoalliance.org/specs/fido-v2.0-rd-20170927/fido-client-to-authenticator-protocol-v2.0-rd-20170927.html#ctaphid-commands
@@ -228,6 +236,7 @@ enum class CtapRequestCommand : uint8_t {
   kAuthenticatorClientPin = 0x06,
   kAuthenticatorReset = 0x07,
   kAuthenticatorBioEnrollment = 0x09,
+  kAuthenticatorLargeBlobs = 0x0C,
   kAuthenticatorBioEnrollmentPreview = 0x40,
   kAuthenticatorCredentialManagement = 0x0a,
   kAuthenticatorCredentialManagementPreview = 0x41,
@@ -325,6 +334,7 @@ COMPONENT_EXPORT(DEVICE_FIDO) extern const char kBioEnrollmentPreviewMapKey[];
 COMPONENT_EXPORT(DEVICE_FIDO) extern const char kPinUvTokenMapKey[];
 extern const char kDefaultCredProtectKey[];
 extern const char kEnterpriseAttestationKey[];
+extern const char kLargeBlobsKey[];
 
 // HID transport specific constants.
 constexpr uint32_t kHidBroadcastChannel = 0xffffffff;
@@ -368,7 +378,18 @@ constexpr char kCableWebSocketProtocol[] = "fido.cable";
 
 // kCableShardIdHeader is the name of an HTTP header that is sent in the reply
 // from the tunnel server and which specifies the server's chosen shard number.
+// TODO(agl): remove. Only being kept around to allow things to compile.
 constexpr char kCableShardIdHeader[] = "X-caBLE-Shard";
+
+// kCableRoutingIdHeader is the name of an HTTP header that is sent in the reply
+// from the tunnel server and which specifies the server's chosen routing ID
+// which other parties can use to reach the same tunnel server.
+constexpr char kCableRoutingIdHeader[] = "X-caBLE-Routing-ID";
+
+// kCableClientPayloadHeader is the name of an HTTP header that is to
+// the tunnel server when performing a state-assisted handshake and which
+// includes the client's nonce and pairing ID.
+constexpr char kCableClientPayloadHeader[] = "X-caBLE-Client-Payload";
 
 // Maximum wait time before client error outs on device.
 COMPONENT_EXPORT(DEVICE_FIDO) extern const base::TimeDelta kDeviceTimeout;
@@ -400,11 +421,11 @@ COMPONENT_EXPORT(DEVICE_FIDO)
 extern const char kCableAuthenticatorHelloMessage[];
 COMPONENT_EXPORT(DEVICE_FIDO) extern const char kCableClientHelloMessage[];
 
-enum class Ctap2Version {
-  kUnknown = 0,
-  kCtap2_0 = 1,
-  kCtap2_1 = 2,
-};
+// The list of CTAP versions returned in the getInfo response for different
+// minor versions.
+constexpr Ctap2Version kCtap2Versions2_0[] = {Ctap2Version::kCtap2_0};
+constexpr Ctap2Version kCtap2Versions2_1[] = {Ctap2Version::kCtap2_0,
+                                              Ctap2Version::kCtap2_1};
 
 // Protocol version strings.
 // https://fidoalliance.org/specs/fido-v2.0-ps-20190130/fido-client-to-authenticator-protocol-v2.0-ps-20190130.html#authenticatorGetInfo
@@ -419,6 +440,7 @@ COMPONENT_EXPORT(DEVICE_FIDO) extern const char kExtensionHmacSecret[];
 COMPONENT_EXPORT(DEVICE_FIDO) extern const char kExtensionCredProtect[];
 COMPONENT_EXPORT(DEVICE_FIDO)
 extern const char kExtensionAndroidClientData[];
+COMPONENT_EXPORT(DEVICE_FIDO) extern const char kExtensionLargeBlobKey[];
 
 // Maximum number of seconds the browser waits for Bluetooth authenticator to
 // send packets that advertises that the device is in pairing mode before

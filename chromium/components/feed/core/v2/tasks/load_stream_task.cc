@@ -167,6 +167,11 @@ void LoadStreamTask::QueryRequestComplete(
           *response_data.model_update_request),
       base::DoNothing());
 
+  bool isNoticeCardFulfilled = response_data.model_update_request->stream_data
+                                   .privacy_notice_fulfilled();
+  stream_->SetLastStreamLoadHadNoticeCard(isNoticeCardFulfilled);
+  MetricsReporter::NoticeCardFulfilled(isNoticeCardFulfilled);
+
   if (load_type_ != LoadType::kBackgroundRefresh) {
     auto model = std::make_unique<StreamModel>();
     model->Update(std::move(response_data.model_update_request));

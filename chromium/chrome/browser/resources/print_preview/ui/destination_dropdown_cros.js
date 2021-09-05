@@ -14,9 +14,7 @@ import {I18nBehavior} from 'chrome://resources/js/i18n_behavior.m.js';
 import {html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {Destination, DestinationOrigin} from '../data/destination.js';
-import {ERROR_STRING_KEY_MAP, PrinterStatusReason} from '../data/printer_status_cros.js';
-
-import {IconLocation, PrinterState} from './printer_status_icon_cros.js';
+import {ERROR_STRING_KEY_MAP, getPrinterStatusIcon, PrinterStatusReason} from '../data/printer_status_cros.js';
 
 Polymer({
   is: 'print-preview-destination-dropdown-cros',
@@ -53,16 +51,11 @@ Polymer({
 
     destinationIcon: String,
 
-    isCurrentDestinationCrosLocal: Boolean,
-
     /**
      * Index of the highlighted item in the dropdown.
      * @private
      */
     highlightedIndex_: Number,
-
-    /** Mirroring the enum so that it can be used from HTML bindings. */
-    IconLocation: Object,
 
     /** @private */
     dropdownLength_: {
@@ -81,7 +74,6 @@ Polymer({
   /** @override */
   attached() {
     this.updateTabIndex_();
-    this.IconLocation = IconLocation;
   },
 
   /**
@@ -262,22 +254,6 @@ Polymer({
   },
 
   /**
-   * @param {?PrinterStatusReason} printerStatusReason
-   * @return {number}
-   * @private
-   */
-  computePrinterState_(printerStatusReason) {
-    if (!printerStatusReason ||
-        printerStatusReason === PrinterStatusReason.UNKNOWN_REASON) {
-      return PrinterState.UNKNOWN;
-    }
-    if (printerStatusReason === PrinterStatusReason.NO_ERROR) {
-      return PrinterState.GOOD;
-    }
-    return PrinterState.ERROR;
-  },
-
-  /**
    * Sets tabindex to -1 when dropdown is disabled to prevent the dropdown from
    * being focusable.
    * @private
@@ -348,4 +324,13 @@ Polymer({
     const errorStringKey = ERROR_STRING_KEY_MAP.get(printerStatusReason);
     return errorStringKey ? this.i18n(errorStringKey) : '';
   },
+
+  /**
+   * @param {!PrinterStatusReason} printerStatusReason
+   * @return {string}
+   * @private
+   */
+  getPrinterStatusIcon_(printerStatusReason) {
+    return getPrinterStatusIcon(printerStatusReason);
+  }
 });

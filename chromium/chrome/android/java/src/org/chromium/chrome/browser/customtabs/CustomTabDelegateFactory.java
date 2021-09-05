@@ -20,6 +20,7 @@ import org.chromium.base.IntentUtils;
 import org.chromium.base.Log;
 import org.chromium.base.PackageManagerUtils;
 import org.chromium.base.supplier.Supplier;
+import org.chromium.chrome.browser.AppHooks;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.ShortcutHelper;
 import org.chromium.chrome.browser.app.ChromeActivity;
@@ -29,7 +30,8 @@ import org.chromium.chrome.browser.browserservices.permissiondelegation.TrustedW
 import org.chromium.chrome.browser.browserservices.ui.controller.Verifier;
 import org.chromium.chrome.browser.compositor.bottombar.ephemeraltab.EphemeralTabCoordinator;
 import org.chromium.chrome.browser.contextmenu.ChromeContextMenuPopulator;
-import org.chromium.chrome.browser.contextmenu.ContextMenuPopulator;
+import org.chromium.chrome.browser.contextmenu.ChromeContextMenuPopulatorFactory;
+import org.chromium.chrome.browser.contextmenu.ContextMenuPopulatorFactory;
 import org.chromium.chrome.browser.customtabs.features.toolbar.CustomTabBrowserControlsVisibilityDelegate;
 import org.chromium.chrome.browser.dependency_injection.ActivityScope;
 import org.chromium.chrome.browser.externalauth.ExternalAuthUtils;
@@ -464,18 +466,18 @@ public class CustomTabDelegateFactory implements TabDelegateFactory {
     }
 
     @Override
-    public ContextMenuPopulator createContextMenuPopulator(Tab tab) {
+    public ContextMenuPopulatorFactory createContextMenuPopulatorFactory(Tab tab) {
         @ChromeContextMenuPopulator.ContextMenuMode
         int contextMenuMode = getContextMenuMode(mActivityType);
         Supplier<ShareDelegate> shareDelegateSupplier =
                 mActivity == null ? null : mActivity.getShareDelegateSupplier();
         TabModelSelector tabModelSelector =
                 mActivity != null ? mActivity.getTabModelSelector() : null;
-        return new ChromeContextMenuPopulator(
+        return new ChromeContextMenuPopulatorFactory(
                 new TabContextMenuItemDelegate(tab, tabModelSelector,
                         EphemeralTabCoordinator.isSupported() ? mEphemeralTabCoordinator::get
                                                               : () -> null),
-                shareDelegateSupplier, contextMenuMode, ExternalAuthUtils.getInstance());
+                shareDelegateSupplier, contextMenuMode, AppHooks.get().getExternalAuthUtils());
     }
 
     @Override

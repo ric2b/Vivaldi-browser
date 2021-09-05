@@ -18,14 +18,13 @@
 #include "ui/views/controls/button/button.h"
 #include "ui/views/controls/button/checkbox.h"
 #include "ui/views/controls/button/radio_button.h"
-#include "ui/views/controls/combobox/combobox_listener.h"
 
 namespace views {
+class Combobox;
 class ImageButton;
 class RadioButton;
 class LabelButton;
-class Link;
-}
+}  // namespace views
 
 // ContentSettingBubbleContents is used when the user turns on different kinds
 // of content blocking (e.g. "block images").  When viewing a page with blocked
@@ -39,7 +38,6 @@ class Link;
 class ContentSettingBubbleContents : public content::WebContentsObserver,
                                      public views::BubbleDialogDelegateView,
                                      public views::ButtonListener,
-                                     public views::ComboboxListener,
                                      public ContentSettingBubbleModel::Owner {
  public:
   ContentSettingBubbleContents(
@@ -78,8 +76,10 @@ class ContentSettingBubbleContents : public content::WebContentsObserver,
   // "learn more" button and a "manage" button.
   std::unique_ptr<View> CreateHelpAndManageView();
 
-  void LinkClicked(views::Link* source, int event_flags);
+  void LinkClicked(int row, const ui::Event& event);
   void CustomLinkClicked();
+
+  void OnPerformAction(views::Combobox* combobox);
 
   // content::WebContentsObserver:
   void DidFinishNavigation(
@@ -90,8 +90,6 @@ class ContentSettingBubbleContents : public content::WebContentsObserver,
   // views::ButtonListener:
   void ButtonPressed(views::Button* sender, const ui::Event& event) override;
 
-  // views::ComboboxListener:
-  void OnPerformAction(views::Combobox* combobox) override;
 
   // Provides data for this bubble.
   std::unique_ptr<ContentSettingBubbleModel> content_setting_bubble_model_;

@@ -44,7 +44,6 @@
 #import "ios/chrome/browser/ui/popup_menu/public/popup_menu_consumer.h"
 #import "ios/chrome/browser/ui/reading_list/reading_list_menu_notification_delegate.h"
 #import "ios/chrome/browser/ui/reading_list/reading_list_menu_notifier.h"
-#import "ios/chrome/browser/ui/toolbar/public/features.h"
 #import "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/browser/ui/util/multi_window_support.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
@@ -894,7 +893,7 @@ PopupMenuTextItem* CreateEnterpriseInfoItem(NSString* imageName,
   // Create the menu item -- hardcoded string and no accessibility ID.
   PopupMenuToolsItem* openNewWindowItem = CreateTableViewItem(
       IDS_IOS_TOOLS_MENU_NEW_WINDOW, PopupMenuActionOpenNewWindow,
-      @"popup_menu_new_tab", kToolsMenuNewWindow);
+      @"popup_menu_new_window", kToolsMenuNewWindowId);
 
   return @[ openNewWindowItem ];
 }

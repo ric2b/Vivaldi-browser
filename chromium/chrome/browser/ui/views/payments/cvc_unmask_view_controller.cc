@@ -47,9 +47,9 @@ enum class Tags {
 };
 
 CvcUnmaskViewController::CvcUnmaskViewController(
-    PaymentRequestSpec* spec,
-    PaymentRequestState* state,
-    PaymentRequestDialogView* dialog,
+    base::WeakPtr<PaymentRequestSpec> spec,
+    base::WeakPtr<PaymentRequestState> state,
+    base::WeakPtr<PaymentRequestDialogView> dialog,
     const autofill::CreditCard& credit_card,
     base::WeakPtr<autofill::payments::FullCardRequest::ResultDelegate>
         result_delegate,
@@ -189,14 +189,16 @@ void CvcUnmaskViewController::FillContentView(views::View* content_view) {
   layout->StartRow(views::GridLayout::kFixedSize, 1);
   if (requesting_expiration) {
     auto month = std::make_unique<views::Combobox>(&month_combobox_model_);
-    month->set_listener(this);
+    month->set_callback(base::BindRepeating(
+        &CvcUnmaskViewController::OnPerformAction, base::Unretained(this)));
     month->SetID(static_cast<int>(DialogViewID::CVC_MONTH));
     month->SelectValue(credit_card_.Expiration2DigitMonthAsString());
     month->SetInvalid(true);
     layout->AddView(std::move(month));
 
     auto year = std::make_unique<views::Combobox>(&year_combobox_model_);
-    year->set_listener(this);
+    year->set_callback(base::BindRepeating(
+        &CvcUnmaskViewController::OnPerformAction, base::Unretained(this)));
     year->SetID(static_cast<int>(DialogViewID::CVC_YEAR));
     year->SelectValue(credit_card_.Expiration4DigitYearAsString());
     year->SetInvalid(true);
@@ -211,7 +213,7 @@ void CvcUnmaskViewController::FillContentView(views::View* content_view) {
       credit_card_.network() == autofill::kAmericanExpressCard
           ? IDR_CREDIT_CARD_CVC_HINT_AMEX
           : IDR_CREDIT_CARD_CVC_HINT));
-  cvc_image->set_tooltip_text(l10n_util::GetStringUTF16(
+  cvc_image->SetTooltipText(l10n_util::GetStringUTF16(
       IDS_AUTOFILL_CARD_UNMASK_CVC_IMAGE_DESCRIPTION));
   layout->AddView(std::move(cvc_image));
 
@@ -383,7 +385,7 @@ void CvcUnmaskViewController::ContentsChanged(
   UpdatePayButtonState();
 }
 
-void CvcUnmaskViewController::OnPerformAction(views::Combobox* combobox) {
+void CvcUnmaskViewController::OnPerformAction() {
   if (!dialog()->IsInteractive())
     return;
 

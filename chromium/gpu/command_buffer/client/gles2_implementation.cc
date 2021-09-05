@@ -143,6 +143,19 @@ bool IsReadbackUsage(GLenum usage) {
          usage == GL_STATIC_READ;
 }
 
+void UpdateProgramInfo(base::span<const uint8_t>& data,
+                       ProgramInfoManager* manager,
+                       ProgramInfoManager::ProgramInfoType type) {
+  DCHECK(data.size() > sizeof(cmds::GLES2ReturnProgramInfo));
+  const cmds::GLES2ReturnProgramInfo* return_program_info =
+      reinterpret_cast<const cmds::GLES2ReturnProgramInfo*>(data.data());
+  uint32_t program = return_program_info->program_client_id;
+  base::span<const int8_t> info(
+      reinterpret_cast<const int8_t*>(return_program_info->deserialized_buffer),
+      data.size() - sizeof(cmds::GLES2ReturnProgramInfo));
+  manager->UpdateProgramInfo(program, info, type);
+}
+
 }  // anonymous namespace
 
 GLES2Implementation::GLStaticState::GLStaticState() = default;
@@ -448,7 +461,31 @@ void GLES2Implementation::OnSwapBufferPresented(
 
 void GLES2Implementation::OnGpuControlReturnData(
     base::span<const uint8_t> data) {
-  NOTIMPLEMENTED();
+  DCHECK(data.size() > sizeof(cmds::GLES2ReturnDataHeader));
+  const cmds::GLES2ReturnDataHeader& gles2ReturnDataHeader =
+      *reinterpret_cast<const cmds::GLES2ReturnDataHeader*>(data.data());
+
+  switch (gles2ReturnDataHeader.return_data_type) {
+    case GLES2ReturnDataType::kES2ProgramInfo: {
+      UpdateProgramInfo(data, share_group_->program_info_manager(),
+                        ProgramInfoManager::kES2);
+    } break;
+    case GLES2ReturnDataType::kES3UniformBlocks: {
+      UpdateProgramInfo(data, share_group_->program_info_manager(),
+                        ProgramInfoManager::kES3UniformBlocks);
+    } break;
+    case GLES2ReturnDataType::kES3TransformFeedbackVaryings: {
+      UpdateProgramInfo(data, share_group_->program_info_manager(),
+                        ProgramInfoManager::kES3TransformFeedbackVaryings);
+    } break;
+    case GLES2ReturnDataType::kES3Uniforms: {
+      UpdateProgramInfo(data, share_group_->program_info_manager(),
+                        ProgramInfoManager::kES3Uniformsiv);
+    } break;
+
+    default:
+      NOTREACHED();
+  }
 }
 
 void GLES2Implementation::FreeSharedMemory(void* mem) {
@@ -723,11 +760,14 @@ GLboolean GLES2Implementation::IsEnablediOES(GLenum target, GLuint index) {
                      << ")");
   bool state = false;
   typedef cmds::IsEnabled::Result Result;
-  auto result = GetResultAs<Result>();
-  *result = 0;
-  helper_->IsEnablediOES(target, index, GetResultShmId(), result.offset());
-  WaitForCmd();
-  state = (*result) != 0;
+  // Limit scope of result to avoid overlap with CheckGLError()
+  {
+    auto result = GetResultAs<Result>();
+    *result = 0;
+    helper_->IsEnablediOES(target, index, GetResultShmId(), result.offset());
+    WaitForCmd();
+    state = (*result) != 0;
+  }
 
   GPU_CLIENT_LOG("returned " << state);
   CheckGLError();
@@ -4383,35 +4423,38 @@ void GLES2Implementation::GetShaderPrecisionFormat(GLenum shadertype,
                      << static_cast<const void*>(precision) << ", ");
   TRACE_EVENT0("gpu", "GLES2::GetShaderPrecisionFormat");
   typedef cmds::GetShaderPrecisionFormat::Result Result;
-  auto result = GetResultAs<Result>();
-  if (!result) {
-    return;
-  }
-
-  GLStaticState::ShaderPrecisionKey key(shadertype, precisiontype);
-  GLStaticState::ShaderPrecisionMap::iterator i =
-      static_state_.shader_precisions.find(key);
-  if (i != static_state_.shader_precisions.end()) {
-    *result = i->second;
-  } else {
-    result->success = false;
-    helper_->GetShaderPrecisionFormat(shadertype, precisiontype,
-                                      GetResultShmId(), result.offset());
-    WaitForCmd();
-    if (result->success)
-      static_state_.shader_precisions[key] = *result;
-  }
-
-  if (result->success) {
-    if (range) {
-      range[0] = result->min_range;
-      range[1] = result->max_range;
-      GPU_CLIENT_LOG("  min_range: " << range[0]);
-      GPU_CLIENT_LOG("  min_range: " << range[1]);
+  // Limit scope of result to avoid overlap with CheckGLError()
+  {
+    auto result = GetResultAs<Result>();
+    if (!result) {
+      return;
     }
-    if (precision) {
-      precision[0] = result->precision;
-      GPU_CLIENT_LOG("  min_range: " << precision[0]);
+
+    GLStaticState::ShaderPrecisionKey key(shadertype, precisiontype);
+    GLStaticState::ShaderPrecisionMap::iterator i =
+        static_state_.shader_precisions.find(key);
+    if (i != static_state_.shader_precisions.end()) {
+      *result = i->second;
+    } else {
+      result->success = false;
+      helper_->GetShaderPrecisionFormat(shadertype, precisiontype,
+                                        GetResultShmId(), result.offset());
+      WaitForCmd();
+      if (result->success)
+        static_state_.shader_precisions[key] = *result;
+    }
+
+    if (result->success) {
+      if (range) {
+        range[0] = result->min_range;
+        range[1] = result->max_range;
+        GPU_CLIENT_LOG("  min_range: " << range[0]);
+        GPU_CLIENT_LOG("  min_range: " << range[1]);
+      }
+      if (precision) {
+        precision[0] = result->precision;
+        GPU_CLIENT_LOG("  min_range: " << precision[0]);
+      }
     }
   }
   CheckGLError();
@@ -4570,19 +4613,22 @@ void GLES2Implementation::GetUniformfv(GLuint program,
                      << ")");
   TRACE_EVENT0("gpu", "GLES2::GetUniformfv");
   typedef cmds::GetUniformfv::Result Result;
-  auto result = GetResultAs<Result>();
-  if (!result) {
-    return;
-  }
-  result->SetNumResults(0);
-  helper_->GetUniformfv(program, location, GetResultShmId(), result.offset());
-  WaitForCmd();
-  result->CopyResult(params);
-  GPU_CLIENT_LOG_CODE_BLOCK({
-    for (int32_t i = 0; i < result->GetNumResults(); ++i) {
-      GPU_CLIENT_LOG("  " << i << ": " << result->GetData()[i]);
+  // Limit scope of result to avoid overlap with CheckGLError()
+  {
+    auto result = GetResultAs<Result>();
+    if (!result) {
+      return;
     }
-  });
+    result->SetNumResults(0);
+    helper_->GetUniformfv(program, location, GetResultShmId(), result.offset());
+    WaitForCmd();
+    result->CopyResult(params);
+    GPU_CLIENT_LOG_CODE_BLOCK({
+      for (int32_t i = 0; i < result->GetNumResults(); ++i) {
+        GPU_CLIENT_LOG("  " << i << ": " << result->GetData()[i]);
+      }
+    });
+  }
   CheckGLError();
 }
 
@@ -4595,19 +4641,22 @@ void GLES2Implementation::GetUniformiv(GLuint program,
                      << ")");
   TRACE_EVENT0("gpu", "GLES2::GetUniformiv");
   typedef cmds::GetUniformiv::Result Result;
-  auto result = GetResultAs<Result>();
-  if (!result) {
-    return;
-  }
-  result->SetNumResults(0);
-  helper_->GetUniformiv(program, location, GetResultShmId(), result.offset());
-  WaitForCmd();
-  result->CopyResult(params);
-  GPU_CLIENT_LOG_CODE_BLOCK({
-    for (int32_t i = 0; i < result->GetNumResults(); ++i) {
-      GPU_CLIENT_LOG("  " << i << ": " << result->GetData()[i]);
+  // Limit scope of result to avoid overlap with CheckGLError()
+  {
+    auto result = GetResultAs<Result>();
+    if (!result) {
+      return;
     }
-  });
+    result->SetNumResults(0);
+    helper_->GetUniformiv(program, location, GetResultShmId(), result.offset());
+    WaitForCmd();
+    result->CopyResult(params);
+    GPU_CLIENT_LOG_CODE_BLOCK({
+      for (int32_t i = 0; i < result->GetNumResults(); ++i) {
+        GPU_CLIENT_LOG("  " << i << ": " << result->GetData()[i]);
+      }
+    });
+  }
   CheckGLError();
 }
 
@@ -4620,19 +4669,23 @@ void GLES2Implementation::GetUniformuiv(GLuint program,
                      << static_cast<const void*>(params) << ")");
   TRACE_EVENT0("gpu", "GLES2::GetUniformuiv");
   typedef cmds::GetUniformuiv::Result Result;
-  auto result = GetResultAs<Result>();
-  if (!result) {
-    return;
-  }
-  result->SetNumResults(0);
-  helper_->GetUniformuiv(program, location, GetResultShmId(), result.offset());
-  WaitForCmd();
-  result->CopyResult(params);
-  GPU_CLIENT_LOG_CODE_BLOCK({
-    for (int32_t i = 0; i < result->GetNumResults(); ++i) {
-      GPU_CLIENT_LOG("  " << i << ": " << result->GetData()[i]);
+  // Limit scope of result to avoid overlap with CheckGLError()
+  {
+    auto result = GetResultAs<Result>();
+    if (!result) {
+      return;
     }
-  });
+    result->SetNumResults(0);
+    helper_->GetUniformuiv(program, location, GetResultShmId(),
+                           result.offset());
+    WaitForCmd();
+    result->CopyResult(params);
+    GPU_CLIENT_LOG_CODE_BLOCK({
+      for (int32_t i = 0; i < result->GetNumResults(); ++i) {
+        GPU_CLIENT_LOG("  " << i << ": " << result->GetData()[i]);
+      }
+    });
+  }
   CheckGLError();
 }
 
@@ -5473,19 +5526,22 @@ void GLES2Implementation::GetVertexAttribfv(GLuint index,
   }
   TRACE_EVENT0("gpu", "GLES2::GetVertexAttribfv");
   typedef cmds::GetVertexAttribfv::Result Result;
-  auto result = GetResultAs<Result>();
-  if (!result) {
-    return;
-  }
-  result->SetNumResults(0);
-  helper_->GetVertexAttribfv(index, pname, GetResultShmId(), result.offset());
-  WaitForCmd();
-  result->CopyResult(params);
-  GPU_CLIENT_LOG_CODE_BLOCK({
-    for (int32_t i = 0; i < result->GetNumResults(); ++i) {
-      GPU_CLIENT_LOG("  " << i << ": " << result->GetData()[i]);
+  // Limit scope of result to avoid overlap with CheckGLError()
+  {
+    auto result = GetResultAs<Result>();
+    if (!result) {
+      return;
     }
-  });
+    result->SetNumResults(0);
+    helper_->GetVertexAttribfv(index, pname, GetResultShmId(), result.offset());
+    WaitForCmd();
+    result->CopyResult(params);
+    GPU_CLIENT_LOG_CODE_BLOCK({
+      for (int32_t i = 0; i < result->GetNumResults(); ++i) {
+        GPU_CLIENT_LOG("  " << i << ": " << result->GetData()[i]);
+      }
+    });
+  }
   CheckGLError();
 }
 
@@ -5503,19 +5559,22 @@ void GLES2Implementation::GetVertexAttribiv(GLuint index,
   }
   TRACE_EVENT0("gpu", "GLES2::GetVertexAttribiv");
   typedef cmds::GetVertexAttribiv::Result Result;
-  auto result = GetResultAs<Result>();
-  if (!result) {
-    return;
-  }
-  result->SetNumResults(0);
-  helper_->GetVertexAttribiv(index, pname, GetResultShmId(), result.offset());
-  WaitForCmd();
-  result->CopyResult(params);
-  GPU_CLIENT_LOG_CODE_BLOCK({
-    for (int32_t i = 0; i < result->GetNumResults(); ++i) {
-      GPU_CLIENT_LOG("  " << i << ": " << result->GetData()[i]);
+  // Limit scope of result to avoid overlap with CheckGLError()
+  {
+    auto result = GetResultAs<Result>();
+    if (!result) {
+      return;
     }
-  });
+    result->SetNumResults(0);
+    helper_->GetVertexAttribiv(index, pname, GetResultShmId(), result.offset());
+    WaitForCmd();
+    result->CopyResult(params);
+    GPU_CLIENT_LOG_CODE_BLOCK({
+      for (int32_t i = 0; i < result->GetNumResults(); ++i) {
+        GPU_CLIENT_LOG("  " << i << ": " << result->GetData()[i]);
+      }
+    });
+  }
   CheckGLError();
 }
 
@@ -5533,19 +5592,23 @@ void GLES2Implementation::GetVertexAttribIiv(GLuint index,
   }
   TRACE_EVENT0("gpu", "GLES2::GetVertexAttribIiv");
   typedef cmds::GetVertexAttribiv::Result Result;
-  auto result = GetResultAs<Result>();
-  if (!result) {
-    return;
-  }
-  result->SetNumResults(0);
-  helper_->GetVertexAttribIiv(index, pname, GetResultShmId(), result.offset());
-  WaitForCmd();
-  result->CopyResult(params);
-  GPU_CLIENT_LOG_CODE_BLOCK({
-    for (int32_t i = 0; i < result->GetNumResults(); ++i) {
-      GPU_CLIENT_LOG("  " << i << ": " << result->GetData()[i]);
+  // Limit scope of result to avoid overlap with CheckGLError()
+  {
+    auto result = GetResultAs<Result>();
+    if (!result) {
+      return;
     }
-  });
+    result->SetNumResults(0);
+    helper_->GetVertexAttribIiv(index, pname, GetResultShmId(),
+                                result.offset());
+    WaitForCmd();
+    result->CopyResult(params);
+    GPU_CLIENT_LOG_CODE_BLOCK({
+      for (int32_t i = 0; i < result->GetNumResults(); ++i) {
+        GPU_CLIENT_LOG("  " << i << ": " << result->GetData()[i]);
+      }
+    });
+  }
   CheckGLError();
 }
 
@@ -5563,19 +5626,23 @@ void GLES2Implementation::GetVertexAttribIuiv(GLuint index,
   }
   TRACE_EVENT0("gpu", "GLES2::GetVertexAttribIuiv");
   typedef cmds::GetVertexAttribiv::Result Result;
-  auto result = GetResultAs<Result>();
-  if (!result) {
-    return;
-  }
-  result->SetNumResults(0);
-  helper_->GetVertexAttribIuiv(index, pname, GetResultShmId(), result.offset());
-  WaitForCmd();
-  result->CopyResult(params);
-  GPU_CLIENT_LOG_CODE_BLOCK({
-    for (int32_t i = 0; i < result->GetNumResults(); ++i) {
-      GPU_CLIENT_LOG("  " << i << ": " << result->GetData()[i]);
+  // Limit scope of result to avoid overlap with CheckGLError()
+  {
+    auto result = GetResultAs<Result>();
+    if (!result) {
+      return;
     }
-  });
+    result->SetNumResults(0);
+    helper_->GetVertexAttribIuiv(index, pname, GetResultShmId(),
+                                 result.offset());
+    WaitForCmd();
+    result->CopyResult(params);
+    GPU_CLIENT_LOG_CODE_BLOCK({
+      for (int32_t i = 0; i < result->GetNumResults(); ++i) {
+        GPU_CLIENT_LOG("  " << i << ": " << result->GetData()[i]);
+      }
+    });
+  }
   CheckGLError();
 }
 
@@ -7331,18 +7398,23 @@ GLenum GLES2Implementation::ClientWaitSync(GLsync sync,
   GPU_CLIENT_LOG("[" << GetLogPrefix() << "] glClientWaitSync(" << sync << ", "
                      << flags << ", " << timeout << ")");
   typedef cmds::ClientWaitSync::Result Result;
-  auto result = GetResultAs<Result>();
-  if (!result) {
-    SetGLError(GL_OUT_OF_MEMORY, "ClientWaitSync", "");
-    return GL_WAIT_FAILED;
+  // Limit scope of result to avoid overlap with CheckGLError()
+  Result localResult;
+  {
+    auto result = GetResultAs<Result>();
+    if (!result) {
+      SetGLError(GL_OUT_OF_MEMORY, "ClientWaitSync", "");
+      return GL_WAIT_FAILED;
+    }
+    *result = GL_WAIT_FAILED;
+    helper_->ClientWaitSync(ToGLuint(sync), flags, timeout, GetResultShmId(),
+                            result.offset());
+    WaitForCmd();
+    localResult = *result;
+    GPU_CLIENT_LOG("returned " << localResult);
   }
-  *result = GL_WAIT_FAILED;
-  helper_->ClientWaitSync(ToGLuint(sync), flags, timeout, GetResultShmId(),
-                          result.offset());
-  WaitForCmd();
-  GPU_CLIENT_LOG("returned " << *result);
   CheckGLError();
-  return *result;
+  return localResult;
 }
 
 void GLES2Implementation::CopyBufferSubData(GLenum readtarget,
@@ -7406,26 +7478,29 @@ void GLES2Implementation::GetInternalformativ(GLenum target,
     return;
   }
   typedef cmds::GetInternalformativ::Result Result;
-  auto result = GetResultAs<Result>();
-  if (!result) {
-    return;
-  }
-  result->SetNumResults(0);
-  helper_->GetInternalformativ(target, format, pname, GetResultShmId(),
-                               result.offset());
-  WaitForCmd();
-  GPU_CLIENT_LOG_CODE_BLOCK({
-    for (int32_t i = 0; i < result->GetNumResults(); ++i) {
-      GPU_CLIENT_LOG("  " << i << ": " << result->GetData()[i]);
+  // Limit scope of result to avoid overlap with CheckGLError()
+  {
+    auto result = GetResultAs<Result>();
+    if (!result) {
+      return;
     }
-  });
-  if (buf_size > 0 && params) {
-    GLint* data = result->GetData();
-    if (buf_size >= result->GetNumResults()) {
-      buf_size = result->GetNumResults();
-    }
-    for (GLsizei ii = 0; ii < buf_size; ++ii) {
-      params[ii] = data[ii];
+    result->SetNumResults(0);
+    helper_->GetInternalformativ(target, format, pname, GetResultShmId(),
+                                 result.offset());
+    WaitForCmd();
+    GPU_CLIENT_LOG_CODE_BLOCK({
+      for (int32_t i = 0; i < result->GetNumResults(); ++i) {
+        GPU_CLIENT_LOG("  " << i << ": " << result->GetData()[i]);
+      }
+    });
+    if (buf_size > 0 && params) {
+      GLint* data = result->GetData();
+      if (buf_size >= result->GetNumResults()) {
+        buf_size = result->GetNumResults();
+      }
+      for (GLsizei ii = 0; ii < buf_size; ++ii) {
+        params[ii] = data[ii];
+      }
     }
   }
   CheckGLError();

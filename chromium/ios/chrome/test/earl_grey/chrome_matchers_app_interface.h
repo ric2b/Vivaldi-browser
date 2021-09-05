@@ -110,8 +110,11 @@
 // Matcher for Tools menu button.
 + (id<GREYMatcher>)toolsMenuButton;
 
-// Matcher for the Share menu button.
+// Matcher for the Share... button.
 + (id<GREYMatcher>)shareButton;
+
+// Matcher for the tab Share button (either in the omnibox or the toolbar).
++ (id<GREYMatcher>)tabShareButton;
 
 // Matcher for show tabs button.
 + (id<GREYMatcher>)showTabsButton;
@@ -132,6 +135,10 @@
 // Matcher for the Open in New Tab option in the context menu when long pressing
 // a link.
 + (id<GREYMatcher>)openLinkInNewTabButton;
+
+// Matcher for the Open in Incognito option in the context menu when long
+// pressing a link. |useNewString| determines which string to use.
++ (id<GREYMatcher>)openLinkInIncognitoButtonWithUseNewString:(BOOL)useNewString;
 
 // Matcher for the Open in New Window option in the context menu when long
 // pressing a link.
@@ -302,6 +309,9 @@
 // Returns matcher for the payment request search bar.
 + (id<GREYMatcher>)paymentRequestPickerSearchBar;
 
+// Returns matcher for the New Window button on the Tools menu.
++ (id<GREYMatcher>)openNewWindowMenuButton;
+
 // Returns matcher for the reading list button on the Tools menu.
 + (id<GREYMatcher>)readingListMenuButton;
 
@@ -317,7 +327,27 @@
 // Returns matcher for the copy button on the system selection callout.
 + (id<GREYMatcher>)systemSelectionCalloutCopyButton;
 
-// Returns matcher for the Copy item on the context menu.
+// Matcher for the Copy Link option in the updated context menus when long
+// pressing on a link. |useNewString| determines which string to use.
++ (id<GREYMatcher>)copyLinkButtonWithUseNewString:(BOOL)useNewString;
+
+// Matcher for the Edit option on the updated context menus. |useNewString|
+// determines which string to use.
++ (id<GREYMatcher>)editButtonWithUseNewString:(BOOL)useNewString;
+
+// Matcher for the Move option on the updated context menus.
++ (id<GREYMatcher>)moveButton;
+
+// Matcher for the Mark as Read option on the Reading List's context menus.
++ (id<GREYMatcher>)readingListMarkAsReadButton;
+
+// Matcher for the Mark as Unread option on the Reading List's context menus.
++ (id<GREYMatcher>)readingListMarkAsUnreadButton;
+
+// Matcher for the Share option on the updated context menus.
++ (id<GREYMatcher>)deleteButton;
+
+// Returns matcher for the Copy item on the old-style context menu.
 + (id<GREYMatcher>)contextMenuCopyButton;
 
 // Returns matcher for defoucesed omnibox on a new tab.
@@ -478,6 +508,9 @@
 
 // Returns a matcher for the CreditCardTableView window.
 + (id<GREYMatcher>)manualFallbackCreditCardTableViewWindowMatcher;
+
+// Returns the matcher for the Activity View header.
++ (id<GREYMatcher>)activityViewHeaderWithTitle:(NSString*)pageTitle;
 
 @end
 

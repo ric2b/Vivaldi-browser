@@ -721,7 +721,8 @@ void ArcBluetoothBridge::DeviceRemoved(BluetoothAdapter* adapter,
   DCHECK(device);
 
   std::string address = device->GetAddress();
-  OnGattDisconnected(mojom::BluetoothAddress::From(address));
+  if (gatt_connections_.find(address) != gatt_connections_.end())
+    OnGattDisconnected(mojom::BluetoothAddress::From(address));
   OnForgetDone(mojom::BluetoothAddress::From(address));
 }
 
@@ -2923,8 +2924,9 @@ ArcBluetoothBridge::GattConnection::GattConnection()
 ArcBluetoothBridge::GattConnection::~GattConnection() = default;
 ArcBluetoothBridge::GattConnection::GattConnection(
     ArcBluetoothBridge::GattConnection&&) = default;
-ArcBluetoothBridge::GattConnection& ArcBluetoothBridge::GattConnection::
-operator=(ArcBluetoothBridge::GattConnection&&) = default;
+ArcBluetoothBridge::GattConnection&
+ArcBluetoothBridge::GattConnection::operator=(
+    ArcBluetoothBridge::GattConnection&&) = default;
 
 namespace {
 

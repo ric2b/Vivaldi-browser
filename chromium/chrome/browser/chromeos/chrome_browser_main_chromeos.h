@@ -20,6 +20,10 @@ class ChromeKeyboardControllerClient;
 class ImageDownloaderImpl;
 
 namespace arc {
+namespace data_snapshotd {
+class ArcDataSnapshotdManager;
+}  // namespace data_snapshotd
+
 class ArcServiceLauncher;
 }  // namespace arc
 
@@ -151,8 +155,6 @@ class ChromeBrowserMainPartsChromeos : public ChromeBrowserMainPartsLinux {
   std::unique_ptr<ArcKioskAppManager> arc_kiosk_app_manager_;
   std::unique_ptr<WebKioskAppManager> web_kiosk_app_manager_;
 
-  std::unique_ptr<::memory::MemoryKillsMonitor::Handle> memory_kills_monitor_;
-
   std::unique_ptr<ChromeKeyboardControllerClient>
       chrome_keyboard_controller_client_;
 
@@ -199,6 +201,9 @@ class ChromeBrowserMainPartsChromeos : public ChromeBrowserMainPartsLinux {
 
   std::unique_ptr<GnubbyNotification> gnubby_notification_;
   std::unique_ptr<system::BreakpadConsentWatcher> breakpad_consent_watcher_;
+
+  std::unique_ptr<arc::data_snapshotd::ArcDataSnapshotdManager>
+      arc_data_snapshotd_manager_;
 
   DISALLOW_COPY_AND_ASSIGN(ChromeBrowserMainPartsChromeos);
 };

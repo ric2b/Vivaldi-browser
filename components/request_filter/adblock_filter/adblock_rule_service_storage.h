@@ -31,6 +31,7 @@ class RuleServiceStorage : public base::ImportantFileWriter::DataSerializer {
     std::array<bool, kRuleGroupCount> groups_enabled = {true, true};
     std::array<RuleSources, kRuleGroupCount> rule_sources;
     std::array<std::vector<KnownRuleSource>, kRuleGroupCount> known_sources;
+    std::array<std::set<std::string>, kRuleGroupCount> deleted_presets;
     std::array<RuleService::ExceptionsList, kRuleGroupCount>
         active_exceptions_lists = {RuleService::kProcessList,
                                    RuleService::kProcessList};

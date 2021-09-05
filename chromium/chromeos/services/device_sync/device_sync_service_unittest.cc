@@ -46,6 +46,7 @@
 #include "chromeos/services/device_sync/proto/cryptauth_client_app_metadata.pb.h"
 #include "chromeos/services/device_sync/proto/cryptauth_common.pb.h"
 #include "chromeos/services/device_sync/proto/cryptauth_v2_test_util.h"
+#include "chromeos/services/device_sync/public/cpp/device_sync_prefs.h"
 #include "chromeos/services/device_sync/public/cpp/fake_client_app_metadata_provider.h"
 #include "chromeos/services/device_sync/public/cpp/fake_gcm_device_info_provider.h"
 #include "chromeos/services/device_sync/public/mojom/device_sync.mojom.h"
@@ -125,7 +126,7 @@ class FakeSoftwareFeatureManagerDelegate
     : public FakeSoftwareFeatureManager::Delegate {
  public:
   explicit FakeSoftwareFeatureManagerDelegate(
-      base::Closure on_delegate_call_closure)
+      base::RepeatingClosure on_delegate_call_closure)
       : on_delegate_call_closure_(on_delegate_call_closure) {}
 
   ~FakeSoftwareFeatureManagerDelegate() override = default;
@@ -140,7 +141,7 @@ class FakeSoftwareFeatureManagerDelegate
   }
 
  private:
-  base::Closure on_delegate_call_closure_;
+  base::RepeatingClosure on_delegate_call_closure_;
 };
 
 // Delegate which invokes the Closure provided to its constructor when a
@@ -149,7 +150,7 @@ class FakeCryptAuthFeatureStatusSetterDelegate
     : public FakeCryptAuthFeatureStatusSetter::Delegate {
  public:
   explicit FakeCryptAuthFeatureStatusSetterDelegate(
-      base::Closure on_delegate_call_closure)
+      base::RepeatingClosure on_delegate_call_closure)
       : on_delegate_call_closure_(on_delegate_call_closure) {}
 
   ~FakeCryptAuthFeatureStatusSetterDelegate() override = default;
@@ -158,7 +159,7 @@ class FakeCryptAuthFeatureStatusSetterDelegate
   void OnSetFeatureStatusCalled() override { on_delegate_call_closure_.Run(); }
 
  private:
-  base::Closure on_delegate_call_closure_;
+  base::RepeatingClosure on_delegate_call_closure_;
 };
 
 // Delegate which invokes the Closure provided to its constructor when a
@@ -167,7 +168,7 @@ class FakeCryptAuthDeviceNotifierDelegate
     : public FakeCryptAuthDeviceNotifier::Delegate {
  public:
   explicit FakeCryptAuthDeviceNotifierDelegate(
-      base::Closure on_delegate_call_closure)
+      base::RepeatingClosure on_delegate_call_closure)
       : on_delegate_call_closure_(on_delegate_call_closure) {}
 
   ~FakeCryptAuthDeviceNotifierDelegate() override = default;
@@ -176,7 +177,7 @@ class FakeCryptAuthDeviceNotifierDelegate
   void OnNotifyDevicesCalled() override { on_delegate_call_closure_.Run(); }
 
  private:
-  base::Closure on_delegate_call_closure_;
+  base::RepeatingClosure on_delegate_call_closure_;
 };
 
 class FakeCryptAuthGCMManagerFactory : public CryptAuthGCMManagerImpl::Factory {
@@ -747,7 +748,7 @@ class DeviceSyncServiceTest
     fake_gcm_driver_ = std::make_unique<gcm::FakeGCMDriver>();
 
     test_pref_service_ = std::make_unique<TestingPrefServiceSimple>();
-    DeviceSyncImpl::RegisterProfilePrefs(test_pref_service_->registry());
+    RegisterProfilePrefs(test_pref_service_->registry());
 
     simple_test_clock_ = std::make_unique<base::SimpleTestClock>();
 
@@ -854,7 +855,7 @@ class DeviceSyncServiceTest
     fake_device_sync_impl_factory_ =
         std::make_unique<FakeDeviceSyncImplFactory>(std::move(mock_timer),
                                                     simple_test_clock_.get());
-    DeviceSyncImpl::Factory::SetFactoryForTesting(
+    DeviceSyncImpl::Factory::SetCustomFactory(
         fake_device_sync_impl_factory_.get());
 
     fake_gcm_device_info_provider_ =
@@ -869,7 +870,7 @@ class DeviceSyncServiceTest
     CryptAuthEnrollmentManagerImpl::Factory::SetFactoryForTesting(nullptr);
     RemoteDeviceProviderImpl::Factory::SetFactoryForTesting(nullptr);
     SoftwareFeatureManagerImpl::Factory::SetFactoryForTesting(nullptr);
-    DeviceSyncImpl::Factory::SetFactoryForTesting(nullptr);
+    DeviceSyncImpl::Factory::SetCustomFactory(nullptr);
 
     NetworkHandler::Shutdown();
     DBusThreadManager::Shutdown();
@@ -1905,7 +1906,7 @@ TEST_P(DeviceSyncServiceTest, SetSoftwareFeatureState_Success) {
   EXPECT_FALSE(GetLastSetSoftwareFeatureStateResponseAndReset());
 
   // Now, invoke the success callback.
-  set_software_calls[0]->success_callback.Run();
+  std::move(set_software_calls[0]->success_callback).Run();
 
   // The callback still has not yet been invoked, since a device sync has not
   // confirmed the feature state change yet.
@@ -2017,7 +2018,8 @@ TEST_P(DeviceSyncServiceTest, SetSoftwareFeatureState_Error) {
   EXPECT_FALSE(GetLastSetSoftwareFeatureStateResponseAndReset());
 
   // Now, invoke the error callback.
-  set_software_calls[0]->error_callback.Run(NetworkRequestError::kOffline);
+  std::move(set_software_calls[0]->error_callback)
+      .Run(NetworkRequestError::kOffline);
   base::RunLoop().RunUntilIdle();
   auto last_response = GetLastSetSoftwareFeatureStateResponseAndReset();
   EXPECT_TRUE(last_response);
@@ -2286,12 +2288,12 @@ TEST_P(DeviceSyncServiceTest, FindEligibleDevices) {
 
   // Now, invoke the success callback, simultating that device 0 is eligible and
   // devices 1-4 are not.
-  find_eligible_calls[0]->success_callback.Run(
-      std::vector<cryptauth::ExternalDeviceInfo>(test_device_infos().begin(),
-                                                 test_device_infos().begin()),
-      std::vector<cryptauth::IneligibleDevice>(
-          test_ineligible_devices().begin() + 1,
-          test_ineligible_devices().end()));
+  std::move(find_eligible_calls[0]->success_callback)
+      .Run(std::vector<cryptauth::ExternalDeviceInfo>(
+               test_device_infos().begin(), test_device_infos().begin()),
+           std::vector<cryptauth::IneligibleDevice>(
+               test_ineligible_devices().begin() + 1,
+               test_ineligible_devices().end()));
   base::RunLoop().RunUntilIdle();
   auto last_response = GetLastFindEligibleDevicesResponseAndReset();
   EXPECT_TRUE(last_response);
@@ -2318,7 +2320,8 @@ TEST_P(DeviceSyncServiceTest, FindEligibleDevices) {
   EXPECT_FALSE(GetLastFindEligibleDevicesResponseAndReset());
 
   // Now, invoke the error callback.
-  find_eligible_calls[1]->error_callback.Run(NetworkRequestError::kOffline);
+  std::move(find_eligible_calls[1]->error_callback)
+      .Run(NetworkRequestError::kOffline);
   base::RunLoop().RunUntilIdle();
   last_response = GetLastFindEligibleDevicesResponseAndReset();
   EXPECT_TRUE(last_response);

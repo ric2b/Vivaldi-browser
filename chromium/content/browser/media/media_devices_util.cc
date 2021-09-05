@@ -11,8 +11,8 @@
 #include "base/command_line.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_tokenizer.h"
-#include "content/browser/frame_host/render_frame_host_delegate.h"
-#include "content/browser/frame_host/render_frame_host_impl.h"
+#include "content/browser/renderer_host/render_frame_host_delegate.h"
+#include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -196,6 +196,8 @@ blink::WebMediaDeviceInfo TranslateMediaDeviceInfo(
           : GetHMACForMediaDeviceID(salt_and_origin.group_id_salt,
                                     salt_and_origin.origin,
                                     device_info.group_id),
+      has_permission ? device_info.video_control_support
+                     : media::VideoCaptureControlSupport(),
       has_permission ? device_info.video_facing
                      : media::MEDIA_VIDEO_FACING_NONE);
 }

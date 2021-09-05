@@ -5,10 +5,10 @@
 module network.mojom;
 
 import "mojo/public/mojom/base/big_buffer.mojom";
-import "mojo/public/mojom/base/file.mojom";
 import "mojo/public/mojom/base/file_path.mojom";
 import "mojo/public/mojom/base/time.mojom";
 import "mojo/public/mojom/base/unguessable_token.mojom";
+import "services/network/public/mojom/client_security_state.mojom";
 import "services/network/public/mojom/cors.mojom";
 import "services/network/public/mojom/cookie_access_observer.mojom";
 import "services/network/public/mojom/chunked_data_pipe_getter.mojom";
@@ -63,7 +63,6 @@ enum DataElementType {
   kDataPipe,
   kChunkedDataPipe,
   kReadOnceStream,
-  kRawFile,
 
   // Used for Upload when Network Service is disabled:
   kBlob,
@@ -92,6 +91,14 @@ struct TrustedUrlRequestParams {
   // a cookie. If this is set to non-null, the observer passed to
   // URLLoaderFactory will be ignored.
   pending_remote<CookieAccessObserver>? cookie_observer;
+
+  // Specifies the security state of the client, for cases when the
+  // URLLoaderFactory is shared among multiple clients.
+  //
+  // This field is only used if no ClientSecurityState was specified in the
+  // URLLoaderFactoryParams passed to the factory. Otherwise, the value from
+  // the factory params is used unconditionally.
+  ClientSecurityState? client_security_state;
 };
 
 // Typemapped to network::ResourceRequest.
@@ -131,23 +138,27 @@ struct URLRequest {
 
   // |request_initiator| indicates the origin initiating the resource request.
   //
-  // |request_initiator| is null for browser-initiated requests (e.g.
+  // |request_initiator| can be null for browser-initiated requests (e.g.
   // navigations initiated via omnibox or bookmarks, internal subresource
   // requests like fetching the SafeBrowsing data, etc.).
   //
   // For all requests initiated via web (both subresource requests and
-  // navigations), |request_initiator| is always set to the origin of the frame
-  // that has initiated the request.  This is true even if the request might
-  // have been initiated by an isolated world (e.g. from a content script of an
-  // extension, with its own, separate origin).  This needs to be true even if
-  // the request might be "proxied" in the browser process on behalf of a web
-  // origin (e.g. as is the case for PaymentRequest API).
+  // navigations), |request_initiator| should always be set to the origin of
+  // the frame (or worker) that has initiated the request.  This is true even
+  // if the request might have been initiated by an isolated world (e.g. from a
+  // content script of an extension, with its own, separate origin).  This
+  // needs to be true even if the request might be "proxied" in the browser
+  // process on behalf of a web origin (e.g. as is the case for PaymentRequest
+  // API).
   //
-  // |request_initiator| is consulted in a variety of security features,
-  // including: calculating Sec-Fetch-Site request header, determining if the
-  // request should be subject to CORS, determining if CORB and/or CORP should
-  // block the response, determining if SameSite=strict cookies should be sent,
-  // etc.
+  // SECURITY NOTE: Factories with |process_id| set to |kBrowserProcessId| do
+  // not enforce |request_initiator_origin_lock| and instead rely on the
+  // factory user to ensure that a valid, non-nullopt |request_initiator| is
+  // provided.  Failure to provide a correct, verified |request_initiator| may
+  // lead to bypasses of CORS, CORB, SameSite cookies and other HTTP security
+  // features.  An untrustworthy process (e.g. a renderer or a utility process)
+  // should not be able to trigger or influence requests with a base::nullopt
+  // |request_initiator|).
   //
   // See also:
   // - |isolated_world_origin|
@@ -417,13 +428,11 @@ struct DataElement {
 
   // For kBytes.
   array<uint8> buf;
-  // For kFile and kRawFile
+  // For kFile
   mojo_base.mojom.FilePath path;
-  // For kRawFile
-  mojo_base.mojom.File? file;
   // For kBlob
   // TODO(richard.li): Deprecate this once NetworkService is fully shipped.
-  string? blob_uuid;
+  string blob_uuid;
   // For kDataPipe
   pending_remote<network.mojom.DataPipeGetter>? data_pipe_getter;
   // For kChunkedDataPipe

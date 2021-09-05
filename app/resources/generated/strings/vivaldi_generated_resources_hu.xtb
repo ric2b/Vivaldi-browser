@@ -13,12 +13,12 @@
 <translation id="1163931534039071049">&amp;Keret forrásának megtekintése</translation>
 <translation id="1165039591588034296">Hiba</translation>
 <translation id="1175364870820465910">&amp;Nyomtatás...</translation>
-<translation id="1177863135347784049">Egyéni</translation>
 <translation id="1181037720776840403">Eltávolítás</translation>
 <translation id="1187722533808055681">Tétlen aktiválások</translation>
 <translation id="119944043368869598">Összes törlése</translation>
 <translation id="1221825588892235038">Csak a kijelölt</translation>
 <translation id="1244303850296295656">Bővítménnyel kapcsolatos hiba</translation>
+<translation id="125220115284141797">Alapértelmezett</translation>
 <translation id="1274977772557788323">Adobe Flash Player tárolási beállítások</translation>
 <translation id="1297175357211070620">Cél</translation>
 <translation id="1303101771013849280">Könyvjelzők HTML-fájlja</translation>
@@ -45,9 +45,11 @@
 <translation id="1723824996674794290">&amp;Új ablak</translation>
 <translation id="1725149567830788547">&amp;Vezérlők megjelenítése</translation>
 <translation id="1729533290416704613">Továbbá azt is szabályozza, hogy melyik oldal jelenik meg a cím- és keresősávban indított kereséskor.</translation>
+<translation id="174123615272205933">Egyéni</translation>
 <translation id="1744108098763830590">háttérbeli oldal</translation>
 <translation id="176587472219019965">&amp;Új ablak</translation>
 <translation id="1769104665586091481">Hivatkozás megnyitása új &amp;ablakban</translation>
+<translation id="1779468444204342338">Minimális</translation>
 <translation id="1815083418640426271">Beillesztés egyszerű szövegként</translation>
 <translation id="1828901632669367785">Rendszerablakkal nyomtatás...</translation>
 <translation id="1850508293116537636">Forgatás &amp;jobbra</translation>
@@ -87,7 +89,6 @@
 <translation id="2381756643783702095">Kérdezzen rá küldés előtt (ajánlott)</translation>
 <translation id="241082044617551207">Ismeretlen beépülő modul</translation>
 <translation id="2423578206845792524">Ké&amp;p mentése másként...</translation>
-<translation id="2436707352762155834">Minimális</translation>
 <translation id="2439110203301358333">A számítógépen lévő egyik program olyan bővítményt adott hozzá, amely módosíthatja a Vivaldi működését.</translation>
 <translation id="2445081178310039857">A bővítmény gyökérkönyvtárát kötelező megadni.</translation>
 <translation id="2470702053775288986">Nem támogatott kiterjesztések kikapcsolva</translation>
@@ -138,6 +139,7 @@
 <translation id="3222066309010235055">Előmegjelenítés: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3227137524299004712">Mikrofon</translation>
 <translation id="3241680850019875542">Válassza ki a bővítmény gyökérkönyvtárát. A bővítmény frissítéséhez meg kell adni az ismét használandó privátkulcs-fájlt is.</translation>
+<translation id="3266179261140759675">A bezárt webhelyek nem küldhetnek és fogadhatnak adatokat</translation>
 <translation id="3280237271814976245">Mentés &amp;másként...</translation>
 <translation id="3285322247471302225">Új &amp;lap</translation>
 <translation id="3288047731229977326">A fejlesztői módban futó bővítmények kárt okozhatnak számítógépén. Ha Ön nem fejlesztő, akkor a biztonság kedvéért kapcsolja ki a fejlesztői módban futó bővítményeket.</translation>
@@ -245,7 +247,6 @@
 <translation id="5039804452771397117">Engedélyezés</translation>
 <translation id="5057110919553308744">Amikor a bővítményre kattintasz</translation>
 <translation id="5063480226653192405">Használat</translation>
-<translation id="5068918910148307423">Ne engedélyezze a nemrég bezárt webhelyek számára az adatküldés és -fogadás befejezését</translation>
 <translation id="5116628073786783676">H&amp;ang mentése másként...</translation>
 <translation id="5143374789336132547">A(z) <ph name="EXTENSION_NAME" /> bővítmény módosította, hogy melyik oldal jelenjen meg a Kezdőlap gombra kattintáskor.</translation>
 <translation id="5154108062446123722">A(z) <ph name="PRINTING_DESTINATION" /> speciális beállításai</translation>
@@ -264,6 +265,7 @@
 <translation id="5355926466126177564">A(z) <ph name="EXTENSION_NAME" /> bővítmény módosította, hogy melyik oldal jelenjen meg a cím- és keresősávban indított kereséskor.</translation>
 <translation id="5360150013186312835">Megjelenítés az eszköztáron</translation>
 <translation id="5362741141255528695">Válasszon ki privátkulcs-fájlt.</translation>
+<translation id="536638840841140142">Nincs</translation>
 <translation id="5370819323174483825">Új&amp;ratöltés</translation>
 <translation id="5398572795982417028">Tartományon kívüli oldalra való hivatkozás; a maximális érték <ph name="MAXIMUM_PAGE" /></translation>
 <translation id="5425042808445046667">Letöltés folytatása</translation>
@@ -388,7 +390,6 @@
 <translation id="7663719505383602579">Fogadó fél: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Rendszergazda által telepítve</translation>
 <translation id="7685049629764448582">JavaScript memória</translation>
-<translation id="7701040980221191251">Nincs</translation>
 <translation id="7701869757853594372">FELHASZNÁLÓI azonosítók</translation>
 <translation id="7704305437604973648">Feladat</translation>
 <translation id="7710568461918838723">Át&amp;játszás...</translation>

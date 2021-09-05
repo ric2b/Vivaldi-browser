@@ -6,6 +6,8 @@ package org.chromium.chrome.test.util.browser.signin;
 
 import android.accounts.Account;
 
+import androidx.annotation.Nullable;
+
 import org.junit.Assert;
 
 import org.chromium.base.ThreadUtils;
@@ -27,7 +29,7 @@ import java.util.concurrent.TimeoutException;
 /**
  * Utility class for test signin functionality.
  */
-final class SigninTestUtil {
+public final class SigninTestUtil {
     /**
      * Returns the currently signed in account.
      */
@@ -41,20 +43,59 @@ final class SigninTestUtil {
     }
 
     /**
-     * Sign into an account.
+     * Signs the user into the given account.
      */
-    static void signIn(Account account) {
+    static void signin(CoreAccountInfo coreAccountInfo) {
         CallbackHelper callbackHelper = new CallbackHelper();
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             SigninManager signinManager = IdentityServicesProvider.get().getSigninManager(
                     Profile.getLastUsedRegularProfile());
             signinManager.onFirstRunCheckDone(); // Allow sign-in
-            signinManager.signIn(
-                    SigninAccessPoint.UNKNOWN, account, new SigninManager.SignInCallback() {
+            signinManager.signin(coreAccountInfo, new SigninManager.SignInCallback() {
+                @Override
+                public void onSignInComplete() {
+                    callbackHelper.notifyCalled();
+                }
+
+                @Override
+                public void onSignInAborted() {
+                    Assert.fail("Sign-in was aborted");
+                }
+            });
+        });
+        try {
+            callbackHelper.waitForFirst();
+        } catch (TimeoutException e) {
+            throw new RuntimeException("Timed out waiting for callback", e);
+        }
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            Assert.assertEquals(coreAccountInfo,
+                    IdentityServicesProvider.get()
+                            .getIdentityManager(Profile.getLastUsedRegularProfile())
+                            .getPrimaryAccountInfo(ConsentLevel.NOT_REQUIRED));
+        });
+    }
+
+    /**
+     * Signs into an account and enables the sync if given a {@link ProfileSyncService} object.
+     *
+     * @param profileSyncService Enable the sync with it if it is not null.
+     */
+    public static void signinAndEnableSync(
+            CoreAccountInfo coreAccountInfo, @Nullable ProfileSyncService profileSyncService) {
+        CallbackHelper callbackHelper = new CallbackHelper();
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            SigninManager signinManager = IdentityServicesProvider.get().getSigninManager(
+                    Profile.getLastUsedRegularProfile());
+            signinManager.onFirstRunCheckDone(); // Allow sign-in
+            signinManager.signinAndEnableSync(
+                    SigninAccessPoint.UNKNOWN, coreAccountInfo, new SigninManager.SignInCallback() {
                         @Override
                         public void onSignInComplete() {
-                            ProfileSyncService.get().setFirstSetupComplete(
-                                    SyncFirstSetupCompleteSource.BASIC_FLOW);
+                            if (profileSyncService != null) {
+                                profileSyncService.setFirstSetupComplete(
+                                        SyncFirstSetupCompleteSource.BASIC_FLOW);
+                            }
                             callbackHelper.notifyCalled();
                         }
 
@@ -70,11 +111,10 @@ final class SigninTestUtil {
             throw new RuntimeException("Timed out waiting for callback", e);
         }
         TestThreadUtils.runOnUiThreadBlocking(() -> {
-            Assert.assertEquals(account.name,
+            Assert.assertEquals(coreAccountInfo,
                     IdentityServicesProvider.get()
                             .getIdentityManager(Profile.getLastUsedRegularProfile())
-                            .getPrimaryAccountInfo(ConsentLevel.SYNC)
-                            .getEmail());
+                            .getPrimaryAccountInfo(ConsentLevel.SYNC));
         });
     }
 

@@ -15,9 +15,6 @@ import("//rlz/buildflags/buildflags.gni")
 
 assert(enable_extensions)
 
-# See docs/no_sources_assignment_filter.md and https://crbug.com/1018739.
-set_sources_assignment_filter([])
-
 static_library("extensions") {
   sources = [
     "active_install_data.cc",
@@ -179,6 +176,8 @@ static_library("extensions") {
     "api/identity/gaia_web_auth_flow.h",
     "api/identity/identity_api.cc",
     "api/identity/identity_api.h",
+    "api/identity/identity_clear_all_cached_auth_tokens_function.cc",
+    "api/identity/identity_clear_all_cached_auth_tokens_function.h",
     "api/identity/identity_constants.cc",
     "api/identity/identity_constants.h",
     "api/identity/identity_get_accounts_function.cc",
@@ -470,8 +469,8 @@ static_library("extensions") {
     "chrome_url_request_util.h",
     "chrome_zipfile_installer.cc",
     "chrome_zipfile_installer.h",
-    "component_extensions_whitelist/whitelist.cc",
-    "component_extensions_whitelist/whitelist.h",
+    "component_extensions_allowlist/allowlist.cc",
+    "component_extensions_allowlist/allowlist.h",
     "component_loader.cc",
     "component_loader.h",
     "context_menu_matcher.cc",
@@ -690,10 +689,6 @@ static_library("extensions") {
     "updater/extension_updater.h",
     "updater/extension_updater_switches.cc",
     "updater/extension_updater_switches.h",
-    "updater/fetched_crx_file.cc",
-    "updater/fetched_crx_file.h",
-    "updater/parallel_unpacker.cc",
-    "updater/parallel_unpacker.h",
     "user_script_listener.cc",
     "user_script_listener.h",
     "warning_badge_service.cc",
@@ -747,10 +742,12 @@ static_library("extensions") {
     "//chrome/browser/extensions/api:api_registration",
     "//chrome/common",
     "//chrome/common/extensions/api",
+    "//components/omnibox/browser",
     "//components/safe_browsing/core:csd_proto",
     "//components/safe_browsing/core:webprotect_proto",
     "//components/safe_browsing/core/db:util",
     "//components/signin/core/browser",
+    "//components/translate/content/browser",
     "//content/public/browser",
     "//mojo/public/cpp/bindings",
   ]
@@ -758,7 +755,7 @@ static_library("extensions") {
     "//apps",
     "//base/util/values:values_util",
     "//build:branding_buildflags",
-    "//build:lacros_buildflags",
+    "//build:chromeos_buildflags",
     "//chrome:extra_resources",
     "//chrome:resources",
     "//chrome:strings",
@@ -774,7 +771,6 @@ static_library("extensions") {
     "//chrome/browser/image_decoder",
     "//chrome/browser/media/router",
     "//chrome/browser/media/router/discovery",
-    "//chrome/browser/nearby_sharing/common",
     "//chrome/browser/resource_coordinator:intervention_policy_database_proto",
     "//chrome/browser/resource_coordinator:mojo_bindings",
     "//chrome/browser/safe_browsing",
@@ -815,7 +811,6 @@ static_library("extensions") {
     "//components/nacl/common:buildflags",
     "//components/navigation_interception",
     "//components/net_log",
-    "//components/omnibox/browser",
     "//components/onc",
     "//components/page_load_metrics/browser:browser",
     "//components/password_manager/core/browser",
@@ -851,7 +846,6 @@ static_library("extensions") {
     "//components/sync",
     "//components/sync_preferences",
     "//components/sync_sessions",
-    "//components/translate/content/browser",
     "//components/translate/core/browser",
     "//components/translate/core/common",
     "//components/undo",
@@ -1023,6 +1017,7 @@ static_library("extensions") {
       "//ash/keyboard/ui:resources_grit_grit",
       "//ash/public/cpp",
       "//chrome/browser/chromeos/crostini:crostini_installer_types_mojom",
+      "//chrome/browser/nearby_sharing/common",
       "//chrome/browser/ui/webui/settings/chromeos/constants:mojom",
       "//chromeos",
       "//chromeos/attestation",
@@ -1087,8 +1082,6 @@ static_library("extensions") {
       "api/enterprise_reporting_private/enterprise_reporting_private_api.h",
       "api/enterprise_reporting_private/keychain_data_helper_mac.h",
       "api/enterprise_reporting_private/keychain_data_helper_mac.mm",
-      "api/enterprise_reporting_private/prefs.cc",
-      "api/enterprise_reporting_private/prefs.h",
       "api/image_writer_private/operation_nonchromeos.cc",
       "api/messaging/native_message_process_host.cc",
       "api/messaging/native_message_process_host.h",

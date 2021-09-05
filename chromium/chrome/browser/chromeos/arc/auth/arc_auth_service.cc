@@ -71,75 +71,6 @@ class ArcAuthServiceFactory
   ~ArcAuthServiceFactory() override = default;
 };
 
-mojom::ArcSignInResultPtr ConvertArcSignInStatusToArcSignInResult(
-    mojom::ArcSignInStatus status,
-    mojom::ArcSignInErrorPtr error) {
-  mojom::ArcSignInResultPtr result;
-
-  switch (status) {
-    case mojom::ArcSignInStatus::SUCCESS:
-    case mojom::ArcSignInStatus::SUCCESS_ALREADY_PROVISIONED:
-      result = mojom::ArcSignInResult::NewSuccess(
-          status == mojom::ArcSignInStatus::SUCCESS
-              ? mojom::ArcSignInSuccess::SUCCESS
-              : mojom::ArcSignInSuccess::SUCCESS_ALREADY_PROVISIONED);
-      break;
-    case mojom::ArcSignInStatus::CLOUD_PROVISION_FLOW_ERROR:
-      result = mojom::ArcSignInResult::NewError(std::move(error));
-      break;
-
-#define MAP_GENERAL_ERROR(name)                 \
-  case mojom::ArcSignInStatus::name:            \
-    result = mojom::ArcSignInResult::NewError(  \
-        mojom::ArcSignInError::NewGeneralError( \
-            mojom::GeneralSignInError::name));  \
-    break
-      MAP_GENERAL_ERROR(UNKNOWN_ERROR);
-      MAP_GENERAL_ERROR(MOJO_VERSION_MISMATCH);
-      MAP_GENERAL_ERROR(PROVISIONING_TIMEOUT);
-      MAP_GENERAL_ERROR(NO_NETWORK_CONNECTION);
-      MAP_GENERAL_ERROR(CHROME_SERVER_COMMUNICATION_ERROR);
-      MAP_GENERAL_ERROR(ARC_DISABLED);
-      MAP_GENERAL_ERROR(UNSUPPORTED_ACCOUNT_TYPE);
-      MAP_GENERAL_ERROR(CHROME_ACCOUNT_NOT_FOUND);
-#undef MAP_GENERAL_ERROR
-
-#define MAP_CHECKIN_ERROR(name)                 \
-  case mojom::ArcSignInStatus::name:            \
-    result = mojom::ArcSignInResult::NewError(  \
-        mojom::ArcSignInError::NewCheckinError( \
-            mojom::DeviceCheckInError::name));  \
-    break
-
-      MAP_CHECKIN_ERROR(DEVICE_CHECK_IN_FAILED);
-      MAP_CHECKIN_ERROR(DEVICE_CHECK_IN_TIMEOUT);
-      MAP_CHECKIN_ERROR(DEVICE_CHECK_IN_INTERNAL_ERROR);
-#undef MAP_CHECKIN_ERROR
-
-#define MAP_GMS_ERROR(name)                                         \
-  case mojom::ArcSignInStatus::name:                                \
-    result = mojom::ArcSignInResult::NewError(                      \
-        mojom::ArcSignInError::NewGmsError(mojom::GMSError::name)); \
-    break
-      MAP_GMS_ERROR(GMS_NETWORK_ERROR);
-      MAP_GMS_ERROR(GMS_SERVICE_UNAVAILABLE);
-      MAP_GMS_ERROR(GMS_BAD_AUTHENTICATION);
-      MAP_GMS_ERROR(GMS_SIGN_IN_FAILED);
-      MAP_GMS_ERROR(GMS_SIGN_IN_TIMEOUT);
-      MAP_GMS_ERROR(GMS_SIGN_IN_INTERNAL_ERROR);
-#undef MAP_GMS_ERROR
-
-    case mojom::ArcSignInStatus::DEPRECATED_CLOUD_PROVISION_FLOW_FAILED:
-    case mojom::ArcSignInStatus::DEPRECATED_CLOUD_PROVISION_FLOW_INTERNAL_ERROR:
-    case mojom::ArcSignInStatus::DEPRECATED_CLOUD_PROVISION_FLOW_TIMEOUT:
-    default:
-      NOTREACHED() << "unknown sign result";
-      break;
-  }
-
-  return result;
-}
-
 // Converts mojom::ArcSignInStatus into ProvisiningResult.
 ProvisioningResult ConvertArcSignInResultToProvisioningResult(
     mojom::ArcSignInResult* result) {
@@ -470,49 +401,34 @@ void ArcAuthService::OnAuthorizationResult(mojom::ArcSignInResultPtr result,
   }
 }
 
-// TODO(b/146435695) Remove this method when ARC++ switches to
-// OnAuthorizationResult
-void ArcAuthService::OnAuthorizationCompleteDeprecated(
-    mojom::ArcSignInStatus status,
-    bool initial_signin,
-    const base::Optional<std::string>& account_name,
-    mojom::ArcSignInErrorPtr error) {
-  mojom::ArcSignInResultPtr result =
-      ConvertArcSignInStatusToArcSignInResult(status, std::move(error));
-  mojom::ArcSignInAccountPtr account =
-      initial_signin ? mojom::ArcSignInAccount::NewInitialSignin(1)
-                     : mojom::ArcSignInAccount::NewAccountName(account_name);
-  OnAuthorizationResult(std::move(result), std::move(account));
-}
-
 void ArcAuthService::ReportMetrics(mojom::MetricsType metrics_type,
                                    int32_t value) {
   switch (metrics_type) {
     case mojom::MetricsType::NETWORK_WAITING_TIME_MILLISECONDS:
-      UpdateAuthTiming("ArcAuth.NetworkWaitTime",
-                       base::TimeDelta::FromMilliseconds(value));
+      UpdateAuthTiming("Arc.Auth.NetworkWait.TimeDelta",
+                       base::TimeDelta::FromMilliseconds(value), profile_);
       break;
     case mojom::MetricsType::CHECKIN_ATTEMPTS:
-      UpdateAuthCheckinAttempts(value);
+      UpdateAuthCheckinAttempts(value, profile_);
       break;
     case mojom::MetricsType::CHECKIN_TIME_MILLISECONDS:
-      UpdateAuthTiming("ArcAuth.CheckinTime",
-                       base::TimeDelta::FromMilliseconds(value));
+      UpdateAuthTiming("Arc.Auth.Checkin.TimeDelta",
+                       base::TimeDelta::FromMilliseconds(value), profile_);
       break;
     case mojom::MetricsType::SIGNIN_TIME_MILLISECONDS:
-      UpdateAuthTiming("ArcAuth.SignInTime",
-                       base::TimeDelta::FromMilliseconds(value));
+      UpdateAuthTiming("Arc.Auth.SignIn.TimeDelta",
+                       base::TimeDelta::FromMilliseconds(value), profile_);
       break;
     case mojom::MetricsType::ACCOUNT_CHECK_MILLISECONDS:
-      UpdateAuthTiming("ArcAuth.AccountCheckTime",
-                       base::TimeDelta::FromMilliseconds(value));
+      UpdateAuthTiming("Arc.Auth.AccountCheck.TimeDelta",
+                       base::TimeDelta::FromMilliseconds(value), profile_);
       break;
   }
 }
 
 void ArcAuthService::ReportAccountCheckStatus(
     mojom::AccountCheckStatus status) {
-  UpdateAuthAccountCheckStatus(status);
+  UpdateAuthAccountCheckStatus(status, profile_);
 }
 
 void ArcAuthService::ReportSupervisionChangeStatus(
@@ -538,27 +454,6 @@ void ArcAuthService::ReportSupervisionChangeStatus(
     case mojom::SupervisionChangeStatus::INVALID_SUPERVISION_STATE:
       NOTREACHED() << "Invalid status of child transition: " << status;
   }
-}
-
-void ArcAuthService::OnAccountInfoReadyDeprecated(
-    mojom::ArcSignInStatus status,
-    mojom::AccountInfoPtr account_info) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  auto* instance = ARC_GET_INSTANCE_FOR_METHOD(arc_bridge_service_->auth(),
-                                               OnAccountInfoReadyDeprecated);
-  if (!instance)
-    return;
-
-  instance->OnAccountInfoReadyDeprecated(std::move(account_info), status);
-}
-
-void ArcAuthService::RequestAccountInfoDeprecated(bool initial_signin) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-
-  FetchPrimaryAccountInfo(
-      initial_signin,
-      base::BindOnce(&ArcAuthService::OnAccountInfoReadyDeprecated,
-                     weak_ptr_factory_.GetWeakPtr()));
 }
 
 void ArcAuthService::RequestPrimaryAccountInfo(

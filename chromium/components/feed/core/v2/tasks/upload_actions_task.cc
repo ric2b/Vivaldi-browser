@@ -111,8 +111,11 @@ UploadActionsTask::UploadActionsTask(
       upload_now_(upload_now),
       wire_action_(std::move(action)),
       callback_(std::move(callback)) {
-  wire_action_->mutable_client_data()->set_timestamp_seconds(
+  auto* client_data = wire_action_->mutable_client_data();
+  client_data->set_timestamp_seconds(
       (base::Time::Now() - base::Time::UnixEpoch()).InSeconds());
+  client_data->set_action_surface(
+      feedwire::FeedAction::ClientData::ANDROID_CHROME_NEW_TAB);
 }
 
 UploadActionsTask::UploadActionsTask(
@@ -174,6 +177,11 @@ void UploadActionsTask::OnStorePendingActionFinished(bool write_ok) {
     return;
   }
 
+  if (!stream_->CanUploadActions()) {
+    Done(UploadActionsStatus::kAbortUploadBecauseDisabled);
+    return;
+  }
+
   // If the new action was stored and upload_now was set, load all pending
   // actions and try to upload.
   ReadActions();
@@ -199,6 +207,10 @@ void UploadActionsTask::UploadPendingActions() {
   // Can't upload actions for signed-out users, so abort.
   if (!stream_->IsSignedIn()) {
     Done(UploadActionsStatus::kAbortUploadForSignedOutUser);
+    return;
+  }
+  if (!stream_->CanUploadActions()) {
+    Done(UploadActionsStatus::kAbortUploadBecauseDisabled);
     return;
   }
   UpdateAndUploadNextBatch();

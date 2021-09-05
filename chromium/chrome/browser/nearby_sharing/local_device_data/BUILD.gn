@@ -2,6 +2,8 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+assert(is_chromeos, "Nearby Share is CrOS only")
+
 source_set("local_device_data") {
   sources = [
     "nearby_share_device_data_updater.cc",
@@ -13,6 +15,8 @@ source_set("local_device_data") {
     "nearby_share_local_device_data_manager_impl.cc",
     "nearby_share_local_device_data_manager_impl.h",
   ]
+
+  public_deps = [ "//chrome/browser/ui/webui/nearby_share/public/mojom" ]
 
   deps = [
     "//base",

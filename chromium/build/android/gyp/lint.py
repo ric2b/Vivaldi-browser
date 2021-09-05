@@ -8,6 +8,7 @@
 from __future__ import print_function
 
 import argparse
+import functools
 import logging
 import os
 import re
@@ -25,6 +26,7 @@ _LINT_MD_URL = 'https://chromium.googlesource.com/chromium/src/+/master/build/an
 
 # These checks are not useful for chromium.
 _DISABLED_ALWAYS = [
+    "AppCompatResource",  # Lint does not correctly detect our appcompat lib.
     "Assert",  # R8 --force-enable-assertions is used to enable java asserts.
     "LintBaseline",  # Don't warn about using baseline.xml files.
     "MissingApplicationIcon",  # False positive for non-production targets.
@@ -108,10 +110,18 @@ def _GenerateProjectFile(android_manifest,
   return project
 
 
-def _GenerateAndroidManifest(original_manifest_path, min_sdk_version,
-                             android_sdk_version):
+def _GenerateAndroidManifest(original_manifest_path, extra_manifest_paths,
+                             min_sdk_version, android_sdk_version):
   # Set minSdkVersion in the manifest to the correct value.
   doc, manifest, app_node = manifest_utils.ParseManifest(original_manifest_path)
+
+  # TODO(crbug.com/1126301): Should this be done using manifest merging?
+  # Add anything in the application node of the extra manifests to the main
+  # manifest to prevent unused resource errors.
+  for path in extra_manifest_paths:
+    _, _, extra_app_node = manifest_utils.ParseManifest(path)
+    for node in extra_app_node:
+      app_node.append(node)
 
   if app_node.find(
       '{%s}allowBackup' % manifest_utils.ANDROID_NAMESPACE) is None:
@@ -140,9 +150,21 @@ def _WriteXmlFile(root, path):
             root, encoding='utf-8')).toprettyxml(indent='  '))
 
 
+def _CheckLintWarning(expected_warnings, lint_output):
+  for expected_warning in expected_warnings.split(','):
+    expected_str = '[{}]'.format(expected_warning)
+    if expected_str not in lint_output:
+      raise Exception('Expected {!r} warning in lint output:\n{}.'.format(
+          expected_str, lint_output))
+
+  # Do not print warning
+  return ''
+
+
 def _RunLint(lint_binary_path,
              config_path,
              manifest_path,
+             extra_manifest_paths,
              sources,
              classpath,
              cache_dir,
@@ -154,6 +176,7 @@ def _RunLint(lint_binary_path,
              android_sdk_root,
              lint_gen_dir,
              baseline,
+             expected_warnings,
              testonly_target=False,
              warnings_as_errors=False):
   logging.info('Lint starting')
@@ -177,6 +200,7 @@ def _RunLint(lint_binary_path,
 
   logging.info('Generating Android manifest file')
   android_manifest_tree = _GenerateAndroidManifest(manifest_path,
+                                                   extra_manifest_paths,
                                                    min_sdk_version,
                                                    android_sdk_version)
   # Include the rebased manifest_path in the lint generated path so that it is
@@ -231,12 +255,22 @@ def _RunLint(lint_binary_path,
   env['JAVA_HOME'] = build_utils.JAVA_HOME
   # This is necessary so that lint errors print stack traces in stdout.
   env['LINT_PRINT_STACKTRACE'] = 'true'
+  if baseline and not os.path.exists(baseline):
+    # Generating new baselines is only done locally, and requires more memory to
+    # avoid OOMs.
+    env['LINT_OPTS'] = '-Xmx4g'
+  else:
+    # The default set in the wrapper script is 1g, but it seems not enough :(
+    env['LINT_OPTS'] = '-Xmx2g'
+
   # This filter is necessary for JDK11.
   stderr_filter = build_utils.FilterReflectiveAccessJavaWarnings
   stdout_filter = lambda x: build_utils.FilterLines(x, 'No issues found')
+  if expected_warnings:
+    stdout_filter = functools.partial(_CheckLintWarning, expected_warnings)
 
   start = time.time()
-  logging.debug('Lint command %s', cmd)
+  logging.debug('Lint command %s', ' '.join(cmd))
   failed = True
   try:
     failed = bool(
@@ -305,6 +339,10 @@ def _ParseArgs(argv):
   parser.add_argument('--srcjars', help='GN list of included srcjars.')
   parser.add_argument('--manifest-path',
                       help='Path to original AndroidManifest.xml')
+  parser.add_argument('--extra-manifest-paths',
+                      action='append',
+                      help='GYP-list of manifest paths to merge into the '
+                      'original AndroidManifest.xml')
   parser.add_argument('--resource-sources',
                       default=[],
                       action='append',
@@ -320,11 +358,15 @@ def _ParseArgs(argv):
   parser.add_argument('--baseline',
                       help='Baseline file to ignore existing errors and fail '
                       'on new errors.')
+  parser.add_argument('--expected-warnings',
+                      help='Comma separated list of warnings to test for in '
+                      'the output, failing if not found.')
 
   args = parser.parse_args(build_utils.ExpandFileArgs(argv))
   args.java_sources = build_utils.ParseGnList(args.java_sources)
   args.srcjars = build_utils.ParseGnList(args.srcjars)
   args.resource_sources = build_utils.ParseGnList(args.resource_sources)
+  args.extra_manifest_paths = build_utils.ParseGnList(args.extra_manifest_paths)
   args.resource_zips = build_utils.ParseGnList(args.resource_zips)
   args.classpath = build_utils.ParseGnList(args.classpath)
   return args
@@ -351,6 +393,7 @@ def main():
   _RunLint(args.lint_binary_path,
            args.config_path,
            args.manifest_path,
+           args.extra_manifest_paths,
            sources,
            args.classpath,
            args.cache_dir,
@@ -362,6 +405,7 @@ def main():
            args.android_sdk_root,
            args.lint_gen_dir,
            args.baseline,
+           args.expected_warnings,
            testonly_target=args.testonly,
            warnings_as_errors=args.warnings_as_errors)
   logging.info('Creating stamp file')

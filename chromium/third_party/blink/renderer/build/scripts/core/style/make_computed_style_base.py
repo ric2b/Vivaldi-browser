@@ -51,6 +51,7 @@ ALIGNMENT_ORDER = [
     'NinePieceImage',
     'IntrinsicLength',
     'TextDecorationThickness',
+    'StyleAspectRatio',
     # Aligns like float
     'base::Optional<Length>',
     'StyleOffsetRotation',
@@ -72,7 +73,6 @@ ALIGNMENT_ORDER = [
     'StyleColor',
     'StyleAutoColor',
     'Color',
-    'CSSValueID',
     'LayoutUnit',
     'LineClampValue',
     'OutlineValue',

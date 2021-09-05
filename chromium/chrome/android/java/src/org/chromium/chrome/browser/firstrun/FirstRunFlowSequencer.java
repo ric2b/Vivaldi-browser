@@ -11,6 +11,7 @@ import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.SystemClock;
+import android.provider.Settings;
 
 import androidx.annotation.VisibleForTesting;
 
@@ -21,8 +22,6 @@ import org.chromium.base.Log;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.LaunchIntentDispatcher;
-import org.chromium.chrome.browser.flags.CachedFeatureFlags;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.locale.LocaleManager;
 import org.chromium.chrome.browser.net.spdyproxy.DataReductionProxySettings;
@@ -31,13 +30,11 @@ import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.services.AndroidChildAccountHelper;
 import org.chromium.chrome.browser.signin.IdentityServicesProvider;
 import org.chromium.chrome.browser.signin.SigninManager;
-import org.chromium.chrome.browser.toolbar.bottom.BottomToolbarVariationManager;
 import org.chromium.chrome.browser.vr.VrModuleProvider;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.components.signin.AccountManagerFacadeProvider;
 import org.chromium.components.signin.ChildAccountStatus;
 
-import java.util.Collections;
 import java.util.List;
 
 import org.chromium.chrome.browser.ChromeApplication;
@@ -121,7 +118,9 @@ public abstract class FirstRunFlowSequencer  {
 
     @VisibleForTesting
     protected boolean shouldSkipFirstUseHints() {
-        return ApiCompatibilityUtils.shouldSkipFirstUseHints(mActivity.getContentResolver());
+        return Settings.Secure.getInt(
+                       mActivity.getContentResolver(), Settings.Secure.SKIP_FIRST_USE_HINTS, 0)
+                != 0;
     }
 
     @VisibleForTesting
@@ -205,14 +204,6 @@ public abstract class FirstRunFlowSequencer  {
                 FirstRunActivity.SHOW_DATA_REDUCTION_PAGE, shouldShowDataReductionPage());
         freProperties.putBoolean(
                 FirstRunActivity.SHOW_SEARCH_ENGINE_PAGE, shouldShowSearchEnginePage());
-
-        // Cache the flag for the bottom toolbar. If the flag is not cached here, Users, who are in
-        // bottom toolbar experiment group, will see toolbar on the top in first run, and then
-        // toolbar will appear to the bottom on the second run.
-        CachedFeatureFlags.cacheNativeFlags(
-                Collections.singletonList(ChromeFeatureList.CHROME_DUET));
-        CachedFeatureFlags.cacheFieldTrialParameters(
-                Collections.singletonList(BottomToolbarVariationManager.BOTTOM_TOOLBAR_VARIATION));
     }
 
     /**

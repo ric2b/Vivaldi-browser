@@ -114,6 +114,8 @@ class COMPONENT_EXPORT(DEVICE_FIDO) VirtualFidoDevice : public FidoDevice {
     base::Optional<std::pair<std::array<uint8_t, 32>, std::array<uint8_t, 32>>>
         hmac_key;
 
+    base::Optional<std::array<uint8_t, 32>> large_blob_key;
+
     DISALLOW_COPY_AND_ASSIGN(RegistrationData);
   };
 
@@ -223,6 +225,17 @@ class COMPONENT_EXPORT(DEVICE_FIDO) VirtualFidoDevice : public FidoDevice {
     // seen in assertion requests. This is for tests to confirm that the
     // expected sequence of requests was sent.
     std::vector<size_t> allow_list_sizes;
+
+    // The large-blob array. This is initialized to an empty CBOR array (0x80)
+    // followed by LEFT(SHA-256(h'80'), 16).
+    std::vector<uint8_t> large_blob = {0x80, 0x76, 0xbe, 0x8b, 0x52, 0x8d,
+                                       0x00, 0x75, 0xf7, 0xaa, 0xe9, 0x8d,
+                                       0x6f, 0xa5, 0x7a, 0x6d, 0x3c};
+    // Buffer that gets progressively filled with large blob fragments until
+    // committed.
+    std::vector<uint8_t> large_blob_buffer;
+    uint64_t large_blob_expected_next_offset = 0;
+    uint64_t large_blob_expected_length = 0;
 
     FidoTransportProtocol transport =
         FidoTransportProtocol::kUsbHumanInterfaceDevice;

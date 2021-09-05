@@ -108,7 +108,7 @@
 <translation id="5838278095973806738">Nu ar trebui să introduceți niciun fel de informații sensibile pe acest site web (de exemplu parole sau informații despre cardurile de credit), deoarece ar putea fi furate de către atacatori.</translation>
 <translation id="5869405914158311789">Acest site nu poate fi accesat</translation>
 <translation id="5990559369517809815">Solicitările trimise la server au fost blocate de o extensie.</translation>
-<translation id="6051221802930200923">Nu puteți vizita <ph name="SITE" /> chiar acum, deoarece site-ul folosește fixarea certificatelor. Erorile de rețea și atacurile sunt de obicei temporare, astfel încât această pagină va funcționa probabil mai târziu.</translation>
+<translation id="6051221802930200923">Nu puteți vizita <ph name="SITE" /> chiar acum, deoarece site-ul web folosește fixarea certificatelor. Erorile de rețea și atacurile sunt de obicei temporare, astfel încât această pagină va funcționa probabil mai târziu.</translation>
 <translation id="6146055958333702838">Verifică toate cablurile și repornește routerele, modemurile sau alte
     dispozitive de rețea pe care le folosești.</translation>
 <translation id="614940544461990577">Încercați:</translation>
@@ -149,7 +149,6 @@
 <translation id="8025119109950072390">Atacatorii de pe acest site web vă pot înșela să faceți ceva periculos, cum ar fi instalarea de software sau dezvăluirea informațiilor personale (de exemplu parole, numere de telefon sau informații despre cardurile de credit).</translation>
 <translation id="8037357227543935929">Întreabă (implicit)</translation>
 <translation id="808894953321890993">Schimbă parola</translation>
-<translation id="8142868475871995937">Accesați &lt;strong&gt;vivaldi://policy&lt;/strong&gt; pentru a vedea adresele URL introduse pe lista neagră și alte politici impuse de către administratorul de sistem.</translation>
 <translation id="8150722005171944719">Fișierul de la <ph name="URL" /> nu poate fi citit.  Este posibil să fi fost eliminat ori mutat sau ca permisiunile pentru fișiere să împiedice accesarea acestuia.</translation>
 <translation id="8225771182978767009">Persoana care a configurat acest calculator a ales să blocheze acest site.</translation>
 <translation id="8241712895048303527">Blochează pe acest site web</translation>

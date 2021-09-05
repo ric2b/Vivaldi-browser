@@ -29,8 +29,10 @@ import android.widget.ImageView;
 import android.widget.TextView;
 
 import androidx.annotation.IntDef;
+import androidx.annotation.MainThread;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 import androidx.annotation.WorkerThread;
 
 import org.chromium.android_webview.common.DeveloperModeUtils;
@@ -60,11 +62,28 @@ import java.util.Locale;
 public class CrashesListFragment extends DevUiBaseFragment {
     private static final String TAG = "WebViewDevTools";
 
+    public static final String CRASH_BUG_DIALOG_MESSAGE =
+            "This crash has already been reported to our crash system. "
+            + "Do you want to share more information, such as steps to reproduce the crash?";
+    public static final String NO_WIFI_DIALOG_MESSAGE =
+            "You are connected to a metered network or cellular data."
+            + " Do you want to proceed?";
+    public static final String CRASH_COLLECTION_DISABLED_ERROR_MESSAGE =
+            "Crash collection is disabled. Please turn on 'Usage & diagnostics' "
+            + "from the three-dotted menu in Google settings.";
+    public static final String NO_GMS_ERROR_MESSAGE =
+            "Crash collection is not supported at the moment.";
+
+    public static final String USAGE_AND_DIAGONSTICS_ACTIVITY_INTENT_ACTION =
+            "com.android.settings.action.EXTRA_SETTINGS";
+
     // Max number of crashes to show in the crashes list.
-    private static final int MAX_CRASHES_NUMBER = 20;
+    public static final int MAX_CRASHES_NUMBER = 20;
 
     private CrashListExpandableAdapter mCrashListViewAdapter;
     private Context mContext;
+
+    private static @Nullable Runnable sCrashInfoLoadedListener;
 
     // These values are persisted to logs. Entries should not be renumbered and
     // numeric values should never be reused.
@@ -93,7 +112,7 @@ public class CrashesListFragment extends DevUiBaseFragment {
             CrashInteraction.FORCE_UPLOAD_DIALOG_METERED_NETWORK,
             CrashInteraction.FORCE_UPLOAD_DIALOG_CANCEL, CrashInteraction.FILE_BUG_REPORT_BUTTON,
             CrashInteraction.FILE_BUG_REPORT_DIALOG_PROCEED,
-            CrashInteraction.FILE_BUG_REPORT_DIALOG_DISMISS})
+            CrashInteraction.FILE_BUG_REPORT_DIALOG_DISMISS, CrashInteraction.HIDE_CRASH_BUTTON})
     private @interface CrashInteraction {
         int FORCE_UPLOAD_BUTTON = 0;
         int FORCE_UPLOAD_NO_DIALOG = 1;
@@ -102,7 +121,8 @@ public class CrashesListFragment extends DevUiBaseFragment {
         int FILE_BUG_REPORT_BUTTON = 4;
         int FILE_BUG_REPORT_DIALOG_PROCEED = 5;
         int FILE_BUG_REPORT_DIALOG_DISMISS = 6;
-        int COUNT = 7;
+        int HIDE_CRASH_BUTTON = 7;
+        int COUNT = 8;
     }
 
     private static void logCrashInteraction(@CrashInteraction int action) {
@@ -269,9 +289,7 @@ public class CrashesListFragment extends DevUiBaseFragment {
                     if (!CrashUploadUtil.isNetworkUnmetered(mContext)) {
                         new AlertDialog.Builder(mContext)
                                 .setTitle("Network Warning")
-                                .setMessage(
-                                        "You are connected to a metered network or cellular data."
-                                        + " Do you want to proceed?")
+                                .setMessage(NO_WIFI_DIALOG_MESSAGE)
                                 .setPositiveButton("Upload",
                                         (dialog, id) -> {
                                             logCrashInteraction(
@@ -298,6 +316,7 @@ public class CrashesListFragment extends DevUiBaseFragment {
 
             ImageButton hideButton = view.findViewById(R.id.crash_hide_button);
             hideButton.setOnClickListener(v -> {
+                logCrashInteraction(CrashInteraction.HIDE_CRASH_BUTTON);
                 crashInfo.isHidden = true;
                 WebViewCrashInfoCollector.updateCrashLogFileWithNewCrashInfo(crashInfo);
                 updateCrashes();
@@ -390,13 +409,15 @@ public class CrashesListFragment extends DevUiBaseFragment {
                 protected void onPostExecute(List<CrashInfo> result) {
                     mCrashInfoList = result;
                     notifyDataSetChanged();
+                    if (sCrashInfoLoadedListener != null) sCrashInfoLoadedListener.run();
                 }
             };
             asyncTask.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
         }
     }
 
-    private static String uploadStateString(UploadState uploadState) {
+    @VisibleForTesting
+    public static String uploadStateString(UploadState uploadState) {
         switch (uploadState) {
             case UPLOADED:
                 return "Uploaded";
@@ -473,17 +494,17 @@ public class CrashesListFragment extends DevUiBaseFragment {
 
     private void buildCrashConsentError(PersistentErrorView errorView) {
         if (PlatformServiceBridge.getInstance().canUseGms()) {
-            errorView.setText("Crash collection is disabled. Please turn on 'Usage & diagnostics' "
-                    + "from the three-dotted menu in Google settings.");
+            errorView.setText(CRASH_COLLECTION_DISABLED_ERROR_MESSAGE);
             // Open Google Settings activity, "Usage & diagnostics" activity is not exported and
             // cannot be opened directly.
-            Intent settingsIntent = new Intent("com.android.settings.action.EXTRA_SETTINGS");
+            Intent settingsIntent = new Intent(USAGE_AND_DIAGONSTICS_ACTIVITY_INTENT_ACTION);
             List<ResolveInfo> intentResolveInfo =
                     mContext.getPackageManager().queryIntentActivities(settingsIntent, 0);
             // Show a button to open GMS settings activity only if it exists.
             if (intentResolveInfo.size() > 0) {
                 logCrashCollectionState(CollectionState.DISABLED_BY_USER_CONSENT);
-                errorView.setActionButton("Open Settings", v -> startActivity(settingsIntent));
+                errorView.setActionButton(
+                        "Open Settings", v -> mContext.startActivity(settingsIntent));
             } else {
                 logCrashCollectionState(
                         CollectionState.DISABLED_BY_USER_CONSENT_CANNOT_FIND_SETTINGS);
@@ -491,24 +512,31 @@ public class CrashesListFragment extends DevUiBaseFragment {
             }
         } else {
             logCrashCollectionState(CollectionState.DISABLED_CANNOT_USE_GMS);
-            errorView.setText("Crash collection is not supported at the moment.");
+            errorView.setText(NO_GMS_ERROR_MESSAGE);
         }
     }
 
     private AlertDialog buildCrashBugDialog(CrashInfo crashInfo) {
         AlertDialog.Builder dialogBuilder = new AlertDialog.Builder(mContext);
-        dialogBuilder.setMessage(
-                "This crash has already been reported to our crash system. Do you want to share "
-                + "more information, such as steps to reproduce the crash?");
+        dialogBuilder.setMessage(CRASH_BUG_DIALOG_MESSAGE);
         dialogBuilder.setPositiveButton("Provide more info", (dialog, id) -> {
             logCrashInteraction(CrashInteraction.FILE_BUG_REPORT_DIALOG_PROCEED);
-            startActivity(new CrashBugUrlFactory(crashInfo).getReportIntent());
+            mContext.startActivity(new CrashBugUrlFactory(crashInfo).getReportIntent());
         });
         dialogBuilder.setNegativeButton("Dismiss", (dialog, id) -> {
             logCrashInteraction(CrashInteraction.FILE_BUG_REPORT_DIALOG_DISMISS);
             dialog.dismiss();
         });
         return dialogBuilder.create();
+    }
+
+    /**
+     * Notifies the caller when all CrashInfo is reloaded in the ListView.
+     */
+    @MainThread
+    @VisibleForTesting
+    public static void setCrashInfoLoadedListenerForTesting(@Nullable Runnable listener) {
+        sCrashInfoLoadedListener = listener;
     }
 
     @Override

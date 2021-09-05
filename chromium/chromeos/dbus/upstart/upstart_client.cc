@@ -14,7 +14,6 @@
 #include "dbus/bus.h"
 #include "dbus/message.h"
 #include "dbus/object_proxy.h"
-#include "third_party/cros_system_api/dbus/service_constants.h"
 
 namespace chromeos {
 
@@ -34,31 +33,18 @@ constexpr char kMediaAnalyticsJob[] = "rtanalytics";
 // using underscore as the escape character, followed by the character code in
 // hex.
 constexpr char kWilcoDtcDispatcherJob[] = "wilco_5fdtc_5fdispatcher";
+// "arc_2ddata_2dsnapshotd" below refers to the "arc-data-snapshotd" upstart
+// job. Upstart escapes characters that aren't valid in D-Bus object paths using
+// underscore as the escape character, followed by the character code in hex.
+constexpr char kArcDataSnapshotdJob[] = "arc_2ddata_2dsnapshotd";
 
 UpstartClient* g_instance = nullptr;
 
 class UpstartClientImpl : public UpstartClient {
  public:
-  explicit UpstartClientImpl(dbus::Bus* bus) : bus_(bus) {
-    dbus::ObjectProxy* arc_proxy = bus_->GetObjectProxy(
-        arc::kArcServiceName, dbus::ObjectPath(arc::kArcServicePath));
-    arc_proxy->ConnectToSignal(
-        arc::kArcInterfaceName, arc::kArcStopped,
-        base::BindRepeating(&UpstartClientImpl::ArcStoppedReceived,
-                            weak_ptr_factory_.GetWeakPtr()),
-        base::BindOnce(&UpstartClientImpl::SignalConnected,
-                       weak_ptr_factory_.GetWeakPtr()));
-  }
+  explicit UpstartClientImpl(dbus::Bus* bus) : bus_(bus) {}
 
   ~UpstartClientImpl() override = default;
-
-  void AddObserver(Observer* observer) override {
-    observers_.AddObserver(observer);
-  }
-
-  void RemoveObserver(Observer* observer) override {
-    observers_.RemoveObserver(observer);
-  }
 
   // UpstartClient overrides:
   void StartJob(const std::string& job,
@@ -116,6 +102,14 @@ class UpstartClientImpl : public UpstartClient {
     StopJob(kWilcoDtcDispatcherJob, {}, std::move(callback));
   }
 
+  void StartArcDataSnapshotd(VoidDBusMethodCallback callback) override {
+    StartJob(kArcDataSnapshotdJob, {}, std::move(callback));
+  }
+
+  void StopArcDataSnapshotd(VoidDBusMethodCallback callback) override {
+    StopJob(kArcDataSnapshotdJob, {}, std::move(callback));
+  }
+
  private:
   void CallJobMethod(const std::string& job,
                      const std::string& method,
@@ -133,25 +127,11 @@ class UpstartClientImpl : public UpstartClient {
                        weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
   }
 
-  // Called when the object is connected to the signal.
-  void SignalConnected(const std::string& interface_name,
-                       const std::string& signal_name,
-                       bool success) {
-    LOG_IF(ERROR, !success) << "Failed to connect to " << signal_name;
-  }
-
-  void ArcStoppedReceived(dbus::Signal* signal) {
-    for (auto& observer : observers_)
-      observer.ArcStopped();
-  }
-
   void OnVoidMethod(VoidDBusMethodCallback callback, dbus::Response* response) {
     std::move(callback).Run(response);
   }
 
   dbus::Bus* bus_ = nullptr;
-
-  base::ObserverList<Observer> observers_;
 
   // Note: This should remain the last member so it'll be destroyed and
   // invalidate its weak pointers before any other members are destroyed.

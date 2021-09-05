@@ -94,7 +94,8 @@
 <translation id="4235360514405112390">platný</translation>
 <translation id="4250431568374086873">Spojení s tímto webem není plně zabezpečené</translation>
 <translation id="4265872034478892965">Povoleno správcem</translation>
-<translation id="4312866146174492540">Zamezit (výchozí)</translation>
+<translation id="4305666528087210886">K souboru nelze získat přístup</translation>
+<translation id="4312866146174492540">Blokovat (výchozí)</translation>
 <translation id="4356973930735388585">Útočníci, kteří se aktuálně nacházejí na tomto webu, se mohou pokusit nainstalovat vám do počítače nebezpečné programy, které mohou ukrást nebo smazat vaše informace (například fotky, hesla, zprávy nebo platební karty).</translation>
 <translation id="4408413947728134509">Položky cookie <ph name="NUM_COOKIES" /></translation>
 <translation id="4432688616882109544">Web <ph name="HOST_NAME" /> nepřijal přihlašovací certifikát, případně žádný certifikát nebyl poskytnut.</translation>
@@ -147,6 +148,7 @@ Kontaktujte administrátora systému.</translation>
 <translation id="6165508094623778733">Další informace</translation>
 <translation id="6177128806592000436">Spojení s tímto webem není bezpečné</translation>
 <translation id="6203231073485539293">Zkontrolujte připojení k internetu</translation>
+<translation id="6225522625585012689">Na stránce &lt;strong&gt;vivaldi://policy&lt;/strong&gt; naleznete seznam blokovaných URL adres a další zásady vynucené správcem vašeho systému.</translation>
 <translation id="625755898061068298">U tohoto webu jste vypnuli bezpečnostní upozornění.</translation>
 <translation id="6264485186158353794">Rychle pryč!</translation>
 <translation id="6305205051461490394">Web <ph name="URL" /> není dostupný.</translation>
@@ -163,7 +165,7 @@ Kontaktujte administrátora systému.</translation>
 <translation id="6711464428925977395">Došlo k chybě proxy serveru nebo jste zadali nesprávnou adresu.</translation>
 <translation id="6757797048963528358">Zařízení přešlo do režimu spánku.</translation>
 <translation id="6897140037006041989">Totožnost (UA)</translation>
-<translation id="7053983685419859001">Zamezit</translation>
+<translation id="7053983685419859001">Blokovat</translation>
 <translation id="7079718277001814089">Tento web obsahuje škodlivý kód</translation>
 <translation id="7108819624672055576">Povoleno rozšířením</translation>
 <translation id="7111012039238467737">(platný)</translation>
@@ -175,7 +177,7 @@ Kontaktujte administrátora systému.</translation>
 <translation id="7364115444476960850">Stránka, kterou se pokoušíte navštívit, byla zablokována <ph name="BLOCKER_NAME" /> prohlížeče Vivaldi.</translation>
 <translation id="7419106976560586862">Cesta k profilu</translation>
 <translation id="7445762425076701745">Totožnost serveru, k němuž jste připojeni, nelze plně ověřit. Jste připojeni k serveru, který používá název platný pouze v rámci vaší sítě. Externí certifikační autorita nemůže vlastnictví názvu nijak ověřit. Některé certifikační autority však vydají certifikát i pro takové názvy, a nelze tedy zaručit, že jste připojeni k požadovanému webu a nikoli k webu útočníka.</translation>
-<translation id="7455133967321480974">Použít předvolenou hodnotu (zamezit)</translation>
+<translation id="7455133967321480974">Použít výchozí hodnotu (blokovat)</translation>
 <translation id="7518003948725431193">Na webové adrese <ph name="URL" /> se nepodařilo nalézt žádnou webovou stránku.</translation>
 <translation id="7521387064766892559">JavaScript</translation>
 <translation id="7549584377607005141">Tato stránka potřebuje ke správnému zobrazení data, která jste zadali dříve. Tyto údaje můžete odeslat znovu, ale zopakujete tím všechny akce, které tato stránka již předtím provedla.</translation>
@@ -196,14 +198,13 @@ Kontaktujte administrátora systému.</translation>
 <translation id="8041940743680923270">Použít předvolenou hodnotu (zeptat se)</translation>
 <translation id="808894953321890993">Změnit heslo</translation>
 <translation id="8119307142152921512">sledovače a reklamy</translation>
-<translation id="8142868475871995937">Na stránce &lt;strong&gt;vivaldi://policy&lt;/strong&gt; naleznete seznam zakázaných adres URL a další zásady vynucené vaším správcem systému.</translation>
 <translation id="8149426793427495338">Počítač přešel do režimu spánku.</translation>
 <translation id="8150722005171944719">Soubor na adrese <ph name="URL" /> nelze načíst. Možná byl odstraněn, přesunut nebo mohou přístupu bránit oprávnění souboru.</translation>
 <translation id="8184538546369750125">Použít předvolenou hodnotu (povolit)</translation>
 <translation id="8211406090763984747">Připojení je zabezpečené</translation>
 <translation id="8225771182978767009">Uživatel, který tento počítač nastavoval, se rozhodl tento web blokovat.</translation>
 <translation id="8241707690549784388">Stránka, kterou hledáte, používala vámi zadané informace. Návrat na tuto stránku by mohl způsobit, že akce, kterou jste provedli, bude opakována. Přejete si pokračovat?</translation>
-<translation id="8241712895048303527">Na tomto webu zamezovat</translation>
+<translation id="8241712895048303527">Blokovat na tomto webu</translation>
 <translation id="8286036467436129157">Přihlásit se</translation>
 <translation id="8288807391153049143">Zobrazit certifikát</translation>
 <translation id="8289355894181816810">Pokud nevíte, co dělat, obraťte se na svého správce sítě.</translation>
@@ -219,8 +220,9 @@ Kontaktujte administrátora systému.</translation>
 <translation id="9011424611726486705">Otevřít nastavení webu</translation>
 <translation id="9025348182339809926">(neplatný)</translation>
 <translation id="9039213469156557790">Tato stránka obsahuje ještě další nezabezpečené zdroje. Tyto zdroje budou během přenosu moci zobrazit jiní uživatelé a případní útočníci je mohou upravit a změnit tak chování stránky.</translation>
+<translation id="9062620674789239642">Soubor mohl být přesunut, upraven nebo smazán.</translation>
 <translation id="9069693763241529744">Zamezeno rozšířením</translation>
-<translation id="9169664750068251925">Zamezit vždy na tomto webu</translation>
+<translation id="9169664750068251925">Vždy blokovat na tomto webu</translation>
 <translation id="9180553614777056266">blokováním reklam</translation>
 <translation id="9183425211371246419">Web <ph name="HOST_NAME" /> používá nepodporovaný protokol.</translation>
 <translation id="9219103736887031265">Obrázky</translation>

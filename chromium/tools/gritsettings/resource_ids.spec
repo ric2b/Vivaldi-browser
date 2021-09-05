@@ -156,6 +156,12 @@
   "chrome/browser/resources/nearby_share/nearby_share_dialog_resources.grd": {
     "includes": [1640],
   },
+  "chrome/browser/resources/nearby_share/shared/nearby_shared_resources.grd": {
+    "includes": [1645],
+  },
+  "chrome/browser/resources/nearby_share/shared/nearby_shared_resources_v3.grd": {
+    "includes": [1650],
+  },
   "chrome/browser/resources/new_tab_page/new_tab_page_resources_vulcanized.grd": {
     "includes": [1660],
   },
@@ -165,15 +171,18 @@
   "chrome/browser/resources/print_preview/print_preview_resources_vulcanized.grd": {
     "includes": [1700],
   },
-  "chrome/browser/resources/print_preview/print_preview_resources.grd": {
+  "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/print_preview/print_preview_resources.grd": {
+    "META": {"sizes": {"includes": [500],}},
     "includes": [1720],
-    "structures": [1740],
   },
   "chrome/browser/resources/print_preview/print_preview_pdf_resources.grd": {
     "includes": [1750],
   },
-  "chrome/browser/resources/settings/os_settings_resources_vulcanized.grd": {
+  "chrome/browser/resources/read_later/read_later_resources.grd": {
     "includes": [1760],
+  },
+  "chrome/browser/resources/settings/os_settings_resources_vulcanized.grd": {
+    "includes": [1770],
   },
   "chrome/browser/resources/settings/os_settings_resources.grd": {
     "includes": [1780],
@@ -186,7 +195,10 @@
     "includes": [1830],
     "structures": [1840],
   },
-  "chrome/browser/resources/signin/profile_picker/profile_picker_resources.grd": {
+  "chrome/browser/resources/signin/profile_picker/profile_picker_resources_vulcanized.grd": {
+    "includes": [1850],
+  },
+ "chrome/browser/resources/signin/profile_picker/profile_picker_resources.grd": {
     "includes": [1860],
     "structures": [1870],
   },
@@ -316,8 +328,14 @@
     "includes": [2505],
     "structures": [2510],
   },
-  "chromeos/components/camera_app_ui/resources/src/strings/camera_strings.grd": {
+  "chromeos/components/camera_app_ui/resources/strings/camera_strings.grd": {
     "messages": [2515],
+  },
+  "chromeos/components/diagnostics_ui/resources/diagnostics_app_resources.grd": {
+    "includes": [2517],
+  },
+  "chromeos/components/file_manager/resources/file_manager_resources.grd": {
+    "includes": [2518],
   },
   "chromeos/components/help_app_ui/resources/help_app_resources.grd": {
     "includes": [2520],
@@ -359,9 +377,10 @@
   },
   "chromeos/components/scanning/resources/scanning_app_resources.grd": {
     "includes": [2645],
+    "structures": [2650],
   },
   "chromeos/components/telemetry_extension_ui/resources/telemetry_extension_resources.grd": {
-    "includes": [2650],
+    "includes": [2655],
   },
   "chromeos/resources/chromeos_resources.grd": {
     "includes": [2660],
@@ -529,6 +548,9 @@
   },
   "ash/public/cpp/resources/ash_public_unscaled_resources.grd": {
     "includes": [3140],
+  },
+  "base/tracing/protos/resources.grd": {
+    "includes": [3150],
   },
   "chromecast/renderer/resources/extensions_renderer_resources.grd": {
     "includes": [3160],

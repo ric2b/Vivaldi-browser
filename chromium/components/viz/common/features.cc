@@ -21,17 +21,14 @@ const base::Feature kForcePreferredIntervalForVideo{
     "ForcePreferredIntervalForVideo", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Use the SkiaRenderer.
-#if defined(OS_LINUX) && !(defined(OS_CHROMEOS) || BUILDFLAG(IS_CHROMECAST))
+#if defined(OS_WIN) || \
+    (defined(OS_LINUX) && !(defined(OS_CHROMEOS) || BUILDFLAG(IS_CHROMECAST)))
 const base::Feature kUseSkiaRenderer{"UseSkiaRenderer",
                                      base::FEATURE_ENABLED_BY_DEFAULT};
 #else
 const base::Feature kUseSkiaRenderer{"UseSkiaRenderer",
                                      base::FEATURE_DISABLED_BY_DEFAULT};
 #endif
-
-// Use the SkiaRenderer to record SkPicture.
-const base::Feature kRecordSkPicture{"RecordSkPicture",
-                                     base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Kill-switch to disable de-jelly, even if flags/properties indicate it should
 // be enabled.
@@ -42,7 +39,7 @@ const base::Feature kDisableDeJelly{"DisableDeJelly",
 // When wide color gamut content from the web is encountered, promote our
 // display to wide color gamut if supported.
 const base::Feature kDynamicColorGamut{"DynamicColorGamut",
-                                       base::FEATURE_DISABLED_BY_DEFAULT};
+                                       base::FEATURE_ENABLED_BY_DEFAULT};
 #endif
 
 // Viz for WebView architecture.
@@ -72,10 +69,6 @@ const base::Feature kUseRealBuffersForPageFlipTest{
 const base::Feature kUseSkiaOutputDeviceBufferQueue{
     "UseSkiaOutputDeviceBufferQueue", base::FEATURE_DISABLED_BY_DEFAULT};
 #endif
-
-// Whether we should split partially occluded quads to reduce overdraw.
-const base::Feature kSplitPartiallyOccludedQuads{
-    "SplitPartiallyOccludedQuads", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Whether we should log extra debug information to webrtc native log.
 const base::Feature kWebRtcLogCapturePipeline{
@@ -114,26 +107,16 @@ bool IsUsingSkiaRenderer() {
   if (IsUsingVizForWebView())
     return true;
 
-#if defined(OS_ANDROID)
-  // https://crbug.com/1126490 Mali-400 with <= 512 MB is currently broken.
-  // Must be checked after IsUsingVizForWebView because it requires
-  // SkiaRenderer.
-  if (base::SysInfo::AmountOfPhysicalMemoryMB() <= 512)
-    return false;
-#endif
-
   return base::FeatureList::IsEnabled(kUseSkiaRenderer) ||
          base::FeatureList::IsEnabled(kVulkan);
-}
-
-bool IsRecordingSkPicture() {
-  return IsUsingSkiaRenderer() &&
-         base::FeatureList::IsEnabled(kRecordSkPicture);
 }
 
 #if defined(OS_ANDROID)
 bool IsDynamicColorGamutEnabled() {
   if (viz::AlwaysUseWideColorGamut())
+    return false;
+  auto* build_info = base::android::BuildInfo::GetInstance();
+  if (!build_info->is_at_least_q())
     return false;
   return base::FeatureList::IsEnabled(kDynamicColorGamut);
 }
@@ -167,10 +150,6 @@ int NumOfFramesToToggleInterval() {
 
 bool ShouldUseRealBuffersForPageFlipTest() {
   return base::FeatureList::IsEnabled(kUseRealBuffersForPageFlipTest);
-}
-
-bool ShouldSplitPartiallyOccludedQuads() {
-  return base::FeatureList::IsEnabled(kSplitPartiallyOccludedQuads);
 }
 
 bool ShouldWebRtcLogCapturePipeline() {

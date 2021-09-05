@@ -27,10 +27,11 @@
 #include "chrome/browser/media/router/providers/common/buffered_message_sender.h"
 #include "chrome/browser/media/router/test/mock_logger.h"
 #include "chrome/browser/media/router/test/mock_mojo_media_router.h"
-#include "chrome/browser/media/router/test/test_helper.h"
-#include "chrome/common/media_router/media_source.h"
-#include "chrome/common/media_router/test/test_helper.h"
+#include "chrome/browser/media/router/test/provider_test_helpers.h"
+#include "components/cast_channel/cast_message_util.h"
 #include "components/cast_channel/cast_test_util.h"
+#include "components/media_router/common/media_source.h"
+#include "components/media_router/common/test/test_helper.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/test/browser_task_environment.h"
@@ -288,7 +289,8 @@ class CastActivityManagerTest : public testing::Test,
     });
 
     EXPECT_CALL(message_handler_,
-                EnsureConnection(kChannelId, "theClientId", "theTransportId"));
+                EnsureConnection(kChannelId, "theClientId", "theTransportId",
+                                 cast_channel::VirtualConnectionType::kStrong));
 
     auto response = GetSuccessLaunchResponse(app_id);
     session_tracker_->SetSessionForTest(
@@ -311,8 +313,31 @@ class CastActivityManagerTest : public testing::Test,
     }
   }
 
-  void LaunchMirroringSession() {
-    CallLaunchSession(kCastStreamingAppId);
+  void LaunchNonSdkMirroringSession() {
+    CallLaunchSession(kCastStreamingAppId, /* app_params */ "",
+                      /* client_id */ "");
+    ResolveMirroringSessionLaunch();
+  }
+
+  void LaunchCastSdkMirroringSession() {
+    CallLaunchSession(kCastStreamingAppId, kAppParams, kClientId);
+    // We expect EnsureConnection() to be called for both the sender client and
+    // |message_handler_.sender_id()|. The latter is captured in
+    // ResolveMirroringSessionLaunch().
+    //
+    // CallLaunchSession() calls VerifyAndClearExpectations() on
+    // |message_handler_|, so this EXPECT_CALL() must come after that.
+    EXPECT_CALL(message_handler_,
+                EnsureConnection(kChannelId, "theClientId", "theTransportId",
+                                 cast_channel::VirtualConnectionType::kStrong));
+    ResolveMirroringSessionLaunch();
+  }
+
+  void ResolveMirroringSessionLaunch() {
+    EXPECT_CALL(message_handler_,
+                EnsureConnection(kChannelId, message_handler_.sender_id(),
+                                 "theTransportId",
+                                 cast_channel::VirtualConnectionType::kStrong));
     auto response = GetSuccessLaunchResponse();
     SetSessionForTest(route_->media_sink_id(),
                       CastSession::From(sink_, *response.receiver_status));
@@ -320,10 +345,20 @@ class CastActivityManagerTest : public testing::Test,
     DCHECK(mirroring_activity_);
   }
 
-  void ExpectMirroringActivityStopped() {
+  void AddRemoteMirroringSession() {
+    auto session =
+        CastSession::From(sink2_, MakeReceiverStatus(kCastStreamingAppId));
+    manager_->OnSessionAddedOrUpdated(sink2_, *session);
+    SetSessionForTest(sink2_.id(), std::move(session));
     DCHECK(mirroring_activity_);
-    EXPECT_CALL(message_handler_, StopSession).Times(1);
-    EXPECT_CALL(*mirroring_activity_, SendStopSessionMessageToClients).Times(1);
+    DCHECK(!mirroring_activity_->route().is_local());
+  }
+
+  void ExpectMirroringActivityStoppedTimes(int times) {
+    DCHECK(mirroring_activity_);
+    EXPECT_CALL(message_handler_, StopSession).Times(times);
+    EXPECT_CALL(*mirroring_activity_, SendStopSessionMessageToClients)
+        .Times(times);
   }
 
   void TerminateSession(bool expect_success) {
@@ -425,7 +460,12 @@ TEST_F(CastActivityManagerTest, LaunchAppSessionWithAppParams) {
 }
 
 TEST_F(CastActivityManagerTest, LaunchMirroringSession) {
-  LaunchMirroringSession();
+  LaunchNonSdkMirroringSession();
+  EXPECT_EQ(RouteControllerType::kMirroring, route_->controller_type());
+}
+
+TEST_F(CastActivityManagerTest, LaunchMirroringSessionViaCastSdk) {
+  LaunchCastSdkMirroringSession();
   EXPECT_EQ(RouteControllerType::kMirroring, route_->controller_type());
 }
 
@@ -438,8 +478,8 @@ TEST_F(CastActivityManagerTest, LaunchSiteInitiatedMirroringSession) {
 }
 
 TEST_F(CastActivityManagerTest, MirroringSessionStopped) {
-  LaunchMirroringSession();
-  ExpectMirroringActivityStopped();
+  LaunchNonSdkMirroringSession();
+  ExpectMirroringActivityStoppedTimes(1);
   mirroring_activity_->DidStop();
 }
 
@@ -608,9 +648,15 @@ TEST_F(CastActivityManagerTest, TerminateSessionFails) {
   TerminateSession(false);
 }
 
-TEST_F(CastActivityManagerTest, DestructorClosesMirroringSession) {
-  LaunchMirroringSession();
-  ExpectMirroringActivityStopped();
+TEST_F(CastActivityManagerTest, DestructorClosesLocalMirroringSession) {
+  LaunchNonSdkMirroringSession();
+  ExpectMirroringActivityStoppedTimes(1);
+  manager_.reset();
+}
+
+TEST_F(CastActivityManagerTest, DestructorIgnoresNonlocalMirroringSession) {
+  AddRemoteMirroringSession();
+  ExpectMirroringActivityStoppedTimes(0);
   manager_.reset();
 }
 

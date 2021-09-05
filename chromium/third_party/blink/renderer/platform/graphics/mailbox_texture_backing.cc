@@ -4,22 +4,44 @@
 
 #include "third_party/blink/renderer/platform/graphics/mailbox_texture_backing.h"
 
+#include "third_party/blink/renderer/platform/graphics/accelerated_static_bitmap_image.h"
+#include "third_party/blink/renderer/platform/graphics/mailbox_ref.h"
 #include "third_party/blink/renderer/platform/graphics/skia/skia_utils.h"
 #include "third_party/blink/renderer/platform/graphics/web_graphics_context_3d_provider_wrapper.h"
 
 namespace blink {
 
-MailboxTextureBacking::MailboxTextureBacking(sk_sp<SkImage> sk_image,
-                                             const SkImageInfo& info)
-    : sk_image_(std::move(sk_image)), sk_image_info_(info) {}
+MailboxTextureBacking::MailboxTextureBacking(
+    sk_sp<SkImage> sk_image,
+    scoped_refptr<MailboxRef> mailbox_ref,
+    const SkImageInfo& info,
+    base::WeakPtr<WebGraphicsContext3DProviderWrapper> context_provider_wrapper)
+    : sk_image_(std::move(sk_image)),
+      mailbox_ref_(std::move(mailbox_ref)),
+      sk_image_info_(info),
+      context_provider_wrapper_(std::move(context_provider_wrapper)) {}
 
 MailboxTextureBacking::MailboxTextureBacking(
     const gpu::Mailbox& mailbox,
+    scoped_refptr<MailboxRef> mailbox_ref,
     const SkImageInfo& info,
     base::WeakPtr<WebGraphicsContext3DProviderWrapper> context_provider_wrapper)
     : mailbox_(mailbox),
+      mailbox_ref_(std::move(mailbox_ref)),
       sk_image_info_(info),
       context_provider_wrapper_(std::move(context_provider_wrapper)) {}
+
+MailboxTextureBacking::~MailboxTextureBacking() {
+  if (context_provider_wrapper_) {
+    gpu::raster::RasterInterface* ri =
+        context_provider_wrapper_->ContextProvider()->RasterInterface();
+    // Update the sync token for MailboxRef.
+    ri->WaitSyncTokenCHROMIUM(mailbox_ref_->sync_token().GetConstData());
+    gpu::SyncToken sync_token;
+    ri->GenUnverifiedSyncTokenCHROMIUM(sync_token.GetData());
+    mailbox_ref_->set_sync_token(sync_token);
+  }
+}
 
 const SkImageInfo& MailboxTextureBacking::GetSkImageInfo() {
   return sk_image_info_;
@@ -77,6 +99,13 @@ bool MailboxTextureBacking::readPixels(const SkImageInfo& dst_info,
                                  src_y);
   }
   return false;
+}
+
+void MailboxTextureBacking::FlushPendingSkiaOps() {
+  if (!context_provider_wrapper_ || !sk_image_)
+    return;
+  sk_image_->flushAndSubmit(
+      context_provider_wrapper_->ContextProvider()->GetGrContext());
 }
 
 }  // namespace blink

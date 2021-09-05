@@ -7,7 +7,6 @@
 #include <utility>
 
 #include "ash/focus_cycler.h"
-#include "ash/login/parent_access_controller.h"
 #include "ash/login/security_token_request_controller.h"
 #include "ash/login/ui/lock_screen.h"
 #include "ash/login/ui/login_data_dispatcher.h"
@@ -350,18 +349,6 @@ LoginScreenController::GetScopedGuestButtonBlocker() {
       ->GetScopedGuestButtonBlocker();
 }
 
-void LoginScreenController::ShowParentAccessWidget(
-    const AccountId& child_account_id,
-    base::OnceCallback<void(bool success)> callback,
-    ParentAccessRequestReason reason,
-    bool extra_dimmer,
-    base::Time validation_time) {
-  DCHECK(!PinRequestWidget::Get());
-  Shell::Get()->parent_access_controller()->ShowWidget(
-      child_account_id, std::move(callback), reason, extra_dimmer,
-      validation_time);
-}
-
 void LoginScreenController::RequestSecurityTokenPin(
     SecurityTokenPinRequest request) {
   security_token_request_controller_.SetPinUiState(std::move(request));
@@ -476,6 +463,12 @@ void LoginScreenController::OnFocusLeavingSystemTray(bool reverse) {
   if (!client_)
     return;
   client_->OnFocusLeavingSystemTray(reverse);
+}
+
+void LoginScreenController::NotifyLoginScreenShown() {
+  if (!client_)
+    return;
+  client_->OnLoginScreenShown();
 }
 
 }  // namespace ash

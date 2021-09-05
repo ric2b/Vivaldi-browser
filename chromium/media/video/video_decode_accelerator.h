@@ -187,7 +187,7 @@ class MEDIA_EXPORT VideoDecodeAccelerator {
     gfx::ColorSpace target_color_space;
 
     // HDR metadata specified by the container.
-    base::Optional<HDRMetadata> hdr_metadata;
+    base::Optional<gl::HDRMetadata> hdr_metadata;
   };
 
   // Interface for collaborating with picture interface to provide memory for
@@ -413,6 +413,10 @@ class MEDIA_EXPORT VideoDecodeAccelerator {
   // Windows creates a BGRA texture.
   // TODO(dshwang): after moving to D3D11, remove this. crbug.com/438691
   virtual GLenum GetSurfaceInternalFormat() const;
+
+  // Returns true if the decoder supports SharedImage backed picture buffers.
+  // May be called on any thread at any time.
+  virtual bool SupportsSharedImagePictureBuffers() const;
 
  protected:
   // Do not delete directly; use Destroy() or own it with a scoped_ptr, which

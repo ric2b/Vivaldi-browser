@@ -120,7 +120,7 @@ int ChildCountForContainer(int container_id) {
 // Steps a layer animation until it is completed. Animations must be enabled.
 void RunAnimationForLayer(ui::Layer* layer) {
   // Animations must be enabled for stepping to work.
-  ASSERT_NE(ui::ScopedAnimationDurationScaleMode::duration_scale_mode(),
+  ASSERT_NE(ui::ScopedAnimationDurationScaleMode::duration_multiplier(),
             ui::ScopedAnimationDurationScaleMode::ZERO_DURATION);
 
   ui::LayerAnimatorTestController controller(layer->GetAnimator());
@@ -2783,6 +2783,22 @@ TEST_F(WallpaperControllerPrefTest, InitWithPrefs) {
                                      ->GetDisplayNearestWindow(root_window)
                                      .size());
   EXPECT_EQ(root_window->bounds().size(), wallpaper_view->bounds().size());
+}
+
+TEST_F(WallpaperControllerTest, NoAnimationForNewRootWindowWhenLocked) {
+  ui::ScopedAnimationDurationScaleMode test_duration_mode(
+      ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
+  SetSessionState(SessionState::LOCKED);
+  UpdateDisplay("800x600, 800x600");
+  auto* secondary_root_window_controller =
+      Shell::Get()->GetAllRootWindowControllers()[1];
+  EXPECT_FALSE(secondary_root_window_controller->wallpaper_widget_controller()
+                   ->IsAnimating());
+  EXPECT_FALSE(secondary_root_window_controller->wallpaper_widget_controller()
+                   ->GetWidget()
+                   ->GetLayer()
+                   ->GetAnimator()
+                   ->is_animating());
 }
 
 }  // namespace ash

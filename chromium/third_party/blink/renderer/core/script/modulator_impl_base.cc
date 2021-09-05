@@ -8,7 +8,9 @@
 #include "third_party/blink/public/mojom/devtools/console_message.mojom-blink.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/renderer/bindings/core/v8/module_record.h"
+#include "third_party/blink/renderer/bindings/core/v8/script_function.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/frame/web_feature.h"
 #include "third_party/blink/renderer/core/loader/modulescript/module_script_fetch_request.h"
@@ -46,6 +48,24 @@ ModulatorImplBase::ModulatorImplBase(ScriptState* script_state)
 }
 
 ModulatorImplBase::~ModulatorImplBase() {}
+
+class ModuleEvaluationRejectionCallback final : public ScriptFunction {
+ public:
+  explicit ModuleEvaluationRejectionCallback(ScriptState* script_state)
+      : ScriptFunction(script_state) {}
+
+  static v8::Local<v8::Function> CreateFunction(ScriptState* script_state) {
+    ModuleEvaluationRejectionCallback* self =
+        MakeGarbageCollected<ModuleEvaluationRejectionCallback>(script_state);
+    return self->BindToV8Function();
+  }
+
+ private:
+  ScriptValue Call(ScriptValue value) override {
+    ModuleRecord::ReportException(GetScriptState(), value.V8Value());
+    return ScriptValue();
+  }
+};
 
 bool ModulatorImplBase::IsScriptingDisabled() const {
   return !GetExecutionContext()->CanExecuteScripts(kAboutToExecuteScript);
@@ -262,21 +282,10 @@ ScriptValue ModulatorImplBase::InstantiateModule(
   return ModuleRecord::Instantiate(script_state_, module_record, source_url);
 }
 
-Vector<Modulator::ModuleRequest>
-ModulatorImplBase::ModuleRequestsFromModuleRecord(
+Vector<ModuleRequest> ModulatorImplBase::ModuleRequestsFromModuleRecord(
     v8::Local<v8::Module> module_record) {
   ScriptState::Scope scope(script_state_);
-  Vector<String> specifiers =
-      ModuleRecord::ModuleRequests(script_state_, module_record);
-  Vector<TextPosition> positions =
-      ModuleRecord::ModuleRequestPositions(script_state_, module_record);
-  DCHECK_EQ(specifiers.size(), positions.size());
-  Vector<ModuleRequest> requests;
-  requests.ReserveInitialCapacity(specifiers.size());
-  for (wtf_size_t i = 0; i < specifiers.size(); ++i) {
-    requests.emplace_back(specifiers[i], positions[i]);
-  }
-  return requests;
+  return ModuleRecord::ModuleRequests(script_state_, module_record);
 }
 
 void ModulatorImplBase::ProduceCacheModuleTreeTopLevel(
@@ -305,7 +314,7 @@ void ModulatorImplBase::ProduceCacheModuleTree(
 
   module_script->ProduceCache();
 
-  Vector<Modulator::ModuleRequest> child_specifiers =
+  Vector<ModuleRequest> child_specifiers =
       ModuleRequestsFromModuleRecord(record);
 
   for (const auto& module_request : child_specifiers) {
@@ -327,7 +336,8 @@ void ModulatorImplBase::ProduceCacheModuleTree(
 }
 
 // <specdef href="https://html.spec.whatwg.org/C/#run-a-module-script">
-ModuleEvaluationResult ModulatorImplBase::ExecuteModule(
+// Spec with TLA: https://github.com/whatwg/html/pull/4352
+ScriptEvaluationResult ModulatorImplBase::ExecuteModule(
     ModuleScript* module_script,
     CaptureEvalErrorFlag capture_error) {
   // <spec step="1">If rethrow errors is not given, let it be false.</spec>
@@ -338,24 +348,31 @@ ModuleEvaluationResult ModulatorImplBase::ExecuteModule(
 
   // <spec step="3">Check if we can run script with settings. If this returns
   // "do not run" then return NormalCompletion(empty).</spec>
-  if (IsScriptingDisabled())
-    return ModuleEvaluationResult::Empty();
+  if (IsScriptingDisabled()) {
+    return ScriptEvaluationResult::FromModuleNotRun();
+  }
 
   // <spec step="4">Prepare to run script given settings.</spec>
   //
-  // This is placed here to also cover ModuleRecord::ReportException().
+  // These are placed here to also cover ModuleRecord::ReportException().
+  v8::Isolate* isolate = script_state_->GetIsolate();
+  v8::MicrotasksScope microtasks_scope(isolate,
+                                       ToMicrotaskQueue(GetExecutionContext()),
+                                       v8::MicrotasksScope::kRunMicrotasks);
   ScriptState::EscapableScope scope(script_state_);
 
-  // <spec step="5">Let evaluationStatus be null.</spec>
-  //
-  // |result| corresponds to "evaluationStatus of [[Type]]: throw".
-  ModuleEvaluationResult result = ModuleEvaluationResult::Empty();
+  // Without TLA: <spec step="5">Let evaluationStatus be null.</spec>
+  ScriptEvaluationResult result = ScriptEvaluationResult::FromModuleNotRun();
 
   // <spec step="6">If script's error to rethrow is not null, ...</spec>
   if (module_script->HasErrorToRethrow()) {
-    // <spec step="6">... then set evaluationStatus to Completion { [[Type]]:
-    // throw, [[Value]]: script's error to rethrow, [[Target]]: empty }.</spec>
-    result = ModuleEvaluationResult::FromException(
+    // Without TLA: <spec step="6">... then set evaluationStatus to Completion
+    //     { [[Type]]: throw, [[Value]]: script's error to rethrow,
+    //       [[Target]]: empty }.</spec>
+    // With TLA:    <spec step="5">If script's error to rethrow is not null,
+    //     then let valuationPromise be a promise rejected with script's error
+    //     to rethrow.</spec>
+    result = ScriptEvaluationResult::FromModuleException(
         module_script->CreateErrorToRethrow().V8Value());
   } else {
     // <spec step="7">Otherwise:</spec>
@@ -374,7 +391,8 @@ ModuleEvaluationResult ModulatorImplBase::ExecuteModule(
     // DOMException, [[Target]]: empty }.</spec>
 
     // [not specced] Store V8 code cache on successful evaluation.
-    if (result.IsSuccess()) {
+    if (result.GetResultType() ==
+        ScriptEvaluationResult::ResultType::kSuccess) {
       TaskRunner()->PostTask(
           FROM_HERE,
           WTF::Bind(&ModulatorImplBase::ProduceCacheModuleTreeTopLevel,
@@ -382,25 +400,34 @@ ModuleEvaluationResult ModulatorImplBase::ExecuteModule(
     }
   }
 
-  // <spec step="8">If evaluationStatus is an abrupt completion, then:</spec>
-  if (result.IsException()) {
-    // <spec step="8.1">If rethrow errors is true, rethrow the exception given
-    // by evaluationStatus.[[Value]].</spec>
-    if (capture_error == CaptureEvalErrorFlag::kCapture)
-      return result.Escape(&scope);
-
-    // <spec step="8.2">Otherwise, report the exception given by
-    // evaluationStatus.[[Value]] for script.</spec>
-    ModuleRecord::ReportException(script_state_, result.GetException());
+  if (capture_error == CaptureEvalErrorFlag::kReport) {
+    if (base::FeatureList::IsEnabled(features::kTopLevelAwait)) {
+      // <spec step="7"> If report errors is true, then upon rejection of
+      // evaluationPromise with reason, report the exception given by reason
+      // for script.</spec>
+      v8::Local<v8::Function> callback_failure =
+          ModuleEvaluationRejectionCallback::CreateFunction(script_state_);
+      // Add a rejection handler to report back errors once the result
+      // promise is rejected.
+      result.GetPromise(script_state_)
+          .Then(v8::Local<v8::Function>(), callback_failure);
+    } else {
+      // <spec step="8">If evaluationStatus is an abrupt completion,
+      // then:</spec>
+      if (result.GetResultType() ==
+          ScriptEvaluationResult::ResultType::kException) {
+        // <spec step="8.2">Otherwise, report the exception given by
+        // evaluationStatus.[[Value]] for script.</spec>
+        ModuleRecord::ReportException(script_state_,
+                                      result.GetExceptionForModule());
+      }
+    }
   }
 
-  // <spec step="9">Clean up after running script with settings.</spec>
-  //
-  // Implemented as the ScriptState::Scope destructor.
-  if (base::FeatureList::IsEnabled(features::kTopLevelAwait))
-    return result.Escape(&scope);
-  else
-    return ModuleEvaluationResult::Empty();
+  // <spec step="8">Clean up after running script with settings.</spec>
+  // - Partially implement in MicrotaskScope destructor and the
+  // - ScriptState::EscapableScope destructor.
+  return result.Escape(&scope);
 }
 
 void ModulatorImplBase::Trace(Visitor* visitor) const {

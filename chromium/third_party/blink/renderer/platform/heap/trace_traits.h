@@ -376,47 +376,6 @@ struct TraceInCollectionTrait<
   }
 };
 
-// Nodes used by LinkedHashSet.  Again we need two versions to disambiguate the
-// template.
-template <typename Value, typename Traits>
-struct TraceInCollectionTrait<kNoWeakHandling,
-                              LinkedHashSetNode<Value>,
-                              Traits> {
-  static bool IsAlive(const blink::LivenessBroker& info,
-                      const LinkedHashSetNode<Value>& self) {
-    return TraceInCollectionTrait<
-        kNoWeakHandling, Value,
-        typename Traits::ValueTraits>::IsAlive(info, self.value_);
-  }
-
-  static void Trace(blink::Visitor* visitor,
-                    const LinkedHashSetNode<Value>& self) {
-    static_assert(
-        IsTraceableInCollectionTrait<Traits>::value || IsWeak<Value>::value,
-        "T should be traceable (or weak)");
-    TraceInCollectionTrait<kNoWeakHandling, Value,
-                           typename Traits::ValueTraits>::Trace(visitor,
-                                                                self.value_);
-  }
-};
-
-template <typename Value, typename Traits>
-struct TraceInCollectionTrait<kWeakHandling, LinkedHashSetNode<Value>, Traits> {
-  static bool IsAlive(const blink::LivenessBroker& info,
-                      const LinkedHashSetNode<Value>& self) {
-    return TraceInCollectionTrait<
-        kWeakHandling, Value,
-        typename Traits::ValueTraits>::IsAlive(info, self.value_);
-  }
-
-  static void Trace(blink::Visitor* visitor,
-                    const LinkedHashSetNode<Value>& self) {
-    TraceInCollectionTrait<kWeakHandling, Value,
-                           typename Traits::ValueTraits>::Trace(visitor,
-                                                                self.value_);
-  }
-};
-
 // ListHashSetNode pointers (a ListHashSet is implemented as a hash table of
 // these pointers).
 template <typename Value, size_t inlineCapacity, typename Traits>

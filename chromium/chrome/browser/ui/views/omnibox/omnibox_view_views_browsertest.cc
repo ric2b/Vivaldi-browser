@@ -9,7 +9,6 @@
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/macros.h"
-#include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
@@ -29,7 +28,6 @@
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/omnibox/browser/omnibox_popup_model.h"
 #include "components/omnibox/browser/test_scheme_classifier.h"
-#include "components/omnibox/common/omnibox_features.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/test/browser_test.h"
@@ -38,9 +36,7 @@
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/clipboard/clipboard.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
-#include "ui/base/ime/init/input_method_factory.h"
 #include "ui/base/ime/input_method.h"
-#include "ui/base/ime/mock_input_method.h"
 #include "ui/base/ime/text_edit_commands.h"
 #include "ui/base/ime/text_input_client.h"
 #include "ui/base/test/ui_controls.h"
@@ -71,10 +67,8 @@ void SetClipboardText(ui::ClipboardBuffer buffer, const std::string& text) {
 
 class OmniboxViewViewsTest : public InProcessBrowserTest {
  protected:
-  OmniboxViewViewsTest() {
-    scoped_feature_list_.InitAndEnableFeature(
-        omnibox::kOmniboxContextMenuShowFullUrls);
-  }
+  OmniboxViewViewsTest() = default;
+  ~OmniboxViewViewsTest() override = default;
 
   static void GetOmniboxViewForBrowser(const Browser* browser,
                                        OmniboxView** omnibox_view) {
@@ -141,8 +135,6 @@ class OmniboxViewViewsTest : public InProcessBrowserTest {
 #endif
     return native_window;
   }
-
-  base::test::ScopedFeatureList scoped_feature_list_;
 
   DISALLOW_COPY_AND_ASSIGN(OmniboxViewViewsTest);
 };
@@ -536,7 +528,10 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest, FragmentUnescapedForDisplay) {
   ui_test_utils::NavigateToURL(browser(),
                                GURL("http://example.com/#%E2%98%83"));
 
-  EXPECT_EQ(view->GetText(), base::UTF8ToUTF16("example.com/#\u2603"));
+  EXPECT_EQ(view->GetText(),
+            OmniboxFieldTrial::ShouldRevealPathQueryRefOnHover()
+                ? base::UTF8ToUTF16("http://example.com/#\u2603")
+                : base::UTF8ToUTF16("example.com/#\u2603"));
 }
 
 // Ensure that when the user navigates between suggestions, that the accessible
@@ -725,23 +720,40 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest, AlwaysShowFullURLs) {
       static_cast<OmniboxViewViews*>(omnibox_view);
 
   ASSERT_TRUE(embedded_test_server()->Start());
-  GURL url = embedded_test_server()->GetURL("/title1.html");
+  // Use a hostname ("a.test") since IP addresses aren't eligible for eliding.
+  GURL url = embedded_test_server()->GetURL("a.test", "/title1.html");
   base::string16 url_text = base::ASCIIToUTF16(url.spec());
 
   ui_test_utils::NavigateToURL(browser(), url);
 
-  // By default, the elided URL should be shown.
-  EXPECT_EQ(url_text,
-            base::ASCIIToUTF16("http://") + omnibox_view_views->GetText());
+  // By default, the URL should be elided. Depending on field trial
+  // configuration, this will be implemented by pushing the scheme out of the
+  // display area or by eliding it from the actual text.
+  if (OmniboxFieldTrial::ShouldRevealPathQueryRefOnHover()) {
+    EXPECT_EQ(url_text, omnibox_view_views->GetText());
+    EXPECT_GT(
+        0, omnibox_view_views->GetRenderText()->GetUpdatedDisplayOffset().x());
+  } else {
+    EXPECT_EQ(url_text,
+              base::ASCIIToUTF16("http://") + omnibox_view_views->GetText());
+  }
 
   // After toggling the setting, the full URL should be shown.
   chrome::ToggleShowFullURLs(browser());
   EXPECT_EQ(url_text, omnibox_view_views->GetText());
+  EXPECT_EQ(0,
+            omnibox_view_views->GetRenderText()->GetUpdatedDisplayOffset().x());
 
   // Toggling the setting again should go back to the elided URL.
   chrome::ToggleShowFullURLs(browser());
-  EXPECT_EQ(url_text,
-            base::ASCIIToUTF16("http://") + omnibox_view_views->GetText());
+  if (OmniboxFieldTrial::ShouldRevealPathQueryRefOnHover()) {
+    EXPECT_EQ(url_text, omnibox_view_views->GetText());
+    EXPECT_GT(
+        0, omnibox_view_views->GetRenderText()->GetUpdatedDisplayOffset().x());
+  } else {
+    EXPECT_EQ(url_text,
+              base::ASCIIToUTF16("http://") + omnibox_view_views->GetText());
+  }
 }
 
 // The following set of tests require UIA accessibility support, which only
@@ -811,56 +823,5 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewViewsUIATest, AccessibleOmnibox) {
   ClickBrowserWindowCenter();
   close_waiter.Wait();
   EXPECT_FALSE(omnibox_view->model()->popup_model()->IsOpen());
-}
-
-namespace {
-
-// MockInputMethod ------------------------------------------------------------
-class OmniBoxMockInputMethod : public ui::MockInputMethod {
- public:
-  OmniBoxMockInputMethod() : ui::MockInputMethod(nullptr) {}
-  bool IsInputLocaleCJK() const override { return input_locale_cjk; }
-  void SetInputLocaleCJK(bool is_cjk) { input_locale_cjk = is_cjk; }
-
- private:
-  bool input_locale_cjk = false;
-};
-
-}  // namespace
-
-class OmniboxViewViewsIMETest : public OmniboxViewViewsTest {
- public:
-  OmniboxViewViewsIMETest() {}
-  void SetUp() override {
-    input_method_ = new OmniBoxMockInputMethod();
-    // transfers ownership.
-    ui::SetUpInputMethodForTesting(input_method_);
-    InProcessBrowserTest::SetUp();
-  }
-
- protected:
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    OmniboxViewViewsTest::SetUpCommandLine(command_line);
-    command_line->AppendSwitch(switches::kEnableExperimentalUIAutomation);
-  }
-  OmniBoxMockInputMethod* input_method_ = nullptr;
-};
-
-IN_PROC_BROWSER_TEST_F(OmniboxViewViewsIMETest, TextInputTypeChangedTest) {
-  chrome::FocusLocationBar(browser());
-  OmniboxView* view = nullptr;
-  ASSERT_NO_FATAL_FAILURE(GetOmniboxViewForBrowser(browser(), &view));
-  OmniboxViewViews* omnibox_view_views = static_cast<OmniboxViewViews*>(view);
-  ui::InputMethod* input_method =
-      omnibox_view_views->GetWidget()->GetInputMethod();
-  EXPECT_EQ(input_method, input_method_);
-  EXPECT_EQ(ui::TEXT_INPUT_TYPE_URL, omnibox_view_views->GetTextInputType());
-  input_method_->SetInputLocaleCJK(/*is_cjk*/ true);
-  omnibox_view_views->OnInputMethodChanged();
-  EXPECT_EQ(ui::TEXT_INPUT_TYPE_SEARCH, omnibox_view_views->GetTextInputType());
-
-  input_method_->SetInputLocaleCJK(/*is_cjk*/ false);
-  omnibox_view_views->OnInputMethodChanged();
-  EXPECT_EQ(ui::TEXT_INPUT_TYPE_URL, omnibox_view_views->GetTextInputType());
 }
 #endif  // OS_WIN

@@ -5,6 +5,8 @@
 
 #include "chrome/browser/ui/browser.h"
 
+class VivaldiBrowserWindow;
+
 namespace content {
 class WebContents;
 class RenderWidgetHostView;
@@ -15,9 +17,12 @@ namespace vivaldi {
 Browser* FindBrowserForEmbedderWebContents(
     const content::WebContents* contents);
 
+VivaldiBrowserWindow* FindWindowForEmbedderWebContents(
+    const content::WebContents* contents);
+
 Browser* FindBrowserWithWebContents(content::WebContents* web_contents);
 
-Browser* FindBrowserByWindowId(int window_id);
+Browser* FindBrowserByWindowId(SessionID::id_type window_id);
 
 int GetBrowserCountOfType(Browser::Type type);
 

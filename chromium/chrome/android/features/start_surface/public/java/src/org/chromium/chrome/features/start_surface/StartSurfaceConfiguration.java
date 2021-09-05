@@ -6,6 +6,7 @@ package org.chromium.chrome.features.start_surface;
 
 import androidx.annotation.VisibleForTesting;
 
+import org.chromium.base.Log;
 import org.chromium.base.SysUtils;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.browser.flags.BooleanCachedFieldTrialParameter;
@@ -27,15 +28,26 @@ import org.chromium.chrome.browser.ChromeApplication;
  * which variation should be used.
  */
 public class StartSurfaceConfiguration {
+    private static final String TAG = "StartSurfaceConfig";
     public static final StringCachedFieldTrialParameter START_SURFACE_VARIATION =
             new StringCachedFieldTrialParameter(
                     ChromeFeatureList.START_SURFACE_ANDROID, "start_surface_variation", "");
     public static final BooleanCachedFieldTrialParameter START_SURFACE_EXCLUDE_MV_TILES =
             new BooleanCachedFieldTrialParameter(
                     ChromeFeatureList.START_SURFACE_ANDROID, "exclude_mv_tiles", false);
+    public static final BooleanCachedFieldTrialParameter
+            START_SURFACE_HIDE_INCOGNITO_SWITCH_NO_TAB =
+                    new BooleanCachedFieldTrialParameter(ChromeFeatureList.START_SURFACE_ANDROID,
+                            "hide_switch_when_no_incognito_tabs", false);
+
+    // This parameter hides the incognito switch on non-incognito Start Surface homepage but still
+    // shows the switch in Grid tab switcher. It is different from
+    // {@link START_SURFACE_HIDE_INCOGNITO_SWITCH_NO_TAB} which hides the incognito switch in both
+    // Start Surface homepage and Grid tab switcher whenever there is no incognito tab.
     public static final BooleanCachedFieldTrialParameter START_SURFACE_HIDE_INCOGNITO_SWITCH =
-            new BooleanCachedFieldTrialParameter(ChromeFeatureList.START_SURFACE_ANDROID,
-                    "hide_switch_when_no_incognito_tabs", false);
+            new BooleanCachedFieldTrialParameter(
+                    ChromeFeatureList.START_SURFACE_ANDROID, "hide_incognito_switch", false);
+
     public static final BooleanCachedFieldTrialParameter START_SURFACE_LAST_ACTIVE_TAB_ONLY =
             new BooleanCachedFieldTrialParameter(
                     ChromeFeatureList.START_SURFACE_ANDROID, "show_last_active_tab_only", false);
@@ -138,7 +150,7 @@ public class StartSurfaceConfiguration {
      */
     public static void recordHistogram(String name, long timeDurationMs, boolean isInstantStart) {
         if (timeDurationMs < 0) return;
-
+        Log.i(TAG, "Recorded %s = %d ms", getHistogramName(name, isInstantStart), timeDurationMs);
         RecordHistogram.recordTimesHistogram(
                 getHistogramName(name, isInstantStart), timeDurationMs);
     }

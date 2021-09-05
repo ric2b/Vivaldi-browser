@@ -49,8 +49,6 @@ import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.MathUtils;
 import org.chromium.base.TraceEvent;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.compositor.Invalidator;
-import org.chromium.chrome.browser.compositor.layouts.LayoutUpdateHost;
 import org.chromium.chrome.browser.compositor.layouts.OverviewModeBehavior;
 import org.chromium.chrome.browser.device.DeviceClassManager;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
@@ -62,15 +60,15 @@ import org.chromium.chrome.browser.omnibox.SearchEngineLogoUtils;
 import org.chromium.chrome.browser.partnercustomizations.PartnerBrowserCustomizations;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tasks.ReturnToChromeExperimentsUtil;
 import org.chromium.chrome.browser.toolbar.ButtonData;
 import org.chromium.chrome.browser.toolbar.HomeButton;
 import org.chromium.chrome.browser.toolbar.KeyboardNavigationListener;
 import org.chromium.chrome.browser.toolbar.TabCountProvider;
 import org.chromium.chrome.browser.toolbar.TabCountProvider.TabCountObserver;
 import org.chromium.chrome.browser.toolbar.TabSwitcherDrawable;
+import org.chromium.chrome.browser.toolbar.ThemeColorProvider;
 import org.chromium.chrome.browser.toolbar.ToolbarColors;
-import org.chromium.chrome.browser.toolbar.bottom.BottomToolbarConfiguration;
-import org.chromium.chrome.browser.toolbar.bottom.BottomToolbarVariationManager;
 import org.chromium.chrome.browser.toolbar.menu_button.MenuButton;
 import org.chromium.chrome.browser.toolbar.menu_button.MenuButtonCoordinator;
 import org.chromium.chrome.browser.toolbar.top.TopToolbarCoordinator.UrlExpansionObserver;
@@ -88,9 +86,11 @@ import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
 import java.util.List;
 
+// Vivaldi
+import android.content.res.Configuration;
+
 import org.chromium.chrome.browser.ChromeApplication;
 import org.chromium.chrome.browser.NavigationPopup;
-import org.chromium.chrome.browser.ThemeColorProvider;
 
 import org.vivaldi.browser.common.VivaldiUtils;
 import org.vivaldi.browser.panels.PanelUtils;
@@ -100,9 +100,8 @@ import org.vivaldi.browser.toolbar.TrackerShieldButton;
 /**
  * Phone specific toolbar implementation.
  */
-public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, OnClickListener,
-                                                           NewTabPage.OnSearchBoxScrollListener,
-                                                           TabCountObserver {
+public class ToolbarPhone extends ToolbarLayout
+        implements OnClickListener, NewTabPage.OnSearchBoxScrollListener, TabCountObserver {
     /** The amount of time transitioning from one theme color to another should take in ms. */
     public static final long THEME_COLOR_TRANSITION_DURATION = 250;
 
@@ -250,22 +249,13 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
 
     private boolean mIsHomeButtonEnabled;
 
-    private LayoutUpdateHost mLayoutUpdateHost;
+    private Runnable mLayoutUpdater;
 
     /** The vertical inset of the location bar background. */
     private int mLocationBarBackgroundVerticalInset;
 
     /** The current color of the location bar. */
     private int mCurrentLocationBarColor;
-
-    /**
-     * Whether the bottom toolbar is visible. If it is visible then the top toolbar's home,
-     *  tab switcher, and menu buttons should be hidden.
-     */
-    private boolean mIsBottomToolbarVisible;
-
-    /** Whether the bottom toolbar was visible for the last texture capture. */
-    private boolean mWasBottomToolbarVisibleForLastTextureCapture;
 
     /**
      * Used to specify the visual state of the toolbar.
@@ -341,7 +331,7 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
                 @Override
                 public void set(ToolbarPhone object, Float value) {
                     object.mTabSwitcherModePercent = value;
-                    triggerPaintInvalidate(ToolbarPhone.this);
+                    triggerPaintInvalidate(ToolbarPhone.this::postInvalidateOnAnimation);
                 }
             };
 
@@ -404,11 +394,9 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
 
             setLayoutTransition(null);
 
-            if (getMenuButtonWrapper() != null) {
-                getMenuButtonWrapper().setVisibility(View.VISIBLE);
+            if (getMenuButtonCoordinator() != null) {
+                getMenuButtonCoordinator().setVisibility(true);
             }
-            else if (getMenuButtonWrapper() != null && ChromeApplication.isVivaldi())
-                getMenuButtonWrapper().setVisibility(View.VISIBLE);
 
             inflateTabSwitchingResources();
 
@@ -483,9 +471,8 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
         mToggleTabStackButton.setOnKeyListener(new KeyboardNavigationListener() {
             @Override
             public View getNextFocusForward() {
-                final ImageButton menuButton = getMenuButton();
-                if (menuButton != null && menuButton.isShown()) {
-                    return menuButton;
+                if (getMenuButtonCoordinator().isShown()) {
+                    return getMenuButtonCoordinator().getMenuButton();
                 } else {
                     return getCurrentTabView();
                 }
@@ -502,7 +489,7 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
      * Sets up click and key listeners once we have native library available to handle clicks.
      */
     @Override
-    void onNativeLibraryReady() {
+    protected void onNativeLibraryReady() {
         super.onNativeLibraryReady();
 
         getLocationBar().onNativeLibraryReady();
@@ -525,26 +512,24 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
             mForwardButton.setLongClickable(true);
         }
 
-        if (getMenuButton() != null) {
-            getMenuButton().setOnKeyListener(new KeyboardNavigationListener() {
-                @Override
-                public View getNextFocusForward() {
-                    return getCurrentTabView();
-                }
+        getMenuButtonCoordinator().setOnKeyListener(new KeyboardNavigationListener() {
+            @Override
+            public View getNextFocusForward() {
+                return getCurrentTabView();
+            }
 
-                @Override
-                public View getNextFocusBackward() {
-                    return mToggleTabStackButton;
-                }
+            @Override
+            public View getNextFocusBackward() {
+                return mToggleTabStackButton;
+            }
 
-                @Override
-                protected boolean handleEnterKeyPress() {
-                    return getMenuButtonHelper().onEnterKeyPress(getMenuButton());
-                }
-            });
-        }
-        onHomeButtonUpdate(HomepageManager.isHomepageEnabled()
-                || BottomToolbarConfiguration.isBottomToolbarEnabled());
+            @Override
+            protected boolean handleEnterKeyPress() {
+                return getMenuButtonCoordinator().onEnterKeyPress();
+            }
+        });
+
+        onHomeButtonUpdate(HomepageManager.isHomepageEnabled());
 
         updateVisualsForLocationBarState();
         // Vivaldi
@@ -611,12 +596,6 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
 
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-        // Note(david@vivaldi.com): Handle buttons visibility for different scenarios.
-        int isGone = !isTabSwitcherOnBottom() ? VISIBLE : GONE;
-        mToggleTabStackButton.setVisibility(isGone);
-        mPanelButton.setVisibility(isGone);
-        mHomeButton.setVisibility(isGone);
-
         if (!mDisableLocationBarRelayout) {
             super.onMeasure(widthMeasureSpec, heightMeasureSpec);
 
@@ -1378,7 +1357,7 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
 
         // Draw the tab stack button and associated text if necessary.
         if (mTabSwitcherAnimationTabStackDrawable != null && mToggleTabStackButton != null
-                && mUrlExpansionPercent != 1f && !isTabSwitcherOnBottom()) {
+                && mUrlExpansionPercent != 1f) {
             // Draw the tab stack button image.
             canvas.save();
             translateCanvasToView(mToolbarButtonsContainer, mToggleTabStackButton, canvas);
@@ -1408,7 +1387,7 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
         }
 
         // Draw the menu button if necessary.
-        final MenuButton menuButton = (MenuButton) getMenuButtonWrapper();
+        final MenuButton menuButton = getMenuButtonCoordinator().getMenuButton();
         if (menuButton != null) {
             canvas.save();
             translateCanvasToView(mToolbarButtonsContainer, menuButton, canvas);
@@ -1417,19 +1396,12 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
         }
 
         mLightDrawablesUsedForLastTextureCapture = useLight();
-        mWasBottomToolbarVisibleForLastTextureCapture = mIsBottomToolbarVisible;
 
-        if (mTabSwitcherAnimationTabStackDrawable != null && mToggleTabStackButton != null
-                && !mIsBottomToolbarVisible) {
+        if (mTabSwitcherAnimationTabStackDrawable != null && mToggleTabStackButton != null) {
             mTabCountForLastTextureCapture = mTabSwitcherAnimationTabStackDrawable.getTabCount();
         }
 
         canvas.restore();
-    }
-
-    @Override
-    public void doInvalidate() {
-        postInvalidateOnAnimation();
     }
 
     /**
@@ -1665,8 +1637,7 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
         if (forceTextureCapture) {
             // Only force a texture capture if the tint for the toolbar drawables is changing or
             // if the tab count has changed since the last texture capture.
-            mForceTextureCapture = mLightDrawablesUsedForLastTextureCapture != useLight()
-                    || mWasBottomToolbarVisibleForLastTextureCapture != mIsBottomToolbarVisible;
+            mForceTextureCapture = mLightDrawablesUsedForLastTextureCapture != useLight();
 
             if (mTabSwitcherAnimationTabStackDrawable != null && mToggleTabStackButton != null) {
                 mForceTextureCapture = mForceTextureCapture
@@ -1682,8 +1653,8 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
     }
 
     @Override
-    public void setLayoutUpdateHost(LayoutUpdateHost layoutUpdateHost) {
-        mLayoutUpdateHost = layoutUpdateHost;
+    public void setLayoutUpdater(Runnable layoutUpdater) {
+        mLayoutUpdater = layoutUpdater;
     }
 
     @Override
@@ -1731,17 +1702,18 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
         if (mHomeButton == null) return;
 
         boolean hideHomeButton = !mIsHomeButtonEnabled
-                || (mIsBottomToolbarVisible
-                        && BottomToolbarVariationManager.isHomeButtonOnBottom());
+                || ReturnToChromeExperimentsUtil.shouldHideHomeButtonForStartSurface(
+                        isIncognito(), false /* isTablet */);
 
-        if (ChromeApplication.isVivaldi() && mPanelButton.getVisibility() == GONE)
-            hideHomeButton = true;
-
+        // Note(david@vivaldi.com): Home button visibility will be handled in
+        // onBottomToolbarVisibilityChanged().
+        if (!ChromeApplication.isVivaldi())
         if (hideHomeButton) {
             removeHomeButton();
         } else {
             addHomeButton();
         }
+        // Vivaldi: Update shield button.
         mShieldButton.updateVisibility();
     }
 
@@ -1771,7 +1743,7 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
         // TODO(amaralp): Have the LocationBar listen to tint changes.
         if (mLocationBar != null) mLocationBar.updateVisualsForState();
 
-        if (mLayoutUpdateHost != null) mLayoutUpdateHost.requestUpdate();
+        if (mLayoutUpdater != null) mLayoutUpdater.run();
     }
 
     @Override
@@ -1847,7 +1819,7 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
         // Request a texture update to ensure a texture is captured before the user
         // re-enters the tab switcher.
         postInvalidate();
-        mLayoutUpdateHost.requestUpdate();
+        mLayoutUpdater.run();
     }
 
     @Override
@@ -1998,13 +1970,11 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
         if (!getToolbarDataProvider().shouldShowLocationBarInOverviewMode()) return false;
 
         if (mToggleTabStackButton != null) {
-            boolean isGone = inTabSwitcherMode || isTabSwitcherOnBottom();
+            boolean isGone = inTabSwitcherMode;
             mToggleTabStackButton.setVisibility(isGone ? GONE : VISIBLE);
         }
 
-        if (getMenuButton() != null) {
-            getMenuButton().setVisibility(inTabSwitcherMode ? GONE : VISIBLE);
-        }
+        getMenuButtonCoordinator().setVisibility(!inTabSwitcherMode);
 
         triggerUrlFocusAnimation(inTabSwitcherMode && !urlHasFocus());
 
@@ -2122,7 +2092,7 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
         float toolbarButtonTranslationX =
                 MathUtils.flipSignIf(URL_FOCUS_TOOLBAR_BUTTONS_TRANSLATION_X_DP, isRtl) * density;
 
-        final View menuButtonWrapper = getMenuButtonWrapper();
+        final View menuButtonWrapper = getMenuButtonCoordinator().getMenuButton();
         if (menuButtonWrapper != null) {
             animator = ObjectAnimator.ofFloat(
                     menuButtonWrapper, TRANSLATION_X, toolbarButtonTranslationX);
@@ -2136,7 +2106,7 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
             animators.add(animator);
         }
 
-        if (mToggleTabStackButton != null && !isTabSwitcherOnBottom()) {
+        if (mToggleTabStackButton != null) {
             animator = ObjectAnimator.ofFloat(
                     mToggleTabStackButton, TRANSLATION_X, toolbarButtonTranslationX);
             animator.setDuration(URL_FOCUS_TOOLBAR_BUTTONS_DURATION_MS);
@@ -2177,7 +2147,7 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
         animator.setInterpolator(BakedBezierInterpolator.TRANSFORM_CURVE);
         animators.add(animator);
 
-        final View menuButtonWrapper = getMenuButtonWrapper();
+        final View menuButtonWrapper = getMenuButtonCoordinator().getMenuButton();
         if (menuButtonWrapper != null) {
             animator = ObjectAnimator.ofFloat(menuButtonWrapper, TRANSLATION_X, 0);
             animator.setDuration(URL_FOCUS_TOOLBAR_BUTTONS_DURATION_MS);
@@ -2192,7 +2162,7 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
             animators.add(animator);
         }
 
-        if (mToggleTabStackButton != null && !isTabSwitcherOnBottom()) {
+        if (mToggleTabStackButton != null) {
             animator = ObjectAnimator.ofFloat(mToggleTabStackButton, TRANSLATION_X, 0);
             animator.setDuration(URL_FOCUS_TOOLBAR_BUTTONS_DURATION_MS);
             animator.setStartDelay(URL_CLEAR_FOCUS_TABSTACK_DELAY_MS);
@@ -2420,7 +2390,7 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
         });
         mBrandColorTransitionAnimation.start();
         mBrandColorTransitionActive = true;
-        if (mLayoutUpdateHost != null) mLayoutUpdateHost.requestUpdate();
+        if (mLayoutUpdater != null) mLayoutUpdater.run();
     }
 
     private void updateNtpAnimationState() {
@@ -2537,16 +2507,6 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
         return getToolbarDataProvider().getPrimaryColor();
     }
 
-    /**
-     * @return Whether tab switcher is shown on the bottom toolbar.
-     *         Return false when bottom toolbar is not visible.
-     */
-    private boolean isTabSwitcherOnBottom() {
-        // Note(david@vivaldi.com): We ignore this when toolbar is at the bottom.
-        if (!VivaldiUtils.isTopToolbarOn()) return false;
-        return mIsBottomToolbarVisible && BottomToolbarVariationManager.isTabSwitcherOnBottom();
-    }
-
     private void updateVisualsForLocationBarState() {
         TraceEvent.begin("ToolbarPhone.updateVisualsForLocationBarState");
         // These are used to skip setting state unnecessarily while in the tab switcher.
@@ -2598,8 +2558,8 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
 
         // Refresh the toolbar texture.
         if ((mVisualState == VisualState.BRAND_COLOR || visualStateChanged)
-                && mLayoutUpdateHost != null) {
-            mLayoutUpdateHost.requestUpdate();
+                && mLayoutUpdater != null) {
+            mLayoutUpdater.run();
         }
         updateShadowVisibility();
         updateUrlExpansionAnimation();
@@ -2647,12 +2607,7 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
             updateNtpTransitionAnimation();
         }
 
-        if (getMenuButtonWrapper() != null) {
-            setMenuButtonHighlightDrawable();
-            if (ChromeApplication.isVivaldi()) getMenuButtonWrapper().setVisibility(View.VISIBLE);
-            else
-            if (!mIsBottomToolbarVisible) getMenuButtonWrapper().setVisibility(View.VISIBLE);
-        }
+        getMenuButtonCoordinator().setVisibility(true);
 
         DrawableCompat.setTint(mLocationBarBackground,
                 isIncognito() ? Color.WHITE
@@ -2741,13 +2696,11 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
      * buttons besides the optional button.
      */
     private boolean isMenuButtonPresent() {
-        final ImageButton menuButton = getMenuButton();
-        if (menuButton == null) return false;
-        return menuButton.isShown();
+        return getMenuButtonCoordinator().isShown();
     }
 
     private void requestLayoutHostUpdateForOptionalButton() {
-        if (mLayoutUpdateHost != null) mLayoutUpdateHost.requestUpdate();
+        if (mLayoutUpdater != null) mLayoutUpdater.run();
         getViewTreeObserver().removeOnGlobalLayoutListener(mOptionalButtonLayoutListener);
     }
 
@@ -2936,17 +2889,6 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
         }
     }
 
-    @Override
-    public void onBottomToolbarVisibilityChanged(boolean isVisible) {
-        mIsBottomToolbarVisible = isVisible;
-
-        mToggleTabStackButton.setVisibility(isTabSwitcherOnBottom() ? GONE : VISIBLE);
-        updateButtonVisibility();
-        // Vivaldi
-        updateButtonVisibility(isVisible);
-        mToolbarButtonsContainer.requestLayout();
-    }
-
     private void cancelAnimations() {
         if (mUrlFocusLayoutAnimator != null && mUrlFocusLayoutAnimator.isRunning()) {
             mUrlFocusLayoutAnimator.cancel();
@@ -2968,16 +2910,6 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
         super.setThemeColorProvider(themeColorProvider);
         if (mShieldButton != null)
             mShieldButton.setThemeColorProvider(themeColorProvider);
-    }
-
-    // Vivaldi
-    public void updateButtonVisibility(boolean visible) {
-        int visibility = visible ? GONE : VISIBLE;
-        mPanelButton.setVisibility(visibility);
-        mBackButton.setVisibility(visibility);
-        mForwardButton.setVisibility(visibility);
-        if (visible) removeHomeButton();
-        else addHomeButton();
     }
 
     @Override
@@ -3035,5 +2967,23 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
                 getContext(), tab.getWebContents().getNavigationController(),
                 isForward ? NavigationPopup.Type.TABLET_FORWARD : NavigationPopup.Type.TABLET_BACK);
         mNavigationPopup.show(anchorView);
+    }
+
+    @Override
+    public void onBottomToolbarVisibilityChanged(boolean isVisible, int orientation) {
+        int visibility = isVisible ? GONE : VISIBLE;
+        // For Panel and tab switcher button we apply |GONE| when in portrait mode with toolbar at
+        // the top.
+        if (orientation == Configuration.ORIENTATION_PORTRAIT && VivaldiUtils.isTopToolbarOn())
+            visibility = GONE;
+        mPanelButton.setVisibility(visibility);
+        mToggleTabStackButton.setVisibility(visibility);
+        // For all other buttons we apply |GONE| when in portrait mode with toolbar at the bottom.
+        if (orientation == Configuration.ORIENTATION_PORTRAIT && !VivaldiUtils.isTopToolbarOn())
+            visibility = GONE;
+        mHomeButton.setVisibility(visibility);
+        mBackButton.setVisibility(visibility);
+        mForwardButton.setVisibility(visibility);
+        mToolbarButtonsContainer.requestLayout();
     }
 }

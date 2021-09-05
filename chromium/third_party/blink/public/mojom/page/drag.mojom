@@ -7,11 +7,13 @@ module blink.mojom;
 import "mojo/public/mojom/base/file_path.mojom";
 import "mojo/public/mojom/base/string16.mojom";
 import "services/network/public/mojom/referrer_policy.mojom";
+import "ui/base/dragdrop/mojom/drag_drop_types.mojom";
+import "ui/gfx/geometry/mojom/geometry.mojom";
 import "url/mojom/url.mojom";
-import "third_party/blink/public/mojom/native_file_system/native_file_system_drag_drop_token.mojom";
+import "third_party/blink/public/mojom/file_system_access/native_file_system_drag_drop_token.mojom";
 
 // "Verb" of a drag-and-drop operation as negotiated between the source and
-// destination. It's typemapped to blink::WebDragOperation.
+// destination. It's typemapped to blink::DragOperation.
 enum DragOperation {
   kNone,
   kCopy,
@@ -23,7 +25,7 @@ enum DragOperation {
 };
 
 // This struct encodes what drag-and-drop operations are allowed. It's
-// typemapped to blink::WebDragOperationsMask.
+// typemapped to blink::DragOperationsMask.
 // TODO(https://crbug.com/1082291): Change this to a bitset if/when mojom
 // supports bitset types.
 struct AllowedDragOperations {
@@ -45,11 +47,11 @@ struct DragItemString {
   mojo_base.mojom.String16 string_data;
 
   // Title associated with a link. Only valid when string_type == "text/uri-list".
-  mojo_base.mojom.String16 title;
+  mojo_base.mojom.String16? title;
 
   // Stores the base URL for the contained markup. Only valid when string_type
   // == "text/html".
-  url.mojom.Url base_url;
+  url.mojom.Url? base_url;
 };
 
 // Used for dragging a list of files.
@@ -66,14 +68,14 @@ struct DragItemBinary {
   url.mojom.Url source_url;
   mojo_base.mojom.FilePath filename_extension;
   // Content-Disposition response header.
-  string content_disposition;
+  string? content_disposition;
 };
 
 // Used for dragging files using the FileSystem API.
 struct DragItemFileSystemFile {
   url.mojom.Url url;
   int64 size;
-  string file_system_id;
+  string? file_system_id;
 };
 
 union DragItem {
@@ -86,11 +88,17 @@ union DragItem {
 // Holds data that may be exchanged through a drag-n-drop operation.
 struct DragData {
   array<DragItem> items;
-  string file_system_id;  // Only used when dragging into Blink to represent a
-                          // new isolated file system to access the dropped
-                          // files.
+  string? file_system_id;  // Only used when dragging into Blink to represent a
+                           // new isolated file system to access the dropped
+                           // files.
 
   // Used for DragItemString when string_type == "downloadurl".
   network.mojom.ReferrerPolicy referrer_policy =
       network.mojom.ReferrerPolicy.kDefault;
+};
+
+// Information about the event that started a drag session.
+struct DragEventSourceInfo {
+  gfx.mojom.Point location;
+  ui.mojom.DragEventSource source;
 };

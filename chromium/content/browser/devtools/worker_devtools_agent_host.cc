@@ -6,6 +6,8 @@
 
 #include "base/bind.h"
 #include "content/browser/devtools/devtools_session.h"
+#include "content/browser/devtools/protocol/io_handler.h"
+#include "content/browser/devtools/protocol/network_handler.h"
 #include "content/browser/devtools/protocol/target_handler.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/public/common/child_process_host.h"
@@ -26,7 +28,8 @@ WorkerDevToolsAgentHost::WorkerDevToolsAgentHost(
       url_(url),
       name_(name),
       parent_id_(parent_id),
-      destroyed_callback_(std::move(destroyed_callback)) {
+      destroyed_callback_(std::move(destroyed_callback)),
+      devtools_worker_token_(devtools_worker_token) {
   DCHECK(agent_remote);
   DCHECK(!devtools_worker_token.is_empty());
   AddRef();  // Self keep-alive while the worker agent is alive.
@@ -81,9 +84,12 @@ bool WorkerDevToolsAgentHost::Close() {
 
 bool WorkerDevToolsAgentHost::AttachSession(DevToolsSession* session,
                                             bool acquire_wake_lock) {
+  session->AddHandler(std::make_unique<protocol::IOHandler>(GetIOContext()));
   session->AddHandler(std::make_unique<protocol::TargetHandler>(
       protocol::TargetHandler::AccessMode::kAutoAttachOnly, GetId(),
       GetRendererChannel(), session->GetRootSession()));
+  session->AddHandler(std::make_unique<protocol::NetworkHandler>(
+      GetId(), devtools_worker_token_, GetIOContext(), base::DoNothing()));
   return true;
 }
 

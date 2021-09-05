@@ -13,9 +13,11 @@
 <translation id="1211441953136645838">son qeyd</translation>
 <translation id="1281252709823657822">dialoq</translation>
 <translation id="1306460908038601864">Deaktiv</translation>
+<translation id="1311894908970423688">Dəyər <ph name="VALUE_DATE_OR_TIME" /> olmalıdır.</translation>
 <translation id="1335095011850992622">kreditlər</translation>
 <translation id="1342835525016946179">məqalə</translation>
 <translation id="1359897965706325498">banner</translation>
+<translation id="145015347812617860"><ph name="COUNT" /> element</translation>
 <translation id="1480676835519562650">çox sayda seçilə bilər, <ph name="SELECTED" />/<ph name="COUNT" /> seçilib.</translation>
 <translation id="1589122976691792535">region</translation>
 <translation id="1591562245178063882">Bu ay</translation>
@@ -45,6 +47,7 @@
 <translation id="2247351761944213033"><ph name="WEEKNUMBER" /> həftə, <ph name="YEAR" /></translation>
 <translation id="2277199496770840904">Trek <ph name="NUMBER" /></translation>
 <translation id="2291999235780842123">Qeyd xanası</translation>
+<translation id="2307576640803031502">siyahıda <ph name="INDEX" />/<ph name="COUNT" /> element</translation>
 <translation id="2311842470354187719">səhifə sonu</translation>
 <translation id="2335594187091864976">tarix və saat seçici</translation>
 <translation id="2393030564806080191">Altırəqəmli rəng dəyəri</translation>
@@ -155,9 +158,11 @@
 <translation id="5677946354068040947">əlavə seçimlər</translation>
 <translation id="576709008726043716">giriş</translation>
 <translation id="57838592816432529">Səssiz</translation>
+<translation id="5860033963881614850">Deaktiv</translation>
 <translation id="588258955323874662">Tam ekran</translation>
 <translation id="5888666972993069672">İndi <ph name="DEVICE_FRIENDLY_NAME" /> cihazına yayımlanır</translation>
 <translation id="591047860372322273">axtarış xanası</translation>
+<translation id="5916664084637901428">Aktiv</translation>
 <translation id="5939518447894949180">Sıfırlayın</translation>
 <translation id="5966707198760109579">Həftə</translation>
 <translation id="5987525920412732405">fırlatma düyməsi</translation>
@@ -185,6 +190,7 @@
 <translation id="6643016212128521049">Silin</translation>
 <translation id="668171684555832681">Digər...</translation>
 <translation id="6692633176391053278">stepper</translation>
+<translation id="6709093583001123835">Dəyər <ph name="VALUE" /> olmalıdır.</translation>
 <translation id="6709570249143506788">Oxutma keyfiyyəti pisdir</translation>
 <translation id="6755330956360078551">ipucu</translation>
 <translation id="6790428901817661496">Oxudun</translation>
@@ -285,6 +291,7 @@
 <translation id="9155987714137265666"><ph name="WEEK" />, <ph name="WEEK_START_DATE" /> tarixində başlayır</translation>
 <translation id="916607977885256133">Şəkil içində Şəkil</translation>
 <translation id="9168329111483466115">qeyd</translation>
+<translation id="945780513535800434">Qismən Yoxlanılıb</translation>
 <translation id="954003015749068518">şəkil içində şəkil düyməsinə daxil olun</translation>
 <translation id="966787709310836684">menyu</translation>
 </translationbundle>

@@ -12,7 +12,6 @@
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/style/ash_color_provider.h"
-#include "ash/style/default_color_constants.h"
 #include "ash/system/enterprise/enterprise_domain_observer.h"
 #include "ash/system/model/clock_model.h"
 #include "ash/system/model/clock_observer.h"
@@ -44,7 +43,6 @@
 namespace ash {
 
 using ContentLayerType = AshColorProvider::ContentLayerType;
-using AshColorMode = AshColorProvider::AshColorMode;
 
 namespace {
 
@@ -100,7 +98,7 @@ DateView::DateView(UnifiedSystemTrayController* controller)
   label_->SetAutoColorReadabilityEnabled(false);
   label_->SetSubpixelRenderingEnabled(false);
   label_->SetEnabledColor(AshColorProvider::Get()->GetContentLayerColor(
-      ContentLayerType::kTextColorPrimary, AshColorMode::kDark));
+      ContentLayerType::kTextColorPrimary));
   Update();
 
   Shell::Get()->system_tray_model()->clock()->AddObserver(this);
@@ -240,7 +238,7 @@ void BatteryView::ConfigureLabel(views::Label* label) {
   label->SetAutoColorReadabilityEnabled(false);
   label->SetSubpixelRenderingEnabled(false);
   label->SetEnabledColor(AshColorProvider::Get()->GetContentLayerColor(
-      ContentLayerType::kTextColorSecondary, AshColorMode::kDark));
+      ContentLayerType::kTextColorSecondary));
   label->GetViewAccessibility().OverrideIsIgnored(true);
 }
 
@@ -273,14 +271,14 @@ ManagedStateView::ManagedStateView(views::ButtonListener* listener,
   label->SetAutoColorReadabilityEnabled(false);
   label->SetSubpixelRenderingEnabled(false);
   label->SetEnabledColor(AshColorProvider::Get()->GetContentLayerColor(
-      ContentLayerType::kTextColorSecondary, AshColorMode::kDark));
+      ContentLayerType::kTextColorSecondary));
   label->SetText(l10n_util::GetStringUTF16(label_id));
   AddChildView(label);
 
   auto* image = new views::ImageView;
-  image->SetImage(gfx::CreateVectorIcon(
-      icon, AshColorProvider::Get()->GetContentLayerColor(
-                ContentLayerType::kIconColorSecondary, AshColorMode::kDark)));
+  image->SetImage(
+      gfx::CreateVectorIcon(icon, AshColorProvider::Get()->GetContentLayerColor(
+                                      ContentLayerType::kIconColorSecondary)));
   image->SetPreferredSize(
       gfx::Size(kUnifiedSystemInfoHeight, kUnifiedSystemInfoHeight));
   AddChildView(image);
@@ -414,7 +412,7 @@ UnifiedSystemInfoView::UnifiedSystemInfoView(
   if (PowerStatus::Get()->IsBatteryPresent()) {
     auto* separator = new views::Separator();
     separator->SetColor(AshColorProvider::Get()->GetContentLayerColor(
-        ContentLayerType::kSeparatorColor, AshColorMode::kDark));
+        ContentLayerType::kSeparatorColor));
     separator->SetPreferredHeight(kUnifiedSystemInfoHeight);
     AddChildView(separator);
 

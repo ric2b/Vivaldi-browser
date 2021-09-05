@@ -67,8 +67,8 @@ import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
 import org.chromium.chrome.browser.searchwidget.SearchActivity.SearchActivityDelegate;
 import org.chromium.chrome.browser.share.clipboard.ClipboardImageFileProvider;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4RunnerDelegate;
+import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.MultiActivityTestRule;
 import org.chromium.chrome.test.util.ActivityUtils;
 import org.chromium.chrome.test.util.OmniboxTestUtils;
@@ -108,6 +108,7 @@ import java.util.concurrent.TimeoutException;
 public class SearchActivityTest {
     private static final long OMNIBOX_SHOW_TIMEOUT_MS = 5000L;
     private static final String TEST_PNG_IMAGE_FILE_EXTENSION = ".png";
+    private static final int INVALID_INDEX = -1;
 
     @ParameterAnnotations.ClassParameter
     private static List<ParameterSet> sClassParams =
@@ -180,8 +181,7 @@ public class SearchActivityTest {
     public MultiActivityTestRule mTestRule = new MultiActivityTestRule();
 
     @Rule
-    public ChromeActivityTestRule<ChromeTabbedActivity> mActivityTestRule =
-            new ChromeActivityTestRule<>(ChromeTabbedActivity.class);
+    public ChromeTabbedActivityTestRule mActivityTestRule = new ChromeTabbedActivityTestRule();
 
     @Mock
     VoiceRecognitionHandler mHandler;
@@ -571,7 +571,7 @@ public class SearchActivityTest {
                 AutocompleteCoordinatorTestUtils.getSuggestionsDropdown(
                         locationBar.getAutocompleteCoordinator());
 
-        int imageSuggestionIndex = -1;
+        int imageSuggestionIndex = INVALID_INDEX;
         // Find the index of the image clipboard suggestion.
         for (int i = 0; i < suggestionsDropdown.getItemCount(); ++i) {
             OmniboxSuggestion suggestion = AutocompleteCoordinatorTestUtils.getOmniboxSuggestionAt(
@@ -582,8 +582,8 @@ public class SearchActivityTest {
                 break;
             }
         }
-        Assert.assertNotEquals(
-                "Cannot find the image clipboard Omnibox suggestion", -1, imageSuggestionIndex);
+        Assert.assertNotEquals("Cannot find the image clipboard Omnibox suggestion", INVALID_INDEX,
+                imageSuggestionIndex);
 
         OmniboxSuggestion imageSuggestion = AutocompleteCoordinatorTestUtils.getOmniboxSuggestionAt(
                 locationBar.getAutocompleteCoordinator(), imageSuggestionIndex);
@@ -598,13 +598,6 @@ public class SearchActivityTest {
                 "The image clipboard suggestion should not contains am empty post data.", 0,
                 imageSuggestion.getPostData().length);
 
-        // Find the index of clipboard suggestion in the dropdown list.
-        final int clipboardSuggestionIndexInDropdown =
-                AutocompleteCoordinatorTestUtils.getIndexForFirstSuggestionOfType(
-                        locationBar.getAutocompleteCoordinator(),
-                        OmniboxSuggestionUiType.CLIPBOARD_SUGGESTION);
-        Assert.assertNotEquals("Cannot find the image clipboard Omnibox suggestion in UI.", -1,
-                clipboardSuggestionIndexInDropdown);
 
         // Make sure the new tab is launched.
         final ChromeTabbedActivity cta = ActivityUtils.waitForActivity(
@@ -612,7 +605,7 @@ public class SearchActivityTest {
                 new Callable<Void>() {
                     @Override
                     public Void call() throws InterruptedException {
-                        clickSuggestionAt(suggestionsDropdown, clipboardSuggestionIndexInDropdown);
+                        clickFirstClipboardSuggestion(locationBar);
                         return null;
                     }
                 });
@@ -623,10 +616,11 @@ public class SearchActivityTest {
             // Make sure tab is in either upload page or result page. cannot only verify one of
             // them since on fast device tab jump to result page really quick but on slow device
             // may stay on upload page for a really long time.
-            boolean isValid = tab.getUrlString().equals(imageSuggestion.getUrl().getSpec())
+            boolean isValid = tab.getUrl().equals(imageSuggestion.getUrl())
                     || TemplateUrlServiceFactory.get().isSearchResultsPageFromDefaultSearchProvider(
-                            tab.getUrlString());
-            Criteria.checkThat("Invalid URL: " + tab.getUrlString(), isValid, Matchers.is(true));
+                            tab.getUrl());
+            Criteria.checkThat(
+                    "Invalid URL: " + tab.getUrl().getSpec(), isValid, Matchers.is(true));
         });
     }
 
@@ -651,7 +645,7 @@ public class SearchActivityTest {
                 AutocompleteCoordinatorTestUtils.getSuggestionsDropdown(
                         locationBar.getAutocompleteCoordinator());
 
-        int imageSuggestionIndex = -1;
+        int imageSuggestionIndex = INVALID_INDEX;
         // Find the index of the image clipboard suggestion.
         for (int i = 0; i < suggestionsDropdown.getItemCount(); ++i) {
             OmniboxSuggestion suggestion = AutocompleteCoordinatorTestUtils.getOmniboxSuggestionAt(
@@ -662,8 +656,8 @@ public class SearchActivityTest {
                 break;
             }
         }
-        Assert.assertNotEquals(
-                "Cannot find the image clipboard Omnibox suggestion", -1, imageSuggestionIndex);
+        Assert.assertNotEquals("Cannot find the image clipboard Omnibox suggestion", INVALID_INDEX,
+                imageSuggestionIndex);
 
         OmniboxSuggestion imageSuggestion = AutocompleteCoordinatorTestUtils.getOmniboxSuggestionAt(
                 locationBar.getAutocompleteCoordinator(), imageSuggestionIndex);
@@ -688,9 +682,9 @@ public class SearchActivityTest {
         // Because no POST data, Google wont go to the result page.
         CriteriaHelper.pollUiThread(() -> {
             Tab tab = cta.getActivityTab();
-            Criteria.checkThat("Unexpected URL: " + tab.getUrlString(),
+            Criteria.checkThat("Unexpected URL: " + tab.getUrl().getSpec(),
                     TemplateUrlServiceFactory.get().isSearchResultsPageFromDefaultSearchProvider(
-                            tab.getUrlString()),
+                            tab.getUrl()),
                     Matchers.is(false));
         });
     }
@@ -711,13 +705,27 @@ public class SearchActivityTest {
         });
     }
 
-    private void clickSuggestionAt(OmniboxSuggestionsDropdown suggestionsDropdown, int index)
+    private void clickFirstClipboardSuggestion(SearchActivityLocationBarLayout locationBar)
             throws InterruptedException {
-        // Wait a bit since the button may not able to click.
-        ViewGroup viewGroup = suggestionsDropdown.getViewGroup();
-        BaseSuggestionView baseSuggestionView = (BaseSuggestionView) viewGroup.getChildAt(index);
-        TestTouchUtils.performClickOnMainSync(InstrumentationRegistry.getInstrumentation(),
-                baseSuggestionView.getDecoratedSuggestionView());
+        CriteriaHelper.pollUiThread(() -> {
+            // Find the index of clipboard suggestion in the dropdown list.
+            final int clipboardSuggestionIndexInDropdown =
+                    AutocompleteCoordinatorTestUtils.getIndexForFirstSuggestionOfType(
+                            locationBar.getAutocompleteCoordinator(),
+                            OmniboxSuggestionUiType.CLIPBOARD_SUGGESTION);
+            Criteria.checkThat("Cannot find the clipboard Omnibox suggestion in ModelList.",
+                    clipboardSuggestionIndexInDropdown, Matchers.not(INVALID_INDEX));
+            OmniboxSuggestionsDropdown dropdown =
+                    AutocompleteCoordinatorTestUtils.getSuggestionsDropdown(
+                            locationBar.getAutocompleteCoordinator());
+            ViewGroup viewGroup = dropdown.getViewGroup();
+            BaseSuggestionView baseSuggestionView =
+                    (BaseSuggestionView) viewGroup.getChildAt(clipboardSuggestionIndexInDropdown);
+            Criteria.checkThat("Cannot find the clipboard Omnibox suggestion in UI.",
+                    baseSuggestionView, Matchers.notNullValue());
+            TestTouchUtils.performClickOnMainSync(InstrumentationRegistry.getInstrumentation(),
+                    baseSuggestionView.getDecoratedSuggestionView());
+        });
     }
 
     private SearchActivity startSearchActivity() {

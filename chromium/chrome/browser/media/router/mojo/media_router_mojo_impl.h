@@ -21,15 +21,15 @@
 #include "base/observer_list.h"
 #include "base/optional.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "chrome/browser/media/router/issue_manager.h"
-#include "chrome/browser/media/router/logger_impl.h"
-#include "chrome/browser/media/router/media_router_base.h"
-#include "chrome/browser/media/router/media_routes_observer.h"
 #include "chrome/browser/media/webrtc/desktop_media_picker_controller.h"
-#include "chrome/common/media_router/issue.h"
-#include "chrome/common/media_router/mojom/logger.mojom.h"
-#include "chrome/common/media_router/mojom/media_router.mojom.h"
-#include "chrome/common/media_router/route_request_result.h"
+#include "components/media_router/browser/issue_manager.h"
+#include "components/media_router/browser/logger_impl.h"
+#include "components/media_router/browser/media_router_base.h"
+#include "components/media_router/browser/media_routes_observer.h"
+#include "components/media_router/common/issue.h"
+#include "components/media_router/common/mojom/logger.mojom.h"
+#include "components/media_router/common/mojom/media_router.mojom.h"
+#include "components/media_router/common/route_request_result.h"
 #include "content/public/browser/browser_thread.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
@@ -326,12 +326,10 @@ class MediaRouterMojoImpl : public MediaRouterBase, public mojom::MediaRouter {
                                  SinkAvailability availability) override;
   void OnPresentationConnectionStateChanged(
       const std::string& route_id,
-      media_router::mojom::MediaRouter::PresentationConnectionState state)
-      override;
+      blink::mojom::PresentationConnectionState state) override;
   void OnPresentationConnectionClosed(
       const std::string& route_id,
-      media_router::mojom::MediaRouter::PresentationConnectionCloseReason
-          reason,
+      blink::mojom::PresentationConnectionCloseReason reason,
       const std::string& message) override;
   void OnRouteMessagesReceived(
       const std::string& route_id,

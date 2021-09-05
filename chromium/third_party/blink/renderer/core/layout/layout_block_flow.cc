@@ -39,6 +39,7 @@
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/html/html_dialog_element.h"
+#include "third_party/blink/renderer/core/html/shadow/shadow_element_names.h"
 #include "third_party/blink/renderer/core/layout/hit_test_location.h"
 #include "third_party/blink/renderer/core/layout/layout_analyzer.h"
 #include "third_party/blink/renderer/core/layout/layout_flow_thread.h"
@@ -85,12 +86,6 @@ struct SameSizeAsLayoutBlockFlow : public LayoutBlock {
 ASSERT_SIZE(LayoutBlockFlow, SameSizeAsLayoutBlockFlow);
 
 ASSERT_SIZE(LayoutBlockFlow::MarginValues, LayoutUnit[4]);
-
-typedef HashMap<LayoutBlockFlow*, int> LayoutPassCountMap;
-static LayoutPassCountMap& GetLayoutPassCountMap() {
-  DEFINE_STATIC_LOCAL(LayoutPassCountMap, map, ());
-  return map;
-}
 
 // Caches all our current margin collapsing state.
 class MarginInfo {
@@ -295,6 +290,7 @@ LayoutBlockFlow* LayoutBlockFlow::CreateAnonymous(
 LayoutObject* LayoutBlockFlow::LayoutSpecialExcludedChild(
     bool relayout_children,
     SubtreeLayoutScope& layout_scope) {
+  NOT_DESTROYED();
   LayoutMultiColumnFlowThread* flow_thread = MultiColumnFlowThread();
   if (!flow_thread)
     return nullptr;
@@ -305,6 +301,7 @@ LayoutObject* LayoutBlockFlow::LayoutSpecialExcludedChild(
 }
 
 bool LayoutBlockFlow::UpdateLogicalWidthAndColumnWidth() {
+  NOT_DESTROYED();
   bool relayout_children = LayoutBlock::UpdateLogicalWidthAndColumnWidth();
   if (LayoutMultiColumnFlowThread* flow_thread = MultiColumnFlowThread()) {
     if (flow_thread->NeedsNewWidth())
@@ -314,6 +311,7 @@ bool LayoutBlockFlow::UpdateLogicalWidthAndColumnWidth() {
 }
 
 void LayoutBlockFlow::SetBreakAtLineToAvoidWidow(int line_to_break) {
+  NOT_DESTROYED();
   DCHECK_GE(line_to_break, 0);
   EnsureRareData();
   DCHECK(!rare_data_->did_break_at_line_to_avoid_widow_);
@@ -321,6 +319,7 @@ void LayoutBlockFlow::SetBreakAtLineToAvoidWidow(int line_to_break) {
 }
 
 void LayoutBlockFlow::SetDidBreakAtLineToAvoidWidow() {
+  NOT_DESTROYED();
   DCHECK(!ShouldBreakAtLineToAvoidWidow());
 
   // This function should be called only after a break was applied to avoid
@@ -331,6 +330,7 @@ void LayoutBlockFlow::SetDidBreakAtLineToAvoidWidow() {
 }
 
 void LayoutBlockFlow::ClearDidBreakAtLineToAvoidWidow() {
+  NOT_DESTROYED();
   if (!rare_data_)
     return;
 
@@ -338,6 +338,7 @@ void LayoutBlockFlow::ClearDidBreakAtLineToAvoidWidow() {
 }
 
 void LayoutBlockFlow::ClearShouldBreakAtLineToAvoidWidow() const {
+  NOT_DESTROYED();
   DCHECK(ShouldBreakAtLineToAvoidWidow());
   if (!rare_data_)
     return;
@@ -346,6 +347,7 @@ void LayoutBlockFlow::ClearShouldBreakAtLineToAvoidWidow() const {
 }
 
 bool LayoutBlockFlow::IsSelfCollapsingBlock() const {
+  NOT_DESTROYED();
   if (NeedsLayout()) {
     // Sometimes we don't lay out objects in DOM order (column spanners being
     // one such relevant type of object right here). As long as the object in
@@ -360,6 +362,7 @@ bool LayoutBlockFlow::IsSelfCollapsingBlock() const {
 }
 
 bool LayoutBlockFlow::CheckIfIsSelfCollapsingBlock() const {
+  NOT_DESTROYED();
   // We are not self-collapsing if we
   // (a) have a non-zero height according to layout (an optimization to avoid
   //     wasting time)
@@ -382,7 +385,8 @@ bool LayoutBlockFlow::CheckIfIsSelfCollapsingBlock() const {
   // isSelfCollapsingBlock on them we find that they still need layout.
   auto* element = DynamicTo<Element>(GetNode());
   DCHECK(!NeedsLayout() ||
-         (element && element->ShadowPseudoId() == "-webkit-input-placeholder"));
+         (element && element->ShadowPseudoId() ==
+                         shadow_element_names::kPseudoInputPlaceholder));
 
   if (LogicalHeight() > LayoutUnit() ||
       StyleRef().LogicalMinHeight().IsPositive())
@@ -438,14 +442,9 @@ bool LayoutBlockFlow::CheckIfIsSelfCollapsingBlock() const {
 
 DISABLE_CFI_PERF
 void LayoutBlockFlow::UpdateBlockLayout(bool relayout_children) {
+  NOT_DESTROYED();
   DCHECK(NeedsLayout());
   DCHECK(IsInlineBlockOrInlineTable() || !IsInline());
-
-  if (LayoutBlockedByDisplayLock(DisplayLockLifecycleTarget::kSelf))
-    return;
-
-  if (RuntimeEnabledFeatures::TrackLayoutPassesPerBlockEnabled())
-    IncrementLayoutPassCount();
 
   ClearOffsetMappingIfNeeded();
 
@@ -539,11 +538,11 @@ void LayoutBlockFlow::UpdateBlockLayout(bool relayout_children) {
 
   ClearNeedsLayout();
   is_self_collapsing_ = CheckIfIsSelfCollapsingBlock();
-  NotifyDisplayLockDidLayout(DisplayLockLifecycleTarget::kSelf);
 }
 
 DISABLE_CFI_PERF
 void LayoutBlockFlow::ResetLayout() {
+  NOT_DESTROYED();
   if (!FirstChild() && !IsAnonymousBlock())
     SetChildrenInline(true);
   SetContainsInlineWithOutlineAndContinuation(false);
@@ -601,18 +600,18 @@ void LayoutBlockFlow::ResetLayout() {
 DISABLE_CFI_PERF
 void LayoutBlockFlow::LayoutChildren(bool relayout_children,
                                      SubtreeLayoutScope& layout_scope) {
+  NOT_DESTROYED();
   ResetLayout();
 
-  if (LayoutBlockedByDisplayLock(DisplayLockLifecycleTarget::kChildren))
+  if (ChildLayoutBlockedByDisplayLock())
     return;
 
   LayoutUnit before_edge = BorderBefore() + PaddingBefore();
   LayoutUnit after_edge = BorderAfter() + PaddingAfter();
 
-  if (HasFlippedBlocksWritingMode())
-    before_edge += ScrollbarLogicalHeight();
-  else
-    after_edge += ScrollbarLogicalHeight();
+  NGBoxStrut scrollbars = ComputeLogicalScrollbars();
+  before_edge += scrollbars.block_start;
+  after_edge += scrollbars.block_end;
 
   SetLogicalHeight(before_edge);
 
@@ -627,11 +626,12 @@ void LayoutBlockFlow::LayoutChildren(bool relayout_children,
       CreatesNewFormattingContext())
     SetLogicalHeight(LowestFloatLogicalBottom() + after_edge);
 
-  NotifyDisplayLockDidLayout(DisplayLockLifecycleTarget::kChildren);
+  NotifyDisplayLockDidLayoutChildren();
 }
 
 void LayoutBlockFlow::AddOverhangingFloatsFromChildren(
     LayoutUnit unconstrained_height) {
+  NOT_DESTROYED();
   LayoutBlockFlow* lowest_block = nullptr;
   bool added_overhanging_floats = false;
   // One of our children's floats may have become an overhanging float for us.
@@ -663,6 +663,7 @@ void LayoutBlockFlow::AddOverhangingFloatsFromChildren(
 }
 
 void LayoutBlockFlow::AddLowestFloatFromChildren(LayoutBlockFlow* block) {
+  NOT_DESTROYED();
   // TODO(robhogan): Make createsNewFormattingContext an ASSERT.
   if (!block || !block->ContainsFloats() ||
       block->CreatesNewFormattingContext())
@@ -686,6 +687,7 @@ void LayoutBlockFlow::AddLowestFloatFromChildren(LayoutBlockFlow* block) {
 
 DISABLE_CFI_PERF
 void LayoutBlockFlow::DetermineLogicalLeftPositionForChild(LayoutBox& child) {
+  NOT_DESTROYED();
   LayoutUnit start_position = BorderStart() + PaddingStart();
   LayoutUnit initial_start_position = start_position;
   start_position -= LogicalLeftScrollbarWidth();
@@ -721,6 +723,7 @@ void LayoutBlockFlow::DetermineLogicalLeftPositionForChild(LayoutBox& child) {
 
 void LayoutBlockFlow::SetLogicalLeftForChild(LayoutBox& child,
                                              LayoutUnit logical_left) {
+  NOT_DESTROYED();
   LayoutPoint new_location(child.Location());
   if (IsHorizontalWritingMode()) {
     new_location.SetX(logical_left);
@@ -732,6 +735,7 @@ void LayoutBlockFlow::SetLogicalLeftForChild(LayoutBox& child,
 
 void LayoutBlockFlow::SetLogicalTopForChild(LayoutBox& child,
                                             LayoutUnit logical_top) {
+  NOT_DESTROYED();
   if (IsHorizontalWritingMode()) {
     child.SetY(logical_top);
   } else {
@@ -743,6 +747,7 @@ void LayoutBlockFlow::MarkDescendantsWithFloatsForLayoutIfNeeded(
     LayoutBlockFlow& child,
     LayoutUnit new_logical_top,
     LayoutUnit previous_float_logical_bottom) {
+  NOT_DESTROYED();
   // TODO(mstensho): rework the code to return early when there is no need for
   // marking, instead of this |markDescendantsWithFloats| flag.
   bool mark_descendants_with_floats = false;
@@ -773,6 +778,7 @@ bool LayoutBlockFlow::PositionAndLayoutOnceIfNeeded(
     LayoutBox& child,
     LayoutUnit new_logical_top,
     BlockChildrenLayoutInfo& layout_info) {
+  NOT_DESTROYED();
   if (LayoutFlowThread* flow_thread = FlowThreadContainingBlock())
     layout_info.RollBackToInitialMultiColumnLayoutState(*flow_thread);
 
@@ -809,9 +815,7 @@ bool LayoutBlockFlow::PositionAndLayoutOnceIfNeeded(
   auto child_needs_layout = [&child] {
     if (!child.NeedsLayout())
       return false;
-    return child.SelfNeedsLayout() ||
-           !child.LayoutBlockedByDisplayLock(
-               DisplayLockLifecycleTarget::kChildren);
+    return child.SelfNeedsLayout() || !child.ChildLayoutBlockedByDisplayLock();
   };
 
   if (!child_needs_layout()) {
@@ -839,6 +843,7 @@ bool LayoutBlockFlow::PositionAndLayoutOnceIfNeeded(
 void LayoutBlockFlow::InsertForcedBreakBeforeChildIfNeeded(
     LayoutBox& child,
     BlockChildrenLayoutInfo& layout_info) {
+  NOT_DESTROYED();
   LayoutState* layout_state = View()->GetLayoutState();
 
   // If the child has a start/end page name, that's the current name. Otherwise
@@ -917,6 +922,7 @@ void LayoutBlockFlow::InsertForcedBreakBeforeChildIfNeeded(
 
 void LayoutBlockFlow::LayoutBlockChild(LayoutBox& child,
                                        BlockChildrenLayoutInfo& layout_info) {
+  NOT_DESTROYED();
   MarginInfo& margin_info = layout_info.GetMarginInfo();
   auto* child_layout_block_flow = DynamicTo<LayoutBlockFlow>(&child);
   LayoutUnit old_pos_margin_before = MaxPositiveMarginBefore();
@@ -1072,6 +1078,7 @@ LayoutUnit LayoutBlockFlow::AdjustBlockChildForPagination(
     LayoutBox& child,
     BlockChildrenLayoutInfo& layout_info,
     bool at_before_side_of_block) {
+  NOT_DESTROYED();
   auto* child_block_flow = DynamicTo<LayoutBlockFlow>(&child);
 
   // See if we need a soft (unforced) break in front of this child, and set the
@@ -1116,7 +1123,8 @@ LayoutUnit LayoutBlockFlow::AdjustBlockChildForPagination(
     // there instead. See https://drafts.csswg.org/css-break/#possible-breaks
     bool can_break =
         !layout_info.IsAtFirstInFlowChild() || !at_before_side_of_block;
-    if (!can_break && child.GetPaginationBreakability() == kForbidBreaks &&
+    if (!can_break &&
+        child.GetLegacyPaginationBreakability() == kForbidBreaks &&
         !AllowsPaginationStrut()) {
       // The child is monolithic content, e.g. an image. It is truly
       // unsplittable. Breaking inside it would be bad. Since this block doesn't
@@ -1157,6 +1165,7 @@ LayoutUnit LayoutBlockFlow::AdjustBlockChildForPagination(
 LayoutUnit LayoutBlockFlow::AdjustFloatLogicalTopForPagination(
     LayoutBox& child,
     LayoutUnit logical_top_margin_edge) {
+  NOT_DESTROYED();
   // The first piece of content inside the child may have set a strut during
   // layout.
   LayoutUnit strut;
@@ -1242,6 +1251,7 @@ static bool ShouldSetStrutOnBlock(const LayoutBlockFlow& block,
 
 void LayoutBlockFlow::AdjustLinePositionForPagination(RootInlineBox& line_box,
                                                       LayoutUnit& delta) {
+  NOT_DESTROYED();
   // TODO(mstensho): Pay attention to line overflow. It should be painted in the
   // same column as the rest of the line, possibly overflowing the column. We
   // currently only allow overflow above the first column. We clip at all other
@@ -1363,7 +1373,8 @@ void LayoutBlockFlow::AdjustLinePositionForPagination(RootInlineBox& line_box,
 LayoutUnit LayoutBlockFlow::AdjustForUnsplittableChild(
     LayoutBox& child,
     LayoutUnit logical_offset) const {
-  if (child.GetPaginationBreakability() == kAllowAnyBreaks)
+  NOT_DESTROYED();
+  if (child.GetLegacyPaginationBreakability() == kAllowAnyBreaks)
     return logical_offset;
   LayoutUnit child_logical_height = LogicalHeightForChild(child);
   // Floats' margins do not collapse with page or column boundaries.
@@ -1401,6 +1412,7 @@ LayoutUnit LayoutBlockFlow::AdjustForUnsplittableChild(
 
 DISABLE_CFI_PERF
 void LayoutBlockFlow::RebuildFloatsFromIntruding() {
+  NOT_DESTROYED();
   if (floating_objects_)
     floating_objects_->SetHorizontalWritingMode(IsHorizontalWritingMode());
 
@@ -1580,6 +1592,7 @@ void LayoutBlockFlow::LayoutBlockChildren(bool relayout_children,
                                           SubtreeLayoutScope& layout_scope,
                                           LayoutUnit before_edge,
                                           LayoutUnit after_edge) {
+  NOT_DESTROYED();
   DirtyForLayoutFromPercentageHeightDescendants(layout_scope);
 
   BlockChildrenLayoutInfo layout_info(this, before_edge, after_edge);
@@ -1695,6 +1708,7 @@ MarginInfo::MarginInfo(LayoutBlockFlow* block_flow,
 
 LayoutBlockFlow::MarginValues LayoutBlockFlow::MarginValuesForChild(
     LayoutBox& child) const {
+  NOT_DESTROYED();
   LayoutUnit child_before_positive;
   LayoutUnit child_before_negative;
   LayoutUnit child_after_positive;
@@ -1764,6 +1778,7 @@ LayoutUnit LayoutBlockFlow::AdjustedMarginBeforeForPagination(
     LayoutUnit logical_top_margin_edge,
     LayoutUnit logical_top_border_edge,
     const BlockChildrenLayoutInfo& layout_info) const {
+  NOT_DESTROYED();
   LayoutUnit effective_margin =
       logical_top_border_edge - logical_top_margin_edge;
   DCHECK(IsPageLogicalHeightKnown());
@@ -1802,6 +1817,7 @@ LayoutUnit LayoutBlockFlow::CollapseMargins(
     LayoutBox& child,
     BlockChildrenLayoutInfo& layout_info,
     bool child_is_self_collapsing) {
+  NOT_DESTROYED();
   MarginInfo& margin_info = layout_info.GetMarginInfo();
 
   // Get the four margin values for the child and cache them.
@@ -1973,6 +1989,7 @@ LayoutUnit LayoutBlockFlow::CollapseMargins(
 void LayoutBlockFlow::AdjustPositionedBlock(
     LayoutBox& child,
     const BlockChildrenLayoutInfo& layout_info) {
+  NOT_DESTROYED();
   LayoutUnit logical_top = LogicalHeight();
 
   // Forced breaks are only specified on in-flow objects, but auto-positioned
@@ -2005,6 +2022,7 @@ LayoutUnit LayoutBlockFlow::ClearFloatsIfNeeded(LayoutBox& child,
                                                 LayoutUnit old_top_neg_margin,
                                                 LayoutUnit y_pos,
                                                 bool child_is_self_collapsing) {
+  NOT_DESTROYED();
   LayoutUnit height_increase = GetClearDelta(&child, y_pos);
   margin_info.SetLastChildIsSelfCollapsingBlockWithClearance(false);
 
@@ -2066,6 +2084,7 @@ LayoutUnit LayoutBlockFlow::ClearFloatsIfNeeded(LayoutBox& child,
 }
 
 void LayoutBlockFlow::SetCollapsedBottomMargin(const MarginInfo& margin_info) {
+  NOT_DESTROYED();
   if (margin_info.CanCollapseWithMarginAfter() &&
       !margin_info.CanCollapseWithMarginBefore()) {
     // Update our max pos/neg bottom margins, since we collapsed our bottom
@@ -2091,6 +2110,7 @@ void LayoutBlockFlow::MarginBeforeEstimateForChild(
     LayoutBox& child,
     LayoutUnit& positive_margin_before,
     LayoutUnit& negative_margin_before) const {
+  NOT_DESTROYED();
   // Give up if in quirks mode and we're a body/table cell and the top margin of
   // the child box is quirky.
   // FIXME: Use writing mode independent accessor for marginBeforeCollapse.
@@ -2160,6 +2180,7 @@ LayoutUnit LayoutBlockFlow::EstimateLogicalTopPosition(
     LayoutBox& child,
     const BlockChildrenLayoutInfo& layout_info,
     LayoutUnit& estimate_without_pagination) {
+  NOT_DESTROYED();
   const MarginInfo& margin_info = layout_info.GetMarginInfo();
   // FIXME: We need to eliminate the estimation of vertical position, because
   // when it's wrong we sometimes trigger a pathological
@@ -2229,6 +2250,7 @@ LayoutUnit LayoutBlockFlow::EstimateLogicalTopPosition(
 }
 
 void LayoutBlockFlow::AdjustFloatingBlock(const MarginInfo& margin_info) {
+  NOT_DESTROYED();
   // The float should be positioned taking into account the bottom margin
   // of the previous flow. We add that margin into the height, get the
   // float positioned properly, and then subtract the margin out of the
@@ -2252,6 +2274,7 @@ void LayoutBlockFlow::HandleAfterSideOfBlock(LayoutBox* last_child,
                                              LayoutUnit before_side,
                                              LayoutUnit after_side,
                                              MarginInfo& margin_info) {
+  NOT_DESTROYED();
   margin_info.SetAtAfterSideOfBlock(true);
 
   // If our last child was a self-collapsing block with clearance then our
@@ -2303,6 +2326,7 @@ void LayoutBlockFlow::HandleAfterSideOfBlock(LayoutBox* last_child,
 }
 
 void LayoutBlockFlow::SetMaxMarginBeforeValues(LayoutUnit pos, LayoutUnit neg) {
+  NOT_DESTROYED();
   if (!rare_data_) {
     if (pos == LayoutBlockFlowRareData::PositiveMarginBeforeDefault(this) &&
         neg == LayoutBlockFlowRareData::NegativeMarginBeforeDefault(this))
@@ -2314,6 +2338,7 @@ void LayoutBlockFlow::SetMaxMarginBeforeValues(LayoutUnit pos, LayoutUnit neg) {
 }
 
 void LayoutBlockFlow::SetMaxMarginAfterValues(LayoutUnit pos, LayoutUnit neg) {
+  NOT_DESTROYED();
   if (!rare_data_) {
     if (pos == LayoutBlockFlowRareData::PositiveMarginAfterDefault(this) &&
         neg == LayoutBlockFlowRareData::NegativeMarginAfterDefault(this))
@@ -2326,6 +2351,7 @@ void LayoutBlockFlow::SetMaxMarginAfterValues(LayoutUnit pos, LayoutUnit neg) {
 
 LayoutUnit LayoutBlockFlow::ApplyForcedBreak(LayoutUnit logical_offset,
                                              EBreakBetween break_value) {
+  NOT_DESTROYED();
   if (!IsForcedFragmentainerBreakValue(break_value))
     return logical_offset;
   // TODO(mstensho): honor breakValue. There are different types of forced
@@ -2355,6 +2381,7 @@ LayoutUnit LayoutBlockFlow::ApplyForcedBreak(LayoutUnit logical_offset,
 }
 
 void LayoutBlockFlow::SetBreakBefore(EBreakBetween break_value) {
+  NOT_DESTROYED();
   if (break_value != EBreakBetween::kAuto &&
       !IsBreakBetweenControllable(break_value))
     break_value = EBreakBetween::kAuto;
@@ -2364,6 +2391,7 @@ void LayoutBlockFlow::SetBreakBefore(EBreakBetween break_value) {
 }
 
 void LayoutBlockFlow::SetBreakAfter(EBreakBetween break_value) {
+  NOT_DESTROYED();
   if (break_value != EBreakBetween::kAuto &&
       !IsBreakBetweenControllable(break_value))
     break_value = EBreakBetween::kAuto;
@@ -2373,18 +2401,20 @@ void LayoutBlockFlow::SetBreakAfter(EBreakBetween break_value) {
 }
 
 EBreakBetween LayoutBlockFlow::BreakBefore() const {
+  NOT_DESTROYED();
   return rare_data_ ? static_cast<EBreakBetween>(rare_data_->break_before_)
                     : EBreakBetween::kAuto;
 }
 
 EBreakBetween LayoutBlockFlow::BreakAfter() const {
+  NOT_DESTROYED();
   return rare_data_ ? static_cast<EBreakBetween>(rare_data_->break_after_)
                     : EBreakBetween::kAuto;
 }
 
 void LayoutBlockFlow::AddVisualOverflowFromFloats() {
-  if (PrePaintBlockedByDisplayLock(DisplayLockLifecycleTarget::kChildren) ||
-      !floating_objects_)
+  NOT_DESTROYED();
+  if (ChildPrePaintBlockedByDisplayLock() || !floating_objects_)
     return;
 
   DCHECK(!NeedsLayout());
@@ -2401,8 +2431,9 @@ void LayoutBlockFlow::AddVisualOverflowFromFloats() {
 
 void LayoutBlockFlow::AddVisualOverflowFromFloats(
     const NGPhysicalContainerFragment& fragment) {
+  NOT_DESTROYED();
   DCHECK(!NeedsLayout());
-  DCHECK(!PrePaintBlockedByDisplayLock(DisplayLockLifecycleTarget::kChildren));
+  DCHECK(!ChildPrePaintBlockedByDisplayLock());
   DCHECK(fragment.HasFloatingDescendantsForPaint());
 
   for (const NGLink& child : fragment.PostLayoutChildren()) {
@@ -2424,8 +2455,8 @@ void LayoutBlockFlow::AddVisualOverflowFromFloats(
 }
 
 void LayoutBlockFlow::AddLayoutOverflowFromFloats() {
-  if (LayoutBlockedByDisplayLock(DisplayLockLifecycleTarget::kChildren) ||
-      !floating_objects_)
+  NOT_DESTROYED();
+  if (ChildLayoutBlockedByDisplayLock() || !floating_objects_)
     return;
 
   for (auto& floating_object : floating_objects_->Set()) {
@@ -2440,16 +2471,19 @@ void LayoutBlockFlow::AddLayoutOverflowFromFloats() {
 
 void LayoutBlockFlow::SetPaintFragment(
     const NGBlockBreakToken*,
-    scoped_refptr<const NGPhysicalFragment>) {}
+    scoped_refptr<const NGPhysicalFragment>) {
+  NOT_DESTROYED();
+}
 
 const NGFragmentItems* LayoutBlockFlow::FragmentItems() const {
+  NOT_DESTROYED();
   if (const NGPhysicalBoxFragment* box_fragment = CurrentFragment())
     return box_fragment->Items();
   return nullptr;
 }
 
-void LayoutBlockFlow::ComputeVisualOverflow(
-    bool recompute_floats) {
+void LayoutBlockFlow::ComputeVisualOverflow(bool recompute_floats) {
+  NOT_DESTROYED();
   DCHECK(!SelfNeedsLayout());
 
   LayoutRect previous_visual_overflow_rect = VisualOverflowRect();
@@ -2471,6 +2505,7 @@ void LayoutBlockFlow::ComputeVisualOverflow(
 
 void LayoutBlockFlow::ComputeLayoutOverflow(LayoutUnit old_client_after_edge,
                                             bool recompute_floats) {
+  NOT_DESTROYED();
   LayoutBlock::ComputeLayoutOverflow(old_client_after_edge, recompute_floats);
   // TODO(chrishtr): why does it check for a self-painting layer? That should
   // only apply to visual overflow.
@@ -2482,6 +2517,7 @@ void LayoutBlockFlow::ComputeLayoutOverflow(LayoutUnit old_client_after_edge,
 
 void LayoutBlockFlow::AbsoluteQuads(Vector<FloatQuad>& quads,
                                     MapCoordinatesFlags mode) const {
+  NOT_DESTROYED();
   if (!IsAnonymousBlockContinuation()) {
     LayoutBlock::AbsoluteQuads(quads, mode);
     return;
@@ -2491,6 +2527,7 @@ void LayoutBlockFlow::AbsoluteQuads(Vector<FloatQuad>& quads,
 
 void LayoutBlockFlow::AbsoluteQuadsForSelf(Vector<FloatQuad>& quads,
                                            MapCoordinatesFlags mode) const {
+  NOT_DESTROYED();
   // For blocks inside inlines, we go ahead and include margins so that we run
   // right up to the inline boxes above and below us (thus getting merged with
   // them to form a single irregular shape).
@@ -2502,11 +2539,13 @@ void LayoutBlockFlow::AbsoluteQuadsForSelf(Vector<FloatQuad>& quads,
 }
 
 LayoutObject* LayoutBlockFlow::HoverAncestor() const {
+  NOT_DESTROYED();
   return IsAnonymousBlockContinuation() ? Continuation()
                                         : LayoutBlock::HoverAncestor();
 }
 
 RootInlineBox* LayoutBlockFlow::CreateAndAppendRootInlineBox() {
+  NOT_DESTROYED();
   RootInlineBox* root_box = CreateRootInlineBox();
   line_boxes_.AppendLineBox(root_box);
 
@@ -2516,6 +2555,7 @@ RootInlineBox* LayoutBlockFlow::CreateAndAppendRootInlineBox() {
 // Note: When this function is called from |LayoutInline::SplitFlow()|, some
 // fragments point to destroyed |LayoutObject|.
 void LayoutBlockFlow::DeleteLineBoxTree() {
+  NOT_DESTROYED();
   if (ContainsFloats())
     floating_objects_->ClearLineBoxTreePointers();
 
@@ -2530,6 +2570,7 @@ void LayoutBlockFlow::DeleteLineBoxTree() {
 
 int LayoutBlockFlow::LineCount(
     const RootInlineBox* stop_root_inline_box) const {
+  NOT_DESTROYED();
 #if DCHECK_IS_ON()
   DCHECK(!stop_root_inline_box ||
          stop_root_inline_box->Block().DebugPointer() == this);
@@ -2548,6 +2589,7 @@ int LayoutBlockFlow::LineCount(
 }
 
 LayoutUnit LayoutBlockFlow::FirstLineBoxBaseline() const {
+  NOT_DESTROYED();
   if (ShouldApplyLayoutContainment())
     return LayoutUnit(-1);
   // Orthogonal grid items can participante in baseline alignment along column
@@ -2589,6 +2631,7 @@ LayoutUnit LayoutBlockFlow::FirstLineBoxBaseline() const {
 
 LayoutUnit LayoutBlockFlow::InlineBlockBaseline(
     LineDirectionMode line_direction) const {
+  NOT_DESTROYED();
   if (UseLogicalBottomMarginEdgeForInlineBlockBaseline()) {
     // We are not calling baselinePosition here because the caller should add
     // the margin-top/margin-right, not us.
@@ -2618,6 +2661,7 @@ LayoutUnit LayoutBlockFlow::InlineBlockBaseline(
 }
 
 void LayoutBlockFlow::RemoveFloatingObjectsFromDescendants() {
+  NOT_DESTROYED();
   if (!ContainsFloats())
     return;
   RemoveFloatingObjects();
@@ -2655,6 +2699,7 @@ void LayoutBlockFlow::RemoveFloatingObjectsFromDescendants() {
 void LayoutBlockFlow::MarkAllDescendantsWithFloatsForLayout(
     LayoutBox* float_to_remove,
     bool in_layout) {
+  NOT_DESTROYED();
   if (!EverHadLayout() && !ContainsFloats())
     return;
 
@@ -2698,6 +2743,7 @@ void LayoutBlockFlow::MarkAllDescendantsWithFloatsForLayout(
 
 void LayoutBlockFlow::MarkSiblingsWithFloatsForLayout(
     LayoutBox* float_to_remove) {
+  NOT_DESTROYED();
   if (!floating_objects_)
     return;
 
@@ -2724,6 +2770,7 @@ void LayoutBlockFlow::MarkSiblingsWithFloatsForLayout(
 
 LayoutUnit LayoutBlockFlow::GetClearDelta(LayoutBox* child,
                                           LayoutUnit logical_top) {
+  NOT_DESTROYED();
   // There is no need to compute clearance if we have no floats.
   if (!ContainsFloats())
     return LayoutUnit();
@@ -2782,11 +2829,13 @@ LayoutUnit LayoutBlockFlow::GetClearDelta(LayoutBox* child,
 }
 
 void LayoutBlockFlow::CreateFloatingObjects() {
+  NOT_DESTROYED();
   floating_objects_ =
       std::make_unique<FloatingObjects>(this, IsHorizontalWritingMode());
 }
 
 void LayoutBlockFlow::WillBeDestroyed() {
+  NOT_DESTROYED();
   // Make sure to destroy anonymous children first while they are still
   // connected to the rest of the tree, so that they will properly dirty line
   // boxes that they are removed from. Effects that do :before/:after only on
@@ -2826,6 +2875,7 @@ void LayoutBlockFlow::WillBeDestroyed() {
 
 void LayoutBlockFlow::StyleWillChange(StyleDifference diff,
                                       const ComputedStyle& new_style) {
+  NOT_DESTROYED();
   const ComputedStyle* old_style = Style();
   can_propagate_float_into_sibling_ = old_style &&
                                       !IsFloatingOrOutOfFlowPositioned() &&
@@ -2842,6 +2892,7 @@ void LayoutBlockFlow::StyleWillChange(StyleDifference diff,
 DISABLE_CFI_PERF
 void LayoutBlockFlow::StyleDidChange(StyleDifference diff,
                                      const ComputedStyle* old_style) {
+  NOT_DESTROYED();
   bool had_self_painting_layer = HasSelfPaintingLayer();
   LayoutBlock::StyleDidChange(diff, old_style);
 
@@ -2913,6 +2964,7 @@ void LayoutBlockFlow::StyleDidChange(StyleDifference diff,
 void LayoutBlockFlow::UpdateBlockChildDirtyBitsBeforeLayout(
     bool relayout_children,
     LayoutBox& child) {
+  NOT_DESTROYED();
   if (child.IsLayoutMultiColumnSpannerPlaceholder())
     ToLayoutMultiColumnSpannerPlaceholder(child)
         .MarkForLayoutIfObjectInFlowThreadNeedsLayout();
@@ -2923,6 +2975,7 @@ void LayoutBlockFlow::UpdateStaticInlinePositionForChild(
     LayoutBox& child,
     LayoutUnit logical_top,
     IndentTextOrNot indent_text) {
+  NOT_DESTROYED();
   if (child.StyleRef().IsOriginalDisplayInlineType())
     SetStaticInlinePositionForChild(
         child, StartAlignedOffsetForLine(logical_top, indent_text));
@@ -2933,10 +2986,12 @@ void LayoutBlockFlow::UpdateStaticInlinePositionForChild(
 void LayoutBlockFlow::SetStaticInlinePositionForChild(
     LayoutBox& child,
     LayoutUnit inline_position) {
+  NOT_DESTROYED();
   child.Layer()->SetStaticInlinePosition(inline_position);
 }
 
 LayoutInline* LayoutBlockFlow::InlineElementContinuation() const {
+  NOT_DESTROYED();
   LayoutBoxModelObject* continuation = Continuation();
   return continuation && continuation->IsInline() ? ToLayoutInline(continuation)
                                                   : nullptr;
@@ -2944,6 +2999,7 @@ LayoutInline* LayoutBlockFlow::InlineElementContinuation() const {
 
 void LayoutBlockFlow::AddChild(LayoutObject* new_child,
                                LayoutObject* before_child) {
+  NOT_DESTROYED();
   if (LayoutMultiColumnFlowThread* flow_thread = MultiColumnFlowThread()) {
     if (before_child == flow_thread)
       before_child = flow_thread->FirstChild();
@@ -3026,6 +3082,7 @@ static bool IsMergeableAnonymousBlock(const LayoutBlockFlow* block) {
 }
 
 void LayoutBlockFlow::RemoveChild(LayoutObject* old_child) {
+  NOT_DESTROYED();
   // No need to waste time in merging or removing empty anonymous blocks.
   // We can just bail out if our document is getting destroyed.
   if (DocumentBeingDestroyed()) {
@@ -3132,6 +3189,7 @@ void LayoutBlockFlow::RemoveChild(LayoutObject* old_child) {
 void LayoutBlockFlow::MoveAllChildrenIncludingFloatsTo(
     LayoutBlock* to_block,
     bool full_remove_insert) {
+  NOT_DESTROYED();
   auto* to_block_flow = To<LayoutBlockFlow>(to_block);
 
   DCHECK(full_remove_insert ||
@@ -3177,6 +3235,7 @@ void LayoutBlockFlow::MoveAllChildrenIncludingFloatsTo(
 }
 
 void LayoutBlockFlow::ChildBecameFloatingOrOutOfFlow(LayoutBox* child) {
+  NOT_DESTROYED();
   MakeChildrenInlineIfPossible();
 
   // Reparent the child to an adjacent anonymous block if one is available.
@@ -3197,6 +3256,7 @@ void LayoutBlockFlow::ChildBecameFloatingOrOutOfFlow(LayoutBox* child) {
 }
 
 void LayoutBlockFlow::CollapseAnonymousBlockChild(LayoutBlockFlow* child) {
+  NOT_DESTROYED();
   // It's possible that this block's destruction may have been triggered by the
   // child's removal. Just bail if the anonymous child block is already being
   // destroyed. See crbug.com/282088
@@ -3226,6 +3286,7 @@ void LayoutBlockFlow::CollapseAnonymousBlockChild(LayoutBlockFlow* child) {
 
 bool LayoutBlockFlow::MergeSiblingContiguousAnonymousBlock(
     LayoutBlockFlow* sibling_that_may_be_deleted) {
+  NOT_DESTROYED();
   // Note: |this| and |siblingThatMayBeDeleted| may not be adjacent siblings at
   // this point. There may be an object between them which is about to be
   // removed.
@@ -3251,6 +3312,7 @@ bool LayoutBlockFlow::MergeSiblingContiguousAnonymousBlock(
 }
 
 void LayoutBlockFlow::ReparentSubsequentFloatingOrOutOfFlowSiblings() {
+  NOT_DESTROYED();
   auto* parent_block_flow = DynamicTo<LayoutBlockFlow>(Parent());
   if (!parent_block_flow)
     return;
@@ -3271,6 +3333,7 @@ void LayoutBlockFlow::ReparentSubsequentFloatingOrOutOfFlowSiblings() {
 }
 
 void LayoutBlockFlow::ReparentPrecedingFloatingOrOutOfFlowSiblings() {
+  NOT_DESTROYED();
   auto* parent_block_flow = DynamicTo<LayoutBlockFlow>(Parent());
   if (!parent_block_flow)
     return;
@@ -3285,6 +3348,7 @@ void LayoutBlockFlow::ReparentPrecedingFloatingOrOutOfFlowSiblings() {
 }
 
 void LayoutBlockFlow::MakeChildrenInlineIfPossible() {
+  NOT_DESTROYED();
   // Collapsing away anonymous wrappers isn't relevant for the children of
   // anonymous blocks, unless they are ruby bases.
   if (IsAnonymousBlock() && !IsRubyBase())
@@ -3385,6 +3449,7 @@ static void GetInlineRun(LayoutObject* start,
 }
 
 void LayoutBlockFlow::MakeChildrenNonInline(LayoutObject* insertion_point) {
+  NOT_DESTROYED();
   // makeChildrenNonInline takes a block whose children are *all* inline and it
   // makes sure that inline children are coalesced under anonymous blocks.
   // If |insertionPoint| is defined, then it represents the insertion point for
@@ -3428,6 +3493,7 @@ void LayoutBlockFlow::MakeChildrenNonInline(LayoutObject* insertion_point) {
 }
 
 void LayoutBlockFlow::ChildBecameNonInline(LayoutObject*) {
+  NOT_DESTROYED();
   MakeChildrenNonInline();
   auto* parent_layout_block = DynamicTo<LayoutBlock>(Parent());
   if (IsAnonymousBlock() && parent_layout_block)
@@ -3436,6 +3502,7 @@ void LayoutBlockFlow::ChildBecameNonInline(LayoutObject*) {
 }
 
 void LayoutBlockFlow::ClearFloats(EClear clear) {
+  NOT_DESTROYED();
   PlaceNewFloats(LogicalHeight());
   // set y position
   LayoutUnit new_y = LowestFloatLogicalBottom(clear);
@@ -3444,12 +3511,14 @@ void LayoutBlockFlow::ClearFloats(EClear clear) {
 }
 
 bool LayoutBlockFlow::ContainsFloat(LayoutBox* layout_box) const {
+  NOT_DESTROYED();
   return floating_objects_ &&
          floating_objects_->Set().Contains<FloatingObjectHashTranslator>(
              layout_box);
 }
 
 void LayoutBlockFlow::RemoveFloatingObjects() {
+  NOT_DESTROYED();
   if (!floating_objects_)
     return;
 
@@ -3461,6 +3530,7 @@ void LayoutBlockFlow::RemoveFloatingObjects() {
 LayoutPoint LayoutBlockFlow::FlipFloatForWritingModeForChild(
     const FloatingObject& child,
     const LayoutPoint& point) const {
+  NOT_DESTROYED();
   if (!StyleRef().IsFlippedBlocksWritingMode())
     return point;
 
@@ -3478,6 +3548,7 @@ LayoutUnit LayoutBlockFlow::LogicalLeftOffsetForPositioningFloat(
     LayoutUnit logical_top,
     LayoutUnit fixed_offset,
     LayoutUnit* height_remaining) const {
+  NOT_DESTROYED();
   LayoutUnit offset = fixed_offset;
   if (floating_objects_ && floating_objects_->HasLeftObjects())
     offset = floating_objects_->LogicalLeftOffsetForPositioningFloat(
@@ -3489,6 +3560,7 @@ LayoutUnit LayoutBlockFlow::LogicalRightOffsetForPositioningFloat(
     LayoutUnit logical_top,
     LayoutUnit fixed_offset,
     LayoutUnit* height_remaining) const {
+  NOT_DESTROYED();
   LayoutUnit offset = fixed_offset;
   if (floating_objects_ && floating_objects_->HasRightObjects())
     offset = floating_objects_->LogicalRightOffsetForPositioningFloat(
@@ -3499,6 +3571,7 @@ LayoutUnit LayoutBlockFlow::LogicalRightOffsetForPositioningFloat(
 LayoutUnit LayoutBlockFlow::AdjustLogicalLeftOffsetForLine(
     LayoutUnit offset_from_floats,
     IndentTextOrNot apply_text_indent) const {
+  NOT_DESTROYED();
   LayoutUnit left = offset_from_floats;
 
   if (apply_text_indent == kIndentText && StyleRef().IsLeftToRightDirection())
@@ -3510,6 +3583,7 @@ LayoutUnit LayoutBlockFlow::AdjustLogicalLeftOffsetForLine(
 LayoutUnit LayoutBlockFlow::AdjustLogicalRightOffsetForLine(
     LayoutUnit offset_from_floats,
     IndentTextOrNot apply_text_indent) const {
+  NOT_DESTROYED();
   LayoutUnit right = offset_from_floats;
 
   if (apply_text_indent == kIndentText && !StyleRef().IsLeftToRightDirection())
@@ -3521,6 +3595,7 @@ LayoutUnit LayoutBlockFlow::AdjustLogicalRightOffsetForLine(
 LayoutPoint LayoutBlockFlow::ComputeLogicalLocationForFloat(
     const FloatingObject& floating_object,
     LayoutUnit logical_top_offset) const {
+  NOT_DESTROYED();
   LayoutBox* child_box = floating_object.GetLayoutObject();
   LayoutUnit logical_left_offset =
       LogicalLeftOffsetForContent();  // Constant part of left offset.
@@ -3575,6 +3650,7 @@ LayoutPoint LayoutBlockFlow::ComputeLogicalLocationForFloat(
 }
 
 FloatingObject* LayoutBlockFlow::InsertFloatingObject(LayoutBox& float_box) {
+  NOT_DESTROYED();
   DCHECK(float_box.IsFloating());
 
   // Create the list of special objects if we don't aleady have one
@@ -3600,6 +3676,7 @@ FloatingObject* LayoutBlockFlow::InsertFloatingObject(LayoutBox& float_box) {
 }
 
 void LayoutBlockFlow::RemoveFloatingObject(LayoutBox* float_box) {
+  NOT_DESTROYED();
   if (floating_objects_) {
     const FloatingObjectSet& floating_object_set = floating_objects_->Set();
     FloatingObjectSetIterator it =
@@ -3640,6 +3717,7 @@ void LayoutBlockFlow::RemoveFloatingObject(LayoutBox* float_box) {
 
 void LayoutBlockFlow::RemoveFloatingObjectsBelow(FloatingObject* last_float,
                                                  LayoutUnit logical_offset) {
+  NOT_DESTROYED();
   if (!ContainsFloats())
     return;
 
@@ -3656,6 +3734,7 @@ void LayoutBlockFlow::RemoveFloatingObjectsBelow(FloatingObject* last_float,
 
 FloatingObject* LayoutBlockFlow::LastPlacedFloat(
     FloatingObjectSetIterator* iterator) const {
+  NOT_DESTROYED();
   const FloatingObjectSet& floating_object_set = floating_objects_->Set();
   FloatingObjectSetIterator it = floating_object_set.end();
   --it;  // Go to last item.
@@ -3676,6 +3755,7 @@ FloatingObject* LayoutBlockFlow::LastPlacedFloat(
 
 bool LayoutBlockFlow::PlaceNewFloats(LayoutUnit logical_top_margin_edge,
                                      LineWidth* width) {
+  NOT_DESTROYED();
   if (!floating_objects_)
     return false;
 
@@ -3722,6 +3802,7 @@ bool LayoutBlockFlow::PlaceNewFloats(LayoutUnit logical_top_margin_edge,
 LayoutUnit LayoutBlockFlow::PositionAndLayoutFloat(
     FloatingObject& floating_object,
     LayoutUnit logical_top_margin_edge) {
+  NOT_DESTROYED();
   // Once a float has been placed, we cannot update its position, or the float
   // interval tree will be out of sync with reality. This may in turn lead to
   // objects being used after they have been deleted.
@@ -3851,6 +3932,7 @@ LayoutUnit LayoutBlockFlow::PositionAndLayoutFloat(
 }
 
 bool LayoutBlockFlow::HasOverhangingFloat(LayoutBox* layout_box) {
+  NOT_DESTROYED();
   if (!floating_objects_ || !Parent())
     return false;
 
@@ -3866,6 +3948,7 @@ bool LayoutBlockFlow::HasOverhangingFloat(LayoutBox* layout_box) {
 void LayoutBlockFlow::AddIntrudingFloats(LayoutBlockFlow* prev,
                                          LayoutUnit logical_left_offset,
                                          LayoutUnit logical_top_offset) {
+  NOT_DESTROYED();
   DCHECK(!CreatesNewFormattingContext());
 
   // If we create our own block formatting context then our contents don't
@@ -3917,6 +4000,7 @@ void LayoutBlockFlow::AddIntrudingFloats(LayoutBlockFlow* prev,
 
 void LayoutBlockFlow::AddOverhangingFloats(LayoutBlockFlow* child,
                                            bool make_child_paint_other_floats) {
+  NOT_DESTROYED();
   // Prevent floats from being added to the canvas by the root element, e.g.,
   // <html>.
   if (!child->ContainsFloats() || child->CreatesNewFormattingContext())
@@ -3999,6 +4083,7 @@ void LayoutBlockFlow::AddOverhangingFloats(LayoutBlockFlow* child,
 }
 
 LayoutUnit LayoutBlockFlow::LowestFloatLogicalBottom(EClear clear) const {
+  NOT_DESTROYED();
   if (clear == EClear::kNone || !floating_objects_)
     return LayoutUnit();
 
@@ -4012,6 +4097,7 @@ LayoutUnit LayoutBlockFlow::LowestFloatLogicalBottom(EClear clear) const {
 
 LayoutUnit LayoutBlockFlow::NextFloatLogicalBottomBelow(
     LayoutUnit logical_height) const {
+  NOT_DESTROYED();
   if (!floating_objects_)
     return logical_height;
   return floating_objects_->FindNextFloatLogicalBottomBelow(logical_height);
@@ -4019,6 +4105,7 @@ LayoutUnit LayoutBlockFlow::NextFloatLogicalBottomBelow(
 
 LayoutUnit LayoutBlockFlow::NextFloatLogicalBottomBelowForBlock(
     LayoutUnit logical_height) const {
+  NOT_DESTROYED();
   if (!floating_objects_)
     return logical_height;
 
@@ -4027,11 +4114,13 @@ LayoutUnit LayoutBlockFlow::NextFloatLogicalBottomBelowForBlock(
 }
 
 LayoutUnit LayoutBlockFlow::LogicalHeightWithVisibleOverflow() const {
+  NOT_DESTROYED();
   LayoutUnit logical_height = LayoutBlock::LogicalHeightWithVisibleOverflow();
   return std::max(logical_height, LowestFloatLogicalBottom());
 }
 
 Node* LayoutBlockFlow::NodeForHitTest() const {
+  NOT_DESTROYED();
   // If we are in the margins of block elements that are part of a
   // continuation we're actually still inside the enclosing element
   // that was split. Use the appropriate inner node.
@@ -4043,8 +4132,9 @@ bool LayoutBlockFlow::HitTestChildren(HitTestResult& result,
                                       const HitTestLocation& hit_test_location,
                                       const PhysicalOffset& accumulated_offset,
                                       HitTestAction hit_test_action) {
+  NOT_DESTROYED();
   PhysicalOffset scrolled_offset = accumulated_offset;
-  if (HasOverflowClip())
+  if (IsScrollContainer())
     scrolled_offset -= PhysicalOffset(PixelSnappedScrolledContentOffset());
 
   if (hit_test_action == kHitTestFloat && !IsLayoutNGObject()) {
@@ -4074,6 +4164,7 @@ bool LayoutBlockFlow::HitTestChildren(HitTestResult& result,
 bool LayoutBlockFlow::HitTestFloats(HitTestResult& result,
                                     const HitTestLocation& hit_test_location,
                                     const PhysicalOffset& accumulated_offset) {
+  NOT_DESTROYED();
   if (!floating_objects_)
     return false;
 
@@ -4104,6 +4195,7 @@ bool LayoutBlockFlow::HitTestFloats(HitTestResult& result,
 }
 
 PhysicalOffset LayoutBlockFlow::AccumulateRelativePositionOffsets() const {
+  NOT_DESTROYED();
   if (!IsAnonymousBlock() || !IsInFlowPositioned())
     return PhysicalOffset();
   PhysicalOffset offset;
@@ -4119,6 +4211,7 @@ LayoutUnit LayoutBlockFlow::LogicalLeftFloatOffsetForLine(
     LayoutUnit logical_top,
     LayoutUnit fixed_offset,
     LayoutUnit logical_height) const {
+  NOT_DESTROYED();
   if (floating_objects_ && floating_objects_->HasLeftObjects())
     return floating_objects_->LogicalLeftOffset(fixed_offset, logical_top,
                                                 logical_height);
@@ -4130,6 +4223,7 @@ LayoutUnit LayoutBlockFlow::LogicalRightFloatOffsetForLine(
     LayoutUnit logical_top,
     LayoutUnit fixed_offset,
     LayoutUnit logical_height) const {
+  NOT_DESTROYED();
   if (floating_objects_ && floating_objects_->HasRightObjects())
     return floating_objects_->LogicalRightOffset(fixed_offset, logical_top,
                                                  logical_height);
@@ -4141,6 +4235,7 @@ LayoutUnit LayoutBlockFlow::LogicalLeftFloatOffsetForAvoidingFloats(
     LayoutUnit logical_top,
     LayoutUnit fixed_offset,
     LayoutUnit logical_height) const {
+  NOT_DESTROYED();
   if (floating_objects_ && floating_objects_->HasLeftObjects()) {
     return floating_objects_->LogicalLeftOffsetForAvoidingFloats(
         fixed_offset, logical_top, logical_height);
@@ -4153,6 +4248,7 @@ LayoutUnit LayoutBlockFlow::LogicalRightFloatOffsetForAvoidingFloats(
     LayoutUnit logical_top,
     LayoutUnit fixed_offset,
     LayoutUnit logical_height) const {
+  NOT_DESTROYED();
   if (floating_objects_ && floating_objects_->HasRightObjects()) {
     return floating_objects_->LogicalRightOffsetForAvoidingFloats(
         fixed_offset, logical_top, logical_height);
@@ -4216,6 +4312,7 @@ void LayoutBlockFlow::UpdateAncestorShouldPaintFloatingObject(
 }
 
 bool LayoutBlockFlow::AllowsPaginationStrut() const {
+  NOT_DESTROYED();
   // The block needs to be contained by a LayoutBlockFlow (and not by e.g. a
   // flexbox, grid, or a table (the latter being the case for table cell or
   // table caption)). The reason for this limitation is simply that
@@ -4262,6 +4359,7 @@ bool LayoutBlockFlow::AllowsPaginationStrut() const {
 }
 
 void LayoutBlockFlow::SetPaginationStrutPropagatedFromChild(LayoutUnit strut) {
+  NOT_DESTROYED();
   strut = std::max(strut, LayoutUnit());
   if (!rare_data_) {
     if (!strut)
@@ -4272,6 +4370,7 @@ void LayoutBlockFlow::SetPaginationStrutPropagatedFromChild(LayoutUnit strut) {
 }
 
 void LayoutBlockFlow::SetFirstForcedBreakOffset(LayoutUnit block_offset) {
+  NOT_DESTROYED();
   if (!rare_data_) {
     if (!block_offset)
       return;
@@ -4281,24 +4380,28 @@ void LayoutBlockFlow::SetFirstForcedBreakOffset(LayoutUnit block_offset) {
 }
 
 const AtomicString LayoutBlockFlow::StartPageName() const {
+  NOT_DESTROYED();
   if (const AtomicString& propagated_name = PropagatedStartPageName())
     return propagated_name;
   return StyleRef().Page();
 }
 
 const AtomicString LayoutBlockFlow::EndPageName() const {
+  NOT_DESTROYED();
   if (const AtomicString& propagated_name = PropagatedEndPageName())
     return propagated_name;
   return StyleRef().Page();
 }
 
 const AtomicString LayoutBlockFlow::PropagatedStartPageName() const {
+  NOT_DESTROYED();
   if (!rare_data_)
     return AtomicString();
   return rare_data_->propagated_start_page_name_;
 }
 
 void LayoutBlockFlow::SetPropagatedStartPageName(const AtomicString& name) {
+  NOT_DESTROYED();
   if (name.IsEmpty() && !rare_data_)
     return;
   LayoutBlockFlowRareData& rare_data = EnsureRareData();
@@ -4306,12 +4409,14 @@ void LayoutBlockFlow::SetPropagatedStartPageName(const AtomicString& name) {
 }
 
 const AtomicString LayoutBlockFlow::PropagatedEndPageName() const {
+  NOT_DESTROYED();
   if (!rare_data_)
     return AtomicString();
   return rare_data_->propagated_end_page_name_;
 }
 
 void LayoutBlockFlow::SetPropagatedEndPageName(const AtomicString& name) {
+  NOT_DESTROYED();
   if (name.IsEmpty() && !rare_data_)
     return;
   LayoutBlockFlowRareData& rare_data = EnsureRareData();
@@ -4320,6 +4425,7 @@ void LayoutBlockFlow::SetPropagatedEndPageName(const AtomicString& name) {
 
 void LayoutBlockFlow::PositionSpannerDescendant(
     LayoutMultiColumnSpannerPlaceholder& child) {
+  NOT_DESTROYED();
   LayoutBox& spanner = *child.LayoutObjectInFlowThread();
   // FIXME: |spanner| is a descendant, but never a direct child, so the names
   // here are bad, if nothing else.
@@ -4329,9 +4435,10 @@ void LayoutBlockFlow::PositionSpannerDescendant(
 
 DISABLE_CFI_PERF
 bool LayoutBlockFlow::CreatesNewFormattingContext() const {
-  if (IsInline() || IsFloatingOrOutOfFlowPositioned() || HasOverflowClip() ||
+  NOT_DESTROYED();
+  if (IsInline() || IsFloatingOrOutOfFlowPositioned() || IsScrollContainer() ||
       IsFlexItemIncludingDeprecatedAndNG() || IsCustomItem() ||
-      IsDocumentElement() || IsGridItem() || IsWritingModeRoot() ||
+      IsDocumentElement() || IsGridItemIncludingNG() || IsWritingModeRoot() ||
       IsMathItem() || StyleRef().Display() == EDisplay::kFlowRoot ||
       ShouldApplyPaintContainment() || ShouldApplyLayoutContainment() ||
       StyleRef().IsDeprecatedWebkitBoxWithVerticalLineClamp() ||
@@ -4355,6 +4462,7 @@ void LayoutBlockFlow::MoveChildrenTo(LayoutBoxModelObject* to_box_model_object,
                                      LayoutObject* end_child,
                                      LayoutObject* before_child,
                                      bool full_remove_insert) {
+  NOT_DESTROYED();
   if (ChildrenInline())
     DeleteLineBoxTree();
   LayoutBoxModelObject::MoveChildrenTo(to_box_model_object, start_child,
@@ -4363,11 +4471,13 @@ void LayoutBlockFlow::MoveChildrenTo(LayoutBoxModelObject* to_box_model_object,
 }
 
 RootInlineBox* LayoutBlockFlow::CreateRootInlineBox() {
+  NOT_DESTROYED();
   return new RootInlineBox(LineLayoutItem(this));
 }
 
 void LayoutBlockFlow::CreateOrDestroyMultiColumnFlowThreadIfNeeded(
     const ComputedStyle* old_style) {
+  NOT_DESTROYED();
   bool specifies_columns = StyleRef().SpecifiesColumns();
 
   if (MultiColumnFlowThread()) {
@@ -4402,15 +4512,20 @@ void LayoutBlockFlow::CreateOrDestroyMultiColumnFlowThreadIfNeeded(
   if (IsFieldsetIncludingNG())
     return;
 
-  // Form controls are replaced content, and are therefore not supposed to
-  // support multicol.
-  if (IsFileUploadControl() || IsTextControl() || IsListBox(this))
+  // Form controls are replaced content (also when implemented as a regular
+  // block), and are therefore not supposed to support multicol.
+  const auto* element = DynamicTo<Element>(GetNode());
+  if (element && element->IsFormControlElement())
     return;
 
   // We don't allow custom layout and multicol on the same object. This is
   // similar to not allowing it for flexbox, grids and tables (although those
   // don't create LayoutBlockFlow, so we don't need to check for those here).
   if (IsLayoutNGCustom())
+    return;
+
+  // MathML layout objects don't support multicol.
+  if (IsMathML())
     return;
 
   auto* flow_thread = LayoutMultiColumnFlowThread::CreateAnonymous(
@@ -4429,6 +4544,7 @@ void LayoutBlockFlow::CreateOrDestroyMultiColumnFlowThreadIfNeeded(
 }
 
 LayoutBlockFlow::LayoutBlockFlowRareData& LayoutBlockFlow::EnsureRareData() {
+  NOT_DESTROYED();
   if (rare_data_)
     return *rare_data_;
 
@@ -4437,6 +4553,7 @@ LayoutBlockFlow::LayoutBlockFlowRareData& LayoutBlockFlow::EnsureRareData() {
 }
 
 void LayoutBlockFlow::PositionDialog() {
+  NOT_DESTROYED();
   base::Optional<LayoutUnit> y =
       ComputeAbsoluteDialogYPosition(*this, Size().Height());
   if (y.has_value())
@@ -4444,6 +4561,7 @@ void LayoutBlockFlow::PositionDialog() {
 }
 
 void LayoutBlockFlow::SimplifiedNormalFlowInlineLayout() {
+  NOT_DESTROYED();
   DCHECK(ChildrenInline());
   LinkedHashSet<RootInlineBox*> line_boxes;
   for (InlineWalker walker(LineLayoutBlockFlow(this)); !walker.AtEnd();
@@ -4472,23 +4590,26 @@ void LayoutBlockFlow::SimplifiedNormalFlowInlineLayout() {
   }
 }
 
-bool LayoutBlockFlow::RecalcInlineChildrenLayoutOverflow() {
+RecalcLayoutOverflowResult
+LayoutBlockFlow::RecalcInlineChildrenLayoutOverflow() {
+  NOT_DESTROYED();
   DCHECK(ChildrenInline());
-  bool children_layout_overflow_changed = false;
+  RecalcLayoutOverflowResult result;
   HashSet<RootInlineBox*> line_boxes;
   for (InlineWalker walker(LineLayoutBlockFlow(this)); !walker.AtEnd();
        walker.Advance()) {
     LayoutObject* layout_object = walker.Current().GetLayoutObject();
-    if (RecalcNormalFlowChildLayoutOverflowIfNeeded(layout_object)) {
-      children_layout_overflow_changed = true;
-      // TODO(chrishtr): should this be IsBox()? Non-blocks can be
-      // inline and have line box wrappers.
-      auto* layout_block_object = DynamicTo<LayoutBlock>(layout_object);
-      if (layout_block_object) {
-        if (InlineBox* inline_box_wrapper =
-                layout_block_object->InlineBoxWrapper())
-          line_boxes.insert(&inline_box_wrapper->Root());
-      }
+    if (layout_object->IsOutOfFlowPositioned())
+      continue;
+
+    result.Unite(layout_object->RecalcLayoutOverflow());
+
+    // TODO(chrishtr): should this be IsBox()? Non-blocks can be inline and
+    // have line box wrappers.
+    if (auto* layout_block_object = DynamicTo<LayoutBlock>(layout_object)) {
+      if (InlineBox* inline_box_wrapper =
+              layout_block_object->InlineBoxWrapper())
+        line_boxes.insert(&inline_box_wrapper->Root());
     }
   }
 
@@ -4499,10 +4620,11 @@ bool LayoutBlockFlow::RecalcInlineChildrenLayoutOverflow() {
     box->ClearKnownToHaveNoOverflow();
     box->ComputeOverflow(box->LineTop(), box->LineBottom(), text_box_data_map);
   }
-  return children_layout_overflow_changed;
+  return result;
 }
 
 void LayoutBlockFlow::RecalcInlineChildrenVisualOverflow() {
+  NOT_DESTROYED();
   DCHECK(ChildrenInline());
 
   if (const NGPaintFragment* paint_fragment = PaintFragment()) {
@@ -4510,16 +4632,21 @@ void LayoutBlockFlow::RecalcInlineChildrenVisualOverflow() {
     return;
   }
 
-  if (UNLIKELY(RuntimeEnabledFeatures::LayoutNGFragmentItemEnabled())) {
-    if (const NGPhysicalBoxFragment* fragment = CurrentFragment()) {
-      if (const NGFragmentItems* items = fragment->Items()) {
+  if (PhysicalFragmentCount() &&
+      RuntimeEnabledFeatures::LayoutNGFragmentItemEnabled()) {
+    for (const NGPhysicalBoxFragment& fragment : PhysicalFragments()) {
+      if (const NGFragmentItems* items = fragment.Items()) {
         NGInlineCursor cursor(*items);
         NGFragmentItem::RecalcInkOverflowForCursor(&cursor);
-      } else if (fragment->HasFloatingDescendantsForPaint()) {
-        RecalcFloatingDescendantsVisualOverflow(*fragment);
       }
-      return;
+      // Even if this turned out to be an inline formatting context with
+      // fragment items (handled above), we need to handle floating descendants.
+      // If a float is block-fragmented, it is resumed as a regular box fragment
+      // child, rather than becoming a fragment item.
+      if (fragment.HasFloatingDescendantsForPaint())
+        RecalcFloatingDescendantsVisualOverflow(fragment);
     }
+    return;
   }
 
   for (InlineWalker walker(LineLayoutBlockFlow(this)); !walker.AtEnd();
@@ -4556,6 +4683,7 @@ void LayoutBlockFlow::RecalcFloatingDescendantsVisualOverflow(
 PositionWithAffinity LayoutBlockFlow::PositionForPoint(
     const LayoutObject& offset_parent,
     const PhysicalOffset& offset) const {
+  NOT_DESTROYED();
   // Currently this function is called only from an inline child of this
   // |LayoutBlockFlow|.
   DCHECK(offset_parent.IsInline());
@@ -4565,7 +4693,7 @@ PositionWithAffinity LayoutBlockFlow::PositionForPoint(
   // For inline children, the offset is relative to its containing
   // |LayoutBlockFlow|. If this is scrolling, convert the content offset to the
   // offset of this |LayoutBlockFlow|.
-  if (HasOverflowClip()) {
+  if (IsScrollContainer()) {
     PhysicalOffset offset_in_this = offset;
     offset_in_this -= PhysicalOffset(PixelSnappedScrolledContentOffset());
     return PositionForPoint(offset_in_this);
@@ -4577,6 +4705,7 @@ PositionWithAffinity LayoutBlockFlow::PositionForPoint(
 
 PositionWithAffinity LayoutBlockFlow::PositionForPoint(
     const PhysicalOffset& point) const {
+  NOT_DESTROYED();
   if (IsAtomicInlineLevel()) {
     PositionWithAffinity position =
         PositionForPointIfOutsideAtomicInlineLevel(point);
@@ -4711,6 +4840,7 @@ PositionWithAffinity LayoutBlockFlow::PositionForPoint(
 
 bool LayoutBlockFlow::ShouldMoveCaretToHorizontalBoundaryWhenPastTopOrBottom()
     const {
+  NOT_DESTROYED();
   return GetDocument()
       .GetFrame()
       ->GetEditor()
@@ -4725,6 +4855,7 @@ void LayoutBlockFlow::ShowLineTreeAndMark(const InlineBox* marked_box1,
                                           const InlineBox* marked_box2,
                                           const char* marked_label2,
                                           const LayoutObject* obj) const {
+  NOT_DESTROYED();
   StringBuilder string_blockflow;
   DumpLayoutObject(string_blockflow, true, kShowTreeCharacterOffset);
   for (const RootInlineBox* root = FirstRootBox(); root;
@@ -4741,6 +4872,7 @@ void LayoutBlockFlow::AddOutlineRects(
     Vector<PhysicalRect>& rects,
     const PhysicalOffset& additional_offset,
     NGOutlineType include_block_overflows) const {
+  NOT_DESTROYED();
   // For blocks inside inlines, we go ahead and include margins so that we run
   // right up to the inline boxes above and below us (thus getting merged with
   // them to form a single irregular shape).
@@ -4770,7 +4902,7 @@ void LayoutBlockFlow::AddOutlineRects(
                                include_block_overflows);
 
   if (include_block_overflows == NGOutlineType::kIncludeBlockVisualOverflow &&
-      !HasOverflowClip() && !HasControlClip()) {
+      !HasNonVisibleOverflow() && !HasControlClip()) {
     for (RootInlineBox* curr = FirstRootBox(); curr;
          curr = curr->NextRootBox()) {
       LayoutUnit flipped_left = curr->X();
@@ -4807,21 +4939,9 @@ void LayoutBlockFlow::AddOutlineRects(
 
 void LayoutBlockFlow::InvalidateDisplayItemClients(
     PaintInvalidationReason invalidation_reason) const {
+  NOT_DESTROYED();
   BlockFlowPaintInvalidator(*this).InvalidateDisplayItemClients(
       invalidation_reason);
-}
-
-void LayoutBlockFlow::IncrementLayoutPassCount() {
-  int layout_pass_count = 0;
-  HashMap<LayoutBlockFlow*, int>::iterator layout_count_iterator =
-      GetLayoutPassCountMap().find(this);
-  if (layout_count_iterator != GetLayoutPassCountMap().end())
-    layout_pass_count = layout_count_iterator->value;
-  GetLayoutPassCountMap().Set(this, ++layout_pass_count);
-}
-
-int LayoutBlockFlow::GetLayoutPassCountForTesting() {
-  return GetLayoutPassCountMap().find(this)->value;
 }
 
 LayoutBlockFlow::LayoutBlockFlowRareData::LayoutBlockFlowRareData(
@@ -4838,6 +4958,7 @@ LayoutBlockFlow::LayoutBlockFlowRareData::LayoutBlockFlowRareData(
 LayoutBlockFlow::LayoutBlockFlowRareData::~LayoutBlockFlowRareData() = default;
 
 void LayoutBlockFlow::ClearOffsetMappingIfNeeded() {
+  NOT_DESTROYED();
   DCHECK(!IsLayoutNGObject());
   if (!rare_data_)
     return;
@@ -4845,15 +4966,16 @@ void LayoutBlockFlow::ClearOffsetMappingIfNeeded() {
 }
 
 const NGOffsetMapping* LayoutBlockFlow::GetOffsetMapping() const {
+  NOT_DESTROYED();
   DCHECK(!IsLayoutNGObject());
   CHECK(!SelfNeedsLayout());
-  CHECK(!NeedsLayout() ||
-        LayoutBlockedByDisplayLock(DisplayLockLifecycleTarget::kChildren));
+  CHECK(!NeedsLayout() || ChildLayoutBlockedByDisplayLock());
   return rare_data_ ? rare_data_->offset_mapping_.get() : nullptr;
 }
 
 void LayoutBlockFlow::SetOffsetMapping(
     std::unique_ptr<NGOffsetMapping> offset_mapping) {
+  NOT_DESTROYED();
   DCHECK(!IsLayoutNGObject());
   DCHECK(offset_mapping);
   EnsureRareData().offset_mapping_ = std::move(offset_mapping);

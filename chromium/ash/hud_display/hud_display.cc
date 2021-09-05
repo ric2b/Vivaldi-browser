@@ -33,14 +33,14 @@ namespace {
 constexpr size_t kHUDGraphsInset = 5;
 
 // Default HUDDisplayView height.
-static constexpr size_t kDefaultHUDGraphHeight = 300;
+constexpr size_t kDefaultHUDGraphHeight = 300;
 
 // Top border + Header height + margin + graph height + bottom border..
 constexpr int kHUDViewDefaultHeight =
     kHUDInset + (kHUDSettingsIconSize + 2 * kSettingsIconBorder) +
     kHUDGraphsInset + kDefaultHUDGraphHeight + kHUDInset;
 
-std::unique_ptr<views::Widget> g_hud_widget;
+views::Widget* g_hud_widget = nullptr;
 
 // ClientView that return HTNOWHERE by default. A child view can receive event
 // by setting kHitTestComponentKey property to HTCLIENT.
@@ -66,24 +66,24 @@ class HTClientView : public views::ClientView {
   HUDDisplayView* hud_display_;
 };
 
-BEGIN_METADATA(HTClientView)
-METADATA_PARENT_CLASS(ClientView)
-END_METADATA()
+BEGIN_METADATA(HTClientView, views::ClientView)
+END_METADATA
 
 }  // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 // HUDDisplayView, public:
 
-BEGIN_METADATA(HUDDisplayView)
-METADATA_PARENT_CLASS(WidgetDelegateView)
-END_METADATA()
+BEGIN_METADATA(HUDDisplayView, views::WidgetDelegateView)
+END_METADATA
 
 // static
 void HUDDisplayView::Destroy() {
-  g_hud_widget.reset();
+  delete g_hud_widget;
+  g_hud_widget = nullptr;
 }
 
+// static
 void HUDDisplayView::Toggle() {
   if (g_hud_widget) {
     Destroy();
@@ -95,13 +95,15 @@ void HUDDisplayView::Toggle() {
   params.parent = Shell::GetContainer(Shell::GetPrimaryRootWindow(),
                                       kShellWindowId_OverlayContainer);
   params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
+  // Adjust for 1px grid width around the graph.
   params.bounds =
-      gfx::Rect(kDefaultGraphWidth + 2 * kHUDInset, kHUDViewDefaultHeight);
+      gfx::Rect(kDefaultGraphWidth + 2 * kHUDInset + 2 * kGridLineWidth,
+                kHUDViewDefaultHeight + 2 * kGridLineWidth);
   auto* widget = CreateViewTreeHostWidget(std::move(params));
   widget->GetLayer()->SetName("HUDDisplayView");
   widget->Show();
 
-  g_hud_widget = base::WrapUnique(widget);
+  g_hud_widget = widget;
 }
 
 HUDDisplayView::HUDDisplayView() {
@@ -173,7 +175,7 @@ void HUDDisplayView::SetDisplayMode(DisplayMode display_mode) {
 }
 
 views::ClientView* HUDDisplayView::CreateClientView(views::Widget* widget) {
-  return new HTClientView(this, widget, GetContentsView());
+  return new HTClientView(this, widget, TransferOwnershipOfContentsView());
 }
 
 void HUDDisplayView::OnWidgetInitialized() {

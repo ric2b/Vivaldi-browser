@@ -626,11 +626,12 @@ scoped_refptr<StaticBitmapImage> CanvasResourceRasterSharedImage::Bitmap() {
 
   scoped_refptr<StaticBitmapImage> image;
 
-  // If its cross thread, then the sync token was already verified. If not, then
-  // we don't need one. The image lazily generates a token if needed.
-  gpu::SyncToken token = is_cross_thread() ? sync_token() : gpu::SyncToken();
+  // If its cross thread, then the sync token was already verified.
+  if (!is_cross_thread()) {
+    owning_thread_data().mailbox_sync_mode = kUnverifiedSyncToken;
+  }
   image = AcceleratedStaticBitmapImage::CreateFromCanvasMailbox(
-      mailbox(), token, texture_id_for_image, image_info, texture_target_,
+      mailbox(), GetSyncToken(), texture_id_for_image, image_info, texture_target_,
       is_origin_top_left_, context_provider_wrapper_, owning_thread_ref_,
       owning_thread_task_runner_, std::move(release_callback));
 
@@ -762,7 +763,7 @@ CanvasResourceSkiaDawnSharedImage::CanvasResourceSkiaDawnSharedImage(
   // Ensure Dawn wire is initialized.
   webgpu->RequestAdapterAsync(gpu::webgpu::PowerPreference::kHighPerformance,
                               base::DoNothing());
-  WGPUDeviceProperties properties;
+  WGPUDeviceProperties properties{};
   webgpu->RequestDeviceAsync(0, properties, base::DoNothing());
 
   owning_thread_data().shared_image_mailbox = shared_image_mailbox;
@@ -954,13 +955,14 @@ scoped_refptr<StaticBitmapImage> CanvasResourceSkiaDawnSharedImage::Bitmap() {
 
   scoped_refptr<StaticBitmapImage> image;
 
-  // If its cross thread, then the sync token was already verified. If not, then
-  // we don't need one. The image lazily generates a token if needed.
-  gpu::SyncToken token = is_cross_thread() ? sync_token() : gpu::SyncToken();
+  // If its cross thread, then the sync token was already verified.
+  if (!is_cross_thread()) {
+    owning_thread_data().mailbox_sync_mode = kUnverifiedSyncToken;
+  }
   image = AcceleratedStaticBitmapImage::CreateFromCanvasMailbox(
-      mailbox(), token, 0, image_info, GL_TEXTURE_2D, is_origin_top_left_,
-      context_provider_wrapper_, owning_thread_ref_, owning_thread_task_runner_,
-      std::move(release_callback));
+      mailbox(), GetSyncToken(), 0, image_info, GL_TEXTURE_2D,
+      is_origin_top_left_, context_provider_wrapper_, owning_thread_ref_,
+      owning_thread_task_runner_, std::move(release_callback));
 
   DCHECK(image);
   return image;
@@ -1172,11 +1174,8 @@ scoped_refptr<StaticBitmapImage> CanvasResourceSwapChain::Bitmap() {
       },
       base::RetainedRef(this)));
 
-  // Use an empty sync token so that the image lazily generates its own sync
-  // token so that it can synchronize with Skia commands as well as the copy
-  // from the front buffer to back buffer after present.
   return AcceleratedStaticBitmapImage::CreateFromCanvasMailbox(
-      back_buffer_mailbox_, gpu::SyncToken(), shared_texture_id, image_info,
+      back_buffer_mailbox_, GetSyncToken(), shared_texture_id, image_info,
       GL_TEXTURE_2D, true /*is_origin_top_left*/, context_provider_wrapper_,
       owning_thread_ref_, owning_thread_task_runner_,
       std::move(release_callback));

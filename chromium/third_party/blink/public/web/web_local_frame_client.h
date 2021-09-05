@@ -38,6 +38,7 @@
 #include "base/optional.h"
 #include "base/unguessable_token.h"
 #include "media/base/speech_recognition_client.h"
+#include "services/network/public/mojom/url_loader_factory.mojom-shared.h"
 #include "services/network/public/mojom/web_sandbox_flags.mojom-shared.h"
 #include "third_party/blink/public/common/feature_policy/feature_policy.h"
 #include "third_party/blink/public/common/loader/loading_behavior_flag.h"
@@ -49,6 +50,7 @@
 #include "third_party/blink/public/mojom/frame/frame_owner_element_type.mojom-shared.h"
 #include "third_party/blink/public/mojom/frame/lifecycle.mojom-shared.h"
 #include "third_party/blink/public/mojom/frame/user_activation_update_types.mojom-shared.h"
+#include "third_party/blink/public/mojom/media/renderer_audio_input_stream_factory.mojom-shared.h"
 #include "third_party/blink/public/mojom/portal/portal.mojom-shared.h"
 #include "third_party/blink/public/mojom/use_counter/css_property_id.mojom-shared.h"
 #include "third_party/blink/public/platform/blame_context.h"
@@ -75,6 +77,7 @@
 #include "third_party/blink/public/web/web_frame_owner_properties.h"
 #include "third_party/blink/public/web/web_history_commit_type.h"
 #include "third_party/blink/public/web/web_history_item.h"
+#include "third_party/blink/public/web/web_meaningful_layout.h"
 #include "third_party/blink/public/web/web_media_inspector.h"
 #include "third_party/blink/public/web/web_navigation_params.h"
 #include "third_party/blink/public/web/web_navigation_policy.h"
@@ -317,15 +320,6 @@ class BLINK_EXPORT WebLocalFrameClient {
   // datasource will become the provisional datasource for the frame.
   virtual void DidCreateDocumentLoader(WebDocumentLoader*) {}
 
-  // Used to inform the embedder that `WebNavigationControl::CommitNavigation`
-  // call will fail to commit a new document.
-  //
-  // TODO(https://crbug.com/1117282): Remove the need for these exceptions.
-  enum class CommitFailureReason {
-    kNoPluginForMimeType,
-  };
-  virtual void WillFailCommitNavigation(CommitFailureReason) {}
-
   // The navigation has been committed, as a result of
   // WebNavigationControl::CommitNavigation call. The newly created document
   // is committed to the frame, the encoding of the response body is known,
@@ -559,6 +553,9 @@ class BLINK_EXPORT WebLocalFrameClient {
     return nullptr;
   }
 
+  // WebRTC
+  virtual bool AllowRTCLegacyTLSProtocols() { return false; }
+
   // Encrypted Media -------------------------------------------------
 
   virtual WebEncryptedMediaClient* EncryptedMediaClient() { return nullptr; }
@@ -622,6 +619,10 @@ class BLINK_EXPORT WebLocalFrameClient {
 
   virtual void OnStopLoading() {}
 
+  virtual void MaybeProxyURLLoaderFactory(
+      blink::CrossVariantMojoReceiver<
+          network::mojom::URLLoaderFactoryInterfaceBase>* factory_receiver) {}
+
   // Accessibility Object Model -------------------------------------------
 
   // This method is used to expose the AX Tree stored in content/renderer to the
@@ -663,14 +664,6 @@ class BLINK_EXPORT WebLocalFrameClient {
     return false;
   }
 
-  // Called by WebFrameWidgetBase, it submits throughput data to the browser
-  // process. The browser process aggregates the data and eventually reports to
-  // the UKM.
-  virtual void SubmitThroughputData(ukm::SourceId source_id,
-                                    int aggregated_percent,
-                                    int impl_percent,
-                                    base::Optional<int> main_percent) {}
-
   // Update the current frame selection to the browser.
   virtual void SyncSelectionIfRequired() {}
 
@@ -680,6 +673,35 @@ class BLINK_EXPORT WebLocalFrameClient {
 
   // Reset the currently tracked scrolled focused node.
   virtual void ResetHasScrolledFocusedEditableIntoView() {}
+
+  // TODO(https://crbug.com/787252): Remove the methods below and use the
+  // Supplement mechanism.
+  virtual void CreateAudioInputStream(
+      CrossVariantMojoRemote<
+          blink::mojom::RendererAudioInputStreamFactoryClientInterfaceBase>
+          client,
+      const base::UnguessableToken& session_id,
+      const media::AudioParameters& params,
+      bool automatic_gain_control,
+      uint32_t shared_memory_count) {}
+  virtual void AssociateInputAndOutputForAec(
+      const base::UnguessableToken& input_stream_id,
+      const std::string& output_device_id) {}
+
+  // Called immediately following the first compositor-driven (frame-generating)
+  // layout that happened after an interesting document lifecycle change (see
+  // WebMeaningfulLayout for details.)
+  virtual void DidMeaningfulLayout(WebMeaningfulLayout) {}
+
+  // Notification that the BeginMainFrame completed, was committed into the
+  // compositor (thread) and submitted to the display compositor.
+  virtual void DidCommitAndDrawCompositorFrame() {}
+
+  // Inform the widget that it was hidden.
+  virtual void WasHidden() {}
+
+  // Inform the widget that it was shown.
+  virtual void WasShown() {}
 };
 
 }  // namespace blink

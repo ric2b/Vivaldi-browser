@@ -36,6 +36,7 @@ defaults = args.defaults(
     cq_group = None,
     list_view = args.COMPUTE,
     main_list_view = None,
+    subproject_list_view = None,
 )
 
 def declare_bucket(milestone_vars, *, branch_selector = branches.MAIN_ONLY):
@@ -205,6 +206,7 @@ def try_builder(
         cq_group = args.DEFAULT,
         list_view = args.DEFAULT,
         main_list_view = args.DEFAULT,
+        subproject_list_view = args.DEFAULT,
         tryjob = None,
         **kwargs):
     """Define a try builder.
@@ -227,7 +229,11 @@ def try_builder(
       main_console_view - A string identifying the ID of the main list
         view to add an entry to. Supports a module-level default that
         defaults to None. Note that `add_to_list_view` has no effect on
-        creating an entry to the main list view.
+        adding an entry to the main list view.
+      subproject_list_view - A string identifying the ID of the
+        subproject list view to add an entry to. Suppoers a module-level
+        default that defaults to None. Not that `add_to_list_view` has
+        no effect on adding an entry to the subproject list view.
       tryjob - A struct containing the details of the tryjob verifier for the
         builder, obtained by calling the `tryjob` function.
     """
@@ -290,6 +296,13 @@ def try_builder(
             list_view = main_list_view,
         )
 
+    subproject_list_view = defaults.get_value("subproject_list_view", subproject_list_view)
+    if subproject_list_view:
+        luci.list_view_entry(
+            builder = builder,
+            list_view = subproject_list_view,
+        )
+
 def blink_builder(*, name, goma_backend = None, **kwargs):
     return try_builder(
         name = name,
@@ -298,13 +311,18 @@ def blink_builder(*, name, goma_backend = None, **kwargs):
         **kwargs
     )
 
-def blink_mac_builder(*, name, **kwargs):
+def blink_mac_builder(
+        *,
+        name,
+        os = builders.os.MAC_ANY,
+        builderless = True,
+        **kwargs):
     return blink_builder(
         name = name,
         cores = None,
         goma_backend = builders.goma.backend.RBE_PROD,
-        os = builders.os.MAC_ANY,
-        builderless = True,
+        os = os,
+        builderless = builderless,
         ssd = True,
         **kwargs
     )
@@ -332,6 +350,7 @@ def chromium_angle_builder(*, name, **kwargs):
         builder_group = "tryserver.chromium.angle",
         builderless = False,
         goma_backend = builders.goma.backend.RBE_PROD,
+        goma_jobs = builders.goma.jobs.J150,
         service_account = "chromium-try-gpu-builder@chops-service-accounts.iam.gserviceaccount.com",
         **kwargs
     )
@@ -386,17 +405,16 @@ def chromium_mac_ios_builder(
         *,
         name,
         caches = None,
-        executable = "recipe:ios/try",
+        executable = "recipe:chromium_trybot",
         goma_backend = builders.goma.backend.RBE_PROD,
         os = builders.os.MAC_10_15,
         properties = None,
         **kwargs):
-    if not caches:
-        caches = [builders.xcode_cache.x12a7209]
-    if not properties:
-        properties = {
-            "xcode_build_version": "12a7209",
-        }
+    caches = caches or [builders.xcode_cache.x12a7209]
+
+    properties = properties or {}
+    properties.setdefault("xcode_build_version", "12a7209")
+
     return try_builder(
         name = name,
         builder_group = "tryserver.chromium.mac",
@@ -433,7 +451,6 @@ def chromium_swangle_mac_builder(*, name, **kwargs):
     return chromium_swangle_builder(
         name = name,
         cores = None,
-        ssd = None,
         goma_backend = builders.goma.backend.RBE_PROD,
         os = builders.os.MAC_ANY,
         **kwargs

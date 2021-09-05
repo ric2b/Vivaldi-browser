@@ -17,6 +17,7 @@
 
 #include "base/cancelable_callback.h"
 #include "base/clang_profiling_buildflags.h"
+#include "base/containers/unique_ptr_adapters.h"
 #include "base/macros.h"
 #include "base/memory/discardable_memory_allocator.h"
 #include "base/memory/memory_pressure_listener.h"
@@ -26,13 +27,15 @@
 #include "base/optional.h"
 #include "base/strings/string16.h"
 #include "base/time/time.h"
+#include "base/util/type_safety/pass_key.h"
 #include "build/build_config.h"
+#include "cc/mojom/render_frame_metadata.mojom.h"
 #include "content/child/child_thread_impl.h"
+#include "content/common/agent_scheduling_group.mojom.h"
 #include "content/common/content_export.h"
 #include "content/common/frame.mojom.h"
 #include "content/common/frame_replication_state.h"
 #include "content/common/frame_sink_provider.mojom.h"
-#include "content/common/render_frame_metadata.mojom.h"
 #include "content/common/render_message_filter.mojom.h"
 #include "content/common/renderer.mojom.h"
 #include "content/common/renderer_host.mojom.h"
@@ -40,8 +43,6 @@
 #include "content/public/renderer/url_loader_throttle_provider.h"
 #include "content/renderer/compositor/compositor_dependencies.h"
 #include "content/renderer/discardable_memory_utils.h"
-#include "content/renderer/media/audio/audio_input_ipc_factory.h"
-#include "content/renderer/media/audio/audio_output_ipc_factory.h"
 #include "gpu/ipc/client/gpu_channel_host.h"
 #include "ipc/ipc_sync_channel.h"
 #include "media/media_buildflags.h"
@@ -103,7 +104,7 @@ class SyntheticBeginFrameSource;
 }  // namespace viz
 
 namespace content {
-class AudioRendererMixerManager;
+class AgentSchedulingGroup;
 class CategorizedWorkerPool;
 class GpuVideoAcceleratorFactoriesImpl;
 class RenderThreadObserver;
@@ -128,6 +129,8 @@ class CONTENT_EXPORT RenderThreadImpl
     : public RenderThread,
       public ChildThreadImpl,
       public mojom::Renderer,
+      public mojom::RouteProvider,
+      public blink::mojom::AssociatedInterfaceProvider,
       public viz::mojom::CompositingModeWatcher,
       public CompositorDependencies {
  public:
@@ -216,6 +219,22 @@ class CONTENT_EXPORT RenderThreadImpl
   // viz::mojom::CompositingModeWatcher implementation.
   void CompositingModeFallbackToSoftware() override;
 
+  // Formerly in mojom::Renderer (moved to mojom::AgentSchedulingGroup):
+  void CreateView(mojom::CreateViewParamsPtr params,
+                  util::PassKey<AgentSchedulingGroup>);
+  void DestroyView(int32_t view_id, util::PassKey<AgentSchedulingGroup>);
+  void CreateFrame(mojom::CreateFrameParamsPtr params,
+                   util::PassKey<AgentSchedulingGroup>);
+  void CreateFrameProxy(
+      int32_t routing_id,
+      int32_t render_view_routing_id,
+      const base::Optional<base::UnguessableToken>& opener_frame_token,
+      int32_t parent_routing_id,
+      const FrameReplicationState& replicated_state,
+      const base::UnguessableToken& frame_token,
+      const base::UnguessableToken& devtools_frame_token,
+      util::PassKey<AgentSchedulingGroup>);
+
   // Whether gpu compositing is being used or is disabled for software
   // compositing. Clients of the compositor should give resources that match
   // the appropriate mode.
@@ -296,11 +315,6 @@ class CONTENT_EXPORT RenderThreadImpl
 
   scoped_refptr<viz::ContextProviderCommandBuffer>
   SharedMainThreadContextProvider();
-
-  // AudioRendererMixerManager instance which manages renderer side mixer
-  // instances shared based on configured audio parameters.  Lazily created on
-  // first call.
-  AudioRendererMixerManager* GetAudioRendererMixerManager();
 
   class UnfreezableMessageFilter : public IPC::MessageFilter {
    public:
@@ -421,11 +435,15 @@ class CONTENT_EXPORT RenderThreadImpl
     video_frame_compositor_task_runner_ = task_runner;
   }
 
+  mojom::RouteProvider* GetRemoteRouteProvider(
+      util::PassKey<AgentSchedulingGroup>) override;
+
   // FEATURE_FORCE_ACCESS_TO_GPU
   scoped_refptr<gpu::GpuChannelHost> EstablishForcedGpuChannelSync();
 
  private:
   friend class RenderThreadImplBrowserTest;
+  friend class AgentSchedulingGroup;
 
   void OnProcessFinalRelease() override;
   // IPC::Listener
@@ -446,17 +464,16 @@ class CONTENT_EXPORT RenderThreadImpl
   void OnGetAccessibilityTree();
 
   // mojom::Renderer:
-  void CreateView(mojom::CreateViewParamsPtr params) override;
-  void DestroyView(int32_t view_id) override;
-  void CreateFrame(mojom::CreateFrameParamsPtr params) override;
-  void CreateFrameProxy(
-      int32_t routing_id,
-      int32_t render_view_routing_id,
-      const base::Optional<base::UnguessableToken>& opener_frame_token,
-      int32_t parent_routing_id,
-      const FrameReplicationState& replicated_state,
-      const base::UnguessableToken& frame_token,
-      const base::UnguessableToken& devtools_frame_token) override;
+  void CreateAgentSchedulingGroup(
+      mojo::PendingRemote<mojom::AgentSchedulingGroupHost>
+          agent_scheduling_group_host,
+      mojo::PendingReceiver<mojom::AgentSchedulingGroup> agent_scheduling_group)
+      override;
+  void CreateAssociatedAgentSchedulingGroup(
+      mojo::PendingAssociatedRemote<mojom::AgentSchedulingGroupHost>
+          agent_scheduling_group_host,
+      mojo::PendingAssociatedReceiver<mojom::AgentSchedulingGroup>
+          agent_scheduling_group) override;
   void OnNetworkConnectionChanged(
       net::NetworkChangeNotifier::ConnectionType type,
       double max_bandwidth_mbps) override;
@@ -488,6 +505,18 @@ class CONTENT_EXPORT RenderThreadImpl
   void OnMemoryPressure(
       base::MemoryPressureListener::MemoryPressureLevel memory_pressure_level);
 
+  // mojom::RouteProvider implementation:
+  void GetRoute(
+      int32_t routing_id,
+      mojo::PendingAssociatedReceiver<blink::mojom::AssociatedInterfaceProvider>
+          receiver) override;
+
+  // blink::mojom::AssociatedInterfaceProvider implementation:
+  void GetAssociatedInterface(
+      const std::string& name,
+      mojo::PendingAssociatedReceiver<blink::mojom::AssociatedInterface>
+          receiver) override;
+
   bool RendererIsHidden() const;
   void OnRendererHidden();
   void OnRendererVisible();
@@ -510,10 +539,12 @@ class CONTENT_EXPORT RenderThreadImpl
   std::unique_ptr<viz::SyntheticBeginFrameSource>
   CreateSyntheticBeginFrameSource();
 
+  void OnRouteProviderReceiver(
+      mojo::PendingAssociatedReceiver<mojom::RouteProvider> receiver);
   void OnRendererInterfaceReceiver(
       mojo::PendingAssociatedReceiver<mojom::Renderer> receiver);
 
-  std::unique_ptr<base::DiscardableMemoryAllocator>
+  std::unique_ptr<discardable_memory::ClientDiscardableSharedMemoryManager>
       discardable_memory_allocator_;
 
   // These objects live solely on the render thread.
@@ -524,13 +555,6 @@ class CONTENT_EXPORT RenderThreadImpl
 
   // Filter out unfreezable messages and pass it to unfreezable task runners.
   scoped_refptr<UnfreezableMessageFilter> unfreezable_message_filter_;
-
-  // Provides AudioInputIPC objects for audio input devices. Initialized in
-  // Init.
-  base::Optional<AudioInputIPCFactory> audio_input_ipc_factory_;
-  // Provides AudioOutputIPC objects for audio output devices. Initialized in
-  // Init.
-  base::Optional<AudioOutputIPCFactory> audio_output_ipc_factory_;
 
   // Used on the render thread.
   std::unique_ptr<blink::WebVideoCaptureImplManager> vc_manager_;
@@ -587,8 +611,6 @@ class CONTENT_EXPORT RenderThreadImpl
 
   scoped_refptr<viz::RasterContextProvider> shared_worker_context_provider_;
 
-  std::unique_ptr<AudioRendererMixerManager> audio_renderer_mixer_manager_;
-
   HistogramCustomizer histogram_customizer_;
 
   std::unique_ptr<base::MemoryPressureListener> memory_pressure_listener_;
@@ -620,11 +642,20 @@ class CONTENT_EXPORT RenderThreadImpl
 
   mojo::AssociatedRemote<mojom::RendererHost> renderer_host_;
 
+  mojo::AssociatedReceiver<mojom::RouteProvider> route_provider_receiver_{this};
+  mojo::AssociatedReceiverSet<blink::mojom::AssociatedInterfaceProvider,
+                              int32_t>
+      associated_interface_provider_receivers_;
+  mojo::AssociatedRemote<mojom::RouteProvider> remote_route_provider_;
+
   blink::AssociatedInterfaceRegistry associated_interfaces_;
 
   mojo::AssociatedReceiver<mojom::Renderer> renderer_receiver_{this};
 
   mojo::AssociatedRemote<mojom::RenderMessageFilter> render_message_filter_;
+
+  std::set<std::unique_ptr<AgentSchedulingGroup>, base::UniquePtrComparator>
+      agent_scheduling_groups_;
 
   RendererMemoryMetrics purge_and_suspend_memory_metrics_;
   bool needs_to_record_first_active_paint_;

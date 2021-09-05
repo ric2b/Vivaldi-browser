@@ -18,17 +18,18 @@
 #include "build/build_config.h"
 #include "components/download/public/common/download_url_parameters.h"
 #include "content/browser/child_process_security_policy_impl.h"
-#include "content/browser/frame_host/navigation_entry_impl.h"
-#include "content/browser/frame_host/navigator.h"
-#include "content/browser/frame_host/render_frame_host_impl.h"
-#include "content/browser/frame_host/render_frame_proxy_host.h"
 #include "content/browser/media/audio_stream_monitor.h"
 #include "content/browser/media/media_web_contents_observer.h"
+#include "content/browser/renderer_host/navigation_entry_impl.h"
+#include "content/browser/renderer_host/navigator.h"
+#include "content/browser/renderer_host/render_frame_host_impl.h"
+#include "content/browser/renderer_host/render_frame_proxy_host.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/browser/site_instance_impl.h"
 #include "content/browser/webui/content_web_ui_controller_factory.h"
 #include "content/browser/webui/web_ui_controller_factory_registry.h"
 #include "content/common/content_navigation_policy.h"
+#include "content/common/frame.mojom.h"
 #include "content/common/frame_messages.h"
 #include "content/common/page_messages.h"
 #include "content/common/view_messages.h"
@@ -854,7 +855,7 @@ TEST_F(WebContentsImplTest, FindOpenerRVHWhenPending) {
   RenderFrameProxyHost* proxy =
       contents()->GetRenderManager()->GetRenderFrameProxyHost(instance);
   EXPECT_TRUE(proxy);
-  EXPECT_EQ(proxy->GetFrameToken(), opener_frame_token);
+  EXPECT_EQ(*opener_frame_token, proxy->GetFrameToken());
 
   // Ensure that committing the navigation removes the proxy.
   navigation->Commit();
@@ -2240,7 +2241,7 @@ TEST_F(WebContentsImplTestWithSiteIsolation, IsLoadingToDifferentDocument) {
                                        ui::PAGE_TRANSITION_AUTO_SUBFRAME);
   EXPECT_TRUE(contents()->IsLoading());
   EXPECT_FALSE(contents()->IsLoadingToDifferentDocument());
-  subframe->DidStopLoading();
+  static_cast<mojom::FrameHost*>(subframe)->DidStopLoading();
   EXPECT_FALSE(contents()->IsLoading());
 }
 
@@ -2279,7 +2280,7 @@ TEST_F(WebContentsImplTest, DISABLED_NoEarlyStop) {
   // navigation in the current RenderFrameHost. There should still be a pending
   // RenderFrameHost and the WebContents should still be loading.
   same_process_navigation->Commit();
-  current_rfh->DidStopLoading();
+  static_cast<mojom::FrameHost*>(current_rfh)->DidStopLoading();
   EXPECT_EQ(contents()->GetPendingMainFrame(), pending_rfh);
   EXPECT_TRUE(contents()->IsLoading());
 
@@ -2299,7 +2300,7 @@ TEST_F(WebContentsImplTest, DISABLED_NoEarlyStop) {
 
   // Simulate the new current RenderFrameHost DidStopLoading. The WebContents
   // should now have stopped loading.
-  new_current_rfh->DidStopLoading();
+  static_cast<mojom::FrameHost*>(new_current_rfh)->DidStopLoading();
   EXPECT_EQ(main_test_rfh(), new_current_rfh);
   EXPECT_FALSE(contents()->IsLoading());
 }

@@ -14,6 +14,7 @@
 #include "base/feature_list.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/autofill/manual_filling_controller.h"
 #include "chrome/browser/autofill/manual_filling_utils.h"
@@ -31,6 +32,7 @@
 #include "components/autofill/core/browser/ui/accessory_sheet_enums.h"
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/autofill_util.h"
+#include "components/autofill/core/common/mojom/autofill_types.mojom-shared.h"
 #include "components/autofill/core/common/password_generation_util.h"
 #include "components/password_manager/content/browser/content_password_manager_driver.h"
 #include "components/password_manager/content/browser/content_password_manager_driver_factory.h"
@@ -239,6 +241,7 @@ void PasswordAccessoryControllerImpl::OnToggleChanged(
 void PasswordAccessoryControllerImpl::RefreshSuggestionsForField(
     FocusedFieldType focused_field_type,
     bool is_manual_generation_available) {
+  last_focused_field_type_ = focused_field_type;
   // Prevent crashing by not acting at all if frame became unfocused at any
   // point. The next time a focus event happens, this will be called again and
   // ensure we show correct data.
@@ -268,15 +271,19 @@ void PasswordAccessoryControllerImpl::RefreshSuggestionsForField(
     }
   }
 
-  if (base::FeatureList::IsEnabled(
+  if (origin.GetURL().SchemeIsCryptographic() &&
+      base::FeatureList::IsEnabled(
           password_manager::features::kFillingPasswordsFromAnyOrigin)) {
-    // TODO(crbug.com/1104132): Disable the feature in insecure websites and on
-    // cross-origin iframes (https://crbug.com/1117015).
-    base::string16 use_other_password_title = l10n_util::GetStringUTF16(
-        IDS_PASSWORD_MANAGER_ACCESSORY_USE_OTHER_PASSWORD);
-    footer_commands_to_add.push_back(
-        FooterCommand(use_other_password_title,
-                      autofill::AccessoryAction::USE_OTHER_PASSWORD));
+    // TODO(crbug.com/1104132): Disable the feature in insecure websites.
+    base::string16 button_title =
+        is_password_field
+            ? l10n_util::GetStringUTF16(
+                  IDS_PASSWORD_MANAGER_ACCESSORY_USE_OTHER_PASSWORD)
+            : l10n_util::GetStringUTF16(
+                  IDS_PASSWORD_MANAGER_ACCESSORY_USE_OTHER_USERNAME);
+
+    footer_commands_to_add.push_back(FooterCommand(
+        button_title, autofill::AccessoryAction::USE_OTHER_PASSWORD));
   }
 
   if (is_password_field && is_manual_generation_available) {
@@ -297,12 +304,7 @@ void PasswordAccessoryControllerImpl::RefreshSuggestionsForField(
       autofill::AccessoryTabType::PASSWORDS, GetTitle(has_suggestions, origin),
       std::move(info_to_add), std::move(footer_commands_to_add));
 
-  if (base::FeatureList::IsEnabled(
-          password_manager::features::kRecoverFromNeverSaveAndroid) &&
-      base::FeatureList::IsEnabled(
-          autofill::features::kAutofillKeyboardAccessory) &&
-      is_password_field &&
-      password_client_->IsSavingAndFillingEnabled(origin.GetURL())) {
+  if (ShouldShowRecoveryToggle(focused_field_type, origin)) {
     BlacklistedStatus blacklisted_status =
         credential_cache_->GetCredentialStore(origin).GetBlacklistedStatus();
     if (blacklisted_status == BlacklistedStatus::kWasBlacklisted ||
@@ -372,13 +374,28 @@ bool PasswordAccessoryControllerImpl::AppearsInSuggestions(
   if (origin.opaque())
     return false;  // Don't proceed for invalid origins.
 
-  const auto& credentials =
-      credential_cache_->GetCredentialStore(origin).GetCredentials();
-  return std::any_of(
-      credentials.begin(), credentials.end(), [&](const auto& credential) {
-        return suggestion ==
-               (is_password ? credential.password() : credential.username());
+  return base::ranges::any_of(
+      credential_cache_->GetCredentialStore(origin).GetCredentials(),
+      [&](const auto& cred) {
+        return suggestion == (is_password ? cred.password() : cred.username());
       });
+}
+
+bool PasswordAccessoryControllerImpl::ShouldShowRecoveryToggle(
+    autofill::mojom::FocusedFieldType field_type,
+    const url::Origin& origin) const {
+  if (!base::FeatureList::IsEnabled(
+          password_manager::features::kRecoverFromNeverSaveAndroid)) {
+    return false;
+  }
+  if (!base::FeatureList::IsEnabled(
+          autofill::features::kAutofillKeyboardAccessory)) {
+    return false;
+  }
+  if (!password_client_->IsSavingAndFillingEnabled(origin.GetURL()))
+    return false;
+  return field_type == FocusedFieldType::kFillablePasswordField ||
+         field_type == FocusedFieldType::kFillableUsernameField;
 }
 
 base::WeakPtr<ManualFillingController>
@@ -408,12 +425,14 @@ void PasswordAccessoryControllerImpl::ShowAllPasswords() {
   // |AllPasswordsSheetDismissed| we are sure that this controller is alive as
   // it owns |AllPasswordsBottomSheetController| from which the method is
   // called.
+  // TODO(crbug.com/1104132): Update the controller with the last focused field.
   all_passords_bottom_sheet_controller_ =
       std::make_unique<AllPasswordsBottomSheetController>(
           web_contents_, password_client_->GetProfilePasswordStore(),
           base::BindOnce(
               &PasswordAccessoryControllerImpl::AllPasswordsSheetDismissed,
-              base::Unretained(this)));
+              base::Unretained(this)),
+          last_focused_field_type_);
 
   all_passords_bottom_sheet_controller_->Show();
 }

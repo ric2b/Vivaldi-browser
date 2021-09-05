@@ -47,9 +47,7 @@ std::unique_ptr<views::Label> CreateIndexLabel() {
 // Creates the suggestion label, and returns it (never returns nullptr).
 // The label text is not set in this function.
 std::unique_ptr<views::StyledLabel> CreateSuggestionLabel() {
-  std::unique_ptr<views::StyledLabel> suggestion_label =
-      std::make_unique<views::StyledLabel>(base::EmptyString16(),
-                                           /*listener=*/nullptr);
+  auto suggestion_label = std::make_unique<views::StyledLabel>();
   suggestion_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   suggestion_label->SetBorder(
       views::CreateEmptyBorder(gfx::Insets(kPadding / 2, 0)));
@@ -57,7 +55,7 @@ std::unique_ptr<views::StyledLabel> CreateSuggestionLabel() {
   // StyledLabel eats event, probably because it has to handle links.
   // Explicitly sets can_process_events_within_subtree to false for
   // SuggestionView's hover to work correctly.
-  suggestion_label->set_can_process_events_within_subtree(false);
+  suggestion_label->SetCanProcessEventsWithinSubtree(false);
 
   return suggestion_label;
 }
@@ -122,7 +120,7 @@ std::unique_ptr<views::View> SuggestionView::CreateAnnotationLabel() {
   // AnnotationLabel's ChildViews eat events simmilar to StyledLabel.
   // Explicitly sets can_process_events_within_subtree to false for
   // AnnotationLabel's hover to work correctly.
-  label->set_can_process_events_within_subtree(false);
+  label->SetCanProcessEventsWithinSubtree(false);
   return label;
 }
 

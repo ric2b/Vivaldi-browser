@@ -13,7 +13,7 @@
 #include "browser/vivaldi_app_observer.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/chrome_features.h"
-#include "extraparts/maybe_setup_vivaldi_keychain.h"
+#include "extraparts/vivaldi_keychain_util.h"
 
 VivaldiBrowserMainExtraPartsMac::VivaldiBrowserMainExtraPartsMac() {}
 VivaldiBrowserMainExtraPartsMac::~VivaldiBrowserMainExtraPartsMac() {}

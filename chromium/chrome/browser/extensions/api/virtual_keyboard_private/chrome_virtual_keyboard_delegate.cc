@@ -253,9 +253,13 @@ bool ChromeVirtualKeyboardDelegate::ShowLanguageSettings() {
     keyboard_client->HideKeyboard(ash::HideReason::kUser);
 
   base::RecordAction(base::UserMetricsAction("OpenLanguageOptionsDialog"));
+  const std::string path =
+      base::FeatureList::IsEnabled(
+          ::chromeos::features::kLanguageSettingsUpdate)
+          ? chromeos::settings::mojom::kInputSubpagePath
+          : chromeos::settings::mojom::kLanguagesAndInputDetailsSubpagePath;
   chrome::SettingsWindowManager::GetInstance()->ShowOSSettings(
-      ProfileManager::GetActiveUserProfile(),
-      chromeos::settings::mojom::kLanguagesAndInputDetailsSubpagePath);
+      ProfileManager::GetActiveUserProfile(), path);
   return true;
 }
 
@@ -369,15 +373,6 @@ void ChromeVirtualKeyboardDelegate::OnHasInputDevices(
   results->SetBoolean("hotrodmode", g_hotrod_keyboard_enabled);
   std::unique_ptr<base::ListValue> features(new base::ListValue());
 
-  // TODO(https://crbug.com/880659): Cleanup these flags after removing these
-  // flags from IME extension.
-  features->AppendString(GenerateFeatureFlag("floatingkeyboard", true));
-  features->AppendString(GenerateFeatureFlag("gesturetyping", true));
-  // TODO(https://crbug.com/890134): Implement gesture editing.
-  features->AppendString(GenerateFeatureFlag("gestureediting", false));
-  features->AppendString(GenerateFeatureFlag("fullscreenhandwriting", false));
-  features->AppendString(GenerateFeatureFlag("virtualkeyboardmdui", true));
-
   keyboard::KeyboardConfig config = keyboard_client->GetKeyboardConfig();
   // TODO(oka): Change this to use config.voice_input.
   features->AppendString(GenerateFeatureFlag(
@@ -392,6 +387,10 @@ void ChromeVirtualKeyboardDelegate::OnHasInputDevices(
   features->AppendString(GenerateFeatureFlag(
       "handwritinggesture",
       base::FeatureList::IsEnabled(features::kHandwritingGesture)));
+  features->AppendString(
+      GenerateFeatureFlag("handwritinggestureediting",
+                          base::FeatureList::IsEnabled(
+                              chromeos::features::kHandwritingGestureEditing)));
   features->AppendString(GenerateFeatureFlag(
       "floatingkeyboarddefault",
       base::FeatureList::IsEnabled(
@@ -416,15 +415,12 @@ void ChromeVirtualKeyboardDelegate::OnHasInputDevices(
       "borderedkey", base::FeatureList::IsEnabled(
                          chromeos::features::kVirtualKeyboardBorderedKey)));
   features->AppendString(GenerateFeatureFlag(
-      "resizablefloatingkeyboard",
-      base::FeatureList::IsEnabled(
-          chromeos::features::kVirtualKeyboardFloatingResizable)));
-  features->AppendString(GenerateFeatureFlag(
       "assistiveAutoCorrect",
       base::FeatureList::IsEnabled(chromeos::features::kAssistAutoCorrect)));
-  features->AppendString(GenerateFeatureFlag(
-      "nativerulebased", base::FeatureList::IsEnabled(
-                             chromeos::features::kNativeRuleBasedTyping)));
+  features->AppendString(
+      GenerateFeatureFlag("systemlatinphysicaltyping",
+                          base::FeatureList::IsEnabled(
+                              chromeos::features::kSystemLatinPhysicalTyping)));
 
   results->Set("features", std::move(features));
 

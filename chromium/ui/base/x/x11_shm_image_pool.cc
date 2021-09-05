@@ -64,17 +64,17 @@ bool IsRemoteHost(const std::string& name) {
   return !net::HostStringIsLocalhost(name);
 }
 
-bool ShouldUseMitShm(XDisplay* display) {
+bool ShouldUseMitShm(x11::Connection* connection) {
   // MIT-SHM may be available on remote connetions, but it will be unusable.  Do
   // a best-effort check to see if the host is remote to disable the SHM
   // codepath.  It may be possible in contrived cases for there to be a
   // false-positive, but in that case we'll just fallback to the non-SHM
   // codepath.
-  char* display_string = DisplayString(display);
+  const std::string& display_string = connection->DisplayString();
   char* host = nullptr;
   int display_id = 0;
   int screen = 0;
-  if (xcb_parse_display(display_string, &host, &display_id, &screen)) {
+  if (xcb_parse_display(display_string.c_str(), &host, &display_id, &screen)) {
     std::string name = host;
     free(host);
     if (IsRemoteHost(name))
@@ -115,21 +115,24 @@ XShmImagePool::SwapClosure::~SwapClosure() = default;
 
 XShmImagePool::XShmImagePool(x11::Connection* connection,
                              x11::Drawable drawable,
-                             Visual* visual,
+                             x11::VisualId visual,
                              int depth,
-                             std::size_t frames_pending)
+                             std::size_t frames_pending,
+                             bool enable_multibuffering)
     : connection_(connection),
-      display_(connection_->display()),
       drawable_(drawable),
       visual_(visual),
       depth_(depth),
+      enable_multibuffering_(enable_multibuffering),
       frame_states_(frames_pending) {
-  X11EventSource::GetInstance()->AddXEventDispatcher(this);
+  if (enable_multibuffering_)
+    X11EventSource::GetInstance()->AddXEventDispatcher(this);
 }
 
 XShmImagePool::~XShmImagePool() {
   Cleanup();
-  X11EventSource::GetInstance()->RemoveXEventDispatcher(this);
+  if (enable_multibuffering_)
+    X11EventSource::GetInstance()->RemoveXEventDispatcher(this);
 }
 
 bool XShmImagePool::Resize(const gfx::Size& pixel_size) {
@@ -143,7 +146,7 @@ bool XShmImagePool::Resize(const gfx::Size& pixel_size) {
                                                                cleanup_fn};
 
 #if !defined(OS_CHROMEOS)
-  if (!ShouldUseMitShm(display_))
+  if (!ShouldUseMitShm(connection_))
     return false;
 #endif
 
@@ -155,26 +158,13 @@ bool XShmImagePool::Resize(const gfx::Size& pixel_size) {
     return false;
   }
 
-  SkColorType color_type =
-      ColorTypeForVisual(static_cast<x11::VisualId>(visual_->visualid));
+  SkColorType color_type = ColorTypeForVisual(visual_);
   if (color_type == kUnknown_SkColorType)
     return false;
 
-  std::size_t needed_frame_bytes;
-  for (std::size_t i = 0; i < frame_states_.size(); ++i) {
-    FrameState& state = frame_states_[i];
-    state.image.reset(XShmCreateImage(
-        display_, visual_, depth_, static_cast<int>(x11::ImageFormat::ZPixmap),
-        nullptr, &state.shminfo_, pixel_size.width(), pixel_size.height()));
-    if (!state.image)
-      return false;
-    std::size_t current_frame_bytes =
-        state.image->bytes_per_line * state.image->height;
-    if (i == 0)
-      needed_frame_bytes = current_frame_bytes;
-    else
-      DCHECK_EQ(current_frame_bytes, needed_frame_bytes);
-  }
+  SkImageInfo image_info = SkImageInfo::Make(
+      pixel_size.width(), pixel_size.height(), color_type, kPremul_SkAlphaType);
+  std::size_t needed_frame_bytes = image_info.computeMinByteSize();
 
   if (needed_frame_bytes > frame_bytes_ ||
       needed_frame_bytes < frame_bytes_ * kShmResizeShrinkThreshold) {
@@ -190,48 +180,47 @@ bool XShmImagePool::Resize(const gfx::Size& pixel_size) {
     }
 
     for (FrameState& state : frame_states_) {
-      state.shminfo_.shmid =
+      state.shmid =
           shmget(IPC_PRIVATE, frame_bytes_,
                  IPC_CREAT | SHM_R | SHM_W | (SHM_R >> 6) | (SHM_W >> 6));
-      if (state.shminfo_.shmid < 0)
+      if (state.shmid < 0)
         return false;
-      state.shminfo_.shmaddr =
-          reinterpret_cast<char*>(shmat(state.shminfo_.shmid, nullptr, 0));
-      if (state.shminfo_.shmaddr == reinterpret_cast<char*>(-1)) {
-        shmctl(state.shminfo_.shmid, IPC_RMID, nullptr);
+      state.shmaddr = reinterpret_cast<char*>(shmat(state.shmid, nullptr, 0));
+      if (state.shmaddr == reinterpret_cast<char*>(-1)) {
+        shmctl(state.shmid, IPC_RMID, nullptr);
         return false;
       }
 #if defined(OS_LINUX) || defined(OS_CHROMEOS)
       // On Linux, a shmid can still be attached after IPC_RMID if otherwise
       // kept alive.  Detach before XShmAttach to prevent a memory leak in case
       // the process dies.
-      shmctl(state.shminfo_.shmid, IPC_RMID, nullptr);
+      shmctl(state.shmid, IPC_RMID, nullptr);
 #endif
-      DCHECK(!state.shmem_attached_to_server_);
-      if (!XShmAttach(display_, &state.shminfo_))
+      DCHECK(!state.shmem_attached_to_server);
+      auto shmseg = connection_->GenerateId<x11::Shm::Seg>();
+      auto req = connection_->shm().Attach({
+          .shmseg = shmseg,
+          .shmid = state.shmid,
+          // If this class ever needs to use XShmGetImage(), this needs to be
+          // changed to read-write.
+          .read_only = true,
+      });
+      if (req.Sync().error)
         return false;
-      state.shmem_attached_to_server_ = true;
+      state.shmseg = shmseg;
+      state.shmem_attached_to_server = true;
 #if !defined(OS_LINUX) && !defined(OS_CHROMEOS)
       // The Linux-specific shmctl behavior above may not be portable, so we're
       // forced to do IPC_RMID after the server has attached to the segment.
-      // XShmAttach is asynchronous, so we must also sync.
-      XSync(display_, x11::False);
-      shmctl(shminfo_.shmid, IPC_RMID, nullptr);
+      shmctl(state.shmid, IPC_RMID, nullptr);
 #endif
-      // If this class ever needs to use XShmGetImage(), this needs to be
-      // changed to read-write.
-      state.shminfo_.readOnly = true;
     }
   }
 
   for (FrameState& state : frame_states_) {
-    state.image->data = state.shminfo_.shmaddr;
-    SkImageInfo image_info =
-        SkImageInfo::Make(state.image->width, state.image->height, color_type,
-                          kPremul_SkAlphaType);
     state.bitmap = SkBitmap();
-    if (!state.bitmap.installPixels(image_info, state.image->data,
-                                    state.image->bytes_per_line)) {
+    if (!state.bitmap.installPixels(image_info, state.shmaddr,
+                                    image_info.minRowBytes())) {
       return false;
     }
     state.canvas = std::make_unique<SkCanvas>(state.bitmap);
@@ -260,20 +249,21 @@ SkCanvas* XShmImagePool::CurrentCanvas() {
   return frame_states_[current_frame_index_].canvas.get();
 }
 
-XImage* XShmImagePool::CurrentImage() {
+x11::Shm::Seg XShmImagePool::CurrentSegment() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  return frame_states_[current_frame_index_].image.get();
+  return frame_states_[current_frame_index_].shmseg;
 }
 
 void XShmImagePool::SwapBuffers(
     base::OnceCallback<void(const gfx::Size&)> callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK(enable_multibuffering_);
 
   swap_closures_.emplace_back();
   SwapClosure& swap_closure = swap_closures_.back();
   swap_closure.closure = base::BindOnce(std::move(callback), pixel_size_);
-  swap_closure.shmseg = frame_states_[current_frame_index_].shminfo_.shmseg;
+  swap_closure.shmseg = frame_states_[current_frame_index_].shmseg;
 
   current_frame_index_ = (current_frame_index_ + 1) % frame_states_.size();
 }
@@ -282,9 +272,10 @@ void XShmImagePool::DispatchShmCompletionEvent(
     x11::Shm::CompletionEvent event) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK_EQ(event.offset, 0UL);
+  DCHECK(enable_multibuffering_);
 
   for (auto it = swap_closures_.begin(); it != swap_closures_.end(); ++it) {
-    if (static_cast<uint32_t>(event.shmseg) == it->shmseg) {
+    if (event.shmseg == it->shmseg) {
       std::move(it->closure).Run();
       swap_closures_.erase(it);
       return;
@@ -294,6 +285,7 @@ void XShmImagePool::DispatchShmCompletionEvent(
 
 bool XShmImagePool::DispatchXEvent(x11::Event* xev) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK(enable_multibuffering_);
 
   auto* completion = xev->As<x11::Shm::CompletionEvent>();
   if (!completion || completion->drawable.value != drawable_.value)
@@ -305,12 +297,14 @@ bool XShmImagePool::DispatchXEvent(x11::Event* xev) {
 
 void XShmImagePool::Cleanup() {
   for (FrameState& state : frame_states_) {
-    if (state.shminfo_.shmaddr)
-      shmdt(state.shminfo_.shmaddr);
-    if (state.shmem_attached_to_server_)
-      XShmDetach(display_, &state.shminfo_);
-    state.shmem_attached_to_server_ = false;
-    state.shminfo_ = {};
+    if (state.shmaddr)
+      shmdt(state.shmaddr);
+    if (state.shmem_attached_to_server)
+      connection_->shm().Detach({state.shmseg});
+    state.shmem_attached_to_server = false;
+    state.shmseg = x11::Shm::Seg{};
+    state.shmid = 0;
+    state.shmaddr = nullptr;
   }
   frame_bytes_ = 0;
   pixel_size_ = gfx::Size();

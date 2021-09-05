@@ -7,12 +7,20 @@
  * for languages and inputs settings.
  */
 
+/**
+ * @type {number} Millisecond delay that can be used when closing an action
+ * menu to keep it briefly on-screen so users can see the changes.
+ */
+const kMenuCloseDelay = 100;
+
 Polymer({
   is: 'os-settings-languages-page-v2',
 
   behaviors: [
+    DeepLinkingBehavior,
     I18nBehavior,
     PrefsBehavior,
+    settings.RouteObserverBehavior,
   ],
 
   properties: {
@@ -46,6 +54,49 @@ Polymer({
 
     /** @private */
     showAddLanguagesDialog_: Boolean,
+
+    /** @private */
+    showChangeDeviceLanguageDialog_: {
+      type: Boolean,
+      value: false,
+    },
+
+    /** @private */
+    isGuest_: {
+      type: Boolean,
+      value() {
+        return loadTimeData.getBoolean('isGuest');
+      },
+    },
+
+    /** @private */
+    isSecondaryUser_: {
+      type: Boolean,
+      value() {
+        return loadTimeData.getBoolean('isSecondaryUser');
+      },
+    },
+
+    /** @private */
+    primaryUserEmail_: {
+      type: String,
+      value() {
+        return loadTimeData.getString('primaryUserEmail');
+      },
+    },
+
+    /**
+     * Used by DeepLinkingBehavior to focus this page's deep links.
+     * @type {!Set<!chromeos.settings.mojom.Setting>}
+     */
+    supportedSettingIds: {
+      type: Object,
+      value: () => new Set([
+        chromeos.settings.mojom.Setting.kAddLanguage,
+        chromeos.settings.mojom.Setting.kChangeDeviceLanguage,
+        chromeos.settings.mojom.Setting.kOfferTranslation,
+      ]),
+    },
   },
 
   /** @private {?settings.LanguagesMetricsProxy} */
@@ -58,6 +109,19 @@ Polymer({
   },
 
   /**
+   * @param {!settings.Route} route
+   * @param {!settings.Route} oldRoute
+   */
+  currentRouteChanged(route, oldRoute) {
+    // Does not apply to this page.
+    if (route !== settings.routes.OS_LANGUAGES_LANGUAGES) {
+      return;
+    }
+
+    this.attemptDeepLink();
+  },
+
+  /**
    * @param {string} language
    * @return {string}
    * @private
@@ -67,8 +131,14 @@ Polymer({
   },
 
   /** @private */
-  onChangeSystemLanguageClick_() {
-    // TODO(crbug/1113439): Implement change system language dialog.
+  onChangeDeviceLanguageClick_() {
+    this.showChangeDeviceLanguageDialog_ = true;
+  },
+
+  /** @private */
+  onChangeDeviceLanguageDialogClose_() {
+    this.showChangeDeviceLanguageDialog_ = false;
+    cr.ui.focusWithoutInk(assert(this.$$('#changeDeviceLanguage')));
   },
 
   /**
@@ -76,9 +146,9 @@ Polymer({
    * @return {string}
    * @private
    */
-  getChangeSystemLanguageButtonDescription_(language) {
+  getChangeDeviceLanguageButtonDescription_(language) {
     return this.i18n(
-        'changeSystemLanguageButtonDescription',
+        'changeDeviceLanguageButtonDescription',
         this.getLanguageDisplayName_(language));
   },
 
@@ -111,6 +181,61 @@ Polymer({
     return languages !== undefined && languages.supported.some(language => {
       return this.languageHelper.canEnableLanguage(language);
     });
+  },
+
+  /**
+   * @return {boolean} True if the translate checkbox should be disabled.
+   * @private
+   */
+  disableTranslateCheckbox_() {
+    if (!this.detailLanguage_ || !this.detailLanguage_.state) {
+      return true;
+    }
+
+    const languageState = this.detailLanguage_.state;
+    if (!languageState.language || !languageState.language.supportsTranslate) {
+      return true;
+    }
+
+    if (this.languageHelper.isOnlyTranslateBlockedLanguage(languageState)) {
+      return true;
+    }
+
+    return this.languageHelper.convertLanguageCodeForTranslate(
+               languageState.language.code) === this.languages.translateTarget;
+  },
+
+  /**
+   * Handler for changes to the translate checkbox.
+   * @param {!{target: !Element}} e
+   * @private
+   */
+  onTranslateCheckboxChange_(e) {
+    if (e.target.checked) {
+      this.languageHelper.enableTranslateLanguage(
+          this.detailLanguage_.state.language.code);
+    } else {
+      this.languageHelper.disableTranslateLanguage(
+          this.detailLanguage_.state.language.code);
+    }
+    this.languagesMetricsProxy_.recordTranslateCheckboxChanged(
+        e.target.checked);
+    settings.recordSettingChange();
+    this.closeMenuSoon_();
+  },
+
+  /**
+   * Closes the shared action menu after a short delay, so when a checkbox is
+   * clicked it can be seen to change state before disappearing.
+   * @private
+   */
+  closeMenuSoon_() {
+    const menu = /** @type {!CrActionMenuElement} */ (this.$$('#menu').get());
+    setTimeout(() => {
+      if (menu.open) {
+        menu.close();
+      }
+    }, kMenuCloseDelay);
   },
 
   /**
@@ -213,5 +338,18 @@ Polymer({
    */
   onTranslateToggleChange_(e) {
     this.languagesMetricsProxy_.recordToggleTranslate(e.target.checked);
+  },
+
+  /**
+   * @param {string} languageCode The language code identifying a language.
+   * @param {string} translateTarget The translate target language.
+   * @return {string} class name for whether it's a translate-target or not.
+   * @private
+   */
+  getTranslationTargetClass_(languageCode, translateTarget) {
+    return this.languageHelper.convertLanguageCodeForTranslate(languageCode) ===
+            translateTarget ?
+        'translate-target' :
+        'non-translate-target';
   },
 });

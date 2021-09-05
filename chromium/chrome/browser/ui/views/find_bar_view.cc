@@ -131,11 +131,11 @@ FindBarView::FindBarView(FindBarHost* host) : find_bar_host_(host) {
   find_text_ = AddChildView(std::move(find_text));
 
   auto match_count_text = std::make_unique<MatchCountLabel>();
-  match_count_text->set_can_process_events_within_subtree(false);
+  match_count_text->SetCanProcessEventsWithinSubtree(false);
   match_count_text_ = AddChildView(std::move(match_count_text));
 
   auto separator = std::make_unique<views::Separator>();
-  separator->set_can_process_events_within_subtree(false);
+  separator->SetCanProcessEventsWithinSubtree(false);
   separator_ = AddChildView(std::move(separator));
 
   auto find_previous_button = std::make_unique<views::ImageButton>(this);
@@ -224,6 +224,7 @@ void FindBarView::SetFindTextAndSelectedRange(
     const gfx::Range& selected_range) {
   find_text_->SetText(find_text);
   find_text_->SetSelectedRange(selected_range);
+  last_searched_text_ = find_text;
 }
 
 base::string16 FindBarView::GetFindText() const {
@@ -344,7 +345,7 @@ void FindBarView::ButtonPressed(
             sender->GetID() ==
                 VIEW_ID_FIND_IN_PAGE_NEXT_BUTTON, /* forward_direction */
             false /* case_sensitive */,
-            true /* find_next_if_selection_matches */);
+            true /* find_match */);
       }
       break;
     case VIEW_ID_FIND_IN_PAGE_CLOSE_BUTTON:
@@ -383,7 +384,7 @@ bool FindBarView::HandleKeyEvent(views::Textfield* sender,
       find_tab_helper->StartFinding(
           find_string, !key_event.IsShiftDown() /* forward_direction */,
           false /* case_sensitive */,
-          true /* find_next_if_selection_matches */);
+          true /* find_match */);
     }
     return true;
   }
@@ -427,7 +428,7 @@ void FindBarView::Find(const base::string16& search_text) {
   if (!search_text.empty()) {
     find_tab_helper->StartFinding(search_text, true /* forward_direction */,
                                   false /* case_sensitive */,
-                                  true /* find_next_if_selection_matches */);
+                                  true /* find_match */);
   } else {
     find_tab_helper->StopFinding(find_in_page::SelectionAction::kClear);
     UpdateForResult(find_tab_helper->find_result(), base::string16());

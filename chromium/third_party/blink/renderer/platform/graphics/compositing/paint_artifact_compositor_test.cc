@@ -584,15 +584,19 @@ TEST_P(PaintArtifactCompositorTest, SortingContextID) {
   // Has no 3D rendering context.
   auto transform1 = CreateTransform(t0(), TransformationMatrix());
   // Establishes a 3D rendering context.
-  TransformPaintPropertyNode::State transform2_3_state;
-  transform2_3_state.rendering_context_id = 1;
-  transform2_3_state.direct_compositing_reasons =
+  TransformPaintPropertyNode::State transform2_state;
+  transform2_state.rendering_context_id = 1;
+  transform2_state.direct_compositing_reasons =
       CompositingReason::kWillChangeTransform;
   auto transform2 = TransformPaintPropertyNode::Create(
-      *transform1, std::move(transform2_3_state));
+      *transform1, std::move(transform2_state));
   // Extends the 3D rendering context of transform2.
+  TransformPaintPropertyNode::State transform3_state;
+  transform3_state.rendering_context_id = 1;
+  transform3_state.direct_compositing_reasons =
+      CompositingReason::kWillChangeTransform;
   auto transform3 = TransformPaintPropertyNode::Create(
-      *transform2, std::move(transform2_3_state));
+      *transform2, std::move(transform3_state));
   // Establishes a 3D rendering context distinct from transform2.
   TransformPaintPropertyNode::State transform4_state;
   transform4_state.rendering_context_id = 2;
@@ -3159,7 +3163,8 @@ TEST_P(PaintArtifactCompositorTest, SynthesizedClipRotatedNotSupported) {
   EXPECT_TRUE(clip_mask0->DrawsContent());
   EXPECT_TRUE(clip_mask0->HitTestable());
   EXPECT_EQ(gfx::Size(300, 200), clip_mask0->bounds());
-  EXPECT_EQ(c1_id, clip_mask0->clip_tree_index());
+  // c1 should be applied in the clip mask layer.
+  EXPECT_EQ(c0_id, clip_mask0->clip_tree_index());
   int mask_effect_0_id = clip_mask0->effect_tree_index();
   const cc::EffectNode& mask_effect_0 =
       *GetPropertyTrees().effect_tree.Node(mask_effect_0_id);
@@ -4300,8 +4305,9 @@ TEST_P(PaintArtifactCompositorTest, CreatesViewportNodes) {
   matrix.Scale(2);
   TransformPaintPropertyNode::State transform_state{matrix};
   transform_state.flags.in_subtree_of_page_scale = false;
-  transform_state.compositor_element_id =
+  const CompositorElementId compositor_element_id =
       CompositorElementIdFromUniqueObjectId(1);
+  transform_state.compositor_element_id = compositor_element_id;
 
   auto scale_transform_node = TransformPaintPropertyNode::Create(
       TransformPaintPropertyNode::Root(), std::move(transform_state));
@@ -4312,8 +4318,8 @@ TEST_P(PaintArtifactCompositorTest, CreatesViewportNodes) {
   Update(artifact.Build(), viewport_properties);
 
   cc::TransformTree& transform_tree = GetPropertyTrees().transform_tree;
-  cc::TransformNode* cc_transform_node = transform_tree.FindNodeFromElementId(
-      transform_state.compositor_element_id);
+  cc::TransformNode* cc_transform_node =
+      transform_tree.FindNodeFromElementId(compositor_element_id);
   EXPECT_TRUE(cc_transform_node);
   EXPECT_EQ(TransformationMatrix::ToTransform(matrix),
             cc_transform_node->local);
@@ -4330,14 +4336,18 @@ TEST_P(PaintArtifactCompositorTest, InSubtreeOfPageScale) {
 
   TransformPaintPropertyNode::State page_scale_transform_state;
   page_scale_transform_state.flags.in_subtree_of_page_scale = false;
-  page_scale_transform_state.compositor_element_id =
+  const CompositorElementId page_scale_compositor_element_id =
       CompositorElementIdFromUniqueObjectId(1);
+  page_scale_transform_state.compositor_element_id =
+      page_scale_compositor_element_id;
   auto page_scale_transform = TransformPaintPropertyNode::Create(
       *ancestor_transform, std::move(page_scale_transform_state));
 
   TransformPaintPropertyNode::State descendant_transform_state;
-  descendant_transform_state.compositor_element_id =
+  const CompositorElementId descendant_compositor_element_id =
       CompositorElementIdFromUniqueObjectId(2);
+  descendant_transform_state.compositor_element_id =
+      descendant_compositor_element_id;
   descendant_transform_state.flags.in_subtree_of_page_scale = true;
   descendant_transform_state.direct_compositing_reasons =
       CompositingReason::kWillChangeTransform;
@@ -4352,8 +4362,8 @@ TEST_P(PaintArtifactCompositorTest, InSubtreeOfPageScale) {
   Update(artifact.Build(), viewport_properties);
 
   cc::TransformTree& transform_tree = GetPropertyTrees().transform_tree;
-  const auto* cc_page_scale_transform = transform_tree.FindNodeFromElementId(
-      page_scale_transform_state.compositor_element_id);
+  const auto* cc_page_scale_transform =
+      transform_tree.FindNodeFromElementId(page_scale_compositor_element_id);
   // The page scale node is not in a subtree of the page scale layer.
   EXPECT_FALSE(cc_page_scale_transform->in_subtree_of_page_scale_layer);
 
@@ -4366,8 +4376,8 @@ TEST_P(PaintArtifactCompositorTest, InSubtreeOfPageScale) {
   }
 
   // Descendants of the page scale node should be in the page scale subtree.
-  const auto* cc_descendant_transform = transform_tree.FindNodeFromElementId(
-      descendant_transform_state.compositor_element_id);
+  const auto* cc_descendant_transform =
+      transform_tree.FindNodeFromElementId(descendant_compositor_element_id);
   EXPECT_TRUE(cc_descendant_transform->in_subtree_of_page_scale_layer);
 }
 
@@ -4806,7 +4816,8 @@ TEST_P(PaintArtifactCompositorTest, Non2dAxisAlignedRoundedRectClip) {
   const auto* cc_effect = GetPropertyTrees().effect_tree.Node(effect_id);
   EXPECT_OPACITY(effect_id, 1.f, kHasRenderSurface);
   EXPECT_OPACITY(cc_effect->parent_id, 0.5f, kNoRenderSurface);
-  EXPECT_EQ(cc_effect->clip_id, cc_clip->id);
+  // cc_clip should be applied in the clip mask layer.
+  EXPECT_EQ(cc_effect->clip_id, cc_clip->parent_id);
 }
 
 TEST_P(PaintArtifactCompositorTest,

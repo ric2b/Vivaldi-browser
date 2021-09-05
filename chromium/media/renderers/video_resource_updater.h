@@ -22,6 +22,7 @@
 #include "components/viz/common/resources/resource_format.h"
 #include "components/viz/common/resources/resource_id.h"
 #include "components/viz/common/resources/transferable_resource.h"
+#include "gpu/command_buffer/client/gles2_interface.h"
 #include "media/base/media_export.h"
 #include "ui/gfx/buffer_types.h"
 #include "ui/gfx/geometry/size.h"
@@ -40,7 +41,7 @@ namespace viz {
 class ClientResourceProvider;
 class ContextProvider;
 class RasterContextProvider;
-class RenderPass;
+class CompositorRenderPass;
 class SharedBitmapReporter;
 }  // namespace viz
 
@@ -114,7 +115,7 @@ class MEDIA_EXPORT VideoResourceUpdater
   // of this class (e.g: VideoFrameSubmitter). Producing only one quad will
   // allow viz to optimize compositing when the only content changing per-frame
   // is the video.
-  void AppendQuads(viz::RenderPass* render_pass,
+  void AppendQuads(viz::CompositorRenderPass* render_pass,
                    scoped_refptr<VideoFrame> frame,
                    gfx::Transform transform,
                    gfx::Rect quad_rect,
@@ -185,6 +186,8 @@ class MEDIA_EXPORT VideoResourceUpdater
   // video frame has no textures.
   VideoFrameExternalResources CreateForSoftwarePlanes(
       scoped_refptr<VideoFrame> video_frame);
+
+  gpu::gles2::GLES2Interface* ContextGL();
 
   void RecycleResource(uint32_t plane_resource_id,
                        const gpu::SyncToken& sync_token,

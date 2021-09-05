@@ -15,6 +15,7 @@ import "mojo/public/mojom/base/values.mojom";
 import "services/network/public/mojom/cookie_manager.mojom";
 import "services/network/public/mojom/host_resolver.mojom";
 import "services/network/public/mojom/http_raw_headers.mojom";
+import "services/network/public/mojom/mutable_network_traffic_annotation_tag.mojom";
 import "services/network/public/mojom/net_log.mojom";
 import "services/network/public/mojom/network_change_manager.mojom";
 import "services/network/public/mojom/network_context.mojom";
@@ -103,17 +104,6 @@ interface NetworkServiceClient {
     int32 render_frame_id,
     mojo_base.mojom.UnguessableToken devtool_request_id,
     URLLoaderCompletionStatus status);
-
-  // Called to log a UKM event for the
-  // Extensions.CrossOriginFetchFromContentScript3 metric.  See the metric
-  // definition in //tools/metrics/ukm/ukm.xml for more details, including when
-  // this event should be logged.
-  //
-  // |isolated_world_hostname| is the hostname of the isolated world origin
-  // that has initiated the network request.  See the doc comment for
-  // network.mojom.URLRequest.isolated_world_origin for more details.
-  // In practice, |isolated_world_hostname| is the Chrome Extension ID.
-  LogCrossOriginFetchFromContentScript3(string isolated_world_hostname);
 };
 
 // Values for configuring HTTP authentication that can only be set once.
@@ -403,6 +393,18 @@ interface NetworkService {
   [EnableIf=is_ct_supported]
   ClearSCTAuditingCache();
 
+  // Configures SCT auditing.
+  // This allows the embedder to specify whether SCT auditing should be enabled,
+  // what sampling rate to use on reports, and which URLLoaderFactory to use for
+  // sending reports.
+  // TODO(cthomp): Document what happens if the URLLoaderFactory is destroyed.
+  [EnableIf=is_ct_supported]
+  ConfigureSCTAuditing(bool enabled,
+                       double sampling_rate,
+                       url.mojom.Url report_uri,
+                       MutableNetworkTrafficAnnotationTag traffic_annotation,
+                       pending_remote<network.mojom.URLLoaderFactory> factory);
+
   // Calls base::debug::DumpWithoutCrashing for the network process.
   // TODO(http://crbug.com/934317): Remove this once done debugging renderer
   // hangs.
@@ -412,4 +414,15 @@ interface NetworkService {
   // Binds the test service's testing interface. Available only in some test
   // environments.
   BindTestInterface(pending_receiver<NetworkServiceTest> receiver);
+
+  // Sets the preloaded First-Party Sets data. |raw_sets| is the JSON-encoded
+  // string representation of a collection of set declarations according to the
+  // format specified in this document:
+  // https://github.com/privacycg/first-party-sets
+  // Note that by setting the preloaded First-Party Sets, any previous notion of
+  // preloaded First-Party Sets is cleared. This method can be partially
+  // successful in the event of malformed input (which also clears previously-
+  // known First-Party Sets), but does nothing if given non-JSON input or JSON
+  // which is not a dictionary.
+  SetPreloadedFirstPartySets(string raw_sets);
 };

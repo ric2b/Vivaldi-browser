@@ -50,6 +50,25 @@
         ]
       },
       {
+        "id": "CookieMode",
+        "type": "string",
+        "description": "CookieMode enumeration, corrensponds to CookieControlsMode in chromium/components/content_settings/core/browser/cookie_settings.h",
+        "enum": [
+          {
+            "name": "off",
+            "description": "All cookies allowed."
+          },
+          {
+            "name": "BlockThirdParty",
+            "description": "Block third party cookies."
+          },
+          {
+            "name": "BlockThirdPartyIncognitoOnly",
+            "description": "Block third party cookies in incognito mode only."
+          }
+        ]
+      },
+      {
         "id": "FlowDirection",
         "type": "string",
         "description": "The direction a dialog would be opened from the given rect.",
@@ -237,6 +256,25 @@
             "description": "The first day of the week. 0-6 (Sunday to Saturday)"
           }
         }
+      },
+      {
+        "id": "CaptureQRDestination",
+        "type": "string",
+        "description": "Where to store the generated QR code",
+        "enum": [
+          {
+            "name": "dataurl",
+            "description": "Store as a returned data url."
+          },
+          {
+            "name": "file",
+            "description": "Store in the download location."
+          },
+          {
+            "name": "clipboard",
+            "description": "Store in the clipboard"
+          }
+        ]
       }
     ],
     "functions": [
@@ -732,8 +770,9 @@
         "description": "Set Vivaldi default content settings.",
         "parameters": [
           {
-            "name": "block3rdParty",
-            "type": "boolean"
+            "name": "cookieMode",
+            "$ref": "CookieMode",
+            "description": "Cookie control for third party cookies."
           },
           {
             "type": "function",
@@ -754,11 +793,12 @@
         "parameters": [
           {
             "type": "function",
-            "name": "blockThirdParty",
+            "name": "cookieMode",
             "parameters": [
               {
-                "name": "result",
-                "type": "boolean"
+                "name": "cookieMode",
+                "$ref": "CookieMode",
+                "description": "Cookie control for third party cookies."
               }
             ]
           }
@@ -1084,6 +1124,35 @@
             ]
           }
         ]
+      },
+      {
+        "name": "generateQRCode",
+        "type": "function",
+        "description": "Generate a QR image based on the given data.",
+        "parameters": [
+          {
+            "name": "data",
+            "type": "string",
+            "description": "Data to encode in the QR code. The maximum length of the data is 288 bytes."
+          },
+          {
+            "name": "destination",
+            "$ref": "CaptureQRDestination",
+            "description": "Destination of the QR capture, defaults to 'dataurl'.",
+            "optional": true
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "result",
+                "type": "string",
+                "description": "data url with the generated image if |destination| is 'dataurl' or missing."
+              }
+            ]
+          }
+        ]
       }
     ],
     "events": [
@@ -1155,6 +1224,23 @@
         "type": "function",
         "description": "Fired when the Razer Chroma API has been initialized.",
         "parameters": []
+      },
+      {
+        "name": "onShowQRCode",
+        "type": "function",
+        "description": "Fired when Chromium wants us to show a QR code for the given url.",
+        "parameters": [
+          {
+            "name": "tabId",
+            "type": "integer",
+            "description": "tab id to show QR code on."
+          },
+          {
+            "name": "url",
+            "type": "string",
+            "description": "The url to show the QR code for."
+          }
+        ]
       }
     ]
   }

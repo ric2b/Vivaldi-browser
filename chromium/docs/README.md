@@ -154,9 +154,12 @@ used when committed.
     chrome:// URLs).
 *   [Watchlists](infra/watchlists.md) - Use watchlists to get notified of CLs
     you are interested in.
+*   [Shutdown](shutdown.md) - Explains the steps of Chrome shutdown, to make it
+    easier to determine where to add a new shutdown operation.
 
 ### Testing
 *   [Running and Debugging Web Tests](testing/web_tests.md)
+*   [On disabling tests](testing/disabling_tests.md)
 *   [Writing Web Tests](testing/writing_web_tests.md) - Web Tests using
     `content_shell`
 *   [Web Test Expectations and Baselines](testing/web_test_expectations.md) -
@@ -346,6 +349,11 @@ used when committed.
 *   [Memory Benchmarks](memory-infra/memory_benchmarks.md)
 *   [Heap Profiling](memory-infra/heap_profiler.md)
 
+### Metrics
+*   [Histograms](/tools/metrics/histograms/README.md)
+*   [User Actions](/tools/metrics/actions/README.md)
+*   [Code review guidelines](/tools/metrics/histograms/review_guidelines.md)
+
 ### Misc
 *   [Useful URLs](useful_urls.md) - A collection of links to various tools and
     dashboards
@@ -383,10 +391,6 @@ used when committed.
 ### Speed
 *   [Chrome Speed](speed/README.md) - Documentation for performance measurements and regressions in Chrome.
 *   [Chrome Speed Metrics](speed_metrics/README.md) - Documentation about user experience metrics in the web and their JavaScript APIs.
-
-### WebXR
-*   [Running OpenVR Without Headset](xr/run_openvr_without_headset.md) -
-    Instructions for running OpenVR on Windows without a headset
 
 ### Probably Obsolete
 *   [TPM Quick Reference](tpm_quick_ref.md) - Trusted Platform Module notes.

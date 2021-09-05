@@ -45,7 +45,7 @@ void FindTabHelper::RemoveObserver(FindResultObserver* observer) {
 void FindTabHelper::StartFinding(base::string16 search_string,
                                  bool forward_direction,
                                  bool case_sensitive,
-                                 bool find_next_if_selection_matches,
+                                 bool find_match,
                                  bool run_synchronously_for_testing) {
   // Remove the carriage return character, which generally isn't in web content.
   const base::char16 kInvalidChars[] = {'\r', 0};
@@ -60,13 +60,18 @@ void FindTabHelper::StartFinding(base::string16 search_string,
       return;
   }
 
-  // Keep track of the previous search.
-  previous_find_text_ = find_text_;
-
   // NB: search_string will be empty when using the FindNext keyboard shortcut.
   bool new_session = (find_text_ != search_string && !search_string.empty()) ||
                      (last_search_case_sensitive_ != case_sensitive) ||
                      find_op_aborted_;
+
+  // Continuing here would just find the same results, potentially causing
+  // some flicker in the highlighting.
+  if (!new_session && !find_match)
+    return;
+
+  // Keep track of the previous search.
+  previous_find_text_ = find_text_;
 
   current_find_request_id_ = find_request_id_counter_++;
   if (new_session)
@@ -77,6 +82,7 @@ void FindTabHelper::StartFinding(base::string16 search_string,
   last_search_case_sensitive_ = case_sensitive;
 
   find_op_aborted_ = false;
+  should_find_match_ = find_match;
 
   // Keep track of what the last search was across the tabs.
   if (delegate_)
@@ -86,7 +92,7 @@ void FindTabHelper::StartFinding(base::string16 search_string,
   options->forward = forward_direction;
   options->match_case = case_sensitive;
   options->new_session = new_session;
-  options->find_next_if_selection_matches = find_next_if_selection_matches;
+  options->find_match = find_match;
   options->run_synchronously_for_testing = run_synchronously_for_testing;
   web_contents_->Find(current_find_request_id_, find_text_, std::move(options));
 }
@@ -106,6 +112,7 @@ void FindTabHelper::StopFinding(SelectionAction selection_action) {
   last_completed_find_text_.clear();
   find_op_aborted_ = true;
   last_search_result_ = FindNotificationDetails();
+  should_find_match_ = false;
 
   content::StopFindAction action;
   switch (selection_action) {

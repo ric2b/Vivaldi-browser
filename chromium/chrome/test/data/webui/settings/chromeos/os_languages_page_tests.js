@@ -4,7 +4,7 @@
 
 // clang-format off
 // #import {LanguagesBrowserProxyImpl, LanguagesMetricsProxyImpl, LanguagesPageInteraction} from 'chrome://os-settings/chromeos/lazy_load.js';
-// #import {CrSettingsPrefs, Router} from 'chrome://os-settings/chromeos/os_settings.js';
+// #import {CrSettingsPrefs, Router, routes} from 'chrome://os-settings/chromeos/os_settings.js';
 // #import {assert} from 'chrome://resources/js/assert.m.js';
 // #import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 // #import {getFakeLanguagePrefs} from '../fake_language_settings_private.m.js'
@@ -13,6 +13,8 @@
 // #import {TestLanguagesMetricsProxy} from './test_os_languages_metrics_proxy.m.js';
 // #import {assertEquals, assertFalse, assertTrue} from '../../chai_assert.js';
 // #import {fakeDataBind} from '../../test_util.m.js';
+// #import {getDeepActiveElement} from 'chrome://resources/js/util.m.js';
+// #import {waitAfterNextRender} from 'chrome://test/test_util.m.js';
 // clang-format on
 
 cr.define('os_languages_page_tests', function() {
@@ -21,6 +23,8 @@ cr.define('os_languages_page_tests', function() {
     // The "add languages" dialog is tested by browser settings.
     LanguageMenu: 'language menu',
     InputMethods: 'input methods',
+    RecordMetrics: 'records metrics',
+    DetailsPage: 'details page',
   };
 
   suite('languages page', function() {
@@ -95,6 +99,7 @@ cr.define('os_languages_page_tests', function() {
 
     teardown(function() {
       PolymerTest.clearBody();
+      settings.Router.getInstance().resetRouteForTesting();
     });
 
     suite(TestNames.LanguageMenu, function() {
@@ -347,20 +352,42 @@ cr.define('os_languages_page_tests', function() {
       });
     });
 
-    suite('recordMetrics', function() {
-      test('records when adding languages', async () => {
+    suite(TestNames.DetailsPage, function() {
+      test('Deep link to show input options in shelf', async () => {
+        loadTimeData.overrideValues({
+          isDeepLinkingEnabled: true,
+        });
+
+        const params = new URLSearchParams;
+        params.append('settingId', '1201');
+        settings.Router.getInstance().navigateTo(
+            settings.routes.OS_LANGUAGES_DETAILS, params);
+
+        Polymer.dom.flush();
+
+        const deepLinkElement =
+            languagesPage.$$('#showImeMenu').$$('cr-toggle');
+        await test_util.waitAfterNextRender(deepLinkElement);
+        assertEquals(
+            deepLinkElement, getDeepActiveElement(),
+            'Show input options toggle should be focused for settingId=1201.');
+      });
+    });
+
+    suite(TestNames.RecordMetrics, function() {
+      test('when adding languages', async () => {
         languagesPage.$$('#addLanguages').click();
         Polymer.dom.flush();
         await metricsProxy.whenCalled('recordAddLanguages');
       });
 
-      test('records when managing input methods', async () => {
+      test('when managing input methods', async () => {
         languagesPage.$$('#manageInputMethods').click();
         Polymer.dom.flush();
         await metricsProxy.whenCalled('recordManageInputMethods');
       });
 
-      test('records when deactivating show ime menu', async () => {
+      test('when deactivating show ime menu', async () => {
         languagesPage.setPrefValue(
             'settings.language.ime_menu_activated', true);
         languagesPage.$$('#showImeMenu').click();
@@ -370,7 +397,7 @@ cr.define('os_languages_page_tests', function() {
             'recordToggleShowInputOptionsOnShelf'));
       });
 
-      test('records when activating show ime menu', async () => {
+      test('when activating show ime menu', async () => {
         languagesPage.setPrefValue(
             'settings.language.ime_menu_activated', false);
         languagesPage.$$('#showImeMenu').click();
@@ -381,7 +408,7 @@ cr.define('os_languages_page_tests', function() {
       });
 
       test(
-          'records when switching system language and restarting', async () => {
+          'when switching system language and restarting', async () => {
             // Adds several languages.
             for (const language of ['en-CA', 'en-US', 'tk', 'no']) {
               languageHelper.enableLanguage(language);
@@ -406,7 +433,7 @@ cr.define('os_languages_page_tests', function() {
                 item.click();
 
                 assertEquals(
-                    LanguagesPageInteraction.SWITCH_SYSTEM_LANGUAGE,
+                    settings.LanguagesPageInteraction.SWITCH_SYSTEM_LANGUAGE,
                     await metricsProxy.whenCalled('recordInteraction'));
                 return;
               }
@@ -419,7 +446,7 @@ cr.define('os_languages_page_tests', function() {
             restartButton.click();
 
             assertEquals(
-                LanguagesPageInteraction.RESTART,
+                settings.LanguagesPageInteraction.RESTART,
                 await metricsProxy.whenCalled('recordInteraction'));
           });
     });

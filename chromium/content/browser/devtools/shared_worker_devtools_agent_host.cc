@@ -10,6 +10,7 @@
 #include "content/browser/devtools/devtools_renderer_channel.h"
 #include "content/browser/devtools/devtools_session.h"
 #include "content/browser/devtools/protocol/inspector_handler.h"
+#include "content/browser/devtools/protocol/io_handler.h"
 #include "content/browser/devtools/protocol/network_handler.h"
 #include "content/browser/devtools/protocol/protocol.h"
 #include "content/browser/devtools/protocol/schema_handler.h"
@@ -19,6 +20,7 @@
 #include "content/browser/worker_host/shared_worker_service_impl.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_process_host.h"
+#include "net/cookies/site_for_cookies.h"
 #include "third_party/blink/public/mojom/devtools/devtools_agent.mojom.h"
 
 namespace content {
@@ -56,6 +58,10 @@ GURL SharedWorkerDevToolsAgentHost::GetURL() {
   return instance_.url();
 }
 
+url::Origin SharedWorkerDevToolsAgentHost::GetConstructorOrigin() {
+  return instance_.constructor_origin();
+}
+
 bool SharedWorkerDevToolsAgentHost::Activate() {
   return false;
 }
@@ -71,6 +77,7 @@ bool SharedWorkerDevToolsAgentHost::Close() {
 
 bool SharedWorkerDevToolsAgentHost::AttachSession(DevToolsSession* session,
                                                   bool acquire_wake_lock) {
+  session->AddHandler(std::make_unique<protocol::IOHandler>(GetIOContext()));
   session->AddHandler(std::make_unique<protocol::InspectorHandler>());
   session->AddHandler(std::make_unique<protocol::NetworkHandler>(
       GetId(), devtools_worker_token_, GetIOContext(),
@@ -123,6 +130,18 @@ void SharedWorkerDevToolsAgentHost::WorkerDestroyed() {
   worker_host_ = nullptr;
   GetRendererChannel()->SetRenderer(mojo::NullRemote(), mojo::NullReceiver(),
                                     ChildProcessHost::kInvalidUniqueID);
+}
+
+DevToolsAgentHostImpl::NetworkLoaderFactoryParamsAndInfo
+SharedWorkerDevToolsAgentHost::CreateNetworkFactoryParamsForDevTools() {
+  DCHECK(worker_host_);
+  return {GetConstructorOrigin(), net::SiteForCookies::FromUrl(GetURL()),
+          worker_host_->CreateNetworkFactoryParamsForSubresources()};
+}
+
+RenderProcessHost* SharedWorkerDevToolsAgentHost::GetProcessHost() {
+  DCHECK(worker_host_);
+  return worker_host_->GetProcessHost();
 }
 
 }  // namespace content

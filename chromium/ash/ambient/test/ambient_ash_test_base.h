@@ -19,11 +19,16 @@
 #include "services/media_session/public/mojom/media_session.mojom.h"
 #include "ui/views/widget/widget.h"
 
+namespace views {
+class Label;
+}  // namespace views
+
 namespace ash {
 
 class AmbientAccessTokenController;
 class AmbientContainerView;
 class AmbientPhotoController;
+class FakeAmbientBackendControllerImpl;
 class MediaStringView;
 
 // The base class to test the Ambient Mode in Ash.
@@ -62,6 +67,10 @@ class AmbientAshTestBase : public AshTestBase {
   void SimulateSystemSuspendAndWait(
       power_manager::SuspendImminent::Reason reason);
 
+  views::View* GetMediaStringViewTextContainer();
+
+  views::Label* GetMediaStringViewTextLabel();
+
   // Simulates the system starting to resume.
   // Wait until the event has been processed.
   void SimulateSystemResumeAndWait();
@@ -87,6 +96,21 @@ class AmbientAshTestBase : public AshTestBase {
   // Advance the task environment timer to load the next photo.
   void FastForwardToNextImage();
 
+  // Advance the task environment timer a tiny amount. This is intended to
+  // trigger any pending async operations.
+  void FastForwardTiny();
+
+  // Advance the task environment timer to load the weather info.
+  void FastForwardToRefreshWeather();
+
+  // Advance the task environment timer to ambient mode lock screen delay.
+  void FastForwardToLockScreen();
+  void FastForwardHalfLockScreenDelay();
+
+  void SetPowerStateCharging();
+  void SetPowerStateDischarging();
+  void SetPowerStateFull();
+
   // Returns the number of active wake locks of type |type|.
   int GetNumOfActiveWakeLocks(device::mojom::WakeLockType type);
 
@@ -95,6 +119,8 @@ class AmbientAshTestBase : public AshTestBase {
   void IssueAccessToken(const std::string& access_token, bool with_error);
 
   bool IsAccessTokenRequestPending() const;
+
+  base::TimeDelta GetRefreshTokenDelay();
 
   AmbientBackgroundImageView* GetAmbientBackgroundImageView();
 
@@ -110,13 +136,17 @@ class AmbientAshTestBase : public AshTestBase {
 
   AmbientAccessTokenController* token_controller();
 
+  FakeAmbientBackendControllerImpl* backend_controller();
+
   void FetchTopics();
 
   void FetchImage();
 
+  void FetchBackupImages();
+
   void SetUrlLoaderData(std::unique_ptr<std::string> data);
 
-  void SeteImageDecoderImage(const gfx::ImageSkia& image);
+  void SetImageDecoderImage(const gfx::ImageSkia& image);
 
  private:
   base::test::ScopedFeatureList scoped_feature_list_;

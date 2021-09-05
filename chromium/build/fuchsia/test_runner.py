@@ -7,15 +7,9 @@
 """Deploys and runs a test package on a Fuchsia target."""
 
 import argparse
-import json
-import logging
 import os
 import runner_logs
-import socket
-import subprocess
 import sys
-import tempfile
-import time
 
 from common_args import AddCommonArgs, ConfigureLogging, GetDeploymentTargetForArgs
 from net_test_server import SetupTestServer
@@ -27,6 +21,7 @@ from symbolizer import BuildIdsPaths
 DEFAULT_TEST_SERVER_CONCURRENCY = 4
 
 TEST_RESULT_PATH = '/data/test_summary.json'
+TEST_PERF_RESULT_PATH = '/data/test_perf_summary.json'
 TEST_FILTER_PATH = '/data/test_filter.txt'
 
 def main():
@@ -63,7 +58,7 @@ def main():
                       type=int,
                       help='Sets the limit of test batch to run in a single '
                       'process.')
-  # --test-launcher-filter-file is specified relative to --output-directory,
+  # --test-launcher-filter-file is specified relative to --out-dir,
   # so specifying type=os.path.* will break it.
   parser.add_argument('--test-launcher-filter-file',
                       default=None,
@@ -85,11 +80,15 @@ def main():
                       help='Arguments for the test process.')
   parser.add_argument('child_args', nargs='*',
                       help='Arguments for the test process.')
+  parser.add_argument('--isolated-script-test-output',
+                      help='If present, store test results on this path.')
+  parser.add_argument('--isolated-script-test-perf-output',
+                      help='If present, store chartjson results on this path.')
   args = parser.parse_args()
 
-  # Flag output_directory is required for tests launched with this script.
-  if not args.output_directory:
-    raise ValueError("output-directory must be specified.")
+  # Flag out_dir is required for tests launched with this script.
+  if not args.out_dir:
+    raise ValueError("out-dir must be specified.")
 
   ConfigureLogging(args)
 
@@ -120,7 +119,7 @@ def main():
     if args.device == 'device':
       test_concurrency = DEFAULT_TEST_SERVER_CONCURRENCY
     else:
-      test_concurrency = args.qemu_cpu_cores
+      test_concurrency = args.cpu_cores
   if test_concurrency:
     child_args.append('--test-launcher-jobs=%d' % test_concurrency)
 
@@ -136,6 +135,11 @@ def main():
     child_args.append('--gtest_break_on_failure')
   if args.test_launcher_summary_output:
     child_args.append('--test-launcher-summary-output=' + TEST_RESULT_PATH)
+  if args.isolated_script_test_output:
+    child_args.append('--isolated-script-test-output=' + TEST_RESULT_PATH)
+  if args.isolated_script_test_perf_output:
+    child_args.append('--isolated-script-test-perf-output=' +
+                      TEST_PERF_RESULT_PATH)
 
   if args.child_arg:
     child_args.extend(args.child_arg)
@@ -143,7 +147,7 @@ def main():
     child_args.extend(args.child_args)
 
   try:
-    with GetDeploymentTargetForArgs(args) as target, \
+    with GetDeploymentTargetForArgs() as target, \
          SystemLogReader() as system_logger, \
          RunnerLogManager(args.runner_logs_dir, BuildIdsPaths(args.package)):
       target.Start()
@@ -163,9 +167,8 @@ def main():
                                       args.package_name)
 
       run_package_args = RunPackageArgs.FromCommonArgs(args)
-      returncode = RunPackage(
-          args.output_directory, target, args.package, args.package_name,
-          child_args, run_package_args)
+      returncode = RunPackage(args.out_dir, target, args.package,
+                              args.package_name, child_args, run_package_args)
 
       if test_server:
         test_server.Stop()
@@ -173,6 +176,16 @@ def main():
       if args.test_launcher_summary_output:
         target.GetFile(TEST_RESULT_PATH, args.test_launcher_summary_output,
                       for_package=args.package_name)
+
+      if args.isolated_script_test_output:
+        target.GetFile(TEST_RESULT_PATH,
+                       args.isolated_script_test_output,
+                       for_package=args.package_name)
+
+      if args.isolated_script_test_perf_output:
+        target.GetFile(TEST_PERF_RESULT_PATH,
+                       args.isolated_script_test_perf_output,
+                       for_package=args.package_name)
 
       return returncode
 

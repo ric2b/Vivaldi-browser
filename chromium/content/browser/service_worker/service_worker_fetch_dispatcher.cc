@@ -17,9 +17,9 @@
 #include "content/browser/child_process_security_policy_impl.h"
 #include "content/browser/devtools/service_worker_devtools_agent_host.h"
 #include "content/browser/devtools/service_worker_devtools_manager.h"
-#include "content/browser/frame_host/frame_tree_node.h"
-#include "content/browser/frame_host/navigation_request.h"
 #include "content/browser/loader/navigation_url_loader_impl.h"
+#include "content/browser/renderer_host/frame_tree_node.h"
+#include "content/browser/renderer_host/navigation_request.h"
 #include "content/browser/service_worker/embedded_worker_status.h"
 #include "content/browser/service_worker/service_worker_context_core.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
@@ -324,8 +324,10 @@ void CreateNetworkFactoryForNavigationPreloadOnUI(
       partition->browser_context(), frame_tree_node->current_frame_host(),
       frame_tree_node->current_frame_host()->GetProcess()->GetID(),
       ContentBrowserClient::URLLoaderFactoryType::kNavigation, url::Origin(),
-      frame_tree_node->navigation_request()->GetNavigationId(), &receiver,
-      &header_client, &bypass_redirect_checks_unused,
+      frame_tree_node->navigation_request()->GetNavigationId(),
+      base::UkmSourceId::FromInt64(
+          frame_tree_node->navigation_request()->GetNextPageUkmSourceId()),
+      &receiver, &header_client, &bypass_redirect_checks_unused,
       /*disable_secure_dns=*/nullptr, /*factory_override=*/nullptr);
 
   // Make the network factory.

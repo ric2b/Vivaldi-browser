@@ -74,7 +74,9 @@ class MockMojoVideoCaptureHost : public media::mojom::blink::VideoCaptureHost {
                     const media::VideoCaptureParams&));
   MOCK_METHOD1(RequestRefreshFrame, void(const base::UnguessableToken&));
   MOCK_METHOD3(ReleaseBuffer,
-               void(const base::UnguessableToken&, int32_t, double));
+               void(const base::UnguessableToken&,
+                    int32_t,
+                    const media::VideoFrameFeedback&));
   MOCK_METHOD3(GetDeviceSupportedFormatsMock,
                void(const base::UnguessableToken&,
                     const base::UnguessableToken&,
@@ -118,7 +120,9 @@ class MockMojoVideoCaptureHost : public media::mojom::blink::VideoCaptureHost {
 class VideoCaptureImplTest : public ::testing::Test {
  public:
   VideoCaptureImplTest()
-      : video_capture_impl_(new VideoCaptureImpl(session_id_)) {
+      : video_capture_impl_(
+            new VideoCaptureImpl(session_id_,
+                                 base::ThreadTaskRunnerHandle::Get())) {
     params_small_.requested_format = media::VideoCaptureFormat(
         gfx::Size(176, 144), 30, media::PIXEL_FORMAT_I420);
     params_large_.requested_format = media::VideoCaptureFormat(

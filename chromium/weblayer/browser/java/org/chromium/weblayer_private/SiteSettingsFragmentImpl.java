@@ -28,6 +28,7 @@ import androidx.preference.Preference;
 import androidx.preference.PreferenceFragmentCompat;
 
 import org.chromium.components.browser_ui.settings.SettingsUtils;
+import org.chromium.components.browser_ui.site_settings.AllSiteSettings;
 import org.chromium.components.browser_ui.site_settings.SingleCategorySettings;
 import org.chromium.components.browser_ui.site_settings.SingleWebsiteSettings;
 import org.chromium.components.browser_ui.site_settings.SiteSettings;
@@ -204,14 +205,23 @@ public class SiteSettingsFragmentImpl extends RemoteFragmentImpl {
             Intent intent;
             String newFragmentClassName = preference.getFragment();
             Bundle newFragmentArgs = preference.getExtras();
+            ProfileImpl profile = mFragmentImpl.getProfile();
             if (newFragmentClassName.equals(SiteSettings.class.getName())) {
                 intent = SiteSettingsIntentHelper.createIntentForCategoryList(
-                        mFragmentImpl.getEmbedderContext(), mFragmentImpl.getProfile().getName());
+                        mFragmentImpl.getEmbedderContext(), profile.getName(),
+                        profile.isIncognito());
             } else if (newFragmentClassName.equals(SingleCategorySettings.class.getName())) {
                 intent = SiteSettingsIntentHelper.createIntentForSingleCategory(
-                        mFragmentImpl.getEmbedderContext(), mFragmentImpl.getProfile().getName(),
+                        mFragmentImpl.getEmbedderContext(), profile.getName(),
+                        profile.isIncognito(),
                         newFragmentArgs.getString(SingleCategorySettings.EXTRA_CATEGORY),
                         newFragmentArgs.getString(SingleCategorySettings.EXTRA_TITLE));
+            } else if (newFragmentClassName.equals(AllSiteSettings.class.getName())) {
+                intent = SiteSettingsIntentHelper.createIntentForAllSites(
+                        mFragmentImpl.getEmbedderContext(), profile.getName(),
+                        profile.isIncognito(),
+                        newFragmentArgs.getString(AllSiteSettings.EXTRA_CATEGORY),
+                        newFragmentArgs.getString(AllSiteSettings.EXTRA_TITLE));
             } else if (newFragmentClassName.equals(SingleWebsiteSettings.class.getName())) {
                 WebsiteAddress address;
                 if (newFragmentArgs.containsKey(SingleWebsiteSettings.EXTRA_SITE)) {
@@ -225,8 +235,8 @@ public class SiteSettingsFragmentImpl extends RemoteFragmentImpl {
                     throw new IllegalArgumentException("No website provided");
                 }
                 intent = SiteSettingsIntentHelper.createIntentForSingleWebsite(
-                        mFragmentImpl.getEmbedderContext(), mFragmentImpl.getProfile().getName(),
-                        address.getOrigin());
+                        mFragmentImpl.getEmbedderContext(), profile.getName(),
+                        profile.isIncognito(), address.getOrigin());
             } else {
                 throw new IllegalArgumentException("Unsupported Fragment: " + newFragmentClassName);
             }
@@ -273,12 +283,27 @@ public class SiteSettingsFragmentImpl extends RemoteFragmentImpl {
     public SiteSettingsFragmentImpl(ProfileManager profileManager,
             IRemoteFragmentClient remoteFragmentClient, Bundle intentExtras) {
         super(remoteFragmentClient);
-        mProfile = profileManager.getProfile(
-                intentExtras.getString(SiteSettingsFragmentArgs.PROFILE_NAME));
+        String profileName = intentExtras.getString(SiteSettingsFragmentArgs.PROFILE_NAME);
+        boolean isIncognito;
+        if (intentExtras.containsKey(SiteSettingsFragmentArgs.IS_INCOGNITO_PROFILE)) {
+            isIncognito =
+                    intentExtras.getBoolean(SiteSettingsFragmentArgs.IS_INCOGNITO_PROFILE, false);
+        } else {
+            isIncognito = "".equals(profileName);
+        }
+        mProfile = profileManager.getProfile(profileName, isIncognito);
         // Convert the WebLayer ABI's Site Settings arguments into the format the Site Settings
         // implementation fragments expect.
         Bundle fragmentArgs = intentExtras.getBundle(SiteSettingsFragmentArgs.FRAGMENT_ARGUMENTS);
         switch (intentExtras.getString(SiteSettingsFragmentArgs.FRAGMENT_NAME)) {
+            case SiteSettingsFragmentArgs.ALL_SITES:
+                mFragmentClass = AllSiteSettings.class;
+                mFragmentArguments = new Bundle();
+                mFragmentArguments.putString(AllSiteSettings.EXTRA_TITLE,
+                        fragmentArgs.getString(SiteSettingsFragmentArgs.ALL_SITES_TITLE));
+                mFragmentArguments.putString(AllSiteSettings.EXTRA_CATEGORY,
+                        fragmentArgs.getString(SiteSettingsFragmentArgs.ALL_SITES_TYPE));
+                break;
             case SiteSettingsFragmentArgs.CATEGORY_LIST:
                 mFragmentClass = SiteSettings.class;
                 mFragmentArguments = null;

@@ -92,7 +92,7 @@ class ChromeMetricsServiceAccessor : public metrics::MetricsServiceAccessor {
   friend class ChromeBrowserFieldTrials;
   // For ClangPGO.
   friend class ChromeBrowserMainExtraPartsMetrics;
-  // For StackSamplingConfiguration.
+  // For ThreadProfilerConfiguration.
   friend class ChromeBrowserMainParts;
   friend class ChromeContentBrowserClient;
   friend class ChromeMetricsServicesManagerClient;
@@ -121,6 +121,7 @@ class ChromeMetricsServiceAccessor : public metrics::MetricsServiceAccessor {
   friend class ChromeBrowserMainExtraPartsGpu;
   friend class Browser;
   friend class OptimizationGuideKeyedService;
+  friend class WebUITabStripFieldTrial;
 
 #if defined(OS_CHROMEOS)
   friend class ChromeCameraAppUIDelegate;

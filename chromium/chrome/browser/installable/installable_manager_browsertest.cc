@@ -8,7 +8,9 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/optional.h"
 #include "base/run_loop.h"
+#include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind_test_util.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -22,13 +24,13 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/web_applications/test/service_worker_registration_waiter.h"
-#include "chrome/common/chrome_features.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "content/public/common/content_features.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
+#include "third_party/blink/public/common/features.h"
 
 namespace {
 
@@ -314,10 +316,10 @@ class InstallableManagerOfflineCapabilityBrowserTest
           is_service_worker_offline_supported_(std::get<1>(GetParam())) {
       if (is_offline_check_feature_enabled_) {
         scoped_feature_list_.InitAndEnableFeature(
-            features::kCheckOfflineCapability);
+            blink::features::kCheckOfflineCapability);
       } else {
         scoped_feature_list_.InitAndDisableFeature(
-            features::kCheckOfflineCapability);
+            blink::features::kCheckOfflineCapability);
       }
     }
     ~InstallableManagerOfflineCapabilityBrowserTest() override = default;
@@ -1589,9 +1591,9 @@ IN_PROC_BROWSER_TEST_F(InstallableManagerBrowserTest,
 
     EXPECT_FALSE(tester->manifest().IsEmpty());
     EXPECT_EQ(std::vector<InstallableStatusCode>{}, tester->errors());
-    EXPECT_EQ(base::ASCIIToUTF16("Manifest test app"),
-              tester->manifest().name.string());
-    EXPECT_EQ(base::string16(), tester->manifest().short_name.string());
+    EXPECT_EQ(base::ASCIIToUTF16("Manifest test app"), tester->manifest().name);
+    EXPECT_EQ(base::string16(),
+              tester->manifest().short_name.value_or(base::string16()));
   }
 
   {
@@ -1621,9 +1623,9 @@ IN_PROC_BROWSER_TEST_F(InstallableManagerBrowserTest,
     run_loop.Run();
 
     EXPECT_FALSE(tester->manifest().IsEmpty());
-    EXPECT_EQ(base::string16(), tester->manifest().name.string());
-    EXPECT_EQ(base::ASCIIToUTF16("Manifest"),
-              tester->manifest().short_name.string());
+    EXPECT_EQ(base::string16(),
+              tester->manifest().name.value_or(base::string16()));
+    EXPECT_EQ(base::ASCIIToUTF16("Manifest"), tester->manifest().short_name);
     EXPECT_EQ(std::vector<InstallableStatusCode>{}, tester->errors());
   }
 }

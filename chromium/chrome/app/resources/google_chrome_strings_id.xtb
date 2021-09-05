@@ -21,6 +21,7 @@
 <translation id="1553358976309200471">Perbarui browser Chrome</translation>
 <translation id="1587223624401073077">Google Chrome menggunakan kamera Anda.</translation>
 <translation id="1587325591171447154"><ph name="FILE_NAME" /> berbahaya, sehingga Chrome memblokirnya.</translation>
+<translation id="1597911401261118146">Untuk memeriksa apakah sandi Anda aman dari pelanggaran data dan masalah keamanan lainnya, <ph name="BEGIN_LINK" />login ke Chrome<ph name="END_LINK" />.</translation>
 <translation id="1619887657840448962">Agar Chrome lebih aman, kami menonaktifkan ekstensi berikut yang tidak tercantum dalam <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> dan mungkin telah ditambahkan tanpa sepengetahuan Anda.</translation>
 <translation id="162448658176061655">Chrome memeriksa software yang tidak diinginkan seminggu sekali. Terakhir diperiksa: sesaat yang lalu.</translation>
 <translation id="162629503687514352">Chrome OS tidak dapat menyinkronkan sandi Anda.</translation>
@@ -34,6 +35,7 @@
 <translation id="1734234790201236882">Chrome akan menyimpan sandi ini di Akun Google. Anda tidak perlu mengingatnya.</translation>
 <translation id="174539241580958092">Google Chrome tidak dapat menyinkronkan data Anda karena kesalahan saat masuk.</translation>
 <translation id="1759842336958782510">Chrome</translation>
+<translation id="1786003790898721085">Pastikan Anda login ke Chrome di <ph name="TARGET_DEVICE_NAME" /> Anda, lalu coba kirimkan lagi.</translation>
 <translation id="1812689907177901597">Dengan menonaktifkan ini, Anda dapat login ke situs Google seperti Gmail tanpa harus login ke Chrome</translation>
 <translation id="1860536484129686729">Chrome memerlukan izin akses ke kamera untuk situs ini</translation>
 <translation id="1873233029667955273">Google Chrome bukan browser default</translation>
@@ -71,6 +73,7 @@
 <translation id="2871893339301912279">Anda sudah masuk ke Chrome!</translation>
 <translation id="2885378588091291677">Pengelola Tugas</translation>
 <translation id="2888126860611144412">Tentang Chrome</translation>
+<translation id="2926676257163822632">Sandi yang lemah mudah ditebak. Izinkan Chrome <ph name="BEGIN_LINK" />membuat dan mengingat sandi yang kuat untuk Anda<ph name="END_LINK" />.</translation>
 <translation id="2929907241665500097">Chrome tidak dapat diupdate, terjadi error. <ph name="BEGIN_LINK" />Perbaiki masalah update Chrome dan update yang gagal.<ph name="END_LINK" /></translation>
 <translation id="2969728957078202736"><ph name="PAGE_TITLE" /> - Login Jaringan - Chrome</translation>
 <translation id="3037838751736561277">Google Chrome berjalan di mode latar belakang.</translation>
@@ -78,6 +81,7 @@
 <translation id="3065168410429928842">Tab Chrome</translation>
 <translation id="3080151273017101988">Terus jalankan apl latar belakang saat Google Chrome ditutup</translation>
 <translation id="3089968997497233615">Tersedia versi Google Chrome yang baru dan lebih aman.</translation>
+<translation id="3114643501466072395">Untuk memeriksa apakah sandi Anda yang lain aman dari pelanggaran data dan masalah keamanan lainnya, <ph name="BEGIN_LINK" />login ke Chrome<ph name="END_LINK" />.</translation>
 <translation id="3127818369811890733">Chrome OS tidak dapat menyinkronkan data Anda.</translation>
 <translation id="3149510190863420837">Aplikasi Chrome</translation>
 <translation id="3360895254066713204">Pembantu Chrome</translation>
@@ -98,6 +102,7 @@
 <translation id="3622797965165704966">Kini, menggunakan Chrome dengan Akun Google Anda dan di komputer bersama jadi lebih mudah.</translation>
 <translation id="3718181793972440140">Tindakan ini akan menghapus 1 item dari perangkat ini. Untuk mengambil data nanti, login ke Chrome sebagai <ph name="USER_EMAIL" />.</translation>
 <translation id="3735758079232443276">Ekstensi "<ph name="EXTENSION_NAME" />" telah mengubah apa yang ditampilkan oleh halaman saat Anda memulai Chrome.</translation>
+<translation id="3779473566290487688">Untuk mendapatkan update Google Chrome selanjutnya, Anda perlu OS X 10.11 atau yang lebih baru. Komputer ini menggunakan OS X 10.10.</translation>
 <translation id="3780814664026482060">Chrome - <ph name="PAGE_TITLE" /></translation>
 <translation id="386202838227397562">Tutup semua jendela Google Chrome, lalu coba lagi.</translation>
 <translation id="3865754807470779944">Chrome versi <ph name="PRODUCT_VERSION" /> sudah terinstal</translation>
@@ -184,6 +189,7 @@
 <translation id="6454142105866844106">Chrome memeriksa software yang tidak diinginkan seminggu sekali</translation>
 <translation id="6515495397637126556"><ph name="PAGE_TITLE" /> - Google Chrome Dev</translation>
 <translation id="6566149418543181476">Memperbarui Google Chrome (<ph name="PROGRESS_PERCENT" />)</translation>
+<translation id="6650333065969705433">Untuk memutar media yang dilindungi menggunakan Rosetta, Anda harus memulai ulang Chrome.</translation>
 <translation id="6676384891291319759">Akses Internet</translation>
 <translation id="6679975945624592337">Jalankan Google Chrome di Background</translation>
 <translation id="6750954913813541382">Untuk memperbaiki kesalahan ejaan, Chrome mengirim teks yang Anda ketikkan di browser ke Google</translation>
@@ -194,6 +200,7 @@
 <translation id="6967962315388095737">Inbound rule untuk Google Chrome Beta guna mengizinkan traffic mDNS.</translation>
 <translation id="6982337800632491844"><ph name="DOMAIN" /> mewajibkan Anda membaca dan menyetujui Persyaratan Layanan sebelum menggunakan perangkat ini. Persyaratan ini tidak memperluas, mengubah, atau membatasi Persyaratan Chrome OS.</translation>
 <translation id="6989339256997917931">Google Chrome telah diperbarui, tetapi Anda belum menggunakannya selama setidaknya 30 hari.</translation>
+<translation id="7054640471403081847">Komputer ini akan segera berhenti menerima pembaruan Google Chrome karena perangkat kerasnya tidak didukung lagi.</translation>
 <translation id="7062128746136194023">Orang tuamu telah menonaktifkan "Izin untuk situs, aplikasi, dan ekstensi" untuk Chrome. Tindakan menambahkan <ph name="EXTENSION_TYPE_PARAMETER" /> ini tidak diizinkan.</translation>
 <translation id="7098166902387133879">Google Chrome menggunakan mikrofon Anda.</translation>
 <translation id="7106741999175697885">Pengelola Tugas - Google Chrome</translation>
@@ -213,7 +220,6 @@
 <translation id="7486227612705979895">Chrome akan mengakses Drive Anda untuk membuat saran di kolom URL</translation>
 <translation id="7535429826459677826">Google Chrome Dev</translation>
 <translation id="7573289029918943991">Untuk melihat apakah versi pada perangkat Anda adalah yang terbaru, buka <ph name="LINK_BEGIN" />Setelan Chrome OS<ph name="LINK_END" /></translation>
-<translation id="7589360514048265910">Komputer ini tidak akan menerima update Google Chrome lagi karena Mac OS X 10.9 sudah tidak didukung.</translation>
 <translation id="7592736734348559088">Google Chrome tidak dapat menyinkronkan data karena detail ID masuk akun Anda belum diperbarui.</translation>
 <translation id="7626032353295482388">Selamat Datang di Chrome</translation>
 <translation id="7629695634924605473">Chrome akan memberi tahu jika sandi Anda disusupi</translation>
@@ -244,10 +250,12 @@
 <translation id="8344083974188970894">{NUM_MINS,plural, =1{Chrome memeriksa software yang tidak diinginkan seminggu sekali. Terakhir diperiksa: 1 menit yang lalu.}other{Chrome memeriksa software yang tidak diinginkan seminggu sekali. Terakhir diperiksa: {NUM_MINS} menit yang lalu.}}</translation>
 <translation id="8370517070665726704">Hak cipta <ph name="YEAR" /> Google LLC. Semua hak dilindungi undang-undang.</translation>
 <translation id="840084489713044809">Google Chrome ingin mengekspor sandi.</translation>
+<translation id="8433638294851456451">Untuk mengirimkan nomor dari sini ke ponsel Android Anda, login ke Chrome di kedua perangkat.</translation>
 <translation id="8498858610309223613">Update keamanan khusus untuk Google Chrome baru saja diterapkan. Mulai ulang Google Chrome sekarang dan kami akan memulihkan tab Anda.</translation>
 <translation id="8521348052903287641">Inbound rule untuk Google Chrome Dev guna mengizinkan traffic mDNS.</translation>
 <translation id="8540666473246803645">Google Chrome</translation>
 <translation id="8556340503434111824">Tersedia versi Google Chrome yang baru, dan versi ini lebih cepat dari sebelumnya.</translation>
+<translation id="861359755029082151">Rosetta memungkinkan Chrome memutar media yang dilindungi di halaman ini.</translation>
 <translation id="8614913330719544658">Google Chrome tidak merespons. Luncurkan ulang sekarang?</translation>
 <translation id="861702415419836452">Chrome memerlukan izin untuk mengakses kamera guna membuat peta 3D untuk area di sekeliling Anda.</translation>
 <translation id="8625237574518804553">{0,plural, =1{Chrome akan diluncurkan ulang dalam 1 menit}other{Chrome akan diluncurkan ulang dalam # menit}}</translation>
@@ -262,7 +270,9 @@
 <translation id="8834965163890861871">Google Chrome mencoba mengedit sandi. Ketik sandi Windows Anda untuk mengizinkannya.</translation>
 <translation id="884296878221830158">Juga mengontrol halaman apa yang ditampilkan saat Anda memulai Chrome atau mengeklik tombol Beranda.</translation>
 <translation id="8862326446509486874">Anda tidak memiliki hak yang diperlukan untuk pemasangan tingkat sistem. Coba jalankan lagi pemasang saat login sebagai Administrator.</translation>
+<translation id="8907709077090383765">Agar Chrome dapat memutar media yang dilindungi, Anda harus menginstal Rosetta. Ingin menginstalnya sekarang?</translation>
 <translation id="8914504000324227558">Luncurkan Ulang Chrome</translation>
+<translation id="8922193594870374009">Untuk mengirimkan nomor dari <ph name="ORIGIN" /> ke ponsel Android Anda, login ke Chrome di kedua perangkat.</translation>
 <translation id="8999208279178790196">{0,plural, =0{Update Chrome tersedia}=1{Update Chrome tersedia}other{Update Chrome telah tersedia selama # hari}}</translation>
 <translation id="9026991721384951619">Chrome OS tidak dapat menyinkronkan data karena detail ID masuk akun Anda belum diperbarui.</translation>
 <translation id="9067395829937117663">Google Chrome memerlukan Windows 7 atau lebih tinggi.</translation>

@@ -79,6 +79,8 @@ mojom("mojom") {
         {
           mojom = "gfx.mojom.GpuFenceHandle"
           cpp = "::gfx::GpuFenceHandle"
+          move_only = true
+          nullable_is_same_type = true
         },
       ]
       traits_headers = [ "gpu_fence_handle_mojom_traits.h" ]
@@ -93,6 +95,16 @@ mojom("mojom") {
       ]
       traits_headers = [ "presentation_feedback_mojom_traits.h" ]
       traits_public_deps = [ "//ui/gfx" ]
+    },
+    {
+      types = [
+        {
+          mojom = "gfx.mojom.SelectionBound"
+          cpp = "::gfx::SelectionBound"
+        },
+      ]
+      traits_headers = [ "selection_bound_mojom_traits.h" ]
+      traits_public_deps = [ "//ui/gfx/geometry/mojom:mojom_traits" ]
     },
     {
       types = [
@@ -182,16 +194,6 @@ mojom("mojom") {
         },
       ]
       traits_headers = [ "rrect_f_mojom_traits.h" ]
-      traits_public_deps = [ "//ui/gfx/geometry/mojom:mojom_traits" ]
-    },
-    {
-      types = [
-        {
-          mojom = "gfx.mojom.SelectionBound"
-          cpp = "::gfx::SelectionBound"
-        },
-      ]
-      traits_headers = [ "selection_bound_mojom_traits.h" ]
       traits_public_deps = [ "//ui/gfx/geometry/mojom:mojom_traits" ]
     },
     {

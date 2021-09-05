@@ -8,6 +8,8 @@
 
 #include "ash/public/cpp/network_config_service.h"
 #include "base/metrics/histogram_functions.h"
+#include "chrome/browser/nearby_sharing/contacts/nearby_share_contact_manager.h"
+#include "chrome/browser/nearby_sharing/nearby_receive_manager.h"
 #include "chrome/browser/nearby_sharing/nearby_share_settings.h"
 #include "chrome/browser/nearby_sharing/nearby_sharing_service_factory.h"
 #include "chrome/browser/nearby_sharing/nearby_sharing_service_impl.h"
@@ -18,12 +20,13 @@
 #include "chrome/browser/ui/webui/settings/chromeos/os_settings_manager_factory.h"
 #include "chrome/browser/ui/webui/settings/chromeos/pref_names.h"
 #include "chrome/browser/ui/webui/settings/chromeos/search/search_handler.h"
-#include "chrome/browser/ui/webui/settings/chromeos/search/settings_user_action_tracker.h"
+#include "chrome/browser/ui/webui/settings/chromeos/settings_user_action_tracker.h"
 #include "chrome/browser/ui/webui/webui_util.h"
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/grit/os_settings_resources.h"
 #include "chrome/grit/os_settings_resources_map.h"
 #include "chromeos/constants/chromeos_features.h"
+#include "chromeos/services/cellular_setup/cellular_setup_impl.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/web_ui_data_source.h"
@@ -86,6 +89,10 @@ OSSettingsUI::OSSettingsUI(content::WebUI* web_ui)
                                  IDR_OS_SETTINGS_LAZY_LOAD_VULCANIZED_HTML);
     html_source->SetDefaultResource(IDR_OS_SETTINGS_VULCANIZED_HTML);
   }
+
+  // We only need to register the mojo resources here because the rest are
+  // bundled in.
+  RegisterNearbySharedMojoResources(html_source);
 #else
   webui::SetupWebUIDataSource(
       html_source,
@@ -94,13 +101,15 @@ OSSettingsUI::OSSettingsUI(content::WebUI* web_ui)
       base::FeatureList::IsEnabled(chromeos::features::kOsSettingsPolymer3)
           ? IDR_OS_SETTINGS_OS_SETTINGS_V3_HTML
           : IDR_OS_SETTINGS_SETTINGS_HTML);
-#endif
 
   // Register chrome://nearby resources so they are available at
   // chrome://os-settings. This allows the sharing of resources without having
   // to put everything in chrome://resources. This is necessary because portions
   // of the nearby UI need to be re-used in both places.
+  // This is not nessary when OPTIMIZE_WEBUI is true because the files will be
+  // added to the optimized bundles.
   RegisterNearbySharedResources(html_source);
+#endif
 
   ManagedUIHandler::Initialize(web_ui, html_source);
 
@@ -118,21 +127,25 @@ OSSettingsUI::~OSSettingsUI() {
 }
 
 void OSSettingsUI::BindInterface(
+    mojo::PendingReceiver<cellular_setup::mojom::CellularSetup> receiver) {
+  cellular_setup::CellularSetupImpl::CreateAndBindToReciever(
+      std::move(receiver));
+}
+
+void OSSettingsUI::BindInterface(
     mojo::PendingReceiver<network_config::mojom::CrosNetworkConfig> receiver) {
   ash::GetNetworkConfigService(std::move(receiver));
 }
 
 void OSSettingsUI::BindInterface(
     mojo::PendingReceiver<mojom::UserActionRecorder> receiver) {
-  user_action_recorder_ =
-      std::make_unique<SettingsUserActionTracker>(std::move(receiver));
+  OsSettingsManagerFactory::GetForProfile(Profile::FromWebUI(web_ui()))
+      ->settings_user_action_tracker()
+      ->BindInterface(std::move(receiver));
 }
 
 void OSSettingsUI::BindInterface(
     mojo::PendingReceiver<mojom::SearchHandler> receiver) {
-  if (!base::FeatureList::IsEnabled(::chromeos::features::kNewOsSettingsSearch))
-    return;
-
   OsSettingsManagerFactory::GetForProfile(Profile::FromWebUI(web_ui()))
       ->search_handler()
       ->BindInterface(std::move(receiver));
@@ -154,6 +167,23 @@ void OSSettingsUI::BindInterface(
       NearbySharingServiceFactory::GetForBrowserContext(
           Profile::FromWebUI(web_ui()));
   service->GetSettings()->Bind(std::move(receiver));
+}
+
+void OSSettingsUI::BindInterface(
+    mojo::PendingReceiver<nearby_share::mojom::ReceiveManager> receiver) {
+  NearbySharingService* service =
+      NearbySharingServiceFactory::GetForBrowserContext(
+          Profile::FromWebUI(web_ui()));
+  mojo::MakeSelfOwnedReceiver(std::make_unique<NearbyReceiveManager>(service),
+                              std::move(receiver));
+}
+
+void OSSettingsUI::BindInterface(
+    mojo::PendingReceiver<nearby_share::mojom::ContactManager> receiver) {
+  NearbySharingService* service =
+      NearbySharingServiceFactory::GetForBrowserContext(
+          Profile::FromWebUI(web_ui()));
+  service->GetContactManager()->Bind(std::move(receiver));
 }
 
 WEB_UI_CONTROLLER_TYPE_IMPL(OSSettingsUI)

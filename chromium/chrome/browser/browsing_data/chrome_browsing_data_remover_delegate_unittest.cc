@@ -143,11 +143,11 @@
 #include "components/user_manager/scoped_user_manager.h"
 #endif  // defined(OS_CHROMEOS)
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
 #include "chrome/common/chrome_paths.h"
 #include "components/crash/core/app/crashpad.h"
 #include "components/upload_list/crash_upload_list.h"
-#endif  // defined(OS_LINUX)
+#endif  // defined(OS_LINUX) || defined(OS_CHROMEOS)
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "chrome/browser/extensions/mock_extension_special_storage_policy.h"
@@ -174,8 +174,8 @@ using testing::ByRef;
 using testing::Eq;
 using testing::FloatEq;
 using testing::Invoke;
-using testing::Matcher;
 using testing::MakeMatcher;
+using testing::Matcher;
 using testing::MatcherInterface;
 using testing::MatchResultListener;
 using testing::Return;
@@ -234,7 +234,7 @@ GURL DSEOrigin() {
 #if defined(OS_ANDROID)
 class TestWebappRegistry : public WebappRegistry {
  public:
-  TestWebappRegistry() : WebappRegistry() { }
+  TestWebappRegistry() : WebappRegistry() {}
 
   void UnregisterWebappsForUrls(
       const base::RepeatingCallback<bool(const GURL&)>& url_filter) override {
@@ -1221,9 +1221,8 @@ class ChromeBrowsingDataRemoverDelegateTest : public testing::Test {
 
     content::BrowsingDataRemoverCompletionObserver completion_observer(
         remover_);
-    remover_->RemoveAndReply(
-        delete_begin, delete_end, remove_mask, origin_type_mask,
-        &completion_observer);
+    remover_->RemoveAndReply(delete_begin, delete_end, remove_mask,
+                             origin_type_mask, &completion_observer);
     base::ThreadPoolInstance::Get()->FlushForTesting();
     completion_observer.BlockUntilCompletion();
     return completion_observer.failed_data_types();
@@ -1258,9 +1257,7 @@ class ChromeBrowsingDataRemoverDelegateTest : public testing::Test {
 
   network::NetworkContext* network_context() { return network_context_.get(); }
 
-  TestingProfile* GetProfile() {
-    return profile_.get();
-  }
+  TestingProfile* GetProfile() { return profile_.get(); }
 
   bool Match(const GURL& origin,
              uint64_t mask,
@@ -1476,8 +1473,8 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest,
       ChromeBrowsingDataRemoverDelegate::DATA_TYPE_HISTORY |
       ChromeBrowsingDataRemoverDelegate::DATA_TYPE_PASSWORDS;
 
-  BlockUntilBrowsingDataRemoved(AnHourAgo(), base::Time::Max(),
-                                removal_mask, false);
+  BlockUntilBrowsingDataRemoved(AnHourAgo(), base::Time::Max(), removal_mask,
+                                false);
   EXPECT_EQ(removal_mask, GetRemovalMask());
   EXPECT_EQ(content::BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB,
             GetOriginTypeMask());
@@ -1975,8 +1972,7 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest,
 // ChromeDownloadManagerDelegate is correctly created and shut down.
 TEST_F(ChromeBrowsingDataRemoverDelegateTest, RemoveDownloads) {
   RemoveDownloadsTester tester(GetProfile());
-  EXPECT_CALL(
-      *tester.download_manager(), RemoveDownloadsByURLAndTime(_, _, _));
+  EXPECT_CALL(*tester.download_manager(), RemoveDownloadsByURLAndTime(_, _, _));
 
   BlockUntilBrowsingDataRemoved(
       base::Time(), base::Time::Max(),
@@ -2040,6 +2036,26 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest,
   EXPECT_CALL(*tester.profile_store(), RemoveLoginsByURLAndTimeImpl(_, _, _))
       .WillOnce(Return(password_manager::PasswordStoreChangeList()));
 
+  // Only DATA_TYPE_PASSWORDS is cleared. Accounts passwords are not affected.
+  EXPECT_CALL(*tester.account_store(), RemoveLoginsByURLAndTimeImpl(_, _, _))
+      .Times(0);
+
+  BlockUntilBrowsingDataRemoved(
+      base::Time(), base::Time::Max(),
+      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_PASSWORDS, false);
+}
+
+TEST_F(ChromeBrowsingDataRemoverDelegateTest,
+       RemoveAccountPasswordsByTimeOnly_WithAccountStore) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(
+      password_manager::features::kEnablePasswordsAccountStorage);
+
+  RemovePasswordsTester tester(GetProfile());
+
+  EXPECT_CALL(*tester.profile_store(), RemoveLoginsByURLAndTimeImpl(_, _, _))
+      .Times(0);
+
   EXPECT_CALL(*tester.account_store(), RemoveLoginsByURLAndTimeImpl(_, _, _))
       .WillOnce(Return(password_manager::PasswordStoreChangeList()));
   // For the account store, the remover delegate also waits until all the
@@ -2050,11 +2066,11 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest,
 
   BlockUntilBrowsingDataRemoved(
       base::Time(), base::Time::Max(),
-      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_PASSWORDS, false);
+      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_ACCOUNT_PASSWORDS, false);
 }
 
 TEST_F(ChromeBrowsingDataRemoverDelegateTest,
-       RemovePasswordsByTimeOnly_WithAccountStore_Failure) {
+       RemoveAccountPasswordsByTimeOnly_WithAccountStore_Failure) {
   base::test::ScopedFeatureList feature_list;
   feature_list.InitAndEnableFeature(
       password_manager::features::kEnablePasswordsAccountStorage);
@@ -2062,7 +2078,7 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest,
   RemovePasswordsTester tester(GetProfile());
 
   EXPECT_CALL(*tester.profile_store(), RemoveLoginsByURLAndTimeImpl(_, _, _))
-      .WillOnce(Return(password_manager::PasswordStoreChangeList()));
+      .Times(0);
 
   EXPECT_CALL(*tester.account_store(), RemoveLoginsByURLAndTimeImpl(_, _, _))
       .WillOnce(Return(password_manager::PasswordStoreChangeList()));
@@ -2077,9 +2093,9 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest,
 
   uint64_t failed_data_types = BlockUntilBrowsingDataRemoved(
       base::Time(), base::Time::Max(),
-      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_PASSWORDS, false);
+      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_ACCOUNT_PASSWORDS, false);
   EXPECT_EQ(failed_data_types,
-            ChromeBrowsingDataRemoverDelegate::DATA_TYPE_PASSWORDS);
+            ChromeBrowsingDataRemoverDelegate::DATA_TYPE_ACCOUNT_PASSWORDS);
 }
 
 // Disabled, since passwords are not yet marked as a filterable datatype.
@@ -2146,6 +2162,29 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest,
   BlockUntilBrowsingDataRemoved(
       base::Time(), base::Time::Max(),
       ChromeBrowsingDataRemoverDelegate::DATA_TYPE_PASSWORDS, false);
+}
+
+TEST_F(ChromeBrowsingDataRemoverDelegateTest,
+       RemoveCompromisedAccountCredentialsByTimeOnly_WithAccountStore) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(
+      password_manager::features::kEnablePasswordsAccountStorage);
+
+  RemovePasswordsTester tester(GetProfile());
+  base::RepeatingCallback<bool(const GURL&)> empty_filter;
+
+  EXPECT_CALL(*tester.profile_store(),
+              RemoveCompromisedCredentialsByUrlAndTimeImpl(_, _, _))
+      .Times(0);
+
+  EXPECT_CALL(
+      *tester.account_store(),
+      RemoveCompromisedCredentialsByUrlAndTimeImpl(
+          ProbablySameFilter(empty_filter), base::Time(), base::Time::Max()));
+
+  BlockUntilBrowsingDataRemoved(
+      base::Time(), base::Time::Max(),
+      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_ACCOUNT_PASSWORDS, false);
 }
 
 // TODO(crbug.com/589586): Disabled, since history is not yet marked as
@@ -2258,7 +2297,7 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest, RemoveContentSettings) {
     EXPECT_EQ(ContentSettingsPattern::FromURLNoWildcard(DSEOrigin()),
               host_settings[0].primary_pattern)
         << host_settings[0].primary_pattern.ToString();
-    EXPECT_EQ(ContentSettingsPattern::FromURLNoWildcard(DSEOrigin()),
+    EXPECT_EQ(ContentSettingsPattern::Wildcard(),
               host_settings[0].secondary_pattern)
         << host_settings[0].secondary_pattern.ToString();
     EXPECT_EQ(CONTENT_SETTING_ALLOW, host_settings[0].GetContentSetting());
@@ -3111,16 +3150,17 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest, AllTypesAreGettingDeleted) {
 #if defined(OS_ANDROID)
 TEST_F(ChromeBrowsingDataRemoverDelegateTest, WipeOriginVerifierData) {
   int before =
-    customtabs::OriginVerifier::GetClearBrowsingDataCallCountForTesting();
+      customtabs::OriginVerifier::GetClearBrowsingDataCallCountForTesting();
   BlockUntilBrowsingDataRemoved(
       base::Time(), base::Time::Max(),
       ChromeBrowsingDataRemoverDelegate::DATA_TYPE_HISTORY, false);
-  EXPECT_EQ(before + 1,
+  EXPECT_EQ(
+      before + 1,
       customtabs::OriginVerifier::GetClearBrowsingDataCallCountForTesting());
 }
 #endif  // defined(OS_ANDROID)
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
 TEST_F(ChromeBrowsingDataRemoverDelegateTest, WipeCrashData) {
 #if !defined(OS_CHROMEOS)
   // This test applies only when using a logfile of Crash uploads. Chrome Linux
@@ -3212,18 +3252,18 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest,
       password_manager::features::kEnablePasswordsAccountStorage);
 
   auto* delegate = GetProfile()->GetBrowsingDataRemoverDelegate();
+
   auto domains = delegate->GetDomainsForDeferredCookieDeletion(
-      ChromeBrowsingDataRemoverDelegate::ALL_DATA_TYPES);
+      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_ACCOUNT_PASSWORDS);
   EXPECT_EQ(domains.size(), 1u);
   EXPECT_EQ(domains[0], "google.com");
 
   domains = delegate->GetDomainsForDeferredCookieDeletion(
       ChromeBrowsingDataRemoverDelegate::DATA_TYPE_PASSWORDS);
-  EXPECT_EQ(domains.size(), 1u);
-  EXPECT_EQ(domains[0], "google.com");
+  EXPECT_EQ(domains.size(), 0u);
 
   domains = delegate->GetDomainsForDeferredCookieDeletion(
-      content::BrowsingDataRemover::DATA_TYPE_COOKIES);
+      ChromeBrowsingDataRemoverDelegate::ALL_DATA_TYPES);
   EXPECT_EQ(domains.size(), 0u);
 }
 

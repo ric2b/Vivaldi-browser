@@ -5,9 +5,9 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_IN_PRODUCT_HELP_FEATURE_PROMO_BUBBLE_VIEW_H_
 #define CHROME_BROWSER_UI_VIEWS_IN_PRODUCT_HELP_FEATURE_PROMO_BUBBLE_VIEW_H_
 
+#include <cstddef>
 #include <memory>
 
-#include "base/macros.h"
 #include "base/optional.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/ui/views/in_product_help/feature_promo_bubble_params.h"
@@ -23,22 +23,43 @@ namespace ui {
 class MouseEvent;
 }  // namespace ui
 
+namespace views {
+class MdTextButton;
+}
+
+// NOTE: Avoid using this class directly. FeaturePromoController should
+// be used in almost all cases.
+//
 // The FeaturePromoBubbleView is a special BubbleDialogDelegateView for
-// in-product help which educates users about certain Chrome features in a
-// deferred context.
+// in-product help which educates users about certain Chrome features in
+// a deferred context.
 class FeaturePromoBubbleView : public views::BubbleDialogDelegateView {
  public:
+  // Disallow copy and assign.
+  FeaturePromoBubbleView(const FeaturePromoBubbleView&) = delete;
+  FeaturePromoBubbleView& operator=(const FeaturePromoBubbleView&) = delete;
   ~FeaturePromoBubbleView() override;
 
+  // NOTE: Please read comment above class. This method shouldn't be
+  // called in most cases.
+  //
   // Creates the promo. The returned pointer is only valid until the
   // widget is destroyed. It must not be manually deleted by the caller.
-  static FeaturePromoBubbleView* Create(FeaturePromoBubbleParams params);
+  static FeaturePromoBubbleView* Create(
+      const FeaturePromoBubbleParams& params,
+      base::RepeatingClosure snooze_callback = base::RepeatingClosure(),
+      base::RepeatingClosure dismiss_callback = base::RepeatingClosure());
 
   // Closes the promo bubble.
   void CloseBubble();
 
+  views::Button* GetDismissButtonForTesting() const;
+  views::Button* GetSnoozeButtonForTesting() const;
+
  private:
-  explicit FeaturePromoBubbleView(FeaturePromoBubbleParams params);
+  FeaturePromoBubbleView(const FeaturePromoBubbleParams& params,
+                         base::RepeatingClosure snooze_callback,
+                         base::RepeatingClosure dismiss_callback);
 
   // BubbleDialogDelegateView:
   bool OnMousePressed(const ui::MouseEvent& event) override;
@@ -52,15 +73,28 @@ class FeaturePromoBubbleView : public views::BubbleDialogDelegateView {
   }
   gfx::Size CalculatePreferredSize() const override;
 
-  const FeaturePromoBubbleParams::ActivationAction activation_action_;
+  // Determines if this bubble can be focused. If true, it will get
+  // focus on creation.
+  bool focusable_ = false;
+
+  // Determines if this bubble will be dismissed when it loses focus.
+  // Only meaningful when |focusable_| is true. When |allow_focus|
+  // is false, the bubble will always persist because it will never
+  // get blurred.
+  bool persist_on_blur_ = false;
+
+  // Determines if this bubble has dismiss and snooze buttons.
+  // If true, |focusable_| must be true for keyboard accessibility.
+  bool snoozable_;
+
+  views::MdTextButton* dismiss_button_ = nullptr;
+  views::MdTextButton* snooze_button_ = nullptr;
 
   base::string16 accessible_name_;
 
-  std::unique_ptr<FeaturePromoBubbleTimeout> feature_promo_bubble_timeout_;
-
   base::Optional<int> preferred_width_;
 
-  DISALLOW_COPY_AND_ASSIGN(FeaturePromoBubbleView);
+  std::unique_ptr<FeaturePromoBubbleTimeout> feature_promo_bubble_timeout_;
 };
 
 #endif  // CHROME_BROWSER_UI_VIEWS_IN_PRODUCT_HELP_FEATURE_PROMO_BUBBLE_VIEW_H_

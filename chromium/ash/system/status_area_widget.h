@@ -19,19 +19,22 @@ class Window;
 }
 
 namespace ash {
+class BloomTray;
+class DictationButtonTray;
 class HoldingSpaceTray;
 class ImeMenuTray;
 class LogoutButtonTray;
-class StatusAreaOverflowButtonTray;
+class MediaTray;
 class OverviewButtonTray;
-class DictationButtonTray;
 class PaletteTray;
+class PhoneHubTray;
 class SelectToSpeakTray;
 class Shelf;
+class StatusAreaOverflowButtonTray;
 class StatusAreaWidgetDelegate;
 class StopRecordingButtonTray;
-class UnifiedSystemTray;
 class TrayBackgroundView;
+class UnifiedSystemTray;
 class VirtualKeyboardTray;
 
 // Widget showing the system tray, notification tray, and other tray views in
@@ -109,6 +112,7 @@ class ASH_EXPORT StatusAreaWidget : public SessionObserver,
   DictationButtonTray* dictation_button_tray() {
     return dictation_button_tray_.get();
   }
+  MediaTray* media_tray() { return media_tray_.get(); }
   StatusAreaOverflowButtonTray* overflow_button_tray() {
     return overflow_button_tray_.get();
   }
@@ -121,6 +125,7 @@ class ASH_EXPORT StatusAreaWidget : public SessionObserver,
   }
   ImeMenuTray* ime_menu_tray() { return ime_menu_tray_.get(); }
   HoldingSpaceTray* holding_space_tray() { return holding_space_tray_.get(); }
+  PhoneHubTray* phone_hub_tray() { return phone_hub_tray_.get(); }
 
   SelectToSpeakTray* select_to_speak_tray() {
     return select_to_speak_tray_.get();
@@ -153,6 +158,8 @@ class ASH_EXPORT StatusAreaWidget : public SessionObserver,
   VirtualKeyboardTray* virtual_keyboard_tray_for_testing() {
     return virtual_keyboard_tray_.get();
   }
+
+  BloomTray* bloom_tray_for_testing() { return bloom_tray_.get(); }
 
   CollapseState collapse_state() const { return collapse_state_; }
   void set_collapse_state_for_test(CollapseState state) {
@@ -212,11 +219,14 @@ class ASH_EXPORT StatusAreaWidget : public SessionObserver,
   std::unique_ptr<StatusAreaOverflowButtonTray> overflow_button_tray_;
   std::unique_ptr<OverviewButtonTray> overview_button_tray_;
   std::unique_ptr<DictationButtonTray> dictation_button_tray_;
+  std::unique_ptr<MediaTray> media_tray_;
   std::unique_ptr<UnifiedSystemTray> unified_system_tray_;
   std::unique_ptr<LogoutButtonTray> logout_button_tray_;
   std::unique_ptr<PaletteTray> palette_tray_;
+  std::unique_ptr<PhoneHubTray> phone_hub_tray_;
   std::unique_ptr<StopRecordingButtonTray> stop_recording_button_tray_;
   std::unique_ptr<VirtualKeyboardTray> virtual_keyboard_tray_;
+  std::unique_ptr<BloomTray> bloom_tray_;
   std::unique_ptr<ImeMenuTray> ime_menu_tray_;
   std::unique_ptr<SelectToSpeakTray> select_to_speak_tray_;
   std::unique_ptr<HoldingSpaceTray> holding_space_tray_;

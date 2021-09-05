@@ -10,7 +10,6 @@
 #include "base/feature_list.h"
 #include "base/ios/ios_util.h"
 #include "ios/chrome/app/tests_hook.h"
-#import "ios/chrome/browser/ui/toolbar/public/features.h"
 #import "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #include "ui/base/device_form_factor.h"
@@ -28,16 +27,6 @@ const CGFloat kPortraitWidth[INTERFACE_IDIOM_COUNT] = {
     320,  // IPHONE_IDIOM
     768   // IPAD_IDIOM
 };
-
-bool IsPortrait() {
-  UIInterfaceOrientation orient = GetInterfaceOrientation();
-  return UIInterfaceOrientationIsPortrait(orient) ||
-         orient == UIInterfaceOrientationUnknown;
-}
-
-bool IsLandscape() {
-  return UIInterfaceOrientationIsLandscape(GetInterfaceOrientation());
-}
 
 CGFloat CurrentScreenHeight() {
   return [UIScreen mainScreen].bounds.size.height;

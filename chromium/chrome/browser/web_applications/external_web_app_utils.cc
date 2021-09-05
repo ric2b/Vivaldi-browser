@@ -7,6 +7,7 @@
 #include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "chrome/browser/apps/user_type_filter.h"
@@ -14,6 +15,11 @@
 #include "chrome/browser/web_applications/file_utils_wrapper.h"
 #include "third_party/blink/public/common/manifest/manifest_util.h"
 #include "ui/gfx/codec/png_codec.h"
+
+#if defined(OS_CHROMEOS)
+#include "chromeos/constants/chromeos_switches.h"
+#include "components/arc/arc_util.h"
+#endif  // defined(OS_CHROMEOS)
 
 namespace web_app {
 
@@ -44,17 +50,61 @@ constexpr char kCreateShortcuts[] = "create_shortcuts";
 //  - if the feature is not enabled, the app will be removed.
 constexpr char kFeatureName[] = "feature_name";
 
+#if defined(OS_CHROMEOS)
+
+// kDisableIfArcSupported is an optional bool which specifies whether to skip
+// install of the app if the device supports Arc (Chrome OS only).
+// Defaults to false.
+constexpr char kDisableIfArcSupported[] = "disable_if_arc_supported";
+
+// kDisableIfTabletFormFactor is an optional bool which specifies whether to
+// skip install of the app if the device is a tablet form factor.
+// This is only for Chrome OS tablets, Android does not use any of this code.
+// Defaults to false.
+constexpr char kDisableIfTabletFormFactor[] = "disable_if_tablet_form_factor";
+
+#endif  // defined(OS_CHROMEOS)
+
 // kLaunchContainer is a required string which can be "window" or "tab"
 // and controls what sort of container the web app is launched in.
 constexpr char kLaunchContainer[] = "launch_container";
 constexpr char kLaunchContainerTab[] = "tab";
 constexpr char kLaunchContainerWindow[] = "window";
 
+// kLaunchQueryParams is an optional string which specifies query parameters to
+// add to the start_url when launching the app.
+constexpr char kLaunchQueryParams[] = "launch_query_params";
+
+// kLoadAndAwaitServiceWorkerRegistration is an optional bool that specifies
+// whether to fetch the |kServiceWorkerRegistrationUrl| after installation to
+// allow time for the app to register its service worker. This is done as a
+// second pass after install in order to not block the installation of other
+// background installed apps. No fetch is made if the service worker has already
+// been registered by the |kAppUrl|.
+// Defaults to true.
+constexpr char kLoadAndAwaitServiceWorkerRegistration[] =
+    "load_and_await_service_worker_registration";
+
+// kServiceWorkerRegistrationUrl is an optional string specifying the URL to use
+// for the above |kLoadAndAwaitServiceWorkerRegistration|.
+// Defaults to the |kAppUrl|.
+constexpr char kServiceWorkerRegistrationUrl[] =
+    "service_worker_registration_url";
+
 // kUninstallAndReplace is an optional array of strings which specifies App IDs
 // which the app is replacing. This will transfer OS attributes (e.g the source
 // app's shelf and app list positions on ChromeOS) and then uninstall the source
 // app.
 constexpr char kUninstallAndReplace[] = "uninstall_and_replace";
+
+// kOnlyUseOfflineManifest is an optional bool.
+// If set to true then no network install will be attempted and the app will be
+// installed using |kOfflineManifest| data. |kOfflineManifest| must be specified
+// in this case.
+// If set to false and |kOfflineManifest| is set then it will be used as a
+// fallback manifest if the network install fails.
+// Defaults to false.
+constexpr char kOnlyUseOfflineManifest[] = "only_use_offline_manifest";
 
 // kOfflineManifest is a dictionary of manifest field values to use as an
 // install to avoid the expense of fetching the install URL to download the
@@ -94,24 +144,52 @@ constexpr char kOfflineManifestThemeColorArgbHex[] = "theme_color_argb_hex";
 
 }  // namespace
 
-base::Optional<ExternalInstallOptions> ParseConfig(
-    FileUtilsWrapper& file_utils,
-    const base::FilePath& dir,
-    const base::FilePath& file,
-    const std::string& user_type,
-    const base::Value& app_config) {
+ExternalConfigParseResult ExternalConfigParseResult::Enabled(
+    ExternalInstallOptions options) {
+  return ExternalConfigParseResult(kEnabled, std::move(options));
+}
+
+ExternalConfigParseResult ExternalConfigParseResult::Disabled() {
+  return ExternalConfigParseResult(kDisabled, base::nullopt);
+}
+
+ExternalConfigParseResult ExternalConfigParseResult::Error() {
+  return ExternalConfigParseResult(kError, base::nullopt);
+}
+
+ExternalConfigParseResult::~ExternalConfigParseResult() = default;
+ExternalConfigParseResult::ExternalConfigParseResult(
+    ExternalConfigParseResult&&) = default;
+ExternalConfigParseResult::ExternalConfigParseResult(
+    Type type,
+    base::Optional<ExternalInstallOptions> options)
+    : type(type), options(std::move(options)) {
+  DCHECK_EQ(options.has_value(), type == kEnabled);
+}
+
+ExternalConfigParseResult ParseConfig(FileUtilsWrapper& file_utils,
+                                      const base::FilePath& dir,
+                                      const base::FilePath& file,
+                                      const std::string& user_type,
+                                      const base::Value& app_config) {
+  using Result = ExternalConfigParseResult;
+  ExternalInstallOptions options(GURL(), DisplayMode::kStandalone,
+                                 ExternalInstallSource::kExternalDefault);
+  options.require_manifest = true;
+
   if (app_config.type() != base::Value::Type::DICTIONARY) {
     LOG(ERROR) << file << " was not a dictionary as the top level";
-    return base::nullopt;
+    return Result::Error();
   }
 
   if (!apps::UserTypeMatchesJsonUserType(
           user_type, /*app_id=*/file.MaybeAsASCII(), &app_config,
           /*default_user_types=*/nullptr)) {
     // Already logged.
-    return base::nullopt;
+    return Result::Disabled();
   }
 
+  // feature_name
   const base::Value* value =
       app_config.FindKeyOfType(kFeatureName, base::Value::Type::STRING);
   if (value) {
@@ -121,66 +199,138 @@ base::Optional<ExternalInstallOptions> ParseConfig(
     VLOG(1) << file << " checking feature " << feature_name;
     if (!IsExternalAppInstallFeatureEnabled(feature_name)) {
       VLOG(1) << file << " feature not enabled";
-      return base::nullopt;
+      return Result::Disabled();
     }
   }
 
+  // app_url
   value = app_config.FindKeyOfType(kAppUrl, base::Value::Type::STRING);
   if (!value) {
     LOG(ERROR) << file << " had a missing " << kAppUrl;
-    return base::nullopt;
+    return Result::Error();
   }
-  GURL app_url(value->GetString());
-  if (!app_url.is_valid()) {
+  options.install_url = GURL(value->GetString());
+  if (!options.install_url.is_valid()) {
     LOG(ERROR) << file << " had an invalid " << kAppUrl;
-    return base::nullopt;
+    return Result::Error();
   }
 
+  // hide_from_user
   bool hide_from_user = false;
   value = app_config.FindKey(kHideFromUser);
   if (value) {
     if (!value->is_bool()) {
       LOG(ERROR) << file << " had an invalid " << kHideFromUser;
-      return base::nullopt;
+      return Result::Error();
     }
     hide_from_user = value->GetBool();
   }
+  options.add_to_applications_menu = !hide_from_user;
+  options.add_to_search = !hide_from_user;
+  options.add_to_management = !hide_from_user;
 
+  // create_shortcuts
   bool create_shortcuts = false;
   value = app_config.FindKey(kCreateShortcuts);
   if (value) {
     if (!value->is_bool()) {
       LOG(ERROR) << file << " had an invalid " << kCreateShortcuts;
-      return base::nullopt;
+      return Result::Error();
     }
     create_shortcuts = value->GetBool();
   }
+  options.add_to_desktop = create_shortcuts;
+  options.add_to_quick_launch_bar = create_shortcuts;
 
   // It doesn't make sense to hide the app and also create shortcuts for it.
   DCHECK(!(hide_from_user && create_shortcuts));
 
+#if defined(OS_CHROMEOS)
+  // disable_if_arc_supported
+  value = app_config.FindKey(kDisableIfArcSupported);
+  if (value) {
+    if (!value->is_bool()) {
+      LOG(ERROR) << file << " had an invalid " << kDisableIfArcSupported;
+      return Result::Error();
+    }
+    if (value->GetBool() && arc::IsArcAvailable())
+      return Result::Disabled();
+  }
+
+  // disable_if_tablet_form_factor
+  value = app_config.FindKey(kDisableIfTabletFormFactor);
+  if (value) {
+    if (!value->is_bool()) {
+      LOG(ERROR) << file << " had an invalid " << kDisableIfTabletFormFactor;
+      return Result::Error();
+    }
+    if (value->GetBool() && chromeos::switches::IsTabletFormFactor())
+      return Result::Disabled();
+  }
+#endif  // defined(OS_CHROMEOS)
+
+  // launch_container
   value = app_config.FindKeyOfType(kLaunchContainer, base::Value::Type::STRING);
   if (!value) {
     LOG(ERROR) << file << " had an invalid " << kLaunchContainer;
-    return base::nullopt;
+    return Result::Error();
   }
   std::string launch_container_str = value->GetString();
-  auto user_display_mode = DisplayMode::kBrowser;
   if (launch_container_str == kLaunchContainerTab) {
-    user_display_mode = DisplayMode::kBrowser;
+    options.user_display_mode = DisplayMode::kBrowser;
   } else if (launch_container_str == kLaunchContainerWindow) {
-    user_display_mode = DisplayMode::kStandalone;
+    options.user_display_mode = DisplayMode::kStandalone;
   } else {
     LOG(ERROR) << file << " had an invalid " << kLaunchContainer;
-    return base::nullopt;
+    return Result::Error();
   }
 
+  // launch_query_params
+  value = app_config.FindKey(kLaunchQueryParams);
+  if (value) {
+    if (!value->is_string()) {
+      LOG(ERROR) << file << " had an invalid " << kLaunchQueryParams;
+      return Result::Error();
+    }
+    options.launch_query_params = value->GetString();
+  }
+
+  // load_and_await_service_worker_registration
+  value = app_config.FindKey(kLoadAndAwaitServiceWorkerRegistration);
+  if (value) {
+    if (!value->is_bool()) {
+      LOG(ERROR) << file << " had an invalid "
+                 << kLoadAndAwaitServiceWorkerRegistration;
+      return Result::Error();
+    }
+    options.load_and_await_service_worker_registration = value->GetBool();
+  }
+
+  // service_worker_registration_url
+  value = app_config.FindKey(kServiceWorkerRegistrationUrl);
+  if (value) {
+    if (!options.load_and_await_service_worker_registration) {
+      LOG(ERROR) << file << " should not specify a "
+                 << kServiceWorkerRegistrationUrl << " while "
+                 << kLoadAndAwaitServiceWorkerRegistration << " is disabled";
+    }
+    if (!value->is_string()) {
+      LOG(ERROR) << file << " had an invalid " << kServiceWorkerRegistrationUrl;
+      return Result::Error();
+    }
+    options.service_worker_registration_url.emplace(value->GetString());
+    if (!options.service_worker_registration_url->is_valid()) {
+      LOG(ERROR) << file << " had an invalid " << kServiceWorkerRegistrationUrl;
+      return Result::Error();
+    }
+  }
+
+  // uninstall_and_replace
   value = app_config.FindKey(kUninstallAndReplace);
-  std::vector<AppId> uninstall_and_replace_ids;
   if (value) {
     if (!value->is_list()) {
       LOG(ERROR) << file << " had an invalid " << kUninstallAndReplace;
-      return base::nullopt;
+      return Result::Error();
     }
     base::Value::ConstListView uninstall_and_replace_values = value->GetList();
 
@@ -192,33 +342,44 @@ base::Optional<ExternalInstallOptions> ParseConfig(
                    << " entry";
         break;
       }
-      uninstall_and_replace_ids.push_back(app_id_value.GetString());
+      options.uninstall_and_replace.push_back(app_id_value.GetString());
     }
     if (had_error)
-      return base::nullopt;
+      return Result::Error();
   }
 
+  // only_use_offline_manifest
+  value = app_config.FindKey(kOnlyUseOfflineManifest);
+  if (value) {
+    if (!value->is_bool()) {
+      LOG(ERROR) << file << " had an invalid " << kOnlyUseOfflineManifest;
+      return Result::Error();
+    }
+    options.only_use_app_info_factory = value->GetBool();
+  }
+
+  // offline_manifest
   value = app_config.FindDictKey(kOfflineManifest);
-  WebApplicationInfoFactory app_info_factory;
-  if (value)
-    app_info_factory = ParseOfflineManifest(file_utils, dir, file, *value);
+  if (value) {
+    base::Optional<WebApplicationInfoFactory> offline_manifest_result =
+        ParseOfflineManifest(file_utils, dir, file, *value);
+    if (!offline_manifest_result.has_value()) {
+      // Error already logged by |ParseOfflineManifest|.
+      return Result::Error();
+    }
+    options.app_info_factory = std::move(offline_manifest_result.value());
+  }
 
-  ExternalInstallOptions install_options(
-      std::move(app_url), user_display_mode,
-      ExternalInstallSource::kExternalDefault);
-  install_options.add_to_applications_menu = !hide_from_user;
-  install_options.add_to_search = !hide_from_user;
-  install_options.add_to_management = !hide_from_user;
-  install_options.add_to_desktop = create_shortcuts;
-  install_options.add_to_quick_launch_bar = create_shortcuts;
-  install_options.require_manifest = true;
-  install_options.uninstall_and_replace = std::move(uninstall_and_replace_ids);
-  install_options.app_info_factory = std::move(app_info_factory);
+  if (options.only_use_app_info_factory && !options.app_info_factory) {
+    LOG(ERROR) << file << kOnlyUseOfflineManifest << " set with no "
+               << kOfflineManifest << " available";
+    return Result::Error();
+  }
 
-  return install_options;
+  return Result::Enabled(std::move(options));
 }
 
-WebApplicationInfoFactory ParseOfflineManifest(
+base::Optional<WebApplicationInfoFactory> ParseOfflineManifest(
     FileUtilsWrapper& file_utils,
     const base::FilePath& dir,
     const base::FilePath& file,
@@ -231,14 +392,14 @@ WebApplicationInfoFactory ParseOfflineManifest(
   if (!name_string) {
     LOG(ERROR) << file << " " << kOfflineManifest << " " << kOfflineManifestName
                << " missing or invalid.";
-    return {};
+    return base::nullopt;
   }
   if (!base::UTF8ToUTF16(name_string->data(), name_string->size(),
                          &app_info.title) ||
       app_info.title.empty()) {
     LOG(ERROR) << file << " " << kOfflineManifest << " " << kOfflineManifestName
                << " invalid: " << *name_string;
-    return {};
+    return base::nullopt;
   }
 
   // start_url
@@ -247,13 +408,13 @@ WebApplicationInfoFactory ParseOfflineManifest(
   if (!start_url_string) {
     LOG(ERROR) << file << " " << kOfflineManifest << " "
                << kOfflineManifestStartUrl << " missing or invalid.";
-    return {};
+    return base::nullopt;
   }
-  app_info.app_url = GURL(*start_url_string);
-  if (!app_info.app_url.is_valid()) {
+  app_info.start_url = GURL(*start_url_string);
+  if (!app_info.start_url.is_valid()) {
     LOG(ERROR) << file << " " << kOfflineManifest << " "
                << kOfflineManifestStartUrl << " invalid: " << *start_url_string;
-    return {};
+    return base::nullopt;
   }
 
   // scope
@@ -262,21 +423,21 @@ WebApplicationInfoFactory ParseOfflineManifest(
   if (!scope_string) {
     LOG(ERROR) << file << " " << kOfflineManifest << " "
                << kOfflineManifestScope << " missing or invalid.";
-    return {};
+    return base::nullopt;
   }
   app_info.scope = GURL(*scope_string);
   if (!app_info.scope.is_valid()) {
     LOG(ERROR) << file << " " << kOfflineManifest << " "
                << kOfflineManifestScope << " invalid: " << *scope_string;
-    return {};
+    return base::nullopt;
   }
-  if (!base::StartsWith(app_info.app_url.path(), app_info.scope.path(),
+  if (!base::StartsWith(app_info.start_url.path(), app_info.scope.path(),
                         base::CompareCase::SENSITIVE)) {
     LOG(ERROR) << file << " " << kOfflineManifest << " "
-               << kOfflineManifestScope << " (" << app_info.app_url
+               << kOfflineManifestScope << " (" << app_info.start_url
                << ") not within " << kOfflineManifestScope << " ("
                << app_info.scope << ").";
-    return {};
+    return base::nullopt;
   }
 
   // display
@@ -285,13 +446,13 @@ WebApplicationInfoFactory ParseOfflineManifest(
   if (!display_string) {
     LOG(ERROR) << file << " " << kOfflineManifest << " "
                << kOfflineManifestDisplay << " missing or invalid.";
-    return {};
+    return base::nullopt;
   }
   DisplayMode display = blink::DisplayModeFromString(*display_string);
   if (display == DisplayMode::kUndefined) {
     LOG(ERROR) << file << " " << kOfflineManifest << " "
                << kOfflineManifestDisplay << " invalid: " << display_string;
-    return {};
+    return base::nullopt;
   }
   app_info.display_mode = display;
 
@@ -301,14 +462,14 @@ WebApplicationInfoFactory ParseOfflineManifest(
   if (!icon_files || icon_files->GetList().empty()) {
     LOG(ERROR) << file << " " << kOfflineManifest << " "
                << kOfflineManifestIconAnyPngs << " missing, empty or invalid.";
-    return {};
+    return base::nullopt;
   }
   for (const base::Value& icon_file : icon_files->GetList()) {
     if (!icon_file.is_string()) {
       LOG(ERROR) << file << " " << kOfflineManifest << " "
                  << kOfflineManifestIconAnyPngs << " " << icon_file
                  << " invalid.";
-      return {};
+      return base::nullopt;
     }
 
     base::FilePath icon_path = dir.AppendASCII(icon_file.GetString());
@@ -317,7 +478,7 @@ WebApplicationInfoFactory ParseOfflineManifest(
       LOG(ERROR) << file << " " << kOfflineManifest << " "
                  << kOfflineManifestIconAnyPngs << " " << icon_file
                  << " failed to read.";
-      return {};
+      return base::nullopt;
     }
 
     SkBitmap bitmap;
@@ -327,7 +488,7 @@ WebApplicationInfoFactory ParseOfflineManifest(
       LOG(ERROR) << file << " " << kOfflineManifest << " "
                  << kOfflineManifestIconAnyPngs << " " << icon_file
                  << " failed to decode.";
-      return {};
+      return base::nullopt;
     }
 
     if (bitmap.width() != bitmap.height()) {
@@ -335,7 +496,7 @@ WebApplicationInfoFactory ParseOfflineManifest(
                  << kOfflineManifestIconAnyPngs << " " << icon_file
                  << " must be square: " << bitmap.width() << "x"
                  << bitmap.height();
-      return {};
+      return base::nullopt;
     }
 
     app_info.icon_bitmaps_any[bitmap.width()] = std::move(bitmap);
@@ -355,7 +516,7 @@ WebApplicationInfoFactory ParseOfflineManifest(
       LOG(ERROR) << file << " " << kOfflineManifest << " "
                  << kOfflineManifestThemeColorArgbHex
                  << " invalid: " << *theme_color_value;
-      return {};
+      return base::nullopt;
     }
     app_info.theme_color = SkColorSetA(theme_color, SK_AlphaOPAQUE);
   }

@@ -316,6 +316,10 @@ class CORE_EXPORT NGConstraintSpace final {
                          : base::nullopt;
   }
 
+  bool IsTableCellHiddenForPaint() const {
+    return HasRareData() ? rare_data_->IsTableCellHiddenForPaint() : false;
+  }
+
   const NGTableConstraintSpaceData* TableData() const {
     return HasRareData() ? rare_data_->TableData() : nullptr;
   }
@@ -371,6 +375,8 @@ class CORE_EXPORT NGConstraintSpace final {
 
   // Whether the current node is a table-cell.
   bool IsTableCell() const { return bitfields_.is_table_cell; }
+
+  // True if node is either LayoutTableCell or LayoutNGTableCellLegacy
   bool IsLegacyTableCell() const { return bitfields_.is_legacy_table_cell; }
 
   // Whether the table-cell fragment should be hidden (not painted) if it has
@@ -952,6 +958,15 @@ class CORE_EXPORT NGConstraintSpace final {
           table_cell_alignment_baseline;
     }
 
+    bool IsTableCellHiddenForPaint() const {
+      return data_union_type == kTableCellData &&
+             table_cell_data_.is_hidden_for_paint;
+    }
+
+    void SetIsTableCellHiddenForPaint(bool is_hidden_for_paint) {
+      EnsureTableCellData()->is_hidden_for_paint = is_hidden_for_paint;
+    }
+
     void SetTableRowData(
         scoped_refptr<const NGTableConstraintSpaceData> table_data,
         wtf_size_t row_index) {
@@ -1070,7 +1085,8 @@ class CORE_EXPORT NGConstraintSpace final {
                    other.table_cell_intrinsic_padding_block_end &&
                table_cell_alignment_baseline ==
                    other.table_cell_alignment_baseline &&
-               table_cell_column_index == other.table_cell_column_index;
+               table_cell_column_index == other.table_cell_column_index &&
+               is_hidden_for_paint == other.is_hidden_for_paint;
       }
 
       bool IsInitialForMaySkipLayout() const {
@@ -1078,7 +1094,8 @@ class CORE_EXPORT NGConstraintSpace final {
                table_cell_intrinsic_padding_block_start == LayoutUnit() &&
                table_cell_intrinsic_padding_block_end == LayoutUnit() &&
                table_cell_column_index == kNotFound &&
-               table_cell_alignment_baseline == base::nullopt;
+               table_cell_alignment_baseline == base::nullopt &&
+               !is_hidden_for_paint;
       }
 
       NGBoxStrut table_cell_borders;
@@ -1086,6 +1103,7 @@ class CORE_EXPORT NGConstraintSpace final {
       LayoutUnit table_cell_intrinsic_padding_block_end;
       wtf_size_t table_cell_column_index = kNotFound;
       base::Optional<LayoutUnit> table_cell_alignment_baseline;
+      bool is_hidden_for_paint = false;
     };
 
     struct TableRowData {

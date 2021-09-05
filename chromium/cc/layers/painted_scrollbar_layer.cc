@@ -4,6 +4,10 @@
 
 #include "cc/layers/painted_scrollbar_layer.h"
 
+#include <algorithm>
+#include <memory>
+#include <utility>
+
 #include "base/auto_reset.h"
 #include "cc/layers/painted_scrollbar_layer_impl.h"
 #include "cc/paint/skia_paint_canvas.h"
@@ -64,7 +68,7 @@ void PaintedScrollbarLayer::PushPropertiesTo(LayerImpl* layer) {
   scrollbar_layer->SetBackButtonRect(back_button_rect_);
   scrollbar_layer->SetForwardButtonRect(forward_button_rect_);
   scrollbar_layer->SetTrackRect(track_rect_);
-  if (orientation() == HORIZONTAL) {
+  if (orientation() == ScrollbarOrientation::HORIZONTAL) {
     scrollbar_layer->SetThumbThickness(thumb_size_.height());
     scrollbar_layer->SetThumbLength(thumb_size_.width());
   } else {
@@ -140,6 +144,10 @@ bool PaintedScrollbarLayer::UpdateInternalContentScale() {
   gfx::Vector2dF transform_scales = MathUtil::ComputeTransform2dScaleComponents(
       transform, layer_tree_host()->device_scale_factor());
   float scale = std::max(transform_scales.x(), transform_scales.y());
+  // Clamp minimum scale to 1 to avoid too low scale during scale animation.
+  // TODO(crbug.com/1009291): Move rasterization of scrollbars to the impl side
+  // to better handle scale changes.
+  scale = std::max(1.0f, scale);
 
   bool updated = false;
   updated |= UpdateProperty(scale, &internal_contents_scale_);
@@ -176,21 +184,24 @@ bool PaintedScrollbarLayer::Update() {
   }
 
   if (!track_resource_ ||
-      scrollbar_->NeedsRepaintPart(TRACK_BUTTONS_TICKMARKS)) {
+      scrollbar_->NeedsRepaintPart(ScrollbarPart::TRACK_BUTTONS_TICKMARKS)) {
     track_resource_ = ScopedUIResource::Create(
         layer_tree_host()->GetUIResourceManager(),
-        RasterizeScrollbarPart(size, scaled_size, TRACK_BUTTONS_TICKMARKS));
+        RasterizeScrollbarPart(size, scaled_size,
+                               ScrollbarPart::TRACK_BUTTONS_TICKMARKS));
     SetNeedsPushProperties();
     updated = true;
   }
 
   gfx::Size scaled_thumb_size = LayerSizeToContentSize(thumb_size_);
   if (has_thumb_ && !scaled_thumb_size.IsEmpty()) {
-    if (!thumb_resource_ || scrollbar_->NeedsRepaintPart(THUMB) ||
+    if (!thumb_resource_ ||
+        scrollbar_->NeedsRepaintPart(ScrollbarPart::THUMB) ||
         scaled_thumb_size != thumb_resource_->GetBitmap(0, false).GetSize()) {
       thumb_resource_ = ScopedUIResource::Create(
           layer_tree_host()->GetUIResourceManager(),
-          RasterizeScrollbarPart(thumb_size_, scaled_thumb_size, THUMB));
+          RasterizeScrollbarPart(thumb_size_, scaled_thumb_size,
+                                 ScrollbarPart::THUMB));
       SetNeedsPushProperties();
       updated = true;
     }

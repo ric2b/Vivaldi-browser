@@ -69,24 +69,6 @@ enum class ZeroSuggestEligibility {
   ELIGIBLE_MAX_VALUE
 };
 
-// Histogram values describing client eligibility to receive RemoteNoURL
-// suggestions on NTP.
-// These values are persisted to logs. New values can be added, but existing
-// enums must never be renumbered or deleted and reused.
-enum class ZeroSuggestEligibilityForRemoteNoURL {
-  kEligible = 0,
-  kIneligibleUserOffTheRecord = 1,
-  kIneligibleSuggestionsDisabled = 2,
-  kIneligibleUserNotAuthenticated = 3,
-  // Used to report users ineligible for RemoteNoURL suggestions when the
-  // search and suggest server of their choice cannot be used to offer the
-  // RemoteNoURL suggestions.
-  kIneligibleWithUserSelectedServer = 4,
-  kIneligibleUserNotParticipating = 5,
-
-  kMaxValue = kIneligibleUserNotParticipating
-};
-
 // TODO(hfung): The histogram code was copied and modified from
 // search_provider.cc.  Refactor and consolidate the code.
 // We keep track in a histogram how many suggest requests we send, how
@@ -107,50 +89,11 @@ void LogOmniboxZeroSuggestRequest(
                             ZERO_SUGGEST_MAX_REQUEST_HISTOGRAM_VALUE);
 }
 
-// Record user eligibility for RemoteNoUrl suggestions for supplied page class.
-// The |histogram_variant| is used to specify particular variant of the
-// Omnibox.ZeroSuggest.Eligible.RemoteNoUrl histogram that should be updated.
-void LogOmniboxRemoteNoUrlEligibilityOnNTP(
-    OmniboxEventProto::PageClassification page_class,
-    bool log_for_profile_open,
-    AutocompleteProviderClient* client) {
-  ZeroSuggestEligibilityForRemoteNoURL value =
-      ZeroSuggestEligibilityForRemoteNoURL::kEligible;
-
-  auto* service = client->GetTemplateURLService();
-  auto* provider = service ? service->GetDefaultSearchProvider() : nullptr;
-  auto engine = provider ? provider->GetEngineType(service->search_terms_data())
-                         : SEARCH_ENGINE_UNKNOWN;
-  const auto variants = OmniboxFieldTrial::GetZeroSuggestVariants(page_class);
-
-  if (!base::Contains(variants, ZeroSuggestProvider::kRemoteNoUrlVariant)) {
-    value =
-        ZeroSuggestEligibilityForRemoteNoURL::kIneligibleUserNotParticipating;
-  } else if (client->IsOffTheRecord()) {
-    value = ZeroSuggestEligibilityForRemoteNoURL::kIneligibleUserOffTheRecord;
-  } else if (!client->SearchSuggestEnabled()) {
-    value =
-        ZeroSuggestEligibilityForRemoteNoURL::kIneligibleSuggestionsDisabled;
-  } else if (!client->IsAuthenticated()) {
-    value =
-        ZeroSuggestEligibilityForRemoteNoURL::kIneligibleUserNotAuthenticated;
-  } else if (service == nullptr || provider == nullptr ||
-             engine != SEARCH_ENGINE_GOOGLE) {
-    value =
-        ZeroSuggestEligibilityForRemoteNoURL::kIneligibleWithUserSelectedServer;
-  }
-
-  if (log_for_profile_open) {
-    UMA_HISTOGRAM_ENUMERATION(
-        "Omnibox.ZeroSuggest.Eligible.RemoteNoUrl.OnNTP.OnProfileOpen", value);
-  } else {
-    UMA_HISTOGRAM_ENUMERATION(
-        "Omnibox.ZeroSuggest.Eligible.RemoteNoUrl.OnNTP.OnFocus", value);
-  }
-}
-
 // Relevance value to use if it was not set explicitly by the server.
 const int kDefaultZeroSuggestRelevance = 100;
+// The relevance score for navsuggest tiles.
+// Navsuggest tiles should be positioned below the Query Tiles object.
+const int kMostVisitedTilesRelevance = 1500;
 
 // Used for testing whether zero suggest is ever available.
 constexpr char kArbitraryInsecureUrlString[] = "http://www.google.com/";
@@ -160,17 +103,21 @@ constexpr char kOmniboxZeroSuggestEligibleHistogramName[] =
     "Omnibox.ZeroSuggest.Eligible.OnFocusV2";
 
 // Remote suggestions are allowed only if the user is signed-in and has Google
-// set up as their default search engine. This only applies to
-// kRemoteNoUrlVariant since most of these checks are done in
-// BaseSearchProvider::CanSendURL (with the exception of the authentication
-// state) which applies to kRemoteSendUrlVariant.
+// set up as their default search engine. The authentication state check is done
+// not for privacy reasons but to prevent signed-out users from querying the
+// server which does not have any suggestions for them. This check is skipped if
+// |check_authentication_state| is false.
+// This function only applies to kRemoteNoUrlVariant. For kRemoteSendUrlVariant,
+// most of these checks with the exception of the authentication state are done
+// in BaseSearchProvider::CanSendURL().
 bool RemoteNoUrlSuggestionsAreAllowed(
     AutocompleteProviderClient* client,
-    const TemplateURLService* template_url_service) {
+    const TemplateURLService* template_url_service,
+    bool check_authentication_state) {
   if (!client->SearchSuggestEnabled())
     return false;
 
-  if (!client->IsAuthenticated())
+  if (check_authentication_state && !client->IsAuthenticated())
     return false;
 
   if (template_url_service == nullptr)
@@ -210,14 +157,6 @@ void ZeroSuggestProvider::Start(const AutocompleteInput& input,
   matches_.clear();
   Stop(true, false);
 
-  current_page_classification_ = input.current_page_classification();
-
-  if (input.focus_type() != OmniboxFocusType::DEFAULT &&
-      IsNTPPage(current_page_classification_)) {
-    LogOmniboxRemoteNoUrlEligibilityOnNTP(current_page_classification_, false,
-                                          client());
-  }
-
   if (!AllowZeroSuggestSuggestions(input)) {
     UMA_HISTOGRAM_ENUMERATION(kOmniboxZeroSuggestEligibleHistogramName,
                               ZeroSuggestEligibility::GENERALLY_INELIGIBLE,
@@ -231,6 +170,7 @@ void ZeroSuggestProvider::Start(const AutocompleteInput& input,
   permanent_text_ = input.text();
   current_query_ = input.current_url().spec();
   current_title_ = input.current_title();
+  current_page_classification_ = input.current_page_classification();
   current_text_match_ = MatchForCurrentText();
 
   TemplateURLRef::SearchTermsArgs search_terms_args;
@@ -358,10 +298,6 @@ ZeroSuggestProvider::ZeroSuggestProvider(
                        metrics::OmniboxEventProto::OTHER,
                        template_url_service->search_terms_data(), client,
                        false));
-
-    LogOmniboxRemoteNoUrlEligibilityOnNTP(
-        OmniboxEventProto::INSTANT_NTP_WITH_OMNIBOX_AS_STARTING_FOCUS, true,
-        client);
   }
 }
 
@@ -430,7 +366,8 @@ bool ZeroSuggestProvider::UpdateResults(const std::string& json_data) {
 
   // When running the REMOTE_NO_URL variant, we want to store suggestion
   // responses if non-empty.
-  if (result_type_running_ == REMOTE_NO_URL && !json_data.empty()) {
+  if (base::FeatureList::IsEnabled(omnibox::kOmniboxZeroSuggestCaching) &&
+      result_type_running_ == REMOTE_NO_URL && !json_data.empty()) {
     client()->GetPrefs()->SetString(omnibox::kZeroSuggestCachedResults,
                                     json_data);
 
@@ -544,16 +481,34 @@ void ZeroSuggestProvider::ConvertResultsToAutocompleteMatches() {
       return;
     }
     matches_.push_back(current_text_match_);
-    int relevance = 600;
-    const base::string16 current_query_string16(
-        base::ASCIIToUTF16(current_query_));
-    for (const auto& url : most_visited_urls_) {
-      SearchSuggestionParser::NavigationResult nav(
-          client()->GetSchemeClassifier(), url.url,
-          AutocompleteMatchType::NAVSUGGEST, {}, url.title, std::string(),
-          false, relevance, true, current_query_string16);
-      matches_.push_back(NavigationToMatch(nav));
-      --relevance;
+
+    // Short-circuit in case we have no MOST_VISITED urls to show.
+    if (most_visited_urls_.empty())
+      return;
+
+    if (base::FeatureList::IsEnabled(omnibox::kMostVisitedTiles)) {
+      AutocompleteMatch match =
+          NavigationToMatch(SearchSuggestionParser::NavigationResult(
+              client()->GetSchemeClassifier(), GURL::EmptyGURL(),
+              AutocompleteMatchType::TILE_NAVSUGGEST, {}, base::string16(),
+              std::string(), false, kMostVisitedTilesRelevance, true,
+              base::ASCIIToUTF16(current_query_)));
+      match.navsuggest_tiles.reserve(most_visited_urls_.size());
+
+      for (const auto& url : most_visited_urls_) {
+        match.navsuggest_tiles.push_back({url.url, url.title});
+      }
+      matches_.push_back(std::move(match));
+    } else {
+      int relevance = 600;
+      for (const auto& url : most_visited_urls_) {
+        SearchSuggestionParser::NavigationResult nav(
+            client()->GetSchemeClassifier(), url.url,
+            AutocompleteMatchType::NAVSUGGEST, {}, url.title, std::string(),
+            false, relevance, true, base::ASCIIToUTF16(current_query_));
+        matches_.push_back(NavigationToMatch(nav));
+        --relevance;
+      }
     }
     return;
   }
@@ -660,8 +615,10 @@ bool ZeroSuggestProvider::AllowZeroSuggestSuggestions(
 }
 
 void ZeroSuggestProvider::MaybeUseCachedSuggestions() {
-  if (result_type_running_ != REMOTE_NO_URL)
+  if (!base::FeatureList::IsEnabled(omnibox::kOmniboxZeroSuggestCaching) ||
+      result_type_running_ != REMOTE_NO_URL) {
     return;
+  }
 
   std::string json_data =
       client()->GetPrefs()->GetString(omnibox::kZeroSuggestCachedResults);
@@ -738,8 +695,10 @@ ZeroSuggestProvider::ResultType ZeroSuggestProvider::TypeOfResultToRun(
   }
 
   // Reactive Zero-Prefix Suggestions (rZPS) on NTP cases.
-  bool remote_no_url_allowed =
-      RemoteNoUrlSuggestionsAreAllowed(client, template_url_service);
+  bool check_authentication_state = !base::FeatureList::IsEnabled(
+      omnibox::kOmniboxTrendingZeroPrefixSuggestionsOnNTP);
+  bool remote_no_url_allowed = RemoteNoUrlSuggestionsAreAllowed(
+      client, template_url_service, check_authentication_state);
   if (remote_no_url_allowed) {
     // NTP Omnibox.
     if ((current_page_classification == OmniboxEventProto::NTP ||

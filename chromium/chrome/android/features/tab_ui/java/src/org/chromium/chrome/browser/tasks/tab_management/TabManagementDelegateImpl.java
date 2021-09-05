@@ -7,13 +7,11 @@ package org.chromium.chrome.browser.tasks.tab_management;
 import static org.chromium.chrome.browser.tasks.tab_management.TabManagementModuleProvider.SYNTHETIC_TRIAL_POSTFIX;
 
 import android.content.Context;
-import android.view.View;
 import android.view.ViewGroup;
 
 import org.chromium.base.SysUtils;
 import org.chromium.base.annotations.UsedByReflection;
 import org.chromium.base.supplier.ObservableSupplier;
-import org.chromium.chrome.browser.ThemeColorProvider;
 import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.compositor.layouts.Layout;
@@ -27,6 +25,7 @@ import org.chromium.chrome.browser.tasks.TasksSurfaceCoordinator;
 import org.chromium.chrome.browser.tasks.tab_groups.TabGroupModelFilter;
 import org.chromium.chrome.browser.tasks.tab_management.suggestions.TabSuggestions;
 import org.chromium.chrome.browser.tasks.tab_management.suggestions.TabSuggestionsOrchestrator;
+import org.chromium.chrome.browser.toolbar.ThemeColorProvider;
 import org.chromium.chrome.features.start_surface.StartSurface;
 import org.chromium.chrome.features.start_surface.StartSurfaceDelegate;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
@@ -80,8 +79,10 @@ public class TabManagementDelegateImpl implements TabManagementDelegate {
 
     @Override
     public TabGroupUi createTabGroupUi(ViewGroup parentView, ThemeColorProvider themeColorProvider,
-            ScrimCoordinator scrimCoordinator) {
-        return new TabGroupUiCoordinator(parentView, themeColorProvider, scrimCoordinator);
+            ScrimCoordinator scrimCoordinator,
+            ObservableSupplier<Boolean> omniboxFocusStateSupplier) {
+        return new TabGroupUiCoordinator(
+                parentView, themeColorProvider, scrimCoordinator, omniboxFocusStateSupplier);
     }
 
     @Override
@@ -107,11 +108,5 @@ public class TabManagementDelegateImpl implements TabManagementDelegate {
     public TabSuggestions createTabSuggestions(ChromeActivity activity) {
         return new TabSuggestionsOrchestrator(
                 activity.getTabModelSelector(), activity.getLifecycleDispatcher());
-    }
-
-    @Override
-    public TabGroupPopupUi createTabGroupPopUi(
-            ThemeColorProvider themeColorProvider, ObservableSupplier<View> parentViewSupplier) {
-        return new TabGroupPopupUiCoordinator(themeColorProvider, parentViewSupplier);
     }
 }

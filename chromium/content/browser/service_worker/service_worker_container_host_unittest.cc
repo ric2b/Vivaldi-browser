@@ -17,7 +17,7 @@
 #include "base/scoped_observer.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "content/browser/frame_host/frame_tree_node.h"
+#include "content/browser/renderer_host/frame_tree_node.h"
 #include "content/browser/service_worker/embedded_worker_test_helper.h"
 #include "content/browser/service_worker/service_worker_context_core.h"
 #include "content/browser/service_worker/service_worker_context_core_observer.h"
@@ -39,6 +39,7 @@
 #include "mojo/public/cpp/system/functions.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/features.h"
+#include "third_party/blink/public/common/loader/network_utils.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_object.mojom.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_registration.mojom.h"
@@ -427,7 +428,7 @@ TEST_F(ServiceWorkerContainerHostTest, ContextSecurity) {
   GURL url(std::string(kServiceWorkerScheme) + "://host");
   url::Origin origin = url::Origin::Create(url);
   EXPECT_TRUE(url.is_valid());
-  EXPECT_FALSE(IsOriginSecure(url));
+  EXPECT_FALSE(blink::network_utils::IsOriginSecure(url));
   EXPECT_TRUE(OriginCanAccessServiceWorkers(url));
   container_host_secure_parent->UpdateUrls(
       url, net::SiteForCookies::FromUrl(url), origin);

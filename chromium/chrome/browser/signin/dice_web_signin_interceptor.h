@@ -11,21 +11,29 @@
 #include "base/cancelable_callback.h"
 #include "base/feature_list.h"
 #include "base/gtest_prod_util.h"
+#include "base/optional.h"
 #include "base/scoped_observer.h"
 #include "base/time/time.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "google_apis/gaia/core_account_id.h"
+#include "third_party/skia/include/core/SkColor.h"
+
+namespace base {
+class FilePath;
+}
 
 namespace content {
 class WebContents;
 }
 
 struct AccountInfo;
+class Browser;
 class DiceSignedInProfileCreator;
 class DiceInterceptedSessionStartupHelper;
 class Profile;
+class ProfileAttributesEntry;
 class ProfileAttributesStorage;
 
 // Outcome of the interception heuristic (decision whether the interception
@@ -83,11 +91,10 @@ class DiceWebSigninInterceptor : public KeyedService,
    public:
     // Parameters for interception bubble UIs.
     struct BubbleParameters {
-      bool operator==(const BubbleParameters& rhs) const;
-
       SigninInterceptionType interception_type;
       AccountInfo intercepted_account;
       AccountInfo primary_account;
+      SkColor profile_highlight_color;
     };
 
     virtual ~Delegate() = default;
@@ -100,6 +107,9 @@ class DiceWebSigninInterceptor : public KeyedService,
         content::WebContents* web_contents,
         const BubbleParameters& bubble_parameters,
         base::OnceCallback<void(bool)> callback) = 0;
+
+    // Shows the profile customization bubble.
+    virtual void ShowProfileCustomizationBubble(Browser* browser) = 0;
   };
 
   DiceWebSigninInterceptor(Profile* profile,
@@ -127,12 +137,15 @@ class DiceWebSigninInterceptor : public KeyedService,
   // Called after the new profile was created during a signin interception.
   // The token has been moved to the new profile, but the account is not yet in
   // the cookies.
-  // |intercepted_contents| may be null if the tab was already closed.
+  // `intercepted_contents` may be null if the tab was already closed.
   // The intercepted web contents belong to the source profile (which is not the
   // profile attached to this service).
+  // `show_customization_bubble` indicates whether the customization bubble
+  // should be shown after the browser is opened.
   void CreateBrowserAfterSigninInterception(
       CoreAccountId account_id,
-      content::WebContents* intercepted_contents);
+      content::WebContents* intercepted_contents,
+      bool show_customization_bubble);
 
   // KeyedService:
   void Shutdown() override;
@@ -160,7 +173,7 @@ class DiceWebSigninInterceptor : public KeyedService,
   void Reset();
 
   // Helper functions to determine which interception UI should be shown.
-  bool ShouldShowProfileSwitchBubble(
+  const ProfileAttributesEntry* ShouldShowProfileSwitchBubble(
       const CoreAccountInfo& intercepted_account_info,
       ProfileAttributesStorage* profile_attribute_storage);
   bool ShouldShowEnterpriseBubble(const AccountInfo& intercepted_account_info);
@@ -173,16 +186,21 @@ class DiceWebSigninInterceptor : public KeyedService,
   void OnExtendedAccountInfoFetchTimeout();
 
   // Called after the user chose whether a new profile would be created.
-  void OnProfileCreationChoice(bool create);
+  void OnProfileCreationChoice(SkColor profile_color, bool create);
   // Called after the user chose whether the session should continue in a new
   // profile.
-  void OnProfileSwitchChoice(bool switch_profile);
+  void OnProfileSwitchChoice(const base::FilePath& profile_path,
+                             bool switch_profile);
 
-  // Called when the new profile is created.
-  void OnNewSignedInProfileCreated(Profile* new_profile);
+  // Called when the new profile is created or loaded from disk.
+  // `profile_color` is set as theme color for the profile ; it should be
+  // nullopt if the profile is not new (loaded from disk).
+  void OnNewSignedInProfileCreated(base::Optional<SkColor> profile_color,
+                                   Profile* new_profile);
 
-  // Deletes session_startup_helper_
-  void DeleteSessionStartupHelper();
+  // Called when the new browser is created after interception. Passed as
+  // callback to `session_startup_helper_`.
+  void OnNewBrowserCreated(bool show_customization_bubble);
 
   Profile* const profile_;
   signin::IdentityManager* const identity_manager_;

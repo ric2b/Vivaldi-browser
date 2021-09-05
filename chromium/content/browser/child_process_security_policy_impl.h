@@ -52,9 +52,18 @@ class ResourceContext;
 // ProcessLock is a core part of Site Isolation, which is used to determine
 // which documents are allowed to load in a process and which site data the
 // process is allowed to access, based on the SiteInfo principal. If a process
-// has a non-empty ProcessLock, documents with incompatible SiteInfos will not
-// be allowed into the process, and the process will not be able to access site
-// data from other sites.
+// has a ProcessLock in the "invalid" state, then no SiteInstances have been
+// associated with the process and access should not be granted to anything.
+// Once a process is associated with its first SiteInstance, it transitions to
+// the "locked_to_site" or "allow_any_site" state depending on whether the
+// SiteInstance requires the process to be locked to a specific site or not.
+// If the SiteInstance does not require the process to be locked to a site, the
+// process will transition to the "allow_any_site" state and will allow any
+// site to commit in the process. Such a process can later be upgraded to the
+// "locked_to_site" state if something later determines that the process should
+// only allow access to a single site. Once the process is in the
+// "locked_to_site" state, the process will not be able to access site data from
+// other sites.
 //
 // ProcessLock is currently defined in terms of a single SiteInfo with a process
 // lock URL, but it could be possible to define it in terms of multiple
@@ -68,26 +77,75 @@ class CONTENT_EXPORT ProcessLock {
   // real pages into the process.
   static ProcessLock CreateForErrorPage();
 
-  explicit ProcessLock(const SiteInfo& site_info);
-  ProcessLock();
+  // Create a lock that that represents a process that is associated with at
+  // least one SiteInstance, but is not locked to a specific site. Any request
+  // that wants to commit in this process must have COOP/COEP information that
+  // matches the values used to create this lock.
+  static ProcessLock CreateAllowAnySite(
+      bool is_coop_coep_cross_origin_isolated,
+      const base::Optional<url::Origin>&
+          coop_coep_cross_origin_isolated_origin);
 
-  // An empty ProcessLock indicates that a process is not restricted to pages
-  // from a particular SiteInfo.
-  bool is_empty() const { return lock_url().is_empty(); }
+  ProcessLock();
+  explicit ProcessLock(const SiteInfo& site_info);
+  ProcessLock(const ProcessLock& rhs);
+  ProcessLock& operator=(const ProcessLock& rhs);
+
+  ~ProcessLock();
+
+  // Returns true if no information has been set on the lock.
+  bool is_invalid() const { return !site_info_.has_value(); }
+
+  // Returns true if the process is locked, but it is not restricted to a
+  // specific site. Any site is allowed to commit in the process as long as
+  // the request's COOP/COEP information matches the info provided when
+  // the lock was created.
+  bool allows_any_site() const {
+    return site_info_.has_value() && site_info_->process_lock_url().is_empty();
+  }
+
+  // Returns true if the lock is restricted to a specific site and requires
+  // the request's COOP/COEP information to match the values provided when
+  // the lock was created.
+  bool is_locked_to_site() const {
+    return site_info_.has_value() && !site_info_->process_lock_url().is_empty();
+  }
 
   // Returns the url that corresponds to the SiteInfo the lock is used with. It
   // will always be the same as the site URL, except in cases where effective
   // urls are in use. Always empty if the SiteInfo uses the default site url.
   // TODO(wjmaclean): Delete this accessor once we get to the point where we can
   // safely just compare ProcessLocks directly.
-  const GURL lock_url() const { return site_info_.process_lock_url(); }
+  const GURL lock_url() const {
+    return site_info_.has_value() ? site_info_->process_lock_url() : GURL();
+  }
 
   // Returns whether this ProcessLock is specific to an origin rather than
   // including subdomains, such as due to opt-in origin isolation. This resolves
   // an ambiguity of whether a process with a lock_url() like
   // "https://foo.example" is allowed to include "https://sub.foo.example" or
   // not.
-  bool is_origin_keyed() const { return site_info_.is_origin_keyed(); }
+  bool is_origin_keyed() const {
+    return site_info_.has_value() && site_info_->is_origin_keyed();
+  }
+
+  // Representing agent cluster's "cross-origin isolated" concept.
+  // https://html.spec.whatwg.org/multipage/webappapis.html#dom-crossoriginisolated
+  // This property is renderer process global because we ensure that a
+  // renderer process host only cross-origin isolated agents or only
+  // non-cross-origin isolated agents, not both.
+  bool is_coop_coep_cross_origin_isolated() const {
+    return site_info_.has_value() &&
+           site_info_->is_coop_coep_cross_origin_isolated();
+  }
+
+  // If is_coop_coep_cross_origin_isolated() returns true, this returns the
+  // origin shared across all top level frames in the renderer process.
+  base::Optional<url::Origin> coop_coep_cross_origin_isolated_origin() const {
+    return site_info_.has_value()
+               ? site_info_->coop_coep_cross_origin_isolated_origin()
+               : base::nullopt;
+  }
 
   // Returns whether lock_url() is at least at the granularity of a site (i.e.,
   // a scheme plus eTLD+1, like https://google.com).  Also returns true if the
@@ -105,18 +163,21 @@ class CONTENT_EXPORT ProcessLock {
   // Returns true if |origin| matches the lock's origin.
   bool MatchesOrigin(const url::Origin& origin) const;
 
+  // Returns true if the COOP/COEP origin isolation information in this lock
+  // is set and matches the information in |site_info|.
+  bool IsCompatibleWithCoopCoepCrossOriginIsolation(
+      const SiteInfo& site_info) const;
+
   bool operator==(const ProcessLock& rhs) const;
   bool operator!=(const ProcessLock& rhs) const;
 
-  std::string ToString() const {
-    return site_info_.process_lock_url().possibly_invalid_spec();
-  }
+  std::string ToString() const;
 
  private:
   // TODO(creis): Consider tracking multiple compatible SiteInfos in ProcessLock
   // (e.g., multiple extensions). This can better restrict what the process has
   // access to in cases that we don't currently use a ProcessLock.
-  SiteInfo site_info_;
+  base::Optional<SiteInfo> site_info_;
 };
 
 class CONTENT_EXPORT ChildProcessSecurityPolicyImpl
@@ -195,35 +256,6 @@ class CONTENT_EXPORT ChildProcessSecurityPolicyImpl
     int child_id_;
   };
 
-  // This scoped class is used to temporarily store an origin requesting
-  // opt-in isolation in scoped_isolation_request_origin_, while the request is
-  // being processed. This is only necessary because it is difficult to plumb
-  // the parameter through the site URL computations that need it, and it is
-  // safe because overlapping and nested occurrences cannot occur. Callers
-  // should stack allocate the result so that the temporary result is
-  // automatically cleared when the result goes out of scope. The stored
-  // scoped_isolation_request_origin_ value is only safe to access from the UI
-  // thread, where this object must be created.
-  class CONTENT_EXPORT ScopedOriginIsolationOptInRequest {
-   public:
-    // This returns a new unique_ptr to ScopedOriginIsolationOptInRequest if
-    // no origin is already scoped for an isolation request, or a null
-    // unique_ptr if |origin_to_isolate| has already been scoped. If
-    // a second call occurs while this is set, this will fail on a CHECK.
-    static std::unique_ptr<ScopedOriginIsolationOptInRequest>
-    GetScopedOriginIsolationOptInRequest(const url::Origin& origin_to_isolate);
-
-    ~ScopedOriginIsolationOptInRequest();
-
-   private:
-    explicit ScopedOriginIsolationOptInRequest(
-        const url::Origin& origin_to_isolate);
-
-    friend class ChildProcessSecurityPolicyImpl;
-
-    DISALLOW_COPY_AND_ASSIGN(ScopedOriginIsolationOptInRequest);
-  };
-
   // Object can only be created through GetInstance() so the constructor is
   // private.
   ~ChildProcessSecurityPolicyImpl() override;
@@ -293,8 +325,10 @@ class CONTENT_EXPORT ChildProcessSecurityPolicyImpl
                               const GURL& url,
                               bool url_is_precursor_of_opaque_origin);
 
-  // Determines if the combination of |origin| & |url| is safe to commit to
-  // the process associated with |child_id|.
+  // Determines if the combination of |origin|, |url|,
+  // |is_coop_coep_cross_origin_isolated|, and
+  // |coop_coep_cross_origin_isolated_origin| is safe to commit to the process
+  // associated with |child_id|.
   //
   // Returns CAN_COMMIT_ORIGIN_AND_URL if it is safe to commit the |origin| and
   // |url| combination to the process associated with |child_id|.
@@ -304,7 +338,10 @@ class CONTENT_EXPORT ChildProcessSecurityPolicyImpl
       int child_id,
       const IsolationContext& isolation_context,
       const url::Origin& origin,
-      const GURL& url);
+      const UrlInfo& url_info,
+      bool is_coop_coep_cross_origin_isolated,
+      const base::Optional<url::Origin>&
+          coop_coep_cross_origin_isolated_origin);
 
   // This function will check whether |origin| requires process isolation
   // within |isolation_context|, and if so, it will return true and put the
@@ -334,6 +371,7 @@ class CONTENT_EXPORT ChildProcessSecurityPolicyImpl
   // will only affect future BrowsingInstances.
   bool GetMatchingIsolatedOrigin(const IsolationContext& isolation_context,
                                  const url::Origin& origin,
+                                 bool origin_requests_isolation,
                                  url::Origin* result);
 
   // Removes any origin isolation opt-in entries associated with the
@@ -360,10 +398,10 @@ class CONTENT_EXPORT ChildProcessSecurityPolicyImpl
   //    |origin_isolation_by_browsing_instance_|, in which case we follow the
   //    same policy, or
   // 2) if it's not currently tracked as described above, whether |origin| is
-  //    currently requesting isolation via |scoped_isolation_request_origin_|,
-  //    as part of an in-progress navigation.
+  //    currently requesting isolation via |origin_requests_isolation|.
   bool ShouldOriginGetOptInIsolation(const IsolationContext& isolation_context,
-                                     const url::Origin& origin);
+                                     const url::Origin& origin,
+                                     bool origin_requests_isolation);
 
   // This function adds |origin| to the master list of origins that have
   // ever requested opt-in isolation, either via an OriginPolicy or opt-in
@@ -377,6 +415,7 @@ class CONTENT_EXPORT ChildProcessSecurityPolicyImpl
   // already known to avoid recomputing it internally.
   bool GetMatchingIsolatedOrigin(const IsolationContext& isolation_context,
                                  const url::Origin& origin,
+                                 bool origin_requests_isolation,
                                  const GURL& site_url,
                                  url::Origin* result);
 
@@ -408,6 +447,12 @@ class CONTENT_EXPORT ChildProcessSecurityPolicyImpl
   // Upon creation, child processes should register themselves by calling this
   // this method exactly once. This call must be made on the UI thread.
   void Add(int child_id, BrowserContext* browser_context);
+
+  // Helper method for unit tests that calls Add() and
+  // LockProcess() with an "allow_any_site" lock. This ensures that the process
+  // policy is always in a state where it is valid to call
+  // CanAccessDataForOrigin().
+  void AddForTesting(int child_id, BrowserContext* browser_context);
 
   // Upon destruction, child processes should unregister themselves by calling
   // this method exactly once. This call must be made on the UI thread.
@@ -518,9 +563,13 @@ class CONTENT_EXPORT ChildProcessSecurityPolicyImpl
   //
   // |isolation_context| is used to determine which origins are isolated in
   // this context.  For example, isolated origins that are dynamically added
-  // will only affect future BrowsingInstances.
+  // will only affect future BrowsingInstances. |origin_requests_isolation| may
+  // be true during navigation requests, and allows us to correctly determine
+  // isolation status for an origin that may not have had its isolation status
+  // recorded in the BrowsingInstance yet.
   bool IsIsolatedOrigin(const IsolationContext& isolation_context,
-                        const url::Origin& origin);
+                        const url::Origin& origin,
+                        bool origin_requests_isolation);
 
   // Removes a previously added isolated origin, currently only used in tests.
   //
@@ -557,13 +606,16 @@ class CONTENT_EXPORT ChildProcessSecurityPolicyImpl
   bool HasOriginEverRequestedOptInIsolation(const url::Origin& origin);
 
   // Adds |origin| to the non-isolated list for the BrowsingInstance specified
-  // by |isolation_context|, if it's not already in the list. |is_global_walk|
-  // should only be set to true during the global walk that is triggered when
-  // |origin| first requests opt-in isolation, so that the function can skip
-  // safety checks that will be unnecessary during the global walk.
+  // by |isolation_context|, if we need to track it and it's not already in the
+  // list. |is_global_walk_or_frame_removal| should be set to true during the
+  // global walk that is triggered when |origin| first requests opt-in
+  // isolation, so that the function can skip safety checks that will be
+  // unnecessary during the global walk. It is also set to true if this function
+  // is called when removing a FrameNavigationEntry, since that entry won't be
+  // available to any subsequent global walks.
   void AddNonIsolatedOriginIfNeeded(const IsolationContext& isolation_context,
                                     const url::Origin& origin,
-                                    bool is_global_walk);
+                                    bool is_global_walk_or_frame_removal);
 
  private:
   friend class ChildProcessSecurityPolicyInProcessBrowserTest;
@@ -839,7 +891,7 @@ class CONTENT_EXPORT ChildProcessSecurityPolicyImpl
   // tracked so we know which origins need to be tracked when non-isolated in
   // any given BrowsingInstance. Origins requesting isolation, if successful,
   // are marked as isolated via ShouldOriginGetOptInIsolation's checking
-  // |scoped_isolation_request_origin_|.
+  // |origin_requests_isolation|.
   base::flat_set<url::Origin> origin_isolation_opt_ins_
       GUARDED_BY(origins_isolation_opt_in_lock_);
   // A map to track origins that have been isolated within a given
@@ -855,13 +907,6 @@ class CONTENT_EXPORT ChildProcessSecurityPolicyImpl
   base::flat_map<BrowsingInstanceId, std::vector<url::Origin>>
       origin_isolation_non_isolated_by_browsing_instance_
           GUARDED_BY(origins_isolation_opt_in_lock_);
-
-  // This origin is set during a call to NavigationRequest::OnResponseStarted
-  // that requests isolation for an origin, via the creation of a
-  // ScopedOriginIsolationOptInRequest object. This value's state is read by
-  // ShouldOriginGetOptInIsolation(), and it is only safe to access on the UI
-  // thread.
-  base::Optional<url::Origin> scoped_isolation_request_origin_;
 
   DISALLOW_COPY_AND_ASSIGN(ChildProcessSecurityPolicyImpl);
 };

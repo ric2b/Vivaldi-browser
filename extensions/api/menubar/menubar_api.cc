@@ -12,6 +12,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_command_controller.h"
 #include "chrome/browser/ui/browser_list.h"
+#include "chrome/browser/ui/browser_window.h"
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/schema/menubar.h"
 #include "extensions/tools/vivaldi_tools.h"
@@ -87,6 +88,8 @@ int getIdByAction(const menubar::MenuItem& item) {
     tag_map[item.action] = {IDC_BOOKMARKS_MENU, item.with_no_window};
   else if (item.action == "MENU_WINDOW")
     tag_map[item.action] = {IDC_WINDOW_MENU, item.with_no_window};
+  else if (item.action == "MENU_HELP")
+    tag_map[item.action] = {IDC_VIV_HELP_MENU, item.with_no_window};
   // And containers
   else if (item.action == "CONTAINER_MAC_SERVICES")
     tag_map[item.action] = {IDC_VIV_MAC_SERVICES, item.with_no_window};
@@ -149,6 +152,22 @@ bool MenubarAPI::GetIsEnabledWithNoWindows(int id, bool* enabled) {
     if (it->second.id == id) {
       *enabled = it->second.enabled_with_no_window;
       return true;
+    }
+  }
+  return false;
+}
+
+// We have a problem in the Help Menu. The std inlined search function there
+// takes focus when menu shows and the test we do in validateUserInterfaceItem()
+// in app_controller_app.mm fails because there is no key window. So this
+// function is then used to determine if we indeed have an active window to keep
+// items in the Help menu enabled.
+// static
+bool MenubarAPI::HasActiveWindow() {
+  for (auto* browser : *BrowserList::GetInstance()) {
+    if (browser->window() && browser->window()->IsActive()) {
+      return true;
+      break;
     }
   }
   return false;

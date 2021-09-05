@@ -11,6 +11,12 @@ namespace prefs {
 
 extern const char kLastLoginInputMethod[];
 extern const char kOobeOnboardingTime[];
+extern const char kSAMLOfflineSigninTimeLimit[];
+extern const char kSAMLLastGAIASignInTime[];
+extern const char kSamlInSessionPasswordChangeEnabled[];
+extern const char kSamlPasswordExpirationAdvanceWarningDays[];
+extern const char kSamlLockScreenReauthenticationEnabled[];
+extern const char kSamlPasswordSyncToken[];
 
 }  // namespace prefs
 

@@ -28,6 +28,7 @@
 
 #include <memory>
 
+#include "base/callback_forward.h"
 #include "third_party/blink/public/common/metrics/document_update_reason.h"
 #include "third_party/blink/public/mojom/frame/lifecycle.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/scroll/scroll_into_view_params.mojom-blink-forward.h"
@@ -213,6 +214,10 @@ class CORE_EXPORT LocalFrameView final
   // Sets the internal IntersectionObservationState to the max of the
   // current value and the provided one.
   void SetIntersectionObservationState(IntersectionObservationState);
+  IntersectionObservationState GetIntersectionObservationStateForTesting()
+      const {
+    return intersection_observation_state_;
+  }
 
   // Get the InstersectionObservation::ComputeFlags for target elements in this
   // view.
@@ -256,8 +261,21 @@ class CORE_EXPORT LocalFrameView final
   Color BaseBackgroundColor() const;
   void SetBaseBackgroundColor(const Color&);
   void UpdateBaseBackgroundColorRecursively(const Color&);
-  void SetUseColorAdjustBackground(bool color_adjust,
+
+  enum class UseColorAdjustBackground {
+    // Use the base background color set on this view.
+    kNo,
+    // Use the color-adjust background from StyleEngine instead of the base
+    // background color.
+    kYes,
+    // Use the color-adjust background from StyleEngine, but only if the base
+    // background is not transparent.
+    kIfBaseNotTransparent,
+  };
+
+  void SetUseColorAdjustBackground(UseColorAdjustBackground use,
                                    bool color_scheme_changed);
+  bool ShouldPaintBaseBackgroundColor() const;
 
   void AdjustViewSize();
   void AdjustViewSizeAndLayout();
@@ -856,6 +874,9 @@ class CORE_EXPORT LocalFrameView final
   template <typename Function>
   void ForAllThrottledLocalFrameViews(const Function&);
 
+  void ForAllThrottledLocalFrameViewsForTesting(
+      base::RepeatingCallback<void(LocalFrameView&)>);
+
   template <typename Function>
   void ForAllRemoteFrameViews(const Function&);
 
@@ -894,6 +915,10 @@ class CORE_EXPORT LocalFrameView final
   // Return the sticky-ad detector for this frame, creating it if necessary.
   StickyAdDetector& EnsureStickyAdDetector();
 
+  // Returns true if we should paint the color adjust background from the
+  // StyleEngine instead of the base background color.
+  bool ShouldUseColorAdjustBackground() const;
+
   LayoutSize size_;
 
   typedef HashSet<scoped_refptr<LayoutEmbeddedObject>> EmbeddedObjectSet;
@@ -914,7 +939,8 @@ class CORE_EXPORT LocalFrameView final
   TaskRunnerTimer<LocalFrameView> update_plugins_timer_;
 
   bool first_layout_;
-  bool use_color_adjust_background_ = false;
+  UseColorAdjustBackground use_color_adjust_background_{
+      UseColorAdjustBackground::kNo};
   Color base_background_color_;
   IntSize last_viewport_size_;
   float last_zoom_factor_;
@@ -1060,6 +1086,7 @@ class CORE_EXPORT LocalFrameView final
 
   FRIEND_TEST_ALL_PREFIXES(WebViewTest, DeviceEmulationResetScrollbars);
   FRIEND_TEST_ALL_PREFIXES(FrameThrottlingTest, GraphicsLayerCollection);
+  FRIEND_TEST_ALL_PREFIXES(FrameThrottlingTest, ForAllThrottledLocalFrameViews);
 };
 
 inline void LocalFrameView::IncrementVisuallyNonEmptyCharacterCount(

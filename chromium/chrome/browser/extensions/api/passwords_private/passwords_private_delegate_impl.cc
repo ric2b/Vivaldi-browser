@@ -204,13 +204,14 @@ void PasswordsPrivateDelegateImpl::GetPasswordExceptionsList(
 
 bool PasswordsPrivateDelegateImpl::ChangeSavedPassword(
     const std::vector<int>& ids,
-    base::string16 new_password) {
+    const base::string16& new_username,
+    const base::string16& new_password) {
   const std::vector<std::string> sort_keys =
       GetSortKeys(password_id_generator_, ids);
 
   return !ids.empty() && sort_keys.size() == ids.size() &&
          password_manager_presenter_->ChangeSavedPassword(
-             sort_keys, std::move(new_password));
+             sort_keys, new_username, new_password);
 }
 
 void PasswordsPrivateDelegateImpl::RemoveSavedPasswords(
@@ -473,16 +474,21 @@ void PasswordsPrivateDelegateImpl::SetAccountStorageOptIn(
       signin_metrics::ReauthAccessPoint::kPasswordSettings, base::DoNothing());
 }
 
-std::vector<api::passwords_private::CompromisedCredential>
+std::vector<api::passwords_private::InsecureCredential>
 PasswordsPrivateDelegateImpl::GetCompromisedCredentials() {
   return password_check_delegate_.GetCompromisedCredentials();
 }
 
-void PasswordsPrivateDelegateImpl::GetPlaintextCompromisedPassword(
-    api::passwords_private::CompromisedCredential credential,
+std::vector<api::passwords_private::InsecureCredential>
+PasswordsPrivateDelegateImpl::GetWeakCredentials() {
+  return password_check_delegate_.GetWeakCredentials();
+}
+
+void PasswordsPrivateDelegateImpl::GetPlaintextInsecurePassword(
+    api::passwords_private::InsecureCredential credential,
     api::passwords_private::PlaintextReason reason,
     content::WebContents* web_contents,
-    PlaintextCompromisedPasswordCallback callback) {
+    PlaintextInsecurePasswordCallback callback) {
   // TODO(crbug.com/495290): Pass the native window directly to the
   // reauth-handling code.
   web_contents_ = web_contents;
@@ -492,21 +498,20 @@ void PasswordsPrivateDelegateImpl::GetPlaintextCompromisedPassword(
     return;
   }
 
-  std::move(callback).Run(
-      password_check_delegate_.GetPlaintextCompromisedPassword(
-          std::move(credential)));
+  std::move(callback).Run(password_check_delegate_.GetPlaintextInsecurePassword(
+      std::move(credential)));
 }
 
-bool PasswordsPrivateDelegateImpl::ChangeCompromisedCredential(
-    const api::passwords_private::CompromisedCredential& credential,
+bool PasswordsPrivateDelegateImpl::ChangeInsecureCredential(
+    const api::passwords_private::InsecureCredential& credential,
     base::StringPiece new_password) {
-  return password_check_delegate_.ChangeCompromisedCredential(credential,
-                                                              new_password);
+  return password_check_delegate_.ChangeInsecureCredential(credential,
+                                                           new_password);
 }
 
-bool PasswordsPrivateDelegateImpl::RemoveCompromisedCredential(
-    const api::passwords_private::CompromisedCredential& credential) {
-  return password_check_delegate_.RemoveCompromisedCredential(credential);
+bool PasswordsPrivateDelegateImpl::RemoveInsecureCredential(
+    const api::passwords_private::InsecureCredential& credential) {
+  return password_check_delegate_.RemoveInsecureCredential(credential);
 }
 
 void PasswordsPrivateDelegateImpl::StartPasswordCheck(
@@ -521,6 +526,11 @@ void PasswordsPrivateDelegateImpl::StopPasswordCheck() {
 api::passwords_private::PasswordCheckStatus
 PasswordsPrivateDelegateImpl::GetPasswordCheckStatus() {
   return password_check_delegate_.GetPasswordCheckStatus();
+}
+
+password_manager::InsecureCredentialsManager*
+PasswordsPrivateDelegateImpl::GetInsecureCredentialsManager() {
+  return password_check_delegate_.GetInsecureCredentialsManager();
 }
 
 void PasswordsPrivateDelegateImpl::OnPasswordsExportProgress(

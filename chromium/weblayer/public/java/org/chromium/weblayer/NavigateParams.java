@@ -4,6 +4,8 @@
 
 package org.chromium.weblayer;
 
+import android.webkit.WebResourceResponse;
+
 import androidx.annotation.NonNull;
 
 /**
@@ -17,6 +19,7 @@ public class NavigateParams {
     private boolean mIntentProcessingDisabled;
     private boolean mNetworkErrorAutoReloadDisabled;
     private boolean mAutoPlayEnabled;
+    private WebResourceResponse mResponse;
 
     /**
      * A Builder class to help create NavigateParams.
@@ -60,7 +63,8 @@ public class NavigateParams {
          */
         @NonNull
         public Builder disableIntentProcessing() {
-            if (WebLayer.getSupportedMajorVersionInternal() < 86) {
+            if (WebLayer.shouldPerformVersionChecks()
+                    && WebLayer.getSupportedMajorVersionInternal() < 86) {
                 throw new UnsupportedOperationException();
             }
             mParams.mIntentProcessingDisabled = true;
@@ -75,7 +79,8 @@ public class NavigateParams {
          */
         @NonNull
         public Builder disableNetworkErrorAutoReload() {
-            if (WebLayer.getSupportedMajorVersionInternal() < 86) {
+            if (WebLayer.shouldPerformVersionChecks()
+                    && WebLayer.getSupportedMajorVersionInternal() < 86) {
                 throw new UnsupportedOperationException();
             }
             mParams.mNetworkErrorAutoReloadDisabled = true;
@@ -89,10 +94,37 @@ public class NavigateParams {
          */
         @NonNull
         public Builder enableAutoPlay() {
-            if (WebLayer.getSupportedMajorVersionInternal() < 86) {
+            if (WebLayer.shouldPerformVersionChecks()
+                    && WebLayer.getSupportedMajorVersionInternal() < 86) {
                 throw new UnsupportedOperationException();
             }
             mParams.mAutoPlayEnabled = true;
+            return this;
+        }
+
+        /**
+         * @param response If the embedder has already fetched the data for a navigation it can
+         *         supply it via a WebResourceResponse. The navigation will be committed at the
+         *         Uri given to NavigationController.navigate().
+         *         Caveats:
+         *             -ensure proper cache headers are set if you don't want it to be reloaded.
+         *                  Depending on the device available memory a back navigation might hit
+         *                  the network if the headers don't indicate it's cacheable and the
+         *                  page wasn't in the back-forward cache. An example to cache for 1 minute:
+         *                      Cache-Control: private, max-age=60
+         *             -since this isn't fetched by WebLayer it won't have the necessary certificate
+         *                  information to show the security padlock or certificate data. As such an
+         *                  exception is thrown if this is set when a View from UrlBarController is
+         *                  attached to a window.
+         *
+         * @since 87
+         */
+        @NonNull
+        public Builder setResponse(@NonNull WebResourceResponse response) {
+            if (WebLayer.getSupportedMajorVersionInternal() < 87) {
+                throw new UnsupportedOperationException();
+            }
+            mParams.mResponse = response;
             return this;
         }
     }
@@ -118,7 +150,8 @@ public class NavigateParams {
      * @since 86
      */
     public boolean isIntentProcessingDisabled() {
-        if (WebLayer.getSupportedMajorVersionInternal() < 86) {
+        if (WebLayer.shouldPerformVersionChecks()
+                && WebLayer.getSupportedMajorVersionInternal() < 86) {
             throw new UnsupportedOperationException();
         }
         return mIntentProcessingDisabled;
@@ -132,7 +165,8 @@ public class NavigateParams {
      * @since 86
      */
     public boolean isNetworkErrorAutoReloadDisabled() {
-        if (WebLayer.getSupportedMajorVersionInternal() < 86) {
+        if (WebLayer.shouldPerformVersionChecks()
+                && WebLayer.getSupportedMajorVersionInternal() < 86) {
             throw new UnsupportedOperationException();
         }
         return mNetworkErrorAutoReloadDisabled;
@@ -146,9 +180,21 @@ public class NavigateParams {
      * @since 86
      */
     public boolean isAutoPlayEnabled() {
-        if (WebLayer.getSupportedMajorVersionInternal() < 86) {
+        if (WebLayer.shouldPerformVersionChecks()
+                && WebLayer.getSupportedMajorVersionInternal() < 86) {
             throw new UnsupportedOperationException();
         }
         return mAutoPlayEnabled;
+    }
+
+    /**
+     * Returns a response of the html to use.
+     *
+     * @return WebResourceResponse of html to use.
+     *
+     * @since 87
+     */
+    WebResourceResponse getResponse() {
+        return mResponse;
     }
 }

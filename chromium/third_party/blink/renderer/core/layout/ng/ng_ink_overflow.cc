@@ -7,6 +7,8 @@
 #include "third_party/blink/renderer/core/layout/geometry/logical_rect.h"
 #include "third_party/blink/renderer/core/layout/geometry/writing_mode_converter.h"
 #include "third_party/blink/renderer/core/layout/line/line_orientation_utils.h"
+#include "third_party/blink/renderer/core/layout/ng/ng_text_decoration_offset.h"
+#include "third_party/blink/renderer/core/paint/text_decoration_info.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
 #include "third_party/blink/renderer/platform/wtf/size_assertions.h"
 
@@ -33,6 +35,8 @@ inline bool HasOverflow(const PhysicalRect& rect, const PhysicalSize& size) {
 }  // namespace
 
 #if DCHECK_IS_ON()
+unsigned NGInkOverflow::read_unset_as_none_ = 0;
+
 NGInkOverflow::~NGInkOverflow() {
   // Because |Type| is kept outside of the instance, callers must call |Reset|
   // before destructing.
@@ -98,15 +102,15 @@ NGInkOverflow::NGInkOverflow(Type source_type, NGInkOverflow&& source) {
   SetType(source_type);
 }
 
-NGInkOverflow::Type NGInkOverflow::Reset(Type type) {
+NGInkOverflow::Type NGInkOverflow::Reset(Type type, Type new_type) {
   CheckType(type);
+  DCHECK(new_type == kNotSet || new_type == kNone);
   switch (type) {
     case kNotSet:
+    case kNone:
     case kSmallSelf:
     case kSmallContents:
       break;
-    case kNone:
-      return kNone;
     case kSelf:
     case kContents:
       delete single_;
@@ -115,7 +119,7 @@ NGInkOverflow::Type NGInkOverflow::Reset(Type type) {
       delete container_;
       break;
   }
-  return SetType(kNone);
+  return SetType(new_type);
 }
 
 PhysicalRect NGInkOverflow::FromOutsets(const PhysicalSize& size) const {
@@ -128,12 +132,7 @@ PhysicalRect NGInkOverflow::FromOutsets(const PhysicalSize& size) const {
 
 PhysicalRect NGInkOverflow::Self(Type type, const PhysicalSize& size) const {
   CheckType(type);
-#if DCHECK_IS_ON()
-  // TODO(crbug.com/829028): Should compute all ink overflow when
-  // NGBlockFragmentation is enabled.
-  if (!RuntimeEnabledFeatures::LayoutNGBlockFragmentationEnabled())
-    DCHECK_NE(type, kNotSet);
-#endif
+  DCHECK_NE(type, kNotSet);
   switch (type) {
     case kNotSet:
     case kNone:
@@ -156,9 +155,11 @@ PhysicalRect NGInkOverflow::SelfAndContents(Type type,
   CheckType(type);
   switch (type) {
     case kNotSet:
-      // It is fine to read |kNotSet|, because
-      // |PaintLayer::UpdateDescendantDependentFlags| needs to know the old
-      // value before it computes ink overflow.
+#if DCHECK_IS_ON()
+      if (!read_unset_as_none_)
+        NOTREACHED();
+      FALLTHROUGH;
+#endif
     case kNone:
       return {PhysicalOffset(), size};
     case kSmallSelf:
@@ -334,11 +335,19 @@ base::Optional<PhysicalRect> NGInkOverflow::ComputeTextInkOverflow(
     ink_overflow.Inflate(LayoutUnit::FromFloatCeil(stroke_width / 2.0f));
   }
 
+  // Following effects, such as shadows, operate on the text decorations,
+  // so compute text decoration overflow first.
+  if (!style.AppliedTextDecorations().IsEmpty() && font.PrimaryFont()) {
+    LayoutRect decoration_rect =
+        ComputeTextDecorationOverflow(text_info, style, ink_overflow);
+    ink_overflow.Unite(decoration_rect);
+  }
+
   const WritingMode writing_mode = style.GetWritingMode();
   if (style.GetTextEmphasisMark() != TextEmphasisMark::kNone) {
     LayoutUnit emphasis_mark_height =
         LayoutUnit(font.EmphasisMarkHeight(style.TextEmphasisMarkString()));
-    DCHECK_GT(emphasis_mark_height, LayoutUnit());
+    DCHECK_GE(emphasis_mark_height, LayoutUnit());
     if (style.GetTextEmphasisLineLogicalSide() == LineLogicalSide::kOver) {
       ink_overflow.ShiftYEdgeTo(
           std::min(ink_overflow.Y(), -emphasis_mark_height));
@@ -371,6 +380,105 @@ base::Optional<PhysicalRect> NGInkOverflow::ComputeTextInkOverflow(
   local_ink_overflow.Unite({{}, size});
   local_ink_overflow.ExpandEdgesToPixelBoundaries();
   return local_ink_overflow;
+}
+
+LayoutRect NGInkOverflow::ComputeTextDecorationOverflow(
+    const NGTextFragmentPaintInfo& text_info,
+    const ComputedStyle& style,
+    const LayoutRect& ink_overflow) {
+  // TODO(https://crbug.com/1145160): Reduce code duplication between here and
+  // TextPainterBase::PaintDecorations*.
+
+  // Use a zero offset because all offsets
+  // are applied to the ink overflow after it has been computed.
+  PhysicalOffset offset;
+  TextDecorationInfo decoration_info(offset, offset, ink_overflow.Width(),
+                                     style.GetFontBaseline(), style, nullptr);
+  NGTextDecorationOffset decoration_offset(decoration_info.Style(), style,
+                                           nullptr);
+  const Vector<AppliedTextDecoration>& decorations =
+      style.AppliedTextDecorations();
+
+  // text-underline-position may flip underline and overline.
+  ResolvedUnderlinePosition underline_position =
+      decoration_info.UnderlinePosition();
+  bool flip_underline_and_overline = false;
+  if (underline_position == ResolvedUnderlinePosition::kOver) {
+    flip_underline_and_overline = true;
+    underline_position = ResolvedUnderlinePosition::kUnder;
+  }
+
+  FloatRect accumulated_bound;
+  for (size_t applied_decoration_index = 0;
+       applied_decoration_index < decorations.size();
+       ++applied_decoration_index) {
+    const AppliedTextDecoration& decoration =
+        decorations[applied_decoration_index];
+    TextDecoration lines = decoration.Lines();
+    bool has_underline = EnumHasFlags(lines, TextDecoration::kUnderline);
+    bool has_overline = EnumHasFlags(lines, TextDecoration::kOverline);
+    if (flip_underline_and_overline)
+      std::swap(has_underline, has_overline);
+
+    decoration_info.SetDecorationIndex(applied_decoration_index);
+
+    float resolved_thickness = decoration_info.ResolvedThickness();
+
+    if (has_underline) {
+      // Don't apply text-underline-offset to overline.
+      Length line_offset =
+          flip_underline_and_overline ? Length() : decoration.UnderlineOffset();
+
+      const int paint_underline_offset =
+          decoration_offset.ComputeUnderlineOffset(
+              underline_position, decoration_info.Style().ComputedFontSize(),
+              decoration_info.FontData()->GetFontMetrics(), line_offset,
+              resolved_thickness);
+      decoration_info.SetPerLineData(
+          TextDecoration::kUnderline, paint_underline_offset,
+          TextDecorationInfo::DoubleOffsetFromThickness(resolved_thickness), 1);
+      accumulated_bound.Unite(
+          decoration_info.BoundsForLine(TextDecoration::kUnderline));
+    }
+    if (has_overline) {
+      // Don't apply text-underline-offset to overline.
+      Length line_offset =
+          flip_underline_and_overline ? decoration.UnderlineOffset() : Length();
+
+      FontVerticalPositionType position =
+          flip_underline_and_overline ? FontVerticalPositionType::TopOfEmHeight
+                                      : FontVerticalPositionType::TextTop;
+      const int paint_overline_offset =
+          decoration_offset.ComputeUnderlineOffsetForUnder(
+              line_offset, decoration_info.Style().ComputedFontSize(),
+              resolved_thickness, position);
+      decoration_info.SetPerLineData(
+          TextDecoration::kOverline, paint_overline_offset,
+          -TextDecorationInfo::DoubleOffsetFromThickness(resolved_thickness),
+          1);
+      accumulated_bound.Unite(
+          decoration_info.BoundsForLine(TextDecoration::kOverline));
+    }
+    if (EnumHasFlags(lines, TextDecoration::kLineThrough)) {
+      // For increased line thickness, the line-through decoration needs to grow
+      // in both directions from its origin, subtract half the thickness to keep
+      // it centered at the same origin.
+      const float line_through_offset =
+          2 * decoration_info.Baseline() / 3 - resolved_thickness / 2;
+      // Floor double_offset in order to avoid double-line gap to appear
+      // of different size depending on position where the double line
+      // is drawn because of rounding downstream in
+      // GraphicsContext::DrawLineForText.
+      decoration_info.SetPerLineData(
+          TextDecoration::kLineThrough, line_through_offset,
+          floorf(TextDecorationInfo::DoubleOffsetFromThickness(
+              resolved_thickness)),
+          0);
+      accumulated_bound.Unite(
+          decoration_info.BoundsForLine(TextDecoration::kLineThrough));
+    }
+  }
+  return EnclosingLayoutRect(accumulated_bound);
 }
 
 }  // namespace blink

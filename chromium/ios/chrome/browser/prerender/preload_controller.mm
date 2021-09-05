@@ -22,6 +22,7 @@
 #import "ios/chrome/browser/itunes_urls/itunes_urls_handler_tab_helper.h"
 #include "ios/chrome/browser/pref_names.h"
 #include "ios/chrome/browser/prerender/preload_controller_delegate.h"
+#import "ios/chrome/browser/prerender/prerender_pref.h"
 #import "ios/chrome/browser/signin/account_consistency_service_factory.h"
 #import "ios/chrome/browser/tabs/tab_helper_util.h"
 #import "ios/web/public/navigation/navigation_item.h"
@@ -145,7 +146,7 @@ static const size_t kMaximumCancelledWebStateDelay = 2;
 
 // Used to enable the workaround for a WebKit crash, see crbug.com/1032928.
 const base::Feature kPreloadDelayWebStateReset{
-    "PreloadDelayWebStateReset", base::FEATURE_DISABLED_BY_DEFAULT};
+    "PreloadDelayWebStateReset", base::FEATURE_ENABLED_BY_DEFAULT};
 
 }  // namespace
 
@@ -158,6 +159,7 @@ const base::Feature kPreloadDelayWebStateReset{
                                  PreloadCancelling> {
   std::unique_ptr<web::WebStateDelegateBridge> _webStateDelegate;
   std::unique_ptr<web::WebStateObserverBridge> _webStateObserver;
+  std::unique_ptr<web::WebStateObserverBridge> _webStateToReplaceObserver;
   std::unique_ptr<PrefObserverBridge> _observerBridge;
   std::unique_ptr<ConnectionTypeObserverBridge> _connectionTypeObserver;
   std::unique_ptr<web::WebStatePolicyDeciderBridge> _policyDeciderBridge;
@@ -173,6 +175,11 @@ const base::Feature kPreloadDelayWebStateReset{
 
   // The dialog presenter.
   std::unique_ptr<web::JavaScriptDialogPresenter> _dialogPresenter;
+
+  // A weak pointer to the webState that will be replaced with the prerendered
+  // one. This is needed by |startPrerender| to build the new webstate with the
+  // same sessions.
+  web::WebState* _webStateToReplace;
 }
 
 // The ChromeBrowserState passed on initialization.
@@ -193,14 +200,12 @@ const base::Feature kPreloadDelayWebStateReset{
 // there is no prerender scheduled.
 @property(nonatomic, readonly) const GURL& scheduledURL;
 
-// Whether or not the preference is enabled.
-@property(nonatomic, getter=isPreferenceEnabled) BOOL preferenceEnabled;
-
-// Whether or not prerendering is only when on wifi.
-@property(nonatomic, getter=isWifiOnly) BOOL wifiOnly;
+// Network prediction settings.
+@property(nonatomic)
+    prerender_prefs::NetworkPredictionSetting networkPredictionSetting;
 
 // Whether or not the current connection is using WWAN.
-@property(nonatomic, getter=isUsingWWAN) BOOL usingWWAN;
+@property(nonatomic, assign) BOOL isOnCellularNetwork;
 
 // Number of successful prerenders (i.e. the user viewed the prerendered page)
 // during the lifetime of this controller.
@@ -238,26 +243,27 @@ const base::Feature kPreloadDelayWebStateReset{
   DCHECK_CURRENTLY_ON(web::WebThread::UI);
   if ((self = [super init])) {
     _browserState = browserState;
-    _preferenceEnabled =
-        _browserState->GetPrefs()->GetBoolean(prefs::kNetworkPredictionEnabled);
-    _wifiOnly = _browserState->GetPrefs()->GetBoolean(
-        prefs::kNetworkPredictionWifiOnly);
-    _usingWWAN = net::NetworkChangeNotifier::IsConnectionCellular(
+    _networkPredictionSetting =
+        static_cast<prerender_prefs::NetworkPredictionSetting>(
+            _browserState->GetPrefs()->GetInteger(
+                prefs::kNetworkPredictionSetting));
+    _isOnCellularNetwork = net::NetworkChangeNotifier::IsConnectionCellular(
         net::NetworkChangeNotifier::GetConnectionType());
     _webStateDelegate = std::make_unique<web::WebStateDelegateBridge>(self);
     _webStateObserver = std::make_unique<web::WebStateObserverBridge>(self);
+    _webStateToReplaceObserver =
+        std::make_unique<web::WebStateObserverBridge>(self);
     _observerBridge = std::make_unique<PrefObserverBridge>(self);
     _prefChangeRegistrar.Init(_browserState->GetPrefs());
     _observerBridge->ObserveChangesForPreference(
-        prefs::kNetworkPredictionEnabled, &_prefChangeRegistrar);
-    _observerBridge->ObserveChangesForPreference(
-        prefs::kNetworkPredictionWifiOnly, &_prefChangeRegistrar);
+        prefs::kNetworkPredictionSetting, &_prefChangeRegistrar);
     _dialogPresenter = std::make_unique<PreloadJavaScriptDialogPresenter>(self);
-    if (_preferenceEnabled && _wifiOnly) {
+    if (_networkPredictionSetting ==
+        prerender_prefs::NetworkPredictionSetting::kEnabledWifiOnly) {
       _connectionTypeObserver =
           std::make_unique<ConnectionTypeObserverBridge>(self);
     }
-
+    _webStateToReplace = nullptr;
     [[NSNotificationCenter defaultCenter]
         addObserver:self
            selector:@selector(didReceiveMemoryWarning)
@@ -281,11 +287,27 @@ const base::Feature kPreloadDelayWebStateReset{
 
 - (BOOL)isEnabled {
   DCHECK_CURRENTLY_ON(web::WebThread::UI);
-  return !IsPrerenderTabEvictionExperimentalGroup() && self.preferenceEnabled &&
-         !ios::device_util::IsSingleCoreDevice() &&
-         ios::device_util::RamIsAtLeast512Mb() &&
-         !net::NetworkChangeNotifier::IsOffline() &&
-         (!self.wifiOnly || !self.usingWWAN);
+
+  if (IsPrerenderTabEvictionExperimentalGroup() ||
+      ios::device_util::IsSingleCoreDevice() ||
+      !ios::device_util::RamIsAtLeast512Mb() ||
+      net::NetworkChangeNotifier::IsOffline()) {
+    return false;
+  }
+
+  switch (self.networkPredictionSetting) {
+    case prerender_prefs::NetworkPredictionSetting::kEnabledWifiOnly: {
+      return !self.isOnCellularNetwork;
+    }
+
+    case prerender_prefs::NetworkPredictionSetting::kEnabledWifiAndCellular: {
+      return true;
+    }
+
+    case prerender_prefs::NetworkPredictionSetting::kDisabled: {
+      return false;
+    }
+  }
 }
 
 - (void)setLoadCompleted:(BOOL)loadCompleted {
@@ -311,6 +333,7 @@ const base::Feature kPreloadDelayWebStateReset{
 - (void)prerenderURL:(const GURL&)url
             referrer:(const web::Referrer&)referrer
           transition:(ui::PageTransition)transition
+     currentWebState:(web::WebState*)currentWebState
          immediately:(BOOL)immediately {
   // TODO(crbug.com/754050): If CanPrerenderURL() returns false, should we
   // cancel any scheduled prerender requests?
@@ -326,6 +349,12 @@ const base::Feature kPreloadDelayWebStateReset{
   }
 
   [self removeScheduledPrerenderRequests];
+  _webStateToReplace = currentWebState;
+  // Observing the |_webStateToReplace| to make sure that if it's destructed
+  // the pre-rendering will be canceled.
+  if (_webStateToReplace) {
+    _webStateToReplace->AddObserver(_webStateToReplaceObserver.get());
+  }
   _scheduledRequest =
       std::make_unique<PrerenderRequest>(url, transition, referrer);
 
@@ -392,9 +421,13 @@ const base::Feature kPreloadDelayWebStateReset{
 
 - (void)connectionTypeChanged:(net::NetworkChangeNotifier::ConnectionType)type {
   DCHECK_CURRENTLY_ON(web::WebThread::UI);
-  self.usingWWAN = net::NetworkChangeNotifier::IsConnectionCellular(type);
-  if (self.wifiOnly && self.usingWWAN)
+  self.isOnCellularNetwork =
+      net::NetworkChangeNotifier::IsConnectionCellular(type);
+  if (self.networkPredictionSetting ==
+          prerender_prefs::NetworkPredictionSetting::kEnabledWifiOnly &&
+      self.isOnCellularNetwork) {
     [self cancelPrerender];
+  }
 }
 
 #pragma mark - CRWWebStateDelegate
@@ -434,6 +467,9 @@ const base::Feature kPreloadDelayWebStateReset{
 
 - (void)webState:(web::WebState*)webState
     didFinishNavigation:(web::NavigationContext*)navigation {
+  // the |_webStateToReplace| is observed for destruction event only.
+  if (_webStateToReplace == webState)
+    return;
   DCHECK_EQ(webState, _webState.get());
   if ([self shouldCancelPreloadForMimeType:webState->GetContentsMimeType()])
     [self schedulePrerenderCancel];
@@ -441,6 +477,10 @@ const base::Feature kPreloadDelayWebStateReset{
 
 - (void)webState:(web::WebState*)webState
     didLoadPageWithSuccess:(BOOL)loadSuccess {
+  // the |_webStateToReplace| is observed for destruction event only.
+  if (_webStateToReplace == webState)
+    return;
+
   DCHECK_EQ(webState, _webState.get());
   // The load should have been cancelled when the navigation finishes, but this
   // makes sure that we didn't miss one.
@@ -451,6 +491,14 @@ const base::Feature kPreloadDelayWebStateReset{
   }
 }
 
+- (void)webStateDestroyed:(web::WebState*)webState {
+  if (_webState.get() == webState)
+    return;
+  DCHECK_EQ(webState, _webStateToReplace);
+  // There is no way to create a pre-rendered webState without existing webState
+  // web state to replace, So cancel the prerender.
+  [self schedulePrerenderCancel];
+}
 #pragma mark - CRWWebStatePolicyDecider
 
 - (WebStatePolicyDecider::PolicyDecision)
@@ -473,6 +521,10 @@ const base::Feature kPreloadDelayWebStateReset{
   [self schedulePrerenderCancel];
 }
 
+- (void)onShowConsistencyPromo {
+  [self schedulePrerenderCancel];
+}
+
 - (void)onAddAccount {
   [self schedulePrerenderCancel];
 }
@@ -484,29 +536,39 @@ const base::Feature kPreloadDelayWebStateReset{
 #pragma mark - PrefObserverDelegate
 
 - (void)onPreferenceChanged:(const std::string&)preferenceName {
-  if (preferenceName == prefs::kNetworkPredictionEnabled ||
-      preferenceName == prefs::kNetworkPredictionWifiOnly) {
+  if (preferenceName == prefs::kNetworkPredictionSetting) {
     DCHECK_CURRENTLY_ON(web::WebThread::UI);
     // The logic is simpler if both preferences changes are handled equally.
-    self.preferenceEnabled = self.browserState->GetPrefs()->GetBoolean(
-        prefs::kNetworkPredictionEnabled);
-    self.wifiOnly = self.browserState->GetPrefs()->GetBoolean(
-        prefs::kNetworkPredictionWifiOnly);
+    self.networkPredictionSetting =
+        static_cast<prerender_prefs::NetworkPredictionSetting>(
+            self.browserState->GetPrefs()->GetInteger(
+                prefs::kNetworkPredictionSetting));
 
-    if (self.wifiOnly && self.preferenceEnabled) {
-      if (!_connectionTypeObserver.get()) {
-        self.usingWWAN = net::NetworkChangeNotifier::IsConnectionCellular(
-            net::NetworkChangeNotifier::GetConnectionType());
-        _connectionTypeObserver.reset(new ConnectionTypeObserverBridge(self));
+    switch (self.networkPredictionSetting) {
+      case prerender_prefs::NetworkPredictionSetting::kEnabledWifiOnly: {
+        if (!_connectionTypeObserver.get()) {
+          self.isOnCellularNetwork =
+              net::NetworkChangeNotifier::IsConnectionCellular(
+                  net::NetworkChangeNotifier::GetConnectionType());
+          _connectionTypeObserver =
+              std::make_unique<ConnectionTypeObserverBridge>(self);
+        }
+        if (self.isOnCellularNetwork) {
+          [self cancelPrerender];
+        }
+        break;
       }
-      if (self.usingWWAN) {
+
+      case prerender_prefs::NetworkPredictionSetting::kEnabledWifiAndCellular: {
+        _connectionTypeObserver.reset();
+        break;
+      }
+
+      case prerender_prefs::NetworkPredictionSetting::kDisabled: {
         [self cancelPrerender];
+        _connectionTypeObserver.reset();
+        break;
       }
-    } else if (self.preferenceEnabled) {
-      _connectionTypeObserver.reset();
-    } else {
-      [self cancelPrerender];
-      _connectionTypeObserver.reset();
     }
   }
 }
@@ -536,6 +598,10 @@ const base::Feature kPreloadDelayWebStateReset{
 - (void)removeScheduledPrerenderRequests {
   [NSObject cancelPreviousPerformRequestsWithTarget:self];
   _scheduledRequest = nullptr;
+  if (_webStateToReplace) {
+    _webStateToReplace->RemoveObserver(_webStateToReplaceObserver.get());
+  }
+  _webStateToReplace = nullptr;
 }
 
 #pragma mark - Prerender Helpers
@@ -545,17 +611,27 @@ const base::Feature kPreloadDelayWebStateReset{
   [self destroyPreviewContents];
   self.prerenderedURL = self.scheduledURL;
   std::unique_ptr<PrerenderRequest> request = std::move(_scheduledRequest);
+  // No need to observer the destruction of the |_webStateToReplace| anymore
+  // as it will be used here.
+  if (_webStateToReplace) {
+    _webStateToReplace->RemoveObserver(_webStateToReplaceObserver.get());
+  }
 
-  web::WebState* webStateToReplace = [self.delegate webStateToReplace];
-  if (!self.prerenderedURL.is_valid() || !webStateToReplace) {
+  // TODO(crbug.com/1140583): The correct way is to always get the
+  // webStateToReplace from the delegate. however this is not possible because
+  // there is only one delegate per browser state.
+  if (!_webStateToReplace)
+    _webStateToReplace = [self.delegate webStateToReplace];
+
+  if (!self.prerenderedURL.is_valid() || !_webStateToReplace) {
     [self destroyPreviewContents];
     return;
   }
 
   web::WebState::CreateParams createParams(self.browserState);
   _webState = web::WebState::CreateWithStorageSession(
-      createParams, webStateToReplace->BuildSessionStorage());
-
+      createParams, _webStateToReplace->BuildSessionStorage());
+  _webStateToReplace = nullptr;
   // Add the preload controller as a policyDecider before other tab helpers, so
   // that it can block the navigation if needed before other policy deciders
   // execute thier side effects (eg. AppLauncherTabHelper launching app).

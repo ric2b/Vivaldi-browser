@@ -29,7 +29,8 @@
 #include "base/task/post_task.h"
 #include "base/values.h"
 #include "build/build_config.h"
-#include "build/lacros_buildflags.h"
+#include "build/chromeos_buildflags.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/devtools/devtools_file_watcher.h"
 #include "chrome/browser/devtools/devtools_window.h"
@@ -72,6 +73,7 @@
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/permissions/permissions_data.h"
+#include "google_apis/google_api_keys.h"
 #include "ipc/ipc_channel.h"
 #include "net/base/escape.h"
 #include "net/base/net_errors.h"
@@ -79,6 +81,7 @@
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "services/network/public/cpp/simple_url_loader.h"
 #include "services/network/public/cpp/simple_url_loader_stream_consumer.h"
+#include "services/network/public/cpp/wrapper_shared_url_loader_factory.h"
 #include "services/network/public/mojom/url_response_head.mojom.h"
 #include "third_party/blink/public/mojom/renderer_preferences.mojom.h"
 #include "third_party/blink/public/public_buildflags.h"
@@ -102,6 +105,8 @@ static const char kTitleFormat[] = "DevTools - %s";
 static const char kDevToolsActionTakenHistogram[] = "DevTools.ActionTaken";
 static const char kDevToolsPanelShownHistogram[] = "DevTools.PanelShown";
 static const char kDevToolsPanelClosedHistogram[] = "DevTools.PanelClosed";
+static const char kDevToolsSidebarPaneShownHistogram[] =
+    "DevTools.SidebarPaneShown";
 static const char kDevToolsKeyboardShortcutFiredHistogram[] =
     "DevTools.KeyboardShortcutFired";
 static const char kDevToolsIssuesPanelOpenedFromHistogram[] =
@@ -113,7 +118,9 @@ static const char kDevToolsDualScreenDeviceEmulatedHistogram[] =
 static const char kDevtoolsGridSettingChangedHistogram[] =
     "DevTools.GridSettingChanged";
 static const char kDevtoolsCSSGridSettingsHistogram[] =
-    "DevTools.CSSGridSettings";
+    "DevTools.CSSGridSettings2";
+static const char kDevToolsHighlightedPersistentCSSGridCountHistogram[] =
+    "DevTools.HighlightedPersistentCSSGridCount";
 static const char kDevtoolsExperimentEnabledHistogram[] =
     "DevTools.ExperimentEnabled";
 static const char kDevtoolsExperimentDisabledHistogram[] =
@@ -122,6 +129,14 @@ static const char kDevtoolsExperimentEnabledAtLaunchHistogram[] =
     "DevTools.ExperimentEnabledAtLaunch";
 static const char kDevToolsColorPickerFixedColorHistogram[] =
     "DevTools.ColorPicker.FixedColor";
+static const char kDevToolsComputedStyleGroupingHistogram[] =
+    "DevTools.ComputedStyleGrouping";
+static const char kDevtoolsIssuesPanelIssueExpandedHistogram[] =
+    "DevTools.IssuesPanelIssueExpanded";
+static const char kDevtoolsIssuesPanelResourceOpenedHistogram[] =
+    "DevTools.IssuesPanelResourceOpened";
+static const char kDevToolsGridOverlayOpenedFromHistogram[] =
+    "DevTools.GridOverlayOpenedFrom";
 
 static const char kRemotePageActionInspect[] = "inspect";
 static const char kRemotePageActionReload[] = "reload";
@@ -163,7 +178,7 @@ Browser* FindBrowser(content::WebContents* web_contents) {
     if (tab_index != TabStripModel::kNoTab)
       return browser;
   }
-  return NULL;
+  return nullptr;
 }
 
 // DevToolsUIDefaultDelegate --------------------------------------------------
@@ -650,14 +665,14 @@ void DevToolsUIBindings::FrontendWebContentsObserver::DidFinishNavigation(
 DevToolsUIBindings* DevToolsUIBindings::ForWebContents(
      content::WebContents* web_contents) {
   if (!g_devtools_ui_bindings_instances.IsCreated())
-    return NULL;
+    return nullptr;
   DevToolsUIBindingsList* instances =
       g_devtools_ui_bindings_instances.Pointer();
-  for (auto it(instances->begin()); it != instances->end(); ++it) {
-    if ((*it)->web_contents() == web_contents)
-      return *it;
+  for (DevToolsUIBindings* binding : *instances) {
+    if (binding->web_contents() == web_contents)
+      return binding;
   }
-  return NULL;
+  return nullptr;
 }
 
 DevToolsUIBindings::DevToolsUIBindings(content::WebContents* web_contents)
@@ -669,7 +684,6 @@ DevToolsUIBindings::DevToolsUIBindings(content::WebContents* web_contents)
       frontend_loaded_(false) {
   g_devtools_ui_bindings_instances.Get().push_back(this);
   frontend_contents_observer_.reset(new FrontendWebContentsObserver(this));
-  web_contents_->GetMutableRendererPrefs()->can_accept_load_drops = false;
 
   file_helper_.reset(new DevToolsFileHelper(web_contents_, profile_, this));
   file_system_indexer_ = new DevToolsFileSystemIndexer();
@@ -879,9 +893,13 @@ void DevToolsUIBindings::LoadNetworkResource(const DispatchCallback& callback,
 
   NetworkResourceLoader::URLLoaderFactoryHolder url_loader_factory;
   if (gurl.SchemeIsFile()) {
-    url_loader_factory = content::CreateFileURLLoaderFactory(
-        base::FilePath() /* profile_path */,
-        nullptr /* shared_cors_origin_access_list */);
+    mojo::PendingRemote<network::mojom::URLLoaderFactory> pending_remote =
+        content::CreateFileURLLoaderFactory(
+            base::FilePath() /* profile_path */,
+            nullptr /* shared_cors_origin_access_list */);
+    url_loader_factory = network::SharedURLLoaderFactory::Create(
+        std::make_unique<network::WrapperPendingSharedURLLoaderFactory>(
+            std::move(pending_remote)));
   } else if (content::HasWebUIScheme(gurl)) {
     content::WebContents* target_tab =
         DevToolsWindow::AsDevToolsWindow(web_contents_)
@@ -906,9 +924,14 @@ void DevToolsUIBindings::LoadNetworkResource(const DispatchCallback& callback,
         target_tab->GetURL().scheme() == gurl.scheme()) {
       std::vector<std::string> allowed_webui_hosts;
       content::RenderFrameHost* frame_host = web_contents()->GetMainFrame();
-      url_loader_factory = content::CreateWebUIURLLoader(
-          frame_host, target_tab->GetURL().scheme(),
-          std::move(allowed_webui_hosts));
+
+      mojo::PendingRemote<network::mojom::URLLoaderFactory> pending_remote =
+          content::CreateWebUIURLLoaderFactory(frame_host,
+                                               target_tab->GetURL().scheme(),
+                                               std::move(allowed_webui_hosts));
+      url_loader_factory = network::SharedURLLoaderFactory::Create(
+          std::make_unique<network::WrapperPendingSharedURLLoaderFactory>(
+              std::move(pending_remote)));
     } else {
       base::DictionaryValue response;
       response.SetBoolean("schemeSupported", false);
@@ -1260,39 +1283,32 @@ void DevToolsUIBindings::RecordEnumeratedHistogram(const std::string& name,
   if (!(boundary_value >= 0 && boundary_value <= 100 && sample >= 0 &&
         sample < boundary_value)) {
     // TODO(nick): Replace with chrome::bad_message::ReceivedBadMessage().
-    frontend_host_->BadMessageRecieved();
+    frontend_host_->BadMessageReceived();
     return;
   }
-  // Each histogram name must follow a different code path in
-  // order to UMA_HISTOGRAM_EXACT_LINEAR work correctly.
-  if (name == kDevToolsActionTakenHistogram)
-    base::UmaHistogramExactLinear(name, sample, boundary_value);
-  else if (name == kDevToolsPanelShownHistogram)
-    base::UmaHistogramExactLinear(name, sample, boundary_value);
-  else if (name == kDevToolsPanelClosedHistogram)
-    base::UmaHistogramExactLinear(name, sample, boundary_value);
-  else if (name == kDevToolsKeyboardShortcutFiredHistogram)
-    base::UmaHistogramExactLinear(name, sample, boundary_value);
-  else if (name == kDevToolsIssuesPanelOpenedFromHistogram)
-    base::UmaHistogramExactLinear(name, sample, boundary_value);
-  else if (name == kDevToolsKeybindSetSettingChanged)
-    base::UmaHistogramExactLinear(name, sample, boundary_value);
-  else if (name == kDevToolsDualScreenDeviceEmulatedHistogram)
-    base::UmaHistogramExactLinear(name, sample, boundary_value);
-  else if (name == kDevtoolsGridSettingChangedHistogram)
-    base::UmaHistogramExactLinear(name, sample, boundary_value);
-  else if (name == kDevtoolsCSSGridSettingsHistogram)
-    base::UmaHistogramExactLinear(name, sample, boundary_value);
-  else if (name == kDevtoolsExperimentEnabledHistogram)
-    base::UmaHistogramExactLinear(name, sample, boundary_value);
-  else if (name == kDevtoolsExperimentDisabledHistogram)
-    base::UmaHistogramExactLinear(name, sample, boundary_value);
-  else if (name == kDevtoolsExperimentEnabledAtLaunchHistogram)
-    base::UmaHistogramExactLinear(name, sample, boundary_value);
-  else if (name == kDevToolsColorPickerFixedColorHistogram)
+
+  if (name == kDevToolsActionTakenHistogram ||
+      name == kDevToolsPanelShownHistogram ||
+      name == kDevToolsPanelClosedHistogram ||
+      name == kDevToolsSidebarPaneShownHistogram ||
+      name == kDevToolsKeyboardShortcutFiredHistogram ||
+      name == kDevToolsIssuesPanelOpenedFromHistogram ||
+      name == kDevToolsKeybindSetSettingChanged ||
+      name == kDevToolsDualScreenDeviceEmulatedHistogram ||
+      name == kDevtoolsGridSettingChangedHistogram ||
+      name == kDevtoolsCSSGridSettingsHistogram ||
+      name == kDevToolsHighlightedPersistentCSSGridCountHistogram ||
+      name == kDevtoolsExperimentEnabledHistogram ||
+      name == kDevtoolsExperimentDisabledHistogram ||
+      name == kDevtoolsExperimentEnabledAtLaunchHistogram ||
+      name == kDevToolsColorPickerFixedColorHistogram ||
+      name == kDevToolsComputedStyleGroupingHistogram ||
+      name == kDevtoolsIssuesPanelIssueExpandedHistogram ||
+      name == kDevtoolsIssuesPanelResourceOpenedHistogram ||
+      name == kDevToolsGridOverlayOpenedFromHistogram)
     base::UmaHistogramExactLinear(name, sample, boundary_value);
   else
-    frontend_host_->BadMessageRecieved();
+    frontend_host_->BadMessageReceived();
 }
 
 void DevToolsUIBindings::RecordPerformanceHistogram(const std::string& name,
@@ -1503,6 +1519,12 @@ void DevToolsUIBindings::AddDevToolsExtensionsToClient() {
 void DevToolsUIBindings::RegisterExtensionsAPI(const std::string& origin,
                                                const std::string& script) {
   extensions_api_[origin + "/"] = script;
+}
+
+void DevToolsUIBindings::GetSurveyAPIKey(const DispatchCallback& callback) {
+  base::DictionaryValue response;
+  response.SetString("apiKey", google_apis::GetDevtoolsSurveysAPIKey());
+  callback.Run(&response);
 }
 
 void DevToolsUIBindings::SetDelegate(Delegate* delegate) {

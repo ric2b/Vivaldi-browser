@@ -5,8 +5,10 @@
 #include "ui/accessibility/platform/ax_platform_node_base.h"
 
 #include <algorithm>
+#include <iomanip>
 #include <limits>
 #include <set>
+#include <sstream>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -1271,6 +1273,15 @@ void AXPlatformNodeBase::ComputeAttributes(PlatformAttributeList* attributes) {
     }
   }
 
+  float text_indent;
+  if (GetFloatAttribute(ax::mojom::FloatAttribute::kTextIndent, &text_indent) !=
+      0.0f) {
+    // Round value to two decimal places.
+    std::stringstream value;
+    value << std::fixed << std::setprecision(2) << text_indent << "mm";
+    AddAttributeToList("text-indent", value.str(), attributes);
+  }
+
   // Text fields need to report the attribute "text-model:a1" to instruct
   // screen readers to use IAccessible2 APIs to handle text editing in this
   // object (as opposed to treating it like a native Windows text box).
@@ -1863,6 +1874,7 @@ int AXPlatformNodeBase::FindTextBoundary(
     int offset,
     ax::mojom::MoveDirection direction,
     ax::mojom::TextAffinity affinity) const {
+  DCHECK_NE(boundary, ax::mojom::TextBoundary::kNone);
   if (boundary != ax::mojom::TextBoundary::kSentenceStart) {
     base::Optional<int> boundary_offset =
         GetDelegate()->FindTextBoundary(boundary, offset, direction, affinity);

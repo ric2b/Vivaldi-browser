@@ -29,6 +29,9 @@ import org.chromium.content_public.browser.LoadUrlParams;
 import java.util.HashSet;
 import java.util.List;
 
+import android.view.View;
+import android.widget.PopupMenu;
+
 import org.chromium.chrome.browser.ChromeApplication;
 
 import org.vivaldi.browser.common.VivaldiBookmarkUtils;
@@ -71,6 +74,11 @@ public class BookmarkActionBar extends SelectableListToolbar<BookmarkId>
         // Wait to enable the selection mode group until the BookmarkDelegate is set. The
         // SelectionDelegate is retrieved from the BookmarkDelegate.
         getMenu().setGroupEnabled(R.id.selection_mode_menu_group, false);
+
+        if (ChromeApplication.isVivaldi()) {
+            getMenu().findItem(R.id.sort_bookmarks_id).setVisible(
+                    true);
+        }
     }
 
     @Override
@@ -145,6 +153,40 @@ public class BookmarkActionBar extends SelectableListToolbar<BookmarkId>
             return true;
         } else if (menuItem.getItemId() == R.id.select_all_menu_id) {
             toggleSelectAll();
+            return true;
+        } else if (ChromeApplication.isVivaldi() && menuItem.getItemId() == R.id.sort_bookmarks_id) {
+            View view = findViewById(R.id.sort_bookmarks_id);
+            PopupMenu popupMenu = new PopupMenu(getContext(), view);
+            popupMenu.inflate(R.menu.vivaldi_sort_bookmarks_menu);
+            popupMenu.setOnMenuItemClickListener(new PopupMenu.OnMenuItemClickListener() {
+                @Override
+                public boolean onMenuItemClick(MenuItem menuItem) {
+                    if (menuItem.getItemId() == R.id.sort_manual_id) {
+                        mDelegate.setSortOrder(
+                                BookmarkItemsAdapter.SortOrder.forNumber(BookmarkItemsAdapter.SortOrder.MANUAL.getNumber()));
+                        return true;
+                    } else if (menuItem.getItemId() == R.id.sort_by_title_id) {
+                        mDelegate.setSortOrder(
+                                BookmarkItemsAdapter.SortOrder.forNumber(BookmarkItemsAdapter.SortOrder.TITLE.getNumber()));
+                        return true;
+                    } else if (menuItem.getItemId() == R.id.sort_by_address_id) {
+                        mDelegate.setSortOrder(
+                                BookmarkItemsAdapter.SortOrder.forNumber(BookmarkItemsAdapter.SortOrder.ADDRESS.getNumber()));
+                        return true;
+                    } else if (menuItem.getItemId() == R.id.sort_by_nickname_id) {
+                        mDelegate.setSortOrder(
+                                BookmarkItemsAdapter.SortOrder.forNumber(BookmarkItemsAdapter.SortOrder.NICK.getNumber()));
+                        return true;
+                    } else if (menuItem.getItemId() == R.id.sort_by_description_id) {
+                        mDelegate.setSortOrder(
+                                BookmarkItemsAdapter.SortOrder.forNumber(BookmarkItemsAdapter.SortOrder.DESCRIPTION.getNumber()));
+                        return true;
+                    }
+                    return false;
+                }
+            });
+            popupMenu.show();
+
             return true;
         }
 

@@ -13,9 +13,11 @@
 <translation id="1211441953136645838">amaierako oharra</translation>
 <translation id="1281252709823657822">leihoa</translation>
 <translation id="1306460908038601864">Desaktibatuta</translation>
+<translation id="1311894908970423688">Balioak <ph name="VALUE_DATE_OR_TIME" /> izan behar du.</translation>
 <translation id="1335095011850992622">kredituak</translation>
 <translation id="1342835525016946179">artikulua</translation>
 <translation id="1359897965706325498">iragarki-banda</translation>
+<translation id="145015347812617860"><ph name="COUNT" /> elementu</translation>
 <translation id="1480676835519562650">aukera anitzekoa, <ph name="COUNT" />/<ph name="SELECTED" /> haur hautatu dira.</translation>
 <translation id="1589122976691792535">lurraldea</translation>
 <translation id="1591562245178063882">Uneko hilabetea</translation>
@@ -45,6 +47,7 @@
 <translation id="2247351761944213033"><ph name="WEEKNUMBER" />. astea, <ph name="YEAR" /></translation>
 <translation id="2277199496770840904"><ph name="NUMBER" />. pista</translation>
 <translation id="2291999235780842123">koadroa</translation>
+<translation id="2307576640803031502">zerrendan, <ph name="INDEX" />/<ph name="COUNT" /> elementu</translation>
 <translation id="2311842470354187719">orri-jauzia</translation>
 <translation id="2335594187091864976">data- eta ordu-hautatzailea</translation>
 <translation id="2393030564806080191">Kolore hamaseitarraren balioa</translation>
@@ -155,9 +158,11 @@
 <translation id="5677946354068040947">aukera gehiago</translation>
 <translation id="576709008726043716">sarrera</translation>
 <translation id="57838592816432529">Desaktibatu audioa</translation>
+<translation id="5860033963881614850">Desaktibatuta</translation>
 <translation id="588258955323874662">Pantaila osoa</translation>
 <translation id="5888666972993069672"><ph name="DEVICE_FRIENDLY_NAME" /> gailura igortzen</translation>
 <translation id="591047860372322273">bilaketa-koadroa</translation>
+<translation id="5916664084637901428">Aktibatuta</translation>
 <translation id="5939518447894949180">Berrezarri</translation>
 <translation id="5966707198760109579">Astea</translation>
 <translation id="5987525920412732405">biratze-botoia</translation>
@@ -185,6 +190,7 @@
 <translation id="6643016212128521049">Garbitu</translation>
 <translation id="668171684555832681">Beste bat…</translation>
 <translation id="6692633176391053278">sekuentzia-hautatzailea</translation>
+<translation id="6709093583001123835">Balioak <ph name="VALUE" /> izan behar du.</translation>
 <translation id="6709570249143506788">Erreprodukzio-kalitate txarra</translation>
 <translation id="6755330956360078551">argibidea</translation>
 <translation id="6790428901817661496">Erreproduzitu</translation>
@@ -285,6 +291,7 @@
 <translation id="9155987714137265666"><ph name="WEEK" />, <ph name="WEEK_START_DATE" />(e)etik aurrera</translation>
 <translation id="916607977885256133">Pantaila txiki gainjarria</translation>
 <translation id="9168329111483466115">oin-oharra</translation>
+<translation id="945780513535800434">Partzialki markatuta</translation>
 <translation id="954003015749068518">sartu pantaila txiki gainjarriko moduan</translation>
 <translation id="966787709310836684">menua</translation>
 </translationbundle>

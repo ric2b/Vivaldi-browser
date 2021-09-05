@@ -8,6 +8,7 @@
 #include <string>
 
 #include "base/gtest_prod_util.h"
+#include "base/optional.h"
 #include "content/common/content_export.h"
 
 namespace content {
@@ -47,6 +48,33 @@ class CONTENT_EXPORT StoragePartitionConfig {
   // and partition_name, but the in_memeory field is always set to true.
   StoragePartitionConfig CopyWithInMemorySet() const;
 
+  // In some cases we want a "child" storage partition to resolve blob URLs that
+  // were created by their "parent", while not allowing the reverse. To enable
+  // this, set this flag to a value other than kNone, which will result in the
+  // storage partition with the same partition_domain but empty partition_name
+  // being used as fallback for the purpose of resolving blob URLs.
+  enum class FallbackMode {
+    kNone,
+    kFallbackPartitionOnDisk,
+    kFallbackPartitionInMemory,
+  };
+  void set_fallback_to_partition_domain_for_blob_urls(FallbackMode fallback) {
+    if (fallback != FallbackMode::kNone) {
+      DCHECK(!is_default());
+      DCHECK(!partition_domain_.empty());
+      // TODO(acollwell): Ideally we shouldn't have storage partition configs
+      // that differ only in their fallback mode, but unfortunately that isn't
+      // true. When that is fixed this can be made more robust by disallowing
+      // fallback from storage partitions with an empty partition name.
+      // DCHECK(!partition_name_.empty());
+    }
+    fallback_to_partition_domain_for_blob_urls_ = fallback;
+  }
+  FallbackMode fallback_to_partition_domain_for_blob_urls() const {
+    return fallback_to_partition_domain_for_blob_urls_;
+  }
+  base::Optional<StoragePartitionConfig> GetFallbackForBlobUrls() const;
+
   bool operator<(const StoragePartitionConfig& rhs) const;
   bool operator==(const StoragePartitionConfig& rhs) const;
   bool operator!=(const StoragePartitionConfig& rhs) const;
@@ -61,6 +89,8 @@ class CONTENT_EXPORT StoragePartitionConfig {
   std::string partition_domain_;
   std::string partition_name_;
   bool in_memory_ = false;
+  FallbackMode fallback_to_partition_domain_for_blob_urls_ =
+      FallbackMode::kNone;
 };
 
 }  // namespace content

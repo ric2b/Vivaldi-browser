@@ -50,9 +50,10 @@ class CORE_EXPORT SVGAnimateElement : public SVGAnimationElement {
       const Attribute&) const override;
 
   const QualifiedName& AttributeName() const { return attribute_name_; }
-  AnimatedPropertyType GetAnimatedPropertyType() const;
+  AnimatedPropertyType GetAnimatedPropertyTypeForTesting() const {
+    return type_;
+  }
   bool AnimatedPropertyTypeSupportsAddition() const;
-  bool IsAdditive() const final;
 
  protected:
   void WillChangeAnimationTarget() final;
@@ -60,7 +61,7 @@ class CORE_EXPORT SVGAnimateElement : public SVGAnimationElement {
 
   bool HasValidAnimation() const override;
 
-  void ResetAnimatedType() final;
+  void ResetAnimatedType(bool needs_underlying_value) final;
   void ClearAnimatedType() final;
 
   bool CalculateToAtEndOfDurationValue(

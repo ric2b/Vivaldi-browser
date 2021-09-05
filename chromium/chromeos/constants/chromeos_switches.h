@@ -145,6 +145,8 @@ extern const char kFakeDriveFsLauncherChrootPath[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const char kFakeDriveFsLauncherSocketPath[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
+extern const char kFakeArcRecommendedAppsForTesting[];
+COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const char kFingerprintSensorLocation[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const char kForceCertVerifierBuiltin[];
@@ -166,12 +168,15 @@ COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kHasChromeOSKeyboard[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const char kHideAndroidFilesInFilesApp[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kHomedir[];
+COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kIgnoreArcVmDevConf[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const char kIgnoreUserProfileMappingForTests[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kKernelnextRestrictVMs[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const char kLacrosChromeAdditionalArgs[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kLacrosChromePath[];
+COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
+extern const char kLacrosMojoSocketForTesting[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kLoginManager[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kLoginProfile[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kLoginUser[];

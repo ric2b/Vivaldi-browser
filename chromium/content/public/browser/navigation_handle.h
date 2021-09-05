@@ -21,6 +21,7 @@
 #include "net/base/net_errors.h"
 #include "net/dns/public/resolve_error_info.h"
 #include "net/http/http_response_info.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/network/public/cpp/resource_request_body.h"
 #include "third_party/blink/public/mojom/loader/referrer.mojom.h"
 #include "third_party/blink/public/mojom/loader/transferrable_url_loader.mojom.h"
@@ -37,6 +38,7 @@ class ProxyServer;
 namespace content {
 struct GlobalFrameRoutingId;
 struct GlobalRequestID;
+class NavigationEntry;
 class NavigationThrottle;
 class NavigationUIData;
 class RenderFrameHost;
@@ -60,6 +62,10 @@ class CONTENT_EXPORT NavigationHandle {
 
   // Get a unique ID for this navigation.
   virtual int64_t GetNavigationId() = 0;
+
+  // Get the page UKM ID that will be in use once this navigation fully commits
+  // (the eventual value of GetRenderFrameHost()->GetPageUkmSourceId()).
+  virtual ukm::SourceId GetNextPageUkmSourceId() = 0;
 
   // The URL the frame is navigating to. This may change during the navigation
   // when encountering a server redirect.
@@ -376,6 +382,9 @@ class CONTENT_EXPORT NavigationHandle {
   // document or not. Set only when the navigation commits.
   virtual bool IsSameProcess() = 0;
 
+  // Returns the NavigationEntry associated with this, which may be null.
+  virtual NavigationEntry* GetNavigationEntry() = 0;
+
   // Returns the offset between the indices of the previous last committed and
   // the newly committed navigation entries.
   // (e.g. -1 for back navigations, 0 for reloads, 1 for forward navigations).
@@ -403,6 +412,10 @@ class CONTENT_EXPORT NavigationHandle {
   // called from DidStartNavigation().
   virtual void SetIsOverridingUserAgent(bool override_ua) = 0;
   virtual bool GetIsOverridingUserAgent() = 0;
+
+  // Suppress any errors during a navigation and behave as if the user cancelled
+  // the navigation: no error page will commit.
+  virtual void SetSilentlyIgnoreErrors() = 0;
 
   // Testing methods ----------------------------------------------------------
   //

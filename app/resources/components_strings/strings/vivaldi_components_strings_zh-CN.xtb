@@ -98,6 +98,7 @@
 <translation id="4235360514405112390">有效</translation>
 <translation id="4250431568374086873">您与此网站之间建立的连接并非完全安全</translation>
 <translation id="4265872034478892965">您的管理员允许</translation>
+<translation id="4305666528087210886">无法访问您的文件</translation>
 <translation id="4312866146174492540">屏蔽（默认）</translation>
 <translation id="4356973930735388585">此网站上的攻击者可能会试图在您的计算机上安装危险程序，以窃取或删除您的信息（例如：照片、密码、通讯内容和信用卡信息）。</translation>
 <translation id="4408413947728134509"><ph name="NUM_COOKIES" />Cookie</translation>
@@ -152,6 +153,7 @@
 <translation id="6165508094623778733">了解详情</translation>
 <translation id="6177128806592000436">您与此网站之间建立的连接不安全</translation>
 <translation id="6203231073485539293">请检查您的互联网连接是否正常</translation>
+<translation id="6225522625585012689">请访问 &lt;strong&gt;vivaldi://policy&lt;/strong&gt;查看被屏蔽的网址列表以及您的系统管理员强制执行的其他政策。</translation>
 <translation id="625755898061068298">您已选择针对此网站停用安全警告功能。</translation>
 <translation id="6264485186158353794">返回安全连接</translation>
 <translation id="6305205051461490394">无法访问 <ph name="URL" />。</translation>
@@ -201,7 +203,6 @@
 <translation id="8041940743680923270">使用全局默认设置（询问）</translation>
 <translation id="808894953321890993">更改密码</translation>
 <translation id="8119307142152921512">广告和追踪器</translation>
-<translation id="8142868475871995937">请访问 &lt;strong&gt;vivaldi:// 政策&lt;/strong&gt;，查看列入黑名单的网址列表以及您的系统管理员强制要求执行的其他政策。</translation>
 <translation id="8149426793427495338">您的计算机已进入休眠模式。</translation>
 <translation id="8150722005171944719">无法读取 <ph name="URL" /> 上的文件。该文件可能已遭到删除、移动，或者文件权限不允许进行访问。</translation>
 <translation id="8184538546369750125">使用全局默认设置（允许）</translation>
@@ -224,6 +225,7 @@
 <translation id="9011424611726486705">打开网站设置</translation>
 <translation id="9025348182339809926">（无效）</translation>
 <translation id="9039213469156557790">而且，此页中包含其他不安全的资源。这些资源在传输过程中能被他人查看，而攻击者可以修改这些资源，从而改变此页的行为。</translation>
+<translation id="9062620674789239642">该文件可能已被移动、修改或删除。</translation>
 <translation id="9069693763241529744">已被某款扩展程序阻止</translation>
 <translation id="9169664750068251925">在此网站上始终阻止</translation>
 <translation id="9180553614777056266">广告拦截器</translation>

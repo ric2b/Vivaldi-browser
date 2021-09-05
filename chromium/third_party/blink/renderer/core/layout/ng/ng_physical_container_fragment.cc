@@ -57,11 +57,12 @@ NGPhysicalContainerFragment::NGPhysicalContainerFragment(
   if (oof_positioned_descendants_) {
     oof_positioned_descendants_->ReserveCapacity(
         builder->oof_positioned_descendants_.size());
+    const WritingModeConverter converter(
+        {builder->Style().GetWritingMode(), builder->Direction()}, size);
     for (const auto& descendant : builder->oof_positioned_descendants_) {
       oof_positioned_descendants_->emplace_back(
           descendant.node,
-          descendant.static_position.ConvertToPhysical(
-              builder->Style().GetWritingMode(), builder->Direction(), size),
+          descendant.static_position.ConvertToPhysical(converter),
           descendant.inline_container);
     }
   }
@@ -88,6 +89,35 @@ NGPhysicalContainerFragment::NGPhysicalContainerFragment(
   }
 }
 
+NGPhysicalContainerFragment::NGPhysicalContainerFragment(
+    const NGPhysicalContainerFragment& other,
+    NGLink* buffer)
+    : NGPhysicalFragment(other),
+      num_children_(other.num_children_),
+      break_token_(other.break_token_),
+      oof_positioned_descendants_(
+          other.oof_positioned_descendants_
+              ? new Vector<NGPhysicalOutOfFlowPositionedNode>(
+                    *other.oof_positioned_descendants_)
+              : nullptr),
+      buffer_(buffer) {
+  // To ensure the fragment tree is consistent, use the post-layout fragment.
+  for (wtf_size_t i = 0; i < num_children_; ++i) {
+    buffer[i].offset = other.buffer_[i].offset;
+    scoped_refptr<const NGPhysicalFragment> post_layout =
+        other.buffer_[i]->PostLayout();
+    // While making the fragment tree consistent, we need to also clone any
+    // fragmentainer fragments, as they don't nessecerily have their result
+    // stored on the layout-object tree.
+    if (post_layout->IsFragmentainerBox()) {
+      post_layout = NGPhysicalBoxFragment::CloneWithPostLayoutFragments(
+          To<NGPhysicalBoxFragment>(*post_layout));
+    }
+    new (&buffer[i].fragment)
+        scoped_refptr<const NGPhysicalFragment>(std::move(post_layout));
+  }
+}
+
 NGPhysicalContainerFragment::~NGPhysicalContainerFragment() = default;
 
 // additional_offset must be offset from the containing_block.
@@ -110,6 +140,14 @@ void NGPhysicalContainerFragment::AddOutlineRectsForNormalChildren(
               outline_rects, additional_offset, outline_type, containing_block);
           continue;
         }
+        if (item.IsText()) {
+          if (outline_type == NGOutlineType::kDontIncludeBlockVisualOverflow)
+            continue;
+          outline_rects->push_back(
+              PhysicalRect(additional_offset + item.OffsetInContainerBlock(),
+                           item.Size().ToLayoutSize()));
+          continue;
+        }
         if (item.Type() == NGFragmentItem::kBox) {
           if (const NGPhysicalBoxFragment* child_box =
                   item.PostLayoutBoxFragment()) {
@@ -120,7 +158,6 @@ void NGPhysicalContainerFragment::AddOutlineRectsForNormalChildren(
           }
           continue;
         }
-        DCHECK(item.IsText());
       }
       // Don't add |Children()|. If |this| has |NGFragmentItems|, children are
       // either line box, which we already handled in items, or OOF, which we
@@ -208,7 +245,7 @@ void NGPhysicalContainerFragment::AddScrollableOverflowForInlineChild(
             container, container_style, line, has_hanging, descendants,
             height_type, &child_scroll_overflow);
         child_box->AdjustScrollableOverflowForPropagation(
-            container, &child_scroll_overflow);
+            container, height_type, &child_scroll_overflow);
         if (UNLIKELY(has_hanging)) {
           AdjustScrollableOverflowForHanging(line.RectInContainerBlock(),
                                              container_writing_mode,

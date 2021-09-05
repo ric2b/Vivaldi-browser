@@ -32,7 +32,6 @@ class WebExternalWidgetImpl : public WebExternalWidget,
 
   // WebWidget overrides:
   cc::LayerTreeHost* InitializeCompositing(
-      bool never_composited,
       scheduler::WebThreadScheduler* main_thread_scheduler,
       cc::TaskGraphRunner* task_graph_runner,
       bool for_child_local_root_frame,
@@ -54,8 +53,8 @@ class WebExternalWidgetImpl : public WebExternalWidget,
   void SetCursor(const ui::Cursor& cursor) override;
   bool HandlingInputEvent() override;
   void SetHandlingInputEvent(bool handling) override;
-  void ProcessInputEventSynchronously(const WebCoalescedInputEvent&,
-                                      HandledEventCallback) override;
+  void ProcessInputEventSynchronouslyForTesting(const WebCoalescedInputEvent&,
+                                                HandledEventCallback) override;
   void DidOverscrollForTesting(
       const gfx::Vector2dF& overscroll_delta,
       const gfx::Vector2dF& accumulated_overscroll,
@@ -79,17 +78,14 @@ class WebExternalWidgetImpl : public WebExternalWidget,
 #endif
   void ApplyVisualProperties(
       const VisualProperties& visual_properties) override;
-  void UpdateSurfaceAndScreenInfo(
-      const viz::LocalSurfaceIdAllocation& new_local_surface_id_allocation,
-      const gfx::Rect& compositor_viewport_pixel_rect,
-      const ScreenInfo& new_screen_info) override;
-  void UpdateScreenInfo(const ScreenInfo& new_screen_info) override;
-  void UpdateCompositorViewportAndScreenInfo(
-      const gfx::Rect& compositor_viewport_pixel_rect,
-      const ScreenInfo& new_screen_info) override;
-  void UpdateCompositorViewportRect(
-      const gfx::Rect& compositor_viewport_pixel_rect) override;
   const ScreenInfo& GetScreenInfo() override;
+  gfx::Rect WindowRect() override;
+  gfx::Rect ViewRect() override;
+  void SetScreenRects(const gfx::Rect& widget_screen_rect,
+                      const gfx::Rect& window_screen_rect) override;
+  gfx::Size VisibleViewportSizeInDIPs() override;
+  void SetPendingWindowRect(const gfx::Rect* window_screen_rect) override;
+  bool IsHidden() const override;
 
   // WebExternalWidget overrides:
   void SetRootLayer(scoped_refptr<cc::Layer>) override;
@@ -110,14 +106,11 @@ class WebExternalWidgetImpl : public WebExternalWidget,
       const cc::OverscrollBehavior& overscroll_behavior,
       bool event_processed) override;
   bool SupportsBufferedTouchEvents() override;
-  void FocusChanged(bool enabled) override;
   void FlushInputProcessedCallback() override;
   void CancelCompositionForPepper() override;
   void UpdateVisualProperties(
       const VisualProperties& visual_properties) override;
-  void UpdateScreenRects(const gfx::Rect& widget_screen_rect,
-                         const gfx::Rect& window_screen_rect) override;
-  ScreenInfo GetOriginalScreenInfo() override;
+  const ScreenInfo& GetOriginalScreenInfo() override;
   gfx::Rect ViewportVisibleRect() override;
 
  private:

@@ -235,7 +235,6 @@ executable("web_engine_exe") {
     ":web_engine_core",
     "//base",
     "//content/public/app",
-    "//services/service_manager/embedder:embedder_switches",
   ]
   sources = [ "web_engine_main.cc" ]
   visibility = [ ":*" ]
@@ -361,6 +360,7 @@ test("web_engine_integration_tests") {
     "//media",
     "//media/fuchsia/audio:test_support",
     "//media/fuchsia/camera:test_support",
+    "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.mediacodec",
     "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.sys",
     "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.web",
   ]

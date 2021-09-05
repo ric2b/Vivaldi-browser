@@ -568,7 +568,7 @@ bool URLDatabase::GetKeywordSearchTermRows(
     row.url_id = statement.ColumnInt64(1);
     row.keyword_id = statement.ColumnInt64(0);
     row.term = term;
-    row.normalized_term = statement.ColumnInt64(2);
+    row.normalized_term = statement.ColumnString16(2);
     rows->push_back(row);
   }
   return true;
@@ -715,6 +715,11 @@ bool URLDatabase::DeleteKeywordSearchTermForURL(URLID url_id) {
       SQL_FROM_HERE, "DELETE FROM keyword_search_terms WHERE url_id=?"));
   statement.BindInt64(0, url_id);
   return statement.Run();
+}
+
+bool URLDatabase::GetVisitsForUrl2(URLID url_id, VisitVector* visits) {
+  NOTREACHED();
+  return false;
 }
 
 bool URLDatabase::DropStarredIDFromURLs() {

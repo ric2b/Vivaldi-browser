@@ -23,16 +23,18 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
+#include "base/task/task_traits.h"
 #include "base/values.h"
 #include "base/vivaldi_switches.h"
 #include "browser/vivaldi_browser_finder.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/content_settings/generated_cookie_prefs.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+#include "chrome/browser/download/download_prefs.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/first_run/first_run.h"
-#include "chrome/browser/media/router/media_router_dialog_controller.h"
 #include "chrome/browser/media/router/media_router_feature.h"
-#include "chrome/browser/media/router/media_router_metrics.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/prefs/session_startup_pref.h"
 #include "chrome/browser/profiles/profile.h"
@@ -49,14 +51,18 @@
 #include "chrome/browser/ui/webui/settings/site_settings_helper.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
+#include "chrome/services/qrcode_generator/public/cpp/qrcode_generator_service.h"
 #include "components/content_settings/core/browser/content_settings_info.h"
 #include "components/content_settings/core/browser/content_settings_registry.h"
 #include "components/content_settings/core/browser/content_settings_utils.h"
+#include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/pref_names.h"
 #include "components/datasource/vivaldi_data_source_api.h"
 #include "components/language/core/browser/pref_names.h"
 #include "components/lookalikes/core/lookalike_url_util.h"
+#include "components/media_router/browser/media_router_dialog_controller.h"
+#include "components/media_router/browser/media_router_metrics.h"
 #include "components/prefs/pref_service.h"
 #include "components/sessions/core/tab_restore_service.h"
 #include "components/version_info/version_info.h"
@@ -71,9 +77,11 @@
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/tools/vivaldi_tools.h"
 #include "prefs/vivaldi_pref_names.h"
+#include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/lights/razer_chroma_handler.h"
 #include "ui/shell_dialogs/select_file_policy.h"
 #include "ui/vivaldi_ui_utils.h"
+#include "ui/vivaldi_skia_utils.h"
 #include "url/third_party/mozilla/url_parse.h"
 #include "url/url_constants.h"
 
@@ -92,6 +100,8 @@
 #elif defined(OS_MAC)
 #include "chrome/browser/password_manager/password_manager_util_mac.h"
 #endif
+
+using content_settings::CookieControlsMode;
 
 namespace extensions {
 
@@ -1121,6 +1131,41 @@ UtilitiesGetDefaultContentSettingsFunction::Run() {
   return RespondNow(ArgumentList(Results::Create(setting)));
 }
 
+namespace {
+CookieControlsMode ToCookieControlsMode(
+    vivaldi::utilities::CookieMode cookie_mode) {
+  switch (cookie_mode) {
+    case vivaldi::utilities::CookieMode::COOKIE_MODE_OFF:
+      return CookieControlsMode::kOff;
+    case vivaldi::utilities::CookieMode::COOKIE_MODE_BLOCKTHIRDPARTY:
+      return CookieControlsMode::kBlockThirdParty;
+    case vivaldi::utilities::CookieMode::
+        COOKIE_MODE_BLOCKTHIRDPARTYINCOGNITOONLY:
+      return CookieControlsMode::kIncognitoOnly;
+    default:
+      NOTREACHED() << "Incorrect cookie mode to the API";
+      return CookieControlsMode::kBlockThirdParty;
+  }
+}
+
+vivaldi::utilities::CookieMode ToCookieMode(CookieControlsMode mode) {
+  using vivaldi::utilities::CookieMode;
+
+  switch (mode) {
+    case CookieControlsMode::kOff:
+      return CookieMode::COOKIE_MODE_OFF;
+    case CookieControlsMode::kBlockThirdParty:
+      return CookieMode::COOKIE_MODE_BLOCKTHIRDPARTY;
+    case CookieControlsMode::kIncognitoOnly:
+      return CookieMode::COOKIE_MODE_BLOCKTHIRDPARTYINCOGNITOONLY;
+    default:
+      NOTREACHED() << "Incorrect cookie controls mode to the API";
+      return CookieMode::COOKIE_MODE_BLOCKTHIRDPARTY;
+  }
+}
+
+}
+
 ExtensionFunction::ResponseAction
 UtilitiesSetBlockThirdPartyCookiesFunction::Run() {
   using vivaldi::utilities::SetBlockThirdPartyCookies::Params;
@@ -1129,15 +1174,13 @@ UtilitiesSetBlockThirdPartyCookiesFunction::Run() {
   std::unique_ptr<Params> params = Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  bool block3rdparty = params->block3rd_party;
-
   Profile* profile = Profile::FromBrowserContext(browser_context());
   PrefService* service = profile->GetOriginalProfile()->GetPrefs();
-  service->SetBoolean(prefs::kBlockThirdPartyCookies, block3rdparty);
+  CookieControlsMode mode = ToCookieControlsMode(params->cookie_mode);
 
-  bool blockThirdParty = service->GetBoolean(prefs::kBlockThirdPartyCookies);
+  service->SetInteger(prefs::kCookieControlsMode, static_cast<int>(mode));
 
-  return RespondNow(ArgumentList(Results::Create(blockThirdParty)));
+  return RespondNow(ArgumentList(Results::Create(true)));
 }
 
 ExtensionFunction::ResponseAction
@@ -1146,9 +1189,12 @@ UtilitiesGetBlockThirdPartyCookiesFunction::Run() {
 
   Profile* profile = Profile::FromBrowserContext(browser_context());
   PrefService* service = profile->GetOriginalProfile()->GetPrefs();
-  bool blockThirdParty = service->GetBoolean(prefs::kBlockThirdPartyCookies);
+  CookieControlsMode mode = static_cast<CookieControlsMode>(
+      service->GetInteger(prefs::kCookieControlsMode));
 
-  return RespondNow(ArgumentList(Results::Create(blockThirdParty)));
+  vivaldi::utilities::CookieMode cookie_mode = ToCookieMode(mode);
+
+  return RespondNow(ArgumentList(Results::Create(cookie_mode)));
 }
 
 ExtensionFunction::ResponseAction UtilitiesOpenTaskManagerFunction::Run() {
@@ -1369,10 +1415,11 @@ ExtensionFunction::ResponseAction UtilitiesSetContentSettingsFunction::Run() {
 
   Profile* profile = Profile::FromBrowserContext(browser_context());
   if (incognito) {
-    if (!profile->HasOffTheRecordProfile()) {
+    if (!profile->HasOffTheRecordProfile(Profile::OTRProfileID::PrimaryID())) {
       return RespondNow(NoArguments());
     }
-    profile = profile->GetOffTheRecordProfile();
+    profile =
+        profile->GetOffTheRecordProfile(Profile::OTRProfileID::PrimaryID());
   }
 
   HostContentSettingsMap* map =
@@ -1492,9 +1539,6 @@ ExtensionFunction::ResponseAction UtilitiesGetMediaAvailableStateFunction::Run()
         is_available = false;
         break;
     }
-    // Definitions from mf_initializer.cc.
-    const int kMFVersionVista = (0x0001 << 16 | MF_API_VERSION);
-    const int kMFVersionWin7 = (0x0002 << 16 | MF_API_VERSION);
     if (!is_available) {
       // MFStartup triggers a delayload which crashes on startup if the dll is
       // not available, so ensure the dll is present first.
@@ -1503,10 +1547,7 @@ ExtensionFunction::ResponseAction UtilitiesGetMediaAvailableStateFunction::Run()
       if (dll) {
         // Only check N versions for media framework, otherwise just assume
         // all is fine and proceed.
-        HRESULT hr = MFStartup(base::win::GetVersion() >= base::win::Version::WIN7
-          ? kMFVersionWin7
-          : kMFVersionVista,
-          MFSTARTUP_LITE);
+        HRESULT hr = MFStartup(MF_VERSION, MFSTARTUP_LITE);
         if (SUCCEEDED(hr)) {
           is_available = true;
           MFShutdown();
@@ -1523,6 +1564,104 @@ ExtensionFunction::ResponseAction UtilitiesIsFirstRunFunction::Run() {
   namespace Results = vivaldi::utilities::IsFirstRun::Results;
   return RespondNow(
       ArgumentList(Results::Create(first_run::IsChromeFirstRun())));
+}
+
+UtilitiesGenerateQRCodeFunction::~UtilitiesGenerateQRCodeFunction() {}
+
+UtilitiesGenerateQRCodeFunction::UtilitiesGenerateQRCodeFunction() {}
+
+ExtensionFunction::ResponseAction UtilitiesGenerateQRCodeFunction::Run() {
+  using vivaldi::utilities::GenerateQRCode::Params;
+  std::unique_ptr<Params> params = Params::Create(*args_);
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  dest_ = params->destination;
+
+  qr_code_service_remote_ = qrcode_generator::LaunchQRCodeGeneratorService();
+
+  qrcode_generator::mojom::GenerateQRCodeRequestPtr request =
+      qrcode_generator::mojom::GenerateQRCodeRequest::New();
+  request->data = params->data;
+  request->should_render = true;
+  request->render_dino = false;
+  request->render_module_style =
+      qrcode_generator::mojom::ModuleStyle::DEFAULT_SQUARES;
+  request->render_locator_style =
+      qrcode_generator::mojom::LocatorStyle::DEFAULT_SQUARE;
+
+  qrcode_generator::mojom::QRCodeGeneratorService* generator =
+      qr_code_service_remote_.get();
+
+  auto callback = base::BindOnce(
+    &UtilitiesGenerateQRCodeFunction::OnCodeGeneratorResponse, this);
+  generator->GenerateQRCode(std::move(request), std::move(callback));
+
+  return RespondLater();
+}
+
+
+void UtilitiesGenerateQRCodeFunction::OnCodeGeneratorResponse(
+    const qrcode_generator::mojom::GenerateQRCodeResponsePtr response) {
+  if (response->error_code !=
+      qrcode_generator::mojom::QRCodeGeneratorError::NONE) {
+    RespondOnUiThread("");
+    return;
+  }
+  if (dest_ == vivaldi::utilities::CAPTURE_QR_DESTINATION_CLIPBOARD) {
+    // Ignore everything else, we copy it raw to the clipboard.
+    ui::ScopedClipboardWriter scw(ui::ClipboardBuffer::kCopyPaste);
+    scw.Reset();
+    scw.WriteImage(response->bitmap);
+    RespondOnUiThread("");
+    return;
+  } else if (dest_ == vivaldi::utilities::CAPTURE_QR_DESTINATION_FILE) {
+    base::FilePath path = DownloadPrefs::GetDefaultDownloadDirectory();
+    if (path.empty()) {
+      RespondOnUiThread("");
+      return;
+    }
+    Profile* profile = Profile::FromBrowserContext(browser_context());
+    PrefService* service = profile->GetOriginalProfile()->GetPrefs();
+    std::string save_file_pattern =
+      service->GetString(vivaldiprefs::kWebpagesCaptureSaveFilePattern);
+
+    base::ThreadPool::PostTaskAndReplyWithResult(
+        FROM_HERE,
+        {base::TaskPriority::USER_VISIBLE, base::MayBlock(),
+         base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
+        base::BindOnce(&::vivaldi::skia_utils::EncodeBitmapToFile,
+                       std::move(path), std::move(response->bitmap),
+                       ::vivaldi::skia_utils::ImageFormat::kPNG, 90),
+        base::BindOnce(
+            &UtilitiesGenerateQRCodeFunction::RespondOnUiThreadForFile, this));
+  } else {
+    base::ThreadPool::PostTaskAndReplyWithResult(
+        FROM_HERE,
+        {base::TaskPriority::USER_VISIBLE, base::MayBlock(),
+         base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
+        base::BindOnce(&::vivaldi::skia_utils::EncodeBitmapAsDataUrl,
+                       std::move(response->bitmap),
+                       ::vivaldi::skia_utils::ImageFormat::kPNG, 90),
+        base::BindOnce(&UtilitiesGenerateQRCodeFunction::RespondOnUiThread,
+                       this));
+  }
+}
+
+void UtilitiesGenerateQRCodeFunction::RespondOnUiThreadForFile(
+    base::FilePath path) {
+  namespace Results = vivaldi::utilities::GenerateQRCode::Results;
+
+  Profile* profile = Profile::FromBrowserContext(browser_context());
+  platform_util::ShowItemInFolder(profile, path);
+
+  Respond(ArgumentList(Results::Create(path.AsUTF8Unsafe())));
+}
+
+void UtilitiesGenerateQRCodeFunction::RespondOnUiThread(
+    std::string image_data) {
+  namespace Results = vivaldi::utilities::GenerateQRCode::Results;
+
+  Respond(ArgumentList(Results::Create(image_data)));
 }
 
 }  // namespace extensions

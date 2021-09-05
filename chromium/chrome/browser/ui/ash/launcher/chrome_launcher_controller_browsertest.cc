@@ -14,7 +14,6 @@
 #include "ash/public/cpp/shelf_item_delegate.h"
 #include "ash/public/cpp/shelf_model.h"
 #include "ash/public/cpp/shelf_test_api.h"
-#include "ash/public/cpp/tablet_mode.h"
 #include "ash/public/cpp/window_properties.h"
 #include "ash/root_window_controller.h"
 #include "ash/shelf/shelf.h"
@@ -31,7 +30,6 @@
 #include "ash/wm/desks/desks_test_util.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "base/bind.h"
-#include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -80,11 +78,11 @@
 #include "chrome/browser/web_applications/components/app_registry_controller.h"
 #include "chrome/browser/web_applications/components/app_shortcut_manager.h"
 #include "chrome/browser/web_applications/components/externally_installed_web_app_prefs.h"
+#include "chrome/browser/web_applications/components/os_integration_manager.h"
 #include "chrome/browser/web_applications/components/web_app_constants.h"
 #include "chrome/browser/web_applications/components/web_app_helpers.h"
 #include "chrome/browser/web_applications/components/web_app_id.h"
 #include "chrome/browser/web_applications/components/web_app_provider_base.h"
-#include "chrome/browser/web_applications/os_integration_manager.h"
 #include "chrome/browser/web_applications/system_web_app_manager.h"
 #include "chrome/browser/web_applications/test/web_app_install_observer.h"
 #include "chrome/browser/web_applications/test/web_app_test.h"
@@ -218,9 +216,12 @@ void ExtendHotseat(Browser* browser) {
 class LauncherPlatformAppBrowserTest
     : public extensions::PlatformAppBrowserTest {
  protected:
-  LauncherPlatformAppBrowserTest() : controller_(nullptr) {}
-
-  ~LauncherPlatformAppBrowserTest() override {}
+  LauncherPlatformAppBrowserTest() = default;
+  LauncherPlatformAppBrowserTest(const LauncherPlatformAppBrowserTest&) =
+      delete;
+  LauncherPlatformAppBrowserTest& operator=(
+      const LauncherPlatformAppBrowserTest&) = delete;
+  ~LauncherPlatformAppBrowserTest() override = default;
 
   void SetUpOnMainThread() override {
     controller_ = ChromeLauncherController::instance();
@@ -247,18 +248,17 @@ class LauncherPlatformAppBrowserTest
 
   apps::AppServiceTest& app_service_test() { return app_service_test_; }
 
-  ChromeLauncherController* controller_;
+  ChromeLauncherController* controller_ = nullptr;
 
  private:
   apps::AppServiceTest app_service_test_;
-
-  DISALLOW_COPY_AND_ASSIGN(LauncherPlatformAppBrowserTest);
 };
 
 class ShelfAppBrowserTest : public extensions::ExtensionBrowserTest {
  protected:
-  ShelfAppBrowserTest() {}
-
+  ShelfAppBrowserTest() = default;
+  ShelfAppBrowserTest(const ShelfAppBrowserTest&) = delete;
+  ShelfAppBrowserTest& operator=(const ShelfAppBrowserTest&) = delete;
   ~ShelfAppBrowserTest() override {}
 
   ash::ShelfModel* shelf_model() const { return controller_->shelf_model(); }
@@ -390,23 +390,21 @@ class ShelfAppBrowserTest : public extensions::ExtensionBrowserTest {
   }
 
   ChromeLauncherController* controller_ = nullptr;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(ShelfAppBrowserTest);
 };
 
 class ShelfAppBrowserTestNoDefaultBrowser : public ShelfAppBrowserTest {
  protected:
   ShelfAppBrowserTestNoDefaultBrowser() {}
+  ShelfAppBrowserTestNoDefaultBrowser(
+      const ShelfAppBrowserTestNoDefaultBrowser&) = delete;
+  ShelfAppBrowserTestNoDefaultBrowser& operator=(
+      const ShelfAppBrowserTestNoDefaultBrowser&) = delete;
   ~ShelfAppBrowserTestNoDefaultBrowser() override {}
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
     ShelfAppBrowserTest::SetUpCommandLine(command_line);
     command_line->AppendSwitch(switches::kNoStartupWindow);
   }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(ShelfAppBrowserTestNoDefaultBrowser);
 };
 
 class ShelfWebAppBrowserTest
@@ -434,10 +432,10 @@ class ShelfWebAppBrowserTest
     return https_server()->GetURL("app.com", "/ssl/google.html");
   }
 
-  web_app::AppId InstallWebApp(const GURL& app_url) {
+  web_app::AppId InstallWebApp(const GURL& start_url) {
     auto web_app_info = std::make_unique<WebApplicationInfo>();
-    web_app_info->app_url = app_url;
-    web_app_info->scope = app_url.GetWithoutFilename();
+    web_app_info->start_url = start_url;
+    web_app_info->scope = start_url.GetWithoutFilename();
     return web_app::InstallWebApp(browser()->profile(),
                                   std::move(web_app_info));
   }
@@ -2370,7 +2368,7 @@ IN_PROC_BROWSER_TEST_P(ShelfWebAppBrowserTest, WindowedHostedAndWebApps) {
       WebAppProviderBase::GetProviderBase(browser()->profile());
   DCHECK(provider);
   provider->registry_controller().SetAppUserDisplayMode(
-      web_app_id, web_app::DisplayMode::kStandalone);
+      web_app_id, web_app::DisplayMode::kStandalone, /*is_user_action=*/false);
 
   // The apps should be closed.
   EXPECT_EQ(ash::STATUS_CLOSED,
@@ -2530,6 +2528,9 @@ IN_PROC_BROWSER_TEST_F(ShelfAppBrowserTest, ShelfModelInitialization) {
 class HotseatShelfAppBrowserTest : public ShelfAppBrowserTest {
  public:
   HotseatShelfAppBrowserTest() = default;
+  HotseatShelfAppBrowserTest(const HotseatShelfAppBrowserTest&) = delete;
+  HotseatShelfAppBrowserTest& operator=(const HotseatShelfAppBrowserTest&) =
+      delete;
   ~HotseatShelfAppBrowserTest() override = default;
 
   // ShelfAppBrowserTest:
@@ -2543,8 +2544,6 @@ class HotseatShelfAppBrowserTest : public ShelfAppBrowserTest {
 
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
-
-  DISALLOW_COPY_AND_ASSIGN(HotseatShelfAppBrowserTest);
 };
 
 // Verifies that hotseat should be hidden after launching the browser from
@@ -2858,11 +2857,10 @@ IN_PROC_BROWSER_TEST_P(PerDeskShelfAppBrowserTest, AppMenus) {
   }
 }
 
-// TODO(crbug.com/1054116): Also test with kWebApps.
-INSTANTIATE_TEST_SUITE_P(
-    All,
-    ShelfWebAppBrowserTest,
-    ::testing::Values(web_app::ProviderType::kBookmarkApps),
-    web_app::ProviderTypeParamToString);
+INSTANTIATE_TEST_SUITE_P(All,
+                         ShelfWebAppBrowserTest,
+                         ::testing::Values(web_app::ProviderType::kBookmarkApps,
+                                           web_app::ProviderType::kWebApps),
+                         web_app::ProviderTypeParamToString);
 
 INSTANTIATE_TEST_SUITE_P(All, PerDeskShelfAppBrowserTest, ::testing::Bool());

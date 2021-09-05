@@ -4,6 +4,8 @@
 
 package org.chromium.chrome.browser.omnibox.suggestions;
 
+import androidx.collection.ArraySet;
+
 import org.chromium.chrome.browser.omnibox.MatchClassificationStyle;
 import org.chromium.chrome.browser.omnibox.OmniboxSuggestionType;
 import org.chromium.components.omnibox.SuggestionAnswer;
@@ -12,6 +14,7 @@ import org.chromium.url.GURL;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Utility class for all omnibox suggestions related tests that aids constructing of Omnibox
@@ -20,6 +23,7 @@ import java.util.List;
 public class OmniboxSuggestionBuilderForTest {
     // Fields below directly represent fields used in OmniboxSuggestion.java.
     private @OmniboxSuggestionType int mType;
+    private Set<Integer> mSubtypes;
     private boolean mIsSearchType;
     private String mDisplayText;
     private List<OmniboxSuggestion.MatchClassification> mDisplayTextClassifications;
@@ -40,6 +44,7 @@ public class OmniboxSuggestionBuilderForTest {
     private List<QueryTile> mQueryTiles;
     private byte[] mClipboardImageData;
     private boolean mHasTabMatch;
+    private List<OmniboxSuggestion.NavsuggestTile> mNavsuggestTiles;
 
     /**
      * Create a suggestion builder for a search suggestion.
@@ -56,6 +61,7 @@ public class OmniboxSuggestionBuilderForTest {
 
     public OmniboxSuggestionBuilderForTest(@OmniboxSuggestionType int type) {
         mType = type;
+        mSubtypes = new ArraySet<>();
         mDisplayTextClassifications = new ArrayList<>();
         mDescriptionClassifications = new ArrayList<>();
         mUrl = GURL.emptyGURL();
@@ -79,11 +85,11 @@ public class OmniboxSuggestionBuilderForTest {
      * @return New OmniboxSuggestion.
      */
     public OmniboxSuggestion build() {
-        return new OmniboxSuggestion(mType, mIsSearchType, mRelevance, mTransition, mDisplayText,
-                mDisplayTextClassifications, mDescription, mDescriptionClassifications, mAnswer,
-                mFillIntoEdit, mUrl, mImageUrl, mImageDominantColor, mIsStarred, mIsDeletable,
-                mPostContentType, mPostData, mGroupId, mQueryTiles, mClipboardImageData,
-                mHasTabMatch);
+        return new OmniboxSuggestion(mType, mSubtypes, mIsSearchType, mRelevance, mTransition,
+                mDisplayText, mDisplayTextClassifications, mDescription,
+                mDescriptionClassifications, mAnswer, mFillIntoEdit, mUrl, mImageUrl,
+                mImageDominantColor, mIsStarred, mIsDeletable, mPostContentType, mPostData,
+                mGroupId, mQueryTiles, mClipboardImageData, mHasTabMatch, mNavsuggestTiles);
     }
 
     /**
@@ -218,6 +224,15 @@ public class OmniboxSuggestionBuilderForTest {
      */
     public OmniboxSuggestionBuilderForTest setType(@OmniboxSuggestionType int type) {
         mType = type;
+        return this;
+    }
+
+    /**
+     * @param subtype Suggestion subtype.
+     * @return Omnibox suggestion builder.
+     */
+    public OmniboxSuggestionBuilderForTest addSubtype(int subtype) {
+        mSubtypes.add(subtype);
         return this;
     }
 }

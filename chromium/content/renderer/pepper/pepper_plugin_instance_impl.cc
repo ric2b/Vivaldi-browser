@@ -26,8 +26,8 @@
 #include "content/common/content_constants_internal.h"
 #include "content/common/frame_messages.h"
 #include "content/public/common/content_constants.h"
+#include "content/public/common/use_zoom_for_dsf_policy.h"
 #include "content/public/renderer/content_renderer_client.h"
-#include "content/renderer/media/audio/audio_device_factory.h"
 #include "content/renderer/pepper/event_conversion.h"
 #include "content/renderer/pepper/fullscreen_container.h"
 #include "content/renderer/pepper/gfx_conversion.h"
@@ -100,13 +100,13 @@
 #include "third_party/blink/public/common/input/web_pointer_event.h"
 #include "third_party/blink/public/common/input/web_touch_event.h"
 #include "third_party/blink/public/platform/url_conversion.h"
-#include "third_party/blink/public/platform/web_float_rect.h"
 #include "third_party/blink/public/platform/web_rect.h"
 #include "third_party/blink/public/platform/web_security_origin.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/platform/web_url.h"
 #include "third_party/blink/public/platform/web_url_error.h"
 #include "third_party/blink/public/platform/web_url_request.h"
+#include "third_party/blink/public/web/modules/media/audio/web_audio_device_factory.h"
 #include "third_party/blink/public/web/web_document.h"
 #include "third_party/blink/public/web/web_document_loader.h"
 #include "third_party/blink/public/web/web_frame_widget.h"
@@ -392,6 +392,22 @@ bool IsPrintPreviewUrl(const GURL& document_url) {
          url::Origin::Create(GURL(kChromePrint));
 }
 
+WebElement FindPdfViewerScroller(const WebLocalFrame* frame,
+                                 const WebElement& plugin) {
+  if (!plugin.HasAttribute("pdf-viewer-update-enabled"))
+    return WebElement();
+
+  WebElement viewer = frame->GetDocument().GetElementById("viewer");
+  if (viewer.IsNull())
+    return WebElement();
+
+  blink::WebNode shadow_root = viewer.ShadowRoot();
+  if (shadow_root.IsNull())
+    return WebElement();
+
+  return shadow_root.QuerySelector("#scroller");
+}
+
 }  // namespace
 
 // static
@@ -515,7 +531,6 @@ PepperPluginInstanceImpl::PepperPluginInstanceImpl(
       sent_initial_did_change_view_(false),
       bound_graphics_2d_platform_(nullptr),
       has_webkit_focus_(false),
-      has_content_area_focus_(false),
       find_identifier_(-1),
       plugin_find_interface_(nullptr),
       plugin_input_event_interface_(nullptr),
@@ -554,11 +569,7 @@ PepperPluginInstanceImpl::PepperPluginInstanceImpl(
   if (render_frame_) {  // NULL in tests or if the frame has been destroyed.
     render_frame_->PepperInstanceCreated(this);
     view_data_.is_page_visible =
-        !render_frame_->GetLocalRootRenderWidget()->is_hidden();
-
-    // Set the initial focus.
-    SetContentAreaFocus(
-        render_frame_->GetLocalRootRenderWidget()->GetWebWidget()->HasFocus());
+        !render_frame_->GetLocalRootRenderWidget()->GetWebWidget()->IsHidden();
 
     if (!module_->IsProxied()) {
       created_in_process_instance_ = true;
@@ -892,7 +903,7 @@ bool PepperPluginInstanceImpl::HandleDocumentLoad(
 
   if (module()->is_crashed() || !render_frame_) {
     // Don't create a resource for a crashed plugin.
-    container()->GetDocument().GetFrame()->StopLoading();
+    container()->GetDocument().GetFrame()->DeprecatedStopLoading();
     return false;
   }
 
@@ -1121,10 +1132,6 @@ bool PepperPluginInstanceImpl::HandleInputEvent(
   if (throttler_ && throttler_->ConsumeInputEvent(event))
     return true;
 
-  if (WebInputEvent::IsMouseEventType(event.GetType())) {
-    render_frame_->PepperDidReceiveMouseEvent(this);
-  }
-
   // Don't dispatch input events to crashed plugins.
   if (module()->is_crashed())
     return false;
@@ -1257,10 +1264,15 @@ void PepperPluginInstanceImpl::ViewChanged(
   view_data_.device_scale = container_->DeviceScaleFactor();
   view_data_.css_scale =
       container_->PageZoomFactor() * container_->PageScaleFactor();
-  blink::WebFloatRect windowToViewportScale(0, 0, 1.0f, 0);
-  render_frame()->GetLocalRootRenderWidget()->ConvertWindowToViewport(
-      &windowToViewportScale);
-  viewport_to_dip_scale_ = 1.0f / windowToViewportScale.width;
+  if (IsUseZoomForDSFEnabled()) {
+    WebWidget* widget =
+        render_frame()->GetLocalRootRenderWidget()->GetWebWidget();
+
+    viewport_to_dip_scale_ =
+        1.0f / widget->GetOriginalScreenInfo().device_scale_factor;
+  } else {
+    viewport_to_dip_scale_ = 1.0f;
+  }
   ConvertRectToDIP(&view_data_.rect);
   ConvertRectToDIP(&view_data_.clip_rect);
   view_data_.css_scale *= viewport_to_dip_scale_;
@@ -1323,16 +1335,6 @@ void PepperPluginInstanceImpl::SetWebKitFocus(bool has_focus) {
 
   bool old_plugin_focus = PluginHasFocus();
   has_webkit_focus_ = has_focus;
-  if (PluginHasFocus() != old_plugin_focus)
-    SendFocusChangeNotification();
-}
-
-void PepperPluginInstanceImpl::SetContentAreaFocus(bool has_focus) {
-  if (has_content_area_focus_ == has_focus)
-    return;
-
-  bool old_plugin_focus = PluginHasFocus();
-  has_content_area_focus_ = has_focus;
   if (PluginHasFocus() != old_plugin_focus)
     SendFocusChangeNotification();
 }
@@ -1731,7 +1733,7 @@ void PepperPluginInstanceImpl::UpdateLayerTransform() {
 }
 
 bool PepperPluginInstanceImpl::PluginHasFocus() const {
-  return flash_fullscreen_ || (has_webkit_focus_ && has_content_area_focus_);
+  return flash_fullscreen_ || has_webkit_focus_;
 }
 
 void PepperPluginInstanceImpl::SendFocusChangeNotification() {
@@ -2515,29 +2517,31 @@ PP_Var PepperPluginInstanceImpl::ExecuteScript(PP_Instance instance,
 
 uint32_t PepperPluginInstanceImpl::GetAudioHardwareOutputSampleRate(
     PP_Instance instance) {
-  return render_frame() ? AudioDeviceFactory::GetOutputDeviceInfo(
-                              render_frame()->GetWebFrame()->GetFrameToken(),
-                              media::AudioSinkParameters())
-                              .output_params()
-                              .sample_rate()
-                        : 0;
+  return render_frame()
+             ? blink::WebAudioDeviceFactory::GetOutputDeviceInfo(
+                   render_frame()->GetWebFrame()->GetLocalFrameToken(),
+                   media::AudioSinkParameters())
+                   .output_params()
+                   .sample_rate()
+             : 0;
 }
 
 uint32_t PepperPluginInstanceImpl::GetAudioHardwareOutputBufferSize(
     PP_Instance instance) {
-  return render_frame() ? AudioDeviceFactory::GetOutputDeviceInfo(
-                              render_frame()->GetWebFrame()->GetFrameToken(),
-                              media::AudioSinkParameters())
-                              .output_params()
-                              .frames_per_buffer()
-                        : 0;
+  return render_frame()
+             ? blink::WebAudioDeviceFactory::GetOutputDeviceInfo(
+                   render_frame()->GetWebFrame()->GetLocalFrameToken(),
+                   media::AudioSinkParameters())
+                   .output_params()
+                   .frames_per_buffer()
+             : 0;
 }
 
 PP_Var PepperPluginInstanceImpl::GetDefaultCharSet(PP_Instance instance) {
   if (!render_frame_)
     return PP_MakeUndefined();
   return StringVar::StringToPPVar(
-      render_frame_->render_view()->webkit_preferences().default_encoding);
+      render_frame_->render_view()->GetBlinkPreferences().default_encoding);
 }
 
 void PepperPluginInstanceImpl::SetPluginToHandleFindRequests(
@@ -2592,8 +2596,12 @@ void PepperPluginInstanceImpl::SetTickmarks(PP_Instance instance,
     tickmark.Scale(1 / viewport_to_dip_scale_);
     tickmarks_converted[i] = blink::WebRect(gfx::ToEnclosedRect(tickmark));
   }
+
   WebLocalFrame* frame = render_frame_->GetWebFrame();
-  frame->SetTickmarks(tickmarks_converted);
+  WebElement target;
+  if (LoadPdfInterface())
+    target = FindPdfViewerScroller(frame, container_->GetElement());
+  frame->SetTickmarks(target, tickmarks_converted);
 }
 
 PP_Bool PepperPluginInstanceImpl::IsFullscreen(PP_Instance instance) {
@@ -3045,11 +3053,23 @@ void PepperPluginInstanceImpl::SetAlwaysOnTop(bool on_top) {
 }
 
 void PepperPluginInstanceImpl::DoSetCursor(std::unique_ptr<ui::Cursor> cursor) {
+  if (is_deleted_)
+    return;
+
   cursor_ = std::move(cursor);
-  if (fullscreen_container_)
+  if (fullscreen_container_) {
     fullscreen_container_->PepperDidChangeCursor(*cursor_);
-  else if (render_frame_)
-    render_frame_->PepperDidChangeCursor(this, *cursor_);
+  } else if (render_frame_) {
+    // Update the cursor appearance immediately if the requesting plugin is the
+    // one which receives the last mouse event. Otherwise, the new cursor won't
+    // be picked up until the plugin gets the next input event. That is bad if,
+    // e.g., the plugin would like to set an invisible cursor when there isn't
+    // any user input for a while.
+    if (container()->WasTargetForLastMouseEvent()) {
+      render_frame_->GetLocalRootRenderWidget()->GetWebWidget()->SetCursor(
+          *cursor_);
+    }
+  }
 }
 
 bool PepperPluginInstanceImpl::IsFullPagePlugin() {

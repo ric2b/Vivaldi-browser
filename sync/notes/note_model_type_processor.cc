@@ -227,14 +227,17 @@ void NoteModelTypeProcessor::ModelReadyToSync(
   sync_pb::NotesModelMetadata model_metadata;
   model_metadata.ParseFromString(metadata_str);
 
+  const bool initial_sync_done =
+      model_metadata.model_type_state().initial_sync_done();
+  const bool notes_metadata_empty = model_metadata.notes_metadata().empty();
+
   note_tracker_ = SyncedNoteTracker::CreateFromNotesModelAndMetadata(
       model, std::move(model_metadata));
 
   if (note_tracker_) {
     note_tracker_->CheckAllNodesTracked(notes_model_);
     StartTrackingMetadata();
-  } else if (!model_metadata.model_type_state().initial_sync_done() &&
-             !model_metadata.notes_metadata().empty()) {
+  } else if (!initial_sync_done && !notes_metadata_empty) {
     DLOG(ERROR)
         << "Persisted Metadata not empty while initial sync is not done.";
   }

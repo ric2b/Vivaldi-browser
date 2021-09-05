@@ -47,7 +47,6 @@
 #include "ui/base/ui_base_switches.h"
 #include "ui/compositor/compositor_observer.h"
 #include "ui/compositor/compositor_switches.h"
-#include "ui/compositor/dip_util.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animator_collection.h"
 #include "ui/compositor/overscroll/scroll_input_handler.h"
@@ -236,10 +235,12 @@ Compositor::Compositor(const viz::FrameSinkId& frame_sink_id,
   params.mutator_host = animation_host_.get();
   host_ = cc::LayerTreeHost::CreateSingleThreaded(this, std::move(params));
 
+  const base::WeakPtr<cc::CompositorDelegateForInput>& compositor_delegate =
+      host_->GetDelegateForInput();
   if (base::FeatureList::IsEnabled(features::kUiCompositorScrollWithLayers) &&
-      host_->GetInputHandler()) {
-    scroll_input_handler_.reset(
-        new ScrollInputHandler(host_->GetInputHandler()));
+      compositor_delegate) {
+    input_handler_weak_ = cc::InputHandler::Create(*compositor_delegate);
+    scroll_input_handler_.reset(new ScrollInputHandler(input_handler_weak_));
   }
 
   animation_timeline_ =
@@ -407,22 +408,18 @@ void Compositor::ReenableSwap() {
 }
 #endif
 
-void Compositor::SetScaleAndSize(
-    float scale,
-    const gfx::Size& size_in_pixel,
-    const viz::LocalSurfaceIdAllocation& local_surface_id_allocation) {
+void Compositor::SetScaleAndSize(float scale,
+                                 const gfx::Size& size_in_pixel,
+                                 const viz::LocalSurfaceId& local_surface_id) {
   DCHECK_GT(scale, 0);
   bool device_scale_factor_changed = device_scale_factor_ != scale;
   device_scale_factor_ = scale;
 
 #if DCHECK_IS_ON()
-  if (size_ != size_in_pixel && local_surface_id_allocation.IsValid()) {
+  if (size_ != size_in_pixel && local_surface_id.is_valid()) {
     // A new LocalSurfaceId must be set when the compositor size changes.
-    DCHECK_NE(
-        local_surface_id_allocation.local_surface_id(),
-        host_->local_surface_id_allocation_from_parent().local_surface_id());
-    DCHECK_NE(local_surface_id_allocation,
-              host_->local_surface_id_allocation_from_parent());
+    DCHECK_NE(local_surface_id, host_->local_surface_id_from_parent());
+    DCHECK_NE(local_surface_id, host_->local_surface_id_from_parent());
   }
 #endif  // DECHECK_IS_ON()
 
@@ -430,7 +427,7 @@ void Compositor::SetScaleAndSize(
     bool size_changed = size_ != size_in_pixel;
     size_ = size_in_pixel;
     host_->SetViewportRectAndScale(gfx::Rect(size_in_pixel), scale,
-                                   local_surface_id_allocation);
+                                   local_surface_id);
     root_web_layer_->SetBounds(size_in_pixel);
     if (display_private_ && (size_changed || disabled_swap_until_resize_)) {
       display_private_->Resize(size_in_pixel);
@@ -486,17 +483,19 @@ bool Compositor::IsVisible() {
   return host_->IsVisible();
 }
 
+// TODO(bokan): These calls should be delegated through the
+// scroll_input_handler_ so that we don't have to keep a pointer to the
+// cc::InputHandler in this class.
 bool Compositor::ScrollLayerTo(cc::ElementId element_id,
                                const gfx::ScrollOffset& offset) {
-  auto input_handler = host_->GetInputHandler();
-  return input_handler && input_handler->ScrollLayerTo(element_id, offset);
+  return input_handler_weak_ &&
+         input_handler_weak_->ScrollLayerTo(element_id, offset);
 }
 
 bool Compositor::GetScrollOffsetForLayer(cc::ElementId element_id,
                                          gfx::ScrollOffset* offset) const {
-  auto input_handler = host_->GetInputHandler();
-  return input_handler &&
-         input_handler->GetScrollOffsetForLayer(element_id, offset);
+  return input_handler_weak_ &&
+         input_handler_weak_->GetScrollOffsetForLayer(element_id, offset);
 }
 
 void Compositor::SetDisplayVSyncParameters(base::TimeTicks timebase,

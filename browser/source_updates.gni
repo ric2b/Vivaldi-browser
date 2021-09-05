@@ -47,6 +47,8 @@ update_target("//chrome/browser:browser") {
       "//vivaldi/browser/android/adblock/adblock_manager.cc",
       "//vivaldi/browser/android/capture/capture_handler.cpp",
       "//vivaldi/browser/android/capture/capture_handler.h",
+      "//vivaldi/browser/android/capture/capture_thumbnail_handler.cpp",
+      "//vivaldi/browser/android/capture/capture_thumbnail_handler.h",
       "//vivaldi/browser/android/prefs/vivaldi_preferences_bridge.h",
       "//vivaldi/browser/android/prefs/vivaldi_preferences_bridge.cc",
     ]

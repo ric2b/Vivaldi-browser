@@ -84,8 +84,10 @@ void SharedImageInterfaceInProcess::SetUpOnGpu(
 void SharedImageInterfaceInProcess::DestroyOnGpu(
     base::WaitableEvent* completion) {
   bool have_context = MakeContextCurrent();
-  if (shared_image_factory_)
+  if (shared_image_factory_) {
     shared_image_factory_->DestroyAllSharedImages(have_context);
+    shared_image_factory_ = nullptr;
+  }
 
   if (sync_point_client_state_) {
     sync_point_client_state_->Destroy();
@@ -374,7 +376,8 @@ void SharedImageInterfaceInProcess::RegisterSysmemBufferCollection(
     gfx::SysmemBufferCollectionId id,
     zx::channel token,
     gfx::BufferFormat format,
-    gfx::BufferUsage usage) {
+    gfx::BufferUsage usage,
+    bool register_with_image_pipe) {
   NOTREACHED();
 }
 void SharedImageInterfaceInProcess::ReleaseSysmemBufferCollection(

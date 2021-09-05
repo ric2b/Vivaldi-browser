@@ -163,6 +163,7 @@ class DownloadTestContentBrowserClient : public TestContentBrowserClient {
   void RegisterNonNetworkNavigationURLLoaderFactories(
       int frame_tree_node_id,
       base::UkmSourceId ukm_source_id,
+      NonNetworkURLLoaderFactoryDeprecatedMap* uniquely_owned_factories,
       NonNetworkURLLoaderFactoryMap* factories) override {
     if (!enable_register_non_network_url_loader_)
       return;
@@ -173,8 +174,8 @@ class DownloadTestContentBrowserClient : public TestContentBrowserClient {
             "HTTP/1.1 200 OK\nContent-Type: multipart/related\n\n",
             "This is a test for download mhtml through non http/https urls",
             /* network_accessed */ true, net::OK);
-    factories->emplace(url::kContentScheme,
-                       std::move(content_url_loader_factory));
+    uniquely_owned_factories->emplace(url::kContentScheme,
+                                      std::move(content_url_loader_factory));
 #endif  // OS_ANDROID
 
     auto file_url_loader_factory =
@@ -182,7 +183,8 @@ class DownloadTestContentBrowserClient : public TestContentBrowserClient {
             "HTTP/1.1 200 OK\nContent-Type: multipart/related\n\n",
             "This is a test for download mhtml through non http/https urls",
             /* network_accessed */ true, net::OK);
-    factories->emplace(url::kFileScheme, std::move(file_url_loader_factory));
+    uniquely_owned_factories->emplace(url::kFileScheme,
+                                      std::move(file_url_loader_factory));
   }
 
  private:
@@ -2950,7 +2952,8 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest, MAYBE_RemoveResumedDownload) {
 }
 
 // TODO(qinmin): Flaky crashes on ASAN Linux. https://crbug.com/836689
-#if (defined(OS_LINUX) || defined(OS_CHROMEOS)) && defined(ADDRESS_SANITIZER)
+#if defined(OS_ANDROID) || \
+    (defined(OS_LINUX) || defined(OS_CHROMEOS)) && defined(ADDRESS_SANITIZER)
 #define MAYBE_CancelResumedDownload DISABLED_CancelResumedDownload
 #else
 #define MAYBE_CancelResumedDownload CancelResumedDownload
@@ -4308,23 +4311,14 @@ IN_PROC_BROWSER_TEST_F(ParallelDownloadTest,
                                   parameters);
 }
 
-#if defined(OS_WIN) || defined(OS_LINUX) || defined(OS_CHROMEOS) || \
-    defined(OS_ANDROID)
-// Flaky https://crbug.com/1105429, https://crbug.com/1106059.
-// Windows probably use a large receiving buffer size and cause the first slice
-// to start at a offset > 0.
-#define MAYBE_MiddleSliceDelayedError DISABLED_MiddleSliceDelayedError
-#else
-#define MAYBE_MiddleSliceDelayedError MiddleSliceDelayedError
-#endif
 // Verify that if the second request fails after the beginning request takes
 // over and completes its slice, download should complete.
-IN_PROC_BROWSER_TEST_F(ParallelDownloadTest, MAYBE_MiddleSliceDelayedError) {
+IN_PROC_BROWSER_TEST_F(ParallelDownloadTest, MiddleSliceDelayedError) {
   scoped_refptr<TestFileErrorInjector> injector(
       TestFileErrorInjector::Create(DownloadManagerForShell(shell())));
 
   TestFileErrorInjector::FileErrorInfo err = {
-      TestFileErrorInjector::FILE_OPERATION_WRITE, 0,
+      TestFileErrorInjector::FILE_OPERATION_WRITE, 1,
       download::DOWNLOAD_INTERRUPT_REASON_FILE_NO_SPACE};
   err.data_write_offset = 1699050;
   injector->InjectError(err);

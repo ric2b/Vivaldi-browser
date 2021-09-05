@@ -4,6 +4,8 @@
 
 module tab_search.mojom;
 
+import "mojo/public/mojom/base/time.mojom";
+
 // Collection of WindowTabs of a profile.
 struct ProfileTabs {
   array<WindowTabs> windows;
@@ -17,16 +19,39 @@ struct WindowTabs {
 
 // Information about an existing open tab.
 struct Tab {
+  // Whether the tab is active.
   bool active;
+
+  // The index of the tab in the current tab strip.
   int32 index;
+
+  // The unique identifier of the tab.
   int32 tab_id;
+
+  // The group identifier of the tab.
   string? group_id;
+
+  // Whether the tab is pinned.
   bool pinned;
+
+  // The title of the tab.
   string title;
+
+  // The URL of the tab.
   string url;
-  string? fav_icon_url;
+
+  // The URL of the favicon in data scheme.
+  // Only used in OTR profile where chrome://favicon2 is not available.
+  string? favicon_url;
+
+  // Whether the favicon is the default one.
   bool is_default_favicon;
+
+  // Whether the tab strip should show the icon.
   bool show_icon;
+
+  // Time ticks when the tab is last active.
+  mojo_base.mojom.TimeTicks last_active_time_ticks;
 };
 
 // Collection of tab groups.
@@ -69,11 +94,21 @@ interface PageHandler {
 
   // Switch to a specific tab.
   SwitchToTab(SwitchToTabInfo switch_to_tab_info);
+
+  // Notify the backend that the UI is ready to be shown.
+  ShowUI();
+
+  // Notify the backend that the UI is ready to be closed.
+  CloseUI();
 };
 
 // WebUI-side handler for requests from the browser.
 interface Page {
   // Callback when any tabs in the current profile are
-  // added/changed/removed/navigated to new URL
+  // selected/inserted/removed/moved/replaced
   TabsChanged();
+
+  // Callback when a tab is updated within the same web contents.
+  // e.g. url, title or favicon changed.
+  TabUpdated(Tab tab);
 };

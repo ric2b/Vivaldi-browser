@@ -10,8 +10,8 @@
 #include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
 #include "content/browser/child_process_security_policy_impl.h"
-#include "content/browser/frame_host/render_frame_host_impl.h"
-#include "content/browser/frame_host/render_frame_message_filter.h"
+#include "content/browser/renderer_host/render_frame_host_impl.h"
+#include "content/browser/renderer_host/render_frame_message_filter.h"
 #include "content/browser/renderer_host/render_view_host_delegate_view.h"
 #include "content/browser/renderer_host/render_widget_helper.h"
 #include "content/common/frame_messages.h"
@@ -32,8 +32,10 @@
 #include "content/test/test_web_contents.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "net/base/filename_util.h"
-#include "third_party/blink/public/common/page/web_drag_operation.h"
+#include "skia/ext/skia_utils_base.h"
+#include "third_party/blink/public/common/page/drag_operation.h"
 #include "ui/base/page_transition_types.h"
+#include "ui/gfx/skia_util.h"
 
 namespace content {
 
@@ -96,13 +98,14 @@ class MockDraggingRenderViewHostDelegateView
  public:
   ~MockDraggingRenderViewHostDelegateView() override {}
   void StartDragging(const DropData& drop_data,
-                     blink::WebDragOperationsMask allowed_ops,
+                     blink::DragOperationsMask allowed_ops,
                      const gfx::ImageSkia& image,
                      const gfx::Vector2d& image_offset,
-                     const DragEventSourceInfo& event_info,
+                     const blink::mojom::DragEventSourceInfo& event_info,
                      RenderWidgetHostImpl* source_rwh) override {
     drag_url_ = drop_data.url;
     html_base_url_ = drop_data.html_base_url;
+    image_ = image;
   }
 
   GURL drag_url() {
@@ -113,9 +116,12 @@ class MockDraggingRenderViewHostDelegateView
     return html_base_url_;
   }
 
+  const gfx::ImageSkia& image() { return image_; }
+
  private:
   GURL drag_url_;
   GURL html_base_url_;
+  gfx::ImageSkia image_;
 };
 
 TEST_F(RenderViewHostTest, StartDragging) {
@@ -124,34 +130,69 @@ TEST_F(RenderViewHostTest, StartDragging) {
   web_contents->set_delegate_view(&delegate_view);
 
   DropData drop_data;
+  // If `html` is not populated, `html_base_url` won't be populated when
+  // converting to `DragData` with `DropDataToDragData`.
+  drop_data.html = base::string16();
+
   GURL blocked_url = GURL(kBlockedURL);
   GURL file_url = GURL("file:///home/user/secrets.txt");
   drop_data.url = file_url;
   drop_data.html_base_url = file_url;
-  test_rvh()->TestOnStartDragging(drop_data);
+  test_rvh()->TestStartDragging(drop_data);
   EXPECT_EQ(blocked_url, delegate_view.drag_url());
   EXPECT_EQ(blocked_url, delegate_view.html_base_url());
 
   GURL http_url = GURL("http://www.domain.com/index.html");
   drop_data.url = http_url;
   drop_data.html_base_url = http_url;
-  test_rvh()->TestOnStartDragging(drop_data);
+  test_rvh()->TestStartDragging(drop_data);
   EXPECT_EQ(http_url, delegate_view.drag_url());
   EXPECT_EQ(http_url, delegate_view.html_base_url());
 
   GURL https_url = GURL("https://www.domain.com/index.html");
   drop_data.url = https_url;
   drop_data.html_base_url = https_url;
-  test_rvh()->TestOnStartDragging(drop_data);
+  test_rvh()->TestStartDragging(drop_data);
   EXPECT_EQ(https_url, delegate_view.drag_url());
   EXPECT_EQ(https_url, delegate_view.html_base_url());
 
   GURL javascript_url = GURL("javascript:alert('I am a bookmarklet')");
   drop_data.url = javascript_url;
   drop_data.html_base_url = http_url;
-  test_rvh()->TestOnStartDragging(drop_data);
+  test_rvh()->TestStartDragging(drop_data);
   EXPECT_EQ(javascript_url, delegate_view.drag_url());
   EXPECT_EQ(http_url, delegate_view.html_base_url());
+}
+
+TEST_F(RenderViewHostTest, StartDraggingWithInvalidBitmap) {
+  TestWebContents* web_contents = contents();
+  MockDraggingRenderViewHostDelegateView delegate_view;
+  web_contents->set_delegate_view(&delegate_view);
+
+  GURL http_url = GURL("http://www.domain.com/index.html");
+
+  DropData drop_data;
+  // If `html` is not populated, `html_base_url` won't be populated when
+  // converting to `DragData` with `DropDataToDragData`.
+  drop_data.html = base::string16();
+  drop_data.url = http_url;
+  drop_data.html_base_url = http_url;
+
+  SkBitmap badbitmap;
+  badbitmap.allocPixels(
+      SkImageInfo::Make(1, 1, kARGB_4444_SkColorType, kPremul_SkAlphaType));
+  badbitmap.eraseColor(SK_ColorGREEN);
+
+  SkBitmap n32bitmap;
+  EXPECT_TRUE(skia::SkBitmapToN32OpaqueOrPremul(badbitmap, &n32bitmap));
+
+  // An N32 bitmap is a valid drag image.
+  test_rvh()->TestStartDragging(drop_data, n32bitmap);
+  EXPECT_TRUE(gfx::BitmapsAreEqual(n32bitmap, *delegate_view.image().bitmap()));
+
+  // Other bitmap types are not, and are converted.
+  test_rvh()->TestStartDragging(drop_data, badbitmap);
+  EXPECT_TRUE(gfx::BitmapsAreEqual(n32bitmap, *delegate_view.image().bitmap()));
 }
 
 TEST_F(RenderViewHostTest, DragEnteredFileURLsStillBlocked) {
@@ -173,9 +214,8 @@ TEST_F(RenderViewHostTest, DragEnteredFileURLsStillBlocked) {
   // TODO(paulmeyer): These will need to target the correct specific
   // RenderWidgetHost to work with OOPIFs. See crbug.com/647249.
   rvh()->GetWidget()->FilterDropData(&dropped_data);
-  rvh()->GetWidget()->DragTargetDragEnter(dropped_data, client_point,
-                                          screen_point,
-                                          blink::kWebDragOperationNone, 0);
+  rvh()->GetWidget()->DragTargetDragEnter(
+      dropped_data, client_point, screen_point, blink::kDragOperationNone, 0);
 
   int id = process()->GetID();
   ChildProcessSecurityPolicyImpl* policy =

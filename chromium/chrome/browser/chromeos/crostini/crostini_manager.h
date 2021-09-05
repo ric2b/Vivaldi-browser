@@ -189,7 +189,6 @@ class CrostiniManager : public KeyedService,
     virtual ~RestartObserver() {}
     virtual void OnStageStarted(mojom::InstallerState stage) {}
     virtual void OnComponentLoaded(CrostiniResult result) {}
-    virtual void OnConciergeStarted(bool success) {}
     virtual void OnDiskImageCreated(bool success,
                                     vm_tools::concierge::DiskImageStatus status,
                                     int64_t disk_size_bytes) {}
@@ -242,10 +241,6 @@ class CrostiniManager : public KeyedService,
 
   // Unloads and removes termina.
   void UninstallTermina(BoolCallback callback);
-
-  // Starts the Concierge service. |callback| is called after the method call
-  // finishes.
-  void StartConcierge(BoolCallback callback);
 
   // Checks the arguments for creating a new Termina VM disk image. Creates a
   // disk image for a Termina VM via ConciergeClient::CreateDiskImage.
@@ -427,22 +422,6 @@ class CrostiniManager : public KeyedService,
                               const std::string& hostname)>;
   void GetContainerSshKeys(const ContainerId& container_id,
                            GetContainerSshKeysCallback callback);
-
-  // Called when a USB device should be attached into the VM. Should only ever
-  // be called on user action. The guest_port is only valid on success.
-  using AttachUsbDeviceCallback =
-      base::OnceCallback<void(bool success, uint8_t guest_port)>;
-  void AttachUsbDevice(const std::string& vm_name,
-                       device::mojom::UsbDeviceInfoPtr device,
-                       base::ScopedFD fd,
-                       AttachUsbDeviceCallback callback);
-
-  // Called when a USB device should be detached from the VM.
-  // May be called on user action or on USB removal.
-  void DetachUsbDevice(const std::string& vm_name,
-                       device::mojom::UsbDeviceInfoPtr device,
-                       uint8_t guest_port,
-                       BoolCallback callback);
 
   // Add a relative path to watch within the container homedir. Register as a
   // CrostiniFileChangeObserver to be notified when changes occur. Used by
@@ -719,14 +698,6 @@ class CrostiniManager : public KeyedService,
       base::Optional<vm_tools::concierge::GetVmEnterpriseReportingInfoResponse>
           response);
 
-  // Callback for CrostiniClient::StartConcierge. Called after the
-  // DebugDaemon service method finishes.
-  void OnStartConcierge(BoolCallback callback, bool success);
-
-  // Callback for CrostiniClient::StopConcierge. Called after the
-  // DebugDaemon service method finishes.
-  void OnStopConcierge(BoolCallback callback, bool success);
-
   // Callback for CiceroneClient::StartLxd. May indicate that LXD is still being
   // started in which case we will wait for OnStartLxdProgress events.
   void OnStartLxd(
@@ -827,21 +798,6 @@ class CrostiniManager : public KeyedService,
   void OnGetContainerSshKeys(
       GetContainerSshKeysCallback callback,
       base::Optional<vm_tools::concierge::ContainerSshKeysResponse> response);
-
-  // Callback for CrostiniManager::OnAttachUsbDeviceOpen
-  void OnAttachUsbDevice(
-      const std::string& vm_name,
-      device::mojom::UsbDeviceInfoPtr device,
-      AttachUsbDeviceCallback callback,
-      base::Optional<vm_tools::concierge::AttachUsbDeviceResponse> response);
-
-  // Callback for CrostiniManager::DetachUsbDevice
-  void OnDetachUsbDevice(
-      const std::string& vm_name,
-      uint8_t guest_port,
-      device::mojom::UsbDeviceInfoPtr device,
-      BoolCallback callback,
-      base::Optional<vm_tools::concierge::DetachUsbDeviceResponse> response);
 
   // Callback for AnsibleManagementService::ConfigureDefaultContainer
   void OnDefaultContainerConfigured(bool success);

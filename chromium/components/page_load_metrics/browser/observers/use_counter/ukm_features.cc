@@ -12,7 +12,7 @@
 // (or highly likely be) rare, e.g. <1% of page views as measured by UMA.
 //
 // UKM-based UseCounter should be used to cover the case when UMA UseCounter
-// data shows a behaviour that is rare but too common to bindly change.
+// data shows a behaviour that is rare but too common to blindly change.
 // UKM-based UseCounter would allow use to find specific pages to reason about
 // either a breaking change is acceptable or not.
 
@@ -40,7 +40,6 @@ UseCounterPageLoadMetricsObserver::GetAllowedUkmFeatures() {
           WebFeature::kMixedContentPlugin,
           WebFeature::kOpenerNavigationWithoutGesture,
           WebFeature::kUsbRequestDevice,
-          WebFeature::kXMLHttpRequestSynchronous,
           WebFeature::kXMLHttpRequestSynchronousInMainFrame,
           WebFeature::kXMLHttpRequestSynchronousInCrossOriginSubframe,
           WebFeature::kXMLHttpRequestSynchronousInSameOriginSubframe,
@@ -59,14 +58,14 @@ UseCounterPageLoadMetricsObserver::GetAllowedUkmFeatures() {
           WebFeature::kCredentialManagerGetPublicKeyCredentialSuccess,
           WebFeature::kU2FCryptotokenRegister,
           WebFeature::kU2FCryptotokenSign,
-          WebFeature::kV8AudioContext_Constructor,
+          // TODO(crbug.com/1129465): The below four use counters have high
+          // usage, but are expected to be deprecated in several milestones.
           WebFeature::kElementAttachShadow,
           WebFeature::kElementAttachShadowOpen,
           WebFeature::kElementAttachShadowClosed,
           WebFeature::kCustomElementRegistryDefine,
           WebFeature::kTextToSpeech_Speak,
           WebFeature::kTextToSpeech_SpeakDisallowedByAutoplay,
-          WebFeature::kCSSEnvironmentVariable,
           WebFeature::kCSSEnvironmentVariable_SafeAreaInsetTop,
           WebFeature::kCSSEnvironmentVariable_SafeAreaInsetLeft,
           WebFeature::kCSSEnvironmentVariable_SafeAreaInsetRight,
@@ -85,8 +84,6 @@ UseCounterPageLoadMetricsObserver::GetAllowedUkmFeatures() {
           WebFeature::kDocumentDomainEnabledCrossOriginAccess,
           WebFeature::kCursorImageGT32x32,
           WebFeature::kCursorImageLE32x32,
-          WebFeature::kHistoryPushState,
-          WebFeature::kHistoryReplaceState,
           WebFeature::kCursorImageGT64x64,
           WebFeature::kAdClick,
           WebFeature::kUpdateWithoutShippingOptionOnShippingAddressChange,
@@ -104,7 +101,6 @@ UseCounterPageLoadMetricsObserver::GetAllowedUkmFeatures() {
           WebFeature::kMediaCapabilitiesDecodingInfoWithKeySystemConfig,
           WebFeature::kTextFragmentAnchor,
           WebFeature::kTextFragmentAnchorMatchFound,
-          WebFeature::kCookieNoSameSite,
           WebFeature::kCookieInsecureAndSameSiteNone,
           WebFeature::kCookieStoreAPI,
           WebFeature::kDeviceOrientationSecureOrigin,
@@ -125,13 +121,7 @@ UseCounterPageLoadMetricsObserver::GetAllowedUkmFeatures() {
           WebFeature::kLazyLoadFrameLoadingAttributeEager,
           WebFeature::kLazyLoadImageLoadingAttributeLazy,
           WebFeature::kLazyLoadImageLoadingAttributeEager,
-          WebFeature::kRequestedFileSystemTemporary,
-          WebFeature::kRequestedFileSystemPersistent,
           WebFeature::kWebOTP,
-          WebFeature::kSrcsetWDescriptor,
-          WebFeature::kSrcsetXDescriptor,
-          WebFeature::kRequestFileSystem,
-          WebFeature::kBaseElement,
           WebFeature::kBaseWithCrossOriginHref,
           WebFeature::kWakeLockAcquireScreenLock,
           WebFeature::kWakeLockAcquireSystemLock,
@@ -158,8 +148,6 @@ UseCounterPageLoadMetricsObserver::GetAllowedUkmFeatures() {
           WebFeature::kThirdPartyFileSystem,
           WebFeature::kThirdPartyIndexedDb,
           WebFeature::kThirdPartyCacheStorage,
-          WebFeature::kThirdPartyLocalStorage,
-          WebFeature::kThirdPartySessionStorage,
           WebFeature::kOverlayPopup,
           WebFeature::kOverlayPopupAd,
           WebFeature::kTrustTokenXhr,
@@ -179,6 +167,18 @@ UseCounterPageLoadMetricsObserver::GetAllowedUkmFeatures() {
           WebFeature::kSchemelesslySameSitePostMessage,
           WebFeature::kSchemelesslySameSitePostMessageSecureToInsecure,
           WebFeature::kSchemelesslySameSitePostMessageInsecureToSecure,
+          WebFeature::kElementAttachInternalsBeforeConstructor,
+          WebFeature::kAddressSpaceLocalEmbeddedInPrivateSecureContext,
+          WebFeature::kAddressSpaceLocalEmbeddedInPrivateNonSecureContext,
+          WebFeature::kAddressSpaceLocalEmbeddedInPublicSecureContext,
+          WebFeature::kAddressSpaceLocalEmbeddedInPublicNonSecureContext,
+          WebFeature::kAddressSpaceLocalEmbeddedInUnknownSecureContext,
+          WebFeature::kAddressSpaceLocalEmbeddedInUnknownNonSecureContext,
+          WebFeature::kAddressSpacePrivateEmbeddedInPublicSecureContext,
+          WebFeature::kAddressSpacePrivateEmbeddedInPublicNonSecureContext,
+          WebFeature::kAddressSpacePrivateEmbeddedInUnknownSecureContext,
+          WebFeature::kAddressSpacePrivateEmbeddedInUnknownNonSecureContext,
+          WebFeature::kV8SharedArrayBufferConstructedWithoutIsolation,
       }));
   return *opt_in_features;
 }

@@ -12,9 +12,7 @@
 #error "This file requires ARC support."
 #endif
 
-#if defined(CHROME_EARL_GREY_2)
 GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeMatchersAppInterface)
-#endif
 
 namespace chrome_test_util {
 
@@ -140,6 +138,10 @@ id<GREYMatcher> ShareButton() {
   return [ChromeMatchersAppInterface shareButton];
 }
 
+id<GREYMatcher> TabShareButton() {
+  return [ChromeMatchersAppInterface tabShareButton];
+}
+
 id<GREYMatcher> ShowTabsButton() {
   return [ChromeMatchersAppInterface showTabsButton];
 }
@@ -166,6 +168,11 @@ id<GREYMatcher> SyncSwitchCell(NSString* accessibility_label,
 
 id<GREYMatcher> OpenLinkInNewTabButton() {
   return [ChromeMatchersAppInterface openLinkInNewTabButton];
+}
+
+id<GREYMatcher> OpenLinkInIncognitoButton(BOOL use_new_string) {
+  return [ChromeMatchersAppInterface
+      openLinkInIncognitoButtonWithUseNewString:use_new_string];
 }
 
 id<GREYMatcher> OpenLinkInNewWindowButton() {
@@ -372,6 +379,10 @@ id<GREYMatcher> PaymentRequestPickerSearchBar() {
   return [ChromeMatchersAppInterface paymentRequestPickerSearchBar];
 }
 
+id<GREYMatcher> OpenNewWindowMenuButton() {
+  return [ChromeMatchersAppInterface openNewWindowMenuButton];
+}
+
 id<GREYMatcher> ReadingListMenuButton() {
   return [ChromeMatchersAppInterface readingListMenuButton];
 }
@@ -390,6 +401,31 @@ id<GREYMatcher> SystemSelectionCallout() {
 
 id<GREYMatcher> SystemSelectionCalloutCopyButton() {
   return [ChromeMatchersAppInterface systemSelectionCalloutCopyButton];
+}
+
+id<GREYMatcher> CopyLinkButton(BOOL use_new_string) {
+  return [ChromeMatchersAppInterface
+      copyLinkButtonWithUseNewString:use_new_string];
+}
+
+id<GREYMatcher> EditButton(BOOL use_new_string) {
+  return [ChromeMatchersAppInterface editButtonWithUseNewString:use_new_string];
+}
+
+id<GREYMatcher> MoveButton() {
+  return [ChromeMatchersAppInterface moveButton];
+}
+
+id<GREYMatcher> ReadingListMarkAsReadButton() {
+  return [ChromeMatchersAppInterface readingListMarkAsReadButton];
+}
+
+id<GREYMatcher> ReadingListMarkAsUnreadButton() {
+  return [ChromeMatchersAppInterface readingListMarkAsUnreadButton];
+}
+
+id<GREYMatcher> DeleteButton() {
+  return [ChromeMatchersAppInterface deleteButton];
 }
 
 id<GREYMatcher> ContextMenuCopyButton() {
@@ -596,6 +632,10 @@ id<GREYMatcher> ManualFallbackAddCreditCardsMatcher() {
 id<GREYMatcher> ManualFallbackCreditCardTableViewWindowMatcher() {
   return [ChromeMatchersAppInterface
       manualFallbackCreditCardTableViewWindowMatcher];
+}
+
+id<GREYMatcher> ActivityViewHeader(NSString* page_title) {
+  return [ChromeMatchersAppInterface activityViewHeaderWithTitle:page_title];
 }
 
 }  // namespace chrome_test_util

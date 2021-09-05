@@ -8,7 +8,8 @@
 
 #include "cc/layers/deadline_policy.h"
 #include "cc/layers/layer.h"
-#include "components/viz/common/surfaces/local_surface_id_allocation.h"
+#include "components/viz/common/surfaces/local_surface_id.h"
+#include "content/browser/renderer_host/agent_scheduling_group_host.h"
 #include "content/browser/renderer_host/mock_render_widget_host.h"
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/mock_render_process_host.h"
@@ -32,8 +33,7 @@ class RenderWidgetHostViewAndroidTest : public testing::Test {
   // Directly map to RenderWidgetHostViewAndroid methods.
   bool SynchronizeVisualProperties(
       const cc::DeadlinePolicy& deadline_policy,
-      const base::Optional<viz::LocalSurfaceIdAllocation>&
-          child_local_surface_id_allocation);
+      const base::Optional<viz::LocalSurfaceId>& child_local_surface_id);
   void WasEvicted();
   ui::ViewAndroid* GetViewAndroid() { return &native_view_; }
 
@@ -47,6 +47,7 @@ class RenderWidgetHostViewAndroidTest : public testing::Test {
  private:
   std::unique_ptr<TestBrowserContext> browser_context_;
   MockRenderProcessHost* process_;  // Deleted automatically by the widget.
+  std::unique_ptr<AgentSchedulingGroupHost> agent_scheduling_group_;
   std::unique_ptr<MockRenderWidgetHostDelegate> delegate_;
   scoped_refptr<cc::Layer> parent_layer_;
   scoped_refptr<cc::Layer> layer_;
@@ -66,10 +67,9 @@ RenderWidgetHostViewAndroidTest::RenderWidgetHostViewAndroidTest()
 
 bool RenderWidgetHostViewAndroidTest::SynchronizeVisualProperties(
     const cc::DeadlinePolicy& deadline_policy,
-    const base::Optional<viz::LocalSurfaceIdAllocation>&
-        child_local_surface_id_allocation) {
+    const base::Optional<viz::LocalSurfaceId>& child_local_surface_id) {
   return render_widget_host_view_android_->SynchronizeVisualProperties(
-      deadline_policy, child_local_surface_id_allocation);
+      deadline_policy, child_local_surface_id);
 }
 
 void RenderWidgetHostViewAndroidTest::WasEvicted() {
@@ -80,8 +80,10 @@ void RenderWidgetHostViewAndroidTest::SetUp() {
   browser_context_.reset(new TestBrowserContext());
   delegate_.reset(new MockRenderWidgetHostDelegate());
   process_ = new MockRenderProcessHost(browser_context_.get());
-  host_.reset(MockRenderWidgetHost::Create(delegate_.get(), process_,
-                                           process_->GetNextRoutingID()));
+  agent_scheduling_group_ =
+      std::make_unique<AgentSchedulingGroupHost>(*process_);
+  host_.reset(MockRenderWidgetHost::Create(
+      delegate_.get(), *agent_scheduling_group_, process_->GetNextRoutingID()));
   parent_layer_ = cc::Layer::Create();
   parent_view_.SetLayer(parent_layer_);
   layer_ = cc::Layer::Create();
@@ -97,6 +99,7 @@ void RenderWidgetHostViewAndroidTest::TearDown() {
   render_widget_host_view_android_->Destroy();
   host_.reset();
   delegate_.reset();
+  agent_scheduling_group_ = nullptr;
   process_ = nullptr;
   browser_context_.reset();
 }
@@ -108,16 +111,15 @@ TEST_F(RenderWidgetHostViewAndroidTest, NoSurfaceSynchronizationWhileEvicted) {
   // Android default host and views initialize as visible.
   RenderWidgetHostViewAndroid* rwhva = render_widget_host_view_android();
   EXPECT_TRUE(rwhva->IsShowing());
-  const viz::LocalSurfaceIdAllocation initial_allocation =
-      rwhva->GetLocalSurfaceIdAllocation();
-  EXPECT_TRUE(initial_allocation.local_surface_id().is_valid());
+  const viz::LocalSurfaceId initial_local_surface_id =
+      rwhva->GetLocalSurfaceId();
+  EXPECT_TRUE(initial_local_surface_id.is_valid());
 
   // Evicting while hidden should invalidate the current viz::LocalSurfaceId.
   rwhva->Hide();
   EXPECT_FALSE(rwhva->IsShowing());
   WasEvicted();
-  EXPECT_FALSE(
-      rwhva->GetLocalSurfaceIdAllocation().local_surface_id().is_valid());
+  EXPECT_FALSE(rwhva->GetLocalSurfaceId().is_valid());
 
   // When a child acknowledges a Surface Synchronization message, and has no new
   // properties to change, it responds with the original viz::LocalSurfaceId.
@@ -125,7 +127,7 @@ TEST_F(RenderWidgetHostViewAndroidTest, NoSurfaceSynchronizationWhileEvicted) {
   // should we continue the synchronization process. This should not cause a
   // crash in DelegatedFrameHostAndroid.
   EXPECT_FALSE(SynchronizeVisualProperties(
-      cc::DeadlinePolicy::UseDefaultDeadline(), initial_allocation));
+      cc::DeadlinePolicy::UseDefaultDeadline(), initial_local_surface_id));
 }
 
 // Tests insetting the Visual Viewport.
@@ -135,10 +137,8 @@ TEST_F(RenderWidgetHostViewAndroidTest, InsetVisualViewport) {
   EXPECT_EQ(0, GetViewAndroid()->GetViewportInsetBottom());
 
   // Set up SurfaceId checking.
-  const viz::LocalSurfaceIdAllocation& surface_id_allocation =
-      rwhva->GetLocalSurfaceIdAllocation();
-  viz::LocalSurfaceId original_surface =
-      surface_id_allocation.local_surface_id();
+  const viz::LocalSurfaceId original_local_surface_id =
+      rwhva->GetLocalSurfaceId();
 
   // Set up our test delegate connected to this ViewAndroid.
   test_view_android_delegate_->SetupTestDelegate(GetViewAndroid());
@@ -151,16 +151,15 @@ TEST_F(RenderWidgetHostViewAndroidTest, InsetVisualViewport) {
   test_view_android_delegate_->InsetViewportBottom(100);
   EXPECT_EQ(100, GetViewAndroid()->GetViewportInsetBottom());
   rwhva->OnViewportInsetBottomChanged(env, nullptr);
-  viz::LocalSurfaceId inset_surface = surface_id_allocation.local_surface_id();
-  EXPECT_TRUE(inset_surface.IsNewerThan(original_surface));
+  viz::LocalSurfaceId inset_surface = rwhva->GetLocalSurfaceId();
+  EXPECT_TRUE(inset_surface.IsNewerThan(original_local_surface_id));
 
   // Reset the bottom; should go back to the original inset and have a new
   // surface.
   test_view_android_delegate_->InsetViewportBottom(0);
   rwhva->OnViewportInsetBottomChanged(env, nullptr);
   EXPECT_EQ(0, GetViewAndroid()->GetViewportInsetBottom());
-  EXPECT_TRUE(
-      surface_id_allocation.local_surface_id().IsNewerThan(inset_surface));
+  EXPECT_TRUE(rwhva->GetLocalSurfaceId().IsNewerThan(inset_surface));
 }
 
 }  // namespace content

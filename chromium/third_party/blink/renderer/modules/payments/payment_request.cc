@@ -419,8 +419,8 @@ void StringifyAndParseMethodSpecificData(ExecutionContext& execution_context,
                                          PaymentMethodDataPtr& output,
                                          ExceptionState& exception_state) {
   PaymentsValidators::ValidateAndStringifyObject(
-      execution_context.GetIsolate(), "Payment method data", input,
-      output->stringified_data, exception_state);
+      execution_context.GetIsolate(), input, output->stringified_data,
+      exception_state);
   if (exception_state.HadException())
     return;
 
@@ -634,9 +634,7 @@ void ValidateAndConvertPaymentDetailsUpdate(const PaymentDetailsUpdate* input,
 
   if (input->hasPaymentMethodErrors()) {
     PaymentsValidators::ValidateAndStringifyObject(
-        execution_context.GetIsolate(), "Payment method errors",
-        input->paymentMethodErrors(),
-
+        execution_context.GetIsolate(), input->paymentMethodErrors(),
         output->stringified_payment_method_errors, exception_state);
   }
 }
@@ -795,6 +793,13 @@ ScriptPromise PaymentRequest::show(ScriptState* script_state,
     return ScriptPromise();
   }
 
+  if (!not_supported_for_invalid_origin_or_ssl_error_.IsEmpty()) {
+    return ScriptPromise::RejectWithDOMException(
+        script_state, MakeGarbageCollected<DOMException>(
+                          DOMExceptionCode::kNotSupportedError,
+                          not_supported_for_invalid_origin_or_ssl_error_));
+  }
+
   if (!payment_provider_.is_bound() || accept_resolver_) {
     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
                                       "Already called show() once");
@@ -878,6 +883,11 @@ ScriptPromise PaymentRequest::abort(ScriptState* script_state,
 
 ScriptPromise PaymentRequest::canMakePayment(ScriptState* script_state,
                                              ExceptionState& exception_state) {
+  if (!not_supported_for_invalid_origin_or_ssl_error_.IsEmpty()) {
+    return ScriptPromise::Cast(script_state,
+                               ScriptValue::From(script_state, false));
+  }
+
   if (!payment_provider_.is_bound() || GetPendingAcceptPromiseResolver() ||
       can_make_payment_resolver_ || !script_state->ContextIsValid()) {
     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
@@ -895,6 +905,11 @@ ScriptPromise PaymentRequest::canMakePayment(ScriptState* script_state,
 ScriptPromise PaymentRequest::hasEnrolledInstrument(
     ScriptState* script_state,
     ExceptionState& exception_state) {
+  if (!not_supported_for_invalid_origin_or_ssl_error_.IsEmpty()) {
+    return ScriptPromise::Cast(script_state,
+                               ScriptValue::From(script_state, false));
+  }
+
   if (!payment_provider_.is_bound() || GetPendingAcceptPromiseResolver() ||
       has_enrolled_instrument_resolver_ || !script_state->ContextIsValid()) {
     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
@@ -910,7 +925,9 @@ ScriptPromise PaymentRequest::hasEnrolledInstrument(
 }
 
 bool PaymentRequest::HasPendingActivity() const {
-  return GetPendingAcceptPromiseResolver() || complete_resolver_;
+  return accept_resolver_ || retry_resolver_ || complete_resolver_ ||
+         has_enrolled_instrument_resolver_ || can_make_payment_resolver_ ||
+         abort_resolver_;
 }
 
 const AtomicString& PaymentRequest::InterfaceName() const {
@@ -1181,7 +1198,11 @@ PaymentRequest::PaymentRequest(
           this,
           &PaymentRequest::OnUpdatePaymentDetailsTimeout),
       is_waiting_for_show_promise_to_resolve_(false) {
+  // options_, details has default value, so could never be null, according to
+  // payment_request.idl.
+  DCHECK(options_);
   DCHECK(details);
+
   DCHECK(GetExecutionContext()->IsSecureContext());
   if (!AllowedToUsePaymentRequest(execution_context)) {
     exception_state.ThrowSecurityError(
@@ -1470,7 +1491,12 @@ void PaymentRequest::OnError(PaymentErrorReason error,
       break;
 
     case PaymentErrorReason::NOT_SUPPORTED:
+      exception_code = exception_code = DOMExceptionCode::kNotSupportedError;
+      break;
+
+    case PaymentErrorReason::NOT_SUPPORTED_FOR_INVALID_ORIGIN_OR_SSL:
       exception_code = DOMExceptionCode::kNotSupportedError;
+      not_supported_for_invalid_origin_or_ssl_error_ = error_message;
       break;
 
     case PaymentErrorReason::ALREADY_SHOWING:
@@ -1502,13 +1528,21 @@ void PaymentRequest::OnError(PaymentErrorReason error,
   }
 
   if (can_make_payment_resolver_) {
-    can_make_payment_resolver_->Reject(
-        MakeGarbageCollected<DOMException>(exception_code, error_message));
+    if (!not_supported_for_invalid_origin_or_ssl_error_.IsEmpty()) {
+      can_make_payment_resolver_->Reject(false);
+    } else {
+      can_make_payment_resolver_->Reject(
+          MakeGarbageCollected<DOMException>(exception_code, error_message));
+    }
   }
 
   if (has_enrolled_instrument_resolver_) {
-    has_enrolled_instrument_resolver_->Reject(
-        MakeGarbageCollected<DOMException>(exception_code, error_message));
+    if (!not_supported_for_invalid_origin_or_ssl_error_.IsEmpty()) {
+      has_enrolled_instrument_resolver_->Reject(false);
+    } else {
+      has_enrolled_instrument_resolver_->Reject(
+          MakeGarbageCollected<DOMException>(exception_code, error_message));
+    }
   }
 
   ClearResolversAndCloseMojoConnection();

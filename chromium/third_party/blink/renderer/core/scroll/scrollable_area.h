@@ -28,8 +28,8 @@
 
 #include "base/callback_helpers.h"
 #include "cc/input/scroll_snap_data.h"
+#include "third_party/blink/public/common/css/color_scheme.h"
 #include "third_party/blink/public/mojom/scroll/scroll_into_view_params.mojom-blink-forward.h"
-#include "third_party/blink/public/platform/web_color_scheme.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/layout/geometry/physical_rect.h"
 #include "third_party/blink/renderer/core/loader/history_item.h"
@@ -37,7 +37,7 @@
 #include "third_party/blink/renderer/platform/geometry/float_quad.h"
 #include "third_party/blink/renderer/platform/graphics/color.h"
 #include "third_party/blink/renderer/platform/graphics/compositor_element_id.h"
-#include "third_party/blink/renderer/platform/graphics/scroll_types.h"
+#include "third_party/blink/renderer/platform/graphics/overlay_scrollbar_clip_behavior.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/wtf/math_extras.h"
@@ -74,11 +74,13 @@ enum IncludeScrollbarsInRect {
 };
 
 class CORE_EXPORT ScrollableArea : public GarbageCollectedMixin {
-  DISALLOW_COPY_AND_ASSIGN(ScrollableArea);
   USING_PRE_FINALIZER(ScrollableArea, Dispose);
 
  public:
   using ScrollCallback = base::OnceClosure;
+
+  ScrollableArea(const ScrollableArea&) = delete;
+  ScrollableArea& operator=(const ScrollableArea&) = delete;
 
   static int PixelsPerLineStep(LocalFrame*);
   static float MinFractionToStepWhenPaging();
@@ -213,6 +215,10 @@ class CORE_EXPORT ScrollableArea : public GarbageCollectedMixin {
 
   virtual void ContentsResized();
 
+  // This is for platform overlay scrollbars only, doesn't include
+  // overflow:overlay scrollbars. Probably this should be renamed to
+  // HasPlatformOverlayScrollbars() but we don't bother it because
+  // overflow:overlay might be deprecated soon.
   bool HasOverlayScrollbars() const;
   void SetScrollbarOverlayColorTheme(ScrollbarOverlayColorTheme);
   void RecalculateScrollbarOverlayColorTheme(Color);
@@ -456,16 +462,16 @@ class CORE_EXPORT ScrollableArea : public GarbageCollectedMixin {
     return mojom::blink::ScrollBehavior::kInstant;
   }
 
-  virtual WebColorScheme UsedColorScheme() const = 0;
+  virtual ColorScheme UsedColorScheme() const = 0;
 
   // Subtracts space occupied by this ScrollableArea's scrollbars.
   // Does nothing if overlay scrollbars are enabled.
   IntSize ExcludeScrollbars(const IntSize&) const;
 
   virtual int VerticalScrollbarWidth(
-      OverlayScrollbarClipBehavior = kIgnorePlatformOverlayScrollbarSize) const;
+      OverlayScrollbarClipBehavior = kIgnoreOverlayScrollbarSize) const;
   virtual int HorizontalScrollbarHeight(
-      OverlayScrollbarClipBehavior = kIgnorePlatformOverlayScrollbarSize) const;
+      OverlayScrollbarClipBehavior = kIgnoreOverlayScrollbarSize) const;
 
   virtual LayoutBox* GetLayoutBox() const { return nullptr; }
 
@@ -528,6 +534,11 @@ class CORE_EXPORT ScrollableArea : public GarbageCollectedMixin {
   // ScrollableArea is returned. Otherwise, the layout box's
   // PaintLayerScrollableArea (which can be null) is returned.
   static ScrollableArea* GetForScrolling(const LayoutBox* layout_box);
+
+  // Returns a Node at which 'scroll' events should be dispatched.
+  // For <fieldset>, a ScrollableArea is associated to its internal anonymous
+  // box. GetLayoutBox()->GetNode() doesn't work in this case.
+  Node* EventTargetNode() const;
 
  protected:
   // Deduces the mojom::blink::ScrollBehavior based on the

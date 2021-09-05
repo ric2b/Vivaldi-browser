@@ -11,8 +11,6 @@
       use_base_dir="false" type="BINDATA" />
   <include name="IDR_NEW_TAB_PAGE_ACCOUNT_CIRCLE_SVG"
       file="icons/account_circle.svg" type="BINDATA" />
-  <include name="IDR_NEW_TAB_PAGE_BRUSH_ICON_SVG"
-      file="icons/brush.svg" type="BINDATA" />
   <include name="IDR_NEW_TAB_PAGE_CHECK_CIRCLE_SVG"
       file="icons/check_circle.svg" type="BINDATA" />
   <include name="IDR_NEW_TAB_PAGE_CHEVRON_SVG"
@@ -29,8 +27,6 @@
       file="icons/colored_header.svg" type="BINDATA" />
   <include name="IDR_NEW_TAB_PAGE_COLORS_ICON_SVG"
       file="icons/colors.svg" type="BINDATA" />
-  <include name="IDR_NEW_TAB_PAGE_COLORIZE_ICON_SVG"
-      file="icons/colorize.svg" type="BINDATA" />
   <include name="IDR_NEW_TAB_PAGE_SHORTCUT_CIRCLES_SVG"
       file="icons/shortcut_circles.svg" type="BINDATA" />
   <include name="IDR_NEW_TAB_PAGE_GOOGLE_MIC_SVG"
@@ -47,6 +43,10 @@
       file="icons/mail.svg" type="BINDATA" />
   <include name="IDR_NEW_TAB_PAGE_UPLOAD_SVG" file="icons/upload.svg"
       type="BINDATA" />
+  <include name="IDR_NEW_TAB_PAGE_INFO_SVG" file="icons/info.svg"
+      type="BINDATA" />
+  <include name="IDR_NEW_TAB_PAGE_CARDS_SVG" file="icons/cards.svg"
+      type="BINDATA" />
   <include name="IDR_NEW_TAB_PAGE_NEW_TAB_PAGE_HTML"
       file="new_tab_page.html" type="BINDATA" />
   <include name="IDR_NEW_TAB_PAGE_SHARED_VARS_CSS"
@@ -55,10 +55,6 @@
       file="untrusted/one_google_bar.html" type="BINDATA" />
   <include name="IDR_NEW_TAB_PAGE_UNTRUSTED_ONE_GOOGLE_BAR_JS"
       file="untrusted/one_google_bar.js" type="BINDATA" />
-  <include name="IDR_NEW_TAB_PAGE_UNTRUSTED_PROMO_HTML"
-      file="untrusted/promo.html" type="BINDATA" />
-  <include name="IDR_NEW_TAB_PAGE_UNTRUSTED_PROMO_JS"
-      file="untrusted/promo.js" type="BINDATA" />
   <include name="IDR_NEW_TAB_PAGE_UNTRUSTED_IMAGE_HTML"
       file="untrusted/image.html" type="BINDATA" />
   <include name="IDR_NEW_TAB_PAGE_UNTRUSTED_BACKGROUND_IMAGE_HTML"
@@ -69,4 +65,7 @@
       file="one_google_bar_api.js" type="BINDATA" compress="false" />
   <include name="IDR_NEW_TAB_PAGE_PROMO_BROWSER_COMMAND_PROXY_JS"
       file="promo_browser_command_proxy.js" type="BINDATA" compress="false" />
+  <include name="IDR_NEW_TAB_PAGE_MODULES_SHOPPING_TASKS_SHOPPING_TASKS_MOJO_LITE_JS"
+      file="${root_gen_dir}/chrome/browser/search/shopping_tasks/shopping_tasks.mojom-lite.js"
+      use_base_dir="false" type="BINDATA" />
 </grit-part>

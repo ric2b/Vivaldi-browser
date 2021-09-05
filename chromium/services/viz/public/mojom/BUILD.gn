@@ -13,6 +13,8 @@ mojom("mojom") {
     "compositing/compositor_frame.mojom",
     "compositing/compositor_frame_metadata.mojom",
     "compositing/compositor_frame_sink.mojom",
+    "compositing/compositor_render_pass.mojom",
+    "compositing/compositor_render_pass_id.mojom",
     "compositing/copy_output_request.mojom",
     "compositing/copy_output_result.mojom",
     "compositing/delegated_ink_metadata.mojom",
@@ -23,11 +25,8 @@ mojom("mojom") {
     "compositing/frame_sink_id.mojom",
     "compositing/frame_timing_details.mojom",
     "compositing/local_surface_id.mojom",
-    "compositing/local_surface_id_allocation.mojom",
     "compositing/paint_filter.mojom",
     "compositing/quads.mojom",
-    "compositing/render_pass.mojom",
-    "compositing/render_pass_id.mojom",
     "compositing/resource_settings.mojom",
     "compositing/returned_resource.mojom",
     "compositing/selection.mojom",
@@ -52,6 +51,7 @@ mojom("mojom") {
     "//skia/public/mojom",
     "//ui/gfx/geometry/mojom",
     "//ui/gfx/mojom",
+    "//ui/gl/mojom",
     "//ui/latency/mojom",
   ]
 
@@ -134,11 +134,21 @@ mojom("mojom") {
     {
       types = [
         {
-          mojom = "viz.mojom.LocalSurfaceIdAllocation"
-          cpp = "::viz::LocalSurfaceIdAllocation"
+          mojom = "viz.mojom.Selection"
+          cpp = "::viz::Selection<::gfx::SelectionBound>"
         },
       ]
-      traits_headers = [ "//services/viz/public/cpp/compositing/local_surface_id_allocation_mojom_traits.h" ]
+      traits_headers =
+          [ "//services/viz/public/cpp/compositing/selection_mojom_traits.h" ]
+    },
+    {
+      types = [
+        {
+          mojom = "viz.mojom.VerticalScrollDirection"
+          cpp = "::viz::VerticalScrollDirection"
+        },
+      ]
+      traits_headers = [ "//services/viz/public/cpp/compositing/vertical_scroll_direction_mojom_traits.h" ]
       traits_public_deps = [ "//components/viz/common" ]
     },
   ]
@@ -347,23 +357,19 @@ mojom("mojom") {
     {
       types = [
         {
-          mojom = "viz.mojom.RenderPassId"
-          cpp = "::viz::RenderPassId"
+          mojom = "viz.mojom.CompositorRenderPassId"
+          cpp = "::viz::CompositorRenderPassId"
         },
       ]
-      traits_sources = [
-        "//services/viz/public/cpp/compositing/render_pass_id_mojom_traits.cc",
-      ]
-      traits_headers = [
-        "//services/viz/public/cpp/compositing/render_pass_id_mojom_traits.h",
-      ]
+      traits_sources = [ "//services/viz/public/cpp/compositing/compositor_render_pass_id_mojom_traits.cc" ]
+      traits_headers = [ "//services/viz/public/cpp/compositing/compositor_render_pass_id_mojom_traits.h" ]
       traits_public_deps = [ "//components/viz/common" ]
     },
     {
       types = [
         {
-          mojom = "viz.mojom.RenderPass"
-          cpp = "::std::unique_ptr<::viz::RenderPass>"
+          mojom = "viz.mojom.CompositorRenderPass"
+          cpp = "::std::unique_ptr<::viz::CompositorRenderPass>"
           move_only = true
           nullable_is_same_type = true
         },
@@ -373,12 +379,12 @@ mojom("mojom") {
         },
       ]
       traits_sources = [
+        "//services/viz/public/cpp/compositing/compositor_render_pass_mojom_traits.cc",
         "//services/viz/public/cpp/compositing/quads_mojom_traits.cc",
-        "//services/viz/public/cpp/compositing/render_pass_mojom_traits.cc",
       ]
       traits_headers = [
         "//services/viz/public/cpp/compositing/quads_mojom_traits.h",
-        "//services/viz/public/cpp/compositing/render_pass_mojom_traits.h",
+        "//services/viz/public/cpp/compositing/compositor_render_pass_mojom_traits.h",
       ]
       traits_public_deps = [ "//ui/gl" ]
     },
@@ -399,16 +405,6 @@ mojom("mojom") {
         "//components/viz/common",
         "//ui/gfx/mojom",
       ]
-    },
-    {
-      types = [
-        {
-          mojom = "viz.mojom.Selection"
-          cpp = "::viz::Selection<::gfx::SelectionBound>"
-        },
-      ]
-      traits_headers =
-          [ "//services/viz/public/cpp/compositing/selection_mojom_traits.h" ]
     },
     {
       types = [
@@ -445,16 +441,6 @@ mojom("mojom") {
         "//gpu/ipc/common:mojom_traits",
         "//ui/gfx/geometry/mojom",
       ]
-    },
-    {
-      types = [
-        {
-          mojom = "viz.mojom.VerticalScrollDirection"
-          cpp = "::viz::VerticalScrollDirection"
-        },
-      ]
-      traits_headers = [ "//services/viz/public/cpp/compositing/vertical_scroll_direction_mojom_traits.h" ]
-      traits_public_deps = [ "//components/viz/common" ]
     },
   ]
 
@@ -537,8 +523,8 @@ mojom("mojom") {
         "//services/viz/public/cpp/compositing/filter_operation_mojom_traits.h",
         "//services/viz/public/cpp/compositing/filter_operations_mojom_traits.h",
         "//services/viz/public/cpp/compositing/quads_mojom_traits.h",
-        "//services/viz/public/cpp/compositing/render_pass_id_mojom_traits.h",
-        "//services/viz/public/cpp/compositing/render_pass_mojom_traits.h",
+        "//services/viz/public/cpp/compositing/compositor_render_pass_id_mojom_traits.h",
+        "//services/viz/public/cpp/compositing/compositor_render_pass_mojom_traits.h",
         "//services/viz/public/cpp/compositing/selection_mojom_traits.h",
         "//services/viz/public/cpp/compositing/shared_quad_state_mojom_traits.h",
         "//services/viz/public/cpp/compositing/transferable_resource_mojom_traits.h",

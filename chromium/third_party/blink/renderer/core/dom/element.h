@@ -73,7 +73,6 @@ class InputDeviceCapabilities;
 class Locale;
 class MutableCSSPropertyValueSet;
 class NamedNodeMap;
-class PaintLayerScrollableArea;
 class PointerLockOptions;
 class PseudoElement;
 class PseudoElementStyleRequest;
@@ -93,7 +92,6 @@ class V0CustomElementDefinition;
 enum class CSSPropertyID;
 enum class CSSValueID;
 enum class DisplayLockActivationReason;
-enum class DisplayLockLifecycleTarget;
 enum class DocumentUpdateReason;
 
 struct FocusParams;
@@ -325,9 +323,7 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   void scrollBy(const ScrollToOptions*);
   void scrollTo(double x, double y);
   void scrollTo(const ScrollToOptions*);
-  // This will return the |GetScrollableArea| of correspond LayoutBox. For
-  // LayoutTextControlSingleLine, it will return its |InnerEditorElement|'s.
-  virtual PaintLayerScrollableArea* GetScrollableArea() const;
+  LayoutBox* GetLayoutBoxForScrolling() const override;
 
   IntRect BoundsInViewport() const;
   // Returns an intersection rectangle of the bounds rectangle and the visual
@@ -802,7 +798,8 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   // descendants. Note that even if this element returns true, it's not implied
   // that all descendants will return the same. Once an element needs to force
   // legacy layout, though, the layout engine knows that it will have to perform
-  // legacy layout on the entire subtree.
+  // legacy layout on the entire subtree, unless this is overridden by
+  // ShouldForceNGLayout().
   bool ShouldForceLegacyLayout() const {
     if (TypeShouldForceLegacyLayout())
       return true;
@@ -824,6 +821,7 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   void SetDidAttachInternals();
   bool DidAttachInternals() const;
   ElementInternals& EnsureElementInternals();
+  const ElementInternals* GetElementInternals() const;
 
   bool ContainsFullScreenElement() const {
     return HasElementFlag(ElementFlags::kContainsFullScreenElement);
@@ -916,7 +914,7 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   DisplayLockContext* GetDisplayLockContext() const;
   DisplayLockContext& EnsureDisplayLockContext();
 
-  bool StyleRecalcBlockedByDisplayLock(DisplayLockLifecycleTarget) const;
+  bool ChildStyleRecalcBlockedByDisplayLock() const;
 
   // Activates all activatable (for a given reason) locked ancestors for this
   // element. Return true if we activated at least one previously locked
@@ -929,6 +927,8 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   // Classes overriding this method can return true when an element has
   // been determined to be from an ad. Returns false by default.
   virtual bool IsAdRelated() const { return false; }
+
+  void NotifyInlineStyleMutation();
 
  protected:
   const ElementData* GetElementData() const { return element_data_.Get(); }
@@ -999,6 +999,12 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   // This function clears the "nonce" attribute whenever conditions (1) and (2)
   // are met.
   void HideNonce();
+
+  // Adjust the state of legacy layout forcing for this element (and its
+  // subtree). Input is the state inherited from the parent element. Output will
+  // be modified if required by this element.
+  void AdjustForceLegacyLayout(const ComputedStyle*,
+                               bool* should_force_legacy_layout);
 
  private:
   friend class AXObject;

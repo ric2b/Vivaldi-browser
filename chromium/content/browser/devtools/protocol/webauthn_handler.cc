@@ -11,7 +11,7 @@
 
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
-#include "content/browser/frame_host/render_frame_host_impl.h"
+#include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/browser/webauth/authenticator_environment_impl.h"
 #include "content/browser/webauth/virtual_authenticator.h"
 #include "content/browser/webauth/virtual_fido_discovery_factory.h"
@@ -143,20 +143,31 @@ Response WebAuthnHandler::AddVirtualAuthenticator(
     return Response::InvalidParams(kCableNotSupportedOnU2f);
   }
 
-  auto* authenticator = authenticator_manager->CreateAuthenticator(
-      protocol, *transport,
-      transport == device::FidoTransportProtocol::kInternal
-          ? device::AuthenticatorAttachment::kPlatform
-          : device::AuthenticatorAttachment::kCrossPlatform,
-      options->GetHasResidentKey(false /* default */),
-      options->GetHasUserVerification(false /* default */));
+  VirtualAuthenticator* authenticator = nullptr;
+  switch (protocol) {
+    case device::ProtocolVersion::kU2f:
+      authenticator = authenticator_manager->CreateU2FAuthenticator(*transport);
+      break;
+    case device::ProtocolVersion::kCtap2:
+      authenticator = authenticator_manager->CreateCTAP2Authenticator(
+          device::Ctap2Version::kCtap2_0, *transport,
+          transport == device::FidoTransportProtocol::kInternal
+              ? device::AuthenticatorAttachment::kPlatform
+              : device::AuthenticatorAttachment::kCrossPlatform,
+          options->GetHasResidentKey(/*default=*/false),
+          options->GetHasUserVerification(/*default=*/false));
+      break;
+    case device::ProtocolVersion::kUnknown:
+      NOTREACHED();
+      break;
+  }
   if (!authenticator)
     return Response::ServerError(kErrorCreatingAuthenticator);
 
   authenticator->SetUserPresence(
       options->GetAutomaticPresenceSimulation(true /* default */));
   authenticator->set_user_verified(
-      options->GetIsUserVerified(false /* default */));
+      options->GetIsUserVerified(/*default=*/false));
 
   *out_authenticator_id = authenticator->unique_id();
   return Response::Success();

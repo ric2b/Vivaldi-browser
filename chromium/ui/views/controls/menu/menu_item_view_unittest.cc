@@ -9,6 +9,7 @@
 
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/bind_test_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/compositor/canvas_painter.h"
@@ -28,7 +29,6 @@ using MenuItemViewUnitTest = ViewsTestBase;
 
 TEST_F(MenuItemViewUnitTest, AddAndRemoveChildren) {
   views::TestMenuItemView root_menu;
-  root_menu.set_owned_by_client();
 
   auto* item = root_menu.AppendMenuItem(0);
 
@@ -60,7 +60,6 @@ class SquareView : public views::View {
 
 TEST_F(MenuItemViewUnitTest, TestMenuItemViewWithFlexibleWidthChild) {
   views::TestMenuItemView root_menu;
-  root_menu.set_owned_by_client();
 
   // Append a normal MenuItemView.
   views::MenuItemView* label_view =
@@ -181,6 +180,31 @@ TEST_F(MenuItemViewUnitTest, UseMnemonicOnPlatform) {
   }
 }
 
+TEST_F(MenuItemViewUnitTest, NotifiesSelectedChanged) {
+  views::TestMenuItemView root_menu;
+
+  // Append a MenuItemView.
+  views::MenuItemView* menu_item_view =
+      root_menu.AppendMenuItem(1, base::ASCIIToUTF16("item"));
+
+  // Verify initial selected state.
+  bool is_selected = menu_item_view->IsSelected();
+  EXPECT_FALSE(is_selected);
+
+  // Subscribe to be notified of changes to selected state.
+  auto subscription =
+      menu_item_view->AddSelectedChangedCallback(base::BindLambdaForTesting(
+          [&]() { is_selected = menu_item_view->IsSelected(); }));
+
+  // Verify we are notified when the MenuItemView becomes selected.
+  menu_item_view->SetSelected(true);
+  EXPECT_TRUE(is_selected);
+
+  // Verify we are notified when the MenuItemView becomes deselected.
+  menu_item_view->SetSelected(false);
+  EXPECT_FALSE(is_selected);
+}
+
 class MenuItemViewLayoutTest : public ViewsTestBase {
  public:
   MenuItemViewLayoutTest() : test_item_(root_menu_.AppendMenuItem(1)) {}
@@ -191,10 +215,9 @@ class MenuItemViewLayoutTest : public ViewsTestBase {
 
   void PerformLayout() {
     // SubmenuView does not lay out its children unless it is contained in a
-    // view. Make a simple container for it. We have to call
-    // set_owned_by_client() since |submenu| is owned by |root_menu|.
+    // view, so make a simple container for it.
     SubmenuView* submenu = root_menu_.GetSubmenu();
-    submenu->set_owned_by_client();
+    ASSERT_TRUE(submenu->owned_by_client());
 
     submenu_parent_ = std::make_unique<View>();
     submenu_parent_->AddChildView(submenu);

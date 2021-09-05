@@ -79,6 +79,11 @@ const char kPakFileExtension[] = ".pak";
 
 ResourceBundle* g_shared_instance_ = nullptr;
 
+// NOTE(igor@vivaldi.com): See comments in InitSharedInstanceWithLocale.
+#if !defined(OS_ANDROID)
+bool g_vivaldi_load_secondary = false;
+#endif
+
 base::FilePath GetResourcesPakFilePath(const std::string& pak_name) {
   base::FilePath path;
   if (base::PathService::Get(base::DIR_MODULE, &path))
@@ -263,6 +268,18 @@ std::string ResourceBundle::InitSharedInstanceWithLocale(
   std::string result =
       g_shared_instance_->LoadLocaleResources(pref_locale,
                                               /*crash_on_failure=*/true);
+#if !defined(OS_ANDROID)
+  // NOTE(igor@vivaldi.com): If we use a locale unsupported by Chromium use
+  // English as a fallback. This way if we miss a translation of a Chromium
+  // string we avoid asserts in a debug build and in a release build the user
+  // see an English text that they can report, not an empty string.
+  if (!result.empty() && vivaldi::IsVivaldiExtraLocale(pref_locale)) {
+    g_vivaldi_load_secondary = true;
+    g_shared_instance_->LoadLocaleResources("en-US",
+                                            /*crash_on_failure=*/true);
+    g_vivaldi_load_secondary = false;
+  }
+#endif
   g_shared_instance_->InitDefaultFontList();
   return result;
 }
@@ -421,7 +438,14 @@ base::FilePath ResourceBundle::GetLocaleFilePath(
 #if !defined(OS_ANDROID)
 std::string ResourceBundle::LoadLocaleResources(const std::string& pref_locale,
                                                 bool crash_on_failure) {
+  if (!g_vivaldi_load_secondary) {
+    // clang-format off
   DCHECK(!locale_resources_data_.get()) << "locale.pak already loaded";
+    // clang-format on
+  } else {
+    DCHECK(!secondary_locale_resources_data_.get())
+        << "secondary locale.pak already loaded";
+  }
   std::string app_locale = l10n_util::GetApplicationLocale(pref_locale);
   base::FilePath locale_file_path = GetOverriddenPakPath();
   if (locale_file_path.empty())
@@ -455,7 +479,13 @@ std::string ResourceBundle::LoadLocaleResources(const std::string& pref_locale,
     CHECK(false);
   }
 
+  if (!g_vivaldi_load_secondary) {
+    // clang-format off
   locale_resources_data_ = std::move(data_pack);
+    // clang-format on
+  } else {
+    secondary_locale_resources_data_ = std::move(data_pack);
+  }
   return app_locale;
 }
 #endif  // defined(OS_ANDROID)
@@ -500,12 +530,12 @@ void ResourceBundle::OverrideLocaleStringResource(
   overridden_locale_strings_[resource_id] = string;
 }
 
-const base::FilePath& ResourceBundle::GetOverriddenPakPath() {
+const base::FilePath& ResourceBundle::GetOverriddenPakPath() const {
   return overridden_pak_path_;
 }
 
 base::string16 ResourceBundle::MaybeMangleLocalizedString(
-    const base::string16& str) {
+    const base::string16& str) const {
   if (!mangle_localized_strings_)
     return str;
 
@@ -728,7 +758,7 @@ base::string16 ResourceBundle::GetLocalizedString(int resource_id) {
 }
 
 base::RefCountedMemory* ResourceBundle::LoadLocalizedResourceBytes(
-    int resource_id) {
+    int resource_id) const {
   {
     base::AutoLock lock_scope(*locale_resources_data_lock_);
     base::StringPiece data;
@@ -1063,7 +1093,7 @@ gfx::Image& ResourceBundle::GetEmptyImage() {
   return empty_image_;
 }
 
-base::string16 ResourceBundle::GetLocalizedStringImpl(int resource_id) {
+base::string16 ResourceBundle::GetLocalizedStringImpl(int resource_id) const {
   base::string16 string;
   if (delegate_ && delegate_->GetLocalizedString(resource_id, &string))
     return MaybeMangleLocalizedString(string);

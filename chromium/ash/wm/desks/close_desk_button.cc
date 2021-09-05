@@ -31,8 +31,7 @@ CloseDeskButton::CloseDeskButton(views::ButtonListener* listener)
   AshColorProvider* color_provider = AshColorProvider::Get();
   color_provider->DecorateCloseButton(
       this, AshColorProvider::ButtonType::kCloseButtonWithSmallBase,
-      AshColorProvider::AshColorMode::kDark, kCloseButtonSize,
-      kCloseButtonIcon);
+      kCloseButtonSize, kCloseButtonIcon);
 
   AshColorProvider::RippleAttributes ripple_attributes =
       color_provider->GetRippleAttributes(background()->get_color());
@@ -40,8 +39,8 @@ CloseDeskButton::CloseDeskButton(views::ButtonListener* listener)
   inkdrop_base_color_ = ripple_attributes.base_color;
 
   SetInkDropMode(InkDropMode::ON);
-  set_has_ink_drop_action_on_click(true);
-  set_ink_drop_visible_opacity(ripple_attributes.inkdrop_opacity);
+  SetHasInkDropActionOnClick(true);
+  SetInkDropVisibleOpacity(ripple_attributes.inkdrop_opacity);
   SetFocusPainter(nullptr);
 
   SetEventTargeter(std::make_unique<views::ViewTargeter>(this));

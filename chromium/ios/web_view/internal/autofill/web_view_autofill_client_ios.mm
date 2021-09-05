@@ -151,6 +151,10 @@ WebViewAutofillClientIOS::GetSecurityLevelForUmaHistograms() {
   return security_state::GetSecurityLevelForWebState(web_state_);
 }
 
+const translate::LanguageState* WebViewAutofillClientIOS::GetLanguageState() {
+  return nullptr;
+}
+
 void WebViewAutofillClientIOS::ShowAutofillSettings(
     bool show_credit_card_settings) {
   NOTREACHED();
@@ -298,6 +302,10 @@ void WebViewAutofillClientIOS::LoadRiskData(
 
 LogManager* WebViewAutofillClientIOS::GetLogManager() const {
   return log_manager_.get();
+}
+
+bool WebViewAutofillClientIOS::IsQueryIDRelevant(int query_id) {
+  return [bridge_ isQueryIDRelevant:query_id];
 }
 
 }  // namespace autofill

@@ -7,6 +7,7 @@
 #include <string>
 
 #include "base/bind.h"
+#include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/metrics/histogram_functions.h"
 #include "chrome/browser/accessibility/caption_util.h"
@@ -20,6 +21,7 @@
 #include "chrome/common/pref_names.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_change_registrar.h"
+#include "components/soda/constants.h"
 #include "components/sync_preferences/pref_service_syncable.h"
 #include "content/public/browser/browser_accessibility_state.h"
 #include "content/public/browser/web_contents.h"
@@ -52,6 +54,10 @@ void CaptionController::RegisterProfilePrefs(
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
   registry->RegisterFilePathPref(prefs::kSodaBinaryPath, base::FilePath());
   registry->RegisterFilePathPref(prefs::kSodaEnUsConfigPath, base::FilePath());
+  registry->RegisterFilePathPref(prefs::kSodaJaJpConfigPath, base::FilePath());
+
+  // Initially default the language to en-US.
+  registry->RegisterStringPref(prefs::kLiveCaptionLanguageCode, "en-US");
 }
 
 void CaptionController::Init() {
@@ -61,9 +67,19 @@ void CaptionController::Init() {
 
   pref_change_registrar_ = std::make_unique<PrefChangeRegistrar>();
   pref_change_registrar_->Init(profile_->GetPrefs());
+  auto* command_line = base::CommandLine::ForCurrentProcess();
+  if (command_line &&
+      command_line->HasSwitch(switches::kEnableLiveCaptionPrefForTesting)) {
+    profile_->GetPrefs()->SetBoolean(prefs::kLiveCaptionEnabled, true);
+  }
+
   pref_change_registrar_->Add(
       prefs::kLiveCaptionEnabled,
       base::BindRepeating(&CaptionController::OnLiveCaptionEnabledChanged,
+                          base::Unretained(this)));
+  pref_change_registrar_->Add(
+      prefs::kLiveCaptionLanguageCode,
+      base::BindRepeating(&CaptionController::OnLiveCaptionLanguageChanged,
                           base::Unretained(this)));
 
   enabled_ = IsLiveCaptionEnabled();
@@ -81,9 +97,13 @@ void CaptionController::OnLiveCaptionEnabledChanged() {
   if (enabled == enabled_)
     return;
   enabled_ = enabled;
-
   UpdateSpeechRecognitionServiceEnabled();
+  UpdateSpeechRecognitionLanguage();
   UpdateUIEnabled();
+}
+
+void CaptionController::OnLiveCaptionLanguageChanged() {
+  UpdateSpeechRecognitionLanguage();
 }
 
 bool CaptionController::IsLiveCaptionEnabled() {
@@ -103,6 +123,13 @@ void CaptionController::UpdateSpeechRecognitionServiceEnabled() {
     // device on the next start up.
   }
 }
+
+void CaptionController::UpdateSpeechRecognitionLanguage() {
+  if (enabled_) {
+    component_updater::RegisterSodaLanguageComponent(
+        g_browser_process->component_updater(), profile_->GetPrefs());
+  }
+}  // namespace captions
 
 void CaptionController::UpdateUIEnabled() {
   if (enabled_) {
@@ -136,7 +163,7 @@ void CaptionController::UpdateUIEnabled() {
 }
 
 void CaptionController::UpdateAccessibilityCaptionHistograms() {
-  base::UmaHistogramBoolean("Accessibility.LiveCaptions", enabled_);
+  base::UmaHistogramBoolean("Accessibility.LiveCaption", enabled_);
 }
 
 void CaptionController::OnBrowserAdded(Browser* browser) {
@@ -159,15 +186,6 @@ void CaptionController::OnBrowserRemoved(Browser* browser) {
 
   DCHECK(caption_bubble_controllers_.count(browser));
   caption_bubble_controllers_.erase(browser);
-}
-
-bool CaptionController::OnSpeechRecognitionReady(
-    content::WebContents* web_contents) {
-  Browser* browser = chrome::FindBrowserWithWebContents(web_contents);
-  if (!browser || !caption_bubble_controllers_.count(browser))
-    return false;
-  return caption_bubble_controllers_[browser]->OnSpeechRecognitionReady(
-      web_contents);
 }
 
 bool CaptionController::DispatchTranscription(

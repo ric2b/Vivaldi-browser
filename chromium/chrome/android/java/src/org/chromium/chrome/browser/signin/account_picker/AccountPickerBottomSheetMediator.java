@@ -7,13 +7,14 @@ package org.chromium.chrome.browser.signin.account_picker;
 import android.accounts.Account;
 import android.content.Context;
 import android.text.TextUtils;
+import android.view.View.OnClickListener;
 
 import androidx.annotation.Nullable;
 
 import org.chromium.base.task.AsyncTask;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.signin.ProfileDataCache;
-import org.chromium.chrome.browser.signin.account_picker.AccountPickerBottomSheetProperties.AccountPickerBottomSheetState;
+import org.chromium.chrome.browser.signin.account_picker.AccountPickerBottomSheetProperties.ViewState;
 import org.chromium.components.signin.AccountManagerFacade;
 import org.chromium.components.signin.AccountManagerFacadeProvider;
 import org.chromium.components.signin.AccountUtils;
@@ -30,7 +31,8 @@ import java.util.List;
 /**
  * Mediator of the account picker bottom sheet in web sign-in flow.
  */
-class AccountPickerBottomSheetMediator implements AccountPickerCoordinator.Listener {
+class AccountPickerBottomSheetMediator implements AccountPickerCoordinator.Listener,
+                                                  AccountPickerBottomSheetView.BackPressListener {
     private final AccountPickerDelegate mAccountPickerDelegate;
     private final ProfileDataCache mProfileDataCache;
     private final PropertyModel mModel;
@@ -40,18 +42,27 @@ class AccountPickerBottomSheetMediator implements AccountPickerCoordinator.Liste
     private final AccountManagerFacade mAccountManagerFacade;
     private final AccountsChangeObserver mAccountsChangeObserver = this::onAccountListUpdated;
     private @Nullable String mSelectedAccountName;
+    private @Nullable String mDefaultAccountName;
+    private @Nullable String mAddedAccountName;
 
-    AccountPickerBottomSheetMediator(Context context, AccountPickerDelegate accountPickerDelegate) {
+    AccountPickerBottomSheetMediator(Context context, AccountPickerDelegate accountPickerDelegate,
+            Runnable dismissBottomSheetRunnable) {
         mAccountPickerDelegate = accountPickerDelegate;
         mProfileDataCache = new ProfileDataCache(
                 context, context.getResources().getDimensionPixelSize(R.dimen.user_picture_size));
 
+        OnClickListener onDismissClicked = v -> {
+            AccountPickerDelegate.recordAccountConsistencyPromoAction(
+                    AccountConsistencyPromoAction.DISMISSED_BUTTON);
+            dismissBottomSheetRunnable.run();
+        };
         mModel = AccountPickerBottomSheetProperties.createModel(
-                this::onSelectedAccountClicked, this::onContinueAsClicked);
+                this::onSelectedAccountClicked, this::onContinueAsClicked, onDismissClicked);
         mProfileDataCache.addObserver(mProfileDataSourceObserver);
 
         mAccountManagerFacade = AccountManagerFacadeProvider.getInstance();
         mAccountManagerFacade.addObserver(mAccountsChangeObserver);
+        mAddedAccountName = null;
         onAccountListUpdated();
     }
 
@@ -68,8 +79,7 @@ class AccountPickerBottomSheetMediator implements AccountPickerCoordinator.Liste
     public void onAccountSelected(String accountName, boolean isDefaultAccount) {
         // Clicking on one account in the account list when the account list is expanded
         // will collapse it to the selected account
-        mModel.set(AccountPickerBottomSheetProperties.ACCOUNT_PICKER_BOTTOM_SHEET_STATE,
-                AccountPickerBottomSheetState.COLLAPSED_ACCOUNT_LIST);
+        mModel.set(AccountPickerBottomSheetProperties.VIEW_STATE, ViewState.COLLAPSED_ACCOUNT_LIST);
         setSelectedAccountName(accountName);
     }
 
@@ -78,7 +88,12 @@ class AccountPickerBottomSheetMediator implements AccountPickerCoordinator.Liste
      */
     @Override
     public void addAccount() {
-        mAccountPickerDelegate.addAccount(accountName -> onAccountSelected(accountName, false));
+        AccountPickerDelegate.recordAccountConsistencyPromoAction(
+                AccountConsistencyPromoAction.ADD_ACCOUNT);
+        mAccountPickerDelegate.addAccount(accountName -> {
+            mAddedAccountName = accountName;
+            onAccountSelected(accountName, false);
+        });
     }
 
     /**
@@ -86,9 +101,30 @@ class AccountPickerBottomSheetMediator implements AccountPickerCoordinator.Liste
      */
     @Override
     public void goIncognitoMode() {
-        mModel.set(AccountPickerBottomSheetProperties.ACCOUNT_PICKER_BOTTOM_SHEET_STATE,
-                AccountPickerBottomSheetState.INCOGNITO_INTERSTITIAL);
-        mAccountPickerDelegate.goIncognitoMode();
+        mModel.set(AccountPickerBottomSheetProperties.VIEW_STATE, ViewState.INCOGNITO_INTERSTITIAL);
+    }
+
+    /**
+     * Notifies when user clicks the back-press button.
+     *
+     * @return true if the listener handles the back press, false if not.
+     */
+    @Override
+    public boolean onBackPressed() {
+        @ViewState
+        int viewState = mModel.get(AccountPickerBottomSheetProperties.VIEW_STATE);
+        if (viewState == ViewState.EXPANDED_ACCOUNT_LIST) {
+            mModel.set(AccountPickerBottomSheetProperties.VIEW_STATE,
+                    ViewState.COLLAPSED_ACCOUNT_LIST);
+            return true;
+        } else if (viewState == ViewState.INCOGNITO_INTERSTITIAL) {
+            mModel.set(
+                    AccountPickerBottomSheetProperties.VIEW_STATE, ViewState.EXPANDED_ACCOUNT_LIST);
+            return true;
+        } else {
+            // The bottom sheet will be dismissed for all other view states
+            return false;
+        }
     }
 
     PropertyModel getModel() {
@@ -111,28 +147,28 @@ class AccountPickerBottomSheetMediator implements AccountPickerCoordinator.Liste
         if (accounts.isEmpty()) {
             // If all accounts disappeared, no matter if the account list is collapsed or expanded,
             // we will go to the zero account screen.
-            mModel.set(AccountPickerBottomSheetProperties.ACCOUNT_PICKER_BOTTOM_SHEET_STATE,
-                    AccountPickerBottomSheetState.NO_ACCOUNTS);
+            mModel.set(AccountPickerBottomSheetProperties.VIEW_STATE, ViewState.NO_ACCOUNTS);
             mSelectedAccountName = null;
+            mDefaultAccountName = null;
             mModel.set(AccountPickerBottomSheetProperties.SELECTED_ACCOUNT_DATA, null);
             return;
         }
 
-        @AccountPickerBottomSheetState
-        int state =
-                mModel.get(AccountPickerBottomSheetProperties.ACCOUNT_PICKER_BOTTOM_SHEET_STATE);
-        if (state == AccountPickerBottomSheetState.NO_ACCOUNTS) {
+        mDefaultAccountName = accounts.get(0).name;
+        @ViewState
+        int viewState = mModel.get(AccountPickerBottomSheetProperties.VIEW_STATE);
+        if (viewState == ViewState.NO_ACCOUNTS) {
             // When a non-empty account list appears while it is currently zero-account screen,
             // we should change the screen to collapsed account list and set the selected account
             // to the first account of the account list
-            mModel.set(AccountPickerBottomSheetProperties.ACCOUNT_PICKER_BOTTOM_SHEET_STATE,
-                    AccountPickerBottomSheetState.COLLAPSED_ACCOUNT_LIST);
-            setSelectedAccountName(accounts.get(0).name);
-        } else if (state == AccountPickerBottomSheetState.COLLAPSED_ACCOUNT_LIST
+            setSelectedAccountName(mDefaultAccountName);
+            mModel.set(AccountPickerBottomSheetProperties.VIEW_STATE,
+                    ViewState.COLLAPSED_ACCOUNT_LIST);
+        } else if (viewState == ViewState.COLLAPSED_ACCOUNT_LIST
                 && AccountUtils.findAccountByName(accounts, mSelectedAccountName) == null) {
             // When it is already collapsed account list, we update the selected account only
             // when the current selected account name is no longer in the new account list
-            setSelectedAccountName(accounts.get(0).name);
+            setSelectedAccountName(mDefaultAccountName);
         }
     }
 
@@ -159,8 +195,7 @@ class AccountPickerBottomSheetMediator implements AccountPickerCoordinator.Liste
     private void onSelectedAccountClicked() {
         // Clicking on the selected account when the account list is collapsed will expand the
         // account list and make the account list visible
-        mModel.set(AccountPickerBottomSheetProperties.ACCOUNT_PICKER_BOTTOM_SHEET_STATE,
-                AccountPickerBottomSheetState.EXPANDED_ACCOUNT_LIST);
+        mModel.set(AccountPickerBottomSheetProperties.VIEW_STATE, ViewState.EXPANDED_ACCOUNT_LIST);
     }
 
     /**
@@ -168,35 +203,66 @@ class AccountPickerBottomSheetMediator implements AccountPickerCoordinator.Liste
      * {@link AccountPickerBottomSheetProperties#ON_CONTINUE_AS_CLICKED}.
      */
     private void onContinueAsClicked() {
-        if (mSelectedAccountName == null) {
+        @ViewState
+        int viewState = mModel.get(AccountPickerBottomSheetProperties.VIEW_STATE);
+        if (viewState == ViewState.COLLAPSED_ACCOUNT_LIST
+                || viewState == ViewState.SIGNIN_GENERAL_ERROR) {
+            signIn();
+        } else if (viewState == ViewState.NO_ACCOUNTS) {
             addAccount();
-        } else {
-            mModel.set(AccountPickerBottomSheetProperties.ACCOUNT_PICKER_BOTTOM_SHEET_STATE,
-                    AccountPickerBottomSheetState.SIGNIN_IN_PROGRESS);
-            new AsyncTask<String>() {
-                @Override
-                protected String doInBackground() {
-                    return mAccountManagerFacade.getAccountGaiaId(mSelectedAccountName);
-                }
-
-                @Override
-                protected void onPostExecute(String accountGaiaId) {
-                    CoreAccountInfo coreAccountInfo = new CoreAccountInfo(
-                            new CoreAccountId(accountGaiaId), mSelectedAccountName, accountGaiaId);
-                    mAccountPickerDelegate.signIn(
-                            coreAccountInfo, AccountPickerBottomSheetMediator.this::onSignInError);
-                }
-            }.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
+        } else if (viewState == ViewState.SIGNIN_AUTH_ERROR) {
+            updateCredentials();
         }
     }
 
-    private void onSignInError(GoogleServiceAuthError error) {
-        if (error.getState() == State.INVALID_GAIA_CREDENTIALS) {
-            mModel.set(AccountPickerBottomSheetProperties.ACCOUNT_PICKER_BOTTOM_SHEET_STATE,
-                    AccountPickerBottomSheetState.SIGNIN_AUTH_ERROR);
+    private void signIn() {
+        mModel.set(AccountPickerBottomSheetProperties.VIEW_STATE, ViewState.SIGNIN_IN_PROGRESS);
+        if (TextUtils.equals(mSelectedAccountName, mAddedAccountName)) {
+            AccountPickerDelegate.recordAccountConsistencyPromoAction(
+                    AccountConsistencyPromoAction.SIGNED_IN_WITH_ADDED_ACCOUNT);
+        } else if (TextUtils.equals(mSelectedAccountName, mDefaultAccountName)) {
+            AccountPickerDelegate.recordAccountConsistencyPromoAction(
+                    AccountConsistencyPromoAction.SIGNED_IN_WITH_DEFAULT_ACCOUNT);
         } else {
-            mModel.set(AccountPickerBottomSheetProperties.ACCOUNT_PICKER_BOTTOM_SHEET_STATE,
-                    AccountPickerBottomSheetState.SIGNIN_GENERAL_ERROR);
+            AccountPickerDelegate.recordAccountConsistencyPromoAction(
+                    AccountConsistencyPromoAction.SIGNED_IN_WITH_NON_DEFAULT_ACCOUNT);
         }
+        new AsyncTask<String>() {
+            @Override
+            protected String doInBackground() {
+                return mAccountManagerFacade.getAccountGaiaId(mSelectedAccountName);
+            }
+
+            @Override
+            protected void onPostExecute(String accountGaiaId) {
+                CoreAccountInfo coreAccountInfo = new CoreAccountInfo(
+                        new CoreAccountId(accountGaiaId), mSelectedAccountName, accountGaiaId);
+                mAccountPickerDelegate.signIn(
+                        coreAccountInfo, AccountPickerBottomSheetMediator.this::onSigninFailed);
+            }
+        }.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
+    }
+
+    private void onSigninFailed(GoogleServiceAuthError error) {
+        final @AccountConsistencyPromoAction int promoAction;
+        final @ViewState int newViewState;
+        if (error.getState() == State.INVALID_GAIA_CREDENTIALS) {
+            promoAction = AccountConsistencyPromoAction.AUTH_ERROR_SHOWN;
+            newViewState = ViewState.SIGNIN_AUTH_ERROR;
+        } else {
+            promoAction = AccountConsistencyPromoAction.GENERIC_ERROR_SHOWN;
+            newViewState = ViewState.SIGNIN_GENERAL_ERROR;
+        }
+        AccountPickerDelegate.recordAccountConsistencyPromoAction(promoAction);
+        mModel.set(AccountPickerBottomSheetProperties.VIEW_STATE, newViewState);
+    }
+
+    private void updateCredentials() {
+        mAccountPickerDelegate.updateCredentials(mSelectedAccountName, (isSuccess) -> {
+            if (isSuccess) {
+                mModel.set(AccountPickerBottomSheetProperties.VIEW_STATE,
+                        ViewState.COLLAPSED_ACCOUNT_LIST);
+            }
+        });
     }
 }

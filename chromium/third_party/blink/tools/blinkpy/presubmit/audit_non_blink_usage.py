@@ -257,6 +257,7 @@ _CONFIG = [
             'cc::PaintShader',
             'cc::PaintWorkletInput',
             'cc::NodeId',
+            'cc::NodeInfo',
 
             # Chromium geometry types.
             'gfx::Point',
@@ -273,6 +274,9 @@ _CONFIG = [
             'gfx::Transform',
             'gfx::Vector2d',
             'gfx::Vector2dF',
+
+            # Chromium geometry operations.
+            'gfx::ToFlooredPoint',
 
             # Range type.
             'gfx::Range',
@@ -471,12 +475,21 @@ _CONFIG = [
             # depend on.
             'ui::AXEvent',
             'ui::AXEventIntent',
+            'ui::AXMode',
             'ui::AXNodeData',
-            'ui::IsDialog',
-            'ui::IsContainerWithSelectableChildren',
             'ax::mojom::BoolAttribute',
             'ax::mojom::HasPopup',
             'ax::mojom::State',
+            'ax::mojom::Restriction',
+
+            # Accessibility helper functions - mostly used in Blink for
+            # serialization.
+            'ui::IsDialog',
+            'ui::IsContainerWithSelectableChildren',
+            'ui::IsTableLike',
+            'ui::IsTableRow',
+            'ui::IsCellOrTableHeader',
+            'ui::IsTableHeader',
 
             # Blink uses UKM for logging e.g. always-on leak detection (crbug/757374)
             'ukm::.+',
@@ -589,7 +602,8 @@ _CONFIG = [
             'cc::TaskGraphRunner',
             'gfx::DisplayColorSpaces',
             'ui::ImeTextSpan',
-            'viz::LocalSurfaceIdAllocation',
+            'viz::FrameSinkId',
+            'viz::LocalSurfaceId',
         ],
     },
     {
@@ -827,6 +841,29 @@ _CONFIG = [
         ],
         'allowed': [
             'media::.+',
+            'media_capabilities_identifiability_metrics::.+',
+        ]
+    },
+    {
+        'paths': [
+            'third_party/blink/renderer/modules/media/audio/',
+        ],
+        'allowed': [
+            # TODO(https://crbug.com/787252): Remove most of the entries below,
+            # once the directory is fully Onion soup'ed.
+            'base::Bind.*',
+            'base::Unretained',
+            'base::NoDestructor',
+            'base::flat_map',
+            'base::AutoLock',
+            'base::Lock',
+            'base::EraseIf',
+            'base::ScopedPlatformFile',
+            'mojo::WrapCallbackWithDefaultInvokeIfNotRun',
+
+            # TODO(https://crrev.com/787252): Consider allowlisting fidl::*
+            # usage more broadly in Blink.
+            'fidl::InterfaceHandle',
         ]
     },
     {
@@ -1040,8 +1077,6 @@ _CONFIG = [
         'paths': [
             'third_party/blink/renderer/core/layout/layout_theme.cc',
             'third_party/blink/renderer/core/layout/layout_theme_mac.mm',
-            'third_party/blink/renderer/core/paint/fallback_theme.cc',
-            'third_party/blink/renderer/core/paint/fallback_theme.h',
             'third_party/blink/renderer/core/paint/object_painter_base.cc',
             'third_party/blink/renderer/core/paint/theme_painter.cc',
         ],
@@ -1085,12 +1120,10 @@ _CONFIG = [
             'base::LazyInstance',
             'base::Lock',
             # TODO(crbug.com/787254): Remove base::BindOnce, base::Unretained,
-            # base::Passed, base::Closure, base::CurrentThread,
-            # base::RetainedRef, base::EndsWith and base::CompareCase.
+            # base::Passed, base::Closure, base::CurrentThread and
+            # base::RetainedRef.
             'base::Bind.*',
             'base::Closure',
-            'base::CompareCase',
-            'base::EndsWith',
             'base::MD5.*',
             'base::CurrentThread',
             'base::Passed',
@@ -1131,10 +1164,7 @@ _CONFIG = [
     },
     {
         'paths': ['third_party/blink/renderer/modules/manifest/'],
-        'allowed': [
-            'base::NullableString16',
-            'net::ParseMimeTypeWithoutParameter',
-        ],
+        'allowed': ['net::ParseMimeTypeWithoutParameter'],
     },
     {
         'paths':
@@ -1148,7 +1178,9 @@ _CONFIG = [
     },
     {
         'paths': [
-            'third_party/blink/renderer/modules/webaudio/audio_worklet_thread.cc'
+            'third_party/blink/renderer/modules/webaudio/offline_audio_worklet_thread.cc',
+            'third_party/blink/renderer/modules/webaudio/realtime_audio_worklet_thread.cc',
+            'third_party/blink/renderer/modules/webaudio/semi_realtime_audio_worklet_thread.cc',
         ],
         'allowed': ['base::ThreadPriority'],
     },

@@ -6,6 +6,7 @@
 #include "base/guid.h"
 #include "base/memory/ptr_util.h"
 #include "base/sequenced_task_runner.h"
+#include "base/task/task_traits.h"
 #include "menus/menu_node.h"
 #include "menus/menu_storage.h"
 
@@ -47,8 +48,14 @@ std::unique_ptr<MenuLoadDetails> Menu_Model::CreateLoadDetails(int64_t id) {
   return base::WrapUnique(new MenuLoadDetails(mainmenu, control, id, loaded_));
 }
 
-void Menu_Model::Load(
-    const scoped_refptr<base::SequencedTaskRunner>& task_runner) {
+void Menu_Model::Load() {
+  // Make a backend task runner to avoid file access in the IO-thread
+  const scoped_refptr<base::SequencedTaskRunner>& task_runner =
+      base::ThreadPool::CreateSequencedTaskRunner({
+          base::MayBlock(),
+          base::TaskPriority::USER_VISIBLE,
+          base::TaskShutdownBehavior::BLOCK_SHUTDOWN,
+      });
   store_.reset(new MenuStorage(context_, this, task_runner.get()));
   store_->Load(CreateLoadDetails(""));
 }

@@ -12,18 +12,15 @@
 #include "base/files/file.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/weak_ptr.h"
+#include "base/timer/timer.h"
 #include "chrome/browser/nearby_sharing/nearby_connection_impl.h"
+#include "chrome/browser/nearby_sharing/nearby_file_handler.h"
 #include "chrome/browser/nearby_sharing/nearby_process_manager.h"
 #include "chrome/services/sharing/public/mojom/nearby_connections.mojom.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
 
 class Profile;
-
-struct InitializeFileResult {
-  base::File input_file;
-  base::File output_file;
-};
 
 // Concrete NearbyConnectionsManager implementation.
 class NearbyConnectionsManagerImpl
@@ -72,14 +69,13 @@ class NearbyConnectionsManagerImpl
       const std::string& endpoint_id) override;
   void UpgradeBandwidth(const std::string& endpoint_id) override;
 
-  // Converts the status to a logging-friendly string.
-  static std::string ConnectionsStatusToString(ConnectionsStatus status);
-
  private:
   using AdvertisingOptions =
       location::nearby::connections::mojom::AdvertisingOptions;
   using ConnectionInfoPtr =
       location::nearby::connections::mojom::ConnectionInfoPtr;
+  using ConnectionOptions =
+      location::nearby::connections::mojom::ConnectionOptions;
   using ConnectionLifecycleListener =
       location::nearby::connections::mojom::ConnectionLifecycleListener;
   using DiscoveredEndpointInfoPtr =
@@ -96,6 +92,7 @@ class NearbyConnectionsManagerImpl
   using PayloadTransferUpdatePtr =
       location::nearby::connections::mojom::PayloadTransferUpdatePtr;
   using Status = location::nearby::connections::mojom::Status;
+  using Medium = location::nearby::connections::mojom::Medium;
 
   FRIEND_TEST_ALL_PREFIXES(NearbyConnectionsManagerImplTest,
                            DiscoveryProcessStopped);
@@ -118,7 +115,7 @@ class NearbyConnectionsManagerImpl
                             Status status) override;
   void OnDisconnected(const std::string& endpoint_id) override;
   void OnBandwidthChanged(const std::string& endpoint_id,
-                          int32_t quality) override;
+                          Medium medium) override;
 
   // PayloadListener:
   void OnPayloadReceived(const std::string& endpoint_id,
@@ -126,18 +123,19 @@ class NearbyConnectionsManagerImpl
   void OnPayloadTransferUpdate(const std::string& endpoint_id,
                                PayloadTransferUpdatePtr update) override;
 
+  void OnConnectionTimedOut(const std::string& endpoint_id);
   void OnConnectionRequested(const std::string& endpoint_id,
-                             NearbyConnectionCallback callback,
                              ConnectionsStatus status);
   bool BindNearbyConnections();
   void Reset();
 
-  void OnFileInitialized(int64_t payload_id,
-                         ConnectionsCallback callback,
-                         InitializeFileResult result);
+  void OnFileCreated(int64_t payload_id,
+                     ConnectionsCallback callback,
+                     NearbyFileHandler::CreateFileResult result);
 
   NearbyProcessManager* process_manager_;
   Profile* profile_;
+  NearbyFileHandler file_handler_;
   IncomingConnectionListener* incoming_connection_listener_ = nullptr;
   DiscoveryListener* discovery_listener_ = nullptr;
   base::flat_set<std::string> discovered_endpoints_;
@@ -149,6 +147,9 @@ class NearbyConnectionsManagerImpl
   // A map of endpoint_id to NearbyConnection.
   base::flat_map<std::string, std::unique_ptr<NearbyConnectionImpl>>
       connections_;
+  // A map of endpoint_id to timers that timeout a connection request.
+  base::flat_map<std::string, std::unique_ptr<base::OneShotTimer>>
+      connect_timeout_timers_;
   // A map of payload_id to PayloadStatusListener*.
   base::flat_map<int64_t, PayloadStatusListener*> payload_status_listeners_;
   // A map of payload_id to PayloadPtr.

@@ -41,6 +41,7 @@
 #include "services/network/public/mojom/web_sandbox_flags.mojom-blink-forward.h"
 #include "third_party/blink/public/common/metrics/document_update_reason.h"
 #include "third_party/blink/public/mojom/feature_policy/document_policy_feature.mojom-blink-forward.h"
+#include "third_party/blink/public/mojom/federated_learning/floc.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/input/focus_type.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/permissions/permission.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/scroll/scrollbar_mode.mojom-blink-forward.h"
@@ -67,7 +68,7 @@
 #include "third_party/blink/renderer/core/loader/font_preload_manager.h"
 #include "third_party/blink/renderer/platform/bindings/dom_wrapper_world.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
-#include "third_party/blink/renderer/platform/heap_observer_list.h"
+#include "third_party/blink/renderer/platform/heap_observer_set.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/scheduler/public/post_cancellable_task.h"
 #include "third_party/blink/renderer/platform/supplementable.h"
@@ -188,6 +189,7 @@ class Text;
 class TrustedHTML;
 class ScriptElementBase;
 class ScriptPromise;
+class ScriptRegexp;
 class ScriptRunner;
 class ScriptableDocumentParser;
 class ScriptedAnimationController;
@@ -241,7 +243,6 @@ enum DocumentClass {
   kMediaDocumentClass = 1 << 4,
   kSVGDocumentClass = 1 << 5,
   kXMLDocumentClass = 1 << 6,
-  kViewSourceDocumentClass = 1 << 7,
 };
 
 enum ShadowCascadeOrder {
@@ -317,6 +318,14 @@ class CORE_EXPORT Document : public ContainerNode,
   void MediaQueryAffectingValueChanged(MediaValueChange change);
 
   using TreeScope::getElementById;
+
+  bool IsInitialEmptyDocument() const { return is_initial_empty_document_; }
+  // Sometimes we permit an initial empty document to cease to be the initial
+  // empty document. This is needed for cross-process navigations, where a new
+  // LocalFrame needs to be created but the conceptual frame might have had
+  // other Documents in a different process. document.open() also causes the
+  // document to cease to be the initial empty document.
+  void OverrideIsInitialEmptyDocument() { is_initial_empty_document_ = false; }
 
   // Gets the associated LocalDOMWindow even if this Document is associated with
   // an HTMLImportsController.
@@ -438,7 +447,7 @@ class CORE_EXPORT Document : public ContainerNode,
     has_xml_declaration_ = has_xml_declaration ? 1 : 0;
   }
 
-  String visibilityState() const;
+  AtomicString visibilityState() const;
   bool IsPageVisible() const;
   bool hidden() const;
   void DidChangeVisibilityState();
@@ -495,7 +504,9 @@ class CORE_EXPORT Document : public ContainerNode,
   StyleResolver& GetStyleResolver() const;
 
   bool IsViewSource() const { return is_view_source_; }
-  void SetIsViewSource(bool);
+  void SetIsViewSource(bool is_view_source) {
+    is_view_source_ = is_view_source;
+  }
 
   // WebXR DOM Overlay support, cf https://immersive-web.github.io/dom-overlays/
   // True if there's an ongoing "immersive-ar" WebXR session with a DOM Overlay
@@ -588,7 +599,7 @@ class CORE_EXPORT Document : public ContainerNode,
   void IncLayoutBlockCounter() { ++layout_blocks_counter_; }
   void IncLayoutBlockCounterNG() { ++layout_blocks_counter_ng_; }
 
-  scoped_refptr<const ComputedStyle> StyleForPage(int page_index);
+  scoped_refptr<const ComputedStyle> StyleForPage(uint32_t page_index);
 
   // Ensures that location-based data will be valid for a given node.
   //
@@ -602,13 +613,13 @@ class CORE_EXPORT Document : public ContainerNode,
                                            DocumentUpdateReason reason);
 
   // Returns true if page box (margin boxes and page borders) is visible.
-  bool IsPageBoxVisible(int page_index);
+  bool IsPageBoxVisible(uint32_t page_index);
 
   // Gets the description for the specified page. This includes preferred page
   // size and margins in pixels, assuming 96 pixels per inch. The size and
   // margins must be initialized to the default values that are used if auto is
   // specified.
-  void GetPageDescription(int page_index, WebPrintPageDescription*);
+  void GetPageDescription(uint32_t page_index, WebPrintPageDescription*);
 
   ResourceFetcher* Fetcher() const { return fetcher_.Get(); }
 
@@ -978,6 +989,8 @@ class CORE_EXPORT Document : public ContainerNode,
   ElementIntersectionObserverData&
   EnsureDocumentExplicitRootIntersectionObserverData();
 
+  const ScriptRegexp& EnsureEmailRegexp() const;
+
   // Returns the owning element in the parent document. Returns nullptr if
   // this is the top level document or the owner is remote.
   HTMLFrameOwnerElement* LocalOwner() const;
@@ -985,7 +998,8 @@ class CORE_EXPORT Document : public ContainerNode,
   void WillChangeFrameOwnerProperties(int margin_width,
                                       int margin_height,
                                       mojom::blink::ScrollbarMode,
-                                      bool is_display_none);
+                                      bool is_display_none,
+                                      ColorScheme color_scheme);
 
   String title() const { return title_; }
   void setTitle(const String&);
@@ -1051,6 +1065,17 @@ class CORE_EXPORT Document : public ContainerNode,
   ScriptPromise hasTrustToken(ScriptState* script_state,
                               const String& issuer,
                               ExceptionState&);
+
+  // Floc service helper methods to facilitate querying the floc (i.e.
+  // interestCohort).
+  mojom::blink::FlocService* GetFlocService(
+      ExecutionContext* execution_context);
+
+  // Sends a query via Mojo to ask for the interest cohort. This can reject on
+  // permissions errors (e.g. cookies not allowed, etc.) or when the interest
+  // cohort is unavailable.
+  // https://github.com/jkarlin/floc
+  ScriptPromise interestCohort(ScriptState* script_state);
 
   // The following implements the rule from HTML 4 for what valid names are.
   // To get this right for all the XML cases, we probably have to improve this
@@ -1381,7 +1406,6 @@ class CORE_EXPORT Document : public ContainerNode,
   void SetResizedForViewportUnits();
   void ClearResizedForViewportUnits();
 
-  void UpdateActiveStyle();
   void InvalidateStyleAndLayoutForFontUpdates();
 
   void Trace(Visitor*) const override;
@@ -1618,9 +1642,9 @@ class CORE_EXPORT Document : public ContainerNode,
 
   void CancelPendingJavaScriptUrls();
 
-  HeapObserverList<SynchronousMutationObserver>&
-  SynchronousMutationObserverList() {
-    return synchronous_mutation_observer_list_;
+  HeapObserverSet<SynchronousMutationObserver>&
+  SynchronousMutationObserverSet() {
+    return synchronous_mutation_observer_set_;
   }
 
   void NotifyUpdateCharacterData(CharacterData* character_data,
@@ -1786,6 +1810,8 @@ class CORE_EXPORT Document : public ContainerNode,
   void HasTrustTokensAnswererConnectionError();
 
   DocumentLifecycle lifecycle_;
+
+  bool is_initial_empty_document_;
 
   bool evaluate_media_queries_on_style_recalc_;
 
@@ -2150,8 +2176,8 @@ class CORE_EXPORT Document : public ContainerNode,
   HeapHashMap<WeakMember<Element>, Member<ExplicitlySetAttrElementsMap>>
       element_explicitly_set_attr_elements_map_;
 
-  HeapObserverList<SynchronousMutationObserver>
-      synchronous_mutation_observer_list_;
+  HeapObserverSet<SynchronousMutationObserver>
+      synchronous_mutation_observer_set_;
 
   Member<DisplayLockDocumentState> display_lock_document_state_;
 

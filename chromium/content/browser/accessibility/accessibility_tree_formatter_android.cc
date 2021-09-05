@@ -86,14 +86,11 @@ class AccessibilityTreeFormatterAndroid
   std::unique_ptr<base::DictionaryValue> BuildAccessibilityTree(
       BrowserAccessibility* root) override;
 
-  std::unique_ptr<base::DictionaryValue> BuildAccessibilityTreeForProcess(
-      base::ProcessId pid) override;
-
   std::unique_ptr<base::DictionaryValue> BuildAccessibilityTreeForWindow(
       gfx::AcceleratedWidget widget) override;
 
-  std::unique_ptr<base::DictionaryValue> BuildAccessibilityTreeForPattern(
-      const base::StringPiece& pattern) override;
+  std::unique_ptr<base::DictionaryValue> BuildAccessibilityTreeForSelector(
+      const TreeSelector& selector) override;
 
   void AddDefaultFilters(
       std::vector<PropertyFilter>* property_filters) override;
@@ -112,7 +109,7 @@ class AccessibilityTreeFormatterAndroid
   void AddProperties(const BrowserAccessibility& node,
                      base::DictionaryValue* dict) const;
 
-  base::string16 ProcessTreeForOutput(
+  std::string ProcessTreeForOutput(
       const base::DictionaryValue& node,
       base::DictionaryValue* filtered_dict_result = nullptr) override;
 };
@@ -149,13 +146,6 @@ AccessibilityTreeFormatterAndroid::BuildAccessibilityTree(
 }
 
 std::unique_ptr<base::DictionaryValue>
-AccessibilityTreeFormatterAndroid::BuildAccessibilityTreeForProcess(
-    base::ProcessId pid) {
-  NOTREACHED();
-  return nullptr;
-}
-
-std::unique_ptr<base::DictionaryValue>
 AccessibilityTreeFormatterAndroid::BuildAccessibilityTreeForWindow(
     gfx::AcceleratedWidget widget) {
   NOTREACHED();
@@ -163,8 +153,8 @@ AccessibilityTreeFormatterAndroid::BuildAccessibilityTreeForWindow(
 }
 
 std::unique_ptr<base::DictionaryValue>
-AccessibilityTreeFormatterAndroid::BuildAccessibilityTreeForPattern(
-    const base::StringPiece& pattern) {
+AccessibilityTreeFormatterAndroid::BuildAccessibilityTreeForSelector(
+    const TreeSelector& selector) {
   NOTREACHED();
   return nullptr;
 }
@@ -268,21 +258,21 @@ void AccessibilityTreeFormatterAndroid::AddProperties(
   dict->SetBoolean("action_scroll_right", android_node->CanScrollRight());
 }
 
-base::string16 AccessibilityTreeFormatterAndroid::ProcessTreeForOutput(
+std::string AccessibilityTreeFormatterAndroid::ProcessTreeForOutput(
     const base::DictionaryValue& dict,
     base::DictionaryValue* filtered_dict_result) {
-  base::string16 error_value;
+  std::string error_value;
   if (dict.GetString("error", &error_value))
     return error_value;
 
-  base::string16 line;
+  std::string line;
   if (show_ids()) {
     int id_value;
     dict.GetInteger("id", &id_value);
-    WriteAttribute(true, base::NumberToString16(id_value), &line);
+    WriteAttribute(true, base::NumberToString(id_value), &line);
   }
 
-  base::string16 class_value;
+  std::string class_value;
   dict.GetString("class", &class_value);
   WriteAttribute(true, class_value, &line);
 

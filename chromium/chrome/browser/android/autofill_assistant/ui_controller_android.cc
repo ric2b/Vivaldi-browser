@@ -334,6 +334,8 @@ void UiControllerAndroid::Attach(content::WebContents* web_contents,
   Java_AssistantCollectUserDataModel_setWebContents(
       env, GetCollectUserDataModel(), java_web_contents);
   OnClientSettingsChanged(ui_delegate_->GetClientSettings());
+  Java_AssistantModel_setPeekModeDisabled(env, GetModel(),
+                                          ui_delegate->IsRunningLiteScript());
 
   if (ui_delegate->GetState() != AutofillAssistantState::INACTIVE &&
       ui_delegate->IsTabSelected()) {
@@ -360,6 +362,9 @@ void UiControllerAndroid::Detach() {
 UiControllerAndroid::~UiControllerAndroid() {
   Java_AutofillAssistantUiController_clearNativePtr(AttachCurrentThread(),
                                                     java_object_);
+  if (ui_delegate_) {
+    ui_delegate_->SetUiShown(false);
+  }
   Detach();
 }
 
@@ -496,14 +501,15 @@ void UiControllerAndroid::OnStepProgressBarConfigurationChanged(
   auto jmodel = GetHeaderModel();
   Java_AssistantHeaderModel_setUseStepProgressBar(
       env, jmodel, configuration.use_step_progress_bar());
-  if (!configuration.step_icons().empty()) {
+  if (!configuration.annotated_step_icons().empty()) {
     auto jcontext =
         Java_AutofillAssistantUiController_getContext(env, java_object_);
     auto jlist = Java_AssistantHeaderModel_createIconList(env);
-    for (const auto& icon : configuration.step_icons()) {
+    for (const auto& icon : configuration.annotated_step_icons()) {
       Java_AssistantHeaderModel_addStepProgressBarIcon(
           env, jlist,
-          ui_controller_android_utils::CreateJavaDrawable(env, jcontext, icon));
+          ui_controller_android_utils::CreateJavaDrawable(env, jcontext,
+                                                          icon.icon()));
     }
     Java_AssistantHeaderModel_setStepProgressBarIcons(env, jmodel, jlist);
   }
@@ -638,6 +644,7 @@ void UiControllerAndroid::SetVisible(bool visible) {
   } else {
     SetOverlayState(OverlayState::HIDDEN);
   }
+  ui_delegate_->SetUiShown(visible);
 }
 
 void UiControllerAndroid::RestoreUi() {
@@ -693,8 +700,18 @@ void UiControllerAndroid::RestoreUi() {
 void UiControllerAndroid::OnTabSwitched(
     JNIEnv* env,
     const base::android::JavaParamRef<jobject>& jcaller,
-    jint state) {
+    jint state,
+    jboolean activity_changed) {
   if (ui_delegate_ == nullptr) {
+    return;
+  }
+
+  // TODO(b/167947210) Allow lite scripts to transition from CCT to regular
+  // scripts.
+  if (activity_changed && ui_delegate_->IsRunningLiteScript()) {
+    // Destroying UI here because Shutdown does not do so in all cases.
+    DestroySelf();
+    Shutdown(Metrics::DropOutReason::CUSTOM_TAB_CLOSED);
     return;
   }
 
@@ -917,6 +934,14 @@ bool UiControllerAndroid::OnBackButtonClicked() {
                   Metrics::DropOutReason::BACK_BUTTON_CLICKED);
   }
   return true;
+}
+
+void UiControllerAndroid::OnBottomSheetClosedWithSwipe() {
+  if (ui_delegate_->IsTabSelected() && ui_delegate_->IsRunningLiteScript()) {
+    // Destroying UI here because Shutdown does not do so in all cases.
+    DestroySelf();
+    Shutdown(Metrics::DropOutReason::SHEET_CLOSED);
+  }
 }
 
 void UiControllerAndroid::CloseOrCancel(

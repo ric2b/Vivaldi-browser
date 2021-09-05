@@ -2,6 +2,10 @@ import("//vivaldi/vivaldi_init_settings.gni")
 
 assert(is_vivaldi)
 
+declare_overrides() {
+  is_full_signer = true
+}
+
 import("//vivaldi/gn/config/stored_version.gni")
 import("//vivaldi/gn/config/features.gni")
 import("//vivaldi/gn/config/product.gni")
@@ -9,12 +13,6 @@ import("//vivaldi/gn/compile_updates.gni")
 import("//vivaldi/gn/product_updates.gni")
 
 import("//vivaldi/gn/source_updates.gni")
-
-if(is_mac) {
-  declare_overrides() {
-    is_full_mac_signer = true
-  }
-}
 
 import("//vivaldi/gn/config/signer_features.gni")
 
@@ -37,7 +35,9 @@ if (is_win) {
 group("signings") {
   deps = []
   if (is_win) {
-    deps += [ "//chrome/installer/mini_installer" ]
+    deps += [
+      "//chrome/installer/mini_installer",
+    ]
   }
   if (is_mac) {
     deps += [ "//vivaldi/installer/mac" ]

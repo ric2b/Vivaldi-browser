@@ -392,7 +392,7 @@ TEST_P(LayoutBoxTest, ControlClip) {
   LayoutBox* target = GetLayoutBoxByElementId("target");
   EXPECT_TRUE(target->HasControlClip());
   EXPECT_TRUE(target->HasClipRelatedProperty());
-  EXPECT_TRUE(target->ShouldClipOverflow());
+  EXPECT_TRUE(target->ShouldClipOverflowAlongEitherAxis());
   EXPECT_EQ(PhysicalRect(2, 2, 96, 46), target->ClippingRect(PhysicalOffset()));
 }
 
@@ -426,7 +426,7 @@ TEST_P(LayoutBoxTest, LocalVisualRectWithMaskAndOverflowClip) {
 
   LayoutBox* target = GetLayoutBoxByElementId("target");
   EXPECT_TRUE(target->HasMask());
-  EXPECT_TRUE(target->HasOverflowClip());
+  EXPECT_TRUE(target->IsScrollContainer());
   EXPECT_EQ(PhysicalRect(0, 0, 100, 100), target->LocalVisualRect());
   EXPECT_EQ(LayoutRect(0, 0, 100, 100), target->VisualOverflowRect());
 }
@@ -463,7 +463,7 @@ TEST_P(LayoutBoxTest, LocalVisualRectWithMaskWithOutsetAndOverflowClip) {
 
   LayoutBox* target = GetLayoutBoxByElementId("target");
   EXPECT_TRUE(target->HasMask());
-  EXPECT_TRUE(target->HasOverflowClip());
+  EXPECT_TRUE(target->IsScrollContainer());
   EXPECT_EQ(PhysicalRect(-20, -10, 140, 120), target->LocalVisualRect());
   EXPECT_EQ(LayoutRect(-20, -10, 140, 120), target->VisualOverflowRect());
 }
@@ -533,6 +533,44 @@ TEST_P(LayoutBoxTest, HitTestContainPaint) {
   EXPECT_EQ(GetDocument().documentElement(), HitTest(10, 250));
 }
 
+TEST_P(LayoutBoxTest, OverflowRectsContainPaint) {
+  SetBodyInnerHTML(R"HTML(
+    <div id='container' style='width: 100px; height: 200px; contain: paint;
+                               border: 10px solid blue'>
+      <div id='child' style='width: 300px; height: 400px;'></div>
+    </div>
+  )HTML");
+
+  auto* container = GetLayoutBoxByElementId("container");
+  EXPECT_TRUE(container->ShouldClipOverflowAlongEitherAxis());
+  EXPECT_EQ(LayoutRect(10, 10, 300, 400), container->LayoutOverflowRect());
+  EXPECT_EQ(LayoutRect(0, 0, 120, 220), container->VisualOverflowRect());
+  EXPECT_EQ(LayoutRect(0, 0, 120, 220), container->SelfVisualOverflowRect());
+  EXPECT_EQ(LayoutRect(10, 10, 300, 400),
+            container->ContentsVisualOverflowRect());
+  EXPECT_EQ(PhysicalRect(10, 10, 100, 200),
+            container->OverflowClipRect(PhysicalOffset()));
+}
+
+TEST_P(LayoutBoxTest, OverflowRectsOverflowHidden) {
+  SetBodyInnerHTML(R"HTML(
+    <div id='container' style='width: 100px; height: 200px; overflow: hidden;
+                               border: 10px solid blue'>
+      <div id='child' style='width: 300px; height: 400px;'></div>
+    </div>
+  )HTML");
+
+  auto* container = GetLayoutBoxByElementId("container");
+  EXPECT_TRUE(container->ShouldClipOverflowAlongEitherAxis());
+  EXPECT_EQ(LayoutRect(10, 10, 300, 400), container->LayoutOverflowRect());
+  EXPECT_EQ(LayoutRect(0, 0, 120, 220), container->VisualOverflowRect());
+  EXPECT_EQ(LayoutRect(0, 0, 120, 220), container->SelfVisualOverflowRect());
+  EXPECT_EQ(LayoutRect(10, 10, 300, 400),
+            container->ContentsVisualOverflowRect());
+  EXPECT_EQ(PhysicalRect(10, 10, 100, 200),
+            container->OverflowClipRect(PhysicalOffset()));
+}
+
 class AnimatedImage : public StubImage {
  public:
   bool MaybeAnimated() override { return true; }
@@ -571,10 +609,6 @@ TEST_P(LayoutBoxTest, DelayedInvalidation) {
 }
 
 TEST_P(LayoutBoxTest, MarkerContainerLayoutOverflowRect) {
-  // TODO(crbug.com/878025): The test fails in LayoutNG mode.
-  if (RuntimeEnabledFeatures::LayoutNGEnabled())
-    return;
-
   SetBodyInnerHTML(R"HTML(
     <style>
       html { font-size: 16px; }
@@ -586,9 +620,16 @@ TEST_P(LayoutBoxTest, MarkerContainerLayoutOverflowRect) {
 
   LayoutBox* marker_container =
       ToLayoutBox(GetLayoutObjectByElementId("target")->SlowFirstChild());
-  // Unit marker_container's frame_rect which y-pos starts from 0 and marker's
-  // frame_rect.
-  EXPECT_TRUE(marker_container->LayoutOverflowRect().Height() > LayoutUnit(50));
+  if (RuntimeEnabledFeatures::LayoutNGEnabled()) {
+    EXPECT_GE(marker_container->Location().Y() +
+                  marker_container->LayoutOverflowRect().MaxY(),
+              LayoutUnit(50));
+  } else {
+    // Unit marker_container's frame_rect which y-pos starts from 0 and marker's
+    // frame_rect in Legacy.
+    EXPECT_EQ(LayoutPoint(), marker_container->Location());
+    EXPECT_GE(marker_container->LayoutOverflowRect().MaxY(), LayoutUnit(50));
+  }
 }
 
 static String CommonStyleForGeometryWithScrollbarTests() {

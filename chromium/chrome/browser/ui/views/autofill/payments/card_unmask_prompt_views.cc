@@ -138,7 +138,8 @@ void CardUnmaskPromptViews::GotVerificationResult(
       // The label of the overlay will now show the error in red.
       auto error_label = std::make_unique<views::Label>(error_message);
       const SkColor warning_text_color = views::style::GetColor(
-          *error_label, ChromeTextContext::CONTEXT_BODY_TEXT_SMALL, STYLE_RED);
+          *error_label, ChromeTextContext::CONTEXT_DIALOG_BODY_TEXT_SMALL,
+          STYLE_RED);
       error_label->SetEnabledColor(warning_text_color);
       error_label->SetMultiLine(true);
 
@@ -293,7 +294,7 @@ void CardUnmaskPromptViews::ContentsChanged(
   DialogModelChanged();
 }
 
-void CardUnmaskPromptViews::OnPerformAction(views::Combobox* combobox) {
+void CardUnmaskPromptViews::DateChanged() {
   if (ExpirationDateIsValid()) {
     if (month_input_->GetInvalid()) {
       month_input_->SetInvalid(false);
@@ -338,7 +339,7 @@ void CardUnmaskPromptViews::InitIfNecessary() {
   auto instructions =
       std::make_unique<views::Label>(controller_->GetInstructionsMessage());
   instructions->SetEnabledColor(views::style::GetColor(
-      *instructions.get(), ChromeTextContext::CONTEXT_BODY_TEXT_LARGE,
+      *instructions.get(), views::style::CONTEXT_DIALOG_BODY_TEXT,
       views::style::STYLE_SECONDARY));
   instructions->SetMultiLine(true);
   instructions->SetHorizontalAlignment(gfx::ALIGN_LEFT);
@@ -359,12 +360,14 @@ void CardUnmaskPromptViews::InitIfNecessary() {
 
   // Add the month and year comboboxes if the expiration date is needed.
   auto month_input = std::make_unique<views::Combobox>(&month_combobox_model_);
-  month_input->set_listener(this);
+  month_input->set_callback(base::BindRepeating(
+      &CardUnmaskPromptViews::DateChanged, base::Unretained(this)));
   month_input->SetAccessibleName(
       l10n_util::GetStringUTF16(IDS_AUTOFILL_CARD_UNMASK_EXPIRATION_MONTH));
   month_input_ = input_row->AddChildView(std::move(month_input));
   auto year_input = std::make_unique<views::Combobox>(&year_combobox_model_);
-  year_input->set_listener(this);
+  year_input->set_callback(base::BindRepeating(
+      &CardUnmaskPromptViews::DateChanged, base::Unretained(this)));
   year_input->SetAccessibleName(
       l10n_util::GetStringUTF16(IDS_AUTOFILL_CARD_UNMASK_EXPIRATION_YEAR));
   year_input_ = input_row->AddChildView(std::move(year_input));
@@ -379,7 +382,7 @@ void CardUnmaskPromptViews::InitIfNecessary() {
 
   auto cvc_image = std::make_unique<views::ImageView>();
   cvc_image->SetImage(rb.GetImageSkiaNamed(controller_->GetCvcImageRid()));
-  cvc_image->set_tooltip_text(l10n_util::GetStringUTF16(
+  cvc_image->SetTooltipText(l10n_util::GetStringUTF16(
       IDS_AUTOFILL_CARD_UNMASK_CVC_IMAGE_DESCRIPTION));
   input_row->AddChildView(std::move(cvc_image));
   input_row_ = input_container->AddChildView(std::move(input_row));
@@ -395,7 +398,8 @@ void CardUnmaskPromptViews::InitIfNecessary() {
       views::BoxLayout::CrossAxisAlignment::kCenter);
 
   const SkColor warning_text_color = views::style::GetColor(
-      *instructions_, ChromeTextContext::CONTEXT_BODY_TEXT_SMALL, STYLE_RED);
+      *instructions_, ChromeTextContext::CONTEXT_DIALOG_BODY_TEXT_SMALL,
+      STYLE_RED);
   auto error_icon = std::make_unique<views::ImageView>();
   error_icon->SetImage(
       gfx::CreateVectorIcon(kBrowserToolsErrorIcon, warning_text_color));

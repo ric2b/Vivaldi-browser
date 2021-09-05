@@ -10,6 +10,7 @@
 #include "base/check_op.h"
 #include "base/command_line.h"
 #include "base/json/json_writer.h"
+#include "base/optional.h"
 #include "base/run_loop.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -38,10 +39,12 @@
 #include "printing/buildflags/buildflags.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/common/switches.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/codec/png_codec.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/gfx/geometry/size_f.h"
 #include "url/gurl.h"
 
 #if BUILDFLAG(ENABLE_PRINTING)
@@ -351,27 +354,31 @@ class HeadlessWebContentsPDFTest : public HeadlessAsyncDevTooledBrowserTest {
     EXPECT_TRUE(chrome_pdf::GetPDFDocInfo(pdf_span, &num_pages, nullptr));
     EXPECT_EQ(std::ceil(kDocHeight / kPaperHeight), num_pages);
 
+    constexpr chrome_pdf::RenderOptions options = {
+        .stretch_to_bounds = false,
+        .keep_aspect_ratio = true,
+        .autorotate = true,
+        .use_color = true,
+        .render_device_type = chrome_pdf::RenderDeviceType::kPrinter,
+    };
     for (int i = 0; i < num_pages; i++) {
-      double width_in_points;
-      double height_in_points;
-      EXPECT_TRUE(chrome_pdf::GetPDFPageSizeByIndex(
-          pdf_span, i, &width_in_points, &height_in_points));
-      EXPECT_EQ(static_cast<int>(width_in_points),
+      base::Optional<gfx::SizeF> size_in_points =
+          chrome_pdf::GetPDFPageSizeByIndex(pdf_span, i);
+      ASSERT_TRUE(size_in_points.has_value());
+      EXPECT_EQ(static_cast<int>(size_in_points.value().width()),
                 static_cast<int>(kPaperWidth * printing::kPointsPerInch));
-      EXPECT_EQ(static_cast<int>(height_in_points),
+      EXPECT_EQ(static_cast<int>(size_in_points.value().height()),
                 static_cast<int>(kPaperHeight * printing::kPointsPerInch));
 
       gfx::Rect rect(kPaperWidth * kDpi, kPaperHeight * kDpi);
       printing::PdfRenderSettings settings(
-          rect, gfx::Point(0, 0), gfx::Size(kDpi, kDpi), /*autorotate=*/true,
-          /*use_color=*/true, printing::PdfRenderSettings::Mode::NORMAL);
+          rect, gfx::Point(), gfx::Size(kDpi, kDpi), options.autorotate,
+          options.use_color, printing::PdfRenderSettings::Mode::NORMAL);
       std::vector<uint8_t> page_bitmap_data(kColorChannels *
                                             settings.area.size().GetArea());
       EXPECT_TRUE(chrome_pdf::RenderPDFPageToBitmap(
-          pdf_span, i, page_bitmap_data.data(), settings.area.size().width(),
-          settings.area.size().height(), settings.dpi.width(),
-          settings.dpi.height(), /*stretch_to_bounds=*/false,
-          /*keep_aspect_ratio=*/true, settings.autorotate, settings.use_color));
+          pdf_span, i, page_bitmap_data.data(), settings.area.size(),
+          settings.dpi, options));
       EXPECT_EQ(0x56, page_bitmap_data[0]);  // B
       EXPECT_EQ(0x34, page_bitmap_data[1]);  // G
       EXPECT_EQ(0x12, page_bitmap_data[2]);  // R
@@ -843,7 +850,7 @@ class HeadlessWebContentsBeginFrameControlTest
     command_line->AppendSwitch(::switches::kDisableNewContentRenderingTimeout);
     command_line->AppendSwitch(cc::switches::kDisableCheckerImaging);
     command_line->AppendSwitch(cc::switches::kDisableThreadedAnimation);
-    command_line->AppendSwitch(::switches::kDisableThreadedScrolling);
+    command_line->AppendSwitch(blink::switches::kDisableThreadedScrolling);
   }
 
   void OnCreateTargetResult(
@@ -1161,7 +1168,10 @@ const char* kPageWhichOpensAWindow = R"(
 <html>
 <body>
 <script>
-window.open('/page2.html');
+const win = window.open('/page2.html');
+if (!win)
+  console.error('ready');
+win.addEventListener('load', () => console.log('ready'));
 </script>
 </body>
 </html>
@@ -1176,18 +1186,18 @@ Page 2.
 )";
 }  // namespace
 
-class WebContentsOpenTest : public page::Observer,
+class WebContentsOpenTest : public runtime::Observer,
                             public HeadlessAsyncDevTooledBrowserTest {
  public:
   void RunDevTooledTest() override {
-    devtools_client_->GetPage()->AddObserver(this);
     interceptor_->InsertResponse("http://foo.com/index.html",
                                  {kPageWhichOpensAWindow, "text/html"});
     interceptor_->InsertResponse("http://foo.com/page2.html",
                                  {kPage2, "text/html"});
 
     base::RunLoop run_loop(base::RunLoop::Type::kNestableTasksAllowed);
-    devtools_client_->GetPage()->Enable(run_loop.QuitClosure());
+    devtools_client_->GetRuntime()->AddObserver(this);
+    devtools_client_->GetRuntime()->Enable(run_loop.QuitClosure());
     run_loop.Run();
 
     devtools_client_->GetPage()->Navigate("http://foo.com/index.html");
@@ -1201,7 +1211,8 @@ class DontBlockWebContentsOpenTest : public WebContentsOpenTest {
     builder.SetBlockNewWebContents(false);
   }
 
-  void OnLoadEventFired(const page::LoadEventFiredParams&) override {
+  void OnConsoleAPICalled(
+      const runtime::ConsoleAPICalledParams& params) override {
     EXPECT_THAT(
         interceptor_->urls_requested(),
         ElementsAre("http://foo.com/index.html", "http://foo.com/page2.html"));
@@ -1209,15 +1220,7 @@ class DontBlockWebContentsOpenTest : public WebContentsOpenTest {
   }
 };
 
-#if defined(OS_WIN) || defined(OS_LINUX) || defined(OS_CHROMEOS) || \
-    defined(OS_FUCHSIA)
-// TODO(crbug.com/1045980): Disabled due to flakiness.
-// TODO(crbug.com/1078405): Disabled due to flakiness.
-// TODO(crbug.com/1090936): Disabled due to flakiness.
-DISABLED_HEADLESS_ASYNC_DEVTOOLED_TEST_F(DontBlockWebContentsOpenTest);
-#else
 HEADLESS_ASYNC_DEVTOOLED_TEST_F(DontBlockWebContentsOpenTest);
-#endif
 
 class BlockWebContentsOpenTest : public WebContentsOpenTest {
  public:
@@ -1226,18 +1229,14 @@ class BlockWebContentsOpenTest : public WebContentsOpenTest {
     builder.SetBlockNewWebContents(true);
   }
 
-  void OnLoadEventFired(const page::LoadEventFiredParams&) override {
+  void OnConsoleAPICalled(
+      const runtime::ConsoleAPICalledParams& params) override {
     EXPECT_THAT(interceptor_->urls_requested(),
                 ElementsAre("http://foo.com/index.html"));
     FinishAsynchronousTest();
   }
 };
 
-#if defined(OS_WIN)
-// TODO(crbug.com/1045980): Disabled due to flakiness.
-DISABLED_HEADLESS_ASYNC_DEVTOOLED_TEST_F(BlockWebContentsOpenTest);
-#else
 HEADLESS_ASYNC_DEVTOOLED_TEST_F(BlockWebContentsOpenTest);
-#endif
 
 }  // namespace headless

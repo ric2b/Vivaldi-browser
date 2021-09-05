@@ -30,6 +30,9 @@
   <message name="IDS_CLIPBOARD_PERMISSION_TITLE" desc="Title of the permission to read from clipboard [CHAR-LIMIT=32]">
     Clipboard
   </message>
+  <message name="IDS_WEBSITE_SETTINGS_IDLE_DETECTION" desc="Title of the permission to detect user activity [CHAR-LIMIT=32]">
+    User presence
+  </message>
   <message name="IDS_JAVASCRIPT_PERMISSION_TITLE" desc="Title of the permission to run javascript [CHAR-LIMIT=32]">
     JavaScript
   </message>
@@ -86,13 +89,6 @@
   </message>
 
   <!-- Site settings supplemental global toggle settings -->
-
-  <message name="IDS_BLOCK_THIRD_PARTY_COOKIES_TITLE" desc="Title for Block Third Party Cookies preference">
-    Block third-party cookies
-  </message>
-  <message name="IDS_BLOCK_THIRD_PARTY_COOKIES_SUMMARY" desc="Summary text for Block Third Party Cookies preference">
-    Prevent third-party websites from saving and reading cookie data
-  </message>
   <message name="IDS_WEBSITE_SETTINGS_CATEGORY_NOTIFICATIONS_QUIET" desc="A setting that, if turned on will enable a quieter permission prompt for notifications.">
     Use quieter messaging (blocks notification prompts from interrupting you)
   </message>
@@ -171,7 +167,7 @@
   <message name="IDS_WEBSITE_SETTINGS_ADD_SITE_ADD_BUTTON" desc="The label for the button to add a website to a list.">
     Add
   </message>
-  <message name="IDS_WEBSITE_SETTINGS_ADD_SITE_TOAST" desc="The toast shown when a new site has been added to the whitelist.">
+  <message name="IDS_WEBSITE_SETTINGS_ADD_SITE_TOAST" desc="The toast shown when a new site has been added to the exception list.">
     Site <ph name="SITE_NAME">%1$s<ex>google.com</ex></ph> added
   </message>
   <message name="IDS_WEBSITE_SETTINGS_ADD_SITE_SITE_URL" desc="The label for the input field where the user can type a website URL.">
@@ -346,6 +342,17 @@
   </message>
   <message name="IDS_WEBSITE_SETTINGS_COOKIE_INFO" desc="Text describing cookie and third-party cookie settings.">
     Cookies are files created by websites you visit. Sites use them to remember your preferences. Third-party cookies are created by other sites. These sites own some of the content, like ads or images, that you see on the webpage you visit.
+  </message>
+
+  <!-- Idle Detection -->
+  <message name="IDS_IDLE_DETECTION_PERMISSION_TITLE" desc="Title for the permission of detecting user activity [CHAR-LIMIT=32]">
+    User presence
+  </message>
+  <message name="IDS_WEBSITE_SETTINGS_CATEGORY_IDLE_DETECTION_ASK" desc="The description for the option to allow sites to ask for permission to access your activity state">
+    Ask when a site wants to know when you're present
+  </message>
+  <message name="IDS_WEBSITE_SETTINGS_CATEGORY_IDLE_DETECTION_BLOCKED" desc="The description for the option to block sites from accessing your activity state">
+    Block sites from knowing when you're present
   </message>
 
   <!-- JavaScript -->

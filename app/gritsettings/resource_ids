@@ -21,6 +21,9 @@
   "app/android/vivaldi_android_strings.grd": {
     "messages": [36700],
   },
+  "app/resources/android-permissions/vivaldi_android_permissions_strings.grd": {
+    "messages": [39000],
+  },
   "app/resources/strings/vivaldi_strings.grd": {
     "messages": [400],
   },

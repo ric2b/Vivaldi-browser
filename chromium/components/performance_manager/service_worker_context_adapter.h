@@ -59,7 +59,7 @@ class ServiceWorkerContextAdapter
       int64_t service_worker_version_id,
       const std::string& request_uuid) override;
   void CountExternalRequestsForTest(
-      const GURL& origin,
+      const url::Origin& origin,
       CountExternalRequestsCallback callback) override;
   bool MaybeHasRegistrationForOrigin(const url::Origin& origin) override;
   void GetInstalledRegistrationOrigins(
@@ -84,7 +84,7 @@ class ServiceWorkerContextAdapter
   void StartServiceWorkerForNavigationHint(
       const GURL& document_url,
       StartServiceWorkerForNavigationHintCallback callback) override;
-  void StopAllServiceWorkersForOrigin(const GURL& origin) override;
+  void StopAllServiceWorkersForOrigin(const url::Origin& origin) override;
   void StopAllServiceWorkers(base::OnceClosure callback) override;
   const base::flat_map<int64_t /* version_id */,
                        content::ServiceWorkerRunningInfo>&
@@ -107,6 +107,10 @@ class ServiceWorkerContextAdapter
   void OnControlleeRemoved(int64_t version_id,
                            const std::string& client_uuid) override;
   void OnNoControllees(int64_t version_id, const GURL& scope) override;
+  void OnControlleeNavigationCommitted(
+      int64_t version_id,
+      const std::string& uuid,
+      content::GlobalFrameRoutingId render_frame_host_id) override;
   void OnReportConsoleMessage(int64_t version_id,
                               const GURL& scope,
                               const content::ConsoleMessage& message) override;

@@ -19,8 +19,10 @@ cr.define('settings', function() {
         'recordAddLanguages',
         'recordManageInputMethods',
         'recordToggleShowInputOptionsOnShelf',
+        'recordToggleSpellCheck',
         'recordToggleTranslate',
         'recordAddInputMethod',
+        'recordTranslateCheckboxChanged',
       ]);
     }
 
@@ -45,6 +47,11 @@ cr.define('settings', function() {
     }
 
     /** @override */
+    recordToggleSpellCheck(value) {
+      this.methodCalled('recordToggleSpellCheck', value);
+    }
+
+    /** @override */
     recordToggleTranslate(value) {
       this.methodCalled('recordToggleTranslate', value);
     }
@@ -52,6 +59,11 @@ cr.define('settings', function() {
     /** @override */
     recordAddInputMethod(value) {
       this.methodCalled('recordAddInputMethod', value);
+    }
+
+    /** @override */
+    recordTranslateCheckboxChanged(value) {
+      this.methodCalled('recordTranslateCheckboxChanged', value);
     }
   }
   // #cr_define_end

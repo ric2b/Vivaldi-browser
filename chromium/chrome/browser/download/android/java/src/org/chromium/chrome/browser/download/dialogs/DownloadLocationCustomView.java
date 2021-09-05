@@ -9,6 +9,7 @@ import static org.chromium.chrome.browser.download.settings.DownloadDirectoryAda
 import android.content.Context;
 import android.util.AttributeSet;
 import android.view.View;
+import android.widget.AdapterView;
 import android.widget.CheckBox;
 import android.widget.CompoundButton;
 import android.widget.CompoundButton.OnCheckedChangeListener;
@@ -17,13 +18,17 @@ import android.widget.Spinner;
 import android.widget.TextView;
 
 import androidx.annotation.Nullable;
+import androidx.core.content.ContextCompat;
+import androidx.core.graphics.drawable.DrawableCompat;
 
 import org.chromium.chrome.browser.download.DirectoryOption;
 import org.chromium.chrome.browser.download.DownloadDialogBridge;
 import org.chromium.chrome.browser.download.DownloadLocationDialogType;
 import org.chromium.chrome.browser.download.DownloadPromptStatus;
 import org.chromium.chrome.browser.download.R;
+import org.chromium.chrome.browser.download.StringUtils;
 import org.chromium.chrome.browser.download.settings.DownloadDirectoryAdapter;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.components.browser_ui.util.DownloadUtils;
 import org.chromium.components.browser_ui.widget.text.AlertDialogEditText;
 
@@ -39,9 +44,12 @@ public class DownloadLocationCustomView
     private TextView mTitle;
     private TextView mSubtitleView;
     private AlertDialogEditText mFileName;
+    private TextView mFileSize;
     private Spinner mFileLocation;
+    private TextView mLocationAvailableSpace;
     private CheckBox mDontShowAgain;
     private @DownloadLocationDialogType int mDialogType;
+    private long mTotalBytes;
 
     public DownloadLocationCustomView(Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -55,7 +63,9 @@ public class DownloadLocationCustomView
         mTitle = findViewById(R.id.title);
         mSubtitleView = findViewById(R.id.subtitle);
         mFileName = findViewById(R.id.file_name);
+        mFileSize = findViewById(R.id.file_size);
         mFileLocation = findViewById(R.id.file_location);
+        mLocationAvailableSpace = findViewById(R.id.location_available_space);
         mDontShowAgain = findViewById(R.id.show_again_checkbox);
     }
 
@@ -71,6 +81,8 @@ public class DownloadLocationCustomView
 
         mFileName.setText(suggestedPath.getName());
         mTitle.setText(title);
+        mTotalBytes = totalBytes;
+
         switch (dialogType) {
             case DownloadLocationDialogType.DEFAULT:
                 // Show a file size subtitle if file size is available.
@@ -78,12 +90,7 @@ public class DownloadLocationCustomView
                     mSubtitleView.setText(
                             DownloadUtils.getStringForBytes(getContext(), totalBytes));
                 } else {
-                    // Hide the subtitle and adjust the bottom margin.
-                    mSubtitleView.setVisibility(View.GONE);
-                    MarginLayoutParams titleMargin = (MarginLayoutParams) mTitle.getLayoutParams();
-                    titleMargin.bottomMargin = getResources().getDimensionPixelSize(
-                            R.dimen.download_dialog_subtitle_margin_bottom);
-                    setLayoutParams(titleMargin);
+                    hideSubtitle();
                 }
                 break;
 
@@ -101,6 +108,13 @@ public class DownloadLocationCustomView
 
             case DownloadLocationDialogType.NAME_TOO_LONG:
                 mSubtitleView.setText(R.string.download_location_name_too_long);
+                break;
+
+            case DownloadLocationDialogType.LOCATION_SUGGESTION:
+                // Show the location available space underneath the spinner.
+                mLocationAvailableSpace.setVisibility(View.VISIBLE);
+                setFileSize(totalBytes);
+                hideSubtitle();
                 break;
         }
 
@@ -141,6 +155,51 @@ public class DownloadLocationCustomView
         return mDontShowAgain != null && mDontShowAgain.isChecked();
     }
 
+    /**
+     * Hide the subtitle and adjust the bottom margin.
+     */
+    private void hideSubtitle() {
+        mSubtitleView.setVisibility(View.GONE);
+        MarginLayoutParams titleMargin = (MarginLayoutParams) mTitle.getLayoutParams();
+        titleMargin.bottomMargin = getResources().getDimensionPixelSize(
+                R.dimen.download_dialog_subtitle_margin_bottom);
+        mTitle.setLayoutParams(titleMargin);
+    }
+
+    /**
+     * Show the file size below the file name.
+     * @param  totalBytes The total bytes of the download.
+     */
+    private void setFileSize(long totalBytes) {
+        mFileSize.setVisibility(View.VISIBLE);
+        mFileSize.setText(DownloadUtils.getStringForBytes(getContext(), totalBytes));
+    }
+
+    /**
+     * Show the available space below the file location spinner.
+     * @param  availableSpace The available space of the file location.
+     */
+    private void setLocationAvailableSpace(long availableSpace) {
+        if (mDialogType != DownloadLocationDialogType.LOCATION_SUGGESTION) return;
+        String locationAvailableSpaceText =
+                StringUtils.getAvailableBytesForUi(getContext(), availableSpace);
+        int textColor = ContextCompat.getColor(getContext(), R.color.default_text_color);
+        int barColor = ContextCompat.getColor(getContext(), R.color.explanation_text_color);
+
+        // Show not enough space and change color to error.
+        if (availableSpace < mTotalBytes) {
+            locationAvailableSpaceText = getContext().getResources().getString(
+                    R.string.download_manager_list_item_description, locationAvailableSpaceText,
+                    getContext().getText(R.string.download_location_not_enough_space));
+            textColor = ContextCompat.getColor(getContext(), R.color.input_underline_error_color);
+            barColor = ContextCompat.getColor(getContext(), R.color.input_underline_error_color);
+        }
+
+        mLocationAvailableSpace.setText(locationAvailableSpaceText);
+        mLocationAvailableSpace.setTextColor(textColor);
+        DrawableCompat.setTint(mFileLocation.getBackground().mutate(), barColor);
+    }
+
     // DownloadDirectoryAdapter.Delegate implementation.
     @Override
     public void onDirectoryOptionsUpdated() {
@@ -150,9 +209,29 @@ public class DownloadLocationCustomView
                 || mDialogType == DownloadLocationDialogType.LOCATION_NOT_FOUND) {
             selectedItemId = mDirectoryAdapter.useFirstValidSelectableItemId();
         }
+        if (mDialogType == DownloadLocationDialogType.LOCATION_SUGGESTION) {
+            selectedItemId = mDirectoryAdapter.useSuggestedItemId(mTotalBytes);
+        }
 
         mFileLocation.setAdapter(mDirectoryAdapter);
         mFileLocation.setSelection(selectedItemId);
+
+        // Show "not enough space" error text the new chosen storage doesn't have enough space.
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.SMART_SUGGESTION_FOR_LARGE_DOWNLOADS)) {
+            mFileLocation.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+                @Override
+                public void onItemSelected(
+                        AdapterView<?> parent, View view, int position, long id) {
+                    DirectoryOption option = (DirectoryOption) mDirectoryAdapter.getItem(position);
+                    setLocationAvailableSpace(option.availableSpace);
+                }
+
+                @Override
+                public void onNothingSelected(AdapterView<?> parent) {
+                    // No callback. Only update listeners when an actual option is selected.
+                }
+            });
+        }
     }
 
     @Override

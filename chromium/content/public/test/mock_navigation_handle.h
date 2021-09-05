@@ -27,6 +27,10 @@ class MockNavigationHandle : public NavigationHandle {
 
   // NavigationHandle implementation:
   int64_t GetNavigationId() override { return navigation_id_; }
+  ukm::SourceId GetNextPageUkmSourceId() override {
+    return ukm::ConvertToSourceId(navigation_id_,
+                                  base::UkmSourceId::Type::NAVIGATION_ID);
+  }
   const GURL& GetURL() override { return url_; }
   const GURL& GetPreviousURL() override { return previous_url_; }
   SiteInstance* GetStartingSiteInstance() override {
@@ -120,18 +124,23 @@ class MockNavigationHandle : public NavigationHandle {
   const base::Optional<url::Origin>& GetInitiatorOrigin() override {
     return initiator_origin_;
   }
-  MOCK_METHOD1(RegisterThrottleForTesting,
-               void(std::unique_ptr<NavigationThrottle>));
-  MOCK_METHOD0(IsDeferredForTesting, bool());
-  MOCK_METHOD1(RegisterSubresourceOverride,
-               void(blink::mojom::TransferrableURLLoaderPtr));
-  MOCK_METHOD0(FromDownloadCrossOriginRedirect, bool());
-  MOCK_METHOD0(IsSameProcess, bool());
-  MOCK_METHOD0(GetNavigationEntryOffset, int());
-  MOCK_METHOD1(ForceEnableOriginTrials,
-               void(const std::vector<std::string>& trials));
-  MOCK_METHOD1(SetIsOverridingUserAgent, void(bool));
-  MOCK_METHOD0(GetIsOverridingUserAgent, bool());
+  MOCK_METHOD(void,
+              RegisterThrottleForTesting,
+              (std::unique_ptr<NavigationThrottle>));
+  MOCK_METHOD(bool, IsDeferredForTesting, ());
+  MOCK_METHOD(void,
+              RegisterSubresourceOverride,
+              (blink::mojom::TransferrableURLLoaderPtr));
+  MOCK_METHOD(bool, FromDownloadCrossOriginRedirect, ());
+  MOCK_METHOD(bool, IsSameProcess, ());
+  MOCK_METHOD(NavigationEntry*, GetNavigationEntry, ());
+  MOCK_METHOD(int, GetNavigationEntryOffset, ());
+  MOCK_METHOD(void,
+              ForceEnableOriginTrials,
+              (const std::vector<std::string>& trials));
+  MOCK_METHOD(void, SetIsOverridingUserAgent, (bool));
+  MOCK_METHOD(bool, GetIsOverridingUserAgent, ());
+  MOCK_METHOD(void, SetSilentlyIgnoreErrors, ());
 
   void set_url(const GURL& url) { url_ = url; }
   void set_previous_url(const GURL& previous_url) {

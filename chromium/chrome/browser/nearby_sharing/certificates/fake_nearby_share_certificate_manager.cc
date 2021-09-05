@@ -14,11 +14,12 @@ FakeNearbyShareCertificateManager::Factory::~Factory() = default;
 std::unique_ptr<NearbyShareCertificateManager>
 FakeNearbyShareCertificateManager::Factory::CreateInstance(
     NearbyShareLocalDeviceDataManager* local_device_data_manager,
+    NearbyShareContactManager* contact_manager,
     PrefService* pref_service,
     leveldb_proto::ProtoDatabaseProvider* proto_database_provider,
     const base::FilePath& profile_path,
     NearbyShareClientFactory* client_factory,
-    base::Clock* clock) {
+    const base::Clock* clock) {
   auto instance = std::make_unique<FakeNearbyShareCertificateManager>();
   instances_.push_back(instance.get());
 
@@ -43,22 +44,15 @@ FakeNearbyShareCertificateManager::GetDecryptedPublicCertificateCall::operator=(
 FakeNearbyShareCertificateManager::GetDecryptedPublicCertificateCall::
     ~GetDecryptedPublicCertificateCall() = default;
 
-FakeNearbyShareCertificateManager::FakeNearbyShareCertificateManager() =
-    default;
+FakeNearbyShareCertificateManager::FakeNearbyShareCertificateManager()
+    : next_salt_(GetNearbyShareTestSalt()) {}
 
 FakeNearbyShareCertificateManager::~FakeNearbyShareCertificateManager() =
     default;
 
-NearbySharePrivateCertificate
-FakeNearbyShareCertificateManager::GetValidPrivateCertificate(
-    NearbyShareVisibility visibility) {
-  ++num_get_valid_private_certificate_calls_;
-  return GetNearbyShareTestPrivateCertificate(visibility);
-}
-
 std::vector<nearbyshare::proto::PublicCertificate>
 FakeNearbyShareCertificateManager::GetPrivateCertificatesAsPublicCertificates(
-    NearbyShareVisibility visibility) {
+    nearby_share::mojom::Visibility visibility) {
   ++num_get_private_certificates_as_public_certificates_calls_;
   return GetNearbyShareTestPublicCertificateList(visibility);
 }
@@ -77,3 +71,15 @@ void FakeNearbyShareCertificateManager::DownloadPublicCertificates() {
 void FakeNearbyShareCertificateManager::OnStart() {}
 
 void FakeNearbyShareCertificateManager::OnStop() {}
+
+base::Optional<NearbySharePrivateCertificate>
+FakeNearbyShareCertificateManager::GetValidPrivateCertificate(
+    nearby_share::mojom::Visibility visibility) const {
+  auto cert = GetNearbyShareTestPrivateCertificate(visibility);
+  cert.next_salts_for_testing() = base::queue<std::vector<uint8_t>>();
+  cert.next_salts_for_testing().push(next_salt_);
+  return cert;
+}
+
+void FakeNearbyShareCertificateManager::UpdatePrivateCertificateInStorage(
+    const NearbySharePrivateCertificate& private_certificate) {}

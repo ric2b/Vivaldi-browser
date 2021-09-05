@@ -15,28 +15,25 @@ chrome.test.runTests([
 
   // Error if search string is empty.
   function QueryEmpty() {
-    chrome.search.query({search: ''}, function() {
-      assertLastError('Empty search parameter.');
+    chrome.search.query({text: ''}, function() {
+      assertLastError('Empty text parameter.');
       succeed();
     });
   },
 
   // Display results in current tab if no disposition is provided.
   function QueryPopulatedDispositionEmpty() {
-    chrome.tabs.query({active: true}, (tabs) => {
-      chrome.search.query({search: SEARCH_WORDS}, () => {
-        didPerformQuery(tabs[0].id);
-      });
+    chrome.tabs.create({}, (tab) => {
+      waitForTabAndPass(tab.id);
+      chrome.search.query({text: SEARCH_WORDS}, () => {});
     });
   },
 
   // Display results in current tab if said disposition is provided.
   function QueryPopulatedDispositionCurrentTab() {
-    chrome.tabs.query({active: true}, (tabs) => {
-      chrome.search.query(
-          {search: SEARCH_WORDS, disposition: 'CURRENT_TAB'}, () => {
-            didPerformQuery(tabs[0].id);
-          });
+    chrome.tabs.create({}, (tab) => {
+      waitForTabAndPass(tab.id);
+      chrome.search.query({text: SEARCH_WORDS, disposition: 'CURRENT_TAB'});
     });
   },
 
@@ -44,14 +41,24 @@ chrome.test.runTests([
   function QueryPopulatedDispositionNewTab() {
     chrome.tabs.query({}, (initialTabs) => {
       let initialTabIds = initialTabs.map(tab => tab.id);
-      chrome.search.query(
-          {search: SEARCH_WORDS, disposition: 'NEW_TAB'}, () => {
-            chrome.tabs.query({active: true, currentWindow: true}, (tabs) => {
-              assertEq(1, tabs.length);
-              // A new tab should have been created.
-              assertFalse(initialTabIds.includes(tabs[0].id));
-              didPerformQuery(tabs[0].id);
-            });
+      Promise
+          .all([
+            waitForAnyTab(),
+            new Promise(resolve => {
+              chrome.search.query(
+                  {text: SEARCH_WORDS, disposition: 'NEW_TAB'}, () => {
+                    chrome.tabs.query(
+                        {active: true, currentWindow: true}, (tabs) => {
+                          assertEq(1, tabs.length);
+                          // A new tab should have been created.
+                          assertFalse(initialTabIds.includes(tabs[0].id));
+                          resolve();
+                        });
+                  });
+            }),
+          ])
+          .then(() => {
+            succeed();
           });
     });
   },
@@ -60,17 +67,24 @@ chrome.test.runTests([
   function QueryPopulatedDispositionNewWindow() {
     chrome.windows.getAll({}, (initialWindows) => {
       let initialWindowIds = initialWindows.map(window => window.id);
-      chrome.search.query(
-          {search: SEARCH_WORDS, disposition: 'NEW_WINDOW'}, () => {
-            chrome.windows.getAll({}, (windows) => {
-              assertEq(windows.length, initialWindowIds.length + 1);
-              let window =
-                  windows.find(window => !initialWindowIds.includes(window.id));
-              assertTrue(!!window);
-              chrome.tabs.query({windowId: window.id}, (tabs) => {
-                didPerformQuery(tabs[0].id);
-              });
-            });
+      Promise
+          .all([
+            waitForAnyTab(),
+            new Promise((resolve) => {
+              chrome.search.query(
+                  {text: SEARCH_WORDS, disposition: 'NEW_WINDOW'}, () => {
+                    chrome.windows.getAll({}, (windows) => {
+                      let window = windows.find(
+                          window => !initialWindowIds.includes(window.id));
+                      assertEq(windows.length, initialWindowIds.length + 1);
+                      assertTrue(!!window);
+                      resolve();
+                    });
+                  });
+            }),
+          ])
+          .then(() => {
+            succeed();
           });
     });
   },
@@ -78,15 +92,14 @@ chrome.test.runTests([
   // Display results in specified tab if said tabId is provided.
   function QueryPopulatedTabIDValid() {
     chrome.tabs.create({}, (tab) => {
-      chrome.search.query({search: SEARCH_WORDS, tabId: tab.id}, () => {
-        didPerformQuery(tab.id);
-      });
+      waitForTabAndPass(tab.id);
+      chrome.search.query({text: SEARCH_WORDS, tabId: tab.id});
     });
   },
 
   // Error if tab id invalid.
   function QueryPopulatedTabIDInvalid() {
-    chrome.search.query({search: SEARCH_WORDS, tabId: -1}, () => {
+    chrome.search.query({text: SEARCH_WORDS, tabId: -1}, () => {
       assertLastError('No tab with id: -1.');
       succeed();
     });
@@ -96,7 +109,7 @@ chrome.test.runTests([
   function QueryAndDispositionPopulatedTabIDValid() {
     chrome.tabs.query({active: true}, (tabs) => {
       chrome.search.query(
-          {search: SEARCH_WORDS, tabId: tabs[0].id, disposition: 'NEW_TAB'},
+          {text: SEARCH_WORDS, tabId: tabs[0].id, disposition: 'NEW_TAB'},
           () => {
             assertLastError('Cannot set both \'disposition\' and \'tabId\'.');
             succeed();
@@ -105,13 +118,29 @@ chrome.test.runTests([
   },
 ]);
 
-var didPerformQuery = function(tabId) {
-  assertNoLastError();
-  chrome.tabs.get(tabId, (tab) => {
-    const tabUrl = tab.pendingUrl || tab.url;
-    const url = new URL(tabUrl);
-    // The default search is google.
-    assertEq('www.google.com', url.hostname);
-    succeed();
+function waitForTab(tabIdExpected) {
+  return new Promise((resolve) => {
+    chrome.tabs.onUpdated.addListener(function listener(
+        tabId, changeInfo, tab) {
+      if ((tabIdExpected != -1 && tabId != tabIdExpected) ||
+          changeInfo.status !== 'complete') {
+        return;  // Not our tab.
+      }
+      // Note: make sure to stop listening to future events, so that this
+      // doesn't affect future tests.
+      chrome.tabs.onUpdated.removeListener(listener);
+      // The tab finished loading. It should be on google (the default
+      // search engine).
+      assertEq('www.google.com', new URL(tab.url).hostname);
+      resolve();
+    });
   });
+};
+
+function waitForAnyTab() {
+  return waitForTab(-1);
+};
+
+function waitForTabAndPass(tabId) {
+  waitForTab(tabId).then(succeed);
 }

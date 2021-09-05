@@ -4,8 +4,6 @@
 
 // clang-format off
 // #import 'chrome://nearby/shared/nearby_onboarding_page.m.js';
-// #import {setNearbyShareSettingsForTesting} from 'chrome://nearby/shared/nearby_share_settings.m.js';
-// #import {FakeNearbyShareSettings} from './fake_nearby_share_settings.m.js';
 // #import {assertEquals} from '../../chai_assert.js';
 // clang-format on
 
@@ -33,6 +31,6 @@ suite('nearby-onboarding-page', function() {
   test('Renders onboarding page', async function() {
     assertEquals('NEARBY-ONBOARDING-PAGE', element.tagName);
     // Verify the device name is shown correctly.
-    assertEquals(deviceName, element.$$('#link-row').$$('#label').innerText);
+    assertEquals(deviceName, element.$$('#deviceName').value);
   });
 });

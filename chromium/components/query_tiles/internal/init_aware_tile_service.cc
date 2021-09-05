@@ -113,6 +113,27 @@ void InitAwareTileService::SetServerUrl(const std::string& base_url) {
   }
 }
 
+void InitAwareTileService::OnTileClicked(const std::string& tile_id) {
+  if (IsReady()) {
+    tile_service_->OnTileClicked(tile_id);
+  } else if (!IsFailed()) {
+    MaybeCacheApiCall(base::BindOnce(&InitAwareTileService::OnTileClicked,
+                                     weak_ptr_factory_.GetWeakPtr(), tile_id));
+  }
+}
+
+void InitAwareTileService::OnQuerySelected(
+    const base::Optional<std::string>& parent_tile_id,
+    const base::string16& query_text) {
+  if (IsReady()) {
+    tile_service_->OnQuerySelected(std::move(parent_tile_id), query_text);
+  } else if (!IsFailed()) {
+    MaybeCacheApiCall(base::BindOnce(&InitAwareTileService::OnQuerySelected,
+                                     weak_ptr_factory_.GetWeakPtr(),
+                                     std::move(parent_tile_id), query_text));
+  }
+}
+
 Logger* InitAwareTileService::GetLogger() {
   return tile_service_->GetLogger();
 }

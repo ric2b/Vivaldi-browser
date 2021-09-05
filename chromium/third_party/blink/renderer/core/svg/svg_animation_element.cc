@@ -27,12 +27,14 @@
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/frame/web_feature.h"
 #include "third_party/blink/renderer/core/svg/animation/element_smil_animations.h"
+#include "third_party/blink/renderer/core/svg/animation/smil_animation_effect_parameters.h"
 #include "third_party/blink/renderer/core/svg/svg_animate_element.h"
 #include "third_party/blink/renderer/core/svg/svg_parser_utilities.h"
 #include "third_party/blink/renderer/core/svg_names.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/wtf/math_extras.h"
+#include "third_party/blink/renderer/platform/wtf/text/character_visitor.h"
 
 namespace blink {
 
@@ -106,11 +108,9 @@ fail:
 }
 
 template <typename CharType>
-static bool ParseKeySplinesInternal(const String& string,
+static bool ParseKeySplinesInternal(const CharType* ptr,
+                                    const CharType* end,
                                     Vector<gfx::CubicBezier>& result) {
-  const CharType* ptr = string.GetCharacters<CharType>();
-  const CharType* end = ptr + string.length();
-
   SkipOptionalSVGSpaces(ptr, end);
 
   while (ptr < end) {
@@ -152,11 +152,10 @@ static bool ParseKeySplines(const String& string,
   result.clear();
   if (string.IsEmpty())
     return true;
-  bool parsed = true;
-  if (string.Is8Bit())
-    parsed = ParseKeySplinesInternal<LChar>(string, result);
-  else
-    parsed = ParseKeySplinesInternal<UChar>(string, result);
+  bool parsed =
+      WTF::VisitCharacters(string, [&](const auto* chars, unsigned length) {
+        return ParseKeySplinesInternal(chars, chars + length, result);
+      });
   if (!parsed) {
     result.clear();
     return false;
@@ -350,7 +349,7 @@ String SVGAnimationElement::FromValue() const {
 bool SVGAnimationElement::IsAdditive() const {
   DEFINE_STATIC_LOCAL(const AtomicString, sum, ("sum"));
   const AtomicString& value = FastGetAttribute(svg_names::kAdditiveAttr);
-  return value == sum || GetAnimationMode() == kByAnimation;
+  return value == sum;
 }
 
 bool SVGAnimationElement::IsAccumulated() const {
@@ -648,12 +647,24 @@ bool SVGAnimationElement::CheckAnimationParameters() {
   return false;
 }
 
+SMILAnimationEffectParameters SVGAnimationElement::ComputeEffectParameters()
+    const {
+  SMILAnimationEffectParameters parameters;
+  parameters.is_discrete = GetCalcMode() == kCalcModeDiscrete;
+  // 'to'-animations are neither additive nor cumulative.
+  if (GetAnimationMode() != kToAnimation) {
+    parameters.is_additive = IsAdditive() || GetAnimationMode() == kByAnimation;
+    parameters.is_cumulative = IsAccumulated();
+  }
+  return parameters;
+}
+
 void SVGAnimationElement::ApplyAnimation(SVGAnimationElement* result_element) {
   if (animation_valid_ == AnimationValidity::kUnknown) {
     if (CheckAnimationParameters()) {
       animation_valid_ = AnimationValidity::kValid;
 
-      if (IsAdditive() ||
+      if (IsAdditive() || GetAnimationMode() == kByAnimation ||
           (IsAccumulated() && GetAnimationMode() != kToAnimation)) {
         UseCounter::Count(&GetDocument(),
                           WebFeature::kSVGSMILAdditiveAnimation);
@@ -703,11 +714,23 @@ void SVGAnimationElement::ApplyAnimation(SVGAnimationElement* result_element) {
 }
 
 bool SVGAnimationElement::OverwritesUnderlyingAnimationValue() const {
-  if (IsAdditive() || IsAccumulated())
+  // Our animation value is added to the underlying value.
+  if (IsAdditive())
     return false;
-  return GetAnimationMode() != kToAnimation &&
-         GetAnimationMode() != kByAnimation &&
-         GetAnimationMode() != kNoAnimation;
+  // TODO(fs): Remove this. (Is a function of the repeat count and
+  // does not depend on the underlying value.)
+  if (IsAccumulated())
+    return false;
+  // Animation is from the underlying value by (adding) the specified value.
+  if (GetAnimationMode() == kByAnimation)
+    return false;
+  // Animation is from the underlying value to the specified value.
+  if (GetAnimationMode() == kToAnimation)
+    return false;
+  // No animation...
+  if (GetAnimationMode() == kNoAnimation)
+    return false;
+  return true;
 }
 
 }  // namespace blink

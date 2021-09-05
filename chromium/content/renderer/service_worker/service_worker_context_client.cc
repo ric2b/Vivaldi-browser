@@ -44,9 +44,7 @@
 #include "services/network/public/cpp/wrapper_shared_url_loader_factory.h"
 #include "third_party/blink/public/common/messaging/message_port_channel.h"
 #include "third_party/blink/public/common/service_worker/service_worker_status_code.h"
-#include "third_party/blink/public/common/service_worker/service_worker_utils.h"
 #include "third_party/blink/public/mojom/blob/blob.mojom.h"
-#include "third_party/blink/public/mojom/blob/blob_registry.mojom.h"
 #include "third_party/blink/public/mojom/browser_interface_broker.mojom.h"
 #include "third_party/blink/public/mojom/loader/request_context_frame_type.mojom.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker.mojom.h"
@@ -320,8 +318,6 @@ void ServiceWorkerContextClient::WillDestroyWorkerContext(
   // worker_task_runner_->RunsTasksInCurrentSequence() returns false
   // (while we're still on the worker thread).
   proxy_ = nullptr;
-
-  blob_registry_.reset();
 
   // We have to clear callbacks now, as they need to be freed on the
   // same thread.

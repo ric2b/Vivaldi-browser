@@ -403,11 +403,9 @@ void LocalWindowProxy::SetSecurityToken(const SecurityOrigin* origin) {
   //    value. Checking this can currently only be done in Blink, so require a
   //    full CanAccess() check.
   bool use_default_security_token =
-      world_->IsMainWorld() && (GetFrame()
-                                    ->Loader()
-                                    .StateMachine()
-                                    ->IsDisplayingInitialEmptyDocument() ||
-                                origin->DomainWasSetInDOM());
+      world_->IsMainWorld() &&
+      (GetFrame()->GetDocument()->IsInitialEmptyDocument() ||
+       origin->DomainWasSetInDOM());
   if (origin && !use_default_security_token)
     token = origin->ToTokenForFastCheck();
 
@@ -475,7 +473,7 @@ void LocalWindowProxy::UpdateDocumentInternal() {
 // GetNamedProperty(), Getter(), NamedItemAdded(), and NamedItemRemoved()
 // optimize property access performance for Document.
 //
-// Document interface has [OverrideBuiltins] and a named getter. If we
+// Document interface has [LegacyOverrideBuiltIns] and a named getter. If we
 // implemented the named getter as a standard IDL-mapped code, we would call a
 // Blink function before any of Document property access, and it would be
 // performance overhead even for builtin properties. Our implementation updates
@@ -583,6 +581,12 @@ void LocalWindowProxy::UpdateSecurityOrigin(const SecurityOrigin* origin) {
     return;
 
   SetSecurityToken(origin);
+}
+
+void LocalWindowProxy::SetAbortScriptExecution(
+    v8::Context::AbortScriptExecutionCallback callback) {
+  InitializeIfNeeded();
+  script_state_->GetContext()->SetAbortScriptExecution(callback);
 }
 
 LocalWindowProxy::LocalWindowProxy(v8::Isolate* isolate,

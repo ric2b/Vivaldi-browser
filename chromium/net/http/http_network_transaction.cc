@@ -1553,6 +1553,7 @@ int HttpNetworkTransaction::HandleIOError(int error) {
     case ERR_HTTP2_CLAIMED_PUSHED_STREAM_RESET_BY_SERVER:
     case ERR_HTTP2_PUSHED_RESPONSE_DOES_NOT_MATCH:
     case ERR_QUIC_HANDSHAKE_FAILED:
+    case ERR_QUIC_GOAWAY_REQUEST_CAN_BE_RETRIED:
       if (HasExceededMaxRetries())
         break;
       net_log_.AddEventWithNetErrorCode(
@@ -1686,7 +1687,7 @@ bool HttpNetworkTransaction::ShouldApplyProxyAuth() const {
 }
 
 bool HttpNetworkTransaction::ShouldApplyServerAuth() const {
-  return !(request_->load_flags & LOAD_DO_NOT_SEND_AUTH_DATA);
+  return request_->privacy_mode == PRIVACY_MODE_DISABLED;
 }
 
 int HttpNetworkTransaction::HandleAuthChallenge() {
@@ -1709,9 +1710,7 @@ int HttpNetworkTransaction::HandleAuthChallenge() {
     return ERR_UNEXPECTED_PROXY_AUTH;
 
   int rv = auth_controllers_[target]->HandleAuthChallenge(
-      headers, response_.ssl_info,
-      (request_->load_flags & LOAD_DO_NOT_SEND_AUTH_DATA) != 0, false,
-      net_log_);
+      headers, response_.ssl_info, !ShouldApplyServerAuth(), false, net_log_);
   if (auth_controllers_[target]->HaveAuthHandler())
     pending_auth_target_ = target;
 

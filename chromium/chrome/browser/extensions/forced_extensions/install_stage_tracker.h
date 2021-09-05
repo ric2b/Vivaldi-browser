@@ -38,10 +38,13 @@ class InstallStageTracker : public KeyedService {
  public:
   // Stage of extension installing process. Typically forced extensions from
   // policies should go through all stages in this order, other extensions skip
-  // CREATED stage.
-  // Note: enum used for UMA. Do NOT reorder or remove entries. Don't forget to
-  // update enums.xml (name: ExtensionInstallationStage) when adding new
-  // entries. Don't forget to update device_management_backend.proto (name:
+  // CREATED stage. The stages are recorded in the increasing order of their
+  // values, therefore always verify that values are in increasing order and
+  // items are in order in which they appear. Exceptions are handled in
+  // ShouldOverrideCurrentStage method. Note: enum used for UMA. Do NOT reorder
+  // or remove entries. Don't forget to update enums.xml (name:
+  // ExtensionInstallationStage) when adding new entries. Don't forget to update
+  // device_management_backend.proto (name:
   // ExtensionInstallReportLogEvent::InstallationStage) when adding new entries.
   // Don't forget to update ConvertInstallationStageToProto method in
   // ExtensionInstallEventLogCollector.
@@ -50,25 +53,14 @@ class InstallStageTracker : public KeyedService {
     // ExtensionManagement::settings_by_id_.
     CREATED = 0,
 
-    // TODO(crbug.com/989526): stages from NOTIFIED_FROM_MANAGEMENT to
-    // SEEN_BY_EXTERNAL_PROVIDER are temporary ones for investigation. Remove
-    // then after investigation will complete and we'll be confident in
-    // extension handling between CREATED and PENDING.
+    // NOTIFIED_FROM_MANAGEMENT = 5, // Moved to InstallCreationStage.
 
-    // ExtensionManagement class is about to pass extension with
-    // INSTALLATION_FORCED mode to its observers.
-    NOTIFIED_FROM_MANAGEMENT = 5,
+    // NOTIFIED_FROM_MANAGEMENT_NOT_FORCED = 6, // Moved to
+    // InstallCreationStage.
 
-    // ExtensionManagement class is about to pass extension with other mode to
-    // its observers.
-    NOTIFIED_FROM_MANAGEMENT_NOT_FORCED = 6,
+    // SEEN_BY_POLICY_LOADER = 7, // Moved to InstallCreationStage.
 
-    // ExternalPolicyLoader with FORCED type fetches extension from
-    // ExtensionManagement.
-    SEEN_BY_POLICY_LOADER = 7,
-
-    // ExternalProviderImpl receives extension.
-    SEEN_BY_EXTERNAL_PROVIDER = 8,
+    // SEEN_BY_EXTERNAL_PROVIDER = 8, // Moved to InstallCreationStage.
 
     // Extension added to PendingExtensionManager.
     PENDING = 1,
@@ -81,6 +73,51 @@ class InstallStageTracker : public KeyedService {
 
     // Extension installation finished (either successfully or not).
     COMPLETE = 4,
+
+    // Magic constant used by the histogram macros.
+    // Always update it to the max value.
+    kMaxValue = COMPLETE,
+  };
+
+  // Intermediate stage of extension installation when the Stage is CREATED.
+  // TODO(crbug.com/989526): These stages are temporary ones for investigation.
+  // Remove them after investigation will complete.
+  // Note: enum used for UMA. Do NOT reorder or remove entries. Don't forget to
+  // update enums.xml (name: InstallCreationStage) when adding new
+  // entries. Don't forget to update device_management_backend.proto (name:
+  // ExtensionInstallReportLogEvent::InstallCreationStage) when adding new
+  // entries. Don't forget to update ConvertInstallCreationStageToProto method
+  // in ExtensionInstallEventLogCollector.
+  enum InstallCreationStage {
+    UNKNOWN = 0,
+
+    // ExtensionManagement has reported the Stage has Stage::CREATED.
+    CREATION_INITIATED = 1,
+
+    // Installation mode for the extension is set to INSTALLATION_FORCED just
+    // after ExtensionManagement class is created and CREATION_INITIATED has
+    // been reported.
+    NOTIFIED_FROM_MANAGEMENT_INITIAL_CREATION_FORCED = 2,
+
+    // Installation mode for the extension is set to other mode just after
+    // ExtensionManagement class is created and CREATION_INITIATED has been
+    // reported.
+    NOTIFIED_FROM_MANAGEMENT_INITIAL_CREATION_NOT_FORCED = 3,
+
+    // ExtensionManagement class is about to pass extension with
+    // INSTALLATION_FORCED mode to its observers.
+    NOTIFIED_FROM_MANAGEMENT = 4,
+
+    // ExtensionManagement class is about to pass extension with other mode to
+    // its observers.
+    NOTIFIED_FROM_MANAGEMENT_NOT_FORCED = 5,
+
+    // ExternalPolicyLoader with FORCED type fetches extension from
+    // ExtensionManagement.
+    SEEN_BY_POLICY_LOADER = 6,
+
+    // ExternalProviderImpl receives extension.
+    SEEN_BY_EXTERNAL_PROVIDER = 7,
 
     // Magic constant used by the histogram macros.
     // Always update it to the max value.
@@ -176,49 +213,21 @@ class InstallStageTracker : public KeyedService {
     // extension in required time.
     IN_PROGRESS = 24,
 
-    // The download of the crx failed.
+    // The download of the crx failed. In past histograms, this error has only
+    // occurred when the update check status is "no update" in the manifest. See
+    // crbug/1063031 for more details.
     CRX_FETCH_URL_EMPTY = 25,
 
     // The download of the crx failed.
     CRX_FETCH_URL_INVALID = 26,
 
-    // Magic constant used by the histogram macros.
-    // Always update it to the max value.
-    kMaxValue = CRX_FETCH_URL_INVALID,
-  };
-  // Status for the update check returned by server while fetching manifest.
-  // Enum used for UMA. Do NOT reorder or remove entries. Don't forget to update
-  // enums.xml (name: UpdateCheckStatus) when adding new entries.
-  enum class UpdateCheckStatus {
-    // Technically it may happen that update server return some unknown value or
-    // no value.
-    kUnknown = 0,
-
-    // An update is available and should be applied.
-    kOk = 1,
-
-    // No update is available for this application at this time.
-    kNoUpdate = 2,
-
-    // Server encountered an unknown internal error.
-    kErrorInternal = 3,
-
-    // The server attempted to serve an update, but could not provide a valid
-    // hash for the download.
-    kErrorHash = 4,
-
-    // The application is running on an incompatible operating system.
-    kErrorOsNotSupported = 5,
-
-    // The application is running on an incompatible hardware.
-    kErrorHardwareNotSupported = 6,
-
-    // This application is incompatible with this version of the protocol.
-    kErrorUnsupportedProtocol = 7,
+    // Applying the ExtensionSettings policy changed installation mode from
+    // force-installed to anything else.
+    OVERRIDDEN_BY_SETTINGS = 27,
 
     // Magic constant used by the histogram macros.
     // Always update it to the max value.
-    kMaxValue = kErrorUnsupportedProtocol,
+    kMaxValue = OVERRIDDEN_BY_SETTINGS,
   };
 
   // Status for the app returned by server while fetching manifest when status
@@ -283,6 +292,7 @@ class InstallStageTracker : public KeyedService {
     InstallationData(const InstallationData&);
 
     base::Optional<Stage> install_stage;
+    base::Optional<InstallCreationStage> install_creation_stage;
     base::Optional<ExtensionDownloaderDelegate::Stage> downloading_stage;
     base::Optional<ExtensionDownloaderDelegate::CacheStatus>
         downloading_cache_status;
@@ -300,9 +310,6 @@ class InstallStageTracker : public KeyedService {
     base::Optional<SandboxedUnpackerFailureReason> unpacker_failure_reason;
     // Type of extension, assigned during CRX installation process.
     base::Optional<Manifest::Type> extension_type;
-    // Type of update check status received from server when manifest was
-    // fetched.
-    base::Optional<UpdateCheckStatus> update_check_status;
     // Error detail when the fetched manifest was invalid. This includes errors
     // occurred while parsing the manifest and errors occurred due to the
     // internal details of the parsed manifest.
@@ -369,6 +376,11 @@ class InstallStageTracker : public KeyedService {
     virtual void OnExtensionDownloadingStageChanged(
         const ExtensionId& id,
         ExtensionDownloaderDelegate::Stage stage) {}
+
+    // Called when InstallCreationStage of extension is updated.
+    virtual void OnExtensionInstallCreationStageChanged(
+        const ExtensionId& id,
+        InstallCreationStage stage) {}
   };
 
   explicit InstallStageTracker(const content::BrowserContext* context);
@@ -400,6 +412,8 @@ class InstallStageTracker : public KeyedService {
 
   // Remembers failure reason and in-progress stages in memory.
   void ReportInstallationStage(const ExtensionId& id, Stage stage);
+  void ReportInstallCreationStage(const ExtensionId& id,
+                                  InstallCreationStage stage);
   void ReportFetchError(
       const ExtensionId& id,
       FailureReason reason,
@@ -412,8 +426,6 @@ class InstallStageTracker : public KeyedService {
   void ReportDownloadingCacheStatus(
       const ExtensionId& id,
       ExtensionDownloaderDelegate::CacheStatus cache_status);
-  void ReportManifestUpdateCheckStatus(const ExtensionId& id,
-                                       const std::string& status);
   // Assigns the extension type. Reported from SandboxedInstalled when (and in
   // case when) the extension type is discovered.
   // See InstallationData::extension_type for more details.

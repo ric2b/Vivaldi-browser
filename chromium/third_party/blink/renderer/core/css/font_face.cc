@@ -100,6 +100,16 @@ CSSFontFace* CreateCSSFontFace(FontFace* font_face,
   return MakeGarbageCollected<CSSFontFace>(font_face, ranges);
 }
 
+const CSSValue* ConvertFontMetricOverrideValue(const CSSValue* parsed_value) {
+  if (parsed_value && parsed_value->IsIdentifierValue()) {
+    // We store the "normal" keyword value as nullptr
+    DCHECK_EQ(CSSValueID::kNormal,
+              To<CSSIdentifierValue>(parsed_value)->GetValueID());
+    return nullptr;
+  }
+  return parsed_value;
+}
+
 }  // namespace
 
 FontFace* FontFace::Create(ExecutionContext* context,
@@ -228,7 +238,14 @@ FontFace::FontFace(ExecutionContext* context,
                         AtRuleDescriptorID::FontFeatureSettings);
   SetPropertyFromString(context, descriptors->display(),
                         AtRuleDescriptorID::FontDisplay);
-  // TODO(xiaochengh): Add override descriptors to FontFaceDescriptors
+  if (RuntimeEnabledFeatures::CSSFontMetricsOverrideEnabled()) {
+    SetPropertyFromString(context, descriptors->ascentOverride(),
+                          AtRuleDescriptorID::AscentOverride);
+    SetPropertyFromString(context, descriptors->descentOverride(),
+                          AtRuleDescriptorID::DescentOverride);
+    SetPropertyFromString(context, descriptors->lineGapOverride(),
+                          AtRuleDescriptorID::LineGapOverride);
+  }
 }
 
 FontFace::~FontFace() = default;
@@ -259,6 +276,18 @@ String FontFace::featureSettings() const {
 
 String FontFace::display() const {
   return display_ ? display_->CssText() : "auto";
+}
+
+String FontFace::ascentOverride() const {
+  return ascent_override_ ? ascent_override_->CssText() : "normal";
+}
+
+String FontFace::descentOverride() const {
+  return descent_override_ ? descent_override_->CssText() : "normal";
+}
+
+String FontFace::lineGapOverride() const {
+  return line_gap_override_ ? line_gap_override_->CssText() : "normal";
 }
 
 void FontFace::setStyle(ExecutionContext* context,
@@ -307,6 +336,27 @@ void FontFace::setDisplay(ExecutionContext* context,
                           const String& s,
                           ExceptionState& exception_state) {
   SetPropertyFromString(context, s, AtRuleDescriptorID::FontDisplay,
+                        &exception_state);
+}
+
+void FontFace::setAscentOverride(ExecutionContext* context,
+                                 const String& s,
+                                 ExceptionState& exception_state) {
+  SetPropertyFromString(context, s, AtRuleDescriptorID::AscentOverride,
+                        &exception_state);
+}
+
+void FontFace::setDescentOverride(ExecutionContext* context,
+                                  const String& s,
+                                  ExceptionState& exception_state) {
+  SetPropertyFromString(context, s, AtRuleDescriptorID::DescentOverride,
+                        &exception_state);
+}
+
+void FontFace::setLineGapOverride(ExecutionContext* context,
+                                  const String& s,
+                                  ExceptionState& exception_state) {
+  SetPropertyFromString(context, s, AtRuleDescriptorID::LineGapOverride,
                         &exception_state);
 }
 
@@ -362,13 +412,13 @@ bool FontFace::SetPropertyValue(const CSSValue* value,
         css_font_face_->SetDisplay(CSSValueToFontDisplay(display_.Get()));
       break;
     case AtRuleDescriptorID::AscentOverride:
-      ascent_override_ = value;
+      ascent_override_ = ConvertFontMetricOverrideValue(value);
       break;
     case AtRuleDescriptorID::DescentOverride:
-      descent_override_ = value;
+      descent_override_ = ConvertFontMetricOverrideValue(value);
       break;
     case AtRuleDescriptorID::LineGapOverride:
-      line_gap_override_ = value;
+      line_gap_override_ = ConvertFontMetricOverrideValue(value);
       break;
     case AtRuleDescriptorID::AdvanceOverride:
       advance_override_ = value;

@@ -65,9 +65,8 @@ void FuzzerBrowserProcess::EmbedFuzzedCompositorFrame(
   }
 
   lsi_allocator_.GenerateId();
-  SurfaceId embedded_surface_id(
-      kEmbeddedFrameSinkId,
-      lsi_allocator_.GetCurrentLocalSurfaceIdAllocation().local_surface_id());
+  SurfaceId embedded_surface_id(kEmbeddedFrameSinkId,
+                                lsi_allocator_.GetCurrentLocalSurfaceId());
   sink_remote->SubmitCompositorFrame(embedded_surface_id.local_surface_id(),
                                      std::move(fuzzed_frame), base::nullopt, 0);
 
@@ -100,15 +99,15 @@ FuzzerBrowserProcess::BuildRootCompositorFrameSinkParams() {
   params->gpu_compositing = false;
   params->compositor_frame_sink =
       root_compositor_frame_sink_remote_
-          .BindNewEndpointAndPassDedicatedReceiverForTesting();
+          .BindNewEndpointAndPassDedicatedReceiver();
   params->compositor_frame_sink_client =
       root_compositor_frame_sink_client_.BindInterfaceRemote();
   params->display_private =
-      display_private_.BindNewEndpointAndPassDedicatedReceiverForTesting();
+      display_private_.BindNewEndpointAndPassDedicatedReceiver();
   params->display_client = display_client_.BindRemote();
   params->external_begin_frame_controller =
       external_begin_frame_controller_remote_
-           .BindNewEndpointAndPassDedicatedReceiverForTesting();
+          .BindNewEndpointAndPassDedicatedReceiver();
   return params;
 }
 
@@ -120,12 +119,11 @@ CompositorFrame FuzzerBrowserProcess::BuildBrowserUICompositorFrame(
   frame.metadata.begin_frame_ack.frame_id = BeginFrameId(
       BeginFrameArgs::kManualSourceId, BeginFrameArgs::kStartingFrameNumber);
   frame.metadata.device_scale_factor = 1;
-  frame.metadata.local_surface_id_allocation_time = base::TimeTicks::Now();
   frame.metadata.referenced_surfaces.push_back(
       SurfaceRange(base::nullopt, renderer_surface_id));
 
-  std::unique_ptr<RenderPass> pass = RenderPass::Create();
-  pass->SetNew(RenderPassId{1}, gfx::Rect(kBrowserSize),
+  auto pass = CompositorRenderPass::Create();
+  pass->SetNew(CompositorRenderPassId{1}, gfx::Rect(kBrowserSize),
                gfx::Rect(kBrowserSize), gfx::Transform());
 
   auto* renderer_sqs = pass->CreateAndAppendSharedQuadState();

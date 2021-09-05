@@ -847,6 +847,23 @@
         },
         "test": "wtf_unittests",
         "test_id_prefix": "ninja://third_party/blink/renderer/platform/wtf:wtf_unittests/"
+      },
+      {
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-16.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test": "zlib_unittests",
+        "test_id_prefix": "ninja://third_party/zlib:zlib_unittests/"
       }
     ]
   },
@@ -1748,6 +1765,23 @@
         },
         "test": "wtf_unittests",
         "test_id_prefix": "ninja://third_party/blink/renderer/platform/wtf:wtf_unittests/"
+      },
+      {
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-16.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test": "zlib_unittests",
+        "test_id_prefix": "ninja://third_party/zlib:zlib_unittests/"
       }
     ]
   },
@@ -1796,28 +1830,6 @@
         },
         "test": "accessibility_unittests",
         "test_id_prefix": "ninja://ui/accessibility:accessibility_unittests/"
-      },
-      {
-        "args": [
-          "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
-        ],
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "cpu": "arm64",
-              "inside_docker": "1",
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "angle_unittests",
-        "test_id_prefix": "ninja://third_party/angle/src/tests:angle_unittests/"
       },
       {
         "args": [
@@ -2506,7 +2518,6 @@
       },
       {
         "args": [
-          "--test-launcher-filter-file=../../testing/buildbot/filters/fuchsia.mojo_unittests.filter",
           "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
         ],
         "merge": {
@@ -2548,6 +2559,30 @@
         },
         "test": "native_theme_unittests",
         "test_id_prefix": "ninja://ui/native_theme:native_theme_unittests/"
+      },
+      {
+        "args": [
+          "--test-launcher-filter-file=../../testing/buildbot/filters/fuchsia.net_unittests.filter",
+          "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "arm64",
+              "inside_docker": "1",
+              "os": "Ubuntu-16.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
+          "shards": 4
+        },
+        "test": "net_unittests",
+        "test_id_prefix": "ninja://net:net_unittests/"
       },
       {
         "args": [
@@ -2878,6 +2913,33 @@
         "test": "wtf_unittests",
         "test_id_prefix": "ninja://third_party/blink/renderer/platform/wtf:wtf_unittests/"
       }
+    ],
+    "isolated_scripts": [
+      {
+        "args": [
+          "bin/run_standalone_angle_unittests",
+          "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
+        ],
+        "isolate_name": "standalone_angle_unittests",
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "standalone_angle_unittests",
+        "should_retry_with_patch": false,
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "arm64",
+              "inside_docker": "1",
+              "os": "Ubuntu-16.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test_id_prefix": "ninja://third_party/angle/src/tests:standalone_angle_unittests/"
+      }
     ]
   },
   "Fuchsia x64": {
@@ -2923,27 +2985,6 @@
         },
         "test": "accessibility_unittests",
         "test_id_prefix": "ninja://ui/accessibility:accessibility_unittests/"
-      },
-      {
-        "args": [
-          "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
-        ],
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "kvm": "1",
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "angle_unittests",
-        "test_id_prefix": "ninja://third_party/angle/src/tests:angle_unittests/"
       },
       {
         "args": [
@@ -3643,7 +3684,6 @@
       },
       {
         "args": [
-          "--test-launcher-filter-file=../../testing/buildbot/filters/fuchsia.mojo_unittests.filter",
           "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
         ],
         "merge": {
@@ -4072,6 +4112,35 @@
       },
       {
         "args": [
+          "context_lost",
+          "--show-stdout",
+          "--browser=web-engine-shell",
+          "--passthrough",
+          "-v",
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --use-cmd-decoder=validating"
+        ],
+        "isolate_name": "fuchsia_telemetry_gpu_integration_test",
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "context_lost_validating_tests",
+        "should_retry_with_patch": false,
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "kvm": "1",
+              "os": "Ubuntu-16.04"
+            }
+          ],
+          "idempotent": false,
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test_id_prefix": "ninja://content/test:fuchsia_telemetry_gpu_integration_test/"
+      },
+      {
+        "args": [
           "depth_capture",
           "--show-stdout",
           "--browser=web-engine-shell",
@@ -4176,6 +4245,123 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "info_collection_tests",
+        "should_retry_with_patch": false,
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "kvm": "1",
+              "os": "Ubuntu-16.04"
+            }
+          ],
+          "idempotent": false,
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test_id_prefix": "ninja://content/test:fuchsia_telemetry_gpu_integration_test/"
+      },
+      {
+        "args": [
+          "pixel",
+          "--show-stdout",
+          "--browser=web-engine-shell",
+          "--passthrough",
+          "-v",
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc",
+          "--git-revision=${got_revision}"
+        ],
+        "isolate_name": "fuchsia_telemetry_gpu_integration_test",
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "pixel_tests",
+        "precommit_args": [
+          "--gerrit-issue=${patch_issue}",
+          "--gerrit-patchset=${patch_set}",
+          "--buildbucket-id=${buildbucket_build_id}"
+        ],
+        "should_retry_with_patch": false,
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "kvm": "1",
+              "os": "Ubuntu-16.04"
+            }
+          ],
+          "idempotent": false,
+          "service_account": "chrome-gpu-gold@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test_id_prefix": "ninja://content/test:fuchsia_telemetry_gpu_integration_test/"
+      },
+      {
+        "args": [
+          "screenshot_sync",
+          "--show-stdout",
+          "--browser=web-engine-shell",
+          "--passthrough",
+          "-v",
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc"
+        ],
+        "isolate_name": "fuchsia_telemetry_gpu_integration_test",
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "screenshot_sync_tests",
+        "should_retry_with_patch": false,
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "kvm": "1",
+              "os": "Ubuntu-16.04"
+            }
+          ],
+          "idempotent": false,
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test_id_prefix": "ninja://content/test:fuchsia_telemetry_gpu_integration_test/"
+      },
+      {
+        "args": [
+          "bin/run_standalone_angle_unittests",
+          "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
+        ],
+        "isolate_name": "standalone_angle_unittests",
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "standalone_angle_unittests",
+        "should_retry_with_patch": false,
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "kvm": "1",
+              "os": "Ubuntu-16.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test_id_prefix": "ninja://third_party/angle/src/tests:standalone_angle_unittests/"
+      },
+      {
+        "args": [
+          "trace_test",
+          "--show-stdout",
+          "--browser=web-engine-shell",
+          "--passthrough",
+          "-v",
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc"
+        ],
+        "isolate_name": "fuchsia_telemetry_gpu_integration_test",
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "trace_test",
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -4856,6 +5042,666 @@
           "--ozone-platform=x11",
           "--enable-features=UseOzonePlatform",
           "--test-launcher-filter-file=../../testing/buildbot/filters/ozone-linux.x11_views_unittests.filter"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "name": "views_unittests_x11",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-16.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test": "views_unittests",
+        "test_id_prefix": "ninja://ui/views:views_unittests/"
+      },
+      {
+        "args": [
+          "--ozone-platform=x11",
+          "--enable-features=UseOzonePlatform"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "name": "viz_unittests_x11",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-16.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test": "viz_unittests",
+        "test_id_prefix": "ninja://components/viz:viz_unittests/"
+      },
+      {
+        "args": [
+          "--ozone-platform=x11",
+          "--enable-features=UseOzonePlatform"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "name": "x11_unittests_x11",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-16.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test": "x11_unittests",
+        "test_id_prefix": "ninja://ui/platform_window/x11:x11_unittests/"
+      }
+    ]
+  },
+  "Linux Tester (Ozone Headless)": {
+    "gtest_tests": [
+      {
+        "args": [
+          "--no-xvfb",
+          "--ozone-platform=headless",
+          "--enable-features=UseOzonePlatform"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "name": "content_unittests_headless",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-16.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test": "content_unittests",
+        "test_id_prefix": "ninja://content/test:content_unittests/"
+      },
+      {
+        "args": [
+          "--no-xvfb",
+          "--ozone-platform=headless",
+          "--enable-features=UseOzonePlatform"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "name": "events_unittests_headless",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-16.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test": "events_unittests",
+        "test_id_prefix": "ninja://ui/events:events_unittests/"
+      },
+      {
+        "args": [
+          "--no-xvfb",
+          "--ozone-platform=headless",
+          "--enable-features=UseOzonePlatform"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "name": "ozone_unittests_headless",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-16.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test": "ozone_unittests",
+        "test_id_prefix": "ninja://ui/ozone:ozone_unittests/"
+      },
+      {
+        "args": [
+          "--no-xvfb",
+          "--ozone-platform=headless",
+          "--enable-features=UseOzonePlatform"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "name": "services_unittests_headless",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-16.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test": "services_unittests",
+        "test_id_prefix": "ninja://services:services_unittests/"
+      }
+    ]
+  },
+  "Linux Tester (Ozone Wayland)": {
+    "gtest_tests": [
+      {
+        "args": [
+          "--no-xvfb",
+          "--use-weston",
+          "--ozone-platform=wayland",
+          "--enable-features=UseOzonePlatform"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "name": "accessibility_unittests_wayland",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-16.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test": "accessibility_unittests",
+        "test_id_prefix": "ninja://ui/accessibility:accessibility_unittests/"
+      },
+      {
+        "args": [
+          "--no-xvfb",
+          "--use-weston",
+          "--ozone-platform=wayland",
+          "--enable-features=UseOzonePlatform"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "name": "aura_unittests_wayland",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-16.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test": "aura_unittests",
+        "test_id_prefix": "ninja://ui/aura:aura_unittests/"
+      },
+      {
+        "args": [
+          "--no-xvfb",
+          "--use-weston",
+          "--ozone-platform=wayland",
+          "--enable-features=UseOzonePlatform",
+          "--test-launcher-filter-file=../../testing/buildbot/filters/ozone-linux.wayland_browser_tests.filter"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "name": "browser_tests_wayland",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-16.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
+          "shards": 10
+        },
+        "test": "browser_tests",
+        "test_id_prefix": "ninja://chrome/test:browser_tests/"
+      },
+      {
+        "args": [
+          "--no-xvfb",
+          "--use-weston",
+          "--ozone-platform=wayland",
+          "--enable-features=UseOzonePlatform"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "name": "compositor_unittests_wayland",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-16.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test": "compositor_unittests",
+        "test_id_prefix": "ninja://ui/compositor:compositor_unittests/"
+      },
+      {
+        "args": [
+          "--no-xvfb",
+          "--use-weston",
+          "--ozone-platform=wayland",
+          "--enable-features=UseOzonePlatform"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "name": "content_browsertests_wayland",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-16.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
+          "shards": 2
+        },
+        "test": "content_browsertests",
+        "test_id_prefix": "ninja://content/test:content_browsertests/"
+      },
+      {
+        "args": [
+          "--no-xvfb",
+          "--use-weston",
+          "--ozone-platform=wayland",
+          "--enable-features=UseOzonePlatform"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "name": "content_unittests_wayland",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-16.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test": "content_unittests",
+        "test_id_prefix": "ninja://content/test:content_unittests/"
+      },
+      {
+        "args": [
+          "--no-xvfb",
+          "--use-weston",
+          "--ozone-platform=wayland",
+          "--enable-features=UseOzonePlatform"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "name": "events_unittests_wayland",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-16.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test": "events_unittests",
+        "test_id_prefix": "ninja://ui/events:events_unittests/"
+      },
+      {
+        "args": [
+          "--no-xvfb",
+          "--use-weston",
+          "--ozone-platform=wayland",
+          "--enable-features=UseOzonePlatform"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "name": "gpu_unittests_wayland",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-16.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test": "gpu_unittests",
+        "test_id_prefix": "ninja://gpu:gpu_unittests/"
+      },
+      {
+        "args": [
+          "--no-xvfb",
+          "--use-weston",
+          "--ozone-platform=wayland",
+          "--enable-features=UseOzonePlatform"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "name": "ui_touch_selection_unittests_wayland",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-16.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test": "ui_touch_selection_unittests",
+        "test_id_prefix": "ninja://ui/touch_selection:ui_touch_selection_unittests/"
+      },
+      {
+        "args": [
+          "--no-xvfb",
+          "--use-weston",
+          "--ozone-platform=wayland",
+          "--enable-features=UseOzonePlatform",
+          "--test-launcher-filter-file=../../testing/buildbot/filters/ozone-linux.wayland_views_unittests.filter"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "name": "views_unittests_wayland",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-16.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test": "views_unittests",
+        "test_id_prefix": "ninja://ui/views:views_unittests/"
+      },
+      {
+        "args": [
+          "--no-xvfb",
+          "--use-weston",
+          "--ozone-platform=wayland",
+          "--enable-features=UseOzonePlatform"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "name": "viz_unittests_wayland",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-16.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test": "viz_unittests",
+        "test_id_prefix": "ninja://components/viz:viz_unittests/"
+      }
+    ]
+  },
+  "Linux Tester (Ozone X11)": {
+    "gtest_tests": [
+      {
+        "args": [
+          "--ozone-platform=x11",
+          "--enable-features=UseOzonePlatform"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "name": "accessibility_unittests_x11",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-16.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test": "accessibility_unittests",
+        "test_id_prefix": "ninja://ui/accessibility:accessibility_unittests/"
+      },
+      {
+        "args": [
+          "--ozone-platform=x11",
+          "--enable-features=UseOzonePlatform"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "name": "aura_unittests_x11",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-16.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test": "aura_unittests",
+        "test_id_prefix": "ninja://ui/aura:aura_unittests/"
+      },
+      {
+        "args": [
+          "--ozone-platform=x11",
+          "--enable-features=UseOzonePlatform"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "name": "browser_tests_x11",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-16.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
+          "shards": 10
+        },
+        "test": "browser_tests",
+        "test_id_prefix": "ninja://chrome/test:browser_tests/"
+      },
+      {
+        "args": [
+          "--ozone-platform=x11",
+          "--enable-features=UseOzonePlatform"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "name": "compositor_unittests_x11",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-16.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test": "compositor_unittests",
+        "test_id_prefix": "ninja://ui/compositor:compositor_unittests/"
+      },
+      {
+        "args": [
+          "--ozone-platform=x11",
+          "--enable-features=UseOzonePlatform"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "name": "content_browsertests_x11",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-16.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
+          "shards": 2
+        },
+        "test": "content_browsertests",
+        "test_id_prefix": "ninja://content/test:content_browsertests/"
+      },
+      {
+        "args": [
+          "--ozone-platform=x11",
+          "--enable-features=UseOzonePlatform"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "name": "content_unittests_x11",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-16.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test": "content_unittests",
+        "test_id_prefix": "ninja://content/test:content_unittests/"
+      },
+      {
+        "args": [
+          "--ozone-platform=x11",
+          "--enable-features=UseOzonePlatform"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "name": "events_unittests_x11",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-16.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test": "events_unittests",
+        "test_id_prefix": "ninja://ui/events:events_unittests/"
+      },
+      {
+        "args": [
+          "--ozone-platform=x11",
+          "--enable-features=UseOzonePlatform"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "name": "gpu_unittests_x11",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-16.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test": "gpu_unittests",
+        "test_id_prefix": "ninja://gpu:gpu_unittests/"
+      },
+      {
+        "args": [
+          "--ozone-platform=x11",
+          "--enable-features=UseOzonePlatform"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "name": "ozone_x11_unittests_x11",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-16.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test": "ozone_x11_unittests",
+        "test_id_prefix": "ninja://ui/ozone:ozone_x11_unittests/"
+      },
+      {
+        "args": [
+          "--ozone-platform=x11",
+          "--enable-features=UseOzonePlatform"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "name": "ui_touch_selection_unittests_x11",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-16.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test": "ui_touch_selection_unittests",
+        "test_id_prefix": "ninja://ui/touch_selection:ui_touch_selection_unittests/"
+      },
+      {
+        "args": [
+          "--ozone-platform=x11",
+          "--enable-features=UseOzonePlatform"
         ],
         "merge": {
           "args": [],
@@ -6074,6 +6920,24 @@
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
         },
+        "test": "openscreen_unittests",
+        "test_id_prefix": "ninja://chrome/browser/media/router:openscreen_unittests/"
+      },
+      {
+        "isolate_profile_data": true,
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-16.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
         "test": "pdf_unittests",
         "test_id_prefix": "ninja://pdf:pdf_unittests/"
       },
@@ -6581,6 +7445,24 @@
         },
         "test": "xr_browser_tests",
         "test_id_prefix": "ninja://chrome/test:xr_browser_tests/"
+      },
+      {
+        "isolate_profile_data": true,
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-16.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test": "zlib_unittests",
+        "test_id_prefix": "ninja://third_party/zlib:zlib_unittests/"
       }
     ],
     "isolated_scripts": [
@@ -8102,6 +8984,23 @@
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
         },
+        "test": "openscreen_unittests",
+        "test_id_prefix": "ninja://chrome/browser/media/router:openscreen_unittests/"
+      },
+      {
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-16.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
         "test": "pdf_unittests",
         "test_id_prefix": "ninja://pdf:pdf_unittests/"
       },
@@ -8581,6 +9480,23 @@
         },
         "test": "xr_browser_tests",
         "test_id_prefix": "ninja://chrome/test:xr_browser_tests/"
+      },
+      {
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-16.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test": "zlib_unittests",
+        "test_id_prefix": "ninja://third_party/zlib:zlib_unittests/"
       }
     ],
     "isolated_scripts": [
@@ -8921,7 +9837,7 @@
     "gtest_tests": [
       {
         "args": [
-          "--enable-features=BackForwardCache,BackForwardCacheNoTimeEviction,ServiceWorkerOnUI,ProactivelySwapBrowsingInstance"
+          "--enable-features=BackForwardCache,BackForwardCacheNoTimeEviction,ProactivelySwapBrowsingInstance"
         ],
         "merge": {
           "args": [],
@@ -8943,7 +9859,7 @@
       },
       {
         "args": [
-          "--enable-features=BackForwardCache,BackForwardCacheNoTimeEviction,ServiceWorkerOnUI,ProactivelySwapBrowsingInstance"
+          "--enable-features=BackForwardCache,BackForwardCacheNoTimeEviction,ProactivelySwapBrowsingInstance"
         ],
         "merge": {
           "args": [],
@@ -8965,7 +9881,7 @@
       },
       {
         "args": [
-          "--enable-features=BackForwardCache,BackForwardCacheNoTimeEviction,ServiceWorkerOnUI,ProactivelySwapBrowsingInstance"
+          "--enable-features=BackForwardCache,BackForwardCacheNoTimeEviction,ProactivelySwapBrowsingInstance"
         ],
         "merge": {
           "args": [],
@@ -8987,7 +9903,7 @@
       },
       {
         "args": [
-          "--enable-features=BackForwardCache,BackForwardCacheNoTimeEviction,ServiceWorkerOnUI,ProactivelySwapBrowsingInstance",
+          "--enable-features=BackForwardCache,BackForwardCacheNoTimeEviction,ProactivelySwapBrowsingInstance",
           "--test-launcher-filter-file=../../testing/buildbot/filters/bfcache.unit_tests.filter"
         ],
         "merge": {
@@ -10143,6 +11059,23 @@
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
         },
+        "test": "openscreen_unittests",
+        "test_id_prefix": "ninja://chrome/browser/media/router:openscreen_unittests/"
+      },
+      {
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-14.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
         "test": "pdf_unittests",
         "test_id_prefix": "ninja://pdf:pdf_unittests/"
       },
@@ -10622,6 +11555,23 @@
         },
         "test": "xr_browser_tests",
         "test_id_prefix": "ninja://chrome/test:xr_browser_tests/"
+      },
+      {
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-14.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test": "zlib_unittests",
+        "test_id_prefix": "ninja://third_party/zlib:zlib_unittests/"
       }
     ],
     "isolated_scripts": [

@@ -30,10 +30,25 @@ const base::Feature kDoubleTapToZoomInTabletMode{
 #endif
 
 #if !defined(OS_ANDROID)
+// Adds an item to the context menu that copies a link to the page with the
+// selected text highlighted.
+const base::Feature kCopyLinkToText{"CopyLinkToText",
+                                    base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enables notification muting during screen share sessions.
+const base::Feature kMuteNotificationsDuringScreenShare{
+    "MuteNotificationsDuringScreenShare", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Enables Nearby Sharing functionality. Android already has a native
 // implementation.
 const base::Feature kNearbySharing{"NearbySharing",
                                    base::FEATURE_DISABLED_BY_DEFAULT};
+#endif
+
+#if defined(OS_MAC)
+// Enables the usage of Apple's new Notification API on macOS 10.14+
+const base::Feature kNewMacNotificationAPI{"NewMacNotificationAPI",
+                                           base::FEATURE_DISABLED_BY_DEFAULT};
 #endif
 
 #if !defined(OS_ANDROID) && !defined(OS_CHROMEOS)

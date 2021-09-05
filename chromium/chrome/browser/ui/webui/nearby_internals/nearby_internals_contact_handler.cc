@@ -29,43 +29,37 @@ base::Value GetJavascriptTimestamp() {
 
 // Keys in the JSON representation of a contact message
 const char kContactMessageTimeKey[] = "time";
-const char kContactMessageContactListChangedKey[] = "contactListChanged";
-const char kContactMessageContactsAddedToAllowedListKey[] =
-    "contactsAddedToAllowlist";
-const char kContactMessageContactsRemovedFromAllowedListKey[] =
-    "contactsRemovedFromAllowlist";
+const char kContactMessageContactsChangedKey[] = "contactsChanged";
 const char kContactMessageAllowedIdsKey[] = "allowedIds";
-const char kContactMessageContactsPassedKey[] = "contactsPassed";
 const char kContactMessageContactRecordKey[] = "contactRecords";
 
 // Converts Contact to a raw dictionary value used as a JSON argument to
 // JavaScript functions.
+// TODO(nohle): We should probably break up this dictionary into smaller
+// dictionaries corresponding to each contact-manager observer functions. This
+// will require changes at the javascript layer as well.
 base::Value ContactMessageToDictionary(
-    bool contacts_list_changed,
-    bool contacts_added_to_allowlist,
-    bool contacts_removed_from_allowlist,
-    const std::set<std::string>& allowed_contact_ids,
+    base::Optional<bool> did_contacts_change_since_last_upload,
+    const base::Optional<std::set<std::string>>& allowed_contact_ids,
     const base::Optional<std::vector<nearbyshare::proto::ContactRecord>>&
         contacts) {
   base::Value dictionary(base::Value::Type::DICTIONARY);
 
   dictionary.SetKey(kContactMessageTimeKey, GetJavascriptTimestamp());
-  dictionary.SetBoolKey(kContactMessageContactListChangedKey,
-                        contacts_list_changed);
-  dictionary.SetBoolKey(kContactMessageContactsAddedToAllowedListKey,
-                        contacts_added_to_allowlist);
-  dictionary.SetBoolKey(kContactMessageContactsRemovedFromAllowedListKey,
-                        contacts_removed_from_allowlist);
-
-  base::Value::ListStorage allowed_ids_list;
-  allowed_ids_list.reserve(allowed_contact_ids.size());
-  for (const auto& contact_id : allowed_contact_ids)
-    allowed_ids_list.push_back(base::Value(contact_id));
-
-  dictionary.SetStringKey(kContactMessageAllowedIdsKey,
-                          FormatAsJSON(base::Value(std::move(allowed_ids_list))));
-
-  dictionary.SetBoolKey(kContactMessageContactsPassedKey, contacts.has_value());
+  if (did_contacts_change_since_last_upload.has_value()) {
+    dictionary.SetBoolKey(kContactMessageContactsChangedKey,
+                          *did_contacts_change_since_last_upload);
+  }
+  if (allowed_contact_ids) {
+    base::Value::ListStorage allowed_ids_list;
+    allowed_ids_list.reserve(allowed_contact_ids->size());
+    for (const auto& contact_id : *allowed_contact_ids) {
+      allowed_ids_list.push_back(base::Value(contact_id));
+    }
+    dictionary.SetStringKey(
+        kContactMessageAllowedIdsKey,
+        FormatAsJSON(base::Value(std::move(allowed_ids_list))));
+  }
   if (contacts) {
     base::Value::ListStorage contact_list;
     contact_list.reserve(contacts->size());
@@ -123,24 +117,26 @@ void NearbyInternalsContactHandler::HandleDownloadContacts(
   NearbySharingService* service_ =
       NearbySharingServiceFactory::GetForBrowserContext(context_);
   if (service_) {
-    const bool only_download_if_contacts_changed = args->GetList()[0].GetBool();
-    service_->GetContactManager()->DownloadContacts(
-        only_download_if_contacts_changed);
+    service_->GetContactManager()->DownloadContacts();
   } else {
     NS_LOG(ERROR) << "No NearbyShareService instance to call.";
   }
 }
 
-void NearbyInternalsContactHandler::OnContactsUpdated(
-    bool contacts_list_changed,
-    bool contacts_added_to_allowlist,
-    bool contacts_removed_from_allowlist,
+void NearbyInternalsContactHandler::OnContactsDownloaded(
     const std::set<std::string>& allowed_contact_ids,
-    const base::Optional<std::vector<nearbyshare::proto::ContactRecord>>&
-        contacts) {
+    const std::vector<nearbyshare::proto::ContactRecord>& contacts) {
   FireWebUIListener("contacts-updated",
-                    ContactMessageToDictionary(contacts_list_changed,
-                                               contacts_added_to_allowlist,
-                                               contacts_removed_from_allowlist,
-                                               allowed_contact_ids, contacts));
+                    ContactMessageToDictionary(
+                        /*did_contacts_change_since_last_upload=*/base::nullopt,
+                        allowed_contact_ids, contacts));
+}
+
+void NearbyInternalsContactHandler::OnContactsUploaded(
+    bool did_contacts_change_since_last_upload) {
+  FireWebUIListener(
+      "contacts-updated",
+      ContactMessageToDictionary(did_contacts_change_since_last_upload,
+                                 /*allowed_contact_ids=*/base::nullopt,
+                                 /*contacts=*/base::nullopt));
 }

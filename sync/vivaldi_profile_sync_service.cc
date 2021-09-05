@@ -110,8 +110,8 @@ void VivaldiProfileSyncService::ClearSyncData() {
   resource_request->url = sync_service_url_.ReplaceComponents(replacements);
   resource_request->method = "POST";
   resource_request->load_flags =
-      net::LOAD_BYPASS_CACHE | net::LOAD_DISABLE_CACHE |
-      net::LOAD_DO_NOT_SAVE_COOKIES | net::LOAD_DO_NOT_SEND_COOKIES;
+      net::LOAD_BYPASS_CACHE | net::LOAD_DISABLE_CACHE;
+  resource_request->credentials_mode = network::mojom::CredentialsMode::kOmit;
 
   resource_request->headers.AddHeadersFromString(
       std::string("Authorization: Bearer ") + auth_token);

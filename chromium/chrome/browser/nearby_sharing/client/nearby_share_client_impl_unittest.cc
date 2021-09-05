@@ -30,15 +30,14 @@
 #include "url/gurl.h"
 
 namespace {
+
 const char kGet[] = "GET";
 const char kPost[] = "POST";
 const char kPatch[] = "PATCH";
 const char kAccessToken[] = "access_token";
 const char kAccountName1[] = "accountname1";
 const char kContactId1[] = "contactid1";
-const char kContactId2[] = "contactid2";
-const char kDeviceName1[] = "users/me/devices/devicename1";
-const char kDeviceParent1[] = "kdeviceparent1";
+const char kDeviceIdPath[] = "users/me/devices/deviceid";
 const char kEmail[] = "test@gmail.com";
 const char kEncryptedMetadataBytes1[] = "encryptedmetadatabytes1";
 const char kImageUrl1[] = "https://example.com/image.jpg";
@@ -52,9 +51,10 @@ const char kPhoneNumber1[] = "1231231234";
 const char kPublicKey1[] = "publickey1";
 const char kSecretId1[] = "secretid1";
 const char kSecretId2[] = "secretid2";
+const char kSecretId1Encoded[] = "c2VjcmV0aWQx";
+const char kSecretId2Encoded[] = "c2VjcmV0aWQy";
 const char kSecretKey1[] = "secretkey1";
-const char kTestGoogleApisUrl[] =
-    "https://www.nearbysharing-pa.testgoogleapis.com";
+const char kTestGoogleApisUrl[] = "https://nearbysharing-pa.testgoogleapis.com";
 const int32_t kNanos1 = 123123123;
 const int32_t kNanos2 = 321321321;
 const int32_t kPageSize1 = 1000;
@@ -236,18 +236,6 @@ class NearbyShareClientImplTest : public testing::Test,
     list_public_certificate_response_from_notifier_ = response;
   }
 
-  void OnCheckContactsReachabilityResponse(
-      const nearbyshare::proto::CheckContactsReachabilityResponse& response)
-      override {
-    check_contact_readability_response_from_notifier_ = response;
-  }
-
-  void OnCheckContactsReachabilityRequest(
-      const nearbyshare::proto::CheckContactsReachabilityRequest& request)
-      override {
-    check_contact_readability_request_from_notifier_ = request;
-  }
-
   const std::string& http_method() { return api_call_flow_->http_method_; }
   const GURL& request_url() { return api_call_flow_->request_url_; }
   const std::string& serialized_request() {
@@ -321,24 +309,6 @@ class NearbyShareClientImplTest : public testing::Test,
         list_public_certificate_response_from_notifier_->SerializeAsString());
   }
 
-  void VerifyRequestNotification(
-      const nearbyshare::proto::CheckContactsReachabilityRequest&
-          expected_request) const {
-    ASSERT_TRUE(check_contact_readability_request_from_notifier_);
-    EXPECT_EQ(
-        expected_request.SerializeAsString(),
-        check_contact_readability_request_from_notifier_->SerializeAsString());
-  }
-
-  void VerifyResponseNotification(
-      const nearbyshare::proto::CheckContactsReachabilityResponse&
-          expected_response) const {
-    ASSERT_TRUE(check_contact_readability_response_from_notifier_);
-    EXPECT_EQ(
-        expected_response.SerializeAsString(),
-        check_contact_readability_response_from_notifier_->SerializeAsString());
-  }
-
  protected:
   base::Optional<nearbyshare::proto::UpdateDeviceRequest>
       update_device_request_from_notifier_;
@@ -352,10 +322,6 @@ class NearbyShareClientImplTest : public testing::Test,
       list_public_certificate_request_from_notifier_;
   base::Optional<nearbyshare::proto::ListPublicCertificatesResponse>
       list_public_certificate_response_from_notifier_;
-  base::Optional<nearbyshare::proto::CheckContactsReachabilityRequest>
-      check_contact_readability_request_from_notifier_;
-  base::Optional<nearbyshare::proto::CheckContactsReachabilityResponse>
-      check_contact_readability_response_from_notifier_;
   base::test::TaskEnvironment task_environment_;
   signin::IdentityTestEnvironment identity_test_environment_;
   FakeNearbyShareApiCallFlow* api_call_flow_;
@@ -367,7 +333,7 @@ class NearbyShareClientImplTest : public testing::Test,
 TEST_F(NearbyShareClientImplTest, UpdateDeviceSuccess) {
   nearbyshare::proto::UpdateDeviceResponse result_proto;
   nearbyshare::proto::UpdateDeviceRequest request_proto;
-  request_proto.mutable_device()->set_name(kDeviceName1);
+  request_proto.mutable_device()->set_name(kDeviceIdPath);
   client_->UpdateDevice(
       request_proto,
       base::BindOnce(
@@ -382,16 +348,16 @@ TEST_F(NearbyShareClientImplTest, UpdateDeviceSuccess) {
 
   EXPECT_EQ(kPatch, http_method());
   EXPECT_EQ(request_url(), GURL(std::string(kTestGoogleApisUrl) + "/v1/" +
-                                std::string(kDeviceName1)));
+                                std::string(kDeviceIdPath)));
 
   nearbyshare::proto::UpdateDeviceRequest expected_request;
   EXPECT_TRUE(expected_request.ParseFromString(serialized_request()));
-  EXPECT_EQ(kDeviceName1, expected_request.device().name());
+  EXPECT_EQ(kDeviceIdPath, expected_request.device().name());
 
   nearbyshare::proto::UpdateDeviceResponse response_proto;
   nearbyshare::proto::Device& device = *response_proto.mutable_device();
 
-  device.set_name(kDeviceName1);
+  device.set_name(kDeviceIdPath);
   device.add_contacts();
   device.mutable_contacts(0)->mutable_identifier()->set_phone_number(
       kPhoneNumber1);
@@ -426,7 +392,7 @@ TEST_F(NearbyShareClientImplTest, UpdateDeviceSuccess) {
 
 TEST_F(NearbyShareClientImplTest, UpdateDeviceFailure) {
   nearbyshare::proto::UpdateDeviceRequest request;
-  request.mutable_device()->set_name(kDeviceName1);
+  request.mutable_device()->set_name(kDeviceIdPath);
 
   NearbyShareHttpError error;
   client_->UpdateDevice(
@@ -440,86 +406,15 @@ TEST_F(NearbyShareClientImplTest, UpdateDeviceFailure) {
 
   EXPECT_EQ(kPatch, http_method());
   EXPECT_EQ(request_url(), GURL(std::string(kTestGoogleApisUrl) + "/v1/" +
-                                std::string(kDeviceName1)));
+                                std::string(kDeviceIdPath)));
 
   FailApiCallFlow(NearbyShareHttpError::kInternalServerError);
   EXPECT_EQ(NearbyShareHttpError::kInternalServerError, error);
 }
 
-TEST_F(NearbyShareClientImplTest, CheckContactsReachabilitySuccess) {
-  nearbyshare::proto::CheckContactsReachabilityResponse result_proto;
-  nearbyshare::proto::CheckContactsReachabilityRequest request_proto;
-  request_proto.add_contacts();
-  request_proto.mutable_contacts(0)->set_contact_id(kContactId1);
-
-  client_->CheckContactsReachability(
-      request_proto,
-      base::BindOnce(&SaveResultConstRef<
-                         nearbyshare::proto::CheckContactsReachabilityResponse>,
-                     &result_proto),
-      base::BindOnce(&NotCalled<NearbyShareHttpError>));
-  identity_test_environment_
-      .WaitForAccessTokenRequestIfNecessaryAndRespondWithToken(
-          kAccessToken, base::Time::Max());
-
-  VerifyRequestNotification(request_proto);
-
-  EXPECT_EQ(kPost, http_method());
-  EXPECT_EQ(request_url(),
-            std::string(kTestGoogleApisUrl) + "/v1/contactsReachability:check");
-
-  nearbyshare::proto::CheckContactsReachabilityRequest expected_request;
-  EXPECT_TRUE(expected_request.ParseFromString(serialized_request()));
-  EXPECT_EQ(kContactId1, expected_request.contacts(0).contact_id());
-
-  // Return a response proto
-  nearbyshare::proto::CheckContactsReachabilityResponse response_proto;
-  response_proto.add_results();
-  response_proto.mutable_results(0)->set_contact_id(kContactId1);
-  response_proto.mutable_results(0)->set_is_reachable(false);
-  response_proto.mutable_results(0)->set_is_recommended(false);
-  response_proto.add_results();
-  response_proto.mutable_results(1)->set_contact_id(kContactId2);
-  response_proto.mutable_results(1)->set_is_reachable(true);
-  response_proto.mutable_results(1)->set_is_recommended(true);
-
-  FinishApiCallFlow(&response_proto);
-  VerifyResponseNotification(response_proto);
-
-  // Check that the result received in callback is the same as the response.
-  ASSERT_EQ(2, result_proto.results_size());
-  EXPECT_EQ(kContactId1, result_proto.results(0).contact_id());
-  EXPECT_EQ(false, result_proto.results(0).is_reachable());
-  EXPECT_EQ(false, result_proto.results(0).is_recommended());
-  EXPECT_EQ(kContactId2, result_proto.results(1).contact_id());
-  EXPECT_EQ(true, result_proto.results(1).is_reachable());
-  EXPECT_EQ(true, result_proto.results(1).is_recommended());
-}
-
-TEST_F(NearbyShareClientImplTest, CheckContactsReachabilityFailure) {
-  NearbyShareHttpError error;
-  nearbyshare::proto::CheckContactsReachabilityRequest request_proto;
-  client_->CheckContactsReachability(
-      request_proto,
-      base::BindOnce(&NotCalledConstRef<
-                     nearbyshare::proto::CheckContactsReachabilityResponse>),
-      base::BindOnce(&SaveResult<NearbyShareHttpError>, &error));
-  identity_test_environment_
-      .WaitForAccessTokenRequestIfNecessaryAndRespondWithToken(
-          kAccessToken, base::Time::Max());
-
-  EXPECT_EQ(kPost, http_method());
-  EXPECT_EQ(request_url(),
-            std::string(kTestGoogleApisUrl) + "/v1/contactsReachability:check");
-
-  FailApiCallFlow(NearbyShareHttpError::kAuthenticationError);
-  EXPECT_EQ(NearbyShareHttpError::kAuthenticationError, error);
-}
-
 TEST_F(NearbyShareClientImplTest, ListContactPeopleSuccess) {
   nearbyshare::proto::ListContactPeopleResponse result_proto;
   nearbyshare::proto::ListContactPeopleRequest request_proto;
-  request_proto.set_parent(kDeviceParent1);
   request_proto.set_page_size(kPageSize1);
   request_proto.set_page_token(kPageToken1);
 
@@ -536,9 +431,8 @@ TEST_F(NearbyShareClientImplTest, ListContactPeopleSuccess) {
   VerifyRequestNotification(request_proto);
 
   EXPECT_EQ(kGet, http_method());
-  EXPECT_EQ(request_url(), std::string(kTestGoogleApisUrl) +
-                               "/v1/users/me/devices/" +
-                               std::string(kDeviceParent1) + "/contactRecords");
+  EXPECT_EQ(request_url(),
+            std::string(kTestGoogleApisUrl) + "/v1/contactRecords");
 
   EXPECT_EQ(
       std::vector<std::string>{base::NumberToString(kPageSize1)},
@@ -575,7 +469,7 @@ TEST_F(NearbyShareClientImplTest, ListContactPeopleSuccess) {
 TEST_F(NearbyShareClientImplTest, ListPublicCertificatesSuccess) {
   nearbyshare::proto::ListPublicCertificatesResponse result_proto;
   nearbyshare::proto::ListPublicCertificatesRequest request_proto;
-  request_proto.set_parent(kDeviceParent1);
+  request_proto.set_parent(kDeviceIdPath);
   request_proto.set_page_size(kPageSize1);
   request_proto.set_page_token(kPageToken1);
   request_proto.add_secret_ids();
@@ -596,9 +490,9 @@ TEST_F(NearbyShareClientImplTest, ListPublicCertificatesSuccess) {
   VerifyRequestNotification(request_proto);
 
   EXPECT_EQ(kGet, http_method());
-  EXPECT_EQ(request_url(),
-            std::string(kTestGoogleApisUrl) + "/v1/users/me/devices/" +
-                std::string(kDeviceParent1) + "/publicCertificates");
+  EXPECT_EQ(request_url(), std::string(kTestGoogleApisUrl) + "/v1/" +
+                               std::string(kDeviceIdPath) +
+                               "/publicCertificates");
 
   EXPECT_EQ(
       std::vector<std::string>{base::NumberToString(kPageSize1)},
@@ -607,7 +501,7 @@ TEST_F(NearbyShareClientImplTest, ListPublicCertificatesSuccess) {
       std::vector<std::string>{kPageToken1},
       ExpectQueryStringValues(request_as_query_parameters(), "page_token"));
   EXPECT_EQ(
-      (std::vector<std::string>{kSecretId1, kSecretId2}),
+      (std::vector<std::string>{kSecretId1Encoded, kSecretId2Encoded}),
       ExpectQueryStringValues(request_as_query_parameters(), "secret_ids"));
 
   nearbyshare::proto::ListPublicCertificatesResponse response_proto;
@@ -673,7 +567,7 @@ TEST_F(NearbyShareClientImplTest, FetchAccessTokenFailure) {
 
 TEST_F(NearbyShareClientImplTest, ParseResponseProtoFailure) {
   nearbyshare::proto::UpdateDeviceRequest request_proto;
-  request_proto.mutable_device()->set_name(kDeviceName1);
+  request_proto.mutable_device()->set_name(kDeviceIdPath);
 
   NearbyShareHttpError error;
   client_->UpdateDevice(
@@ -687,7 +581,7 @@ TEST_F(NearbyShareClientImplTest, ParseResponseProtoFailure) {
 
   EXPECT_EQ(kPatch, http_method());
   EXPECT_EQ(request_url(), std::string(kTestGoogleApisUrl) + "/v1/" +
-                               std::string(kDeviceName1));
+                               std::string(kDeviceIdPath));
 
   FinishApiCallFlowRaw("Not a valid serialized response message.");
   EXPECT_EQ(NearbyShareHttpError::kResponseMalformed, error);
@@ -695,7 +589,7 @@ TEST_F(NearbyShareClientImplTest, ParseResponseProtoFailure) {
 
 TEST_F(NearbyShareClientImplTest, MakeSecondRequestBeforeFirstRequestSucceeds) {
   nearbyshare::proto::UpdateDeviceRequest request_proto;
-  request_proto.mutable_device()->set_name(kDeviceName1);
+  request_proto.mutable_device()->set_name(kDeviceIdPath);
 
   // Make first request.
   nearbyshare::proto::UpdateDeviceResponse result_proto;
@@ -711,26 +605,26 @@ TEST_F(NearbyShareClientImplTest, MakeSecondRequestBeforeFirstRequestSucceeds) {
 
   EXPECT_EQ(kPatch, http_method());
   EXPECT_EQ(request_url(), std::string(kTestGoogleApisUrl) + "/v1/" +
-                               std::string(kDeviceName1));
+                               std::string(kDeviceIdPath));
 
   // With request pending, make second request.
   {
     NearbyShareHttpError error;
-    EXPECT_DCHECK_DEATH(client_->CheckContactsReachability(
-        nearbyshare::proto::CheckContactsReachabilityRequest(),
+    EXPECT_DCHECK_DEATH(client_->ListPublicCertificates(
+        nearbyshare::proto::ListPublicCertificatesRequest(),
         base::BindOnce(&NotCalledConstRef<
-                       nearbyshare::proto::CheckContactsReachabilityResponse>),
+                       nearbyshare::proto::ListPublicCertificatesResponse>),
         base::BindOnce(&SaveResult<NearbyShareHttpError>, &error)));
   }
 
   // Complete first request.
   {
     nearbyshare::proto::UpdateDeviceResponse response_proto;
-    response_proto.mutable_device()->set_name(kDeviceName1);
+    response_proto.mutable_device()->set_name(kDeviceIdPath);
     FinishApiCallFlow(&response_proto);
   }
 
-  EXPECT_EQ(kDeviceName1, result_proto.device().name());
+  EXPECT_EQ(kDeviceIdPath, result_proto.device().name());
 }
 
 TEST_F(NearbyShareClientImplTest, MakeSecondRequestAfterFirstRequestSucceeds) {
@@ -738,7 +632,7 @@ TEST_F(NearbyShareClientImplTest, MakeSecondRequestAfterFirstRequestSucceeds) {
   {
     nearbyshare::proto::UpdateDeviceResponse result_proto;
     nearbyshare::proto::UpdateDeviceRequest request_proto;
-    request_proto.mutable_device()->set_name(kDeviceName1);
+    request_proto.mutable_device()->set_name(kDeviceIdPath);
 
     client_->UpdateDevice(
         request_proto,
@@ -752,21 +646,21 @@ TEST_F(NearbyShareClientImplTest, MakeSecondRequestAfterFirstRequestSucceeds) {
 
     EXPECT_EQ(kPatch, http_method());
     EXPECT_EQ(request_url(), std::string(kTestGoogleApisUrl) + "/v1/" +
-                                 std::string(kDeviceName1));
+                                 std::string(kDeviceIdPath));
 
     nearbyshare::proto::UpdateDeviceResponse response_proto;
-    response_proto.mutable_device()->set_name(kDeviceName1);
+    response_proto.mutable_device()->set_name(kDeviceIdPath);
     FinishApiCallFlow(&response_proto);
-    EXPECT_EQ(kDeviceName1, result_proto.device().name());
+    EXPECT_EQ(kDeviceIdPath, result_proto.device().name());
   }
 
   // Second request fails.
   {
     NearbyShareHttpError error;
-    EXPECT_DCHECK_DEATH(client_->CheckContactsReachability(
-        nearbyshare::proto::CheckContactsReachabilityRequest(),
+    EXPECT_DCHECK_DEATH(client_->ListPublicCertificates(
+        nearbyshare::proto::ListPublicCertificatesRequest(),
         base::BindOnce(&NotCalledConstRef<
-                       nearbyshare::proto::CheckContactsReachabilityResponse>),
+                       nearbyshare::proto::ListPublicCertificatesResponse>),
         base::BindOnce(&SaveResult<NearbyShareHttpError>, &error)));
   }
 }
@@ -776,7 +670,7 @@ TEST_F(NearbyShareClientImplTest, GetAccessTokenUsed) {
 
   nearbyshare::proto::UpdateDeviceResponse result_proto;
   nearbyshare::proto::UpdateDeviceRequest request_proto;
-  request_proto.mutable_device()->set_name(kDeviceName1);
+  request_proto.mutable_device()->set_name(kDeviceIdPath);
 
   client_->UpdateDevice(
       request_proto,
@@ -790,7 +684,7 @@ TEST_F(NearbyShareClientImplTest, GetAccessTokenUsed) {
 
   EXPECT_EQ(kPatch, http_method());
   EXPECT_EQ(request_url(), std::string(kTestGoogleApisUrl) + "/v1/" +
-                               std::string(kDeviceName1));
+                               std::string(kDeviceIdPath));
 
   EXPECT_EQ(kAccessToken, client_->GetAccessTokenUsed());
 }

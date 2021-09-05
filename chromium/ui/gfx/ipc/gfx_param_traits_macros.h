@@ -32,9 +32,6 @@ IPC_ENUM_TRAITS_MAX_VALUE(gfx::SwapResult, gfx::SwapResult::SWAP_RESULT_LAST)
 
 IPC_ENUM_TRAITS_MAX_VALUE(gfx::SelectionBound::Type, gfx::SelectionBound::LAST)
 
-IPC_ENUM_TRAITS_MAX_VALUE(gfx::GpuFenceHandleType,
-                          gfx::GpuFenceHandleType::kLast)
-
 IPC_STRUCT_TRAITS_BEGIN(gfx::CALayerParams)
   IPC_STRUCT_TRAITS_MEMBER(is_empty)
 #if defined(OS_MAC)
@@ -109,9 +106,8 @@ IPC_STRUCT_TRAITS_BEGIN(gfx::PresentationFeedback)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(gfx::GpuFenceHandle)
-  IPC_STRUCT_TRAITS_MEMBER(type)
 #if defined(OS_POSIX)
-  IPC_STRUCT_TRAITS_MEMBER(native_fd)
+  IPC_STRUCT_TRAITS_MEMBER(owned_fd)
 #endif
 IPC_STRUCT_TRAITS_END()
 

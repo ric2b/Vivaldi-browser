@@ -11,8 +11,11 @@
 #include "base/callback_forward.h"
 #include "base/containers/flat_map.h"
 #include "base/files/file.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
+#include "base/sequenced_task_runner.h"
+#include "base/single_thread_task_runner.h"
 #include "base/synchronization/lock.h"
 #include "base/task/post_task.h"
 #include "base/thread_annotations.h"
@@ -45,6 +48,7 @@ class NearbyConnections : public mojom::NearbyConnections {
   NearbyConnections(
       mojo::PendingReceiver<mojom::NearbyConnections> nearby_connections,
       mojom::NearbyConnectionsDependenciesPtr dependencies,
+      scoped_refptr<base::SequencedTaskRunner> io_task_runner,
       base::OnceClosure on_disconnect,
       std::unique_ptr<Core> core = std::make_unique<Core>());
 
@@ -55,14 +59,29 @@ class NearbyConnections : public mojom::NearbyConnections {
   // Should only be used by objects within lifetime of NearbyConnections.
   static NearbyConnections& GetInstance();
 
-  // May return null if Nearby Connections was not provided an Adapter (likely
-  // because this device does not support Bluetooth).
-  bluetooth::mojom::Adapter* GetBluetoothAdapter();
+  // May return an unbound Remote if Nearby Connections was not provided an
+  // Adapter (likely because this device does not support Bluetooth).
+  const mojo::SharedRemote<bluetooth::mojom::Adapter>& bluetooth_adapter()
+      const {
+    return bluetooth_adapter_;
+  }
 
-  network::mojom::P2PSocketManager* GetWebRtcP2PSocketManager();
-  network::mojom::MdnsResponder* GetWebRtcMdnsResponder();
-  sharing::mojom::IceConfigFetcher* GetWebRtcIceConfigFetcher();
-  sharing::mojom::WebRtcSignalingMessenger* GetWebRtcSignalingMessenger();
+  const mojo::SharedRemote<network::mojom::P2PSocketManager>& socket_manager()
+      const {
+    return socket_manager_;
+  }
+  const mojo::SharedRemote<network::mojom::MdnsResponder>& mdns_responder()
+      const {
+    return mdns_responder_;
+  }
+  const mojo::SharedRemote<sharing::mojom::IceConfigFetcher>&
+  ice_config_fetcher() const {
+    return ice_config_fetcher_;
+  }
+  const mojo::SharedRemote<sharing::mojom::WebRtcSignalingMessenger>&
+  webrtc_signaling_messenger() const {
+    return webrtc_signaling_messenger_;
+  }
 
   // mojom::NearbyConnections:
   void StartAdvertising(
@@ -81,6 +100,7 @@ class NearbyConnections : public mojom::NearbyConnections {
   void RequestConnection(
       const std::vector<uint8_t>& endpoint_info,
       const std::string& endpoint_id,
+      mojom::ConnectionOptionsPtr options,
       mojo::PendingRemote<mojom::ConnectionLifecycleListener> listener,
       RequestConnectionCallback callback) override;
   void DisconnectFromEndpoint(const std::string& endpoint_id,
@@ -109,6 +129,9 @@ class NearbyConnections : public mojom::NearbyConnections {
 
   // Returns the file associated with |payload_id| for OutputFile.
   base::File ExtractOutputFile(int64_t payload_id);
+
+  // Returns the task runner for the thread that created |this|.
+  scoped_refptr<base::SingleThreadTaskRunner> GetThreadTaskRunner();
 
  private:
   void OnDisconnect();
@@ -140,6 +163,8 @@ class NearbyConnections : public mojom::NearbyConnections {
   // A map of payload_id to file for OutputFile.
   base::flat_map<int64_t, base::File> output_file_map_
       GUARDED_BY(output_file_lock_);
+
+  scoped_refptr<base::SingleThreadTaskRunner> thread_task_runner_;
 
   base::WeakPtrFactory<NearbyConnections> weak_ptr_factory_{this};
 };

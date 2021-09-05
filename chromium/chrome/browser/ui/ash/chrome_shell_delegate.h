@@ -26,6 +26,7 @@ class ChromeShellDelegate : public ash::ShellDelegate {
       ash::BackGestureContextualNudgeController* controller) override;
   void OpenKeyboardShortcutHelpPage() const override;
   bool CanGoBack(gfx::NativeWindow window) const override;
+  void SetTabScrubberEnabled(bool enabled) override;
   bool AllowDefaultTouchActions(gfx::NativeWindow window) override;
   bool ShouldWaitForTouchPressAck(gfx::NativeWindow window) override;
   bool IsTabDrag(const ui::OSExchangeData& drop_data) override;
@@ -45,6 +46,8 @@ class ChromeShellDelegate : public ash::ShellDelegate {
           chromeos::multidevice_setup::mojom::MultiDeviceSetup> receiver)
       override;
   media_session::mojom::MediaSessionService* GetMediaSessionService() override;
+  std::unique_ptr<ash::NearbyShareDelegate> CreateNearbyShareDelegate(
+      ash::NearbyShareController* controller) const override;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(ChromeShellDelegate);

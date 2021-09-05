@@ -12,15 +12,6 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent">
 
-    <!-- TODO (crbug.com/1034733) Fix that this button is being 
-    partially covered by the iamgeview -->
-        <org.chromium.ui.widget.ChromeImageButton
-            android:id="@+id/close_button"
-            style="@style/ToolbarButton"
-            android:src="@drawable/btn_close"
-            android:contentDescription="@string/close"
-            app:tint="@color/default_icon_color_tint_list" />
-
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="match_parent"
@@ -56,48 +47,55 @@
                     android:text="@string/screenshot_edit_title"
                     style="@style/SplitToolbarButton"
                     android:drawableTop="@drawable/edit"
+                    android:drawableTint="@color/default_icon_color_tint_list"
                     android:layout_weight="1"
                     android:gravity="center"
                     android:layout_gravity="end|bottom"
-                    android:background="?attr/selectableItemBackgroundBorderless"
-                    app:tint="@color/default_icon_color_tint_list" />
+                    android:background="?attr/selectableItemBackgroundBorderless" />
 
                 <TextView
                     android:id="@+id/delete"
                     android:text="@string/screenshot_delete_title"
                     style="@style/SplitToolbarButton"
                     android:drawableTop="@drawable/delete"
+                    android:drawableTint="@color/default_icon_color_tint_list"
                     android:layout_weight="1"
                     android:gravity="center"
                     android:layout_gravity="center|bottom"
-                    android:background="?attr/selectableItemBackgroundBorderless"
-                    app:tint="@color/default_icon_color_tint_list" />
+                    android:background="?attr/selectableItemBackgroundBorderless" />
 
                 <TextView
                     android:id="@+id/save"
                     android:text="@string/screenshot_save_title"
                     style="@style/SplitToolbarButton"
                     android:drawableTop="@drawable/save"
+                    android:drawableTint="@color/default_icon_color_tint_list"
                     android:layout_weight="1"
                     android:gravity="center"
                     android:layout_gravity="center|bottom"
-                    android:background="?attr/selectableItemBackgroundBorderless"
-                    app:tint="@color/default_icon_color_tint_list" />
+                    android:background="?attr/selectableItemBackgroundBorderless" />
 
                 <TextView
                     android:id="@+id/share"
                     android:text="@string/screenshot_share_title"
                     style="@style/SplitToolbarButton"
                     android:drawableTop="@drawable/share"
+                    android:drawableTint="@color/default_icon_color_tint_list"
                     android:layout_weight="1"
                     android:gravity="center"
                     android:layout_gravity="start|bottom"
-                    android:background="?attr/selectableItemBackgroundBorderless"
-                    app:tint="@color/default_icon_color_tint_list" />
+                    android:background="?attr/selectableItemBackgroundBorderless" />
 
             </LinearLayout>
 
         </LinearLayout>
+
+        <org.chromium.ui.widget.ChromeImageButton
+            android:id="@+id/close_button"
+            style="@style/ToolbarButton"
+            android:src="@drawable/btn_close"
+            android:contentDescription="@string/close"
+            app:tint="@color/default_icon_color_tint_list" />
 
     </RelativeLayout>
 

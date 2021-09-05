@@ -392,10 +392,6 @@ bool VivaldiNativeAppWindowViews::ShouldShowWindowTitle() const {
   return true;
 }
 
-bool VivaldiNativeAppWindowViews::ShouldShowWindowIcon() const {
-  return false;
-}
-
 void VivaldiNativeAppWindowViews::SaveWindowPlacement(
     const gfx::Rect& bounds,
     ui::WindowShowState show_state) {

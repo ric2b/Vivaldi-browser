@@ -18,6 +18,7 @@ import org.chromium.base.ApplicationStatus;
 import org.chromium.base.test.UiThreadTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.browser.app.ChromeActivity;
+import org.chromium.chrome.browser.app.tabmodel.AsyncTabParamsManagerSingleton;
 import org.chromium.chrome.browser.customtabs.CustomTabActivity;
 import org.chromium.chrome.browser.tab.MockTab;
 import org.chromium.chrome.browser.tab.Tab;
@@ -294,7 +295,7 @@ public class TabWindowManagerTest {
         Assert.assertTrue(manager.tabExistsInAnySelector(tab2.getId()));
         Assert.assertFalse(manager.tabExistsInAnySelector(tab2.getId() + 1));
 
-        AsyncTabParamsManager asyncTabParamsManager = AsyncTabParamsManager.getInstance();
+        AsyncTabParamsManager asyncTabParamsManager = AsyncTabParamsManagerSingleton.getInstance();
         asyncTabParamsManager.getAsyncTabParams().clear();
         final int asyncTabId = 123;
         final TabReparentingParams dummyParams =
@@ -330,7 +331,7 @@ public class TabWindowManagerTest {
         Assert.assertNotNull(manager.getTabById(tab2.getId()));
         Assert.assertNull(manager.getTabById(tab2.getId() + 1));
 
-        AsyncTabParamsManager asyncTabParamsManager = AsyncTabParamsManager.getInstance();
+        AsyncTabParamsManager asyncTabParamsManager = AsyncTabParamsManagerSingleton.getInstance();
         asyncTabParamsManager.getAsyncTabParams().clear();
         final int asyncTabId = 123;
         final TabReparentingParams dummyParams =
@@ -342,5 +343,34 @@ public class TabWindowManagerTest {
         } finally {
             asyncTabParamsManager.getAsyncTabParams().clear();
         }
+    }
+
+    /**
+     * Tests that getTabModelForTab(...) functions properly.
+     */
+    @Test
+    @SmallTest
+    @Feature({"Multiwindow"})
+    @UiThreadTest
+    public void getTabModelForTab() {
+        final TabWindowManager manager = TabWindowManager.getInstance();
+
+        ChromeActivity activity0 = buildActivity();
+        ChromeActivity activity1 = buildActivity();
+        MockTabModelSelector selector0 = requestSelector(activity0, 0);
+        MockTabModelSelector selector1 = requestSelector(activity1, 1);
+        Tab tab1 = selector0.addMockTab();
+        Tab tab2 = selector1.addMockTab();
+        Tab tab3 = selector0.addMockIncognitoTab();
+        Tab tab4 = selector1.addMockIncognitoTab();
+
+        Assert.assertEquals(
+                selector0.getModel(/* incognito= */ false), manager.getTabModelForTab(tab1));
+        Assert.assertEquals(
+                selector1.getModel(/* incognito= */ false), manager.getTabModelForTab(tab2));
+        Assert.assertEquals(
+                selector0.getModel(/* incognito= */ true), manager.getTabModelForTab(tab3));
+        Assert.assertEquals(
+                selector1.getModel(/* incognito= */ true), manager.getTabModelForTab(tab4));
     }
 }

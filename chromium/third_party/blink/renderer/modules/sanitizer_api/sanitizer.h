@@ -11,17 +11,30 @@
 
 namespace blink {
 
+class DocumentFragment;
 class ExceptionState;
+class SanitizerConfig;
+class ScriptState;
 
 class MODULES_EXPORT Sanitizer final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static Sanitizer* Create(ExceptionState&);
-  Sanitizer();
+  static Sanitizer* Create(const SanitizerConfig*, ExceptionState&);
+  explicit Sanitizer(const SanitizerConfig*);
   ~Sanitizer() override;
 
-  String saneStringFrom(const String&);
+  String sanitizeToString(ScriptState*, const String&, ExceptionState&);
+  DocumentFragment* sanitize(ScriptState*, const String&, ExceptionState&);
+
+  SanitizerConfig* creationOptions() const;
+
+  void Trace(Visitor*) const override;
+
+ private:
+  // TODO(lyf): Make config_ read-only. The creationOptions getter which
+  // asks for the pointer is forbidened by a read-only variable.
+  Member<SanitizerConfig> config_ = {};
 };
 
 }  // namespace blink

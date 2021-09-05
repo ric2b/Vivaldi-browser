@@ -68,15 +68,14 @@ var MediaAppUIBrowserTest = class extends testing.Test {
 
   /** @override */
   get featureList() {
-    // NativeFileSystem and FileHandling flags should be automatically set by
-    // origin trials when the Media App feature is enabled, but this testing
-    // environment does not seem to recognize origin trials, so they must be
-    // explicitly set with flags to prevent tests crashing on Media App load due
-    // to window.launchQueue being undefined. See http://crbug.com/1071320.
+    // The FileHandling flag should be automatically set by origin trials when
+    // the Media App feature is enabled, but this testing environment does not
+    // seem to recognize origin trials, so they must be explicitly set with
+    // flags to prevent tests crashing on Media App load due to
+    // window.launchQueue being undefined. See http://crbug.com/1071320.
     return {
       enabled: [
         'chromeos::features::kMediaApp',
-        'blink::features::kNativeFileSystemAPI',
         'blink::features::kFileHandlingAPI'
       ]
     };
@@ -923,6 +922,8 @@ TEST_F('MediaAppUIBrowserTest', 'RequestSaveFileIPC', async () => {
   const result = await sendTestMessage({requestSaveFile: true});
   const options = await chooseEntries;
   const lastToken = [...tokenMap.keys()].slice(-1)[0];
+  // Check the token matches to confirm the ReceivedFile returned represents the
+  // new file created on disk.
   assertMatch(result.testQueryResult, lastToken);
   assertEquals(options.types.length, 1);
   assertEquals(options.types[0].description, '.png');
@@ -1036,26 +1037,27 @@ TEST_F('MediaAppUIBrowserTest', 'RelatedFiles', async () => {
     {name: 'jiff.gif', type: 'image/gif'},
     {name: 'matroska.emkv'},
     {name: 'matroska.mkv'},
+    {name: 'matryoshka.MKV'},
     {name: 'noext', type: ''},
     {name: 'other.txt', type: 'text/plain'},
     {name: 'text.txt', type: 'text/plain'},
     {name: 'world.webm', type: 'video/webm'},
   ];
   const directory = await createMockTestDirectory(testFiles);
-  const [html, jpg, gif, emkv, mkv, ext, other, txt, webm] =
+  const [html, jpg, gif, emkv, mkv, MKV, ext, other, txt, webm] =
       directory.getFilesSync();
 
   await loadFilesWithoutSendingToGuest(directory, mkv);
-  assertFilesToBe([mkv, webm, jpg, gif], 'mkv');
+  assertFilesToBe([mkv, MKV, webm, jpg, gif], 'mkv');
 
   await loadFilesWithoutSendingToGuest(directory, jpg);
-  assertFilesToBe([jpg, gif, mkv, webm], 'jpg');
+  assertFilesToBe([jpg, gif, mkv, MKV, webm], 'jpg');
 
   await loadFilesWithoutSendingToGuest(directory, gif);
-  assertFilesToBe([gif, mkv, webm, jpg], 'gif');
+  assertFilesToBe([gif, mkv, MKV, webm, jpg], 'gif');
 
   await loadFilesWithoutSendingToGuest(directory, webm);
-  assertFilesToBe([webm, jpg, gif, mkv], 'webm');
+  assertFilesToBe([webm, jpg, gif, mkv, MKV], 'webm');
 
   await loadFilesWithoutSendingToGuest(directory, txt);
   assertFilesToBe([txt, other], 'txt');

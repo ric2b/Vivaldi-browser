@@ -21,6 +21,10 @@
 #include "extensions/schema/savedpasswords.h"
 #include "extensions/api/vivaldi_utilities/vivaldi_utilities_api.h"
 
+#if defined(OS_MAC)
+#include "extraparts/vivaldi_keychain_util.h"
+#endif
+
 namespace extensions {
 
 namespace {
@@ -121,6 +125,12 @@ ExtensionFunction::ResponseAction SavedpasswordsAddFunction::Run() {
   if (!params->password_form.password.get()) {
     return RespondNow(Error("No password"));
   }
+
+#if defined(OS_MAC)
+  if (!::vivaldi::HasKeychainAccess()) {
+    return RespondNow(Error("No keychain access, unable to store password."));
+  }
+#endif
 
   autofill::PasswordForm password_form = {};
   password_form.scheme = autofill::PasswordForm::Scheme::kOther;

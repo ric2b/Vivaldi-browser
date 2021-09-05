@@ -19,7 +19,6 @@
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/common/content_client.h"
-#include "third_party/blink/public/common/service_worker/service_worker_utils.h"
 
 namespace content {
 
@@ -238,10 +237,6 @@ ServiceWorkerMetrics::Site ServiceWorkerMetrics::SiteFromURL(const GURL& url) {
   return ServiceWorkerMetrics::Site::OTHER;
 }
 
-void ServiceWorkerMetrics::CountInitDiskCacheResult(bool result) {
-  UMA_HISTOGRAM_BOOLEAN("ServiceWorker.DiskCache.InitResult", result);
-}
-
 void ServiceWorkerMetrics::CountReadResponseResult(
     ServiceWorkerMetrics::ReadResponseResult result) {
   UMA_HISTOGRAM_ENUMERATION("ServiceWorker.DiskCache.ReadResponseResult",
@@ -252,17 +247,6 @@ void ServiceWorkerMetrics::CountWriteResponseResult(
     ServiceWorkerMetrics::WriteResponseResult result) {
   UMA_HISTOGRAM_ENUMERATION("ServiceWorker.DiskCache.WriteResponseResult",
                             result, NUM_WRITE_RESPONSE_RESULT_TYPES);
-}
-
-void ServiceWorkerMetrics::RecordPurgeResourceResult(int net_error) {
-  base::UmaHistogramSparse("ServiceWorker.Storage.PurgeResourceResult",
-                           std::abs(net_error));
-}
-
-void ServiceWorkerMetrics::RecordDeleteAndStartOverResult(
-    DeleteAndStartOverResult result) {
-  UMA_HISTOGRAM_ENUMERATION("ServiceWorker.Storage.DeleteAndStartOverResult",
-                            result, NUM_DELETE_AND_START_OVER_RESULT_TYPES);
 }
 
 void ServiceWorkerMetrics::CountControlledPageLoad(Site site,
@@ -331,19 +315,33 @@ void ServiceWorkerMetrics::RecordActivateEventStatus(
 }
 
 void ServiceWorkerMetrics::RecordInstallEventStatus(
-    blink::ServiceWorkerStatusCode status) {
-  UMA_HISTOGRAM_ENUMERATION("ServiceWorker.InstallEventStatus", status);
+    blink::ServiceWorkerStatusCode status,
+    uint32_t fetch_count) {
+  base::UmaHistogramEnumeration("ServiceWorker.InstallEvent.All.Status",
+                                status);
+  base::UmaHistogramCounts1000("ServiceWorker.InstallEvent.All.FetchCount",
+                               fetch_count);
+  if (fetch_count > 0) {
+    base::UmaHistogramEnumeration("ServiceWorker.InstallEvent.WithFetch.Status",
+                                  status);
+  }
 }
 
 void ServiceWorkerMetrics::RecordEventDuration(EventType event,
                                                base::TimeDelta time,
-                                               bool was_handled) {
+                                               bool was_handled,
+                                               uint32_t fetch_count) {
   switch (event) {
     case EventType::ACTIVATE:
       UMA_HISTOGRAM_MEDIUM_TIMES("ServiceWorker.ActivateEvent.Time", time);
       break;
     case EventType::INSTALL:
-      UMA_HISTOGRAM_MEDIUM_TIMES("ServiceWorker.InstallEvent.Time", time);
+      base::UmaHistogramMediumTimes("ServiceWorker.InstallEvent.All.Time",
+                                    time);
+      if (fetch_count) {
+        base::UmaHistogramMediumTimes(
+            "ServiceWorker.InstallEvent.WithFetch.Time", time);
+      }
       break;
     case EventType::FETCH_MAIN_FRAME:
     case EventType::FETCH_SUB_FRAME:
@@ -563,10 +561,6 @@ void ServiceWorkerMetrics::RecordStartServiceWorkerForNavigationHintResult(
     StartServiceWorkerForNavigationHintResult result) {
   UMA_HISTOGRAM_ENUMERATION("ServiceWorker.StartForNavigationHint.Result",
                             result);
-}
-
-void ServiceWorkerMetrics::RecordRegisteredOriginCount(size_t origin_count) {
-  UMA_HISTOGRAM_COUNTS_1M("ServiceWorker.RegisteredOriginCount", origin_count);
 }
 
 void ServiceWorkerMetrics::RecordLookupRegistrationTime(

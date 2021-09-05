@@ -11,11 +11,14 @@ namespace extension {
 // Name of the GCPW extension service.
 extern const wchar_t kGCPWExtensionServiceName[];
 
-// Description of the GCPW extension service.
-extern const wchar_t kGCPWExtensionServiceDescription[];
+// Display name of the GCPW extension service.
+extern const wchar_t kGCPWExtensionServiceDisplayName[];
 
 // Registry which controls whether to install GCPW Extension.
 extern const wchar_t kEnableGCPWExtension[];
+
+// Registry which keeps track of last time periodic sync was performed.
+extern const wchar_t kLastPeriodicSyncTimeRegKey[];
 
 }  // namespace extension
 }  // namespace credential_provider

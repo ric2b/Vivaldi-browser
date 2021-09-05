@@ -5,8 +5,11 @@
 #ifndef ASH_PUBLIC_CPP_AMBIENT_FAKE_AMBIENT_BACKEND_CONTROLLER_IMPL_H_
 #define ASH_PUBLIC_CPP_AMBIENT_FAKE_AMBIENT_BACKEND_CONTROLLER_IMPL_H_
 
+#include <array>
+
 #include "ash/public/cpp/ambient/ambient_backend_controller.h"
 #include "ash/public/cpp/ash_public_export.h"
+#include "base/callback.h"
 
 namespace ash {
 
@@ -38,6 +41,33 @@ class ASH_PUBLIC_EXPORT FakeAmbientBackendControllerImpl
       int num_albums,
       OnSettingsAndAlbumsFetchedCallback callback) override;
   void SetPhotoRefreshInterval(base::TimeDelta interval) override;
+  void FetchWeather(FetchWeatherCallback callback) override;
+  const std::array<const char*, 2>& GetBackupPhotoUrls() const override;
+
+  // Simulate to reply the request of FetchSettingsAndAlbums().
+  // If |success| is true, will return fake data.
+  // If |success| is false, will return null |settings| data.
+  void ReplyFetchSettingsAndAlbums(bool success);
+
+  // Whether there is a pending FetchSettingsAndAlbums() request.
+  bool IsFetchSettingsAndAlbumsPending() const;
+
+  // Simulate to reply the request of UpdateSettings() with |success|.
+  void ReplyUpdateSettings(bool success);
+
+  // Whether there is a pending UpdateSettings() request.
+  bool IsUpdateSettingsPending() const;
+
+  // Sets the weather info that will be returned in subsequent calls to
+  // `FetchWeather`.
+  void SetWeatherInfo(base::Optional<WeatherInfo> info);
+
+ private:
+  OnSettingsAndAlbumsFetchedCallback pending_fetch_settings_albums_callback_;
+
+  UpdateSettingsCallback pending_update_callback_;
+
+  base::Optional<WeatherInfo> weather_info_;
 };
 
 }  // namespace ash

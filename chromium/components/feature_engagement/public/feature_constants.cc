@@ -20,11 +20,15 @@ const base::Feature kIPHFocusModeFeature{"IPH_FocusMode",
                                          base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kIPHGlobalMediaControlsFeature{
     "IPH_GlobalMediaControls", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kIPHLiveCaptionFeature{"IPH_LiveCaption",
+                                           base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kIPHPasswordsAccountStorageFeature{
     "IPH_PasswordsAccountStorage", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kIPHReopenTabFeature{"IPH_ReopenTab",
                                          base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kIPHWebUITabStripFeature{"IPH_WebUITabStrip",
+                                             base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kIPHDesktopSnoozeFeature{"IPH_DesktopSnoozeFeature",
                                              base::FEATURE_DISABLED_BY_DEFAULT};
 #endif  // defined(OS_WIN) || defined(OS_APPLE) || defined(OS_LINUX) ||
         // defined(OS_CHROMEOS)
@@ -38,16 +42,12 @@ const base::Feature kIPHDataSaverPreviewFeature{
     "IPH_DataSaverPreview", base::FEATURE_ENABLED_BY_DEFAULT};
 const base::Feature kIPHDownloadHomeFeature{"IPH_DownloadHome",
                                             base::FEATURE_ENABLED_BY_DEFAULT};
+const base::Feature kIPHDownloadIndicatorFeature{
+    "IPH_DownloadIndicator", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kIPHDownloadPageFeature{"IPH_DownloadPage",
                                             base::FEATURE_ENABLED_BY_DEFAULT};
 const base::Feature kIPHDownloadPageScreenshotFeature{
     "IPH_DownloadPageScreenshot", base::FEATURE_DISABLED_BY_DEFAULT};
-const base::Feature kIPHChromeDuetHomeButtonFeature{
-    "IPH_ChromeDuetHomeButton", base::FEATURE_DISABLED_BY_DEFAULT};
-const base::Feature kIPHChromeDuetSearchFeature{
-    "IPH_ChromeDuet", base::FEATURE_DISABLED_BY_DEFAULT};
-const base::Feature kIPHChromeDuetTabSwitcherFeature{
-    "IPH_ChromeDuetTabSwitcherButton", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kIPHChromeHomeExpandFeature{
     "IPH_ChromeHomeExpand", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kIPHChromeHomePullToRefreshFeature{
@@ -83,6 +83,8 @@ const base::Feature kIPHIdentityDiscFeature{"IPH_IdentityDisc",
                                             base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kIPHKeyboardAccessoryAddressFillingFeature{
     "IPH_KeyboardAccessoryAddressFilling", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kIPHKeyboardAccessoryBarSwipingFeature{
+    "IPH_KeyboardAccessoryBarSwiping", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kIPHKeyboardAccessoryPasswordFillingFeature{
     "IPH_KeyboardAccessoryPasswordFilling", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kIPHKeyboardAccessoryPaymentFillingFeature{
@@ -99,6 +101,10 @@ const base::Feature kIPHTabGroupsDragAndDropFeature{
     "IPH_TabGroupsDragAndDrop", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kIPHTranslateMenuButtonFeature{
     "IPH_TranslateMenuButton", base::FEATURE_ENABLED_BY_DEFAULT};
+const base::Feature kIPHVideoTutorialDownloadFeature{
+    "IPH_VideoTutorial_Download", base::FEATURE_ENABLED_BY_DEFAULT};
+const base::Feature kIPHVideoTutorialSearchFeature{
+    "IPH_VideoTutorial_Search", base::FEATURE_ENABLED_BY_DEFAULT};
 const base::Feature kIPHExploreSitesTileFeature{
     "IPH_ExploreSitesTile", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kIPHFeedHeaderMenuFeature{

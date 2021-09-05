@@ -29,6 +29,7 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/notreached.h"
 #include "base/path_service.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
@@ -60,6 +61,7 @@
 #include "components/autofill/core/browser/geo/phone_number_i18n.h"
 #include "components/autofill/core/browser/logging/log_manager.h"
 #include "components/autofill/core/browser/metrics/form_events.h"
+#include "components/autofill/core/browser/payments/autofill_offer_manager.h"
 #include "components/autofill/core/browser/payments/credit_card_access_manager.h"
 #include "components/autofill/core/browser/payments/payments_client.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
@@ -221,6 +223,15 @@ void LogValuePatternsMetric(const FormData& form) {
   }
 }
 
+void LogLanguageMetrics(const translate::LanguageState* language_state) {
+  if (language_state) {
+    AutofillMetrics::LogFieldParsingTranslatedFormLanguageMetric(
+        language_state->current_language());
+    AutofillMetrics::LogFieldParsingPageTranslationStatusMetric(
+        language_state->IsPageTranslated());
+  }
+}
+
 bool IsAddressForm(FieldTypeGroup field_type_group) {
   switch (field_type_group) {
     case NAME:
@@ -360,12 +371,10 @@ AutofillField* GetBestPossibleCVCFieldForUpload(
 // Some autofill types are detected based on values and not based on form
 // features. We may decide that it's an autofill form after submission.
 bool ContainsAutofillableValue(const autofill::FormStructure& form) {
-  return std::any_of(form.begin(), form.end(),
-                     [](const std::unique_ptr<autofill::AutofillField>& field) {
-                       return base::Contains(field->possible_types(),
-                                             UPI_VPA) ||
-                              IsUPIVirtualPaymentAddress(field->value);
-                     });
+  return base::ranges::any_of(form, [](const auto& field) {
+    return base::Contains(field->possible_types(), UPI_VPA) ||
+           IsUPIVirtualPaymentAddress(field->value);
+  });
 }
 
 #if !defined(OS_ANDROID) && !defined(OS_IOS)
@@ -671,12 +680,8 @@ void AutofillManager::OnFormSubmittedImpl(const FormData& form,
                         << Br{} << form;
   }
 
-  // TODO(crbug.com/801698): handle PROBABLY_FORM_SUBMITTED.
-  if (source == SubmissionSource::PROBABLY_FORM_SUBMITTED &&
-      !base::FeatureList::IsEnabled(
-          features::kAutofillSaveOnProbablySubmitted)) {
-    return;
-  }
+  // Always upload page language metrics.
+  LogLanguageMetrics(client_->GetLanguageState());
 
   // Always let the value patterns metric upload data.
   LogValuePatternsMetric(form);
@@ -783,7 +788,9 @@ bool AutofillManager::MaybeStartVoteUploadProcess(
     copied_credit_cards.push_back(*card);
 
   // Annotate the form with the source language of the page.
-  form_structure->set_page_language(client_->GetPageLanguage());
+  base::Optional<std::string> page_language = GetPageLanguage();
+  if (page_language)
+    form_structure->set_page_language(page_language.value());
 
   // Attach the Randomized Encoder.
   form_structure->set_randomized_encoder(
@@ -1400,17 +1407,19 @@ void AutofillManager::SelectFieldOptionsDidChange(const FormData& form) {
 
 void AutofillManager::OnLoadedServerPredictions(
     std::string response,
-    const FormAndFieldSignatures& signatures) {
-  // Get the current valid FormStructures represented by |signatures|.
+    const std::vector<FormSignature>& queried_form_signatures) {
+  // Get the current valid FormStructures represented by
+  // |queried_form_signatures|.
   std::vector<FormStructure*> queried_forms;
-  queried_forms.reserve(signatures.size());
-  for (const auto& p : signatures) {
-    FindCachedFormsBySignature(p.first, &queried_forms);
+  queried_forms.reserve(queried_form_signatures.size());
+  for (const auto& form_signature : queried_form_signatures) {
+    FindCachedFormsBySignature(form_signature, &queried_forms);
   }
 
-  // Each form signature in |signatures| is supposed to be unique, and therefore
-  // appear only once. This ensures that FindCachedFormsBySignature() produces
-  // an output without duplicates in the forms.
+  // Each form signature in |queried_form_signatures| is supposed to be unique,
+  // and therefore appear only once. This ensures that
+  // FindCachedFormsBySignature() produces an output without duplicates in the
+  // forms.
   // TODO(crbug/1064709): |queried_forms| could be a set data structure; their
   // order should be irrelevant.
   DCHECK_EQ(queried_forms.size(),
@@ -1423,17 +1432,9 @@ void AutofillManager::OnLoadedServerPredictions(
     return;
 
   // Parse and store the server predictions.
-  if (base::FeatureList::IsEnabled(features::kAutofillUseApi)) {
-    // Parse response from API.
-    FormStructure::ParseApiQueryResponse(std::move(response), queried_forms,
-                                         signatures,
-                                         form_interactions_ukm_logger_.get());
-  } else {
-    // Parse response from legacy server.
-    FormStructure::ParseQueryResponse(std::move(response), queried_forms,
-                                      signatures,
-                                      form_interactions_ukm_logger_.get());
-  }
+  FormStructure::ParseApiQueryResponse(std::move(response), queried_forms,
+                                       queried_form_signatures,
+                                       form_interactions_ukm_logger_.get());
 
   // Will log quality metrics for each FormStructure based on the presence of
   // autocomplete attributes, if available.
@@ -1590,9 +1591,7 @@ void AutofillManager::Reset() {
       personal_data_, client_));
   credit_card_access_manager_.reset(new CreditCardAccessManager(
       driver(), client_, personal_data_, credit_card_form_event_logger_.get()));
-#if defined(OS_ANDROID) || defined(OS_IOS)
-  autofill_assistant_.Reset();
-#endif
+
   has_logged_autofill_enabled_ = false;
   has_logged_address_suggestions_count_ = false;
   did_show_suggestions_ = false;
@@ -1640,9 +1639,6 @@ AutofillManager::AutofillManager(
               form_interactions_ukm_logger_.get(),
               personal_data_,
               client_)),
-#if defined(OS_ANDROID) || defined(OS_IOS)
-      autofill_assistant_(this),
-#endif
       is_rich_query_enabled_(IsRichQueryEnabled(client->GetChannel())) {
   DCHECK(driver);
   DCHECK(client_);
@@ -1657,6 +1653,7 @@ AutofillManager::AutofillManager(
         driver, this, GetAPIKeyForUrl(channel), client_->GetLogManager()));
   }
   CountryNames::SetLocaleString(app_locale_);
+  offer_manager_ = client_->GetAutofillOfferManager();
 }
 
 bool AutofillManager::RefreshDataModels() {
@@ -1828,13 +1825,6 @@ void AutofillManager::FillOrPreviewDataModelForm(
     if (field_group_type == NO_GROUP) {
       buffer << Tr{} << field_number
              << "Skipped: field type has no fillable group";
-      continue;
-    }
-
-    if (field_group_type == COMPANY &&
-        !base::FeatureList::IsEnabled(features::kAutofillEnableCompanyName)) {
-      buffer << Tr{} << field_number
-             << "Skipped: field is a company-name field";
       continue;
     }
 
@@ -2020,6 +2010,12 @@ std::vector<Suggestion> AutofillManager::GetCreditCardSuggestions(
       personal_data_->GetCreditCardSuggestions(
           type, SanitizeCreditCardFieldValue(field.value),
           client_->AreServerCardsSupported());
+  if (base::FeatureList::IsEnabled(
+          features::kAutofillEnableOffersInDownstream) &&
+      offer_manager_) {
+    offer_manager_->UpdateSuggestionsWithOffers(client_->GetLastCommittedURL(),
+                                                suggestions);
+  }
   *should_display_gpay_logo =
       credit_card_access_manager_->ShouldDisplayGPayLogo();
 
@@ -2027,6 +2023,8 @@ std::vector<Suggestion> AutofillManager::GetCreditCardSuggestions(
     suggestions[i].frontend_id =
         MakeFrontendID(suggestions[i].backend_id, std::string());
   }
+
+  credit_card_form_event_logger_->set_suggestions(suggestions);
   return suggestions;
 }
 
@@ -2064,12 +2062,6 @@ void AutofillManager::OnFormsParsed(const std::vector<const FormData*>& forms,
                               client_->GetUkmSourceId(), form_structure);
     std::set<FormType> current_form_types = form_structure->GetFormTypes();
     form_types.insert(current_form_types.begin(), current_form_types.end());
-
-    // Annotate the form with the source language of the page.
-    // TODO(898510): Move this earlier in the form parsing flow. Ideally the
-    // form structure should be annotated with the page language before the
-    // heuristics are run.
-    form_structure->set_page_language(client_->GetPageLanguage());
 
     // Configure the query encoding for this form and add it to the appropriate
     // collection of forms: queryable vs non-queryable.
@@ -2134,21 +2126,6 @@ void AutofillManager::OnFormsParsed(const std::vector<const FormData*>& forms,
     KeyboardAccessoryMetricsLogger::OnFormsLoaded();
 #endif
   }
-
-#if defined(OS_ANDROID) || defined(OS_IOS)
-  // When a credit card form is parsed and conditions are met, show an infobar
-  // prompt for credit card assisted filling. Upon accepting the infobar, the
-  // form will automatically be filled with the user's information through this
-  // class' FillCreditCardForm().
-  if (autofill_assistant_.CanShowCreditCardAssist()) {
-    const std::vector<CreditCard*> cards =
-        credit_card_access_manager_->GetCreditCardsToSuggest();
-    // Expired cards are last in the sorted order, so if the first one is
-    // expired, they all are.
-    if (!cards.empty() && !cards.front()->IsExpired(AutofillClock::Now()))
-      autofill_assistant_.ShowAssistForCreditCard(*cards.front());
-  }
-#endif
 
   // Send the current type predictions to the renderer. For non-queryable forms
   // this is all the information about them that will ever be available. The
@@ -2524,7 +2501,12 @@ void AutofillManager::TriggerRefill(const FormData& form) {
 
   auto itr =
       filling_contexts_map_.find(form_structure->GetIdentifierForRefill());
-  DCHECK(itr != filling_contexts_map_.end());
+
+  // Since GetIdentifierForRefill() is not stable across dynamic changes,
+  // |filling_contexts_map_| may not contain the element anymore.
+  if (itr == filling_contexts_map_.end())
+    return;
+
   FillingContext* filling_context = itr->second.get();
 
   // The refill attempt can happen from different paths, some of which happen
@@ -2585,13 +2567,6 @@ void AutofillManager::GetAvailableSuggestions(
                             &context->focused_field) &&
       // Don't send suggestions or track forms that should not be parsed.
       context->form_structure->ShouldBeParsed();
-
-  // Early exit here in the case where we want to disable company names.
-  if (got_autofillable_form &&
-      context->focused_field->Type().GetStorableType() == COMPANY_NAME &&
-      !base::FeatureList::IsEnabled(features::kAutofillEnableCompanyName)) {
-    got_autofillable_form = false;
-  }
 
   // Log interactions of forms that are autofillable.
   if (got_autofillable_form) {
@@ -2759,6 +2734,14 @@ FormEventLoggerBase* AutofillManager::GetEventFormLogger(
   }
   NOTREACHED();
   return nullptr;
+}
+
+std::string AutofillManager::GetPageLanguage() const {
+  DCHECK(client_);
+  const translate::LanguageState* language_state = client_->GetLanguageState();
+  if (language_state)
+    return language_state->original_language();
+  return std::string();
 }
 
 }  // namespace autofill

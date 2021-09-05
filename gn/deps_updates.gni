@@ -25,6 +25,8 @@ import("//vivaldi/ui/deps_updates.gni")
 import("//vivaldi/vivaldi_account/deps_updates.gni")
 import("//vivaldi/vivapp/deps_updates.gni")
 
+import("//vivaldi/testing/testing.gni")
+
 if (!is_android) {
   update_target("//chrome/browser:test_support_ui") {
     deps += [ "//chrome/common" ]
@@ -46,24 +48,6 @@ update_target("//third_party/blink/public:all_blink") {
     "//third_party/blink/renderer/platform:blink_platform_unittests",
     "//third_party/blink/renderer/platform/wtf:wtf_unittests",
   ]
-}
-
-update_template_instance("//third_party/blink/renderer/core/frame:frame") {
-  if (!is_android && enable_basic_printing && current_toolchain != default_toolchain) {
-    deps -= [ "//printing" ]
-    deps += [ "//printing/buildflags" ]
-  }
-}
-
-update_template_instance("//printing/buildflags:buildflags") {
-  if (!is_android && current_toolchain != default_toolchain) {
-    flags = []
-    flags = [
-      "ENABLE_PRINTING=false",
-      "ENABLE_PRINT_PREVIEW=false",
-      "ENABLE_TAGGED_PDF=false",
-    ]
-  }
 }
 
 foreach(_target,
@@ -193,6 +177,14 @@ if (!is_android) {
   update_target("//chrome/browser/policy:path_parser") {
     allow_circular_includes_from = [
       "//chrome/common:constants",
+    ]
+  }
+}
+
+if (!is_android) {
+  update_target("//chrome/browser/media/router/discovery:discovery") {
+    deps += [
+      "//components/media_router/common/mojom:logger",
     ]
   }
 }

@@ -7,7 +7,9 @@
 #include <list>
 #include <unordered_map>
 
-#include "ash/clipboard/clipboard_history_controller.h"
+#include "ash/clipboard/clipboard_history_controller_impl.h"
+#include "ash/clipboard/clipboard_history_item.h"
+#include "ash/public/cpp/clipboard_image_model_factory.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
 #include "base/strings/utf_string_conversions.h"
@@ -18,6 +20,7 @@
 #include "ui/base/clipboard/clipboard_buffer.h"
 #include "ui/base/clipboard/custom_data_helper.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
+#include "ui/events/test/event_generator.h"
 
 namespace ash {
 
@@ -37,7 +40,7 @@ class ClipboardHistoryTest : public AshTestBase {
         Shell::Get()->clipboard_history_controller()->history());
   }
 
-  const std::list<ui::ClipboardData>& GetClipboardHistoryData() {
+  const std::list<ClipboardHistoryItem>& GetClipboardHistoryItems() {
     return clipboard_history_->GetItems();
   }
 
@@ -62,13 +65,13 @@ class ClipboardHistoryTest : public AshTestBase {
   }
 
   void EnsureTextHistory(const std::vector<base::string16>& expected_strings) {
-    const std::list<ui::ClipboardData>& datas = GetClipboardHistoryData();
-    EXPECT_EQ(expected_strings.size(), datas.size());
+    const std::list<ClipboardHistoryItem>& items = GetClipboardHistoryItems();
+    EXPECT_EQ(expected_strings.size(), items.size());
 
     int expected_strings_index = 0;
-    for (auto& data : datas) {
+    for (const auto& item : items) {
       EXPECT_EQ(expected_strings[expected_strings_index++],
-                base::UTF8ToUTF16(data.text()));
+                base::UTF8ToUTF16(item.data().text()));
     }
   }
 
@@ -84,13 +87,13 @@ class ClipboardHistoryTest : public AshTestBase {
       }
       base::RunLoop().RunUntilIdle();
     }
-    const std::list<ui::ClipboardData>& datas = GetClipboardHistoryData();
-    EXPECT_EQ(expected_bitmaps.size(), datas.size());
+    const std::list<ClipboardHistoryItem>& items = GetClipboardHistoryItems();
+    EXPECT_EQ(expected_bitmaps.size(), items.size());
 
     int expected_bitmaps_index = 0;
-    for (auto& data : datas) {
+    for (const auto& item : items) {
       EXPECT_TRUE(gfx::BitmapsAreEqual(
-          expected_bitmaps[expected_bitmaps_index++], data.bitmap()));
+          expected_bitmaps[expected_bitmaps_index++], item.data().bitmap()));
     }
   }
 
@@ -110,12 +113,15 @@ class ClipboardHistoryTest : public AshTestBase {
     }
     base::RunLoop().RunUntilIdle();
 
-    const std::list<ui::ClipboardData> datas = GetClipboardHistoryData();
-    EXPECT_EQ(1u, datas.size());
+    const std::list<ClipboardHistoryItem> items = GetClipboardHistoryItems();
+    EXPECT_EQ(expected_data.empty() ? 0u : 1u, items.size());
+
+    if (expected_data.empty())
+      return;
 
     std::unordered_map<base::string16, base::string16> actual_data;
-    ui::ReadCustomDataIntoMap(datas.front().custom_data_data().c_str(),
-                              datas.front().custom_data_data().size(),
+    ui::ReadCustomDataIntoMap(items.front().data().custom_data_data().c_str(),
+                              items.front().data().custom_data_data().size(),
                               &actual_data);
 
     EXPECT_EQ(expected_data, actual_data);
@@ -125,7 +131,7 @@ class ClipboardHistoryTest : public AshTestBase {
 
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
-  // Owned by ClipboardHistoryController.
+  // Owned by ClipboardHistoryControllerImpl.
   ClipboardHistory* clipboard_history_ = nullptr;
 };
 
@@ -268,13 +274,23 @@ TEST_F(ClipboardHistoryTest, DuplicateBitmap) {
   WriteAndEnsureBitmapHistory(input_bitmaps, expected_bitmaps);
 }
 
-// Tests that custom data is recorded in clipboard history.
+// Tests that unrecognized custom data is omitted from clipboard history.
 TEST_F(ClipboardHistoryTest, BasicCustomData) {
   const std::unordered_map<base::string16, base::string16> input_data = {
       {base::UTF8ToUTF16("custom-format-1"),
        base::UTF8ToUTF16("custom-data-1")},
       {base::UTF8ToUTF16("custom-format-2"),
        base::UTF8ToUTF16("custom-data-2")}};
+
+  // Custom data which is not recognized is omitted from history.
+  WriteAndEnsureCustomDataHistory(input_data, /*expected_data=*/{});
+}
+
+// Tests that file system data is recorded in clipboard history.
+TEST_F(ClipboardHistoryTest, BasicFileSystemData) {
+  const std::unordered_map<base::string16, base::string16> input_data = {
+      {base::UTF8ToUTF16("fs/sources"),
+       base::UTF8ToUTF16("/path/to/My%20File.txt")}};
 
   const std::unordered_map<base::string16, base::string16> expected_data =
       input_data;

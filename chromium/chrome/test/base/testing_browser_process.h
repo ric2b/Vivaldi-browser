@@ -99,6 +99,8 @@ class TestingBrowserProcess : public BrowserProcess {
   subresource_filter::RulesetService* subresource_filter_ruleset_service()
       override;
   federated_learning::FlocBlocklistService* floc_blocklist_service() override;
+  federated_learning::FlocSortingLshClustersService*
+  floc_sorting_lsh_clusters_service() override;
   optimization_guide::OptimizationGuideService* optimization_guide_service()
       override;
   BrowserProcessPlatformPart* platform_part() override;
@@ -106,7 +108,9 @@ class TestingBrowserProcess : public BrowserProcess {
   extensions::EventRouterForwarder* extension_event_router_forwarder() override;
   NotificationUIManager* notification_ui_manager() override;
   NotificationPlatformBridge* notification_platform_bridge() override;
+#if !defined(OS_ANDROID)
   IntranetRedirectDetector* intranet_redirect_detector() override;
+#endif
   void CreateDevToolsProtocolHandler() override;
   void CreateDevToolsAutoOpener() override;
   bool IsShuttingDown() override;
@@ -135,7 +139,9 @@ class TestingBrowserProcess : public BrowserProcess {
 
   network_time::NetworkTimeTracker* network_time_tracker() override;
 
+#if !defined(OS_ANDROID)
   gcm::GCMDriver* gcm_driver() override;
+#endif
   resource_coordinator::TabManager* GetTabManager() override;
   resource_coordinator::ResourceCoordinatorParts* resource_coordinator_parts()
       override;
@@ -150,6 +156,9 @@ class TestingBrowserProcess : public BrowserProcess {
       std::unique_ptr<subresource_filter::RulesetService> ruleset_service);
   void SetFlocBlocklistService(
       std::unique_ptr<federated_learning::FlocBlocklistService> service);
+  void SetFlocSortingLshClustersService(
+      std::unique_ptr<federated_learning::FlocSortingLshClustersService>
+          service);
   void SetOptimizationGuideService(
       std::unique_ptr<optimization_guide::OptimizationGuideService>
           optimization_guide_service);
@@ -204,6 +213,8 @@ class TestingBrowserProcess : public BrowserProcess {
       subresource_filter_ruleset_service_;
   std::unique_ptr<federated_learning::FlocBlocklistService>
       floc_blocklist_service_;
+  std::unique_ptr<federated_learning::FlocSortingLshClustersService>
+      floc_sorting_lsh_clusters_service_;
   std::unique_ptr<optimization_guide::OptimizationGuideService>
       optimization_guide_service_;
 

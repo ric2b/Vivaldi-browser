@@ -20,7 +20,6 @@
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/password_manager/core/browser/login_database.h"
 #include "components/password_manager/core/browser/password_manager_constants.h"
-#include "components/password_manager/core/browser/password_manager_onboarding.h"
 #include "components/password_manager/core/browser/password_manager_util.h"
 #include "components/password_manager/core/browser/password_store.h"
 #include "components/password_manager/core/browser/password_store_default.h"
@@ -46,7 +45,7 @@
 #include "ui/base/ui_base_features.h"
 #endif
 
-#if defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
+#if defined(PASSWORD_REUSE_DETECTION_ENABLED)
 #include "chrome/browser/password_manager/password_store_signin_notifier_impl.h"
 #endif
 
@@ -59,7 +58,7 @@ constexpr PasswordStoreX::MigrationToLoginDBStep
     kMigrationToLoginDBNotAttempted = PasswordStoreX::NOT_ATTEMPTED;
 #endif
 
-#if defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
+#if defined(PASSWORD_REUSE_DETECTION_ENABLED)
 std::string GetSyncUsername(Profile* profile) {
   auto* identity_manager =
       IdentityManagerFactory::GetForProfileIfExists(profile);
@@ -68,7 +67,7 @@ std::string GetSyncUsername(Profile* profile) {
 }
 #endif
 
-#if defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
+#if defined(PASSWORD_REUSE_DETECTION_ENABLED)
 bool IsSignedIn(Profile* profile) {
   auto* identity_manager =
       IdentityManagerFactory::GetForProfileIfExists(profile);
@@ -121,7 +120,7 @@ PasswordStoreFactory::PasswordStoreFactory()
           "PasswordStore",
           BrowserContextDependencyManager::GetInstance()) {
   DependsOn(WebDataServiceFactory::GetInstance());
-#if defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
+#if defined(PASSWORD_REUSE_DETECTION_ENABLED)
   // TODO(crbug.com/715987). Remove when PasswordReuseDetector is decoupled
   // from PasswordStore.
   DependsOn(IdentityManagerFactory::GetInstance());
@@ -172,7 +171,7 @@ PasswordStoreFactory::BuildServiceInstanceFor(
     return nullptr;
   }
 
-#if defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
+#if defined(PASSWORD_REUSE_DETECTION_ENABLED)
   // Prepare password hash data for reuse detection.
   ps->PreparePasswordHashData(GetSyncUsername(profile), IsSignedIn(profile));
 #endif
@@ -187,10 +186,6 @@ PasswordStoreFactory::BuildServiceInstanceFor(
       profile);
   password_manager_util::RemoveUselessCredentials(ps, profile->GetPrefs(), 60,
                                                   network_context_getter);
-
-  // Update the |kPasswordManagerOnboardingState| pref in the background.
-  UpdateOnboardingState(ps, profile->GetPrefs(),
-                        base::TimeDelta::FromSeconds(20));
 
 #if defined(OS_WIN) || defined(OS_MAC) || \
     (defined(OS_LINUX) && !defined(OS_CHROMEOS))

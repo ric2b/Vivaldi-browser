@@ -54,16 +54,46 @@ RangeAutomationHandler = class extends BaseAutomationHandler {
                      newRange.start.node, newRange.end.node) ||
         newRange.start.node;
 
+    // Some re-targeting is needed for cases like tables.
+    let retarget = this.node_;
+    while (retarget && retarget != retarget.root) {
+      // Table headers require retargeting for events because they often have
+      // event types we care about e.g. sort direction.
+      if (retarget.role == RoleType.COLUMN_HEADER ||
+          retarget.role == RoleType.ROW_HEADER) {
+        this.node_ = retarget;
+        break;
+      }
+      retarget = retarget.parent;
+    }
+
+    // TODO: some of the events mapped to onAriaAttributeChanged need to have
+    // specific handlers that only output the specific attribute. There also
+    // needs to be an audit of all attribute change events to ensure they get
+    // outputted.
     this.addListener_(
         EventType.ARIA_ATTRIBUTE_CHANGED, this.onAriaAttributeChanged);
+    this.addListener_(
+        EventType.AUTO_COMPLETE_CHANGED, this.onAriaAttributeChanged);
+    this.addListener_(
+        EventType.IMAGE_ANNOTATION_CHANGED, this.onAriaAttributeChanged);
+    this.addListener_(EventType.NAME_CHANGED, this.onAriaAttributeChanged);
+    this.addListener_(
+        EventType.DESCRIPTION_CHANGED, this.onAriaAttributeChanged);
+    this.addListener_(EventType.ROLE_CHANGED, this.onAriaAttributeChanged);
     this.addListener_(EventType.AUTOCORRECTION_OCCURED, this.onEventIfInRange);
     this.addListener_(
         EventType.CHECKED_STATE_CHANGED, this.onCheckedStateChanged);
-    this.addListener_(EventType.EXPANDED_CHANGED, this.onEventIfInRange);
+    this.addListener_(EventType.COLLAPSED, this.onEventIfInRange);
+    this.addListener_(EventType.EXPANDED, this.onEventIfInRange);
     this.addListener_(EventType.INVALID_STATUS_CHANGED, this.onEventIfInRange);
     this.addListener_(EventType.LOCATION_CHANGED, this.onLocationChanged);
+    this.addListener_(
+        EventType.RELATED_NODE_CHANGED, this.onAriaAttributeChanged);
     this.addListener_(EventType.ROW_COLLAPSED, this.onEventIfInRange);
     this.addListener_(EventType.ROW_EXPANDED, this.onEventIfInRange);
+    this.addListener_(EventType.STATE_CHANGED, this.onAriaAttributeChanged);
+    this.addListener_(EventType.SORT_CHANGED, this.onAriaAttributeChanged);
   }
 
   /**
@@ -128,6 +158,23 @@ RangeAutomationHandler = class extends BaseAutomationHandler {
 
     // Don't report changes in static text nodes which can be extremely noisy.
     if (evt.target.role == RoleType.STATIC_TEXT) {
+      return;
+    }
+
+    // Report attribute changes for specific generated events.
+    if (evt.type == chrome.automation.EventType.SORT_CHANGED) {
+      let msgId;
+      if (evt.target.sortDirection ==
+          chrome.automation.SortDirectionType.ASCENDING) {
+        msgId = 'sort_ascending';
+      } else if (
+          evt.target.sortDirection ==
+          chrome.automation.SortDirectionType.DESCENDING) {
+        msgId = 'sort_descending';
+      }
+      if (msgId) {
+        new Output().withString(Msgs.getMsg(msgId)).go();
+      }
       return;
     }
 

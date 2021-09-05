@@ -17,9 +17,9 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "build/build_config.h"
-#include "components/autofill/core/common/password_form.h"
 #include "components/password_manager/core/browser/mock_password_store.h"
 #include "components/password_manager/core/browser/multi_store_form_fetcher.h"
+#include "components/password_manager/core/browser/password_form.h"
 #include "components/password_manager/core/browser/password_manager_test_utils.h"
 #include "components/password_manager/core/browser/password_store.h"
 #include "components/password_manager/core/browser/statistics_table.h"
@@ -33,7 +33,6 @@
 #include "url/origin.h"
 #include "url/url_constants.h"
 
-using autofill::PasswordForm;
 using base::ASCIIToUTF16;
 using base::StringPiece;
 using testing::_;
@@ -563,6 +562,35 @@ TEST_P(FormFetcherImplTest, DoNotTryToMigrateHTTPPasswordsOnHTTPSites) {
               UnorderedElementsAre(Pointee(http_form)));
   EXPECT_THAT(form_fetcher_->GetFederatedMatches(),
               UnorderedElementsAre(Pointee(federated_form)));
+  EXPECT_FALSE(form_fetcher_->IsBlacklisted());
+}
+
+// Test that ensures HTTP passwords are not migrated on non HTML forms.
+TEST_P(FormFetcherImplTest, DoNotTryToMigrateHTTPPasswordsOnNonHTMLForms) {
+  GURL::Replacements https_rep;
+  https_rep.SetSchemeStr(url::kHttpsScheme);
+  const GURL https_url = form_digest_.url.ReplaceComponents(https_rep);
+  form_digest_ = PasswordStore::FormDigest(
+      PasswordForm::Scheme::kBasic, https_url.GetOrigin().spec(), https_url);
+
+  // A new form fetcher is created to be able to set the form digest and
+  // migration flag.
+  form_fetcher_ = std::make_unique<FormFetcherImpl>(
+      form_digest_, &client_, true /* should_migrate_http_passwords */);
+  EXPECT_CALL(consumer_, OnFetchCompleted);
+  form_fetcher_->AddConsumer(&consumer_);
+
+  Fetch();
+  // No migration takes places upon receiving empty results from the store, and
+  // hence no data are read/added from/to the store.
+  EXPECT_CALL(*mock_store_, GetLogins).Times(0);
+  EXPECT_CALL(*mock_store_, AddLogin).Times(0);
+  EXPECT_CALL(consumer_, OnFetchCompleted);
+  std::vector<PasswordForm> empty_forms;
+  store_consumer()->OnGetPasswordStoreResultsFrom(mock_store_.get(),
+                                                  MakeResults(empty_forms));
+  EXPECT_THAT(form_fetcher_->GetNonFederatedMatches(), IsEmpty());
+  EXPECT_THAT(form_fetcher_->GetFederatedMatches(), IsEmpty());
   EXPECT_FALSE(form_fetcher_->IsBlacklisted());
 }
 

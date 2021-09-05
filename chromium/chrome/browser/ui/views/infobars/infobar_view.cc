@@ -116,7 +116,8 @@ InfoBarView::InfoBarView(std::unique_ptr<infobars::InfoBarDelegate> delegate)
   }
 
   if (this->delegate()->IsCloseable()) {
-    auto close_button = views::CreateVectorImageButton(this);
+    auto close_button = views::CreateVectorImageButton(base::BindRepeating(
+        &InfoBarView::CloseButtonPressed, base::Unretained(this)));
     // This is the wrong color, but allows the button's size to be computed
     // correctly.  We'll reset this with the correct color in OnThemeChanged().
     views::SetImageFromVectorIcon(close_button.get(),
@@ -250,16 +251,6 @@ void InfoBarView::OnThemeChanged() {
   RecalculateHeight();
 }
 
-void InfoBarView::ButtonPressed(views::Button* sender,
-                                const ui::Event& event) {
-  if (!owner())
-    return;  // We're closing; don't call anything, it might access the owner.
-  if (sender == close_button_) {
-    delegate()->InfoBarDismissed();
-    RemoveSelf();
-  }
-}
-
 void InfoBarView::OnWillChangeFocus(View* focused_before, View* focused_now) {
   views::ExternalFocusTracker::OnWillChangeFocus(focused_before, focused_now);
 
@@ -272,7 +263,8 @@ void InfoBarView::OnWillChangeFocus(View* focused_before, View* focused_now) {
 }
 
 views::Label* InfoBarView::CreateLabel(const base::string16& text) const {
-  views::Label* label = new views::Label(text, CONTEXT_BODY_TEXT_LARGE);
+  views::Label* label =
+      new views::Label(text, views::style::CONTEXT_DIALOG_BODY_TEXT);
   SetLabelDetails(label);
   label->SetEnabledColor(GetColor(kInfoBarLabelTextColor));
   label->SetProperty(kLabelType, LabelType::kLabel);
@@ -280,7 +272,8 @@ views::Label* InfoBarView::CreateLabel(const base::string16& text) const {
 }
 
 views::Link* InfoBarView::CreateLink(const base::string16& text) {
-  views::Link* link = new views::Link(text, CONTEXT_BODY_TEXT_LARGE);
+  views::Link* link =
+      new views::Link(text, views::style::CONTEXT_DIALOG_BODY_TEXT);
   SetLabelDetails(link);
   link->set_callback(
       base::BindRepeating(&InfoBarView::LinkClicked, base::Unretained(this)));
@@ -400,9 +393,16 @@ void InfoBarView::SetLabelDetails(views::Label* label) const {
                                  0));
 }
 
-void InfoBarView::LinkClicked(views::Link* source, int event_flags) {
+void InfoBarView::LinkClicked(const ui::Event& event) {
   if (!owner())
     return;  // We're closing; don't call anything, it might access the owner.
-  if (delegate()->LinkClicked(ui::DispositionFromEventFlags(event_flags)))
+  if (delegate()->LinkClicked(ui::DispositionFromEventFlags(event.flags())))
     RemoveSelf();
+}
+
+void InfoBarView::CloseButtonPressed() {
+  if (!owner())
+    return;  // We're closing; don't call anything, it might access the owner.
+  delegate()->InfoBarDismissed();
+  RemoveSelf();
 }

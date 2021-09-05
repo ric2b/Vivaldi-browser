@@ -10,6 +10,8 @@ Description of common properties:
         May be 0 (e.g. for .bss or for SymbolGroups).
   * size: The number of bytes this symbol takes up, including padding that comes
         before |address|.
+  * aliases: List of symbols that represent the same bytes. The |aliases| of
+        each symbol in this list points to the same list instance.
   * num_aliases: The number of symbols with the same address (including self).
   * pss: size / num_aliases.
   * padding: The number of bytes of padding before |address| due to this symbol.
@@ -52,6 +54,8 @@ BUILD_CONFIG_KEYS = (
 
 METADATA_APK_FILENAME = 'apk_file_name'  # Path relative to output_directory.
 METADATA_APK_SIZE = 'apk_size'  # File size of apk in bytes.
+METADATA_ZIPALIGN_OVERHEAD = 'zipalign_padding'  # Overhead from zipalign.
+METADATA_SIGNING_BLOCK_SIZE = 'apk_signature_block_size'  # Size in bytes.
 METADATA_MAP_FILENAME = 'map_file_name'  # Path relative to output_directory.
 METADATA_ELF_ARCHITECTURE = 'elf_arch'  # "Machine" field from readelf -h
 METADATA_ELF_FILENAME = 'elf_file_name'  # Path relative to output_directory.

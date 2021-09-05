@@ -36,10 +36,12 @@
 #include "base/optional.h"
 #include "base/unguessable_token.h"
 #include "mojo/public/cpp/base/big_buffer.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
 #include "third_party/blink/public/common/feature_policy/document_policy.h"
 #include "third_party/blink/public/common/loader/loading_behavior_flag.h"
 #include "third_party/blink/public/mojom/loader/content_security_notifier.mojom-blink.h"
 #include "third_party/blink/public/mojom/loader/mhtml_load_result.mojom-blink-forward.h"
+#include "third_party/blink/public/mojom/page_state/page_state.mojom-blink.h"
 #include "third_party/blink/public/mojom/timing/worker_timing_container.mojom-blink-forward.h"
 #include "third_party/blink/public/platform/scheduler/web_scoped_virtual_time_pauser.h"
 #include "third_party/blink/public/platform/web_navigation_body_loader.h"
@@ -156,7 +158,7 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
   void UpdateForSameDocumentNavigation(const KURL&,
                                        SameDocumentNavigationSource,
                                        scoped_refptr<SerializedScriptValue>,
-                                       HistoryScrollRestorationType,
+                                       mojom::blink::ScrollRestorationType,
                                        WebFrameLoadType,
                                        bool is_content_initiated);
   const ResourceResponse& GetResponse() const { return response_; }
@@ -171,7 +173,6 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
 
   void FillNavigationParamsForErrorPage(WebNavigationParams*);
 
-  void MarkAsCommitted();
   void SetSentDidFinishLoad() { state_ = kSentDidFinishLoad; }
   bool SentDidFinishLoad() const { return state_ == kSentDidFinishLoad; }
 
@@ -341,6 +342,8 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
   void DidInstallNewDocument(Document*);
   void WillCommitNavigation();
   void DidCommitNavigation();
+  void RecordUseCountersForCommit();
+  void RecordConsoleMessagesForCommit();
 
   void CreateParserPostCommit();
 
@@ -535,6 +538,7 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
   Member<PrefetchedSignedExchangeManager> prefetched_signed_exchange_manager_;
   const KURL web_bundle_physical_url_;
   const KURL web_bundle_claimed_url_;
+  ukm::SourceId ukm_source_id_;
 
   // This UseCounterHelper tracks feature usage associated with the lifetime of
   // the document load. Features recorded prior to commit will be recorded

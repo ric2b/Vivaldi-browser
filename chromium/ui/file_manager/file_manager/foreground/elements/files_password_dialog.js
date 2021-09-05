@@ -130,23 +130,34 @@ class FilesPasswordDialog extends HTMLElement {
     unlockButton.onclick = () => this.unlock_();
 
     this.dialog_.addEventListener('close', () => this.onClose_());
+    this.input_.errorMessage =
+        loadTimeData.getString('PASSWORD_DIALOG_INVALID');
   }
 
   /**
    * Asks the user for a password to open the given file.
-   * @param {string} filename name of the file to mount.
-   * @return {!Promise<!string>} a password string if the user provides a
-   *     password. The returned promise is rejected with
-   * FilesPasswordDialog.USER_CANCELLED if the user presses Cancel.
-   * @public
+   * @param {string} filename Name of the file to open.
+   * @param {?string} password Previously entered password. If not null, it
+   *     indicates that an invalid password was previously tried.
+   * @return {!Promise<!string>} Password provided by the user. The returned
+   *     promise is rejected with FilesPasswordDialog.USER_CANCELLED if the user
+   *     presses Cancel.
    */
-  async askForPassword(filename) {
+  async askForPassword(filename, password = null) {
     const mutexUnlock = await this.mutex.lock();
     try {
       return await new Promise((resolve, reject) => {
         this.success_ = false;
         this.resolve_ = resolve;
         this.reject_ = reject;
+        if (password != null) {
+          this.input_.value = password;
+          // An invalid password has previously been entered for this file.
+          // Display an 'invalid password' error message.
+          this.input_.invalid = true;
+        } else {
+          this.input_.invalid = false;
+        }
         this.showModal_(filename);
         this.input_.focus();
       });

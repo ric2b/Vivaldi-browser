@@ -955,18 +955,19 @@ void SplitViewController::StartResize(const gfx::Point& location_in_screen) {
         split_view_divider_->divider_widget()->GetCompositor(),
         kTabletSplitViewResizeMultiHistogram,
         kTabletSplitViewResizeMultiMaxLatencyHistogram);
-  } else if (GetOverviewSession() && !GetOverviewSession()
-                                          ->GetGridWithRootWindow(root_window_)
-                                          ->empty()) {
-    presentation_time_recorder_ = CreatePresentationTimeHistogramRecorder(
-        split_view_divider_->divider_widget()->GetCompositor(),
-        kTabletSplitViewResizeWithOverviewHistogram,
-        kTabletSplitViewResizeWithOverviewMaxLatencyHistogram);
-  } else {
+    return;
+  }
+  DCHECK(GetOverviewSession());
+  if (GetOverviewSession()->GetGridWithRootWindow(root_window_)->empty()) {
     presentation_time_recorder_ = CreatePresentationTimeHistogramRecorder(
         split_view_divider_->divider_widget()->GetCompositor(),
         kTabletSplitViewResizeSingleHistogram,
         kTabletSplitViewResizeSingleMaxLatencyHistogram);
+  } else {
+    presentation_time_recorder_ = CreatePresentationTimeHistogramRecorder(
+        split_view_divider_->divider_widget()->GetCompositor(),
+        kTabletSplitViewResizeWithOverviewHistogram,
+        kTabletSplitViewResizeWithOverviewMaxLatencyHistogram);
   }
 }
 
@@ -1265,6 +1266,7 @@ void SplitViewController::OnResizeLoopStarted(aura::Window* window) {
     return;
   }
 
+  DCHECK_NE(State::kBothSnapped, state_);
   DCHECK(GetOverviewSession());
   if (GetOverviewSession()->GetGridWithRootWindow(root_window_)->empty()) {
     presentation_time_recorder_ = CreatePresentationTimeHistogramRecorder(
@@ -1364,11 +1366,11 @@ void SplitViewController::OnOverviewModeEnding(
   if (state_ == State::kBothSnapped)
     overview_session->SetWindowListNotAnimatedWhenExiting(root_window_);
 
-  // If clamshell split view mode is active, end it and bail out.
-  if (split_view_type_ == SplitViewType::kClamshellType) {
-    EndSplitView();
+  // If clamshell split view mode is active, bail out. |OnOverviewModeEnded|
+  // will end split view. We do not end split view here, because that would mess
+  // up histograms of overview exit animation smoothness.
+  if (split_view_type_ == SplitViewType::kClamshellType)
     return;
-  }
 
   // Tablet split view mode is active. If it still only has one snapped window,
   // snap the first snappable window in the overview grid on the other side.
@@ -1402,6 +1404,12 @@ void SplitViewController::OnOverviewModeEnding(
     return;
   EndSplitView();
   ShowAppCannotSnapToast();
+}
+
+void SplitViewController::OnOverviewModeEnded() {
+  DCHECK(InSplitViewMode());
+  if (split_view_type_ == SplitViewType::kClamshellType)
+    EndSplitView();
 }
 
 void SplitViewController::OnDisplayRemoved(
@@ -1541,7 +1549,7 @@ void SplitViewController::OnTabletControllerDestroyed() {
 void SplitViewController::OnAccessibilityStatusChanged() {
   // TODO(crubg.com/853588): Exit split screen if ChromeVox is turned on until
   // they are compatible.
-  if (Shell::Get()->accessibility_controller()->spoken_feedback_enabled())
+  if (Shell::Get()->accessibility_controller()->spoken_feedback().enabled())
     EndSplitView();
 }
 
@@ -2022,8 +2030,8 @@ void SplitViewController::SetTransformWithAnimation(
 void SplitViewController::UpdateSnappingWindowTransformedBounds(
     aura::Window* window) {
   if (!window->layer()->GetTargetTransform().IsIdentity()) {
-    snapping_window_transformed_bounds_map_[window] =
-        gfx::ToEnclosedRect(GetTransformedBounds(window, /*top_inset=*/0));
+    snapping_window_transformed_bounds_map_[window] = gfx::ToEnclosedRect(
+        window_util::GetTransformedBounds(window, /*top_inset=*/0));
   }
 }
 

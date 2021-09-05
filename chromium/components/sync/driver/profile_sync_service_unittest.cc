@@ -35,6 +35,7 @@
 #include "components/sync/driver/sync_service_observer.h"
 #include "components/sync/driver/sync_token_status.h"
 #include "components/sync/engine/fake_sync_engine.h"
+#include "components/sync/invalidations/switches.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "components/version_info/version_info_values.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -43,6 +44,7 @@
 
 using testing::_;
 using testing::ByMove;
+using testing::Not;
 using testing::Return;
 
 namespace syncer {
@@ -177,14 +179,16 @@ class ProfileSyncServiceTest : public ::testing::Test {
 
   void SignIn() { identity_test_env()->MakePrimaryAccountAvailable(kTestUser); }
 
-  void CreateService(ProfileSyncService::StartBehavior behavior) {
+  void CreateService(ProfileSyncService::StartBehavior behavior,
+                     ModelTypeSet registered_types =
+                         ModelTypeSet(BOOKMARKS, SUPERVISED_USER_SETTINGS)) {
     DCHECK(!service_);
 
-    // Include a regular controller and a transport-mode controller.
+    // Default includes a regular controller and a transport-mode controller.
     DataTypeController::TypeVector controllers;
-    controllers.push_back(std::make_unique<FakeDataTypeController>(BOOKMARKS));
-    controllers.push_back(
-        std::make_unique<FakeDataTypeController>(SUPERVISED_USER_SETTINGS));
+    for (const ModelType type : registered_types) {
+      controllers.push_back(std::make_unique<FakeDataTypeController>(type));
+    }
 
     std::unique_ptr<SyncClientMock> sync_client =
         profile_sync_service_bundle_.CreateSyncClientMock();
@@ -308,6 +312,10 @@ class ProfileSyncServiceTest : public ::testing::Test {
     return profile_sync_service_bundle_.component_factory();
   }
 
+  MockSyncInvalidationsService* sync_invalidations_service() {
+    return profile_sync_service_bundle_.sync_invalidations_service();
+  }
+
   void SetDemographics(int birth_year,
                        metrics::UserDemographicsProto_Gender gender) {
     base::DictionaryValue dict;
@@ -347,6 +355,21 @@ class ProfileSyncServiceTestWithStopSyncInPausedState
   }
 
   ~ProfileSyncServiceTestWithStopSyncInPausedState() override = default;
+
+ private:
+  base::test::ScopedFeatureList override_features_;
+};
+
+class ProfileSyncServiceTestWithSyncInvalidationsServiceCreated
+    : public ProfileSyncServiceTest {
+ public:
+  ProfileSyncServiceTestWithSyncInvalidationsServiceCreated() {
+    override_features_.InitAndEnableFeature(
+        switches::kSyncSendInterestedDataTypes);
+  }
+
+  ~ProfileSyncServiceTestWithSyncInvalidationsServiceCreated() override =
+      default;
 
  private:
   base::test::ScopedFeatureList override_features_;
@@ -1598,6 +1621,73 @@ TEST_F(ProfileSyncServiceTest,
   EXPECT_NE(kTestCacheGuid, sync_prefs.GetCacheGuid());
   EXPECT_EQ(signin::GetTestGaiaIdForEmail(kTestUser), sync_prefs.GetGaiaId());
 }
+
+TEST_F(ProfileSyncServiceTestWithSyncInvalidationsServiceCreated,
+       ShouldSendDataTypesToSyncInvalidationsService) {
+  CreateService(ProfileSyncService::AUTO_START);
+  SignIn();
+  EXPECT_CALL(*sync_invalidations_service(), SetInterestedDataTypes(_, _));
+  InitializeForFirstSync();
+}
+
+MATCHER(ContainsSessions, "") {
+  return arg.Has(SESSIONS);
+}
+
+TEST_F(ProfileSyncServiceTestWithSyncInvalidationsServiceCreated,
+       ShouldEnableAndDisableInvalidationsForSessions) {
+  CreateService(ProfileSyncService::AUTO_START,
+                ModelTypeSet(SESSIONS, TYPED_URLS));
+  SignIn();
+  InitializeForNthSync();
+
+  EXPECT_CALL(*sync_invalidations_service(),
+              SetInterestedDataTypes(ContainsSessions(), _));
+  service()->SetInvalidationsForSessionsEnabled(true);
+  EXPECT_CALL(*sync_invalidations_service(),
+              SetInterestedDataTypes(Not(ContainsSessions()), _));
+  service()->SetInvalidationsForSessionsEnabled(false);
+}
+
+TEST_F(ProfileSyncServiceTestWithSyncInvalidationsServiceCreated,
+       ShouldActivateSyncInvalidationsServiceWhenSyncIsInitialized) {
+  CreateService(ProfileSyncService::AUTO_START);
+  EXPECT_CALL(*sync_invalidations_service(), SetActive(true)).Times(0);
+  SignIn();
+  EXPECT_CALL(*sync_invalidations_service(), SetActive(true));
+  InitializeForFirstSync();
+}
+
+TEST_F(ProfileSyncServiceTestWithSyncInvalidationsServiceCreated,
+       ShouldActivateSyncInvalidationsServiceOnSignIn) {
+  CreateService(ProfileSyncService::AUTO_START);
+  EXPECT_CALL(*sync_invalidations_service(), SetActive(false));
+  InitializeForFirstSync();
+  EXPECT_CALL(*sync_invalidations_service(), SetActive(true));
+  SignIn();
+}
+
+// CrOS does not support signout.
+#if !defined(OS_CHROMEOS)
+TEST_F(ProfileSyncServiceTestWithSyncInvalidationsServiceCreated,
+       ShouldDectivateSyncInvalidationsServiceOnSignOut) {
+  CreateService(ProfileSyncService::AUTO_START);
+  SignIn();
+  EXPECT_CALL(*sync_invalidations_service(), SetActive(true));
+  InitializeForFirstSync();
+
+  auto* account_mutator = identity_manager()->GetPrimaryAccountMutator();
+  // GetPrimaryAccountMutator() returns nullptr on ChromeOS only.
+  DCHECK(account_mutator);
+
+  // Sign out.
+  EXPECT_CALL(*sync_invalidations_service(), SetActive(false));
+  account_mutator->ClearPrimaryAccount(
+      signin::PrimaryAccountMutator::ClearAccountsAction::kDefault,
+      signin_metrics::SIGNOUT_TEST,
+      signin_metrics::SignoutDelete::IGNORE_METRIC);
+}
+#endif
 
 }  // namespace
 }  // namespace syncer

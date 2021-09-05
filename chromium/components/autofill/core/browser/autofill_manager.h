@@ -32,6 +32,7 @@
 #include "components/autofill/core/browser/form_types.h"
 #include "components/autofill/core/browser/metrics/address_form_event_logger.h"
 #include "components/autofill/core/browser/metrics/credit_card_form_event_logger.h"
+#include "components/autofill/core/browser/payments/autofill_offer_manager.h"
 #include "components/autofill/core/browser/payments/card_unmask_delegate.h"
 #include "components/autofill/core/browser/payments/credit_card_access_manager.h"
 #include "components/autofill/core/browser/payments/full_card_request.h"
@@ -40,10 +41,6 @@
 #include "components/autofill/core/browser/ui/popup_types.h"
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill/core/common/signatures.h"
-
-#if defined(OS_ANDROID) || defined(OS_IOS)
-#include "components/autofill/core/browser/autofill_assistant.h"
-#endif
 
 namespace gfx {
 class RectF;
@@ -288,8 +285,8 @@ class AutofillManager : public AutofillHandler,
   // purposes only.
   void OnLoadedServerPredictionsForTest(
       std::string response,
-      const FormAndFieldSignatures& signatures) {
-    OnLoadedServerPredictions(response, signatures);
+      const std::vector<FormSignature>& queried_form_signatures) {
+    OnLoadedServerPredictions(response, queried_form_signatures);
   }
 
   // A public wrapper that calls |MakeFrontendID| for testing purposes only.
@@ -450,7 +447,7 @@ class AutofillManager : public AutofillHandler,
   // AutofillDownloadManager::Observer:
   void OnLoadedServerPredictions(
       std::string response,
-      const FormAndFieldSignatures& signatures) override;
+      const std::vector<FormSignature>& queried_form_signatures) override;
 
   // CreditCardAccessManager::Accessor
   void OnCreditCardFetched(
@@ -606,6 +603,9 @@ class AutofillManager : public AutofillHandler,
                                std::vector<Suggestion>* suggestions,
                                SuggestionsContext* context);
 
+  // Retrieves the page language from |client_|
+  std::string GetPageLanguage() const override;
+
 #if !defined(OS_ANDROID) && !defined(OS_IOS)
   // Whether to show the option to use virtual card in the autofill popup.
   bool ShouldShowVirtualCardOption(FormStructure* form_structure);
@@ -682,6 +682,10 @@ class AutofillManager : public AutofillHandler,
   // The credit card access manager, used to access local and server cards.
   std::unique_ptr<CreditCardAccessManager> credit_card_access_manager_;
 
+  // The autofill offer manager, used to to retrieve offers for card
+  // suggestions.
+  AutofillOfferManager* offer_manager_;
+
   // Collected information about the autofill form where a credit card will be
   // filled.
   AutofillDriver::RendererFormDataAction credit_card_action_;
@@ -707,10 +711,6 @@ class AutofillManager : public AutofillHandler,
 
   // Delegate used in test to get notifications on certain events.
   AutofillManagerTestDelegate* test_delegate_ = nullptr;
-
-#if defined(OS_ANDROID) || defined(OS_IOS)
-  AutofillAssistant autofill_assistant_;
-#endif
 
   // A map of form names to FillingContext instances used to make refill
   // attempts for dynamic forms.

@@ -13,7 +13,6 @@
 #define _NTDEF_  // Prevent redefition errors, must come after <winternl.h>
 #include <ntsecapi.h>  // For POLICY_ALL_ACCESS types
 
-#include "base/base64.h"
 #include "base/containers/span.h"
 #include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -21,7 +20,6 @@
 #include "chrome/credential_provider/gaiacp/gcp_utils.h"
 #include "chrome/credential_provider/gaiacp/gcpw_strings.h"
 #include "chrome/credential_provider/gaiacp/logging.h"
-#include "chrome/credential_provider/gaiacp/mdm_utils.h"
 #include "chrome/credential_provider/gaiacp/os_user_manager.h"
 #include "chrome/credential_provider/gaiacp/reg_utils.h"
 #include "chrome/credential_provider/gaiacp/win_http_url_fetcher.h"
@@ -53,6 +51,7 @@ const char kUploadDeviceDetailsResponseDeviceResourceIdParameterName[] =
 const char kOsVersion[] = "os_edition";
 const char kBuiltInAdminNameParameterName[] = "built_in_admin_name";
 const char kAdminGroupNameParameterName[] = "admin_group_name";
+const char kDmToken[] = "dm_token";
 
 // Maximum number of retries if a HTTP call to the backend fails.
 constexpr unsigned int kMaxNumHttpRetries = 3;
@@ -111,12 +110,30 @@ HRESULT GemDeviceDetailsManager::UploadDeviceDetails(
   base::string16 admin_group_name = L"";
   hr = LookupLocalizedNameForWellKnownSid(WinBuiltinAdministratorsSid,
                                           &admin_group_name);
+  if (FAILED(hr)) {
+    LOGFN(ERROR) << "LookupLocalizedNameForWellKnownSid  hr=" << putHR(hr);
+    hr = S_OK;
+  }
+
   base::string16 built_in_admin_name = L"";
   hr = GetLocalizedNameBuiltinAdministratorAccount(&built_in_admin_name);
+  if (FAILED(hr)) {
+    LOGFN(ERROR) << "GetLocalizedNameBuiltinAdministratorAccount  hr="
+                 << putHR(hr);
+    hr = S_OK;
+  }
 
   base::Value mac_address_value_list(base::Value::Type::LIST);
   for (const std::string& mac_address : mac_addresses)
     mac_address_value_list.Append(base::Value(mac_address));
+
+  base::string16 dm_token;
+  hr = GetGCPWDmToken(sid, &dm_token);
+  if (FAILED(hr)) {
+    LOGFN(WARNING) << "DM token is required to execute periodic tasks hr="
+                 << putHR(hr);
+    hr = S_OK;
+  }
 
   request_dict_.reset(new base::Value(base::Value::Type::DICTIONARY));
   request_dict_->SetStringKey(
@@ -139,6 +156,7 @@ HRESULT GemDeviceDetailsManager::UploadDeviceDetails(
   request_dict_->SetStringKey(kBuiltInAdminNameParameterName,
                               built_in_admin_name);
   request_dict_->SetStringKey(kAdminGroupNameParameterName, admin_group_name);
+  request_dict_->SetStringKey(kDmToken, base::UTF16ToUTF8(dm_token));
 
   base::string16 known_resource_id = GetUserDeviceResourceId(sid);
   if (!known_resource_id.empty()) {

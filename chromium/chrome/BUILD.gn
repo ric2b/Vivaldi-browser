@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 import("//build/config/chrome_build.gni")
+import("//build/config/chromeos/ui_mode.gni")
 import("//build/config/compiler/compiler.gni")
 import("//build/config/features.gni")
 import("//build/config/locales.gni")
@@ -21,7 +22,7 @@ import("//media/media_options.gni")
 import("//ppapi/buildflags/buildflags.gni")
 import("//third_party/blink/public/public_features.gni")
 import("//third_party/widevine/cdm/widevine.gni")
-import("//tools/resources/generate_resource_whitelist.gni")
+import("//tools/resources/generate_resource_allowlist.gni")
 import("//tools/v8_context_snapshot/v8_context_snapshot.gni")
 import("//ui/gl/features.gni")
 import("//v8/gni/v8.gni")
@@ -47,7 +48,17 @@ if (is_android) {
 if (defined(is_vivaldi) && is_vivaldi) {
   import("//vivaldi/gn/config/product.gni")
   import("//vivaldi/gn/config/version.gni")
+  if (is_win || is_mac) {
+    import("//vivaldi/installer/widevine.gni")
+  }
 }
+
+# This file depends on the legacy global sources assignment filter. It should
+# be converted to check target platform before assigning source files to the
+# sources variable. Remove this import and set_sources_assignment_filter call
+# when the file has been converted. See https://crbug.com/1018739 for details.
+import("//build/config/deprecated_default_sources_assignment_filter.gni")
+set_sources_assignment_filter(deprecated_default_sources_assignment_filter)
 
 declare_args() {
   # Indicates whether keystone registration framework should be enabled (see
@@ -58,7 +69,7 @@ declare_args() {
 
 assert(!is_ios, "Chromium/iOS shouldn't use anything in //chrome")
 
-if (enable_resource_whitelist_generation) {
+if (enable_resource_allowlist_generation) {
   chrome_resource_whitelist = "$target_gen_dir/chrome_resource_whitelist.txt"
 }
 
@@ -162,23 +173,28 @@ if (!is_android && !is_mac) {
         "//chrome/app/version_assembly:chrome_exe_manifest",
         "//chrome/browser:active_use_util",
         "//chrome/browser:chrome_process_finder",
+        "//chrome/browser/policy:path_parser",
         "//chrome/chrome_elf",
         "//chrome/common:constants",
+        "//chrome/install_static:install_static_util",
         "//chrome/install_static:secondary_module",
         "//chrome/installer/util:constants",
         "//chrome/installer/util:did_run_support",
         "//components/browser_watcher:browser_watcher_client",
+        "//components/crash/core/app",
         "//components/crash/core/app:run_as_crashpad_handler",
         "//components/crash/core/common",
         "//components/flags_ui:switches",
         "//content:sandbox_helper_win",
         "//content/public/common:static_switches",
         "//crypto",
+        "//gpu/command_buffer/service",
         "//sandbox",
         "//sandbox/policy",
         "//third_party/breakpad:breakpad_handler",
         "//third_party/breakpad:breakpad_sender",
         "//third_party/crashpad/crashpad/util",
+        "//ui/gl",
       ]
       data_deps = [
         "//chrome/app/version_assembly:version_assembly_manifest",
@@ -240,7 +256,6 @@ if (!is_android && !is_mac) {
 
         # For headless mode.
         "//headless:headless_shell_lib",
-        "//services/service_manager/embedder",
       ]
 
       public_deps = [
@@ -337,7 +352,7 @@ if (is_win) {
       "//headless:headless_shell_browser_lib",
       "//net:net_resources",
       "//ppapi/buildflags",
-      "//services/service_manager/embedder",
+      "//sandbox/win:sandbox",
       "//third_party/cld_3/src/src:cld_3",
       "//third_party/wtl",
       "//ui/views",
@@ -398,16 +413,19 @@ if (is_win) {
 
   tweak_info_plist("chrome_app_plist") {
     info_plist = "app/app-Info.plist"
-    _keystone_arg = "0"
-    if (is_chrome_branded) {
-      _keystone_arg = "1"
-    }
     args = [
       "--breakpad=0",
-      "--keystone=$_keystone_arg",
       "--scm=1",
       "--bundle_id=$chrome_mac_bundle_id",
     ]
+    if (is_chrome_branded) {
+      args += [ "--keystone=1" ]
+      if (current_cpu == "arm64") {
+        args += [ "--keystone-base-tag=arm64" ]
+      }
+    } else {
+      args += [ "--keystone=0" ]
+    }
   }
 
   mac_app_bundle("chrome_app") {
@@ -570,7 +588,7 @@ if (is_win) {
       ":verify_chrome_framework_order",
     ]
 
-    if (enable_widevine_cdm_host_verification) {
+    if (enable_widevine_cdm_host_verification && enable_widevine_signing) {
       # The :chrome_framework_widevine_signature target copies into the
       # :chrome_framework bundle. But because the signing file depends on the
       # framework itself, that would cause a cyclical dependency. Instead,
@@ -774,7 +792,7 @@ if (is_win) {
     if (v8_use_external_startup_data) {
       public_deps += [ "//v8" ]
       if (use_v8_context_snapshot) {
-        sources += [ "$root_out_dir/v8_context_snapshot.bin" ]
+        sources += [ "$root_out_dir/$v8_context_snapshot_filename" ]
         public_deps += [ "//tools/v8_context_snapshot" ]
       } else {
         sources += [ "$root_out_dir/snapshot_blob.bin" ]
@@ -877,8 +895,8 @@ if (is_win) {
     }
   }
 
-  if (enable_widevine_cdm_host_verification) {
-    widevine_sign_file("sign_chrome_framework_for_widevine") {
+  if (enable_widevine_cdm_host_verification && enable_widevine_signing) {
+    widevine_sign("sign_chrome_framework_for_widevine") {
       file = "$root_out_dir/$chrome_framework_name.framework/Versions/$chrome_framework_version/$chrome_framework_name"
       flags = 1
       signature_file = "$root_out_dir/$chrome_framework_name.sig"
@@ -947,7 +965,6 @@ if (is_win) {
     deps = [
       ":browser_dependencies",
       ":child_dependencies",
-      "//build:lacros_buildflags",
       "//chrome/app:command_ids",
       "//chrome/common:buildflags",
       "//chrome/common/profiler",
@@ -956,7 +973,6 @@ if (is_win) {
       "//content/public/app",
       "//content/public/common:service_names",
       "//headless:headless_shell_lib",
-      "//services/service_manager/embedder",
       "//third_party/cld_3/src/src:cld_3",
     ]
 
@@ -1178,11 +1194,18 @@ if (is_win) {
 
 group("browser_dependencies") {
   public_deps = [
+    "//build:branding_buildflags",
+    "//build:chromeos_buildflags",
+    "//chrome/app:shutdown_signal_handlers",
     "//chrome/browser",
+    "//chrome/browser/policy:path_parser",
     "//chrome/common",
+    "//components/crash/core/app",
     "//components/gwp_asan/buildflags",
     "//components/heap_profiling/in_process",
+    "//components/startup_metric_utils/browser",
     "//components/sync",
+    "//components/upload_list:upload_list",
     "//services/tracing/public/cpp",
   ]
   if (enable_plugins) {
@@ -1198,6 +1221,23 @@ group("browser_dependencies") {
 
   if (enable_gwp_asan) {
     public_deps += [ "//components/gwp_asan/client" ]
+  }
+
+  if (enable_nacl) {
+    public_deps += [ "//components/nacl/browser" ]
+  }
+
+  if (chromeos_is_browser_only) {
+    public_deps += [ "//chromeos/lacros" ]
+  }
+
+  if (is_chromeos) {
+    public_deps += [
+      "//chrome/browser/chromeos",
+      "//chromeos",
+      "//chromeos/constants",
+      "//chromeos/memory",
+    ]
   }
 
   if (!is_component_build) {
@@ -1237,6 +1277,7 @@ group("child_dependencies") {
     "//services/tracing/public/cpp",
     "//third_party/blink/public:blink_devtools_frontend_resources",
     "//third_party/blink/public:blink_devtools_inspector_resources",
+    "//v8:v8_headers",
   ]
 
   if (enable_nacl) {
@@ -1330,9 +1371,8 @@ group("extra_resources") {
       "//chrome/browser/resources:gaia_auth_host_resources",
       "//chrome/browser/resources:history_resources",
       "//chrome/browser/resources:local_ntp_resources",
-      "//chrome/browser/resources:nearby_internals_resources",
-      "//chrome/browser/resources:nearby_share_dialog_resources",
       "//chrome/browser/resources:new_tab_page_resources",
+      "//chrome/browser/resources:read_later_resources",
       "//chrome/browser/resources:settings_resources",
     ]
   }
@@ -1341,6 +1381,10 @@ group("extra_resources") {
     public_deps += [
       "//chrome/browser/resources:bluetooth_pairing_dialog_resources",
       "//chrome/browser/resources:multidevice_internals_resources",
+      "//chrome/browser/resources:nearby_internals_resources",
+      "//chrome/browser/resources:nearby_share_dialog_resources",
+      "//chrome/browser/resources:nearby_shared_resources",
+      "//chrome/browser/resources:nearby_shared_resources_v3",
       "//chrome/browser/resources:os_settings_resources",
       "//chrome/browser/resources/chromeos:cellular_setup_resources",
       "//chrome/browser/resources/chromeos:multidevice_setup_resources",
@@ -1419,8 +1463,8 @@ if (!is_android) {
       output_dir = root_out_dir
     }
 
-    if (enable_resource_whitelist_generation) {
-      repack_whitelist = chrome_resource_whitelist
+    if (enable_resource_allowlist_generation) {
+      repack_allowlist = chrome_resource_whitelist
       deps = [ "//chrome:resource_whitelist" ]
     }
 
@@ -1506,6 +1550,8 @@ if (is_android) {
     ]
 
     deps = [
+      ":browser_dependencies",
+      ":child_dependencies",
       "//chrome/browser/ui",
       "//chrome/child",
       "//chrome/common",
@@ -1516,11 +1562,11 @@ if (is_android) {
       "//components/heap_profiling/in_process",
       "//components/minidump_uploader",
       "//components/safe_browsing:buildflags",
+      "//components/safe_browsing/android:safe_browsing_api_handler",
       "//components/safe_browsing/android:safe_browsing_mobile",
       "//components/services/heap_profiling",
       "//content/public/app",
       "//content/public/common:service_names",
-      "//services/service_manager/embedder",
     ]
 
     # Explicit dependency required for JNI registration to be able to
@@ -1543,8 +1589,8 @@ if (is_android) {
   }
 }
 
-if (enable_resource_whitelist_generation) {
-  generate_resource_whitelist("resource_whitelist") {
+if (enable_resource_allowlist_generation) {
+  generate_resource_allowlist("resource_whitelist") {
     if (is_android) {
       deps = [ "//chrome/android:libchrome" ]
       inputs = [ "$root_out_dir/lib.unstripped/libchrome$shlib_extension" ]

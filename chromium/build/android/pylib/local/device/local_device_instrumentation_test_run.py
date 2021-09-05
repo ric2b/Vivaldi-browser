@@ -165,7 +165,7 @@ class LocalDeviceInstrumentationTestRun(
     target_package = _GetTargetPackageName(self._test_instance.test_apk)
 
     @local_device_environment.handle_shard_failures_with(
-        self._env.BlacklistDevice)
+        self._env.DenylistDevice)
     @trace_event.traced
     def individual_device_set_up(device, host_device_tuples):
       steps = []
@@ -192,6 +192,21 @@ class LocalDeviceInstrumentationTestRun(
           self._context_managers[str(dev)].append(system_app_context)
 
         steps.append(replace_package)
+
+      if self._test_instance.system_packages_to_remove:
+
+        @trace_event.traced
+        def remove_packages(dev):
+          logging.info('Attempting to remove system packages %s',
+                       self._test_instance.system_packages_to_remove)
+          system_app.RemoveSystemApps(
+              dev, self._test_instance.system_packages_to_remove)
+          logging.info('Done removing system packages')
+
+        # This should be at the front in case we're removing the package to make
+        # room for another APK installation later on. Since we disallow
+        # concurrent adb with this option specified, this should be safe.
+        steps.insert(0, remove_packages)
 
       if self._test_instance.use_webview_provider:
         @trace_event.traced
@@ -404,7 +419,7 @@ class LocalDeviceInstrumentationTestRun(
       return
 
     @local_device_environment.handle_shard_failures_with(
-        self._env.BlacklistDevice)
+        self._env.DenylistDevice)
     @trace_event.traced
     def individual_device_tear_down(dev):
       if str(dev) in self._flag_changers:
@@ -591,8 +606,10 @@ class LocalDeviceInstrumentationTestRun(
                                wpr_archive_path,
                                os.path.exists(wpr_archive_path)))
 
-      archive_path = os.path.join(wpr_archive_path,
-                                  self._GetUniqueTestName(test) + '.wprgo')
+      # Some linux version does not like # in the name. Replaces it with __.
+      archive_path = os.path.join(
+          wpr_archive_path,
+          _ReplaceUncommonChars(self._GetUniqueTestName(test)) + '.wprgo')
 
       if not os.path.exists(_WPR_GO_LINUX_X86_64_PATH):
         # If we got to this stage, then we should have
@@ -635,6 +652,7 @@ class LocalDeviceInstrumentationTestRun(
 
       if self._env.trace_output:
         self._SaveTraceData(trace_device_file, device, test['class'])
+
 
       def restore_flags():
         if flags_to_add:
@@ -1073,7 +1091,8 @@ class LocalDeviceInstrumentationTestRun(
         failure_log = (
             'Skia Gold reported failure for RenderTest %s. See '
             'RENDER_TESTS.md for how to fix this failure.' % render_name)
-        status_codes = gold_utils.AndroidSkiaGoldSession.StatusCodes
+        status_codes =\
+            self._skia_gold_session_manager.GetSessionClass().StatusCodes
         if status == status_codes.AUTH_FAILURE:
           _AppendToLog(results,
                        'Gold authentication failed with output %s' % error)
@@ -1179,6 +1198,17 @@ def _GetWPRArchivePath(test):
   """Retrieves the archive path from the WPRArchiveDirectory annotation."""
   return test['annotations'].get(WPR_ARCHIVE_FILE_PATH_ANNOTATION,
                                  {}).get('value', ())
+
+
+def _ReplaceUncommonChars(original):
+  """Replaces uncommon characters with __."""
+  if not original:
+    raise ValueError('parameter should not be empty')
+
+  uncommon_chars = ['#']
+  for char in uncommon_chars:
+    original = original.replace(char, '__')
+  return original
 
 
 def _IsRenderTest(test):

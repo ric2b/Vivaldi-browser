@@ -927,6 +927,9 @@ Because your account is managed by <ph name="HOSTED_DOMAIN">$1<ex>google.com</ex
       <message name="IDS_IOS_ICON_SEARCH" desc="Accessibility label for the search icon [iOS only].">
         Search
       </message>
+      <message name="IDS_IOS_INFO_BUTTON_ACCESSIBILITY_HINT" desc="Action hint for the info button of the TableViewInfoButtonCell. This is spoken by VoiceOver. [iOS only]">
+        Double tap for more information
+      </message>
       <message name="IDS_IOS_INFOBAR_BANNER_DISMISS_HINT" desc="Accessibility hint that indicates the user that can dismiss the Infobar Banner. [Length:Unlimited]">
         Dismiss
       </message>
@@ -1011,6 +1014,12 @@ Because your account is managed by <ph name="HOSTED_DOMAIN">$1<ex>google.com</ex
       </message>
       <message name="IDS_IOS_KEYBOARD_REOPEN_CLOSED_TAB" desc="Title of the keyboard shortcut to reopen a recently closed tab. [Length: 20 em] [iOS only]">
         Reopen Closed Tab
+      </message>
+      <message name="IDS_IOS_KEYBOARD_NEXT_TAB" desc="Title of the keyboard shortcut to switch to the next tab in the tab strip. [Length: 20 em] [iOS only]">
+        Next Tab
+      </message>
+      <message name="IDS_IOS_KEYBOARD_PREVIOUS_TAB" desc="Title of the keyboard shortcut to switch to the previous tab in the tab strip. [Length: 20 em] [iOS only]">
+        Previous Tab
       </message>
       <message name="IDS_IOS_LONG_PRESS_TOOLBAR_IPH_PROMOTION_TEXT" desc="Text for the LongPress Toolbar Tip in-product help promotion, explaining that the user can long press on the toolbar's button to display more options. [iOS only]">
         Touch &amp; hold for more tab options
@@ -1691,11 +1700,28 @@ While in incognito, sites can't use cookies to see your browsing activity across
       <message name="IDS_IOS_EXPORT_PASSWORDS_CANCEL_BUTTON" desc="Label of a confirmation dialog button which allows the user to cancel passwords export. [Length: 22em] [iOS only]">
         Cancel
       </message>
-      <message name="IDS_IOS_SETTINGS_SET_DEFAULT_BROWSER" desc="Title of the button allowing the user to change its default browser">
-Change Default Browser…
-</message>
       <message name="IDS_IOS_SETTINGS_EXPORT_PASSWORDS_SET_UP_SCREENLOCK_CONTENT" desc="Message informing the user that in order to export the passwords, a screen lock needs to be set up on the device. This is shown as an alert message after the user tries to view or copy the password from a settings page. [Length: about two lines]">
         To export passwords, you must first set a passcode on your device.
+      </message>
+      <message name="IDS_IOS_SETTINGS_HEADER_TEXT" desc="Header of the Default Browser Settings page explaining the default browser feature's utility.">
+      You can open links in Chrome automatically by making it your Default Browser App.
+      
+Follow the steps below:
+      </message>
+      <message name="IDS_IOS_SETTINGS_OPEN_CHROME_SETTINGS_BUTTON_TEXT" desc="Label of the button that opens the Chrome panel in Settings.app">
+          Open Chrome Settings
+      </message>
+      <message name="IDS_IOS_SETTINGS_OPEN_SETTINGS_STEP" desc="Text of the row indicating the first step of setting the default browser.">
+        1. Open Chrome Settings
+      </message>
+      <message name="IDS_IOS_SETTINGS_SET_DEFAULT_BROWSER" desc="Label of the row that opens the Default Browser Settings page">
+          Default Browser
+      </message>
+      <message name="IDS_IOS_SETTINGS_TAP_DEFAULT_BROWSER_APP_STEP" desc="Text of the row indicating the second step of setting the default browser.">
+        2. Tap Default Browser App
+      </message>
+      <message name="IDS_IOS_SETTINGS_SELECT_CHROME_STEP" desc="Text of the row indicating the third step of setting the default browser.">
+        3. Select Chrome
       </message>
       <message name="IDS_IOS_SAVE_PASSWORDS_MANAGE_ACCOUNT" desc="Header text with link for the view in Settings for managing saved passwords. [Length: unlimited] [iOS only]">
         View and manage saved passwords at <ph name="BEGIN_LINK">BEGIN_LINK</ph>passwords.google.com<ph name="END_LINK">END_LINK</ph>
@@ -1769,8 +1795,14 @@ Change Default Browser…
       <message name="IDS_IOS_SETTINGS_SAFETY_CHECK_PASSWORDS_TITLE" desc="Title for the passwords element of safety check" meaning="Row title to access the passowrd check subpage if a probelm is found with user's saved passwords [CHAR_LIMIT=20]">
         Passwords
       </message>
+      <message name="IDS_IOS_SETTINGS_SAFETY_CHECK_PASSWORDS_DESCRIPTION" desc="Description text on the password element describing what the password check does.">
+        Check for compromised passwords
+      </message>
       <message name="IDS_IOS_SETTINGS_SAFETY_CHECK_SAFE_BROWSING_TITLE" desc="Title for the safe browsing element of safety check" meaning="Row title to display the user's safe browsing status [CHAR_LIMIT=20]">
         Safe Browsing
+      </message>
+      <message name="IDS_IOS_SETTINGS_SAFETY_CHECK_SAFE_BROWSING_DESCRIPTION" desc="Description text on the Safe Browsing element describing what the Safe Browsing check does.">
+        Stay protected from dangerous websites
       </message>
       <message name="IDS_IOS_SETTINGS_SAFETY_CHECK_SAFE_BROWSING_DISABLED_DESC" desc="Detail text for the Safe Browsing check if the user has Safe Browsing disabled">
         Off - Not recommended
@@ -1781,11 +1813,17 @@ Change Default Browser…
       <message name="IDS_IOS_SETTINGS_SAFETY_CHECK_SAFE_BROWSING_MANAGED_DESC" desc="Detail text for the Safe Browsing check if the user's Safe Browsing setting is managed by their administrator and disabled">
         Turned off by your administrator
       </message>
+      <message name="IDS_IOS_SETTINGS_SAFETY_CHECK_UPDATES_MANAGED_DESC" desc="Description text for when the device has updates managed by an administrator">
+       Managed by your administrator
+      </message>
       <message name="IDS_IOS_SETTINGS_SAFETY_CHECK_SAFE_BROWSING_DISABLED_INFO" desc="String in the popover for the Safe Browsing check to direct the user to the Sync and Google Services page if Safe Browsing is disabled">
         To turn on Safe Browsing, open <ph name="BEGIN_LINK">BEGIN_LINK</ph>Sync and Google Services<ph name="END_LINK">END_LINK</ph> and tap Safe Browsing.
       </message>
       <message name="IDS_IOS_SETTINGS_SAFETY_CHECK_UPDATES_TITLE" desc="Title for the updates element of safety check" meaning="Row title to display the user's Chrome update status, and access upates [CHAR_LIMIT=20]">
         Updates
+      </message>
+      <message name="IDS_IOS_SETTINGS_SAFETY_CHECK_ISSUES_FOUND_TIME" desc="Footer for the safety check section telling the user when issues were found.">
+        Issues found <ph name="TIME">$1<ex>10 minutes ago</ex></ph>.
       </message>
       <message name="IDS_IOS_SETTINGS_SITE_COPY_BUTTON" desc="Button that the user can press to copy the site to clipboard. [Length: 12em]">
         Copy
@@ -1915,6 +1953,9 @@ Change Default Browser…
       </message>
       <message name="IDS_IOS_SHARE_MENU_SEND_TAB_TO_SELF_ACTION" desc="Text label to the Send Tab To Self action in the extension menu that sends the current tab to the user's other devices. [iOS only]">
         Send To Your Devices
+      </message>
+      <message name="IDS_IOS_SHARE_PAGE_BUTTON_LABEL" desc="Label of a button which will initiate a share flow for the current page. [iOS only]">
+        Share Page...
       </message>
       <message name="IDS_SEND_TAB_TO_SELF_INFOBAR_MESSAGE" desc="The message text for the infobar when a user receives a shared tab from another device.">
         Tab received.
@@ -2183,6 +2224,11 @@ Your data was encrypted with your sync passphrase on <ph name="TIME">$2<ex>Sept 
       <message name="IDS_IOS_TAB_GRID_CLOSE_ALL_BUTTON" desc="Title of the button in the tab grid UI that closes all the tabs in the grid. [iOS only]">
         Close All
       </message>
+      <message name="IDS_IOS_TAB_GRID_CLOSE_ALL_TABS_CONFIRMATION" desc="Title of the button in the action sheet that close all tabs. COUNT refers to the number of tabs open. According to its value, the string goes from singular to plural. [iOS only]">
+        {COUNT, plural,
+             =1 {Close {COUNT} Tab}
+             other {Close {COUNT} Tabs}}
+      </message>
       <message name="IDS_IOS_TAB_GRID_UNDO_CLOSE_ALL_BUTTON" desc="Title of the button in the tab grid UI that revert the close all action recently taken by the user. [iOS only]">
         Undo
       </message>
@@ -2292,7 +2338,7 @@ Your data was encrypted with your sync passphrase on <ph name="TIME">$2<ex>Sept 
         Double tap to toggle setting
       </message>
       <message name="IDS_IOS_TOGGLE_SETTING_MANAGED_ACCESSIBILITY_HINT" desc="Action hint for any managed switch in settings. This is spoken by VoiceOver. [iOS only]">
-        This setting is managed
+        This setting is managed, double tap for more information
       </message>
       <message name="IDS_IOS_TOOLBAR_CLOSE_MENU" desc="The accessibility label for the toolbar close settings menu button [iOS only].">
         Close Menu
@@ -2489,6 +2535,12 @@ New Search
       <message name="IDS_IOS_LANGUAGE_SETTINGS_OFFER_TO_TRANSLATE_TITLE" desc="Label shown next to a language for which translation is offered. [Length: 25em] [iOS only]">
         Offer to Translate
       </message>
+      <message name="IDS_IOS_LINK_TO_TEXT_ERROR_DESCRIPTION" desc="Description message in the alert dialog shown when link-to-text link generation failed. [iOS only]">
+        A link to the highlighted text can not be created.
+      </message>
+      <message name="IDS_IOS_LINK_TO_TEXT_ERROR_TITLE" desc="Title of the alert dialog shown when link-to-text link generation failed. [iOS only]">
+        Unable to Link to Text
+      </message>
       <message name="IDS_IOS_TRANSLATE_SETTING" desc="Title for the view and option in Settings for Translate. [Length: 25em] [iOS only]">
         Google Translate
       </message>
@@ -2605,6 +2657,18 @@ New Search
       </message>
       <message name="IDS_IOS_SHARE_LINK_TO_TEXT" desc="Option that appears in the iOS Edit Menu when highlighting text (alongside options like Copy, Paste, and Share). When selected, this generates a special URL that will open the current page and jump to/highlight the user's current selection. The user will then have the chance to share this special URL through the normal iOS sharing menu.">
           Link to Text
+      </message>
+      <message name="IDS_IOS_UI_BLOCKED_USE_OTHER_WINDOW_DESCRIPTION" desc="Explanatory text that appears when the user has multiple windows open, and one window is showing a dialog that has to be interacted with before any other window can be used. [iOS only]">
+          Finish what you were doing in your other open Chrome window.
+      </message>
+      <message name="IDS_IOS_UI_BLOCKED_USE_OTHER_WINDOW_SWITCH_WINDOW_ACTION" desc="Button label that appears on a button to switch to some other window, when the user has multiple windows open, and one window is showing a dialog that has to be interacted with before any other window can be used.">
+          Switch to Open Window
+      </message>
+      <message name="IDS_IOS_APP_SWITCHER_SCENE_TITLE" desc="Shown under the Application title in the OS-level app switcher with the number of tabs in the window">
+        {count, plural,
+          =0 {{domain}}
+          =1 {{domain} and 1 other}
+          other {{domain} and {count} others}}
       </message>
     </messages>
   </release>

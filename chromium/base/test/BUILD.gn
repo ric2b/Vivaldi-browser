@@ -7,12 +7,6 @@ import("//build/config/nacl/config.gni")
 import("//build/config/ui.gni")
 import("//build_overrides/build.gni")
 
-# Reset sources_assignment_filter for the BUILD.gn file to prevent
-# regression during the migration of Chromium away from the feature.
-# See docs/no_sources_assignment_filter.md for more information.
-# TODO(crbug.com/1018739): remove this when migration is done.
-set_sources_assignment_filter([])
-
 if (is_android) {
   import("//build/config/android/rules.gni")
 }
@@ -34,6 +28,8 @@ static_library("test_config") {
 static_library("test_support") {
   testonly = true
   sources = [
+    "../power_monitor/test/fake_power_monitor_source.cc",
+    "../power_monitor/test/fake_power_monitor_source.h",
     "../task/sequence_manager/test/fake_task.cc",
     "../task/sequence_manager/test/fake_task.h",
     "../task/sequence_manager/test/mock_time_domain.cc",
@@ -172,6 +168,7 @@ static_library("test_support") {
 
   if (is_win) {
     sources += [
+      "fake_iasync_operation_win.h",
       "scoped_os_info_override_win.cc",
       "scoped_os_info_override_win.h",
       "test_file_util_win.cc",

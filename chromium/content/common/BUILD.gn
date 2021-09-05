@@ -17,6 +17,13 @@ if (is_mac) {
   import("//content/public/app/mac_helpers.gni")
 }
 
+# This file depends on the legacy global sources assignment filter. It should
+# be converted to check target platform before assigning source files to the
+# sources variable. Remove this import and set_sources_assignment_filter call
+# when the file has been converted. See https://crbug.com/1018739 for details.
+import("//build/config/deprecated_default_sources_assignment_filter.gni")
+set_sources_assignment_filter(deprecated_default_sources_assignment_filter)
+
 # For feature flags internal to content. See content/public/common:features
 # for feature flags that clients of contents need to know about.
 buildflag_header("buildflags") {
@@ -41,6 +48,8 @@ source_set("common") {
 
   sources = [
     "all_messages.h",
+    "android/cpu_affinity.cc",
+    "android/cpu_affinity.h",
     "android/cpu_time_metrics.cc",
     "android/cpu_time_metrics.h",
     "android/gin_java_bridge_errors.cc",
@@ -60,8 +69,6 @@ source_set("common") {
     "ax_serialization_utils.h",
     "background_fetch/background_fetch_types.cc",
     "background_fetch/background_fetch_types.h",
-    "browser_plugin/browser_plugin_constants.cc",
-    "browser_plugin/browser_plugin_constants.h",
     "child_process_host_impl.cc",
     "child_process_host_impl.h",
     "common_param_traits.cc",
@@ -82,8 +89,6 @@ source_set("common") {
     "content_paths.cc",
     "content_switches_internal.cc",
     "content_switches_internal.h",
-    "content_to_visible_time_reporter.cc",
-    "content_to_visible_time_reporter.h",
     "cursors/webcursor.cc",
     "cursors/webcursor.h",
     "cursors/webcursor_android.cc",
@@ -91,9 +96,7 @@ source_set("common") {
     "cursors/webcursor_aurawin.cc",
     "cursors/webcursor_mac.mm",
     "cursors/webcursor_ozone.cc",
-    "drag_event_source_info.h",
     "drag_messages.h",
-    "drag_traits.h",
     "fetch/fetch_api_request_proto.cc",
     "fetch/fetch_api_request_proto.h",
     "fetch/fetch_request_type_converters.cc",
@@ -110,8 +113,6 @@ source_set("common") {
     "frame_messages_forward.h",
     "frame_replication_state.cc",
     "frame_replication_state.h",
-    "frame_visual_properties.cc",
-    "frame_visual_properties.h",
     "gin_java_bridge_messages.h",
     "in_process_child_thread_params.cc",
     "in_process_child_thread_params.h",
@@ -157,8 +158,6 @@ source_set("common") {
     "navigation_params.h",
     "navigation_params_mojom_traits.h",
     "navigation_params_utils.h",
-    "net/record_load_histograms.cc",
-    "net/record_load_histograms.h",
     "origin_util.cc",
     "page_messages.h",
     "page_state_serialization.cc",
@@ -180,6 +179,10 @@ source_set("common") {
     "service_worker/service_worker_loader_helpers.h",
     "service_worker/service_worker_utils.cc",
     "service_worker/service_worker_utils.h",
+    "set_process_title.cc",
+    "set_process_title.h",
+    "shared_file_util.cc",
+    "shared_file_util.h",
     "skia_utils.cc",
     "skia_utils.h",
     "state_transitions.h",
@@ -187,8 +190,6 @@ source_set("common") {
     "thread_pool_util.h",
     "trace_utils.h",
     "unfreezable_frame_messages.h",
-    "unique_name_helper.cc",
-    "unique_name_helper.h",
     "url_schemes.cc",
     "url_schemes.h",
     "user_agent.cc",
@@ -219,8 +220,6 @@ source_set("common") {
     "//ui/accessibility/mojom",
     "//ui/base/cursor:cursor_base",
     "//ui/base/cursor/mojom:cursor_type",
-    "//ui/base/dragdrop/mojom:mojom_headers",
-    "//ui/base/dragdrop/mojom:mojom_shared",
     "//ui/events/ipc",
   ]
   deps = [
@@ -228,7 +227,7 @@ source_set("common") {
     "//base",
     "//base/third_party/dynamic_annotations",
     "//build:branding_buildflags",
-    "//build:lacros_buildflags",
+    "//build:chromeos_buildflags",
     "//build/util:webkit_version",
     "//components/discardable_memory/common",
     "//components/services/filesystem/public/mojom",
@@ -266,7 +265,6 @@ source_set("common") {
     "//services/network/public/cpp",
     "//services/network/public/mojom",
     "//services/resource_coordinator/public/cpp/memory_instrumentation",
-    "//services/service_manager/embedder:embedder_result_codes",
     "//services/service_manager/public/mojom",
     "//services/video_capture/public/mojom",
     "//services/viz/public/mojom",
@@ -311,7 +309,7 @@ source_set("common") {
       "//sandbox/policy/linux/bpf_base_policy_linux.cc",
       "//sandbox/policy/linux/bpf_base_policy_linux.h",
     ]
-    set_sources_assignment_filter(sources_assignment_filter)
+    set_sources_assignment_filter(deprecated_default_sources_assignment_filter)
   }
 
   if (is_mac) {
@@ -355,7 +353,10 @@ source_set("common") {
       "zygote/zygote_communication_linux.cc",
       "zygote/zygote_communication_linux.h",
     ]
-    deps += [ "//third_party/fontconfig" ]
+    deps += [
+      ":set_process_title_linux",
+      "//third_party/fontconfig",
+    ]
   }
 
   if (use_zygote_handle) {
@@ -411,6 +412,14 @@ source_set("common") {
   }
 }
 
+if (is_linux || is_chromeos) {
+  source_set("set_process_title_linux") {
+    public = [ "set_process_title_linux.h" ]
+    sources = [ "set_process_title_linux.cc" ]
+    deps = [ "//base" ]
+  }
+}
+
 # See comment at the top of //content/BUILD.gn for how this works.
 group("for_content_tests") {
   visibility = [ "//content/test/*" ]
@@ -448,10 +457,8 @@ mojom("mojo_bindings") {
     "native_types.mojom",
     "navigation_client.mojom",
     "navigation_params.mojom",
-    "page_state.mojom",
     "prefetched_signed_exchange_info.mojom",
     "render_accessibility.mojom",
-    "render_frame_metadata.mojom",
     "render_message_filter.mojom",
     "renderer.mojom",
     "renderer_host.mojom",
@@ -561,7 +568,7 @@ mojom("mojo_bindings") {
         "//content/common/input/synthetic_smooth_scroll_gesture_params.h",
         "//content/common/input/synthetic_tap_gesture_params.h",
         "//third_party/blink/public/common/widget/visual_properties.h",
-        "//content/public/common/web_preferences.h",
+        "//third_party/blink/public/common/web_preferences/web_preferences.h",
         "//net/base/network_change_notifier.h",
         "//third_party/blink/public/common/input/web_coalesced_input_event_mojom_traits.h",
         "//third_party/blink/public/common/input/web_input_event.h",
@@ -650,28 +657,12 @@ mojom("mojo_bindings") {
         "//content/common/resource_messages.h",
       ]
     },
-    {
-      types = [
-        {
-          mojom = "content.mojom.RenderFrameMetadata"
-          cpp = "::cc::RenderFrameMetadata"
-        },
-      ]
-      traits_headers =
-          [ "//content/common/render_frame_metadata_mojom_traits.h" ]
-      traits_sources =
-          [ "//content/common/render_frame_metadata_mojom_traits.cc" ]
-      traits_deps = [
-        "//cc",
-        "//ui/gfx/geometry/mojom:mojom_traits",
-      ]
-    },
   ]
 
   public_deps = [
     "//cc/mojom",
+    "//components/variations:variations_mojom",
     "//content/public/common:interfaces",
-    "//content/public/common:web_preferences_mojom",
     "//ipc:mojom",
     "//ipc:mojom_constants",
     "//media/capture/mojom:video_capture",

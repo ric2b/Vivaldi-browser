@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 /** This class handles interactions with sliders. */
-class SliderNode extends NodeWrapper {
+class SliderNode extends BasicNode {
   /**
    * @param {!AutomationNode} baseNode
    * @param {?SARootNode} parent
@@ -26,10 +26,10 @@ class SliderNode extends NodeWrapper {
     // presses.
     if (this.isCustomSlider_) {
       if (action === SwitchAccessMenuAction.INCREMENT) {
-        EventHelper.simulateKeyPress(EventHelper.KeyCode.RIGHT_ARROW);
+        EventGenerator.sendKeyPress(KeyCode.RIGHT);
         return SAConstants.ActionResponse.REMAIN_OPEN;
       } else if (action === SwitchAccessMenuAction.DECREMENT) {
-        EventHelper.simulateKeyPress(EventHelper.KeyCode.LEFT_ARROW);
+        EventGenerator.sendKeyPress(KeyCode.LEFT);
         return SAConstants.ActionResponse.REMAIN_OPEN;
       }
     }

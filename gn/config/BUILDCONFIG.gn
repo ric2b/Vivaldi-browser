@@ -14,6 +14,4 @@ declare_args() {
   vivaldi_notarize_password = ""
 }
 
-vivaldi_build_tests = !is_android && !(is_linux && (target_cpu == "x86" || target_cpu == "arm" || target_cpu == "arm64"))
-
 default_chrome_lint_targets = ["//chrome/android:chrome_public_apk__lint"]

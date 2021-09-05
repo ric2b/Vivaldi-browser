@@ -1,5 +1,6 @@
     <style>
       :host {
+        align-items: center;
         color: #fff;
         display: flex;
         font-size: 0.81rem;
@@ -8,8 +9,8 @@
         --page-selector-spacing: 4px;
       }
 
-      :host ::selection {
-        background: rgba(255, 255, 255, 0.3);
+      #pageselector::selection {
+        background-color: var(--viewer-text-input-selection-color);
       }
 
       input,
@@ -35,8 +36,8 @@
         margin: 0 var(--page-selector-spacing);
       }
     </style>
-    <input type="text" id="pageselector" value="[[pageNo]]" on-mouseup="select"
-        on-input="onInput_" on-change="pageNoCommitted"
-        aria-label$="$i18n{labelPageNumber}">
+    <input type="text" id="pageselector" value="[[pageNo]]"
+        on-pointerup="select" on-input="onInput_" on-change="pageNoCommitted"
+        aria-label="$i18n{labelPageNumber}">
     <span id="divider">/</span>
     <span id="pagelength">[[docLength]]</span>

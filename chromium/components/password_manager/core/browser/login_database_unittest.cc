@@ -22,9 +22,9 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
-#include "components/autofill/core/common/password_form.h"
 #include "components/os_crypt/os_crypt.h"
 #include "components/os_crypt/os_crypt_mocker.h"
+#include "components/password_manager/core/browser/password_form.h"
 #include "components/password_manager/core/browser/password_manager_test_utils.h"
 #include "components/password_manager/core/browser/psl_matching_helper.h"
 #include "components/password_manager/core/common/password_manager_features.h"
@@ -39,7 +39,6 @@
 #include "url/origin.h"
 
 using autofill::GaiaIdHash;
-using autofill::PasswordForm;
 using autofill::ValueElementPair;
 using autofill::ValueElementVector;
 using base::ASCIIToUTF16;
@@ -2061,7 +2060,7 @@ TEST_F(LoginDatabaseTest, HandleObfuscationMix) {
     EXPECT_EQ(AddChangeForForm(password_form), db.AddLogin(password_form));
   }
 
-  std::vector<std::unique_ptr<autofill::PasswordForm>> forms;
+  std::vector<std::unique_ptr<PasswordForm>> forms;
   {
     LoginDatabase db(file, IsAccountStore(false));
     ASSERT_TRUE(db.Init());
@@ -2318,6 +2317,13 @@ class LoginDatabaseUndecryptableLoginsTest : public testing::Test {
  protected:
   LoginDatabaseUndecryptableLoginsTest() = default;
 
+ public:
+  LoginDatabaseUndecryptableLoginsTest(
+      const LoginDatabaseUndecryptableLoginsTest&) = delete;
+  LoginDatabaseUndecryptableLoginsTest& operator=(
+      const LoginDatabaseUndecryptableLoginsTest&) = delete;
+
+ protected:
   void SetUp() override {
     ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
     database_path_ = temp_dir_.GetPath().AppendASCII("test.db");
@@ -2346,8 +2352,6 @@ class LoginDatabaseUndecryptableLoginsTest : public testing::Test {
   base::ScopedTempDir temp_dir_;
   base::test::TaskEnvironment task_environment_;
   TestingPrefServiceSimple testing_local_state_;
-
-  DISALLOW_COPY_AND_ASSIGN(LoginDatabaseUndecryptableLoginsTest);
 };
 
 PasswordForm LoginDatabaseUndecryptableLoginsTest::AddDummyLogin(
@@ -2395,12 +2399,6 @@ PasswordForm LoginDatabaseUndecryptableLoginsTest::AddDummyLogin(
 }
 
 TEST_F(LoginDatabaseUndecryptableLoginsTest, DeleteUndecryptableLoginsTest) {
-  // Disable feature for deleting corrupted passwords, so GetAutofillableLogins
-  // doesn't remove any passwords.
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndDisableFeature(
-      features::kDeleteCorruptedPasswords);
-
   auto form1 = AddDummyLogin("foo1", GURL("https://foo1.com/"), false);
   auto form2 = AddDummyLogin("foo2", GURL("https://foo2.com/"), true);
   auto form3 = AddDummyLogin("foo3", GURL("https://foo3.com/"), false);
@@ -2449,36 +2447,8 @@ TEST_F(LoginDatabaseUndecryptableLoginsTest, DeleteUndecryptableLoginsTest) {
 }
 
 #if defined(OS_MAC)
-TEST_F(LoginDatabaseUndecryptableLoginsTest, PasswordRecoveryEnabledGetLogins) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(features::kDeleteCorruptedPasswords);
-
-  auto form1 = AddDummyLogin("foo1", GURL("https://foo1.com/"), false);
-  auto form2 = AddDummyLogin("foo2", GURL("https://foo2.com/"), true);
-  auto form3 = AddDummyLogin("foo3", GURL("https://foo3.com/"), false);
-
-  LoginDatabase db(database_path(), IsAccountStore(false));
-  ASSERT_TRUE(db.Init());
-
-  testing_local_state().registry()->RegisterTimePref(prefs::kPasswordRecovery,
-                                                     base::Time());
-  db.InitPasswordRecoveryUtil(std::make_unique<PasswordRecoveryUtilMac>(
-      &testing_local_state(), base::ThreadTaskRunnerHandle::Get()));
-
-  std::vector<std::unique_ptr<PasswordForm>> result;
-  EXPECT_TRUE(db.GetAutofillableLogins(&result));
-  EXPECT_THAT(result, UnorderedElementsAre(Pointee(form1), Pointee(form3)));
-
-  RunUntilIdle();
-  EXPECT_TRUE(testing_local_state().HasPrefPath(prefs::kPasswordRecovery));
-}
-
 TEST_F(LoginDatabaseUndecryptableLoginsTest,
        PasswordRecoveryDisabledGetLogins) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndDisableFeature(
-      features::kDeleteCorruptedPasswords);
-
   AddDummyLogin("foo1", GURL("https://foo1.com/"), false);
   AddDummyLogin("foo2", GURL("https://foo2.com/"), true);
 
@@ -2496,39 +2466,6 @@ TEST_F(LoginDatabaseUndecryptableLoginsTest,
 
   RunUntilIdle();
   EXPECT_FALSE(testing_local_state().HasPrefPath(prefs::kPasswordRecovery));
-}
-
-TEST_F(LoginDatabaseUndecryptableLoginsTest,
-       PasswordRecoveryEnabledKeychainLocked) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(features::kDeleteCorruptedPasswords);
-
-  // This is a valid entry.
-  auto form = AddDummyLogin("foo", GURL("https://foo.com/"), false);
-
-  OSCryptMocker::SetBackendLocked(true);
-
-  LoginDatabase db(database_path(), IsAccountStore(false));
-  ASSERT_TRUE(db.Init());
-
-  testing_local_state().registry()->RegisterTimePref(prefs::kPasswordRecovery,
-                                                     base::Time());
-  db.InitPasswordRecoveryUtil(std::make_unique<PasswordRecoveryUtilMac>(
-      &testing_local_state(), base::ThreadTaskRunnerHandle::Get()));
-
-  std::vector<std::unique_ptr<PasswordForm>> result;
-  EXPECT_FALSE(db.GetAutofillableLogins(&result));
-  EXPECT_TRUE(result.empty());
-
-  RunUntilIdle();
-  EXPECT_FALSE(testing_local_state().HasPrefPath(prefs::kPasswordRecovery));
-
-  // Note: it's not possible that encryption suddenly becomes available. This is
-  // only used to check that the form is not removed from the database.
-  OSCryptMocker::SetBackendLocked(false);
-
-  EXPECT_TRUE(db.GetAutofillableLogins(&result));
-  EXPECT_THAT(result, UnorderedElementsAre(Pointee(form)));
 }
 
 TEST_F(LoginDatabaseUndecryptableLoginsTest, KeychainLockedTest) {
@@ -2667,6 +2604,36 @@ TEST_F(LoginDatabaseTest, GetLoginsEncryptedPassword) {
 
   ASSERT_EQ(1U, forms.size());
   ASSERT_FALSE(forms[0]->encrypted_password.empty());
+}
+
+class LoginDatabaseForAccountStoreTest : public testing::Test {
+ protected:
+  void SetUp() override {
+    ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
+    file_ = temp_dir_.GetPath().AppendASCII("TestMetadataStoreMacDatabase");
+    OSCryptMocker::SetUp();
+
+    db_ = std::make_unique<LoginDatabase>(file_, IsAccountStore(true));
+    ASSERT_TRUE(db_->Init());
+  }
+
+  void TearDown() override { OSCryptMocker::TearDown(); }
+
+  LoginDatabase& db() { return *db_; }
+
+  base::ScopedTempDir temp_dir_;
+  base::FilePath file_;
+  std::unique_ptr<LoginDatabase> db_;
+  base::test::TaskEnvironment task_environment_;
+};
+
+TEST_F(LoginDatabaseForAccountStoreTest, AddLogins) {
+  PasswordForm form;
+  GenerateExamplePasswordForm(&form);
+
+  PasswordStoreChangeList changes = db().AddLogin(form);
+  ASSERT_EQ(1U, changes.size());
+  EXPECT_EQ(PasswordForm::Store::kAccountStore, changes[0].form().in_store);
 }
 
 }  // namespace password_manager

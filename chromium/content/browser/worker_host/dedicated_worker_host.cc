@@ -10,8 +10,8 @@
 #include "base/bind.h"
 #include "content/browser/appcache/appcache_navigation_handle.h"
 #include "content/browser/blob_storage/chrome_blob_storage_context.h"
-#include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/browser/loader/content_security_notifier.h"
+#include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/browser/service_worker/service_worker_main_resource_handle.h"
 #include "content/browser/service_worker/service_worker_object_host.h"
 #include "content/browser/storage_partition_impl.h"
@@ -143,8 +143,7 @@ void DedicatedWorkerHost::StartScriptLoad(
     }
     blob_url_loader_factory =
         ChromeBlobStorageContext::URLLoaderFactoryForToken(
-            storage_partition_impl->browser_context(),
-            std::move(blob_url_token));
+            storage_partition_impl, std::move(blob_url_token));
   } else if (blob_url_token) {
     mojo::ReportBadMessage("DWH_NOT_BLOB_URL");
     return;
@@ -312,15 +311,18 @@ DedicatedWorkerHost::CreateNetworkFactoryForSubresources(
           ancestor_render_frame_host->IsFeatureEnabled(
               blink::mojom::FeaturePolicyFeature::kTrustTokenRedemption)
               ? network::mojom::TrustTokenRedemptionPolicy::kPotentiallyPermit
-              : network::mojom::TrustTokenRedemptionPolicy::kForbid);
+              : network::mojom::TrustTokenRedemptionPolicy::kForbid,
+          "DedicatedWorkerHost::CreateNetworkFactoryForSubresources");
   GetContentClient()->browser()->WillCreateURLLoaderFactory(
       worker_process_host_->GetBrowserContext(),
       /*frame=*/nullptr, worker_process_host_->GetID(),
       ContentBrowserClient::URLLoaderFactoryType::kWorkerSubResource,
       worker_origin_, /*navigation_id=*/base::nullopt,
+      base::UkmSourceId::FromInt64(
+          ancestor_render_frame_host->GetPageUkmSourceId()),
       &default_factory_receiver, &factory_params->header_client,
-      bypass_redirect_checks, /*disable_secure_dns=*/nullptr,
-      &factory_params->factory_override);
+      bypass_redirect_checks,
+      /*disable_secure_dns=*/nullptr, &factory_params->factory_override);
 
   // TODO(nhiroki): Call devtools_instrumentation::WillCreateURLLoaderFactory()
   // here.
@@ -467,6 +469,7 @@ void DedicatedWorkerHost::ObserveNetworkServiceCrash(
     StoragePartitionImpl* storage_partition_impl) {
   auto params = network::mojom::URLLoaderFactoryParams::New();
   params->process_id = worker_process_host_->GetID();
+  params->debug_tag = "DedicatedWorkerHost::ObserveNetworkServiceCrash";
   network_service_connection_error_handler_holder_.reset();
   storage_partition_impl->GetNetworkContext()->CreateURLLoaderFactory(
       network_service_connection_error_handler_holder_
@@ -499,6 +502,13 @@ void DedicatedWorkerHost::UpdateSubresourceLoaderFactories() {
   // Start observing Network Service crash again.
   ObserveNetworkServiceCrash(storage_partition_impl);
 
+  // If this is a nested worker, there is no creator frame and
+  // |creator_render_frame_host| will be null.
+  RenderFrameHostImpl* creator_render_frame_host =
+      creator_render_frame_host_id_
+          ? RenderFrameHostImpl::FromID(creator_render_frame_host_id_.value())
+          : nullptr;
+
   // Recreate the default URLLoaderFactory. This doesn't support
   // AppCache-specific factory.
   std::unique_ptr<blink::PendingURLLoaderFactoryBundle>
@@ -507,7 +517,7 @@ void DedicatedWorkerHost::UpdateSubresourceLoaderFactories() {
               WorkerScriptFetchInitiator::LoaderType::kSubResource,
               worker_process_host_->GetID(), storage_partition_impl,
               partition_domain, file_url_support_,
-              /*filesystem_url_support=*/true);
+              /*filesystem_url_support=*/true, creator_render_frame_host);
 
   bool bypass_redirect_checks = false;
   subresource_loader_factories->pending_default_factory() =

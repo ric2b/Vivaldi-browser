@@ -31,7 +31,6 @@ android_resources("java_resources") {
   ]
 
   deps = [ "//components/browser_ui/strings/android:browser_ui_strings_grd" ]
-  create_srcjar = false
 }
 
 # The only dependent on this code outside of this component should be glue.
@@ -51,6 +50,7 @@ android_library_factory("factory_java") {
     ":java",
     ":manager_java",
     "//base:base_java",
+    "//components/browser_ui/widget/android:java",
     "//ui/android:ui_full_java",
     "//ui/android:ui_utils_java",
   ]

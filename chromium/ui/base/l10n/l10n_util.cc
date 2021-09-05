@@ -895,6 +895,13 @@ const std::vector<std::string>& GetAvailableLocales() {
 
 void GetAcceptLanguagesForLocale(const std::string& display_locale,
                                  std::vector<std::string>* locale_codes) {
+  if (vivaldi::IsVivaldiExtraLocale(display_locale)) {
+    // NOTE(igor@vivaldi,com): Chromium uses ICU library for
+    // IsLocaleNameTranslated that is of no use for our extra locales. Assume
+    // that we have translations for all accept languages in our extra locales.
+    GetAcceptLanguages(locale_codes);
+    return;
+  }
   for (const char* accept_language : kAcceptLanguageList) {
     if (!l10n_util::IsLocaleNameTranslated(accept_language, display_locale)) {
       // TODO(jungshik) : Put them at the end of the list with language codes

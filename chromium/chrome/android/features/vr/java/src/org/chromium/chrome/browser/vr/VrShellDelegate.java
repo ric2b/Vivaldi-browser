@@ -18,7 +18,6 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
-import android.os.StrictMode;
 import android.provider.Settings;
 import android.view.View;
 import android.view.ViewGroup;
@@ -50,8 +49,8 @@ import org.chromium.chrome.browser.ApplicationLifetime;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.customtabs.CustomTabActivity;
+import org.chromium.chrome.browser.feedback.HelpAndFeedbackLauncherImpl;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
-import org.chromium.chrome.browser.help.HelpAndFeedback;
 import org.chromium.chrome.browser.infobar.InfoBarIdentifier;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
@@ -728,7 +727,7 @@ public class VrShellDelegate
     private static void startFeedback(Tab tab) {
         // TODO(ymalik): This call will connect to the Google Services api which can be slow. Can we
         // connect to it beforehand when we know that we'll be prompting for feedback?
-        HelpAndFeedback.getInstance().showFeedback(TabUtils.getActivity(tab),
+        HelpAndFeedbackLauncherImpl.getInstance().showFeedback(TabUtils.getActivity(tab),
                 Profile.fromWebContents(tab.getWebContents()), tab.getUrlString(),
                 ContextUtils.getApplicationContext().getPackageName() + "." + FEEDBACK_REPORT_TYPE);
     }
@@ -1246,13 +1245,8 @@ public class VrShellDelegate
         assert (VrCoreInstallUtils.getVrSupportLevel() == VrSupportLevel.VR_DAYDREAM
                 || !mStartedFromVrIntent);
 
-        StrictMode.ThreadPolicy oldPolicy = StrictMode.allowThreadDiskWrites();
-        try {
-            if (mNativeVrShellDelegate != 0) {
-                VrShellDelegateJni.get().onResume(mNativeVrShellDelegate, VrShellDelegate.this);
-            }
-        } finally {
-            StrictMode.setThreadPolicy(oldPolicy);
+        if (mNativeVrShellDelegate != 0) {
+            VrShellDelegateJni.get().onResume(mNativeVrShellDelegate, VrShellDelegate.this);
         }
 
         // Perform slow initialization asynchronously.
@@ -1575,13 +1569,11 @@ public class VrShellDelegate
         if (mActivity.getCompositorViewHolder() == null) return false;
         TabModelSelector tabModelSelector = mActivity.getTabModelSelector();
         if (tabModelSelector == null) return false;
-        StrictMode.ThreadPolicy oldPolicy = StrictMode.allowThreadDiskWrites();
         try {
             mVrShell = new VrShell(mActivity, this, tabModelSelector);
         } catch (VrUnsupportedException e) {
             return false;
         } finally {
-            StrictMode.setThreadPolicy(oldPolicy);
         }
         return true;
     }

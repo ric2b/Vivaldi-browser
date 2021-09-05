@@ -9,6 +9,7 @@
 
 #include "base/bind.h"
 #include "base/numerics/ranges.h"
+#include "base/ranges/algorithm.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/timer/timer.h"
@@ -135,6 +136,8 @@ MediaSessionUserAction MediaSessionActionToUserAction(
       return MediaSessionUserAction::EnterPictureInPicture;
     case media_session::mojom::MediaSessionAction::kExitPictureInPicture:
       return MediaSessionUserAction::ExitPictureInPicture;
+    case media_session::mojom::MediaSessionAction::kSwitchAudioDevice:
+      return MediaSessionUserAction::SwitchAudioDevice;
   }
   NOTREACHED();
   return MediaSessionUserAction::Play;
@@ -269,6 +272,13 @@ void MediaSessionImpl::DidFinishNavigation(
     return;
   }
 
+  auto new_origin = url::Origin::Create(navigation_handle->GetURL());
+  if (navigation_handle->IsInMainFrame() &&
+      !new_origin.IsSameOriginWith(origin_)) {
+    audio_device_id_for_origin_.reset();
+    origin_ = new_origin;
+  }
+
   RenderFrameHost* rfh = navigation_handle->GetRenderFrameHost();
   if (services_.count(rfh))
     services_[rfh]->DidFinishNavigation();
@@ -351,6 +361,8 @@ bool MediaSessionImpl::AddPlayer(MediaSessionPlayerObserver* observer,
     return AddPepperPlayer(observer, player_id);
 
   observer->OnSetVolumeMultiplier(player_id, GetVolumeMultiplier());
+  if (audio_device_id_for_origin_)
+    observer->OnSetAudioSinkId(player_id, audio_device_id_for_origin_.value());
 
   AudioFocusType required_audio_focus_type;
   if (media_content_type == media::MediaContentType::Persistent)
@@ -1079,6 +1091,8 @@ void MediaSessionImpl::ExitPictureInPicture() {
 }
 
 void MediaSessionImpl::SetAudioSinkId(const base::Optional<std::string>& id) {
+  audio_device_id_for_origin_ = id;
+
   for (const auto& it : normal_players_) {
     it.first.observer->OnSetAudioSinkId(
         it.first.player_id,
@@ -1366,6 +1380,15 @@ void MediaSessionImpl::OnPictureInPictureAvailabilityChanged() {
 }
 
 void MediaSessionImpl::OnAudioOutputSinkIdChanged() {
+  if (audio_device_id_for_origin_ &&
+      audio_device_id_for_origin_ != GetSharedAudioOutputDeviceId()) {
+    audio_device_id_for_origin_.reset();
+  }
+
+  RebuildAndNotifyMediaSessionInfoChanged();
+}
+
+void MediaSessionImpl::OnAudioOutputSinkChangingDisabled() {
   RebuildAndNotifyMediaSessionInfoChanged();
 }
 
@@ -1411,6 +1434,13 @@ void MediaSessionImpl::RebuildAndNotifyActionsChanged() {
         media_session::mojom::MediaSessionAction::kEnterPictureInPicture);
     actions.insert(
         media_session::mojom::MediaSessionAction::kExitPictureInPicture);
+  }
+
+  if (base::FeatureList::IsEnabled(
+          media::kGlobalMediaControlsSeamlessTransfer) &&
+      IsAudioOutputDeviceSwitchingSupported()) {
+    actions.insert(
+        media_session::mojom::MediaSessionAction::kSwitchAudioDevice);
   }
 
   // If we support kSeekTo then we support kScrubTo as well.
@@ -1504,6 +1534,16 @@ std::string MediaSessionImpl::GetSharedAudioOutputDeviceId() const {
   }
 
   return media::AudioDeviceDescription::kDefaultDeviceId;
+}
+
+bool MediaSessionImpl::IsAudioOutputDeviceSwitchingSupported() const {
+  if (normal_players_.empty())
+    return false;
+
+  return base::ranges::all_of(normal_players_, [](const auto& player) {
+    return player.first.observer->SupportsAudioOutputDeviceSwitching(
+        player.first.player_id);
+  });
 }
 
 MediaAudioVideoState MediaSessionImpl::GetMediaAudioVideoState() {

@@ -43,6 +43,10 @@ class TranslateManagerTest;
 struct TranslateErrorDetails;
 struct TranslateInitDetails;
 
+extern const base::Feature kOverrideLanguagePrefsForHrefTranslate;
+extern const base::Feature kOverrideSitePrefsForHrefTranslate;
+extern const char kForceAutoTranslateKey[];
+
 // The TranslateManager class is responsible for showing an info-bar when a page
 // in a language different than the user language is loaded.  It triggers the
 // page translation the user requests.
@@ -120,7 +124,8 @@ class TranslateManager {
   // Initiate a manually triggered translation process for the current page.
   // Collect source and target languages, and show translation UI. If
   // |auto_translate| is true the page gets translated to the target language.
-  void InitiateManualTranslation(bool auto_translate = false);
+  void InitiateManualTranslation(bool auto_translate = false,
+                                 bool triggered_from_menu = false);
 
   // Returns true iff the current page could be manually translated.
   bool CanManuallyTranslate();
@@ -157,7 +162,7 @@ class TranslateManager {
   RegisterTranslateInitCallback(const TranslateInitCallback& callback);
 
   // Gets the LanguageState associated with the TranslateManager
-  LanguageState& GetLanguageState();
+  LanguageState* GetLanguageState();
 
   // Record an event of the given |event_type| using the currently saved
   // |translate_event_| as context. |event_type| must be one of the values

@@ -13,12 +13,12 @@
 <translation id="1163931534039071049">&amp;Zobraziť zdrojový kód rámca</translation>
 <translation id="1165039591588034296">Chyba</translation>
 <translation id="1175364870820465910">&amp;Tlačiť...</translation>
-<translation id="1177863135347784049">Vlastné</translation>
 <translation id="1181037720776840403">Odstrániť</translation>
 <translation id="1187722533808055681">Prebudenia z nečinnosti</translation>
 <translation id="119944043368869598">Odstrániť všetko</translation>
 <translation id="1221825588892235038">Len výber</translation>
 <translation id="1244303850296295656">Chyba rozšírenia</translation>
+<translation id="125220115284141797">Predvolené</translation>
 <translation id="1274977772557788323">Nastavenia úložiska aplikácie Adobe Flash Player</translation>
 <translation id="1297175357211070620">Cieľ</translation>
 <translation id="1303101771013849280">Súbor HTML so záložkami</translation>
@@ -45,9 +45,11 @@
 <translation id="1723824996674794290">&amp;Nové okno</translation>
 <translation id="1725149567830788547">Zobraziť &amp;ovládacie prvky</translation>
 <translation id="1729533290416704613">Tiež určuje, ktorá stránka sa zobrazí pri vyhľadávaní pomocou všeobecného poľa.</translation>
+<translation id="174123615272205933">Vlastné</translation>
 <translation id="1744108098763830590">stránka na pozadí</translation>
 <translation id="176587472219019965">&amp;Nové okno</translation>
 <translation id="1769104665586091481">Otvoriť odkaz v novom &amp;okne</translation>
+<translation id="1779468444204342338">Minimálne</translation>
 <translation id="1815083418640426271">Prilepiť ako čistý text</translation>
 <translation id="1828901632669367785">Tlačiť prostredníctvom dialógového okna systému…</translation>
 <translation id="1850508293116537636">Otočiť &amp;v smere hodinových ručičiek</translation>
@@ -87,7 +89,6 @@
 <translation id="2381756643783702095">Spýtať sa pred odoslaním (odporúčané)</translation>
 <translation id="241082044617551207">Neznámy doplnok</translation>
 <translation id="2423578206845792524">Uložiť &amp;obrázok ako...</translation>
-<translation id="2436707352762155834">Minimálne</translation>
 <translation id="2439110203301358333">Iný program v počítači pridal rozšírenie, ktoré môže zmeniť spôsob fungovania prehliadača Vivaldi.</translation>
 <translation id="2445081178310039857">Požaduje sa koreňový adresár rozšírenia.</translation>
 <translation id="2470702053775288986">Nepodporovaný typ rozšírenia bol zakázaný</translation>
@@ -138,6 +139,7 @@
 <translation id="3222066309010235055">Predbežne vykresliť: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3227137524299004712">Mikrofón</translation>
 <translation id="3241680850019875542">Vyberte koreňový adresár rozšírenia, ktoré chcete zbaliť. Ak chcete rozšírenie aktualizovať, vyberte tiež súbor súkromného kľúča, ktorý sa má znova použiť.</translation>
+<translation id="3266179261140759675">Blokovať zavreté stránky, aby nemohli odosielať ani prijímať údaje</translation>
 <translation id="3280237271814976245">Uložiť &amp;ako...</translation>
 <translation id="3285322247471302225">Nový &amp;list</translation>
 <translation id="3288047731229977326">Rozšírenia spustené v režime pre vývojárov môžu poškodiť váš počítač. Ak nie ste vývojár, mali by ste v záujme bezpečnosti rozšírenia spustené v režime vývojára zakázať.</translation>
@@ -245,7 +247,6 @@
 <translation id="5039804452771397117">Povoliť</translation>
 <translation id="5057110919553308744">Keď kliknete na rozšírenie</translation>
 <translation id="5063480226653192405">Využitie</translation>
-<translation id="5068918910148307423">Nepovoliť nedávno zatvoreným stránkam dokončiť posielanie a prijímanie údajov</translation>
 <translation id="5116628073786783676">Uložiť &amp;zvuk ako...</translation>
 <translation id="5143374789336132547">Rozšírenie „<ph name="EXTENSION_NAME" />“ zmenilo stránku, ktorá sa zobrazí po kliknutí na tlačidlo Domovská stránka.</translation>
 <translation id="5154108062446123722">Rozšírené nastavenia pre <ph name="PRINTING_DESTINATION" /></translation>
@@ -264,6 +265,7 @@
 <translation id="5355926466126177564">Rozšírenie „<ph name="EXTENSION_NAME" />“ zmenilo stránku, ktorá sa zobrazí pri vyhľadávaní pomocou všeobecného poľa.</translation>
 <translation id="5360150013186312835">Zobraziť na paneli s nástrojmi</translation>
 <translation id="5362741141255528695">Vybrať súbor súkromného kľúča.</translation>
+<translation id="536638840841140142">Žiadne</translation>
 <translation id="5370819323174483825">&amp;Znova načítať</translation>
 <translation id="5398572795982417028">Odkaz na stránku je mimo rozsahu, limit je <ph name="MAXIMUM_PAGE" /></translation>
 <translation id="5425042808445046667">Pokračovať v sťahovaní</translation>
@@ -388,7 +390,6 @@
 <translation id="7663719505383602579">Prijímač: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Nainštalované vaším správcom</translation>
 <translation id="7685049629764448582">Pamäť jazyka JavaScript</translation>
-<translation id="7701040980221191251">Žiadne</translation>
 <translation id="7701869757853594372">POUŽÍVATEĽ – popisovače</translation>
 <translation id="7704305437604973648">Úloha</translation>
 <translation id="7710568461918838723">&amp;Prenášať...</translation>

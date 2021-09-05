@@ -469,6 +469,9 @@ std::string LocatedEvent::ToString() const {
 MouseEvent::MouseEvent(const PlatformEvent& native_event)
     : LocatedEvent(native_event),
       changed_button_flags_(GetChangedMouseButtonFlagsFromNative(native_event)),
+#if defined(OS_CHROMEOS) || defined(OS_LINUX)
+      movement_(GetMouseMovementFromNative(native_event)),
+#endif
       pointer_details_(GetMousePointerDetailsFromNative(native_event)) {
   latency()->set_source_event_type(SourceEventType::MOUSE);
   latency()->AddLatencyNumberWithTimestamp(
@@ -635,7 +638,9 @@ void MouseEvent::SetClickCount(int click_count) {
 // MouseWheelEvent
 
 MouseWheelEvent::MouseWheelEvent(const PlatformEvent& native_event)
-    : MouseEvent(native_event), offset_(GetMouseWheelOffset(native_event)) {}
+    : MouseEvent(native_event),
+      offset_(GetMouseWheelOffset(native_event)),
+      tick_120ths_(GetMouseWheelTick120ths(native_event)) {}
 
 MouseWheelEvent::MouseWheelEvent(const ScrollEvent& scroll_event)
     : MouseEvent(scroll_event),
@@ -652,16 +657,20 @@ MouseWheelEvent::MouseWheelEvent(const MouseEvent& mouse_event,
 }
 
 MouseWheelEvent::MouseWheelEvent(const MouseWheelEvent& mouse_wheel_event)
-    : MouseEvent(mouse_wheel_event), offset_(mouse_wheel_event.offset()) {
+    : MouseEvent(mouse_wheel_event),
+      offset_(mouse_wheel_event.offset()),
+      tick_120ths_(mouse_wheel_event.tick_120ths()) {
   DCHECK_EQ(ET_MOUSEWHEEL, type());
 }
 
-MouseWheelEvent::MouseWheelEvent(const gfx::Vector2d& offset,
-                                 const gfx::PointF& location,
-                                 const gfx::PointF& root_location,
-                                 base::TimeTicks time_stamp,
-                                 int flags,
-                                 int changed_button_flags)
+MouseWheelEvent::MouseWheelEvent(
+    const gfx::Vector2d& offset,
+    const gfx::PointF& location,
+    const gfx::PointF& root_location,
+    base::TimeTicks time_stamp,
+    int flags,
+    int changed_button_flags,
+    const base::Optional<gfx::Vector2d> tick_120ths)
     : MouseEvent(ET_UNKNOWN,
                  location,
                  root_location,
@@ -673,6 +682,16 @@ MouseWheelEvent::MouseWheelEvent(const gfx::Vector2d& offset,
   // DCHECK for type to enforce that we use MouseWheelEvent() to create
   // a MouseWheelEvent.
   SetType(ET_MOUSEWHEEL);
+
+  if (!tick_120ths) {
+    // Since no wheel ticks have been specified, assume that scrolling is linear
+    // (not accelerated, like it is on Chrome OS).
+    tick_120ths_ =
+        gfx::Vector2d(offset_.x() / MouseWheelEvent::kWheelDelta * 120,
+                      offset_.y() / MouseWheelEvent::kWheelDelta * 120);
+  } else {
+    tick_120ths_ = tick_120ths.value();
+  }
 }
 
 MouseWheelEvent::MouseWheelEvent(const gfx::Vector2d& offset,
@@ -975,7 +994,8 @@ bool KeyEvent::IsRepeated(KeyEvent** last_key_event) {
 #endif
   if (!is_repeat) {
     if (key_code() == last->key_code() &&
-        flags() == (last->flags() & ~EF_IS_REPEAT) &&
+        (flags() & ~EF_MOUSE_BUTTON) ==
+            (last->flags() & ~EF_IS_REPEAT & ~EF_MOUSE_BUTTON) &&
         (time_stamp() - last->time_stamp()).InMilliseconds() <
             kMaxAutoRepeatTimeMs) {
       is_repeat = true;

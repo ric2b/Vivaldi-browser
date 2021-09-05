@@ -381,16 +381,8 @@ IN_PROC_BROWSER_TEST_F(FileSystemApiTestForDrive,
       << message_;
 }
 
-#if defined(ADDRESS_SANITIZER)
-// Flaky when run under ASan: crbug.com/499233.
-#define MAYBE_FileSystemApiOpenDirectoryWithWriteTest \
-  DISABLED_FileSystemApiOpenDirectoryWithWriteTest
-#else
-#define MAYBE_FileSystemApiOpenDirectoryWithWriteTest \
-  FileSystemApiOpenDirectoryWithWriteTest
-#endif
 IN_PROC_BROWSER_TEST_F(FileSystemApiTestForDrive,
-                       MAYBE_FileSystemApiOpenDirectoryWithWriteTest) {
+                       FileSystemApiOpenDirectoryWithWriteTest) {
   base::FilePath test_directory =
       GetDriveMountPoint().AppendASCII("root/subdir");
   FileSystemChooseEntryFunction::SkipPickerAndAlwaysSelectPathForTest(
@@ -502,7 +494,7 @@ IN_PROC_BROWSER_TEST_F(FileSystemApiTestForRequestFileSystem, NotKioskSession) {
 }
 
 IN_PROC_BROWSER_TEST_F(FileSystemApiTestForRequestFileSystem,
-                       WhitelistedComponent) {
+                       AllowlistedComponent) {
   ScopedSkipRequestFileSystemDialog dialog_skipper(ui::DIALOG_BUTTON_CANCEL);
   ASSERT_TRUE(RunPlatformAppTestWithFlags(
       "api_test/file_system/request_file_system_whitelisted_component",
@@ -511,7 +503,7 @@ IN_PROC_BROWSER_TEST_F(FileSystemApiTestForRequestFileSystem,
 }
 
 IN_PROC_BROWSER_TEST_F(FileSystemApiTestForRequestFileSystem,
-                       NotWhitelistedComponent) {
+                       NotAllowlistedComponent) {
   ScopedSkipRequestFileSystemDialog dialog_skipper(ui::DIALOG_BUTTON_OK);
   ASSERT_TRUE(RunPlatformAppTestWithFlags(
       "api_test/file_system/request_file_system_not_whitelisted_component",
@@ -547,7 +539,7 @@ IN_PROC_BROWSER_TEST_F(FileSystemApiTestForRequestFileSystem,
 }
 
 IN_PROC_BROWSER_TEST_F(FileSystemApiTestForRequestFileSystem,
-                       WhitelistedExtensionForDownloads) {
+                       AllowlistedExtensionForDownloads) {
   ScopedSkipRequestFileSystemDialog dialog_skipper(ui::DIALOG_BUTTON_CANCEL);
   ASSERT_TRUE(RunPlatformAppTestWithFlags(
       "api_test/file_system/request_downloads_whitelisted_extension", kFlagNone,

@@ -68,6 +68,12 @@ const std::vector<SearchConcept>& GetAboutSearchConcepts() {
        mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSetting,
        {.setting = mojom::Setting::kChangeChromeChannel}},
+      {IDS_OS_SETTINGS_TAG_ABOUT_CHROME_OS_COPY_DETAILED_BUILD,
+       mojom::kDetailedBuildInfoSubpagePath,
+       mojom::SearchResultIcon::kChrome,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSetting,
+       {.setting = mojom::Setting::kCopyDetailedBuildInfo}},
       {IDS_OS_SETTINGS_TAG_ABOUT_OS_UPDATE,
        mojom::kAboutChromeOsDetailsSubpagePath,
        mojom::SearchResultIcon::kChrome,
@@ -80,12 +86,6 @@ const std::vector<SearchConcept>& GetAboutSearchConcepts() {
        mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSetting,
        {.setting = mojom::Setting::kGetHelpWithChromeOs}},
-  });
-  return *tags;
-}
-
-const std::vector<SearchConcept>& GetAboutReleaseNotesSearchConcepts() {
-  static const base::NoDestructor<std::vector<SearchConcept>> tags({
       {IDS_OS_SETTINGS_TAG_ABOUT_RELEASE_NOTES,
        mojom::kAboutChromeOsDetailsSubpagePath,
        mojom::SearchResultIcon::kChrome,
@@ -167,9 +167,6 @@ AboutSection::AboutSection(Profile* profile,
     : OsSettingsSection(profile, search_tag_registry) {
   SearchTagRegistry::ScopedTagUpdater updater = registry()->StartUpdate();
   updater.AddSearchTags(GetAboutSearchConcepts());
-
-  if (base::FeatureList::IsEnabled(features::kReleaseNotes))
-    updater.AddSearchTags(GetAboutReleaseNotesSearchConcepts());
 }
 
 AboutSection::~AboutSection() = default;
@@ -353,6 +350,11 @@ mojom::SearchResultIcon AboutSection::GetSectionIcon() const {
 
 std::string AboutSection::GetSectionPath() const {
   return mojom::kAboutChromeOsSectionPath;
+}
+
+bool AboutSection::LogMetric(mojom::Setting setting, base::Value& value) const {
+  // Unimplemented.
+  return false;
 }
 
 void AboutSection::RegisterHierarchy(HierarchyGenerator* generator) const {

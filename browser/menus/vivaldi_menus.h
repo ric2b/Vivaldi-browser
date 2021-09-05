@@ -59,6 +59,7 @@ bool IsVivaldiCommandIdEnabled(const SimpleMenuModel& menu,
                                const ContextMenuParams& params,
                                int id,
                                bool* enabled);
+WindowOpenDisposition VivaldiGetNewTabDispostion(WebContents* web_contents);
 bool VivaldiExecuteCommand(RenderViewContextMenu* context_menu,
                            const ContextMenuParams& params,
                            WebContents* source_web_contents_,

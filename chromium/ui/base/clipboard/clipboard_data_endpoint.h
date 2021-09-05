@@ -7,7 +7,7 @@
 
 #include "base/optional.h"
 #include "base/stl_util.h"
-#include "url/gurl.h"
+#include "url/origin.h"
 
 namespace ui {
 
@@ -15,9 +15,16 @@ namespace ui {
 // destination trying to read the clipboard data.
 // Whenever a new format is supported, a new enum should be added.
 enum class EndpointType {
-  kUrl = 0,  // Website URL e.g. www.example.com
-  kVm = 1,   // Virtual machine: ARC++, PluginVM, Crostini.
-  kMaxValue = kVm
+#if defined(OS_CHROMEOS) || (OS_LINUX) || (OS_FUCHSIA)
+  kGuestOs = 0,  // Guest OS: PluginVM, Crostini.
+#endif           // defined(OS_CHROMEOS) || (OS_LINUX) || (OS_FUCHSIA)
+#if defined(OS_CHROMEOS)
+  kArc = 1,               // ARC.
+#endif                    // defined(OS_CHROMEOS)
+  kUrl = 2,               // Website URL e.g. www.example.com.
+  kClipboardHistory = 3,  // Clipboard History UI has privileged access to any
+                          // clipboard data.
+  kMaxValue = kClipboardHistory
 };
 
 // ClipboardDataEndpoint can represent:
@@ -25,7 +32,7 @@ enum class EndpointType {
 // - The destination trying to access the clipboard data.
 class COMPONENT_EXPORT(UI_BASE_CLIPBOARD) ClipboardDataEndpoint {
  public:
-  explicit ClipboardDataEndpoint(const GURL& url);
+  explicit ClipboardDataEndpoint(const url::Origin& origin);
   // This constructor shouldn't be used if |type| == EndpointType::kUrl.
   explicit ClipboardDataEndpoint(EndpointType type);
 
@@ -41,16 +48,16 @@ class COMPONENT_EXPORT(UI_BASE_CLIPBOARD) ClipboardDataEndpoint {
 
   bool IsUrlType() const { return type_ == EndpointType::kUrl; }
 
-  const GURL* url() const { return base::OptionalOrNullptr(url_); }
+  const url::Origin* origin() const { return base::OptionalOrNullptr(origin_); }
 
   EndpointType type() const { return type_; }
 
  private:
   // This variable should always have a value representing the object type.
   const EndpointType type_;
-  // The url of the data endpoint. It always has a value if |type_| ==
-  // EndpointType::URL, otherwise it's empty.
-  const base::Optional<GURL> url_;
+  // The url::Origin of the data endpoint. It always has a value if |type_| ==
+  // EndpointType::kUrl, otherwise it's empty.
+  const base::Optional<url::Origin> origin_;
 };
 
 }  // namespace ui

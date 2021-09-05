@@ -35,8 +35,8 @@ version_info::Channel AutofillClient::GetChannel() const {
   return version_info::Channel::UNKNOWN;
 }
 
-std::string AutofillClient::GetPageLanguage() const {
-  return std::string();
+AutofillOfferManager* AutofillClient::GetAutofillOfferManager() {
+  return nullptr;
 }
 
 std::string AutofillClient::GetVariationConfigCountryCode() const {

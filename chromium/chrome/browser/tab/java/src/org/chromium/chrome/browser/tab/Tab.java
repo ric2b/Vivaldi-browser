@@ -265,4 +265,24 @@ public interface Tab extends TabLifecycle {
      * @param isDirty Whether the Tab's state has changed.
      */
     void setIsTabStateDirty(boolean isTabStateDirty);
+
+    /**
+     * If set to true, any future navigations in the tab automatically get
+     * PageTransition.FROM_API_2 applied.
+     */
+    void setAddApi2TransitionToFutureNavigations(boolean shouldAdd);
+    boolean getAddApi2TransitionToFutureNavigations();
+
+    /**
+     * If true, all future navigations are hidden. See |HistoryTabHelper::hide_navigations_|
+     * for the specifics on this.
+     */
+    public void setHideFutureNavigations(boolean hide);
+    public boolean getHideFutureNavigations();
+
+    /**
+     *  Vivaldi: This is will exchange the webcontents.
+     */
+    public void changeWebContents(
+            WebContents newWebContents, boolean didStartLoad, boolean didFinishLoad);
 }

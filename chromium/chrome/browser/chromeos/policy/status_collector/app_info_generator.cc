@@ -49,6 +49,8 @@ em::AppInfo::AppType ExtractAppType(const apps::mojom::AppType app_type) {
       return em::AppInfo::AppType::AppInfo_AppType_TYPE_EXTENSION;
     case apps::mojom::AppType::kWeb:
       return em::AppInfo::AppType::AppInfo_AppType_TYPE_WEB;
+    case apps::mojom::AppType::kBorealis:
+      return em::AppInfo::AppType::AppInfo_AppType_TYPE_BOREALIS;
     case apps::mojom::AppType::kMacNative:
     case apps::mojom::AppType::kLacros:
     case apps::mojom::AppType::kRemote:
@@ -194,7 +196,7 @@ const em::AppInfo AppInfoGenerator::ConvertToAppInfo(
     info.set_app_name(update.Name());
   } else {
     const std::string launch_url = provider_->web_app_provider.registrar()
-                                       .GetAppLaunchURL(update.AppId())
+                                       .GetAppStartUrl(update.AppId())
                                        .GetOrigin()
                                        .spec();
     info.set_app_id(launch_url);

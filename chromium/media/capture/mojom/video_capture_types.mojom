@@ -99,6 +99,13 @@ enum VideoCaptureBufferType {
   kGpuMemoryBuffer
 };
 
+// Represents capture device's support for different controls.
+struct VideoCaptureControlSupport {
+  bool pan;
+  bool tilt;
+  bool zoom;
+};
+
 enum VideoCaptureError {
   kNone,
   kVideoCaptureControllerInvalidOrUnsupportedVideoCaptureParametersRequested,
@@ -267,6 +274,27 @@ struct VideoCaptureParams {
   bool enable_face_detection;
 };
 
+// |resource_utilization| reports that the frame incurred some fractional
+// utilization of the downstream pipeline's per-frame processing capacity.
+// See code comments in media::base::VideoFrameMetadata for a discussion of
+// how utilization is interpreted. The capturer uses this information to
+// auto-adjust the capture resolution based on performance variances in the
+// live system environment.
+// -1.0 means no value present.
+//
+// |max_framerate_fps| reports requested maximum frame-rate
+// float::inifinty used to signal no limit.
+//
+// |max_pixels| reports requested maximum resolution (in sense of image area).
+// int::max used to signal no limit.
+struct VideoFrameFeedback {
+  double resource_utilization;
+
+  float max_framerate_fps;
+
+  int32 max_pixels;
+};
+
 // Contains one stride value per image plane. Stride means the number of bytes
 // per row. If the image format uses fewer than kMaxPlanes planes, the values
 // for higher plane indices are ignored. For example, for a YUV format, plane
@@ -303,7 +331,7 @@ struct VideoCaptureDeviceDescriptor {
   string model_id;
   VideoFacingMode facing_mode;
   VideoCaptureApi capture_api;
-  bool pan_tilt_zoom_supported;
+  VideoCaptureControlSupport control_support;
   VideoCaptureTransportType transport_type;
 };
 

@@ -11,6 +11,7 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
+import org.chromium.base.StrictModeContext;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 
@@ -33,7 +34,9 @@ public class ChromeBrowserInitializerTest {
     public void testSynchronousInitialization() throws Exception {
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             Assert.assertFalse(mInstance.isFullBrowserInitialized());
-            mInstance.handleSynchronousStartup();
+            try (StrictModeContext ignored = StrictModeContext.allowDiskReads()) {
+                mInstance.handleSynchronousStartup();
+            }
             Assert.assertTrue(mInstance.isFullBrowserInitialized());
             return true;
         });
@@ -71,7 +74,9 @@ public class ChromeBrowserInitializerTest {
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             mInstance.runNowOrAfterFullBrowserStarted(done::release);
             Assert.assertFalse("Should not run synchronously", done.tryAcquire());
-            mInstance.handleSynchronousStartup();
+            try (StrictModeContext ignored = StrictModeContext.allowDiskReads()) {
+                mInstance.handleSynchronousStartup();
+            }
             Assert.assertTrue(done.tryAcquire());
             return true;
         });

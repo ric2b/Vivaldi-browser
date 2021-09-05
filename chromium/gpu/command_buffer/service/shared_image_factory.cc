@@ -100,7 +100,9 @@ SharedImageFactory::SharedImageFactory(
   if (use_gl) {
     gl_backing_factory_ = std::make_unique<SharedImageBackingFactoryGLTexture>(
         gpu_preferences, workarounds, gpu_feature_info, image_factory,
-        shared_image_manager->batch_access_manager());
+        shared_image_manager->batch_access_manager(),
+        shared_context_state_ ? shared_context_state_->progress_reporter()
+                              : nullptr);
   }
 
   // TODO(ccameron): This block of code should be changed to a switch on
@@ -341,7 +343,8 @@ bool SharedImageFactory::RegisterSysmemBufferCollection(
     gfx::SysmemBufferCollectionId id,
     zx::channel token,
     gfx::BufferFormat format,
-    gfx::BufferUsage usage) {
+    gfx::BufferUsage usage,
+    bool register_with_image_pipe) {
   decltype(buffer_collections_)::iterator it;
   bool inserted;
   std::tie(it, inserted) =
@@ -362,10 +365,10 @@ bool SharedImageFactory::RegisterSysmemBufferCollection(
   VkDevice device =
       vulkan_context_provider_->GetDeviceQueue()->GetVulkanDevice();
   DCHECK(device != VK_NULL_HANDLE);
-  it->second =
-      vulkan_context_provider_->GetVulkanImplementation()
-          ->RegisterSysmemBufferCollection(device, id, std::move(token), format,
-                                           usage, gfx::Size(), 0);
+  it->second = vulkan_context_provider_->GetVulkanImplementation()
+                   ->RegisterSysmemBufferCollection(
+                       device, id, std::move(token), format, usage, gfx::Size(),
+                       0, register_with_image_pipe);
 
   return true;
 }

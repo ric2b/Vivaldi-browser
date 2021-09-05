@@ -556,8 +556,7 @@ LoginPasswordView::LoginPasswordView(const LoginPalette& palette)
       /*listener=*/this, kSubmitButtonSizeDp));
   const AshColorProvider* color_provider = AshColorProvider::Get();
   SkColor color = color_provider->GetControlsLayerColor(
-      AshColorProvider::ControlsLayerType::kControlBackgroundColorInactive,
-      AshColorProvider::AshColorMode::kDark);
+      AshColorProvider::ControlsLayerType::kControlBackgroundColorInactive);
   submit_button_->SetBackgroundColor(color);
   submit_button_->SetTooltipText(
       l10n_util::GetStringUTF16(IDS_ASH_LOGIN_SUBMIT_BUTTON_ACCESSIBLE_NAME));
@@ -655,6 +654,9 @@ void LoginPasswordView::Clear() {
 }
 
 void LoginPasswordView::InsertNumber(int value) {
+  if (textfield_->GetReadOnly())
+    return;
+
   if (!textfield_->HasFocus()) {
     // RequestFocus on textfield to activate cursor.
     textfield_->RequestFocus();
@@ -732,7 +734,7 @@ void LoginPasswordView::ButtonPressed(views::Button* sender,
 
 void LoginPasswordView::HidePassword(bool chromevox_exception) {
   if (chromevox_exception &&
-      Shell::Get()->accessibility_controller()->spoken_feedback_enabled()) {
+      Shell::Get()->accessibility_controller()->spoken_feedback().enabled()) {
     return;
   }
   if (textfield_->GetTextInputType() == ui::TEXT_INPUT_TYPE_NULL)
@@ -811,6 +813,7 @@ void LoginPasswordView::SubmitPassword() {
   DCHECK(IsPasswordSubmittable());
   if (textfield_->GetReadOnly())
     return;
+  SetReadOnly(true);
   on_submit_.Run(textfield_->GetText());
 }
 

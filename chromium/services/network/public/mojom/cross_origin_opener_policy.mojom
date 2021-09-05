@@ -18,18 +18,16 @@ enum CoopAccessReportType {
 };
 
 // Reports potential COOP violations. Implemented in the browser process.
-// TODO(ahemery, pmeuleman): Add extra coop breakage cases as listed in
-// https://docs.google.com/document/d/1zWqwI8PFrezwQpBSejIMUfdtsIYl9-h8epasdrDXVIM/edit
 interface CrossOriginOpenerPolicyReporter {
   // Sends a report when two browsing contexts from different virtual browsing
   // context groups tries to access each other.
   // - |property| is the name of the access property (postMessage, open, ...).
   // - |source_location| represents the line of code that triggered the access.
+  // - |reported_window_url| the sanitized URL of the second window. Empty when
+  //   cross-origin with the reporting window.
   QueueAccessReport(CoopAccessReportType report_type, string property,
-                    SourceLocation source_location);
-
-  // Connects a new pipe to this instance.
-  Clone(pending_receiver<CrossOriginOpenerPolicyReporter> receiver);
+                    SourceLocation source_location,
+                    string reported_window_url);
 };
 
 // Cross-Origin-Opener-Policy enum representing parsed values.

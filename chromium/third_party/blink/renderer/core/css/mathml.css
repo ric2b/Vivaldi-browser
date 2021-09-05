@@ -27,14 +27,23 @@
 
 @namespace "http://www.w3.org/1998/Math/MathML";
 
+/* Default display */
+* {
+    display: block math;
+    font-size: math;
+}
+
 /* By default, we only display the MathML formulas without any formatting other than the one specified by the display attribute. */
 math {
-    display: inline-math;
-    math-superscript-shift-style: display;
+    display: inline math;
+    math-shift: normal;
+    math-style: compact;
+    font-size: inherited;
+    math-depth: 0;
 }
 
 math[display="block"] {
-    display: math;
+    display: block math;
     text-align: center;
 }
 
@@ -45,11 +54,6 @@ math[display="block"] {
 
 :focus {
     outline: auto 1px -webkit-focus-ring-color;
-}
-
-maction, merror, mfrac, mmultiscripts, mover, mpadded, mphantom, mprescripts, mroot, mrow, msqrt, mspace, mstyle, msub, msup, msubsup, munder, munderover, none
-{
-    display: math;
 }
 
 mphantom {
@@ -77,21 +81,21 @@ mfrac {
 }
 
 mfrac > * {
-  font-size: scriptlevel(auto);
-  math-style: inline;
+  math-depth: auto-add;
+  math-style: compact;
 }
 
 mfrac > :nth-child(2) {
-  math-superscript-shift-style: inline;
+  math-shift: compact;
 }
 
-/* Other rules for scriptlevel, displaystyle and math-superscript-shift-style */
+/* Other rules for scriptlevel, displaystyle and math-shift */
 mroot > :not(:first-child) {
-    font-size: scriptlevel(add(2));
-    math-style: inline;
+    math-depth: add(2);
+    math-style: compact;
 }
 mroot, msqrt {
-    math-superscript-shift-style: inline;
+    math-shift: compact;
 }
 msub > :not(:first-child),
 msup > :not(:first-child),
@@ -100,8 +104,8 @@ mmultiscripts > :not(:first-child),
 munder > :not(:first-child),
 mover > :not(:first-child),
 munderover > :not(:first-child) {
-  font-size: scriptlevel(add(1));
-  math-style: inline;
+  math-depth: add(1);
+  math-style: compact;
 }
 
 munder[accentunder="true" i] > :nth-child(2),
@@ -115,6 +119,6 @@ munder > :nth-child(2),
 munderover > :nth-child(2),
 mover[accent="true" i] > :first-child,
 munderover[accent="true" i] > :first-child {
-  math-superscript-shift-style: inline;
+  math-shift: compact;
 }
 

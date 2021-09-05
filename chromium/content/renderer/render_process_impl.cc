@@ -36,7 +36,7 @@
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/renderer/content_renderer_client.h"
-#include "services/service_manager/embedder/switches.h"
+#include "services/network/public/cpp/features.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/web/web_frame.h"
 #include "v8/include/v8.h"
@@ -121,6 +121,9 @@ RenderProcessImpl::RenderProcessImpl()
   SetV8FlagIfHasSwitch(switches::kEnableExperimentalWebAssemblyFeatures,
                        "--wasm-staging");
 
+  SetV8FlagIfHasSwitch(switches::kEnableUnsafeFastJSCalls,
+                       "--turbo-fast-api-calls");
+
   constexpr char kModuleFlags[] =
       "--harmony-dynamic-import --harmony-import-meta";
   v8::V8::SetFlagsFromString(kModuleFlags, sizeof(kModuleFlags));
@@ -143,15 +146,28 @@ RenderProcessImpl::RenderProcessImpl()
   SetV8FlagIfFeature(blink::features::kTopLevelAwait,
                      "--harmony-top-level-await");
 
-  if (base::FeatureList::IsEnabled(features::kWebAssemblyThreads)) {
-    constexpr char kFlags[] =
-        "--harmony-sharedarraybuffer "
-        "--experimental-wasm-threads";
+  constexpr char kAtomicsFlag[] = "--harmony-atomics";
+  v8::V8::SetFlagsFromString(kAtomicsFlag, sizeof(kAtomicsFlag));
 
-    v8::V8::SetFlagsFromString(kFlags, sizeof(kFlags));
+  // SharedArrayBuffers require the feature flag, or site isolation. On Android,
+  // the feature is disabled by default, so site isolation is required. On
+  // desktop, site isolation is optional while we migrate existing apps to use
+  // COOP+COEP.
+  bool enableSharedArrayBuffer = false;
+  if (base::FeatureList::IsEnabled(features::kWebAssemblyThreads)) {
+    constexpr char kWasmThreadsFlag[] = "--experimental-wasm-threads";
+    v8::V8::SetFlagsFromString(kWasmThreadsFlag, sizeof(kWasmThreadsFlag));
+    enableSharedArrayBuffer = true;
   } else {
+    enableSharedArrayBuffer =
+        base::FeatureList::IsEnabled(features::kSharedArrayBuffer) ||
+        base::FeatureList::IsEnabled(network::features::kCrossOriginIsolated);
+  }
+
+  if (enableSharedArrayBuffer) {
     SetV8FlagIfFeature(features::kSharedArrayBuffer,
                        "--harmony-sharedarraybuffer");
+  } else {
     SetV8FlagIfNotFeature(features::kSharedArrayBuffer,
                           "--no-harmony-sharedarraybuffer");
   }
@@ -164,8 +180,7 @@ RenderProcessImpl::RenderProcessImpl()
 #if (defined(OS_LINUX) || defined(OS_CHROMEOS)) && defined(ARCH_CPU_X86_64)
   if (base::FeatureList::IsEnabled(features::kWebAssemblyTrapHandler)) {
     base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-    if (!command_line->HasSwitch(
-            service_manager::switches::kDisableInProcessStackTraces)) {
+    if (!command_line->HasSwitch(switches::kDisableInProcessStackTraces)) {
       // Only enable WebAssembly trap handler if we can set the callback.
       if (base::debug::SetStackDumpFirstChanceCallback(
               v8::TryHandleWebAssemblyTrapPosix)) {

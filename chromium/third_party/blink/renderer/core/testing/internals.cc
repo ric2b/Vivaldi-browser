@@ -131,7 +131,6 @@
 #include "third_party/blink/renderer/core/page/validation_message_client.h"
 #include "third_party/blink/renderer/core/page/viewport_description.h"
 #include "third_party/blink/renderer/core/paint/compositing/composited_layer_mapping.h"
-#include "third_party/blink/renderer/core/paint/compositing/graphics_layer_tree_as_text.h"
 #include "third_party/blink/renderer/core/paint/compositing/paint_layer_compositor.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
@@ -276,9 +275,7 @@ void Internals::ResetToConsistentState(Page* page) {
 
   page->SetIsCursorVisible(true);
   // Ensure the PageScaleFactor always stays within limits, if the test changed
-  // the limits. BlinkTestRunner will reset the limits to those set by
-  // LayoutTestDefaultPreferences when preferences are reapplied after this
-  // call.
+  // the limits.
   page->SetDefaultPageScaleLimits(1, 4);
   page->SetPageScaleFactor(1);
   page->GetChromeClient().GetWebView()->DisableDeviceEmulation();
@@ -478,9 +475,11 @@ bool Internals::isPreloadedBy(const String& url, Document* document) {
 bool Internals::isLoading(const String& url) {
   if (!document_)
     return false;
-  const String cache_identifier = document_->Fetcher()->GetCacheIdentifier();
-  Resource* resource = GetMemoryCache()->ResourceForURL(
-      document_->CompleteURL(url), cache_identifier);
+  const KURL full_url = document_->CompleteURL(url);
+  const String cache_identifier =
+      document_->Fetcher()->GetCacheIdentifier(full_url);
+  Resource* resource =
+      GetMemoryCache()->ResourceForURL(full_url, cache_identifier);
   // We check loader() here instead of isLoading(), because a multipart
   // ImageResource lies isLoading() == false after the first part is loaded.
   return resource && resource->Loader();
@@ -489,9 +488,11 @@ bool Internals::isLoading(const String& url) {
 bool Internals::isLoadingFromMemoryCache(const String& url) {
   if (!document_)
     return false;
-  const String cache_identifier = document_->Fetcher()->GetCacheIdentifier();
-  Resource* resource = GetMemoryCache()->ResourceForURL(
-      document_->CompleteURL(url), cache_identifier);
+  const KURL full_url = document_->CompleteURL(url);
+  const String cache_identifier =
+      document_->Fetcher()->GetCacheIdentifier(full_url);
+  Resource* resource =
+      GetMemoryCache()->ResourceForURL(full_url, cache_identifier);
   return resource && resource->GetStatus() == ResourceStatus::kCached;
 }
 
@@ -2318,7 +2319,7 @@ int Internals::numberOfPages(float page_width,
 }
 
 String Internals::pageProperty(String property_name,
-                               int page_number,
+                               unsigned page_number,
                                ExceptionState& exception_state) const {
   if (!GetFrame()) {
     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidAccessError,
@@ -2331,7 +2332,7 @@ String Internals::pageProperty(String property_name,
 }
 
 String Internals::pageSizeAndMarginsInPixels(
-    int page_number,
+    unsigned page_number,
     int width,
     int height,
     int margin_top,
@@ -3162,6 +3163,13 @@ Element* Internals::interestedElement() {
       .GetInterestedElement();
 }
 
+bool Internals::isActivated() {
+  if (!GetFrame())
+    return false;
+
+  return GetFrame()->GetPage()->GetFocusController().IsActive();
+}
+
 bool Internals::isInCanvasFontCache(Document* document,
                                     const String& font_string) {
   return document->GetCanvasFontCache()->IsInCache(font_string);
@@ -3515,6 +3523,21 @@ void Internals::generateTestReport(const String& message) {
 
   // Send the test report to any ReportingObservers.
   ReportingContext::From(document_->domWindow())->QueueReport(report);
+}
+
+void Internals::setIsAdSubframe(HTMLIFrameElement* iframe,
+                                ExceptionState& exception_state) {
+  if (!iframe->ContentFrame() || !iframe->ContentFrame()->IsLocalFrame()) {
+    exception_state.ThrowDOMException(DOMExceptionCode::kNotSupportedError,
+                                      "Frame cannot be accessed.");
+    return;
+  }
+  LocalFrame* parent_frame = iframe->GetDocument().GetFrame();
+  LocalFrame* child_frame = To<LocalFrame>(iframe->ContentFrame());
+  bool parent_is_ad = parent_frame && parent_frame->IsAdSubframe();
+  child_frame->SetIsAdSubframe(parent_is_ad
+                                   ? blink::mojom::AdFrameType::kChildAd
+                                   : blink::mojom::AdFrameType::kRootAd);
 }
 
 }  // namespace blink

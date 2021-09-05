@@ -1,0 +1,34 @@
+<style include="diagnostics-shared diagnostics-fonts">
+  #card-wrapper {
+    border: 1px solid var(--diagnostics-border-color);
+    border-radius: 14px;
+    height: 180px;
+    margin: 10px 0;
+  }
+
+  .body-container {
+    column-gap: 15px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, 100px);
+  }
+
+  .title-container {
+    @apply --diagnostics-default-font;
+  }
+
+  .spacing {
+    margin-top: 18px;
+    padding-inline-end: 15px;
+    padding-inline-start: 15px;
+  }
+</style>
+
+<div id="card-wrapper">
+  <div id="title" class="title-container spacing">
+    <slot name="title"></slot>
+  </div>
+
+  <div id="body" class="body-container spacing">
+    <slot name="body"></slot>
+  </div>
+</div>

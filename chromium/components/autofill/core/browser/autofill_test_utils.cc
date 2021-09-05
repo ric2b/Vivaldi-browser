@@ -487,6 +487,7 @@ CreditCard GetMaskedServerCard() {
                           "2109" /* Mastercard */, NextMonth().c_str(),
                           NextYear().c_str(), "1");
   credit_card.SetNetworkForMaskedCard(kMasterCard);
+  credit_card.set_instrument_id(1);
   return credit_card;
 }
 
@@ -577,6 +578,30 @@ CreditCardCloudTokenData GetCreditCardCloudTokenData2() {
   data.exp_year += 1;
   data.card_art_url = "fake url 2";
   data.instrument_token = "fake token 2";
+  return data;
+}
+
+AutofillOfferData GetCardLinkedOfferData1() {
+  AutofillOfferData data;
+  data.offer_id = 111;
+  data.offer_reward_amount = "5%";
+  // Sets the expiry to be 45 days later.
+  data.expiry = AutofillClock::Now() + base::TimeDelta::FromDays(45);
+  data.offer_details_url = GURL("http://www.example1.com");
+  data.merchant_domain.emplace_back("http://www.example1.com");
+  data.eligible_instrument_id.emplace_back(111111);
+  return data;
+}
+
+AutofillOfferData GetCardLinkedOfferData2() {
+  AutofillOfferData data;
+  data.offer_id = 222;
+  data.offer_reward_amount = "$10";
+  // Sets the expiry to be 40 days later.
+  data.expiry = AutofillClock::Now() + base::TimeDelta::FromDays(40);
+  data.offer_details_url = GURL("http://www.example2.com");
+  data.merchant_domain.emplace_back("http://www.example2.com");
+  data.eligible_instrument_id.emplace_back(222222);
   return data;
 }
 
@@ -693,6 +718,7 @@ void SetServerCreditCards(AutofillTable* table,
     card.set_record_type(CreditCard::MASKED_SERVER_CARD);
     card.SetNumber(card.LastFourDigits());
     card.SetNetworkForMaskedCard(card.network());
+    card.set_instrument_id(card.instrument_id());
   }
   table->SetServerCreditCards(as_masked_cards);
 
@@ -849,45 +875,40 @@ std::string ObfuscatedCardDigitsAsUTF8(const std::string& str) {
 
 std::string NextMonth() {
   base::Time::Exploded now;
-  AutofillClock::Now().LocalExplode(&now);
+  // Using AutofillClock here might cause test flakiness. See crbug/1108232.
+  base::Time::Now().LocalExplode(&now);
   return base::StringPrintf("%02d", now.month % 12 + 1);
 }
 std::string LastYear() {
   base::Time::Exploded now;
-  AutofillClock::Now().LocalExplode(&now);
+  // Using AutofillClock here might cause test flakiness. See crbug/1108232.
+  base::Time::Now().LocalExplode(&now);
   return base::NumberToString(now.year - 1);
 }
 std::string NextYear() {
   base::Time::Exploded now;
-  AutofillClock::Now().LocalExplode(&now);
+  // Using AutofillClock here might cause test flakiness. See crbug/1108232.
+  base::Time::Now().LocalExplode(&now);
   return base::NumberToString(now.year + 1);
 }
 std::string TenYearsFromNow() {
   base::Time::Exploded now;
-  AutofillClock::Now().LocalExplode(&now);
+  // Using AutofillClock here might cause test flakiness. See crbug/1108232.
+  base::Time::Now().LocalExplode(&now);
   return base::NumberToString(now.year + 10);
 }
 
-FormAndFieldSignatures GetEncodedSignatures(const FormStructure& form) {
-  FormAndFieldSignatures signatures;
-  signatures.emplace_back(form.form_signature(),
-                          std::vector<autofill::FieldSignature>{});
-  for (const auto& field : form) {
-    if (form.ShouldSkipFieldVisibleForTesting(*field))
-      continue;
-    signatures.back().second.push_back(field->GetFieldSignature());
-  }
+std::vector<FormSignature> GetEncodedSignatures(const FormStructure& form) {
+  std::vector<FormSignature> signatures;
+  signatures.push_back(form.form_signature());
   return signatures;
 }
 
-FormAndFieldSignatures GetEncodedSignatures(
+std::vector<FormSignature> GetEncodedSignatures(
     const std::vector<FormStructure*>& forms) {
-  FormAndFieldSignatures all_signatures;
-  for (const FormStructure* form : forms) {
-    FormAndFieldSignatures form_signatures = GetEncodedSignatures(*form);
-    std::move(form_signatures.begin(), form_signatures.end(),
-              std::back_inserter(all_signatures));
-  }
+  std::vector<FormSignature> all_signatures;
+  for (const FormStructure* form : forms)
+    all_signatures.push_back(form->form_signature());
   return all_signatures;
 }
 

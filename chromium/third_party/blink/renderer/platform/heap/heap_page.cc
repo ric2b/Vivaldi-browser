@@ -88,6 +88,7 @@
 namespace blink {
 
 void HeapObjectHeader::Finalize(Address object, size_t object_size) {
+  DCHECK(!IsInConstruction<HeapObjectHeader::AccessMode::kAtomic>());
   HeapAllocHooks::FreeHookIfEnabled(object);
   const GCInfo& gc_info = GCInfo::From(GcInfoIndex());
   if (gc_info.finalize)
@@ -1814,7 +1815,7 @@ void NormalPage::CollectStatistics(
 bool NormalPage::Contains(ConstAddress addr) const {
   Address blink_page_start = RoundToBlinkPageStart(GetAddress());
   // Page is at aligned address plus guard page size.
-  DCHECK_EQ(blink_page_start, GetAddress() - kBlinkGuardPageSize);
+  DCHECK_EQ(blink_page_start, GetAddress() - BlinkGuardPageSize());
   return blink_page_start <= addr && addr < blink_page_start + kBlinkPageSize;
 }
 #endif

@@ -20,7 +20,7 @@
 #include "base/system/sys_info_internal.h"
 #include "base/threading/scoped_blocking_call.h"
 #include "build/build_config.h"
-#include "build/lacros_buildflags.h"
+#include "build/chromeos_buildflags.h"
 
 #if defined(OS_ANDROID)
 #include <sys/vfs.h>
@@ -29,7 +29,7 @@
 #include <sys/statvfs.h>
 #endif
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
 #include <linux/magic.h>
 #include <sys/vfs.h>
 #endif
@@ -78,7 +78,7 @@ base::LazyInstance<
     base::internal::LazySysInfoValue<int64_t, AmountOfVirtualMemory>>::Leaky
     g_lazy_virtual_memory = LAZY_INSTANCE_INITIALIZER;
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
 bool IsStatsZeroIfUnlimited(const base::FilePath& path) {
   struct statfs stats;
 
@@ -93,7 +93,7 @@ bool IsStatsZeroIfUnlimited(const base::FilePath& path) {
   }
   return false;
 }
-#endif  // defined(OS_LINUX)
+#endif  // defined(OS_LINUX) || defined(OS_CHROMEOS)
 
 bool GetDiskSpaceInfo(const base::FilePath& path,
                       int64_t* available_bytes,
@@ -102,7 +102,7 @@ bool GetDiskSpaceInfo(const base::FilePath& path,
   if (HANDLE_EINTR(statvfs(path.value().c_str(), &stats)) != 0)
     return false;
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
   const bool zero_size_means_unlimited =
       stats.f_blocks == 0 && IsStatsZeroIfUnlimited(path);
 #else

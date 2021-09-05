@@ -299,9 +299,12 @@ chromium_strings.grd. -->
       <message name="IDS_ABOUT_TERMS_OF_SERVICE" desc="The terms of service label in the About box.">
         Terms of Service
       </message>
+      <message name="IDS_CPU_X86_SSE2_OBSOLETE_SOON" desc="A message displayed on an at-launch infobar and About (Help) page warning the user that the computer they are using will soon be or is already unsupported.">
+        This computer will soon stop receiving Google Chrome updates because its hardware is no longer supported.
+      </message>
       <if expr="is_macosx">
-        <message name="IDS_MAC_10_9_OBSOLETE_NOW" desc="A message displayed on an at-launch infobar and About (Help) page warning the user that the OS version they are using is no longer supported.">
-          This computer will no longer receive Google Chrome updates because Mac OS X 10.9 is no longer supported.
+        <message name="IDS_MAC_10_10_OBSOLETE_SOON" desc="A message displayed on an at-launch infobar and About (Help) page warning the user that the OS version they are using will soon be or is already unsupported.">
+          To get future Google Chrome updates, you'll need OS X 10.11 or later. This computer is using OS X 10.10.
         </message>
       </if>
       <if expr="is_win">
@@ -318,6 +321,16 @@ chromium_strings.grd. -->
           Google Chrome is unresponsive. Relaunch now?
         </message>
       </if>
+      <!-- Sharing messages -->
+      <message name="IDS_BROWSER_SHARING_CLICK_TO_CALL_DIALOG_HELP_TEXT_NO_DEVICES" desc="The label to be shown as a help text of the dialog when user click on a phone number, if there are no phones to choose from.">
+        To send a number from here to your Android phone, sign in to Chrome on both devices.
+      </message>
+      <message name="IDS_BROWSER_SHARING_CLICK_TO_CALL_DIALOG_HELP_TEXT_NO_DEVICES_ORIGIN" desc="The label to be shown as a help text of the dialog when user click on a phone number, if there are no phones to choose from.">
+        To send a number from <ph name="ORIGIN">$1<ex>www.google.com</ex></ph> to your Android phone, sign in to Chrome on both devices.
+      </message>
+      <message name="IDS_BROWSER_SHARING_ERROR_DIALOG_TEXT_DEVICE_NOT_FOUND" desc="The text to be shown on the dialog when an error occurred because the device is not synced.">
+        Make sure you are signed in to Chrome on your <ph name="TARGET_DEVICE_NAME">$1<ex>Pixel XL</ex></ph> and then try sending again.
+      </message>
       <!-- Uninstall messages -->
       <if expr="is_win">
         <message name="IDS_UNINSTALL_CLOSE_APP" desc="Message to user when uninstall detects other app instance running">
@@ -334,7 +347,7 @@ chromium_strings.grd. -->
         Make Google Chrome the default browser
       </message>
       <if expr="chromeos">
-        <message name="IDS_EXTERNAL_PROTOCOL_TITLE" desc="External Protocol Dialog Title">
+        <message name="IDS_EXTERNAL_PROTOCOL_NO_HANDLER_TITLE" desc="External Protocol Dialog Title">
           Google Chrome OS can't open this page.
         </message>
       </if>
@@ -1183,6 +1196,21 @@ Google Chrome is unable to recover your settings.
         </message>
       </if>
 
+      <!-- Rosetta installation for protected media -->
+      <if expr="is_macosx">
+        <message name="IDS_ROSETTA_INSTALL_TITLE"
+                   desc="Title of the 'do you want to install Rosetta' dialog. Used when there is a page title.">
+          To enable Chrome to play protected media, you need to install Rosetta. Do you want to install it now?
+        </message>
+        <message name="IDS_ROSETTA_INSTALL_BODY"
+                   desc="Body text of the 'do you want to install Rosetta' dialog.">
+          Rosetta enables Chrome to play the protected media on this page.
+        </message>
+        <message name="IDS_ROSETTA_INSTALL_RESTART_DIALOG"
+                   desc="Title text of the dialog once Rosetta is installed.">
+          To use Rosetta to play protected media, you must restart Chrome.
+        </message>
+      </if>
     </messages>
   </release>
 </grit>

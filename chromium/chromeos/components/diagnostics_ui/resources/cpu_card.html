@@ -1,0 +1,17 @@
+<style include="diagnostics-shared diagnostics-fonts">
+</style>
+
+<diagnostics-card>
+  <div slot="title">
+    <div id="cardTitle">[[i18n('cpuTitle')]]</div>
+  </div>
+  <data-point slot="body" id="cpuTemp"
+    value="[[cpuUsage_.cpu_temp_degrees_celcius]]">
+  </data-point>
+  <data-point slot="body" id="cpuUsageUser"
+    value="[[cpuUsage_.percent_usage_user]]">
+  </data-point>
+  <data-point slot="body" id="cpuUsageSystem"
+    value="[[cpuUsage_.percent_usage_system]]">
+  </data-point>
+</diagnostics-card>

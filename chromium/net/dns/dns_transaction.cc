@@ -117,10 +117,10 @@ bool IsIPLiteral(const std::string& hostname) {
 }
 
 base::Value NetLogStartParams(const std::string& hostname, uint16_t qtype) {
-  base::DictionaryValue dict;
-  dict.SetString("hostname", hostname);
-  dict.SetInteger("query_type", qtype);
-  return std::move(dict);
+  base::Value dict(base::Value::Type::DICTIONARY);
+  dict.SetStringKey("hostname", hostname);
+  dict.SetIntKey("query_type", qtype);
+  return dict;
 }
 
 // ----------------------------------------------------------------------------
@@ -158,11 +158,11 @@ class DnsAttempt {
   base::Value NetLogResponseParams() const {
     DCHECK(GetResponse()->IsValid());
 
-    base::DictionaryValue dict;
-    dict.SetInteger("rcode", GetResponse()->rcode());
-    dict.SetInteger("answer_count", GetResponse()->answer_count());
+    base::Value dict(base::Value::Type::DICTIONARY);
+    dict.SetIntKey("rcode", GetResponse()->rcode());
+    dict.SetIntKey("answer_count", GetResponse()->answer_count());
     GetSocketNetLog().source().AddToEventParameters(&dict);
-    return std::move(dict);
+    return dict;
   }
 
   void set_result(int result) { result_ = result; }
@@ -961,7 +961,8 @@ class DnsOverHttpsProbeRunner : public DnsProbeRunner {
         &probe_stats->probe_attempts, context_->url_request_context(),
         context_->isolation_info(), RequestPriority::DEFAULT_PRIORITY);
 
-    probe_stats->probe_attempts.back()->Start(base::BindOnce(
+    DnsAttempt* probe_attempt = probe_stats->probe_attempts.back().get();
+    probe_attempt->Start(base::BindOnce(
         &DnsOverHttpsProbeRunner::ProbeComplete, weak_ptr_factory_.GetWeakPtr(),
         attempt_number, doh_server_index, std::move(probe_stats),
         network_change, sequence_start_time,
@@ -1043,7 +1044,7 @@ class DnsTransactionImpl : public DnsTransaction,
                      const NetLogWithSource& net_log,
                      const OptRecordRdata* opt_rdata,
                      bool secure,
-                     DnsConfig::SecureDnsMode secure_dns_mode,
+                     SecureDnsMode secure_dns_mode,
                      ResolveContext* resolve_context)
       : session_(session),
         hostname_(hostname),
@@ -1529,7 +1530,7 @@ class DnsTransactionImpl : public DnsTransaction,
   uint16_t qtype_;
   const OptRecordRdata* opt_rdata_;
   const bool secure_;
-  const DnsConfig::SecureDnsMode secure_dns_mode_;
+  const SecureDnsMode secure_dns_mode_;
   // Cleared in DoCallback.
   DnsTransactionFactory::CallbackType callback_;
 
@@ -1577,7 +1578,7 @@ class DnsTransactionFactoryImpl : public DnsTransactionFactory {
       CallbackType callback,
       const NetLogWithSource& net_log,
       bool secure,
-      DnsConfig::SecureDnsMode secure_dns_mode,
+      SecureDnsMode secure_dns_mode,
       ResolveContext* resolve_context) override {
     return std::make_unique<DnsTransactionImpl>(
         session_.get(), hostname, qtype, std::move(callback), net_log,
@@ -1597,7 +1598,7 @@ class DnsTransactionFactoryImpl : public DnsTransactionFactory {
     opt_rdata_->AddOpt(opt);
   }
 
-  DnsConfig::SecureDnsMode GetSecureDnsModeForTest() override {
+  SecureDnsMode GetSecureDnsModeForTest() override {
     return session_->config().secure_dns_mode;
   }
 

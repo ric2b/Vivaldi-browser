@@ -14,6 +14,7 @@
 #include "base/macros.h"
 #include "base/path_service.h"
 #include "base/rand_util.h"
+#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/values.h"
@@ -43,11 +44,9 @@
 
 #if defined(OS_WIN)
 #include "chrome/browser/profiles/profile_attributes_entry.h"
-#include "chrome/grit/chrome_unscaled_resources.h"
+#include "chrome/grit/chrome_unscaled_resources.h"  // nogncheck crbug.com/1125897
 #include "ui/gfx/icon_util.h"  // For Iconutil::kLargeIconSize.
 #endif
-
-#include "app/vivaldi_apptools.h"
 
 // Helper methods for transforming and drawing avatar icons.
 namespace {
@@ -82,14 +81,6 @@ SkBitmap GetSkBitmapCopy(const gfx::Image& image) {
     image_bitmap->readPixels(bitmap_copy.info(), bitmap_copy.getPixels(),
                              bitmap_copy.rowBytes(), 0, 0);
   return bitmap_copy;
-}
-
-// Returns a copied SkBitmap for the given resource id that can be safely passed
-// to another thread.
-SkBitmap GetImageResourceSkBitmapCopy(int resource_id) {
-  const gfx::Image image =
-      ui::ResourceBundle::GetSharedInstance().GetNativeImageNamed(resource_id);
-  return GetSkBitmapCopy(image);
 }
 #endif  // OS_WIN
 
@@ -458,7 +449,7 @@ SkBitmap GetAvatarIconAsSquare(const SkBitmap& source_bitmap,
     source_bitmap.extractSubset(&square_bitmap, gfx::RectToSkIRect(frame));
   } else {
     // If it's not an old avatar icon, the image should be square.
-    DCHECK(source_bitmap.width() == source_bitmap.height());
+    DCHECK_EQ(source_bitmap.width(), source_bitmap.height());
     square_bitmap = source_bitmap;
   }
   return square_bitmap;
@@ -730,6 +721,13 @@ int GetDefaultAvatarIconResourceIDAtIndex(size_t index) {
   return GetDefaultAvatarIconResourceInfo(index)->resource_id;
 }
 
+#if defined(OS_WIN)
+int GetOldDefaultAvatar2xIconResourceIDAtIndex(size_t index) {
+  DCHECK_LT(index, base::size(kProfileAvatarIconResources2x));
+  return kProfileAvatarIconResources2x[index];
+}
+#endif  // defined(OS_WIN)
+
 const char* GetDefaultAvatarIconFileNameAtIndex(size_t index) {
   CHECK_NE(index, kPlaceholderAvatarIndex);
   return GetDefaultAvatarIconResourceInfo(index)->filename;
@@ -836,49 +834,18 @@ size_t GetRandomAvatarIconIndex(
 }
 
 #if defined(OS_WIN)
-void GetWinAvatarImages(ProfileAttributesEntry* entry,
-                        SkBitmap* avatar_image_1x,
-                        SkBitmap* avatar_image_2x) {
-  // The profile might be using the Gaia avatar, which is not in the
-  // resources array.
-  if (entry->IsUsingGAIAPicture()) {
-    const gfx::Image* image = entry->GetGAIAPicture();
-    if (image) {
-      *avatar_image_1x = GetSkBitmapCopy(*image);
-      // Gaia images are 256px, which makes them big enough to use in the
-      // large icon case as well.
-      DCHECK_GE(image->Width(), IconUtil::kLargeIconSize);
-      *avatar_image_2x = *avatar_image_1x;
-      return;
-    }
-  }
-
-  // If the profile isn't using a Gaia image, or if the Gaia image did not
-  // exist, revert to the previously used avatar icon.
-  const size_t icon_index = entry->GetAvatarIconIndex();
-  *avatar_image_1x = GetImageResourceSkBitmapCopy(
-      profiles::GetDefaultAvatarIconResourceIDAtIndex(icon_index));
-
-  if (vivaldi::IsVivaldiRunning()) {
-    // All Vivaldi icons are big and can be used directly.
-    *avatar_image_2x = *avatar_image_1x;
-  } else if (profiles::IsModernAvatarIconIndex(icon_index)) {
-    // Modern avatars are large(192px) by default, which makes them big
-    // enough for 2x.
-    *avatar_image_2x = *avatar_image_1x;
-  } else {
-    *avatar_image_2x =
-        GetImageResourceSkBitmapCopy(kProfileAvatarIconResources2x[icon_index]);
-  }
+SkBitmap GetWin2xAvatarImage(ProfileAttributesEntry* entry) {
+  // Request just one size large enough for all uses.
+  return GetSkBitmapCopy(entry->GetAvatarIcon(IconUtil::kLargeIconSize));
 }
 
 SkBitmap GetBadgedWinIconBitmapForAvatar(const SkBitmap& app_icon_bitmap,
-                                         const SkBitmap& avatar_bitmap,
-                                         int scale_factor) {
+                                         const SkBitmap& avatar_bitmap) {
+  constexpr int kAvatarBitmapScaleFactor = 2;
   // TODO(dfried): This function often doesn't actually do the thing it claims
   // to. We should probably fix it.
   SkBitmap source_bitmap =
-      profiles::GetAvatarIconAsSquare(avatar_bitmap, scale_factor);
+      profiles::GetAvatarIconAsSquare(avatar_bitmap, kAvatarBitmapScaleFactor);
 
   int avatar_badge_width = kProfileAvatarBadgeSizeWin;
   if (app_icon_bitmap.width() != kShortcutIconSizeWin) {

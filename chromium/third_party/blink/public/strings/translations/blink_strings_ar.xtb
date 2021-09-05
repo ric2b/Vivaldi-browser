@@ -13,9 +13,11 @@
 <translation id="1211441953136645838">تعليق ختامي</translation>
 <translation id="1281252709823657822">مربع حوار</translation>
 <translation id="1306460908038601864">غير مفعّل</translation>
+<translation id="1311894908970423688">يجب أن تكون القيمة <ph name="VALUE_DATE_OR_TIME" />.</translation>
 <translation id="1335095011850992622">إسهامات</translation>
 <translation id="1342835525016946179">article</translation>
 <translation id="1359897965706325498">إعلان بانر</translation>
+<translation id="145015347812617860"><ph name="COUNT" /> من العناصر</translation>
 <translation id="1480676835519562650">اختيار متعدد، تم اختيار <ph name="SELECTED" /> من أصل <ph name="COUNT" />.</translation>
 <translation id="1589122976691792535">منطقة</translation>
 <translation id="1591562245178063882">هذا الشهر</translation>
@@ -45,6 +47,7 @@
 <translation id="2247351761944213033">الأسبوع <ph name="WEEKNUMBER" />، <ph name="YEAR" /></translation>
 <translation id="2277199496770840904">المقطع الصوتي <ph name="NUMBER" /></translation>
 <translation id="2291999235780842123">مربع اختيار</translation>
+<translation id="2307576640803031502">في القائمة، العنصر <ph name="INDEX" /> من أصل <ph name="COUNT" />.</translation>
 <translation id="2311842470354187719">فاصل صفحة</translation>
 <translation id="2335594187091864976">منتقي التاريخ والوقت</translation>
 <translation id="2393030564806080191">قيمة اللون السداسية العشرية</translation>
@@ -156,9 +159,11 @@
 <translation id="5677946354068040947">خيارات إضافية</translation>
 <translation id="576709008726043716">مقدمة</translation>
 <translation id="57838592816432529">كتم الصوت</translation>
+<translation id="5860033963881614850">غير مفعّل</translation>
 <translation id="588258955323874662">ملء الشاشة</translation>
 <translation id="5888666972993069672">يتم الإرسال الآن إلى <ph name="DEVICE_FRIENDLY_NAME" /></translation>
 <translation id="591047860372322273">مربع البحث</translation>
+<translation id="5916664084637901428">مفعّل</translation>
 <translation id="5939518447894949180">إعادة الضبط</translation>
 <translation id="5966707198760109579">الأسبوع</translation>
 <translation id="5987525920412732405">زر الدوران</translation>
@@ -186,6 +191,7 @@
 <translation id="6643016212128521049">محو</translation>
 <translation id="668171684555832681">ملف تعريف آخر...</translation>
 <translation id="6692633176391053278">تخطي</translation>
+<translation id="6709093583001123835">يجب أن تكون القيمة <ph name="VALUE" />.</translation>
 <translation id="6709570249143506788">جودة التشغيل ضعيفة.</translation>
 <translation id="6755330956360078551">تلميح</translation>
 <translation id="6790428901817661496">التشغيل</translation>
@@ -286,6 +292,7 @@
 <translation id="9155987714137265666"><ph name="WEEK" />، ابتداء من <ph name="WEEK_START_DATE" /></translation>
 <translation id="916607977885256133">نافذة ضمن النافذة</translation>
 <translation id="9168329111483466115">حاشية سُفلية</translation>
+<translation id="945780513535800434">مُحدَّد جزئيًا</translation>
 <translation id="954003015749068518">الدخول في وضع "نافذة ضمن نافذة"</translation>
 <translation id="966787709310836684">القائمة</translation>
 </translationbundle>

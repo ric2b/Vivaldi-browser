@@ -97,7 +97,8 @@ export let Policies;
  *   destinationsManaged: boolean,
  *   cloudPrintURL: (string | undefined),
  *   userAccounts: (Array<string> | undefined),
- *   syncAvailable: boolean
+ *   syncAvailable: boolean,
+ *   isDriveMounted: (boolean | undefined),
  * }}
  * @see corresponding field name definitions in print_preview_handler.cc
  */
@@ -282,7 +283,7 @@ export class NativeLayer {
   /**
    * Records the histogram to capture the printer status of the current
    * destination and whether the user chose to print or cancel.
-   * @param {!PrinterStatusReason} statusReason Current destination printer
+   * @param {?PrinterStatusReason} statusReason Current destination printer
    * status
    * @param {boolean} didUserAttemptPrint True if user printed, false if user
    * canceled.
@@ -320,11 +321,7 @@ export class NativeLayerImpl {
 
   /** @override */
   getPrinterCapabilities(destinationId, type) {
-    return sendWithPromise(
-        'getPrinterCapabilities', destinationId,
-        destinationId === Destination.GooglePromotedId.SAVE_AS_PDF ?
-            PrinterType.PDF_PRINTER :
-            type);
+    return sendWithPromise('getPrinterCapabilities', destinationId, type);
   }
 
   // <if expr="chromeos">
@@ -403,6 +400,10 @@ export class NativeLayerImpl {
 
   /** @override */
   recordPrinterStatusHistogram(statusReason, didUserAttemptPrint) {
+    if (!statusReason) {
+      return;
+    }
+
     let histogram;
     switch (statusReason) {
       case (PrinterStatusReason.NO_ERROR):

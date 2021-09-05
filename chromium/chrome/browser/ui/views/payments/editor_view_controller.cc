@@ -60,7 +60,7 @@ std::unique_ptr<views::View> CreateErrorLabelView(
   view->SetLayoutManager(std::move(layout));
 
   std::unique_ptr<views::Label> error_label =
-      std::make_unique<views::Label>(error, CONTEXT_BODY_TEXT_SMALL);
+      std::make_unique<views::Label>(error, CONTEXT_DIALOG_BODY_TEXT_SMALL);
   error_label->SetID(static_cast<int>(DialogViewID::ERROR_LABEL_OFFSET) + type);
   error_label->SetEnabledColor(error_label->GetNativeTheme()->GetSystemColor(
       ui::NativeTheme::kColorId_AlertSeverityHigh));
@@ -74,9 +74,9 @@ std::unique_ptr<views::View> CreateErrorLabelView(
 }  // namespace
 
 EditorViewController::EditorViewController(
-    PaymentRequestSpec* spec,
-    PaymentRequestState* state,
-    PaymentRequestDialogView* dialog,
+    base::WeakPtr<PaymentRequestSpec> spec,
+    base::WeakPtr<PaymentRequestState> state,
+    base::WeakPtr<PaymentRequestDialogView> dialog,
     BackNavigationType back_navigation_type,
     bool is_incognito)
     : PaymentRequestSheetController(spec, state, dialog),
@@ -214,7 +214,9 @@ EditorViewController::CreateComboboxForField(const EditorField& field,
 
   // Using autofill field type as a view ID.
   combobox->SetID(GetInputFieldViewId(field.type));
-  combobox->set_listener(this);
+  combobox->set_callback(
+      base::BindRepeating(&EditorViewController::OnPerformAction,
+                          base::Unretained(this), combobox.get()));
   comboboxes_.insert(std::make_pair(combobox.get(), field));
   return combobox;
 }
@@ -226,9 +228,8 @@ void EditorViewController::ContentsChanged(views::Textfield* sender,
   primary_button()->SetEnabled(ValidateInputFields());
 }
 
-void EditorViewController::OnPerformAction(views::Combobox* sender) {
-  ValidatingCombobox* sender_cast = static_cast<ValidatingCombobox*>(sender);
-  sender_cast->OnContentsChanged();
+void EditorViewController::OnPerformAction(ValidatingCombobox* sender) {
+  static_cast<ValidatingCombobox*>(sender)->OnContentsChanged();
   primary_button()->SetEnabled(ValidateInputFields());
 }
 

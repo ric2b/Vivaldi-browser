@@ -401,19 +401,41 @@ const CSSValue* AspectRatio::ParseSingleValue(
     CSSParserTokenRange& range,
     const CSSParserContext& context,
     const CSSParserLocalContext&) const {
+  // Syntax: auto | auto 1/2 | 1/2 auto
+  CSSValue* auto_value = nullptr;
   if (range.Peek().Id() == CSSValueID::kAuto)
-    return css_parsing_utils::ConsumeIdent(range);
-  CSSValue* width = css_parsing_utils::ConsumePositiveInteger(range, context);
+    auto_value = css_parsing_utils::ConsumeIdent(range);
+
+  if (range.AtEnd())
+    return auto_value;
+
+  CSSValue* width =
+      css_parsing_utils::ConsumeNumber(range, context, kValueRangeNonNegative);
   if (!width)
     return nullptr;
-  if (!css_parsing_utils::ConsumeSlashIncludingWhitespace(range))
-    return nullptr;
-  CSSValue* height = css_parsing_utils::ConsumePositiveInteger(range, context);
-  if (!height)
-    return nullptr;
-  CSSValueList* list = CSSValueList::CreateSlashSeparated();
-  list->Append(*width);
-  list->Append(*height);
+  CSSValue* height = nullptr;
+  if (css_parsing_utils::ConsumeSlashIncludingWhitespace(range)) {
+    height = css_parsing_utils::ConsumeNumber(range, context,
+                                              kValueRangeNonNegative);
+  }
+  // missing height is legal (treated as 1)
+
+  CSSValueList* ratio_list = CSSValueList::CreateSlashSeparated();
+  ratio_list->Append(*width);
+  if (height)
+    ratio_list->Append(*height);
+  if (!range.AtEnd()) {
+    if (auto_value)
+      return nullptr;
+    if (range.Peek().Id() != CSSValueID::kAuto)
+      return nullptr;
+    auto_value = css_parsing_utils::ConsumeIdent(range);
+  }
+
+  CSSValueList* list = CSSValueList::CreateSpaceSeparated();
+  if (auto_value)
+    list->Append(*auto_value);
+  list->Append(*ratio_list);
   return list;
 }
 
@@ -423,14 +445,23 @@ const CSSValue* AspectRatio::CSSValueFromComputedStyleInternal(
     const LayoutObject* layout_object,
     bool allow_visited_style) const {
   auto& ratio = style.AspectRatio();
-  if (!ratio.has_value())
+  if (ratio.GetTypeForComputedStyle() == EAspectRatioType::kAuto)
     return CSSIdentifierValue::Create(CSSValueID::kAuto);
 
-  CSSValueList* list = CSSValueList::CreateSlashSeparated();
-  list->Append(*CSSNumericLiteralValue::Create(
-      ratio->Width(), CSSPrimitiveValue::UnitType::kInteger));
-  list->Append(*CSSNumericLiteralValue::Create(
-      ratio->Height(), CSSPrimitiveValue::UnitType::kInteger));
+  CSSValueList* ratio_list = CSSValueList::CreateSlashSeparated();
+  ratio_list->Append(*CSSNumericLiteralValue::Create(
+      ratio.GetRatio().Width(), CSSPrimitiveValue::UnitType::kNumber));
+  if (ratio.GetRatio().Height() != 1.0f) {
+    ratio_list->Append(*CSSNumericLiteralValue::Create(
+        ratio.GetRatio().Height(), CSSPrimitiveValue::UnitType::kNumber));
+  }
+  if (ratio.GetTypeForComputedStyle() == EAspectRatioType::kRatio)
+    return ratio_list;
+
+  DCHECK_EQ(ratio.GetTypeForComputedStyle(), EAspectRatioType::kAutoAndRatio);
+  CSSValueList* list = CSSValueList::CreateSpaceSeparated();
+  list->Append(*CSSIdentifierValue::Create(CSSValueID::kAuto));
+  list->Append(*ratio_list);
   return list;
 }
 
@@ -2294,11 +2325,72 @@ void Direction::ApplyValue(StyleResolverState& state,
       To<CSSIdentifierValue>(value).ConvertTo<TextDirection>());
 }
 
+namespace {
+
+static bool IsDisplayOutside(CSSValueID id) {
+  return id >= CSSValueID::kInline && id <= CSSValueID::kBlock;
+}
+
+static bool IsDisplayInside(CSSValueID id) {
+  if (id >= CSSValueID::kFlowRoot && id <= CSSValueID::kGrid)
+    return true;
+  if (id == CSSValueID::kMath)
+    return RuntimeEnabledFeatures::MathMLCoreEnabled();
+  return false;
+}
+
+static bool IsDisplayBox(CSSValueID id) {
+  return css_parsing_utils::IdentMatches<CSSValueID::kNone,
+                                         CSSValueID::kContents>(id);
+}
+
+static bool IsDisplayInternal(CSSValueID id) {
+  return id >= CSSValueID::kTableRowGroup && id <= CSSValueID::kTableCaption;
+}
+
+static bool IsDisplayLegacy(CSSValueID id) {
+  return id >= CSSValueID::kInlineBlock && id <= CSSValueID::kWebkitInlineFlex;
+}
+
+}  // namespace
+
 const CSSValue* Display::ParseSingleValue(CSSParserTokenRange& range,
                                           const CSSParserContext& context,
                                           const CSSParserLocalContext&) const {
-  // NOTE: All the keyword values for the display property are handled by the
-  // CSSParserFastPaths.
+  CSSValueID id = range.Peek().Id();
+  CSSIdentifierValue* display_outside = nullptr;
+  CSSIdentifierValue* display_inside = nullptr;
+  if (IsDisplayOutside(id)) {
+    display_outside = css_parsing_utils::ConsumeIdent(range);
+    if (range.AtEnd())
+      return display_outside;
+    id = range.Peek().Id();
+    if (!IsDisplayInside(id))
+      return nullptr;
+    display_inside = css_parsing_utils::ConsumeIdent(range);
+  } else if (IsDisplayInside(id)) {
+    display_inside = css_parsing_utils::ConsumeIdent(range);
+    if (range.AtEnd())
+      return display_inside;
+    id = range.Peek().Id();
+    if (!IsDisplayOutside(id))
+      return nullptr;
+    display_outside = css_parsing_utils::ConsumeIdent(range);
+  }
+  if (display_outside && display_inside) {
+    // TODO(crbug.com/995106): should apply to more than just math.
+    if (display_inside->GetValueID() == CSSValueID::kMath) {
+      CSSValueList* parsed_values = CSSValueList::CreateSpaceSeparated();
+      parsed_values->Append(*display_outside);
+      parsed_values->Append(*display_inside);
+      return parsed_values;
+    }
+    return nullptr;
+  }
+  if (id == CSSValueID::kListItem || IsDisplayBox(id) ||
+      IsDisplayInternal(id) || IsDisplayLegacy(id))
+    return css_parsing_utils::ConsumeIdent(range);
+
   if (!RuntimeEnabledFeatures::CSSLayoutAPIEnabled())
     return nullptr;
 
@@ -2336,6 +2428,16 @@ const CSSValue* Display::CSSValueFromComputedStyleInternal(
         style.IsDisplayInlineType());
   }
 
+  if (style.Display() == EDisplay::kBlockMath) {
+    CSSValueList* values = CSSValueList::CreateSpaceSeparated();
+    if (style.Display() == EDisplay::kBlockMath)
+      values->Append(*CSSIdentifierValue::Create(CSSValueID::kBlock));
+    else
+      values->Append(*CSSIdentifierValue::Create(CSSValueID::kInline));
+    values->Append(*CSSIdentifierValue::Create(CSSValueID::kMath));
+    return values;
+  }
+
   return CSSIdentifierValue::Create(style.Display());
 }
 
@@ -2357,6 +2459,24 @@ void Display::ApplyValue(StyleResolverState& state,
     state.Style()->SetDisplay(identifier_value->ConvertTo<EDisplay>());
     state.Style()->SetDisplayLayoutCustomName(
         ComputedStyleInitialValues::InitialDisplayLayoutCustomName());
+    return;
+  }
+
+  if (value.IsValueList()) {
+    state.Style()->SetDisplayLayoutCustomName(
+        ComputedStyleInitialValues::InitialDisplayLayoutCustomName());
+    const CSSValueList& display_pair = To<CSSValueList>(value);
+    DCHECK_EQ(display_pair.length(), 2u);
+    DCHECK(display_pair.Item(0).IsIdentifierValue());
+    DCHECK(display_pair.Item(1).IsIdentifierValue());
+    const auto& outside = To<CSSIdentifierValue>(display_pair.Item(0));
+    const auto& inside = To<CSSIdentifierValue>(display_pair.Item(1));
+    // TODO(crbug.com/995106): should apply to more than just math.
+    DCHECK(inside.GetValueID() == CSSValueID::kMath);
+    if (outside.GetValueID() == CSSValueID::kBlock)
+      state.Style()->SetDisplay(EDisplay::kBlockMath);
+    else
+      state.Style()->SetDisplay(EDisplay::kMath);
     return;
   }
 
@@ -3312,23 +3432,6 @@ const CSSValue* InsetInlineStart::ParseSingleValue(
       range, context, css_parsing_utils::UnitlessQuirk::kForbid);
 }
 
-const CSSValue*
-InternalForcedBackgroundColorRgb::CSSValueFromComputedStyleInternal(
-    const ComputedStyle& style,
-    const SVGComputedStyle&,
-    const LayoutObject*,
-    bool allow_visited_style) const {
-  return CSSIdentifierValue::Create(style.InternalForcedBackgroundColorRgb());
-}
-
-const CSSValue* InternalForcedBackgroundColorRgb::ParseSingleValue(
-    CSSParserTokenRange& range,
-    const CSSParserContext& context,
-    const CSSParserLocalContext& local_context) const {
-  return css_parsing_utils::ConsumeInternalForcedBackgroundColor(range,
-                                                                 context);
-}
-
 const blink::Color InternalVisitedBackgroundColor::ColorIncludingFallback(
     bool visited_link,
     const ComputedStyle& style) const {
@@ -4100,6 +4203,14 @@ const CSSValue* MaskType::CSSValueFromComputedStyleInternal(
   return CSSIdentifierValue::Create(svg_style.MaskType());
 }
 
+const CSSValue* MathShift::CSSValueFromComputedStyleInternal(
+    const ComputedStyle& style,
+    const SVGComputedStyle&,
+    const LayoutObject*,
+    bool allow_visited_style) const {
+  return CSSIdentifierValue::Create(style.MathShift());
+}
+
 const CSSValue* MathStyle::CSSValueFromComputedStyleInternal(
     const ComputedStyle& style,
     const SVGComputedStyle&,
@@ -4108,12 +4219,38 @@ const CSSValue* MathStyle::CSSValueFromComputedStyleInternal(
   return CSSIdentifierValue::Create(style.MathStyle());
 }
 
-const CSSValue* MathSuperscriptShiftStyle::CSSValueFromComputedStyleInternal(
+const CSSValue* MathDepth::ParseSingleValue(
+    CSSParserTokenRange& range,
+    const CSSParserContext& context,
+    const CSSParserLocalContext&) const {
+  return css_parsing_utils::ConsumeMathDepth(range, context);
+}
+
+const CSSValue* MathDepth::CSSValueFromComputedStyleInternal(
     const ComputedStyle& style,
     const SVGComputedStyle&,
     const LayoutObject*,
     bool allow_visited_style) const {
-  return CSSIdentifierValue::Create(style.MathSuperscriptShiftStyle());
+  return CSSNumericLiteralValue::Create(style.MathDepth(),
+                                        CSSPrimitiveValue::UnitType::kNumber);
+}
+
+void MathDepth::ApplyValue(StyleResolverState& state,
+                           const CSSValue& value) const {
+  if (const auto* list = DynamicTo<CSSValueList>(value)) {
+    DCHECK_EQ(list->length(), 1U);
+    const auto& relative_value = To<CSSPrimitiveValue>(list->Item(0));
+    state.Style()->SetMathDepth(state.ParentStyle()->MathDepth() +
+                                relative_value.GetIntValue());
+  } else if (auto* identifier_value = DynamicTo<CSSIdentifierValue>(value)) {
+    DCHECK(identifier_value->GetValueID() == CSSValueID::kAutoAdd);
+    unsigned depth = 0;
+    if (state.ParentStyle()->MathStyle() == EMathStyle::kCompact)
+      depth += 1;
+    state.Style()->SetMathDepth(state.ParentStyle()->MathDepth() + depth);
+  } else if (DynamicTo<CSSPrimitiveValue>(value)) {
+    state.Style()->SetMathDepth(To<CSSPrimitiveValue>(value).GetIntValue());
+  }
 }
 
 const CSSValue* MaxBlockSize::ParseSingleValue(
@@ -4917,8 +5054,11 @@ void Position::ApplyInherit(StyleResolverState& state) const {
 const CSSValue* Quotes::ParseSingleValue(CSSParserTokenRange& range,
                                          const CSSParserContext& context,
                                          const CSSParserLocalContext&) const {
-  if (range.Peek().Id() == CSSValueID::kNone)
-    return css_parsing_utils::ConsumeIdent(range);
+  if (auto* value =
+          css_parsing_utils::ConsumeIdent<CSSValueID::kAuto, CSSValueID::kNone>(
+              range)) {
+    return value;
+  }
   CSSValueList* values = CSSValueList::CreateSpaceSeparated();
   while (!range.AtEnd()) {
     CSSStringValue* parsed_value = css_parsing_utils::ConsumeString(range);
@@ -4936,11 +5076,8 @@ const CSSValue* Quotes::CSSValueFromComputedStyleInternal(
     const SVGComputedStyle&,
     const LayoutObject*,
     bool allow_visited_style) const {
-  if (!style.Quotes()) {
-    // TODO(ramya.v): We should return the quote values that we're actually
-    // using.
-    return nullptr;
-  }
+  if (!style.Quotes())
+    return CSSIdentifierValue::Create(CSSValueID::kAuto);
   if (style.Quotes()->size()) {
     CSSValueList* list = CSSValueList::CreateSpaceSeparated();
     for (int i = 0; i < style.Quotes()->size(); i++) {
@@ -7131,7 +7268,7 @@ const CSSValue* WebkitBoxReflect::CSSValueFromComputedStyleInternal(
                                                 allow_visited_style);
 }
 
-const CSSValue* WebkitFontSizeDelta::ParseSingleValue(
+const CSSValue* InternalFontSizeDelta::ParseSingleValue(
     CSSParserTokenRange& range,
     const CSSParserContext& context,
     const CSSParserLocalContext&) const {
@@ -8233,10 +8370,7 @@ const CSSValue* Zoom::ParseSingleValue(CSSParserTokenRange& range,
   const CSSParserToken& token = range.Peek();
   CSSValue* zoom = nullptr;
   if (token.GetType() == kIdentToken) {
-    CSSIdentifierValue* ident = css_parsing_utils::ConsumeIdent<
-        CSSValueID::kNormal, CSSValueID::kInternalResetEffective>(range);
-    if (ident && isValueAllowedInMode(ident->GetValueID(), context.Mode()))
-      zoom = ident;
+    zoom = css_parsing_utils::ConsumeIdent<CSSValueID::kNormal>(range);
   } else {
     zoom = css_parsing_utils::ConsumePercent(range, context,
                                              kValueRangeNonNegative);
@@ -8274,14 +8408,6 @@ void Zoom::ApplyInherit(StyleResolverState& state) const {
 }
 
 void Zoom::ApplyValue(StyleResolverState& state, const CSSValue& value) const {
-  // TODO(crbug.com/976224): Support zoom on foreignObject
-  if (const auto* ident = DynamicTo<CSSIdentifierValue>(value)) {
-    if (ident->GetValueID() == CSSValueID::kInternalResetEffective) {
-      state.SetEffectiveZoom(ComputedStyleInitialValues::InitialZoom());
-      return;
-    }
-  }
-
   state.SetZoom(StyleBuilderConverter::ConvertZoom(state, value));
 }
 

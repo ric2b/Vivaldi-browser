@@ -13,7 +13,6 @@
 #import "ios/chrome/browser/ui/commands/find_in_page_commands.h"
 #import "ios/chrome/browser/ui/commands/omnibox_commands.h"
 #import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
-#import "ios/chrome/browser/ui/toolbar/public/features.h"
 #include "url/gurl.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -55,7 +54,7 @@
 }
 
 - (void)bookmarkAction {
-  [self.dispatcher bookmarkPage];
+  [self.dispatcher bookmarkCurrentPage];
 }
 
 - (void)searchAction:(id)sender {

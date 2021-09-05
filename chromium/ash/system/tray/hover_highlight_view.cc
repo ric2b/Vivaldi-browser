@@ -32,7 +32,7 @@ HoverHighlightView::HoverHighlightView(ViewClickListener* listener,
     : ActionableView(TrayPopupInkDropStyle::FILL_BOUNDS),
       listener_(listener),
       use_unified_theme_(use_unified_theme) {
-  set_notify_enter_exit_on_child(true);
+  SetNotifyEnterExitOnChild(true);
   SetInkDropMode(InkDropMode::ON);
 }
 
@@ -180,7 +180,7 @@ void HoverHighlightView::OnSetTooltipText(const base::string16& tooltip_text) {
   if (sub_text_label_)
     sub_text_label_->SetTooltipText(tooltip_text);
   if (left_icon_)
-    left_icon_->set_tooltip_text(tooltip_text);
+    left_icon_->SetTooltipText(tooltip_text);
 }
 
 bool HoverHighlightView::PerformAction(const ui::Event& event) {

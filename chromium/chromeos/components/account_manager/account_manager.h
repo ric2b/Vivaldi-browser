@@ -157,6 +157,12 @@ class COMPONENT_EXPORT(ACCOUNT_MANAGER) AccountManager {
   void InitializeInEphemeralMode(
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory);
 
+  // Same as above, except it allows clients to provide a callback which will be
+  // called after initialization.
+  void InitializeInEphemeralMode(
+      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
+      base::OnceClosure initialization_callback);
+
   // Returns |true| if |AccountManager| has been fully initialized.
   bool IsInitialized() const;
 
@@ -216,9 +222,6 @@ class COMPONENT_EXPORT(ACCOUNT_MANAGER) AccountManager {
   // not in the list of known observers.
   void RemoveObserver(Observer* observer);
 
-  // Gets AccountManager's URL Loader Factory.
-  scoped_refptr<network::SharedURLLoaderFactory> GetUrlLoaderFactory();
-
   // Sets the provided URL Loader Factory. Used only by tests.
   void SetUrlLoaderFactoryForTests(
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory);
@@ -228,7 +231,6 @@ class COMPONENT_EXPORT(ACCOUNT_MANAGER) AccountManager {
   // |account_key|, otherwise a |nullptr| is returned.
   std::unique_ptr<OAuth2AccessTokenFetcher> CreateAccessTokenFetcher(
       const AccountKey& account_key,
-      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
       OAuth2AccessTokenConsumer* consumer) const;
 
   // Returns |true| if an LST is available for |account_key|. Note that

@@ -17,9 +17,6 @@
 #include "headless/public/headless_export.h"
 #include "printing/print_settings.h"
 
-struct PrintHostMsg_ScriptedPrint_Params;
-struct PrintMsg_PrintPages_Params;
-
 namespace headless {
 
 // Exported for tests.
@@ -76,8 +73,8 @@ class HeadlessPrintManager
   HEADLESS_EXPORT static PageRangeStatus PageRangeTextToPages(
       base::StringPiece page_range_text,
       bool ignore_invalid_page_ranges,
-      int pages_count,
-      std::vector<int>* pages);
+      uint32_t pages_count,
+      std::vector<uint32_t>* pages);
 
   // Prints the current document immediately. Since the rendering is
   // asynchronous, the actual printing will not be completed on the return of
@@ -91,7 +88,7 @@ class HeadlessPrintManager
   explicit HeadlessPrintManager(content::WebContents* web_contents);
   friend class content::WebContentsUserData<HeadlessPrintManager>;
 
-  std::unique_ptr<PrintMsg_PrintPages_Params> GetPrintParamsFromSettings(
+  printing::mojom::PrintPagesParamsPtr GetPrintParamsFromSettings(
       const HeadlessPrintSettings& settings);
   // content::WebContentsObserver implementation.
   bool OnMessageReceived(const IPC::Message& message,
@@ -102,21 +99,22 @@ class HeadlessPrintManager
       content::RenderFrameHost* render_frame_host,
       const printing::mojom::DidPrintDocumentParams& params,
       std::unique_ptr<DelayedFrameDispatchHelper> helper) override;
-  void OnGetDefaultPrintSettings(content::RenderFrameHost* render_frame_host,
-                                 IPC::Message* reply_msg) override;
-  void OnPrintingFailed(int cookie) override;
   void OnScriptedPrint(content::RenderFrameHost* render_frame_host,
-                       const PrintHostMsg_ScriptedPrint_Params& params,
+                       const printing::mojom::ScriptedPrintParams& params,
                        IPC::Message* reply_msg) override;
 
-  void OnShowInvalidPrinterSettingsError();
+  // printing::mojom::PrintManagerHost:
+  void GetDefaultPrintSettings(
+      GetDefaultPrintSettingsCallback callback) override;
+  void ShowInvalidPrinterSettingsError() override;
+  void PrintingFailed(int32_t cookie) override;
 
   void Reset();
   void ReleaseJob(PrintResult result);
 
   content::RenderFrameHost* printing_rfh_ = nullptr;
   GetPDFCallback callback_;
-  std::unique_ptr<PrintMsg_PrintPages_Params> print_params_;
+  printing::mojom::PrintPagesParamsPtr print_params_;
   std::string page_ranges_text_;
   bool ignore_invalid_page_ranges_ = false;
   std::string data_;

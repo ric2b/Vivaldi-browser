@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "base/bind_helpers.h"
+#include "base/debug/alias.h"
 #include "build/build_config.h"
 #include "components/viz/common/gpu/context_lost_reason.h"
 #include "components/viz/service/display/dc_layer_overlay.h"
@@ -15,12 +16,13 @@
 #include "gpu/command_buffer/service/gl_utils.h"
 #include "gpu/command_buffer/service/mailbox_manager.h"
 #include "gpu/command_buffer/service/shared_context_state.h"
+#include "gpu/command_buffer/service/shared_image_factory.h"
 #include "gpu/command_buffer/service/texture_base.h"
 #include "gpu/command_buffer/service/texture_manager.h"
 #include "third_party/skia/include/core/SkSurface.h"
 #include "third_party/skia/include/core/SkSurfaceProps.h"
 #include "third_party/skia/include/gpu/GrBackendSurface.h"
-#include "third_party/skia/include/gpu/GrContext.h"
+#include "third_party/skia/include/gpu/GrDirectContext.h"
 #include "third_party/skia/include/gpu/gl/GrGLTypes.h"
 #include "ui/gfx/buffer_format_util.h"
 #include "ui/gl/dc_renderer_layer_params.h"
@@ -32,8 +34,24 @@
 
 namespace viz {
 
+namespace {
+base::TimeTicks g_last_reshape_failure = base::TimeTicks();
+
+NOINLINE void CheckForLoopFailures() {
+  const auto threshold = base::TimeDelta::FromSeconds(1);
+  auto now = base::TimeTicks::Now();
+  if (!g_last_reshape_failure.is_null() &&
+      now - g_last_reshape_failure > threshold) {
+    CHECK(false);
+  }
+  g_last_reshape_failure = now;
+}
+
+}  // namespace
+
 SkiaOutputDeviceGL::SkiaOutputDeviceGL(
     gpu::MailboxManager* mailbox_manager,
+    gpu::SharedImageRepresentationFactory* shared_image_representation_factory,
     gpu::SharedContextState* context_state,
     scoped_refptr<gl::GLSurface> gl_surface,
     scoped_refptr<gpu::gles2::FeatureInfo> feature_info,
@@ -43,6 +61,7 @@ SkiaOutputDeviceGL::SkiaOutputDeviceGL(
                        memory_tracker,
                        std::move(did_swap_buffer_complete_callback)),
       mailbox_manager_(mailbox_manager),
+      shared_image_representation_factory_(shared_image_representation_factory),
       context_state_(context_state),
       gl_surface_(std::move(gl_surface)),
       supports_async_swap_(gl_surface_->SupportsAsyncSwap()) {
@@ -89,7 +108,7 @@ SkiaOutputDeviceGL::SkiaOutputDeviceGL(
     context_state_->MakeCurrent(gl_surface_.get());
   }
 
-  GrContext* gr_context = context_state_->gr_context();
+  GrDirectContext* gr_context = context_state_->gr_context();
   gl::CurrentGL* current_gl = context_state_->context()->GetCurrentGL();
 
   // Get alpha bits from the default frame buffer.
@@ -105,15 +124,34 @@ SkiaOutputDeviceGL::SkiaOutputDeviceGL(
     glGetIntegerv(GL_ALPHA_BITS, &alpha_bits);
   }
   CHECK_GL_ERROR();
-  supports_alpha_ = alpha_bits > 0;
 
-  capabilities_.sk_color_type =
-      supports_alpha_ ? kRGBA_8888_SkColorType : kRGB_888x_SkColorType;
-  capabilities_.gr_backend_format = gr_context->defaultBackendFormat(
-      capabilities_.sk_color_type, GrRenderable::kYes);
-  capabilities_.sk_color_type_for_hdr = kRGBA_F16_SkColorType;
-  capabilities_.gr_backend_format_for_hdr = gr_context->defaultBackendFormat(
-      capabilities_.sk_color_type_for_hdr, GrRenderable::kYes);
+  auto color_type = kRGBA_8888_SkColorType;
+
+  if (!alpha_bits) {
+    color_type = gl_surface_->GetFormat().GetBufferSize() == 16
+                     ? kRGB_565_SkColorType
+                     : kRGB_888x_SkColorType;
+    // Skia disables RGBx on some GPUs, fallback to RGBA if it's the
+    // case. This doesn't change framebuffer itself, as we already allocated it,
+    // but will change any temporary buffer Skia needs to allocate.
+    if (!context_state_->gr_context()
+             ->defaultBackendFormat(color_type, GrRenderable::kYes)
+             .isValid()) {
+      color_type = kRGBA_8888_SkColorType;
+    }
+  }
+
+  capabilities_.sk_color_types[static_cast<int>(gfx::BufferFormat::RGBA_8888)] =
+      color_type;
+  capabilities_.sk_color_types[static_cast<int>(gfx::BufferFormat::RGBX_8888)] =
+      color_type;
+  capabilities_.sk_color_types[static_cast<int>(gfx::BufferFormat::BGRA_8888)] =
+      color_type;
+  capabilities_.sk_color_types[static_cast<int>(gfx::BufferFormat::BGRX_8888)] =
+      color_type;
+
+  capabilities_.sk_color_types[static_cast<int>(gfx::BufferFormat::RGBA_F16)] =
+      kRGBA_F16_SkColorType;
 }
 
 SkiaOutputDeviceGL::~SkiaOutputDeviceGL() {
@@ -130,7 +168,9 @@ bool SkiaOutputDeviceGL::Reshape(const gfx::Size& size,
 
   if (!gl_surface_->Resize(size, device_scale_factor, color_space,
                            gfx::AlphaBitsForBufferFormat(buffer_format))) {
-    DLOG(ERROR) << "Failed to resize.";
+    CheckForLoopFailures();
+    // To prevent tail call, so we can see the stack.
+    base::debug::Alias(nullptr);
     return false;
   }
   SkSurfaceProps surface_props =
@@ -140,22 +180,24 @@ bool SkiaOutputDeviceGL::Reshape(const gfx::Size& size,
   framebuffer_info.fFBOID = 0;
   DCHECK_EQ(gl_surface_->GetBackingFramebufferObject(), 0u);
 
-  SkColorType color_type;
-  // TODO(https://crbug.com/1049334): The pixel format should be determined by
-  // |buffer_format|, not |color_space|, and not |supports_alpha_|.
-  if (color_space.IsHDR()) {
-    color_type = capabilities_.sk_color_type_for_hdr;
-    framebuffer_info.fFormat = GL_RGBA16F;
-    DCHECK_EQ(capabilities_.gr_backend_format_for_hdr.asGLFormat(),
-              GrGLFormat::kRGBA16F);
-  } else if (supports_alpha_) {
-    color_type = capabilities_.sk_color_type;
-    framebuffer_info.fFormat = GL_RGBA8;
-    DCHECK_EQ(capabilities_.gr_backend_format.asGLFormat(), GrGLFormat::kRGBA8);
-  } else {
-    color_type = capabilities_.sk_color_type;
-    framebuffer_info.fFormat = GL_RGB8;
-    DCHECK_EQ(capabilities_.gr_backend_format.asGLFormat(), GrGLFormat::kRGB8);
+  const auto format_index = static_cast<int>(buffer_format);
+  SkColorType color_type = capabilities_.sk_color_types[format_index];
+  switch (color_type) {
+    case kRGBA_8888_SkColorType:
+      framebuffer_info.fFormat = GL_RGBA8;
+      break;
+    case kRGB_888x_SkColorType:
+      framebuffer_info.fFormat = GL_RGB8;
+      break;
+    case kRGB_565_SkColorType:
+      framebuffer_info.fFormat = GL_RGB565;
+      break;
+    case kRGBA_F16_SkColorType:
+      framebuffer_info.fFormat = GL_RGBA16F;
+      break;
+    default:
+      NOTREACHED() << "color_type: " << color_type
+                   << " buffer_format: " << format_index;
   }
   // TODO(kylechar): We might need to support RGB10A2 for HDR10. HDR10 was only
   // used with Windows updated RS3 (2017) as a workaround for a DWM bug so it
@@ -176,6 +218,9 @@ bool SkiaOutputDeviceGL::Reshape(const gfx::Size& size,
                << " " << framebuffer_info.fFBOID << " "
                << framebuffer_info.fFormat << " " << color_space.ToString()
                << " " << size.ToString();
+    CheckForLoopFailures();
+    // To prevent tail call, so we can see the stack.
+    base::debug::Alias(nullptr);
   }
 
   memory_type_tracker_->TrackMemFree(backbuffer_estimated_size_);
@@ -314,6 +359,7 @@ void SkiaOutputDeviceGL::ScheduleOverlays(
     params.is_clipped = dc_layer.is_clipped;
     params.clip_rect = dc_layer.clip_rect;
     params.protected_video_type = dc_layer.protected_video_type;
+    params.hdr_metadata = dc_layer.hdr_metadata;
 
     // Schedule DC layer overlay to be presented at next SwapBuffers().
     if (!gl_surface_->ScheduleDCLayer(params))
@@ -340,11 +386,27 @@ void SkiaOutputDeviceGL::EndPaint() {}
 
 scoped_refptr<gl::GLImage> SkiaOutputDeviceGL::GetGLImageForMailbox(
     const gpu::Mailbox& mailbox) {
-  // TODO(crbug.com/1005306): Use SharedImageManager to get textures here once
-  // all clients are using SharedImageInterface to create textures.
+  // TODO(crbug.com/1005306): Stop using MailboxManager for lookup once all
+  // clients are using SharedImageInterface to create textures.
+  // For example, the legacy mailbox still uses GL textures (no overlay)
+  // and is still used.
   auto* texture_base = mailbox_manager_->ConsumeTexture(mailbox);
-  if (!texture_base)
-    return nullptr;
+  if (!texture_base) {
+    auto overlay =
+        shared_image_representation_factory_->ProduceOverlay(mailbox);
+    if (!overlay)
+      return nullptr;
+
+    // Return GLImage since the ScopedReadAccess isn't being held by anyone.
+    // TODO(crbug.com/1011555): Have SkiaOutputSurfaceImplOnGpu hold on to the
+    // ScopedReadAccess for overlays like it does for PromiseImage based
+    // resources.
+    std::unique_ptr<gpu::SharedImageRepresentationOverlay::ScopedReadAccess>
+        scoped_overlay_read_access =
+            overlay->BeginScopedReadAccess(/*need_gl_image=*/true);
+    DCHECK(scoped_overlay_read_access);
+    return scoped_overlay_read_access->gl_image();
+  }
 
   if (texture_base->GetType() == gpu::TextureBase::Type::kPassthrough) {
     gpu::gles2::TexturePassthrough* texture =

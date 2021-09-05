@@ -159,6 +159,7 @@ void NGFragmentItemsBuilder::AddItems(NGLogicalLineItem* child_begin,
       continue;
     }
 
+    const unsigned children_count = child.children_count;
     // Children of inline boxes are flattened and added to |items_|, with the
     // count of descendant items to preserve the tree structure.
     //
@@ -167,14 +168,14 @@ void NGFragmentItemsBuilder::AddItems(NGLogicalLineItem* child_begin,
     items_.emplace_back(child.rect.offset, std::move(child), writing_mode);
 
     // Add all children, including their desendants, skipping this item.
-    CHECK_GE(child.children_count, 1u);  // 0 will loop infinitely.
-    NGLogicalLineItem* end_child_iter = child_iter + child.children_count;
+    CHECK_GE(children_count, 1u);  // 0 will loop infinitely.
+    NGLogicalLineItem* end_child_iter = child_iter + children_count;
     CHECK_LE(end_child_iter - child_begin, child_end - child_begin);
     AddItems(child_iter + 1, end_child_iter);
     child_iter = end_child_iter;
 
     // All children are added. Compute how many items are actually added. The
-    // number of items added maybe different from |child.children_count|.
+    // number of items added may be different from |children_count|.
     const wtf_size_t item_count = items_.size() - box_start_index;
     NGFragmentItem& box_item = items_[box_start_index].item;
     DCHECK_EQ(box_item.DescendantsCount(), 1u);
@@ -198,7 +199,8 @@ NGFragmentItemsBuilder::AddPreviousItems(
     const NGFragmentItems& items,
     const PhysicalSize& container_size,
     NGBoxFragmentBuilder* container_builder,
-    const NGFragmentItem* end_item) {
+    const NGFragmentItem* end_item,
+    wtf_size_t max_lines) {
   if (end_item) {
     DCHECK(node_);
     DCHECK(container_builder);
@@ -234,6 +236,7 @@ NGFragmentItemsBuilder::AddPreviousItems(
   const NGInlineBreakToken* last_break_token = nullptr;
   const NGInlineItemsData* items_data = nullptr;
   LayoutUnit used_block_size;
+  wtf_size_t line_count = 0;
 
   for (NGInlineCursor cursor(items); cursor;) {
     DCHECK(cursor.Current().Item());
@@ -285,6 +288,8 @@ NGFragmentItemsBuilder::AddPreviousItems(
                 line_child.Size()),
             line_child);
       }
+      if (++line_count == max_lines)
+        break;
       cursor.MoveToNextSkippingChildren();
       continue;
     }
@@ -298,7 +303,10 @@ NGFragmentItemsBuilder::AddPreviousItems(
 
   if (end_item && last_break_token) {
     DCHECK(!last_break_token->IsFinished());
-    return AddPreviousItemsResult{last_break_token, used_block_size, true};
+    DCHECK_GT(line_count, 0u);
+    DCHECK(!max_lines || line_count <= max_lines);
+    return AddPreviousItemsResult{last_break_token, used_block_size, line_count,
+                                  true};
   }
   return AddPreviousItemsResult();
 }

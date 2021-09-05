@@ -15,8 +15,8 @@
 #include "components/autofill/core/browser/form_structure.h"
 #include "components/autofill/core/browser/logging/log_manager.h"
 #include "components/autofill/core/browser/proto/server.pb.h"
-#include "components/autofill/core/common/password_form.h"
 #include "components/autofill/core/common/signatures.h"
+#include "components/password_manager/core/browser/password_form.h"
 #include "components/password_manager/core/browser/password_form_metrics_recorder.h"
 #include "components/password_manager/core/browser/password_manager.h"
 
@@ -24,7 +24,6 @@ using autofill::AutofillUploadContents;
 using autofill::FieldPropertiesFlags;
 using autofill::FormStructure;
 using autofill::PasswordAttribute;
-using autofill::PasswordForm;
 using autofill::ServerFieldType;
 using base::NumberToString;
 
@@ -246,7 +245,7 @@ std::string BrowserSavePasswordProgressLogger::FormStructureToFieldsLogString(
 
     if (field->initial_value_hash().has_value()) {
       field_info += ", initial value hash=";
-      field_info += field->initial_value_hash().value();
+      field_info += NumberToString(field->initial_value_hash().value());
     }
 
     std::string generation = GenerationTypeToString(field->generation_type());

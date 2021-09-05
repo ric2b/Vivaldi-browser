@@ -30,13 +30,14 @@ import org.chromium.components.browser_ui.settings.ManagedPreferenceDelegate;
 import org.chromium.components.browser_ui.site_settings.PermissionInfo;
 import org.chromium.components.browser_ui.site_settings.WebsitePreferenceBridgeJni;
 import org.chromium.components.content_settings.ContentSettingValues;
+import org.chromium.components.content_settings.ContentSettingsType;
+import org.chromium.components.policy.test.annotations.Policies;
 import org.chromium.components.search_engines.TemplateUrl;
 import org.chromium.components.search_engines.TemplateUrlService;
 import org.chromium.components.search_engines.TemplateUrlService.LoadListener;
 import org.chromium.content_public.browser.test.util.Criteria;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
-import org.chromium.policy.test.annotations.Policies;
 
 import java.util.List;
 import java.util.concurrent.ExecutionException;
@@ -238,7 +239,7 @@ public class SearchEngineSettingsTest {
     private @ContentSettingValues int locationPermissionForSearchEngine(String keyword) {
         String url = TemplateUrlServiceFactory.get().getSearchEngineUrlFromTemplateUrl(keyword);
         PermissionInfo locationSettings =
-                new PermissionInfo(PermissionInfo.Type.GEOLOCATION, url, null, false);
+                new PermissionInfo(ContentSettingsType.GEOLOCATION, url, null, false);
         @ContentSettingValues
         int locationPermission =
                 locationSettings.getContentSetting(Profile.getLastUsedRegularProfile());

@@ -30,12 +30,6 @@ class NearbyShareHttpNotifier {
         const nearbyshare::proto::ListPublicCertificatesRequest& request) = 0;
     virtual void OnListPublicCertificatesResponse(
         const nearbyshare::proto::ListPublicCertificatesResponse& response) = 0;
-    virtual void OnCheckContactsReachabilityRequest(
-        const nearbyshare::proto::CheckContactsReachabilityRequest&
-            request) = 0;
-    virtual void OnCheckContactsReachabilityResponse(
-        const nearbyshare::proto::CheckContactsReachabilityResponse&
-            response) = 0;
   };
 
   NearbyShareHttpNotifier();
@@ -49,8 +43,6 @@ class NearbyShareHttpNotifier {
   // Sends |request| to all observers.
   void NotifyOfRequest(const nearbyshare::proto::UpdateDeviceRequest& request);
   void NotifyOfRequest(
-      const nearbyshare::proto::CheckContactsReachabilityRequest& request);
-  void NotifyOfRequest(
       const nearbyshare::proto::ListContactPeopleRequest& request);
   void NotifyOfRequest(
       const nearbyshare::proto::ListPublicCertificatesRequest& request);
@@ -62,8 +54,6 @@ class NearbyShareHttpNotifier {
       const nearbyshare::proto::ListContactPeopleResponse& response);
   void NotifyOfResponse(
       const nearbyshare::proto::ListPublicCertificatesResponse& response);
-  void NotifyOfResponse(
-      const nearbyshare::proto::CheckContactsReachabilityResponse& response);
 
  private:
   base::ObserverList<Observer> observers_;

@@ -49,14 +49,6 @@
   {
     "repeat": 1,
     "stories": [
-      "toBlob_duration.html",
-      "toBlob-small-canvas-in-worker.html"
-    ],
-    "name": "blink_perf.canvas"
-  },
-  {
-    "repeat": 1,
-    "stories": [
       "AttributeDescendantSelector.html",
       "CSSPropertySetterGetter.html",
       "CSSPropertySetterGetterMethods.html",
@@ -244,6 +236,7 @@
     "repeat": 1,
     "stories": [
       "css-parser-yui.html",
+      "declarative-shadow-dom.html",
       "html-parser-threaded.html",
       "html-parser.html",
       "html5-full-render.html",

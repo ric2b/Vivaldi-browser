@@ -29,6 +29,7 @@
 #include "content/shell/browser/shell.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/input/synthetic_web_input_event_builders.h"
+#include "third_party/blink/public/common/switches.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/native_theme/native_theme_features.h"
 
@@ -100,7 +101,7 @@ class ScrollLatencyBrowserTest : public ContentBrowserTest {
   void SetUpCommandLine(base::CommandLine* command_line) override {
     ContentBrowserTest::SetUpCommandLine(command_line);
     if (disable_threaded_scrolling_) {
-      command_line->AppendSwitch(::switches::kDisableThreadedScrolling);
+      command_line->AppendSwitch(::blink::switches::kDisableThreadedScrolling);
     }
     // Set the scroll animation duration to a large number so that
     // we ensure secondary GestureScrollUpdates update the animation
@@ -493,8 +494,9 @@ class ScrollLatencyScrollbarBrowserTest : public ScrollLatencyBrowserTest {
   base::test::ScopedFeatureList scoped_feature_list_;
 };
 
+// This test flakes on most platforms: https://crbug.com/1122371.
 IN_PROC_BROWSER_TEST_F(ScrollLatencyScrollbarBrowserTest,
-                       ScrollbarButtonLatency) {
+                       DISABLED_ScrollbarButtonLatency) {
   LoadURL();
 
   RunScrollbarButtonLatencyTest();

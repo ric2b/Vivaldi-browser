@@ -420,9 +420,8 @@ typedef base::RepeatingCallback<void(URLRequest* request,
 
 // Callback that allows the test to substitute its own implementation
 // of URLRequestJob to handle the request.
-typedef base::RepeatingCallback<URLRequestJob*(
+typedef base::RepeatingCallback<std::unique_ptr<URLRequestJob>(
     URLRequest* request,
-    NetworkDelegate* network_delegate,
     SocketDataProvider* data_provider)>
     DohJobMakerCallback;
 
@@ -432,10 +431,9 @@ class URLRequestMockDohJob : public URLRequestJob, public AsyncSocket {
  public:
   URLRequestMockDohJob(
       URLRequest* request,
-      NetworkDelegate* network_delegate,
       SocketDataProvider* data_provider,
       ResponseModifierCallback response_modifier = ResponseModifierCallback())
-      : URLRequestJob(request, network_delegate),
+      : URLRequestJob(request),
         content_length_(0),
         leftover_data_len_(0),
         data_provider_(data_provider),
@@ -783,8 +781,7 @@ class DnsTransactionTestBase : public testing::Test {
     }
   }
 
-  URLRequestJob* MaybeInterceptRequest(URLRequest* request,
-                                       NetworkDelegate* network_delegate) {
+  std::unique_ptr<URLRequestJob> MaybeInterceptRequest(URLRequest* request) {
     // If the path indicates a redirect, skip checking the list of
     // configured servers, because it won't be there and we still want
     // to handle it.
@@ -827,7 +824,7 @@ class DnsTransactionTestBase : public testing::Test {
       }
     }
 
-    EXPECT_EQ(PRIVACY_MODE_ENABLED, request->privacy_mode());
+    EXPECT_FALSE(request->allow_credentials());
     EXPECT_TRUE(request->disable_secure_dns());
 
     std::string accept;
@@ -847,10 +844,10 @@ class DnsTransactionTestBase : public testing::Test {
     SocketDataProvider* provider = socket_factory_->mock_data().GetNext();
 
     if (doh_job_maker_)
-      return doh_job_maker_.Run(request, network_delegate, provider);
+      return doh_job_maker_.Run(request, provider);
 
-    return new URLRequestMockDohJob(request, network_delegate, provider,
-                                    response_modifier_);
+    return std::make_unique<URLRequestMockDohJob>(request, provider,
+                                                  response_modifier_);
   }
 
   class DohJobInterceptor : public URLRequestInterceptor {
@@ -859,10 +856,9 @@ class DnsTransactionTestBase : public testing::Test {
     ~DohJobInterceptor() override {}
 
     // URLRequestInterceptor implementation:
-    URLRequestJob* MaybeInterceptRequest(
-        URLRequest* request,
-        NetworkDelegate* network_delegate) const override {
-      return test_->MaybeInterceptRequest(request, network_delegate);
+    std::unique_ptr<URLRequestJob> MaybeInterceptRequest(
+        URLRequest* request) const override {
+      return test_->MaybeInterceptRequest(request);
     }
 
    private:
@@ -1591,13 +1587,12 @@ TEST_F(DnsTransactionTest, HttpsPostLookupAsync) {
   EXPECT_TRUE(helper0.RunUntilDone(transaction_factory_.get()));
 }
 
-URLRequestJob* DohJobMakerCallbackFailLookup(URLRequest* request,
-                                             NetworkDelegate* network_delegate,
-                                             SocketDataProvider* data) {
+std::unique_ptr<URLRequestJob> DohJobMakerCallbackFailLookup(
+    URLRequest* request,
+    SocketDataProvider* data) {
   URLRequestMockDohJob::MatchQueryData(request, data);
-  return new URLRequestFailedJob(request, network_delegate,
-                                 URLRequestFailedJob::START,
-                                 ERR_NAME_NOT_RESOLVED);
+  return std::make_unique<URLRequestFailedJob>(
+      request, URLRequestFailedJob::START, ERR_NAME_NOT_RESOLVED);
 }
 
 TEST_F(DnsTransactionTest, HttpsPostLookupFailDohServerLookup) {
@@ -1614,12 +1609,12 @@ TEST_F(DnsTransactionTest, HttpsPostLookupFailDohServerLookup) {
   EXPECT_TRUE(helper0.RunUntilDone(transaction_factory_.get()));
 }
 
-URLRequestJob* DohJobMakerCallbackFailStart(URLRequest* request,
-                                            NetworkDelegate* network_delegate,
-                                            SocketDataProvider* data) {
+std::unique_ptr<URLRequestJob> DohJobMakerCallbackFailStart(
+    URLRequest* request,
+    SocketDataProvider* data) {
   URLRequestMockDohJob::MatchQueryData(request, data);
-  return new URLRequestFailedJob(request, network_delegate,
-                                 URLRequestFailedJob::START, ERR_FAILED);
+  return std::make_unique<URLRequestFailedJob>(
+      request, URLRequestFailedJob::START, ERR_FAILED);
 }
 
 TEST_F(DnsTransactionTest, HttpsPostLookupFailStart) {
@@ -1635,12 +1630,12 @@ TEST_F(DnsTransactionTest, HttpsPostLookupFailStart) {
   EXPECT_TRUE(helper0.RunUntilDone(transaction_factory_.get()));
 }
 
-URLRequestJob* DohJobMakerCallbackFailSync(URLRequest* request,
-                                           NetworkDelegate* network_delegate,
-                                           SocketDataProvider* data) {
+std::unique_ptr<URLRequestJob> DohJobMakerCallbackFailSync(
+    URLRequest* request,
+    SocketDataProvider* data) {
   URLRequestMockDohJob::MatchQueryData(request, data);
-  return new URLRequestFailedJob(request, network_delegate,
-                                 URLRequestFailedJob::READ_SYNC, ERR_FAILED);
+  return std::make_unique<URLRequestFailedJob>(
+      request, URLRequestFailedJob::READ_SYNC, ERR_FAILED);
 }
 
 TEST_F(DnsTransactionTest, HttpsPostLookupFailSync) {
@@ -1656,12 +1651,12 @@ TEST_F(DnsTransactionTest, HttpsPostLookupFailSync) {
   EXPECT_TRUE(helper0.RunUntilDone(transaction_factory_.get()));
 }
 
-URLRequestJob* DohJobMakerCallbackFailAsync(URLRequest* request,
-                                            NetworkDelegate* network_delegate,
-                                            SocketDataProvider* data) {
+std::unique_ptr<URLRequestJob> DohJobMakerCallbackFailAsync(
+    URLRequest* request,
+    SocketDataProvider* data) {
   URLRequestMockDohJob::MatchQueryData(request, data);
-  return new URLRequestFailedJob(request, network_delegate,
-                                 URLRequestFailedJob::READ_ASYNC, ERR_FAILED);
+  return std::make_unique<URLRequestFailedJob>(
+      request, URLRequestFailedJob::READ_ASYNC, ERR_FAILED);
 }
 
 TEST_F(DnsTransactionTest, HttpsPostLookupFailAsync) {
@@ -1857,9 +1852,8 @@ TEST_F(DnsTransactionTest, HttpsMarkHttpsBad) {
         resolve_context_->GetClassicDnsIterator(session_->config(),
                                                 session_.get());
     std::unique_ptr<DnsServerIterator> doh_itr =
-        resolve_context_->GetDohIterator(session_->config(),
-                                         DnsConfig::SecureDnsMode::AUTOMATIC,
-                                         session_.get());
+        resolve_context_->GetDohIterator(
+            session_->config(), SecureDnsMode::kAutomatic, session_.get());
     EXPECT_TRUE(classic_itr->AttemptAvailable());
     EXPECT_EQ(classic_itr->GetNextAttemptIndex(), 0u);
     ASSERT_TRUE(doh_itr->AttemptAvailable());
@@ -1885,9 +1879,8 @@ TEST_F(DnsTransactionTest, HttpsMarkHttpsBad) {
         resolve_context_->GetClassicDnsIterator(session_->config(),
                                                 session_.get());
     std::unique_ptr<DnsServerIterator> doh_itr =
-        resolve_context_->GetDohIterator(session_->config(),
-                                         DnsConfig::SecureDnsMode::AUTOMATIC,
-                                         session_.get());
+        resolve_context_->GetDohIterator(
+            session_->config(), SecureDnsMode::kAutomatic, session_.get());
 
     EXPECT_EQ(classic_itr->GetNextAttemptIndex(), 0u);
     ASSERT_TRUE(doh_itr->AttemptAvailable());
@@ -1952,9 +1945,8 @@ TEST_F(DnsTransactionTest, HttpsNotAvailableThenHttpFallback) {
 
   {
     std::unique_ptr<DnsServerIterator> doh_itr =
-        resolve_context_->GetDohIterator(session_->config(),
-                                         DnsConfig::SecureDnsMode::AUTOMATIC,
-                                         session_.get());
+        resolve_context_->GetDohIterator(
+            session_->config(), SecureDnsMode::kAutomatic, session_.get());
 
     ASSERT_TRUE(doh_itr->AttemptAvailable());
     EXPECT_EQ(doh_itr->GetNextAttemptIndex(), 1u);
@@ -1972,9 +1964,8 @@ TEST_F(DnsTransactionTest, HttpsNotAvailableThenHttpFallback) {
   CheckServerOrder(kOrder0, base::size(kOrder0));
   {
     std::unique_ptr<DnsServerIterator> doh_itr =
-        resolve_context_->GetDohIterator(session_->config(),
-                                         DnsConfig::SecureDnsMode::AUTOMATIC,
-                                         session_.get());
+        resolve_context_->GetDohIterator(
+            session_->config(), SecureDnsMode::kAutomatic, session_.get());
 
     ASSERT_TRUE(doh_itr->AttemptAvailable());
     EXPECT_EQ(doh_itr->GetNextAttemptIndex(), 1u);
@@ -1984,7 +1975,7 @@ TEST_F(DnsTransactionTest, HttpsNotAvailableThenHttpFallback) {
 
 // Fail first DoH server, then no fallbacks marked available in AUTOMATIC mode.
 TEST_F(DnsTransactionTest, HttpsFailureThenNotAvailable_Automatic) {
-  config_.secure_dns_mode = DnsConfig::SecureDnsMode::AUTOMATIC;
+  config_.secure_dns_mode = SecureDnsMode::kAutomatic;
   ConfigureDohServers(true /* use_post */, 3 /* num_doh_servers */,
                       false /* make_available */);
 
@@ -1994,9 +1985,8 @@ TEST_F(DnsTransactionTest, HttpsFailureThenNotAvailable_Automatic) {
 
   {
     std::unique_ptr<DnsServerIterator> doh_itr =
-        resolve_context_->GetDohIterator(session_->config(),
-                                         DnsConfig::SecureDnsMode::AUTOMATIC,
-                                         session_.get());
+        resolve_context_->GetDohIterator(
+            session_->config(), SecureDnsMode::kAutomatic, session_.get());
 
     ASSERT_TRUE(doh_itr->AttemptAvailable());
     EXPECT_EQ(doh_itr->GetNextAttemptIndex(), 0u);
@@ -2019,9 +2009,8 @@ TEST_F(DnsTransactionTest, HttpsFailureThenNotAvailable_Automatic) {
 
   {
     std::unique_ptr<DnsServerIterator> doh_itr =
-        resolve_context_->GetDohIterator(session_->config(),
-                                         DnsConfig::SecureDnsMode::AUTOMATIC,
-                                         session_.get());
+        resolve_context_->GetDohIterator(
+            session_->config(), SecureDnsMode::kAutomatic, session_.get());
 
     ASSERT_TRUE(doh_itr->AttemptAvailable());
     EXPECT_EQ(doh_itr->GetNextAttemptIndex(), 0u);
@@ -2032,7 +2021,7 @@ TEST_F(DnsTransactionTest, HttpsFailureThenNotAvailable_Automatic) {
 // Test a secure transaction failure in SECURE mode when other DoH servers are
 // only available for fallback because of
 TEST_F(DnsTransactionTest, HttpsFailureThenNotAvailable_Secure) {
-  config_.secure_dns_mode = DnsConfig::SecureDnsMode::SECURE;
+  config_.secure_dns_mode = SecureDnsMode::kSecure;
   ConfigureDohServers(true /* use_post */, 3 /* num_doh_servers */,
                       false /* make_available */);
 
@@ -2042,9 +2031,8 @@ TEST_F(DnsTransactionTest, HttpsFailureThenNotAvailable_Secure) {
 
   {
     std::unique_ptr<DnsServerIterator> doh_itr =
-        resolve_context_->GetDohIterator(session_->config(),
-                                         DnsConfig::SecureDnsMode::SECURE,
-                                         session_.get());
+        resolve_context_->GetDohIterator(
+            session_->config(), SecureDnsMode::kSecure, session_.get());
 
     ASSERT_TRUE(doh_itr->AttemptAvailable());
     EXPECT_EQ(doh_itr->GetNextAttemptIndex(), 0u);
@@ -2081,9 +2069,8 @@ TEST_F(DnsTransactionTest, HttpsFailureThenNotAvailable_Secure) {
   // Expect server 0 to be preferred due to least recent failure.
   {
     std::unique_ptr<DnsServerIterator> doh_itr =
-        resolve_context_->GetDohIterator(session_->config(),
-                                         DnsConfig::SecureDnsMode::SECURE,
-                                         session_.get());
+        resolve_context_->GetDohIterator(
+            session_->config(), SecureDnsMode::kSecure, session_.get());
 
     ASSERT_TRUE(doh_itr->AttemptAvailable());
     EXPECT_EQ(doh_itr->GetNextAttemptIndex(), 0u);
@@ -2095,9 +2082,8 @@ TEST_F(DnsTransactionTest, MaxHttpsFailures_NonConsecutive) {
   ConfigureDohServers(false /* use_post */);
   {
     std::unique_ptr<DnsServerIterator> doh_itr =
-        resolve_context_->GetDohIterator(session_->config(),
-                                         DnsConfig::SecureDnsMode::AUTOMATIC,
-                                         session_.get());
+        resolve_context_->GetDohIterator(
+            session_->config(), SecureDnsMode::kAutomatic, session_.get());
 
     ASSERT_TRUE(doh_itr->AttemptAvailable());
     EXPECT_EQ(doh_itr->GetNextAttemptIndex(), 0u);
@@ -2114,9 +2100,8 @@ TEST_F(DnsTransactionTest, MaxHttpsFailures_NonConsecutive) {
     EXPECT_TRUE(failure.RunUntilDone(transaction_factory_.get()));
 
     std::unique_ptr<DnsServerIterator> doh_itr =
-        resolve_context_->GetDohIterator(session_->config(),
-                                         DnsConfig::SecureDnsMode::AUTOMATIC,
-                                         session_.get());
+        resolve_context_->GetDohIterator(
+            session_->config(), SecureDnsMode::kAutomatic, session_.get());
 
     ASSERT_TRUE(doh_itr->AttemptAvailable());
     EXPECT_EQ(doh_itr->GetNextAttemptIndex(), 0u);
@@ -2133,9 +2118,8 @@ TEST_F(DnsTransactionTest, MaxHttpsFailures_NonConsecutive) {
   EXPECT_TRUE(success.RunUntilDone(transaction_factory_.get()));
   {
     std::unique_ptr<DnsServerIterator> doh_itr =
-        resolve_context_->GetDohIterator(session_->config(),
-                                         DnsConfig::SecureDnsMode::AUTOMATIC,
-                                         session_.get());
+        resolve_context_->GetDohIterator(
+            session_->config(), SecureDnsMode::kAutomatic, session_.get());
 
     ASSERT_TRUE(doh_itr->AttemptAvailable());
     EXPECT_EQ(doh_itr->GetNextAttemptIndex(), 0u);
@@ -2153,9 +2137,8 @@ TEST_F(DnsTransactionTest, MaxHttpsFailures_NonConsecutive) {
   EXPECT_TRUE(last_failure.RunUntilDone(transaction_factory_.get()));
   {
     std::unique_ptr<DnsServerIterator> doh_itr =
-        resolve_context_->GetDohIterator(session_->config(),
-                                         DnsConfig::SecureDnsMode::AUTOMATIC,
-                                         session_.get());
+        resolve_context_->GetDohIterator(
+            session_->config(), SecureDnsMode::kAutomatic, session_.get());
 
     ASSERT_TRUE(doh_itr->AttemptAvailable());
     EXPECT_EQ(doh_itr->GetNextAttemptIndex(), 0u);
@@ -2167,9 +2150,8 @@ TEST_F(DnsTransactionTest, MaxHttpsFailures_Consecutive) {
   ConfigureDohServers(false /* use_post */);
   {
     std::unique_ptr<DnsServerIterator> doh_itr =
-        resolve_context_->GetDohIterator(session_->config(),
-                                         DnsConfig::SecureDnsMode::AUTOMATIC,
-                                         session_.get());
+        resolve_context_->GetDohIterator(
+            session_->config(), SecureDnsMode::kAutomatic, session_.get());
 
     ASSERT_TRUE(doh_itr->AttemptAvailable());
     EXPECT_EQ(doh_itr->GetNextAttemptIndex(), 0u);
@@ -2185,9 +2167,8 @@ TEST_F(DnsTransactionTest, MaxHttpsFailures_Consecutive) {
                               ERR_CONNECTION_REFUSED, resolve_context_.get());
     EXPECT_TRUE(failure.RunUntilDone(transaction_factory_.get()));
     std::unique_ptr<DnsServerIterator> doh_itr =
-        resolve_context_->GetDohIterator(session_->config(),
-                                         DnsConfig::SecureDnsMode::AUTOMATIC,
-                                         session_.get());
+        resolve_context_->GetDohIterator(
+            session_->config(), SecureDnsMode::kAutomatic, session_.get());
 
     ASSERT_TRUE(doh_itr->AttemptAvailable());
     EXPECT_EQ(doh_itr->GetNextAttemptIndex(), 0u);
@@ -2205,9 +2186,8 @@ TEST_F(DnsTransactionTest, MaxHttpsFailures_Consecutive) {
   EXPECT_TRUE(last_failure.RunUntilDone(transaction_factory_.get()));
   {
     std::unique_ptr<DnsServerIterator> doh_itr =
-        resolve_context_->GetDohIterator(session_->config(),
-                                         DnsConfig::SecureDnsMode::AUTOMATIC,
-                                         session_.get());
+        resolve_context_->GetDohIterator(
+            session_->config(), SecureDnsMode::kAutomatic, session_.get());
 
     EXPECT_FALSE(doh_itr->AttemptAvailable());
   }
@@ -2219,9 +2199,8 @@ TEST_F(DnsTransactionTest, SuccessfulTransactionStartedBeforeUnavailable) {
   ConfigureDohServers(false /* use_post */);
   {
     std::unique_ptr<DnsServerIterator> doh_itr =
-        resolve_context_->GetDohIterator(session_->config(),
-                                         DnsConfig::SecureDnsMode::AUTOMATIC,
-                                         session_.get());
+        resolve_context_->GetDohIterator(
+            session_->config(), SecureDnsMode::kAutomatic, session_.get());
 
     ASSERT_TRUE(doh_itr->AttemptAvailable());
     EXPECT_EQ(doh_itr->GetNextAttemptIndex(), 0u);
@@ -2851,7 +2830,7 @@ TEST_F(DnsTransactionTestWithMockTime, ProbeUntilSuccess) {
   // The first probe happens without any delay.
   RunUntilIdle();
   std::unique_ptr<DnsServerIterator> doh_itr = resolve_context_->GetDohIterator(
-      session_->config(), DnsConfig::SecureDnsMode::AUTOMATIC, session_.get());
+      session_->config(), SecureDnsMode::kAutomatic, session_.get());
 
   EXPECT_FALSE(doh_itr->AttemptAvailable());
 
@@ -2994,9 +2973,8 @@ TEST_F(DnsTransactionTestWithMockTime, MultipleProbeRunners) {
   RunUntilIdle();
   {
     std::unique_ptr<DnsServerIterator> doh_itr =
-        resolve_context_->GetDohIterator(session_->config(),
-                                         DnsConfig::SecureDnsMode::AUTOMATIC,
-                                         session_.get());
+        resolve_context_->GetDohIterator(
+            session_->config(), SecureDnsMode::kAutomatic, session_.get());
 
     ASSERT_TRUE(doh_itr->AttemptAvailable());
     EXPECT_EQ(doh_itr->GetNextAttemptIndex(), 0u);
@@ -3050,17 +3028,15 @@ TEST_F(DnsTransactionTestWithMockTime, MultipleProbeRunners_SeparateContexts) {
   RunUntilIdle();
   {
     std::unique_ptr<DnsServerIterator> doh_itr =
-        resolve_context_->GetDohIterator(session_->config(),
-                                         DnsConfig::SecureDnsMode::AUTOMATIC,
-                                         session_.get());
+        resolve_context_->GetDohIterator(
+            session_->config(), SecureDnsMode::kAutomatic, session_.get());
 
     ASSERT_TRUE(doh_itr->AttemptAvailable());
     EXPECT_EQ(doh_itr->GetNextAttemptIndex(), 0u);
   }
   {
     std::unique_ptr<DnsServerIterator> doh_itr2 = context2.GetDohIterator(
-        session_->config(), DnsConfig::SecureDnsMode::AUTOMATIC,
-        session_.get());
+        session_->config(), SecureDnsMode::kAutomatic, session_.get());
 
     EXPECT_FALSE(doh_itr2->AttemptAvailable());
   }
@@ -3073,8 +3049,7 @@ TEST_F(DnsTransactionTestWithMockTime, MultipleProbeRunners_SeparateContexts) {
   FastForwardBy(runner2->GetDelayUntilNextProbeForTest(0));
   {
     std::unique_ptr<DnsServerIterator> doh_itr2 = context2.GetDohIterator(
-        session_->config(), DnsConfig::SecureDnsMode::AUTOMATIC,
-        session_.get());
+        session_->config(), SecureDnsMode::kAutomatic, session_.get());
 
     ASSERT_TRUE(doh_itr2->AttemptAvailable());
     EXPECT_EQ(doh_itr2->GetNextAttemptIndex(), 0u);
@@ -3104,7 +3079,7 @@ TEST_F(DnsTransactionTestWithMockTime, CancelDohProbe) {
   // The first probe happens without any delay.
   RunUntilIdle();
   std::unique_ptr<DnsServerIterator> doh_itr = resolve_context_->GetDohIterator(
-      session_->config(), DnsConfig::SecureDnsMode::AUTOMATIC, session_.get());
+      session_->config(), SecureDnsMode::kAutomatic, session_.get());
 
   EXPECT_FALSE(doh_itr->AttemptAvailable());
 
@@ -3153,7 +3128,7 @@ TEST_F(DnsTransactionTestWithMockTime, CancelOneOfMultipleProbeRunners) {
   // The first two probes (one for each runner) happen without any delay.
   RunUntilIdle();
   std::unique_ptr<DnsServerIterator> doh_itr = resolve_context_->GetDohIterator(
-      session_->config(), DnsConfig::SecureDnsMode::AUTOMATIC, session_.get());
+      session_->config(), SecureDnsMode::kAutomatic, session_.get());
 
   EXPECT_FALSE(doh_itr->AttemptAvailable());
   EXPECT_GT(runner1->GetDelayUntilNextProbeForTest(0), base::TimeDelta());
@@ -3195,7 +3170,7 @@ TEST_F(DnsTransactionTestWithMockTime, CancelAllOfMultipleProbeRunners) {
   // The first two probes (one for each runner) happen without any delay.
   RunUntilIdle();
   std::unique_ptr<DnsServerIterator> doh_itr = resolve_context_->GetDohIterator(
-      session_->config(), DnsConfig::SecureDnsMode::AUTOMATIC, session_.get());
+      session_->config(), SecureDnsMode::kAutomatic, session_.get());
 
   EXPECT_FALSE(doh_itr->AttemptAvailable());
   EXPECT_GT(runner1->GetDelayUntilNextProbeForTest(0), base::TimeDelta());
@@ -3229,9 +3204,8 @@ TEST_F(DnsTransactionTestWithMockTime, CancelDohProbe_AfterSuccess) {
   RunUntilIdle();
   {
     std::unique_ptr<DnsServerIterator> doh_itr =
-        resolve_context_->GetDohIterator(session_->config(),
-                                         DnsConfig::SecureDnsMode::AUTOMATIC,
-                                         session_.get());
+        resolve_context_->GetDohIterator(
+            session_->config(), SecureDnsMode::kAutomatic, session_.get());
 
     ASSERT_TRUE(doh_itr->AttemptAvailable());
     EXPECT_EQ(doh_itr->GetNextAttemptIndex(), 0u);
@@ -3243,9 +3217,8 @@ TEST_F(DnsTransactionTestWithMockTime, CancelDohProbe_AfterSuccess) {
   RunUntilIdle();
   {
     std::unique_ptr<DnsServerIterator> doh_itr =
-        resolve_context_->GetDohIterator(session_->config(),
-                                         DnsConfig::SecureDnsMode::AUTOMATIC,
-                                         session_.get());
+        resolve_context_->GetDohIterator(
+            session_->config(), SecureDnsMode::kAutomatic, session_.get());
 
     ASSERT_TRUE(doh_itr->AttemptAvailable());
     EXPECT_EQ(doh_itr->GetNextAttemptIndex(), 0u);
@@ -3268,7 +3241,7 @@ TEST_F(DnsTransactionTestWithMockTime, DestroyFactoryAfterStartingDohProbe) {
   // The first probe happens without any delay.
   RunUntilIdle();
   std::unique_ptr<DnsServerIterator> doh_itr = resolve_context_->GetDohIterator(
-      session_->config(), DnsConfig::SecureDnsMode::AUTOMATIC, session_.get());
+      session_->config(), SecureDnsMode::kAutomatic, session_.get());
 
   EXPECT_FALSE(doh_itr->AttemptAvailable());
 

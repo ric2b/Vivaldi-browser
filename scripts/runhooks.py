@@ -79,6 +79,7 @@ def GetGNVars():
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--clobber-out", action="store_true");
+parser.add_argument("--download-pgo-profiles", action="store_true");
 parser.add_argument("--args-gn")
 parser.add_argument("--checkout-os")
 
@@ -123,10 +124,14 @@ def RunHooks(hooks, cwd, env=None, prefix_name=None):
     'host_os': host_os,
     checkout_os: True,
     checkout_cpu: True,
+    "checkout_pgo_profiles": False,
   }
   global_vars["checkout_x64"]= True # Always checking out on x64 systems
   if checkout_os == "checkout_android":
     global_vars["checkout_linux"]= True # Always checking out android on linux systems
+
+  if args.download_pgo_profiles:
+    global_vars["checkout_pgo_profiles"] = True
 
   for an_os in set(list(OS_CHOICES.values())+["telemetry_dependencies"]):
     global_vars.setdefault("checkout_"+an_os, False)

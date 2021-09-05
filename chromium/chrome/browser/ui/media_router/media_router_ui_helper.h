@@ -9,9 +9,9 @@
 #include <vector>
 
 #include "base/time/time.h"
-#include "chrome/browser/media/router/media_router.h"
 #include "chrome/browser/ui/media_router/media_cast_mode.h"
-#include "chrome/common/media_router/media_source.h"
+#include "components/media_router/browser/media_router.h"
+#include "components/media_router/common/media_source.h"
 #include "url/origin.h"
 
 namespace extensions {

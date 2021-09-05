@@ -8,9 +8,9 @@
 #include <memory>
 
 #include "base/location.h"
-#include "base/optional.h"
 #include "base/single_thread_task_runner.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
+#include "third_party/blink/public/common/privacy_budget/identifiable_token.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_blob_callback.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_image_encode_options.h"
@@ -63,7 +63,8 @@ class CORE_EXPORT CanvasAsyncBlobCreator
                          ToBlobFunctionType function_type,
                          base::TimeTicks start_time,
                          ExecutionContext*,
-                         base::Optional<UkmParameters> ukm_params,
+                         UkmParameters ukm_params,
+                         const IdentifiableToken& input_digest,
                          ScriptPromiseResolver*);
   CanvasAsyncBlobCreator(scoped_refptr<StaticBitmapImage>,
                          const ImageEncodeOptions*,
@@ -71,7 +72,8 @@ class CORE_EXPORT CanvasAsyncBlobCreator
                          V8BlobCallback*,
                          base::TimeTicks start_time,
                          ExecutionContext*,
-                         base::Optional<UkmParameters> ukm_params,
+                         UkmParameters ukm_params,
+                         const IdentifiableToken& input_digest,
                          ScriptPromiseResolver* = nullptr);
   virtual ~CanvasAsyncBlobCreator();
 
@@ -137,7 +139,8 @@ class CORE_EXPORT CanvasAsyncBlobCreator
   // Used for HTMLCanvasElement only
   Member<V8BlobCallback> callback_;
 
-  base::Optional<UkmParameters> ukm_params_;
+  UkmParameters ukm_params_;
+  IdentifiableToken input_digest_;
 
   // Used for OffscreenCanvas only
   Member<ScriptPromiseResolver> script_promise_resolver_;

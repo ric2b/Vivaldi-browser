@@ -4,11 +4,16 @@
 
 #include "chrome/browser/ui/webui/nearby_internals/nearby_internals_ui_trigger_handler.h"
 
+#include <memory>
+#include <vector>
+
 #include "base/bind.h"
 #include "base/time/time.h"
+#include "chrome/browser/nearby_sharing/attachment.h"
 #include "chrome/browser/nearby_sharing/logging/logging.h"
 #include "chrome/browser/nearby_sharing/nearby_sharing_service_factory.h"
-#include "chrome/browser/ui/webui/nearby_share/nearby_share_target_types.mojom.h"
+#include "chrome/browser/nearby_sharing/text_attachment.h"
+#include "chrome/services/sharing/public/mojom/nearby_share_target_types.mojom.h"
 
 namespace {
 
@@ -371,13 +376,6 @@ void NearbyInternalsUiTriggerHandler::OnShareTargetLost(
                     ShareTargetMapToList(id_to_share_target_map_));
 }
 
-void NearbyInternalsUiTriggerHandler::OnSendTextCalled(
-    NearbySharingService::StatusCodes status_codes) {
-  FireWebUIListener(
-      "on-status-code-returned",
-      StatusCodeToDictionary(status_codes, TriggerEvent::kSendText));
-}
-
 void NearbyInternalsUiTriggerHandler::OnAcceptCalled(
     NearbySharingService::StatusCodes status_codes) {
   FireWebUIListener(
@@ -413,7 +411,7 @@ void NearbyInternalsUiTriggerHandler::SendText(const base::ListValue* args) {
     return;
   }
 
-  std::string share_target_id = args->GetList()[0].GetString();
+  std::string share_target_id = args->GetList()[1].GetString();
   auto it = id_to_share_target_map_.find(share_target_id);
   if (it == id_to_share_target_map_.end()) {
     NS_LOG(ERROR) << "Invalid ShareTarget ID " << share_target_id
@@ -421,10 +419,16 @@ void NearbyInternalsUiTriggerHandler::SendText(const base::ListValue* args) {
     return;
   }
 
-  service_->SendText(
-      it->second, kPayloadExample,
-      base::BindOnce(&NearbyInternalsUiTriggerHandler::OnSendTextCalled,
-                     weak_ptr_factory_.GetWeakPtr()));
+  std::vector<std::unique_ptr<Attachment>> attachments;
+  attachments.push_back(std::make_unique<TextAttachment>(
+      TextAttachment::Type::kText, kPayloadExample));
+
+  const base::Value& callback_id = args->GetList()[0];
+  ResolveJavascriptCallback(
+      callback_id,
+      StatusCodeToDictionary(
+          service_->SendAttachments(it->second, std::move(attachments)),
+          TriggerEvent::kSendText));
 }
 
 void NearbyInternalsUiTriggerHandler::Accept(const base::ListValue* args) {

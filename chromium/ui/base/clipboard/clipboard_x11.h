@@ -25,8 +25,6 @@ class ClipboardX11 : public Clipboard {
   // Clipboard overrides:
   void OnPreShutdown() override;
   uint64_t GetSequenceNumber(ClipboardBuffer buffer) const override;
-  void SetClipboardDlpController(
-      std::unique_ptr<ClipboardDlpController> dlp_controller) override;
   bool IsFormatAvailable(const ClipboardFormatType& format,
                          ClipboardBuffer buffer,
                          const ClipboardDataEndpoint* data_dst) const override;
@@ -49,6 +47,9 @@ class ClipboardX11 : public Clipboard {
                 std::string* src_url,
                 uint32_t* fragment_start,
                 uint32_t* fragment_end) const override;
+  void ReadSvg(ClipboardBuffer buffer,
+               const ClipboardDataEndpoint* data_dst,
+               base::string16* result) const override;
   void ReadRTF(ClipboardBuffer buffer,
                const ClipboardDataEndpoint* data_dst,
                std::string* result) const override;
@@ -81,6 +82,7 @@ class ClipboardX11 : public Clipboard {
                  size_t markup_len,
                  const char* url_data,
                  size_t url_len) override;
+  void WriteSvg(const char* markup_data, size_t markup_len) override;
   void WriteRTF(const char* rtf_data, size_t data_len) override;
   void WriteBookmark(const char* title_data,
                      size_t title_len,

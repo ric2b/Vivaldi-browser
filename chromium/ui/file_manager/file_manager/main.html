@@ -132,7 +132,8 @@
       <command id="open-with" label="$i18n{OPEN_WITH_BUTTON_LABEL}">
       <command id="more-actions" label="$i18n{MORE_ACTIONS_BUTTON_LABEL}">
       <command id="show-submenu" label="$i18n{MORE_ACTIONS_BUTTON_LABEL}">
-      <command id="invoke-sharesheet" label="$i18n{MORE_ACTIONS_BUTTON_LABEL}">
+      <command id="invoke-sharesheet" label="$i18n{SHARESHEET_BUTTON_LABEL}">
+      <command id="toggle-holding-space">
       <command id="go-to-file-location"
                label="$i18n{GO_TO_FILE_LOCATION_BUTTON_LABEL}">
       <command id="zip-selection"
@@ -204,6 +205,8 @@
         <cr-menu-item command="#pin-folder"></cr-menu-item>
         <cr-menu-item command="#delete" class="hide-on-toolbar">$i18n{DELETE_BUTTON_LABEL}</cr-menu-item>
         <cr-menu-item command="#zip-selection"></cr-menu-item>
+        <cr-menu-item command="#toggle-holding-space" visibleif="full-page">
+            </cr-menu-item>
         <cr-menu-item command="#share-with-linux"></cr-menu-item>
         <cr-menu-item command="#manage-linux-sharing"></cr-menu-item>
         <cr-menu-item command="#share-with-plugin-vm"></cr-menu-item>
@@ -360,6 +363,10 @@
       <div id="files-selected-label"></div>
       <div class="spacer"></div>
       <div id="action-bar">
+        <div id="pinned-toggle-wrapper" hidden>
+          <span id="pinned-toggle-label">$i18n{OFFLINE_COLUMN_LABEL}</span>
+          <cr-toggle id="pinned-toggle" command="#toggle-pinned"></cr-toggle>
+        </div>
         <button id="tasks" class="combobutton menu-button" menu="#tasks-menu"
                 tabindex="0" hidden
                 aria-label="$i18n{TASKS_BUTTON_LABEL}">
@@ -373,7 +380,7 @@
           <div class="icon"></div>
         </button>
         <cr-button id="sharesheet-button" class="icon-button menu-button" tabindex="0" hidden
-                aria-label="$i18n{SHARE_BUTTON_TOOLTIP}"
+                aria-label="$i18n{SHARESHEET_BUTTON_LABEL}"
                 visibleif="full-page"
                 command="#invoke-sharesheet"
                 has-tooltip>
@@ -516,7 +523,7 @@
         </div>
       </div>
       <div class="splitter" id="navigation-list-splitter">
-        <cr-button class="splitter-button" tabindex="-1">
+        <cr-button aria-hidden="true" class="splitter-button" tabindex="-1">
           <div class="icon"></div>
         </cr-button>
       </div>

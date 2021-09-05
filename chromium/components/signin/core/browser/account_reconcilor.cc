@@ -34,6 +34,7 @@
 #include "google_apis/gaia/google_service_auth_error.h"
 
 using signin::AccountReconcilorDelegate;
+using signin::ConsentLevel;
 using signin_metrics::AccountReconcilorState;
 
 namespace {
@@ -125,8 +126,8 @@ bool RevokeAllSecondaryTokens(
   return token_revoked;
 }
 
-// TODO(msalama): Move this code and |RevokeAllSecondaryTokens|
-// to |DiceAccountReconcilorDelegate|.
+// TODO(https://crbug.com/1122551): Move this code and
+// |RevokeAllSecondaryTokens| to |DiceAccountReconcilorDelegate|.
 signin::RevokeTokenAction RevokeTokensNotInCookies(
     signin::IdentityManager* identity_manager,
     const CoreAccountId& primary_account,
@@ -496,7 +497,8 @@ void AccountReconcilor::StartReconcile() {
                                  base::Unretained(this)));
   }
 
-  const CoreAccountId& account_id = identity_manager_->GetPrimaryAccountId();
+  CoreAccountId account_id = identity_manager_->GetPrimaryAccountId(
+      delegate_->GetConsentLevelForPrimaryAccount());
   if (identity_manager_->HasAccountWithRefreshTokenInPersistentErrorState(
           account_id) &&
       delegate_->ShouldAbortReconcileIfPrimaryHasError()) {
@@ -531,16 +533,33 @@ void AccountReconcilor::FinishReconcileWithMultiloginEndpoint(
       identity_manager_->HasAccountWithRefreshTokenInPersistentErrorState(
           primary_account);
 
-  const signin::MultiloginParameters parameters_for_multilogin =
-      delegate_->CalculateParametersForMultilogin(
+  const signin::MultiloginParameters kLogoutParameters(
+      gaia::MultiloginMode::MULTILOGIN_UPDATE_COOKIE_ACCOUNTS_ORDER,
+      std::vector<CoreAccountId>());
+
+  const bool should_revoke_tokens =
+      delegate_->ShouldRevokeTokensBeforeMultilogin(
           chrome_accounts, primary_account, gaia_accounts, first_execution_,
           primary_has_error);
 
   DCHECK(is_reconcile_started_);
+  signin::MultiloginParameters parameters_for_multilogin;
+  if (should_revoke_tokens) {
+    // Set parameters for logout for deleting cookies.
+    parameters_for_multilogin = kLogoutParameters;
+    RevokeAllSecondaryTokens(
+        identity_manager_,
+        AccountReconcilorDelegate::RevokeTokenOption::kRevoke, primary_account,
+        /*is_account_consistency_enforced=*/true,
+        signin_metrics::SourceForRefreshTokenOperation::
+            kAccountReconcilor_Reconcile);
+  } else {
+    parameters_for_multilogin = delegate_->CalculateParametersForMultilogin(
+        chrome_accounts, primary_account, gaia_accounts, first_execution_,
+        primary_has_error);
+  }
   if (CookieNeedsUpdate(parameters_for_multilogin, gaia_accounts)) {
-    if (parameters_for_multilogin.mode ==
-            gaia::MultiloginMode::MULTILOGIN_UPDATE_COOKIE_ACCOUNTS_ORDER &&
-        parameters_for_multilogin.accounts_to_send.empty()) {
+    if (parameters_for_multilogin == kLogoutParameters) {
       // UPDATE mode does not support empty list of accounts, call logout
       // instead.
       PerformLogoutAllAccountsAction();
@@ -625,8 +644,14 @@ void AccountReconcilor::OnAccountsInCookieUpdated(
       << "Ignore " << accounts.size() - verified_gaia_accounts.size()
       << " unverified account(s).";
 
-  CoreAccountId primary_account = identity_manager_->GetPrimaryAccountId();
+  ConsentLevel consent_level = delegate_->GetConsentLevelForPrimaryAccount();
+  CoreAccountId primary_account =
+      identity_manager_->GetPrimaryAccountId(consent_level);
   if (delegate_->ShouldRevokeTokensNotInCookies()) {
+    // This code is only used with DiceAccountReconcilorDelegate and should
+    // thus use sync account.
+    // TODO(https://crbug.com/1122551): Move to |DiceAccountReconcilorDelegate|.
+    DCHECK_EQ(consent_level, ConsentLevel::kSync);
     signin::RevokeTokenAction revoke_token_action = RevokeTokensNotInCookies(
         identity_manager_, primary_account, verified_gaia_accounts);
     delegate_->OnRevokeTokensNotInCookiesCompleted(revoke_token_action);
@@ -636,6 +661,7 @@ void AccountReconcilor::OnAccountsInCookieUpdated(
   // completely remove them from Chrome.
   // Revoking the token for the primary account is not supported (it should be
   // signed out or put to auth error state instead).
+  // TODO(https://crbug.com/1122551): Move to |DiceAccountReconcilorDelegate|.
   AccountReconcilorDelegate::RevokeTokenOption revoke_option =
       delegate_->ShouldRevokeSecondaryTokensBeforeReconcile(
           verified_gaia_accounts);
@@ -669,8 +695,13 @@ void AccountReconcilor::OnAccountsCookieDeletedByUserAction() {
   if (!delegate_->ShouldRevokeTokensOnCookieDeleted())
     return;
 
-  const CoreAccountId& primary_account =
-      identity_manager_->GetPrimaryAccountId();
+  // This code is only used with DiceAccountReconcilorDelegate and should thus
+  // use sync account.
+  // TODO(https://crbug.com/1122551): Move to |DiceAccountReconcilorDelegate|.
+  DCHECK_EQ(delegate_->GetConsentLevelForPrimaryAccount(), ConsentLevel::kSync);
+
+  CoreAccountId primary_account =
+      identity_manager_->GetPrimaryAccountId(ConsentLevel::kSync);
   // Revoke secondary tokens.
   RevokeAllSecondaryTokens(
       identity_manager_, AccountReconcilorDelegate::RevokeTokenOption::kRevoke,

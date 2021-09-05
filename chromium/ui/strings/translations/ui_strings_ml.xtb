@@ -44,7 +44,6 @@
 <translation id="19085484004813472">ഇതൊരു പുതിയ ഫീച്ചറാണ്</translation>
 <translation id="2006524834898217237">ഈ ഉപകരണം ഇന്റർനെറ്റിലേക്ക് കണക്റ്റ് ചെയ്‌തിട്ടുണ്ടെന്ന് ഉറപ്പാക്കുക.</translation>
 <translation id="208586643495776849">വീണ്ടും ശ്രമിക്കുക</translation>
-<translation id="2090963878406559571">നിങ്ങളുടെ Android ഫോണിലേക്ക് <ph name="ORIGIN" /> എന്നതിൽ നിന്ന് ഒരു നമ്പർ അയയ്ക്കാൻ, ക്രമീകരണത്തിൽ രണ്ട് ഉപകരണങ്ങളുടെയും <ph name="TROUBLESHOOT_LINK" />.</translation>
 <translation id="2141853158323869627">{DAYS,plural, =1{1ദിവസം}other{# ദിവസം}}</translation>
 <translation id="2148716181193084225">ഇന്ന്</translation>
 <translation id="2161656808144014275">വാചകം</translation>
@@ -135,8 +134,8 @@
 <translation id="520299402983819650"><ph name="QUANTITY" /> PB</translation>
 <translation id="5266161281976477809">ഡിസ്‌ക്ലോഷർ ത്രികോണം</translation>
 <translation id="5278860589123563674">അയയ്ക്കാനായില്ല</translation>
+<translation id="5283099933536931082"><ph name="APP_ITEM_TITLE" /> നിങ്ങളുടെ ശ്രദ്ധ അഭ്യർത്ഥിക്കുന്നു.</translation>
 <translation id="528468243742722775">അവസാനിപ്പിക്കുക</translation>
-<translation id="5327567770033251652">സമന്വയിപ്പിക്കൽ ഓണാക്കുക</translation>
 <translation id="5329858601952122676">&amp;ഇല്ലാതാക്കൂ</translation>
 <translation id="5395308026110844773"><ph name="IN_PLACE_APP" /> എന്നതിന് മുകളിലാണ് <ph name="DRAGGED_APP_NAME" />, ഫോൾഡർ സൃഷ്‌ടിക്കാൻ റിലീസ് ചെയ്യുക.</translation>
 <translation id="5463830097259460683">ഇമോജിയും ചിഹ്നങ്ങളും</translation>
@@ -146,6 +145,7 @@
 <translation id="5574202486608032840"><ph name="IDS_SHORT_PRODUCT_OS_NAME" /> സിസ്‌റ്റം</translation>
 <translation id="5583640892426849032">ബാക്ക്‌സ്പെയ്‌സ്</translation>
 <translation id="5613020302032141669">ഇടത് ആരോ അടയാളം</translation>
+<translation id="5652575806481723716"><ph name="FOCUSED_APP_NAME" /> നിങ്ങളുടെ ശ്രദ്ധ അഭ്യർത്ഥിക്കുന്നു.</translation>
 <translation id="5675363643668471212">ഷെൽഫ് ഇനം</translation>
 <translation id="5754277640426581776">{MINUTES,plural, =1{ഒരു മിനിറ്റ്}other{# മിനിറ്റ്}}</translation>
 <translation id="5763338081255973061">{DAYS,plural, =0{ഇന്ന് സജീവമായിരുന്നു}=1{ഒരു ദിവസം മുമ്പ് സജീവമായിരുന്നു}other{# ദിവസം മുമ്പ് സജീവമായിരുന്നു}}</translation>
@@ -183,10 +183,8 @@
 <translation id="6578407462441924264">പേരില്ലാത്തത്</translation>
 <translation id="6612467943526193239">കാലിബറേഷനിൽ നിന്ന് പുറത്തുകടക്കാൻ Esc അമർത്തുക.</translation>
 <translation id="6620110761915583480">ഫയല്‍‌ സംരക്ഷിക്കുക</translation>
-<translation id="6656912866303152668">Chrome-ൽ <ph name="TARGET_DEVICE_NAME" /> എന്ന ഉപകരണത്തിൽ സമന്വയം ഓണാക്കിയിട്ടുണ്ടെന്ന് ഉറപ്പാക്കുക, തുടർന്ന് വീണ്ടും അയയ്ക്കാൻ ശ്രമിക്കുക.</translation>
 <translation id="6699343763173986273">അടുത്ത മീഡിയാ ട്രാക്ക്</translation>
 <translation id="6710213216561001401">മുമ്പത്തേത്</translation>
-<translation id="6779314412797872738">നിങ്ങളുടെ Android ഫോണിലേക്ക് ഇവിടെ നിന്ന് ഒരു നമ്പർ അയയ്‌ക്കാൻ, ക്രമീകരണത്തിൽ രണ്ട് ഉപകരണങ്ങളുടെയും <ph name="TROUBLESHOOT_LINK" />.</translation>
 <translation id="6786750046913594791">ഫോൾഡർ അടയ്ക്കുക</translation>
 <translation id="6808150112686056157">മീഡിയ ‌നിർത്തുക</translation>
 <translation id="6845383723252244143">ഫോള്‍ഡര്‍ തിരഞ്ഞെടുക്കുക</translation>

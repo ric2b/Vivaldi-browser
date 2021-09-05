@@ -27,6 +27,7 @@
 #include "url/gurl.h"
 
 #if defined(OS_CHROMEOS)
+#include "chrome/browser/apps/app_service/borealis_apps.h"
 #include "chrome/browser/apps/app_service/built_in_chromeos_apps.h"
 #include "chrome/browser/apps/app_service/crostini_apps.h"
 #include "chrome/browser/apps/app_service/extension_apps_chromeos.h"
@@ -38,7 +39,6 @@
 #include "chrome/browser/apps/app_service/web_apps.h"
 #endif  // OS_CHROMEOS
 
-class PrefRegistrySimple;
 class Profile;
 
 namespace apps {
@@ -84,8 +84,6 @@ class AppServiceProxy : public KeyedService,
 
   explicit AppServiceProxy(Profile* profile);
   ~AppServiceProxy() override;
-
-  static void RegisterProfilePrefs(PrefRegistrySimple* registry);
 
   void ReInitializeForTesting(Profile* profile);
 
@@ -423,6 +421,7 @@ class AppServiceProxy : public KeyedService,
   // nullptr.
   std::unique_ptr<ExtensionAppsChromeOs> extension_web_apps_;
   std::unique_ptr<WebAppsChromeOs> web_apps_;
+  std::unique_ptr<BorealisApps> borealis_apps_;
 
   bool arc_is_registered_ = false;
 

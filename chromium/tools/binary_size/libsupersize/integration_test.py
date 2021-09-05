@@ -125,9 +125,10 @@ class IntegrationTest(unittest.TestCase):
 
     with zipfile.ZipFile(_TEST_APK_PATH, 'w') as apk_file:
       apk_file.write(_TEST_ELF_PATH, _TEST_APK_SO_PATH)
-      # Exactly 4MB of data (2^22).
-      apk_file.writestr(
-          _TEST_APK_SMALL_SO_PATH, IntegrationTest._CreateBlankData(22))
+      # Exactly 4MB of data (2^22), with some zipalign overhead.
+      info = zipfile.ZipInfo(_TEST_APK_SMALL_SO_PATH)
+      info.extra = b'\x00' * 16
+      apk_file.writestr(info, IntegrationTest._CreateBlankData(22))
       # Exactly 1MB of data (2^20).
       apk_file.writestr(
           _TEST_APK_OTHER_FILE_PATH, IntegrationTest._CreateBlankData(20))
@@ -159,16 +160,10 @@ class IntegrationTest(unittest.TestCase):
     ])
 
   def _CreateTestArgs(self):
-    return argparse.Namespace(
-        **{
-            'is_bundle': False,
-            'java_only': False,
-            'native_only': False,
-            'no_java': False,
-            'no_native': False,
-            'relocations': False,
-            'source_directory': _TEST_SOURCE_DIR,
-        })
+    parser = argparse.ArgumentParser()
+    archive.AddArguments(parser)
+    ret = parser.parse_args(['foo'])
+    return ret
 
   def _CloneSizeInfo(self,
                      use_output_directory=True,
@@ -182,54 +177,58 @@ class IntegrationTest(unittest.TestCase):
     cache_key = (use_output_directory, use_elf, use_apk, use_minimal_apks,
                  use_pak, use_aux_elf)
     if cache_key not in IntegrationTest.cached_size_info:
-      elf_path = _TEST_ELF_PATH if use_elf or use_aux_elf else None
-      output_directory = _TEST_OUTPUT_DIR if use_output_directory else None
       knobs = archive.SectionSizeKnobs()
-      opts = archive.ContainerArchiveOptions(self._CreateTestArgs())
       # Override for testing. Lower the bar for compacting symbols, to allow
       # smaller test cases to be created.
       knobs.max_same_name_alias_count = 3
-      apk_path = None
-      minimal_apks_path = None
+
+      args = self._CreateTestArgs()
+      args.elf_file = _TEST_ELF_PATH if use_elf or use_aux_elf else None
+      args.map_file = _TEST_MAP_PATH
+      args.output_directory = _TEST_OUTPUT_DIR if use_output_directory else None
+      args.source_directory = _TEST_SOURCE_DIR
+      args.tool_prefix = _TEST_TOOL_PREFIX
       apk_so_path = None
       size_info_prefix = None
       extracted_minimal_apk_path = None
       if use_apk:
-        apk_path = _TEST_APK_PATH
+        args.apk_file = _TEST_APK_PATH
       elif use_minimal_apks:
-        minimal_apks_path = _TEST_MINIMAL_APKS_PATH
+        args.minimal_apks_file = _TEST_MINIMAL_APKS_PATH
         extracted_minimal_apk_path = _TEST_APK_PATH
       if use_apk or use_minimal_apks:
         apk_so_path = _TEST_APK_SO_PATH
-        if output_directory:
+        if args.output_directory:
           if use_apk:
             orig_path = _TEST_APK_PATH
           else:
             orig_path = _TEST_MINIMAL_APKS_PATH.replace('.minimal.apks', '.aab')
-          size_info_prefix = os.path.join(
-              output_directory, 'size-info', os.path.basename(orig_path))
+          size_info_prefix = os.path.join(args.output_directory, 'size-info',
+                                          os.path.basename(orig_path))
       pak_files = None
       pak_info_file = None
       if use_pak:
         pak_files = [_TEST_APK_LOCALE_PAK_PATH, _TEST_APK_PAK_PATH]
         pak_info_file = _TEST_PAK_INFO_PATH
       linker_name = 'gold'
+
+      # For simplicity, using |args| for both params. This is okay since
+      # |args.ssargs_file| is unassigned.
+      opts = archive.ContainerArchiveOptions(args, args)
       with _AddMocksToPath():
         build_config = {}
-        metadata = archive.CreateMetadata(_TEST_MAP_PATH, elf_path, apk_path,
-                                          minimal_apks_path, _TEST_TOOL_PREFIX,
-                                          output_directory, linker_name,
-                                          build_config)
+        metadata = archive.CreateMetadata(args, linker_name, build_config)
         container, raw_symbols = archive.CreateContainerAndSymbols(
             knobs=knobs,
             opts=opts,
             container_name='',
             metadata=metadata,
-            map_path=_TEST_MAP_PATH,
-            tool_prefix=_TEST_TOOL_PREFIX,
-            output_directory=output_directory,
-            elf_path=elf_path,
-            apk_path=apk_path or extracted_minimal_apk_path,
+            map_path=args.map_file,
+            tool_prefix=args.tool_prefix,
+            output_directory=args.output_directory,
+            source_directory=args.source_directory,
+            elf_path=args.elf_file,
+            apk_path=args.apk_file or extracted_minimal_apk_path,
             apk_so_path=apk_so_path,
             pak_files=pak_files,
             pak_info_file=pak_info_file,
@@ -259,7 +258,7 @@ class IntegrationTest(unittest.TestCase):
       if not use_elf:
         args += ['--output-directory', _TEST_OUTPUT_DIR]
     else:
-      args += ['--no-source-paths']
+      args += ['--no-output-directory']
     if use_apk:
       args += ['-f', _TEST_APK_PATH]
     elif use_minimal_apks:
@@ -352,9 +351,31 @@ class IntegrationTest(unittest.TestCase):
   def test_Archive_Elf_DebugMeasures(self):
     return self._DoArchiveTest(use_elf=True, debug_measures=True)
 
-  @_CompareWithGolden(name='Archive')
+  @_CompareWithGolden(name='Archive_Apk')
   def test_ArchiveSparse(self):
-    return self._DoArchiveTest(use_output_directory=False, include_padding=True)
+    return self._DoArchiveTest(use_apk=True,
+                               use_aux_elf=True,
+                               include_padding=True)
+
+  def test_SaveDeltaSizeInfo(self):
+    # Check that saving & loading is the same as directly parsing.
+    orig_info1 = self._CloneSizeInfo(use_apk=True, use_aux_elf=True)
+    orig_info2 = self._CloneSizeInfo(use_elf=True)
+    orig_delta = diff.Diff(orig_info1, orig_info2)
+
+    with tempfile.NamedTemporaryFile(suffix='.sizediff') as sizediff_file:
+      file_format.SaveDeltaSizeInfo(orig_delta, sizediff_file.name)
+      new_info1, new_info2 = archive.LoadAndPostProcessDeltaSizeInfo(
+          sizediff_file.name)
+    new_delta = diff.Diff(new_info1, new_info2)
+
+    # File format discards unchanged symbols.
+    orig_delta.raw_symbols = orig_delta.raw_symbols.WhereDiffStatusIs(
+        models.DIFF_STATUS_UNCHANGED).Inverted()
+
+    self.assertEqual(
+        '\n'.join(describe.GenerateLines(orig_delta, verbose=True)),
+        '\n'.join(describe.GenerateLines(new_delta, verbose=True)))
 
   @_CompareWithGolden()
   def test_Console(self):

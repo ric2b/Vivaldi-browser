@@ -5,13 +5,13 @@
 #include "ash/quick_answers/ui/user_consent_view.h"
 
 #include "ash/accessibility/accessibility_controller_impl.h"
-#include "ash/public/cpp/vector_icons/vector_icons.h"
 #include "ash/quick_answers/quick_answers_ui_controller.h"
 #include "ash/quick_answers/ui/quick_answers_pre_target_handler.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "chromeos/constants/chromeos_features.h"
+#include "chromeos/ui/vector_icons/vector_icons.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/events/event_handler.h"
 #include "ui/gfx/paint_vector_icon.h"
@@ -178,7 +178,10 @@ gfx::Size UserConsentView::CalculatePreferredSize() const {
 void UserConsentView::OnFocus() {
   // Unless screen-reader mode is enabled, transfer the focus to an actionable
   // button, otherwise retain to read out its contents.
-  if (!ash::Shell::Get()->accessibility_controller()->spoken_feedback_enabled())
+  if (!ash::Shell::Get()
+           ->accessibility_controller()
+           ->spoken_feedback()
+           .enabled())
     settings_button_->RequestFocus();
 }
 
@@ -202,7 +205,8 @@ std::vector<views::View*> UserConsentView::GetFocusableViews() {
   // The view itself is not included in focus loop, unless screen-reader is on.
   if (ash::Shell::Get()
           ->accessibility_controller()
-          ->spoken_feedback_enabled()) {
+          ->spoken_feedback()
+          .enabled()) {
     focusable_views.push_back(this);
   }
   focusable_views.push_back(settings_button_);
@@ -255,7 +259,7 @@ void UserConsentView::InitLayout() {
   assistant_icon->SetBorder(views::CreateEmptyBorder(
       (kLineHeightDip - kAssistantIconSizeDip) / 2, 0, 0, 0));
   assistant_icon->SetImage(gfx::CreateVectorIcon(
-      kAssistantIcon, kAssistantIconSizeDip, gfx::kPlaceholderColor));
+      chromeos::kAssistantIcon, kAssistantIconSizeDip, gfx::kPlaceholderColor));
 
   // Content.
   InitContent();

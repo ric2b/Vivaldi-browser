@@ -27,6 +27,12 @@ class DarkModeDetailedView : public TrayDetailedView {
   // views::View:
   const char* GetClassName() const override;
 
+  // Updates the status of |toggle_| on |dark_mode_enabled|.
+  void UpdateToggleButton(bool dark_mode_enabled);
+
+  // Updates the currently checked radio button.
+  void UpdateCheckedButton(bool is_themed);
+
  private:
   void CreateItems();
 

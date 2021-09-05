@@ -10,6 +10,7 @@
 #include "base/optional.h"
 #include "build/build_config.h"
 #include "components/content_settings/core/common/content_settings_types.h"
+#include "components/permissions/notification_permission_ui_selector.h"
 #include "components/permissions/permission_prompt.h"
 #include "components/permissions/permission_util.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
@@ -34,7 +35,6 @@ class InfoBarManager;
 
 namespace permissions {
 class ChooserContextBase;
-class NotificationPermissionUiSelector;
 class PermissionDecisionAutoBlocker;
 class PermissionManager;
 class PermissionPromptAndroid;
@@ -128,10 +128,13 @@ class PermissionsClient {
   CreateNotificationPermissionUiSelector(
       content::BrowserContext* browser_context);
 
+  using QuietUiReason = NotificationPermissionUiSelector::QuietUiReason;
   // Called for each request type when a permission prompt is resolved.
   virtual void OnPromptResolved(content::BrowserContext* browser_context,
                                 PermissionRequestType request_type,
-                                PermissionAction action);
+                                PermissionAction action,
+                                const GURL& origin,
+                                base::Optional<QuietUiReason> quiet_ui_reason);
 
   // Returns true if user has 3 consecutive notifications permission denies,
   // returns false otherwise.
@@ -139,6 +142,14 @@ class PermissionsClient {
   // ui dry run experiment group.
   virtual base::Optional<bool> HadThreeConsecutiveNotificationPermissionDenies(
       content::BrowserContext* browser_context);
+
+  // Returns whether the |permission| has already been auto-revoked due to abuse
+  // at least once for the given |origin|. Returns `nullopt` if permission
+  // auto-revocation is not supported for a given permission type.
+  virtual base::Optional<bool> HasPreviouslyAutoRevokedPermission(
+      content::BrowserContext* browser_context,
+      const GURL& origin,
+      ContentSettingsType permission);
 
   // If the embedder returns an origin here, any requests matching that origin
   // will be approved. Requests that do not match the returned origin will

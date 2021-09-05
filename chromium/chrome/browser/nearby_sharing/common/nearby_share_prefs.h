@@ -12,18 +12,25 @@ namespace prefs {
 extern const char kNearbySharingActiveProfilePrefName[];
 extern const char kNearbySharingAllowedContactsPrefName[];
 extern const char kNearbySharingBackgroundVisibilityName[];
+extern const char kNearbySharingContactUploadHashPrefName[];
 extern const char kNearbySharingDataUsageName[];
 extern const char kNearbySharingDeviceIdPrefName[];
 extern const char kNearbySharingDeviceNamePrefName[];
 extern const char kNearbySharingEnabledPrefName[];
+extern const char kNearbySharingOnboardingCompletePrefName[];
 extern const char kNearbySharingFullNamePrefName[];
 extern const char kNearbySharingIconUrlPrefName[];
 extern const char kNearbySharingOnboardingDismissedTimePrefName[];
-extern const char kNearbySharingSchedulerDownloadDeviceDataPrefName[];
-extern const char kNearbySharingSchedulerUploadDeviceNamePrefName[];
-extern const char kNearbySharingPublicCertificateExpirationDictPrefName[];
 extern const char kNearbySharingPrivateCertificateListPrefName[];
+extern const char kNearbySharingPublicCertificateExpirationDictPrefName[];
+extern const char kNearbySharingSchedulerContactDownloadAndUploadPrefName[];
+extern const char kNearbySharingSchedulerDownloadDeviceDataPrefName[];
 extern const char kNearbySharingSchedulerDownloadPublicCertificatesPrefName[];
+extern const char kNearbySharingSchedulerPrivateCertificateExpirationPrefName[];
+extern const char kNearbySharingSchedulerPublicCertificateExpirationPrefName[];
+extern const char kNearbySharingSchedulerUploadDeviceNamePrefName[];
+extern const char
+    kNearbySharingSchedulerUploadLocalDeviceCertificatesPrefName[];
 
 }  // namespace prefs
 

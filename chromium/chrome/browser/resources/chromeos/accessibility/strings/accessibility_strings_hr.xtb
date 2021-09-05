@@ -52,6 +52,7 @@
 <translation id="1291286136605998134">Prekidač</translation>
 <translation id="1299774449519412690">Svijetla nebeskoplava</translation>
 <translation id="1303806948938513162">Dodirnite s četiri prsta da biste pristupili izbornicima ChromeVoxa</translation>
+<translation id="1313373992684326101">Prelazak na prethodni odjeljak. Primjeri uključuju traku statusa i Pokretač.</translation>
 <translation id="1325363694295259631">Izborni gumb stavke izbornika <ph name="NAME" /> je poništen</translation>
 <translation id="1325946044405407859">Boja kože</translation>
 <translation id="1331702245475014624"><ph name="INDEX" /> od <ph name="TOTAL" /></translation>
@@ -79,6 +80,7 @@
 <translation id="1506187449813838456">Povećanje visine tona</translation>
 <translation id="151784044608172266">Sljedeća rečenica</translation>
 <translation id="1524531499102321782">Sljedeći redak brajice</translation>
+<translation id="1542513807034338907">Pomicanje na prethodnu stranicu</translation>
 <translation id="1546370775711804143">Kliznik</translation>
 <translation id="1555130319947370107">Plava</translation>
 <translation id="1559739829547075274">Kretanje unatrag</translation>
@@ -280,6 +282,7 @@
 <translation id="3103579948980282461">Srednja ljubičastocrvena</translation>
 <translation id="3104705064753753826">dij upoz</translation>
 <translation id="3109724472072898302">Sažeto</translation>
+<translation id="311015743332597320">Prijeđite s četiri prsta udesno</translation>
 <translation id="3112457281078985179">ChromeVox možete uključiti ili isključiti pritiskom tipki Control + Alt + Z.</translation>
 <translation id="3131002934070407451">Čitaj brojeve kao:</translation>
 <translation id="3134461040845705080">samozačitanje</translation>
@@ -345,6 +348,7 @@
 <translation id="3549141990712742152">Izreži <ph name="TEXT" />.</translation>
 <translation id="3549680091535286226">Dodirnite s dva prsta da biste privremeno zaustavili govor</translation>
 <translation id="3564729643041517261">Trenutačni je stil prikaza usporedan</translation>
+<translation id="3587482841069643663">Sve</translation>
 <translation id="3589661172894441357">Pojmovnik</translation>
 <translation id="3591784666823501596">Kraljevskoplava</translation>
 <translation id="3594207934078151302">Srednja morskozelena</translation>
@@ -436,6 +440,7 @@
 <translation id="4278486392851938658">Nema prethodne posjećene veze</translation>
 <translation id="4281245629646759298">Svijetložuta</translation>
 <translation id="4289540628985791613">Pregled</translation>
+<translation id="4294967782363273192">Poredano uzlazno</translation>
 <translation id="4300318234632215983">Izgovaranje URL-a veze</translation>
 <translation id="4322625298640984693">Oker</translation>
 <translation id="4342180618051828363">{COUNT,plural, =1{točka}=3{trotočka}one{# točka}few{# točke}other{# točaka}}</translation>
@@ -447,6 +452,7 @@
 <translation id="4384583879834880242">Pitanja i odgovori</translation>
 <translation id="4391478986194775161">sdržjinfo</translation>
 <translation id="4402014469255336455">Duboka nebeskoplava</translation>
+<translation id="4406249099130339147">Odjek interpunkcijskih znakova:</translation>
 <translation id="4432457053224379116">Indijanski crvena</translation>
 <translation id="4437615272777527928">Tipkajte da biste pretražili izbornike. Pomoću strelica gore i dolje prelazite s rezultata na rezultat. Pomoću strelica lijevo i desno prilagodite znak za umetanje teksta i prelazite s izbornika na izbornik.</translation>
 <translation id="4457472090507035117">Odaberite trenutačni glas:</translation>
@@ -481,6 +487,7 @@
 <translation id="4763480195061959176">videozapis</translation>
 <translation id="4764692524839457597">zadano</translation>
 <translation id="4772771694153161212">Nije podcrtano</translation>
+<translation id="4780458943471935919">Pomicanje na sljedeću stranicu</translation>
 <translation id="4784215347943747396">Kontrolirajte uređaj samo s jednim prekidačem ili dva prekidača</translation>
 <translation id="4786285211967466855">Nema prethodnog naslova 1. razine</translation>
 <translation id="4787577491510559358">Izgovori formatiranje za trenutačnu stavku</translation>
@@ -644,6 +651,7 @@
 <translation id="5999630716831179808">Glasovi</translation>
 <translation id="6006050241733874051">Obrazac</translation>
 <translation id="6006064078185310784">{COUNT,plural, =1{kosa crta ulijevo}one{# kosa crta ulijevo}few{# kose crte ulijevo}other{# kosih crta ulijevo}}</translation>
+<translation id="6010616110396250088">Poredano silazno</translation>
 <translation id="6017514345406065928">Zelena</translation>
 <translation id="602001110135236999">Pomicanje ulijevo</translation>
 <translation id="6034000775414344507">Svijetlosiva</translation>
@@ -815,6 +823,7 @@
 <translation id="744163271241493234">zprk</translation>
 <translation id="7484805699335881122">Promijeni visinu glasa prilikom izgovaranja vrsta elemenata i teksta koji je citiran, izbrisan, podebljan, u zagradama ili napisan velikim slovima.</translation>
 <translation id="7491962110804786152">kart</translation>
+<translation id="7492497529767769458">Prelazak na sljedeći odjeljak. Primjeri uključuju traku statusa i Pokretač.</translation>
 <translation id="7505149250476994901">Recite "cap" (veliko slovo) prije slova</translation>
 <translation id="7518543783849163354">Da biste privremeno zaustavili govorne povratne informacije ChromeVoxa, pritisnite tipku Control.</translation>
 <translation id="7533226154149229506">Svijetla zlatnožuta</translation>
@@ -822,6 +831,7 @@
 <translation id="7552432549459840808">Korisni prečaci Chromea</translation>
 <translation id="7569983096843329377">Crna</translation>
 <translation id="7579911500627256166">točkica <ph name="DOT" /></translation>
+<translation id="7592060599656252486">Neki</translation>
 <translation id="7595446402663080101">Nema prethodne tablice</translation>
 <translation id="7596131838331109045">Svijetla boja lososa</translation>
 <translation id="7604026522577407655">Prelazak na početak trenutačnog stupca</translation>
@@ -841,6 +851,7 @@
 <translation id="7684431668231950609">Uređivanje teksta, unos URL-a</translation>
 <translation id="7685589220304187312">alttrk</translation>
 <translation id="7693840228159394336">Prethodni izborni gumb</translation>
+<translation id="7701040980221191251">Nema ih</translation>
 <translation id="7701196182766842984">autopop</translation>
 <translation id="7714340021005120797">Nema sljedećeg kombiniranog okvira</translation>
 <translation id="772146615414628379">Čestitamo! Svladali ste osnove potrebne za uspješnu upotrebu ChromeVoxa. Zapamtite da ChromeVoxov izbornik za naredbe možete otvoriti u bilo kojem trenutku tako što ćete pritisnuti tipku za pretraživanje i točku. Još više o ChromeVoxu i OS-u Chrome možete saznati u sljedećim člancima.
@@ -899,7 +910,9 @@
 <translation id="812886159861361726">Zaustavljeno je preuzimanje datoteke <ph name="FILE_NAME" /></translation>
 <translation id="8129445297241948503">Iznad nema ćelije</translation>
 <translation id="8138880386467279117">Dodir</translation>
+<translation id="8173092779156526980">Prijeđite s četiri prsta ulijevo</translation>
 <translation id="817440585505441544">{COUNT,plural, =1{donja crta}one{# donja crta}few{# donje crte}other{# donjih crta}}</translation>
+<translation id="8179976553408161302">Enter</translation>
 <translation id="8184828902145951186">redak</translation>
 <translation id="8186185314313222077">prebacivanje na cijeli zaslon</translation>
 <translation id="8199231515320852133">Izgovaranje zaglavlja trenutačne ćelije</translation>
@@ -985,6 +998,7 @@
 <translation id="8946628535652548639">r<ph name="TABLECELLROWINDEX" />s<ph name="TABLECELLCOLUMNINDEX" /></translation>
 <translation id="8952400011684167587">Nema prethodnog gumba za odabir</translation>
 <translation id="8970172509886453271">Nema prethodnog odjeljka</translation>
+<translation id="89720367119469899">Escape</translation>
 <translation id="8978496506222343566">opis</translation>
 <translation id="8986362086234534611">Zaboravi</translation>
 <translation id="9040132695316389094">Naslov 1</translation>

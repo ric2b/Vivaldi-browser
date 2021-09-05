@@ -8,6 +8,7 @@
 #include "base/path_service.h"
 #include "base/posix/global_descriptors.h"
 #include "base/strings/stringprintf.h"
+#include "build/build_config.h"
 #include "content/browser/child_process_launcher.h"
 #include "content/browser/child_process_launcher_helper.h"
 #include "content/browser/child_process_launcher_helper_posix.h"
@@ -26,7 +27,6 @@
 #include "sandbox/policy/sandbox.h"
 #include "sandbox/policy/sandbox_type.h"
 #include "sandbox/policy/switches.h"
-#include "services/service_manager/embedder/result_codes.h"
 
 namespace content {
 namespace internal {
@@ -64,6 +64,10 @@ bool ChildProcessLauncherHelper::BeforeLaunchOnLauncherThread(
   DCHECK(endpoint.is_valid_mach_receive());
   options->mach_ports_for_rendezvous.insert(std::make_pair(
       'mojo', base::MachRendezvousPort(endpoint.TakeMachReceiveRight())));
+
+#if defined(OS_MAC) && defined(ARCH_CPU_ARM64)
+  options->launch_x86_64 = delegate_->LaunchX86_64();
+#endif  // OS_MAC && ARCH_CPU_ARM64
 
   options->environment = delegate_->GetEnvironment();
 
@@ -160,7 +164,7 @@ void ChildProcessLauncherHelper::ForceNormalProcessTerminationSync(
   DCHECK(CurrentlyOnProcessLauncherTaskRunner());
   // Client has gone away, so just kill the process.  Using exit code 0 means
   // that UMA won't treat this as a crash.
-  process.process.Terminate(service_manager::RESULT_CODE_NORMAL_EXIT, false);
+  process.process.Terminate(RESULT_CODE_NORMAL_EXIT, false);
   base::EnsureProcessTerminated(std::move(process.process));
 }
 

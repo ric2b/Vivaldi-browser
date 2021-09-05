@@ -72,6 +72,7 @@ interface Animation : EventTarget
     setter onremove
     setter playbackRate
     setter startTime
+    setter timeline
 interface AnimationEffect
     attribute @@toStringTag
     method constructor
@@ -897,6 +898,26 @@ interface ConvolverNode : AudioNode
     method constructor
     setter buffer
     setter normalize
+interface CookieChangeEvent : Event
+    attribute @@toStringTag
+    getter changed
+    getter deleted
+    method constructor
+interface CookieStore : EventTarget
+    attribute @@toStringTag
+    getter onchange
+    method constructor
+    method delete
+    method get
+    method getAll
+    method set
+    setter onchange
+interface CookieStoreManager
+    attribute @@toStringTag
+    method constructor
+    method getSubscriptions
+    method subscribe
+    method unsubscribe
 interface CountQueuingStrategy
     attribute @@toStringTag
     getter highWaterMark
@@ -1388,7 +1409,10 @@ interface Document : Node
     getter ontouchend
     getter ontouchmove
     getter ontouchstart
+    getter ontransitioncancel
     getter ontransitionend
+    getter ontransitionrun
+    getter ontransitionstart
     getter onvisibilitychange
     getter onvolumechange
     getter onwaiting
@@ -1582,7 +1606,10 @@ interface Document : Node
     setter ontouchend
     setter ontouchmove
     setter ontouchstart
+    setter ontransitioncancel
     setter ontransitionend
+    setter ontransitionrun
+    setter ontransitionstart
     setter onvisibilitychange
     setter onvolumechange
     setter onwaiting
@@ -2079,9 +2106,12 @@ interface FocusEvent : UIEvent
     method constructor
 interface FontFace
     attribute @@toStringTag
+    getter ascentOverride
+    getter descentOverride
     getter display
     getter family
     getter featureSettings
+    getter lineGapOverride
     getter loaded
     getter status
     getter stretch
@@ -2091,9 +2121,12 @@ interface FontFace
     getter weight
     method constructor
     method load
+    setter ascentOverride
+    setter descentOverride
     setter display
     setter family
     setter featureSettings
+    setter lineGapOverride
     setter stretch
     setter style
     setter unicodeRange
@@ -2569,7 +2602,10 @@ interface HTMLElement : Element
     getter ontouchend
     getter ontouchmove
     getter ontouchstart
+    getter ontransitioncancel
     getter ontransitionend
+    getter ontransitionrun
+    getter ontransitionstart
     getter onvolumechange
     getter onwaiting
     getter onwebkitanimationend
@@ -2681,7 +2717,10 @@ interface HTMLElement : Element
     setter ontouchend
     setter ontouchmove
     setter ontouchstart
+    setter ontransitioncancel
     setter ontransitionend
+    setter ontransitionrun
+    setter ontransitionstart
     setter onvolumechange
     setter onwaiting
     setter onwebkitanimationend
@@ -4574,6 +4613,7 @@ interface Navigator
     getter presentation
     getter product
     getter productSub
+    getter scheduling
     getter serviceWorker
     getter storage
     getter usb
@@ -5956,7 +5996,10 @@ interface SVGElement : Element
     getter ontouchend
     getter ontouchmove
     getter ontouchstart
+    getter ontransitioncancel
     getter ontransitionend
+    getter ontransitionrun
+    getter ontransitionstart
     getter onvolumechange
     getter onwaiting
     getter onwebkitanimationend
@@ -6054,7 +6097,10 @@ interface SVGElement : Element
     setter ontouchend
     setter ontouchmove
     setter ontouchstart
+    setter ontransitioncancel
     setter ontransitionend
+    setter ontransitionrun
+    setter ontransitionstart
     setter onvolumechange
     setter onwaiting
     setter onwebkitanimationend
@@ -6844,6 +6890,10 @@ interface SVGViewElement : SVGElement
     getter zoomAndPan
     method constructor
     setter zoomAndPan
+interface Scheduling
+    attribute @@toStringTag
+    method constructor
+    method isInputPending
 interface Screen
     attribute @@toStringTag
     getter availHeight
@@ -6963,6 +7013,7 @@ interface ServiceWorkerRegistration : EventTarget
     attribute @@toStringTag
     getter active
     getter backgroundFetch
+    getter cookies
     getter installing
     getter navigationPreload
     getter onupdatefound
@@ -7233,6 +7284,8 @@ interface TextMetrics
     getter actualBoundingBoxDescent
     getter actualBoundingBoxLeft
     getter actualBoundingBoxRight
+    getter fontBoundingBoxAscent
+    getter fontBoundingBoxDescent
     getter width
     method constructor
 interface TextTrack : EventTarget
@@ -7606,6 +7659,7 @@ interface WakeLock
 interface WakeLockSentinel : EventTarget
     attribute @@toStringTag
     getter onrelease
+    getter released
     getter type
     method constructor
     method release
@@ -9516,6 +9570,8 @@ interface webkitURL
     getter caches
     getter clientInformation
     getter closed
+    getter cookieStore
+    getter crossOriginIsolated
     getter crypto
     getter customElements
     getter defaultStatus
@@ -9637,7 +9693,10 @@ interface webkitURL
     getter ontouchend
     getter ontouchmove
     getter ontouchstart
+    getter ontransitioncancel
     getter ontransitionend
+    getter ontransitionrun
+    getter ontransitionstart
     getter onunhandledrejection
     getter onunload
     getter onvolumechange
@@ -9835,7 +9894,10 @@ interface webkitURL
     setter ontouchend
     setter ontouchmove
     setter ontouchstart
+    setter ontransitioncancel
     setter ontransitionend
+    setter ontransitionrun
+    setter ontransitionstart
     setter onunhandledrejection
     setter onunload
     setter onvolumechange

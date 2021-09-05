@@ -24,9 +24,9 @@
 #include "components/viz/common/features.h"
 #include "content/browser/browser_plugin/browser_plugin_guest.h"
 #include "content/browser/download/drag_download_util.h"
-#include "content/browser/frame_host/navigation_entry_impl.h"
 #include "content/browser/renderer_host/dip_util.h"
 #include "content/browser/renderer_host/input/touch_selection_controller_client_aura.h"
+#include "content/browser/renderer_host/navigation_entry_impl.h"
 #include "content/browser/renderer_host/overscroll_controller.h"
 #include "content/browser/renderer_host/render_view_host_factory.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
@@ -54,6 +54,7 @@
 #include "content/public/common/content_features.h"
 #include "net/base/filename_util.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
+#include "third_party/blink/public/mojom/page/drag.mojom.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/drag_drop_client.h"
 #include "ui/aura/client/drag_drop_delegate.h"
@@ -359,28 +360,28 @@ void PrepareDropData(DropData* drop_data, const ui::OSExchangeData& data) {
         pickle.data(), pickle.size(), &drop_data->custom_data);
 }
 
-// Utilities to convert between blink::WebDragOperationsMask and
+// Utilities to convert between blink::DragOperationsMask and
 // ui::DragDropTypes.
-int ConvertFromWeb(blink::WebDragOperationsMask ops) {
+int ConvertFromWeb(blink::DragOperationsMask ops) {
   int drag_op = ui::DragDropTypes::DRAG_NONE;
-  if (ops & blink::kWebDragOperationCopy)
+  if (ops & blink::kDragOperationCopy)
     drag_op |= ui::DragDropTypes::DRAG_COPY;
-  if (ops & blink::kWebDragOperationMove)
+  if (ops & blink::kDragOperationMove)
     drag_op |= ui::DragDropTypes::DRAG_MOVE;
-  if (ops & blink::kWebDragOperationLink)
+  if (ops & blink::kDragOperationLink)
     drag_op |= ui::DragDropTypes::DRAG_LINK;
   return drag_op;
 }
 
-blink::WebDragOperationsMask ConvertToWeb(int drag_op) {
-  int web_drag_op = blink::kWebDragOperationNone;
+blink::DragOperationsMask ConvertToWeb(int drag_op) {
+  int web_drag_op = blink::kDragOperationNone;
   if (drag_op & ui::DragDropTypes::DRAG_COPY)
-    web_drag_op |= blink::kWebDragOperationCopy;
+    web_drag_op |= blink::kDragOperationCopy;
   if (drag_op & ui::DragDropTypes::DRAG_MOVE)
-    web_drag_op |= blink::kWebDragOperationMove;
+    web_drag_op |= blink::kDragOperationMove;
   if (drag_op & ui::DragDropTypes::DRAG_LINK)
-    web_drag_op |= blink::kWebDragOperationLink;
-  return (blink::WebDragOperationsMask) web_drag_op;
+    web_drag_op |= blink::kDragOperationLink;
+  return static_cast<blink::DragOperationsMask>(web_drag_op);
 }
 
 GlobalRoutingID GetRenderViewHostID(RenderViewHost* rvh) {
@@ -707,7 +708,7 @@ WebContentsViewAura::WebContentsViewAura(WebContentsImpl* web_contents,
                                          WebContentsViewDelegate* delegate)
     : web_contents_(web_contents),
       delegate_(delegate),
-      current_drag_op_(blink::kWebDragOperationNone),
+      current_drag_op_(blink::kDragOperationNone),
       drag_dest_delegate_(nullptr),
       current_rvh_for_drag_(ChildProcessHost::kInvalidUniqueID,
                             MSG_ROUTING_NONE),
@@ -737,7 +738,7 @@ WebContentsViewAura::~WebContentsViewAura() {
 
 void WebContentsViewAura::EndDrag(
     base::WeakPtr<RenderWidgetHostImpl> source_rwh_weak_ptr,
-    blink::WebDragOperationsMask ops) {
+    blink::DragOperationsMask ops) {
   drag_start_process_id_ = ChildProcessHost::kInvalidUniqueID;
   drag_start_view_id_ = GlobalRoutingID(ChildProcessHost::kInvalidUniqueID,
                                         MSG_ROUTING_NONE);
@@ -1046,10 +1047,10 @@ void WebContentsViewAura::ShowContextMenu(RenderFrameHost* render_frame_host,
 
 void WebContentsViewAura::StartDragging(
     const DropData& drop_data,
-    blink::WebDragOperationsMask operations,
+    blink::DragOperationsMask operations,
     const gfx::ImageSkia& image,
     const gfx::Vector2d& image_offset,
-    const DragEventSourceInfo& event_info,
+    const blink::mojom::DragEventSourceInfo& event_info,
     RenderWidgetHostImpl* source_rwh) {
   aura::Window* root_window = GetNativeView()->GetRootWindow();
   if (!aura::client::GetDragDropClient(root_window)) {
@@ -1090,11 +1091,11 @@ void WebContentsViewAura::StartDragging(
   {
     gfx::NativeView content_native_view = GetContentNativeView();
     base::CurrentThread::ScopedNestableTaskAllower allow;
-    result_op = aura::client::GetDragDropClient(root_window)
-                    ->StartDragAndDrop(
-                        std::move(data), root_window, content_native_view,
-                        event_info.event_location, ConvertFromWeb(operations),
-                        event_info.event_source);
+    result_op =
+        aura::client::GetDragDropClient(root_window)
+            ->StartDragAndDrop(std::move(data), root_window,
+                               content_native_view, event_info.location,
+                               ConvertFromWeb(operations), event_info.source);
   }
 
   // Bail out immediately if the contents view window is gone. Note that it is
@@ -1115,15 +1116,13 @@ void WebContentsViewAura::StartDragging(
   if (::vivaldi::IsVivaldiRunning()) {
     bool cancelled = !!(result_op & VivaldiEventHooks::DRAG_CANCEL);
     result_op &= ~VivaldiEventHooks::DRAG_CANCEL;
-    VivaldiEventHooks* h = VivaldiEventHooks::FromWebContents(web_contents_);
-    if (h) {
-      gfx::Point screen_loc =
-          display::Screen::GetScreen()->GetCursorScreenPoint();
-      bool consumed = h->HandleDragEnd(ConvertToWeb(result_op), cancelled,
-                                       screen_loc.x(), screen_loc.y());
-      if (consumed) {
-        result_op = ui::DragDropTypes::DRAG_NONE;
-      }
+    gfx::Point screen_loc =
+        display::Screen::GetScreen()->GetCursorScreenPoint();
+    bool consumed = VivaldiEventHooks::HandleDragEnd(
+        web_contents_, ConvertToWeb(result_op), cancelled, screen_loc.x(),
+        screen_loc.y());
+    if (consumed) {
+      result_op = ui::DragDropTypes::DRAG_NONE;
     }
   }
 #endif  // defined(OS_WIN)
@@ -1139,7 +1138,7 @@ void WebContentsViewAura::StartDragging(
         std::move(source_rwh_weak_ptr), ConvertToWeb(result_op)));
 }
 
-void WebContentsViewAura::UpdateDragCursor(blink::WebDragOperation operation) {
+void WebContentsViewAura::UpdateDragCursor(blink::DragOperation operation) {
   current_drag_op_ = operation;
 }
 
@@ -1296,7 +1295,7 @@ void WebContentsViewAura::DragEnteredCallback(
   current_drop_data_.reset(drop_data.release());
   current_rwh_for_drag_->FilterDropData(current_drop_data_.get());
 
-  blink::WebDragOperationsMask op = ConvertToWeb(event.source_operations());
+  blink::DragOperationsMask op = ConvertToWeb(event.source_operations());
 
   // Give the delegate an opportunity to cancel the drag.
   if (web_contents_->GetDelegate() &&
@@ -1388,7 +1387,7 @@ void WebContentsViewAura::DragUpdatedCallback(
   }
 
   DCHECK(transformed_pt.has_value());
-  blink::WebDragOperationsMask op = ConvertToWeb(event.source_operations());
+  blink::DragOperationsMask op = ConvertToWeb(event.source_operations());
   target_rwh->DragTargetDragOver(
       transformed_pt.value(), screen_pt, op,
       ui::EventFlagsToWebEventModifiers(event.flags()));

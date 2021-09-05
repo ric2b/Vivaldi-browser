@@ -63,7 +63,7 @@ class SmsBrowserTest : public ContentBrowserTest {
 
     for (const auto* const entry : entries) {
       const int64_t* metric = ukm_recorder()->GetEntryMetric(entry, "Outcome");
-      if (*metric == static_cast<int>(outcome)) {
+      if (metric && *metric == static_cast<int>(outcome)) {
         SUCCEED();
         return;
       }
@@ -71,8 +71,43 @@ class SmsBrowserTest : public ContentBrowserTest {
     FAIL() << "Expected SMSReceiverOutcome was not recorded";
   }
 
+  void ExpectTimingUKM(const std::string& metric_name) {
+    auto entries = ukm_recorder()->GetEntriesByName(Entry::kEntryName);
+
+    ASSERT_FALSE(entries.empty());
+
+    for (const auto* const entry : entries) {
+      if (ukm_recorder()->GetEntryMetric(entry, metric_name)) {
+        SUCCEED();
+        return;
+      }
+    }
+    FAIL() << "Expected UKM was not recorded";
+  }
+
   void ExpectNoOutcomeUKM() {
     EXPECT_TRUE(ukm_recorder()->GetEntriesByName(Entry::kEntryName).empty());
+  }
+
+  void ExpectSmsParsingStatusMetrics(
+      const base::HistogramTester& histogram_tester,
+      int status) {
+    histogram_tester.ExpectBucketCount("Blink.Sms.Receive.SmsParsingStatus",
+                                       status, 1);
+
+    auto entries = ukm_recorder()->GetEntriesByName(Entry::kEntryName);
+
+    ASSERT_FALSE(entries.empty());
+
+    for (const auto* const entry : entries) {
+      const int64_t* metric =
+          ukm_recorder()->GetEntryMetric(entry, "SmsParsingStatus");
+      if (metric && *metric == status) {
+        SUCCEED();
+        return;
+      }
+    }
+    FAIL() << "Expected UKM was not recorded";
   }
 
   void ExpectSmsPrompt() {
@@ -177,6 +212,8 @@ IN_PROC_BROWSER_TEST_F(SmsBrowserTest, Receive) {
 
   content::FetchHistogramsFromChildProcesses();
   ExpectOutcomeUKM(url, blink::SMSReceiverOutcome::kSuccess);
+  ExpectTimingUKM("TimeSmsReceiveMs");
+  ExpectTimingUKM("TimeSuccessMs");
   histogram_tester.ExpectTotalCount("Blink.Sms.Receive.TimeSuccess", 1);
 }
 
@@ -334,12 +371,6 @@ IN_PROC_BROWSER_TEST_F(SmsBrowserTest, Reload) {
   MockSmsProvider* mock_provider_ptr = provider.get();
   BrowserMainLoop::GetInstance()->SetSmsProviderForTesting(std::move(provider));
 
-  std::string script = R"(
-    // kicks off the sms receiver, adding the service
-    // to the observer's list.
-    navigator.credentials.get({otp: {transport: ["sms"]}});
-  )";
-
   base::RunLoop loop;
 
   EXPECT_CALL(*mock_provider_ptr, Retrieve(_)).WillOnce(Invoke([&loop]() {
@@ -348,26 +379,22 @@ IN_PROC_BROWSER_TEST_F(SmsBrowserTest, Reload) {
     loop.Quit();
   }));
 
-  EXPECT_TRUE(ExecJs(shell(), script));
+  EXPECT_TRUE(ExecJs(shell(), R"(
+    navigator.credentials.get({otp: {transport: ["sms"]}});
+  )"));
 
   loop.Run();
 
   ASSERT_TRUE(GetSmsFetcher()->HasSubscribers());
+  ASSERT_TRUE(mock_provider_ptr->HasObservers());
 
-  // Wait for UKM to be recorded to avoid race condition between outcome
-  // capture and evaluation.
-  base::RunLoop ukm_loop;
-  ukm_recorder()->SetOnAddEntryCallback(Entry::kEntryName,
-                                        ukm_loop.QuitClosure());
-
-  // Reload the page.
+  // Reload the page. This destroys the ExecutionContext and resets any HeapMojo
+  // connections.
   EXPECT_TRUE(NavigateToURL(shell(), url));
-
-  ukm_loop.Run();
 
   ASSERT_FALSE(GetSmsFetcher()->HasSubscribers());
 
-  ExpectOutcomeUKM(url, blink::SMSReceiverOutcome::kTimeout);
+  ExpectNoOutcomeUKM();
 }
 
 IN_PROC_BROWSER_TEST_F(SmsBrowserTest, Close) {
@@ -779,6 +806,187 @@ IN_PROC_BROWSER_TEST_F(SmsBrowserTest, UpdateRenderFrameHostWithWebOTPUsage) {
   EXPECT_EQ("hello", EvalJs(shell(), script));
 
   EXPECT_TRUE(render_frame_host->DocumentUsedWebOTP());
+}
+
+// Disabled test: https://crbug.com/1134455
+IN_PROC_BROWSER_TEST_F(SmsBrowserTest, DISABLED_RecordPendingOriginCount) {
+  base::HistogramTester histogram_tester;
+  auto provider = std::make_unique<MockSmsProvider>();
+  MockSmsProvider* mock_provider_ptr = provider.get();
+  BrowserMainLoop::GetInstance()->SetSmsProviderForTesting(std::move(provider));
+
+  Shell* tab1 = CreateBrowser();
+  Shell* tab2 = CreateBrowser();
+
+  net::EmbeddedTestServer https_server(net::EmbeddedTestServer::TYPE_HTTPS);
+  https_server.ServeFilesFromSourceDirectory(GetTestDataFilePath());
+  ASSERT_TRUE(https_server.Start());
+
+  GURL url1 = https_server.GetURL("a.com", "/simple_page.html");
+  GURL url2 = https_server.GetURL("b.com", "/simple_page.html");
+  EXPECT_TRUE(NavigateToURL(tab1, url1));
+  EXPECT_TRUE(NavigateToURL(tab2, url2));
+
+  std::string script = R"(
+    var request = navigator.credentials.get({otp: {transport: ["sms"]}})
+      .then(({code}) => {
+        return code;
+      });
+  )";
+
+  EXPECT_CALL(*mock_provider_ptr, Retrieve(_)).Times(2);
+
+  tab1->web_contents()->SetDelegate(&delegate_);
+  tab2->web_contents()->SetDelegate(&delegate_);
+
+  EXPECT_TRUE(ExecJs(tab1, script));
+  EXPECT_TRUE(ExecJs(tab2, script));
+
+  ExpectSmsPrompt();
+  mock_provider_ptr->NotifyReceive(url::Origin::Create(url1), "code1");
+  ConfirmPrompt();
+  EXPECT_EQ("code1", EvalJs(tab1, "request"));
+
+  ExpectSmsPrompt();
+  mock_provider_ptr->NotifyReceive(url::Origin::Create(url2), "code2");
+  ConfirmPrompt();
+  EXPECT_EQ("code2", EvalJs(tab2, "request"));
+
+  histogram_tester.ExpectBucketCount("Blink.Sms.PendingOriginCount", 1, 1);
+  histogram_tester.ExpectBucketCount("Blink.Sms.PendingOriginCount", 2, 1);
+}
+
+// Verifies that the metrics are correctly recorded when an invalid SMS cannot
+// be parsed.
+IN_PROC_BROWSER_TEST_F(SmsBrowserTest, RecordSmsNotParsedMetrics) {
+  base::HistogramTester histogram_tester;
+
+  auto entries =
+      ukm_recorder_->GetEntriesByName(ukm::builders::SMSReceiver::kEntryName);
+  ASSERT_TRUE(entries.empty());
+
+  GURL url = GetTestUrl(nullptr, "simple_page.html");
+  EXPECT_TRUE(NavigateToURL(shell(), url));
+  auto provider = std::make_unique<MockSmsProvider>();
+  MockSmsProvider* mock_provider_ptr = provider.get();
+  BrowserMainLoop::GetInstance()->SetSmsProviderForTesting(std::move(provider));
+
+  const std::string invalid_sms = "Your OTP is: 1234.\n!example.com #1234";
+  base::RunLoop loop;
+  EXPECT_CALL(*mock_provider_ptr, Retrieve(_)).WillOnce(Invoke([&]() {
+    // Calls NotifyReceive with an invalid sms and record sms parse failure
+    // metrics.
+    mock_provider_ptr->NotifyReceiveForTesting(invalid_sms);
+    loop.Quit();
+  }));
+  EXPECT_TRUE(ExecJs(shell(), R"(
+        navigator.credentials.get({otp: {transport: ["sms"]}});
+    )"));
+  loop.Run();
+
+  ASSERT_TRUE(GetSmsFetcher()->HasSubscribers());
+  ASSERT_TRUE(mock_provider_ptr->HasObservers());
+
+  content::FetchHistogramsFromChildProcesses();
+  ExpectSmsParsingStatusMetrics(
+      histogram_tester,
+      static_cast<int>(SmsParser::SmsParsingStatus::kOTPFormatRegexNotMatch));
+
+  histogram_tester.ExpectBucketCount(
+      "Blink.Sms.Receive.SmsParsingStatus",
+      static_cast<int>(SmsParser::SmsParsingStatus::kParsed), 0);
+}
+
+// Verifies that a valid SMS can be parsed and no metrics regarding parsing
+// failure should be recorded. Note that the metrics about successful parsing
+// are tested separately below.
+IN_PROC_BROWSER_TEST_F(SmsBrowserTest, SmsParsed) {
+  base::HistogramTester histogram_tester;
+
+  auto entries =
+      ukm_recorder_->GetEntriesByName(ukm::builders::SMSReceiver::kEntryName);
+  ASSERT_TRUE(entries.empty());
+
+  GURL url = GetTestUrl(nullptr, "simple_page.html");
+  EXPECT_TRUE(NavigateToURL(shell(), url));
+
+  shell()->web_contents()->SetDelegate(&delegate_);
+
+  auto provider = std::make_unique<MockSmsProvider>();
+  MockSmsProvider* mock_provider_ptr = provider.get();
+  BrowserMainLoop::GetInstance()->SetSmsProviderForTesting(std::move(provider));
+
+  const std::string valid_sms = "Your OTP is: 1234.\n@example.com #1234";
+  base::RunLoop loop;
+  EXPECT_CALL(*mock_provider_ptr, Retrieve(_)).WillOnce(Invoke([&]() {
+    mock_provider_ptr->NotifyReceiveForTesting(valid_sms);
+    loop.Quit();
+  }));
+  EXPECT_TRUE(ExecJs(shell(), R"(
+        navigator.credentials.get({otp: {transport: ["sms"]}});
+    )"));
+  loop.Run();
+
+  ASSERT_TRUE(GetSmsFetcher()->HasSubscribers());
+  ASSERT_TRUE(mock_provider_ptr->HasObservers());
+
+  histogram_tester.ExpectBucketCount(
+      "Blink.Sms.Receive.SmsParsingStatus",
+      static_cast<int>(SmsParser::SmsParsingStatus::kOTPFormatRegexNotMatch),
+      0);
+  histogram_tester.ExpectBucketCount(
+      "Blink.Sms.Receive.SmsParsingStatus",
+      static_cast<int>(SmsParser::SmsParsingStatus::kHostAndPortNotParsed), 0);
+  histogram_tester.ExpectBucketCount(
+      "Blink.Sms.Receive.SmsParsingStatus",
+      static_cast<int>(SmsParser::SmsParsingStatus::kGURLNotValid), 0);
+}
+
+// Verifies that after an SMS is parsed the metrics regarding successful parsing
+// are recorded.
+IN_PROC_BROWSER_TEST_F(SmsBrowserTest, RecordSmsParsedMetrics) {
+  base::HistogramTester histogram_tester;
+
+  GURL url = GetTestUrl(nullptr, "simple_page.html");
+  EXPECT_TRUE(NavigateToURL(shell(), url));
+
+  shell()->web_contents()->SetDelegate(&delegate_);
+
+  ExpectSmsPrompt();
+
+  auto provider = std::make_unique<MockSmsProvider>();
+  MockSmsProvider* mock_provider_ptr = provider.get();
+  BrowserMainLoop::GetInstance()->SetSmsProviderForTesting(std::move(provider));
+
+  EXPECT_CALL(*mock_provider_ptr, Retrieve(_)).WillOnce(Invoke([&]() {
+    // WebOTP does not accept ports in the origin and the test server requires
+    // ports. Therefore we cannot create an SMS with valid origin from the test.
+    // Bypassing the issue by calling NotifyReceive directly to test metrics
+    // recording logic.
+    mock_provider_ptr->NotifyReceive(url::Origin::Create(url), "1234");
+    ConfirmPrompt();
+  }));
+
+  // Wait for UKM to be recorded to avoid race condition between outcome
+  // capture and evaluation.
+  base::RunLoop ukm_loop;
+  ukm_recorder()->SetOnAddEntryCallback(Entry::kEntryName,
+                                        ukm_loop.QuitClosure());
+  EXPECT_EQ("1234", EvalJs(shell(), R"(
+    (async () => {
+      let cred = await navigator.credentials.get({otp: {transport: ["sms"]}});
+      return cred.code;
+    }) ();
+    )"));
+  ukm_loop.Run();
+
+  content::FetchHistogramsFromChildProcesses();
+  ExpectSmsParsingStatusMetrics(
+      histogram_tester, static_cast<int>(SmsParser::SmsParsingStatus::kParsed));
+  histogram_tester.ExpectBucketCount(
+      "Blink.Sms.Receive.SmsParsingStatus",
+      static_cast<int>(SmsParser::SmsParsingStatus::kOTPFormatRegexNotMatch),
+      0);
 }
 
 }  // namespace content

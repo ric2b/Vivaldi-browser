@@ -52,6 +52,10 @@ class CORE_EXPORT NGColumnLayoutAlgorithm
                               const NGBlockBreakToken* break_token,
                               NGMarginStrut*);
 
+  // Propagate the baseline from the given |child| if needed.
+  void PropagateBaselineFromChild(const NGPhysicalBoxFragment& child,
+                                  LayoutUnit block_offset);
+
   LayoutUnit CalculateBalancedColumnBlockSize(
       const LogicalSize& column_size,
       const NGBlockBreakToken* child_break_token);
@@ -71,6 +75,15 @@ class CORE_EXPORT NGColumnLayoutAlgorithm
   // fragmentainer at an less-than-ideal location, due to breaking restrictions,
   // such as break-before:avoid or break-after:avoid.
   scoped_refptr<const NGLayoutResult> RelayoutAndBreakEarlier();
+
+  // Get the percentage resolution size to use for column content (i.e. not
+  // spanners).
+  LogicalSize ColumnPercentageResolutionSize() const {
+    // Percentage block-size on children is resolved against the content-box of
+    // the multicol container (just like in regular block layout), while
+    // percentage inline-size is restricted by the columns.
+    return LogicalSize(column_inline_size_, ChildAvailableSize().block_size);
+  }
 
   NGConstraintSpace CreateConstraintSpaceForBalancing(
       const LogicalSize& column_size) const;
@@ -93,6 +106,8 @@ class CORE_EXPORT NGColumnLayoutAlgorithm
   // the first piece of content of the multicol container. It is used to check
   // if we're at a valid class A  breakpoint (between block-level siblings).
   bool has_processed_first_child_ = false;
+
+  bool has_processed_first_column_ = false;
 };
 
 }  // namespace blink

@@ -52,10 +52,8 @@ void borealis::ShowBorealisInstallerView(Profile* profile) {
     g_borealis_installer_view = new BorealisInstallerView(profile);
     views::DialogDelegate::CreateDialogWidget(g_borealis_installer_view,
                                               nullptr, nullptr);
-    // TODO(danielng): link dialog to shelf item with real values.
     g_borealis_installer_view->GetWidget()->GetNativeWindow()->SetProperty(
-        ash::kShelfIDKey,
-        ash::ShelfID("lgjpclljbbmphhnalkeplcmnborealis").Serialize());
+        ash::kShelfIDKey, ash::ShelfID(borealis::kBorealisAppId).Serialize());
   }
   g_borealis_installer_view->SetButtonRowInsets(kButtonRowInsets);
   g_borealis_installer_view->GetWidget()->Show();
@@ -86,9 +84,9 @@ BorealisInstallerView::BorealisInstallerView(Profile* profile)
   const int kPrimaryMessageHeight = views::style::GetLineHeight(
       CONTEXT_HEADLINE, views::style::STYLE_PRIMARY);
   const int kSecondaryMessageHeight = views::style::GetLineHeight(
-      CONTEXT_BODY_TEXT_LARGE, views::style::STYLE_SECONDARY);
+      views::style::CONTEXT_DIALOG_BODY_TEXT, views::style::STYLE_SECONDARY);
   const int kInstallationProgressMessageHeight = views::style::GetLineHeight(
-      CONTEXT_BODY_TEXT_SMALL, views::style::STYLE_SECONDARY);
+      CONTEXT_DIALOG_BODY_TEXT_SMALL, views::style::STYLE_SECONDARY);
   constexpr int kProgressBarHeight = 5;
   constexpr int kProgressBarTopMargin = 32;
 
@@ -130,9 +128,9 @@ BorealisInstallerView::BorealisInstallerView(Profile* profile)
           views::BoxLayout::Orientation::kVertical,
           gfx::Insets(kSecondaryMessageHeight, 0, 0, 0)));
   upper_container_view->AddChildView(secondary_message_container_view);
-  secondary_message_label_ =
-      new views::Label(GetSecondaryMessage(), CONTEXT_BODY_TEXT_LARGE,
-                       views::style::STYLE_SECONDARY);
+  secondary_message_label_ = new views::Label(
+      GetSecondaryMessage(), views::style::CONTEXT_DIALOG_BODY_TEXT,
+      views::style::STYLE_SECONDARY);
   secondary_message_label_->SetMultiLine(true);
   secondary_message_label_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   secondary_message_container_view->AddChildView(secondary_message_label_);
@@ -143,8 +141,9 @@ BorealisInstallerView::BorealisInstallerView(Profile* profile)
       gfx::Insets(kProgressBarTopMargin - kProgressBarHeight, 0, 0, 0));
   upper_container_view->AddChildView(progress_bar_);
 
-  installation_progress_message_label_ = new views::Label(
-      base::string16(), CONTEXT_BODY_TEXT_SMALL, views::style::STYLE_SECONDARY);
+  installation_progress_message_label_ =
+      new views::Label(base::string16(), CONTEXT_DIALOG_BODY_TEXT_SMALL,
+                       views::style::STYLE_SECONDARY);
   installation_progress_message_label_->SetEnabledColor(gfx::kGoogleGrey700);
   installation_progress_message_label_->SetProperty(
       views::kMarginsKey,
@@ -258,6 +257,7 @@ base::string16 BorealisInstallerView::GetPrimaryMessage() const {
       DCHECK(result_);
       switch (*result_) {
         case borealis::BorealisInstaller::InstallationResult::kNotAllowed:
+        case borealis::BorealisInstaller::InstallationResult::kDlcUnsupported:
           return l10n_util::GetStringFUTF16(
               IDS_BOREALIS_INSTALLER_NOT_ALLOWED_TITLE, app_name_);
         default:
@@ -304,13 +304,20 @@ base::string16 BorealisInstallerView::GetSecondaryMessage() const {
           return l10n_util::GetStringFUTF16(
               IDS_BOREALIS_DLC_NEED_REBOOT_FAILED_MESSAGE, app_name_);
         case ResultEnum::kDlcNeedSpace:
-          return l10n_util::GetStringFUTF16(
-              IDS_BOREALIS_INSUFFICIENT_DISK_SPACE_MESSAGE, app_name_);
+          return l10n_util::GetStringUTF16(
+              IDS_BOREALIS_INSUFFICIENT_DISK_SPACE_MESSAGE);
         case ResultEnum::kDlcUnknown:
-          return l10n_util::GetStringFUTF16(IDS_BOREALIS_GENERIC_ERROR_MESSAGE,
-                                            app_name_);
+          return l10n_util::GetStringFUTF16(
+              IDS_BOREALIS_GENERIC_ERROR_MESSAGE, app_name_,
+              base::NumberToString16(
+                  static_cast<std::underlying_type_t<ResultEnum>>(*result_)));
       }
   }
+}
+
+void BorealisInstallerView::SetInstallingStateForTesting(
+    InstallingState new_state) {
+  installing_state_ = new_state;
 }
 
 int BorealisInstallerView::GetCurrentDialogButtons() const {

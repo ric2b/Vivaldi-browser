@@ -334,6 +334,14 @@ TEST_F(ZeroSuggestProviderTest, TypeOfResultToRun) {
       other_input,
       /*remote_no_url_allowed=*/false);
 
+  // Unless we allow remote suggestions for signed-out users.
+  scoped_feature_list_ = std::make_unique<base::test::ScopedFeatureList>();
+  scoped_feature_list_->InitAndEnableFeature(
+      omnibox::kOmniboxTrendingZeroPrefixSuggestionsOnNTP);
+  ExpectPlatformSpecificDefaultZeroSuggestBehavior(
+      other_input,
+      /*remote_no_url_allowed=*/true);
+
   // Restore authentication state, but now set a non-Google default search
   // engine. Verify that we still disallow remote suggestions.
   EXPECT_CALL(*client_, IsAuthenticated())
@@ -648,8 +656,10 @@ TEST_F(ZeroSuggestProviderTest, TestPsuggestZeroSuggestCachingFirstRun) {
   EXPECT_EQ(3U, provider_->matches().size());  // 3 results, no verbatim match
 #endif
 
-  EXPECT_EQ(json_response,
-            prefs->GetString(omnibox::kZeroSuggestCachedResults));
+  if (base::FeatureList::IsEnabled(omnibox::kOmniboxZeroSuggestCaching)) {
+    EXPECT_EQ(json_response,
+              prefs->GetString(omnibox::kZeroSuggestCachedResults));
+  }
 }
 
 TEST_F(ZeroSuggestProviderTest, TestPsuggestZeroSuggestHasCachedResults) {
@@ -673,18 +683,20 @@ TEST_F(ZeroSuggestProviderTest, TestPsuggestZeroSuggestHasCachedResults) {
 
   provider_->Start(input, false);
 
-  // Expect that matches get populated synchronously out of the cache.
+  if (base::FeatureList::IsEnabled(omnibox::kOmniboxZeroSuggestCaching)) {
+    // Expect that matches get populated synchronously out of the cache.
 #if defined(OS_ANDROID) || defined(OS_IOS)
-  ASSERT_EQ(4U, provider_->matches().size());  // 3 results + verbatim
-  EXPECT_EQ(base::ASCIIToUTF16("search1"), provider_->matches()[1].contents);
-  EXPECT_EQ(base::ASCIIToUTF16("search2"), provider_->matches()[2].contents);
-  EXPECT_EQ(base::ASCIIToUTF16("search3"), provider_->matches()[3].contents);
+    ASSERT_EQ(4U, provider_->matches().size());  // 3 results + verbatim
+    EXPECT_EQ(base::ASCIIToUTF16("search1"), provider_->matches()[1].contents);
+    EXPECT_EQ(base::ASCIIToUTF16("search2"), provider_->matches()[2].contents);
+    EXPECT_EQ(base::ASCIIToUTF16("search3"), provider_->matches()[3].contents);
 #else
-  ASSERT_EQ(3U, provider_->matches().size());  // 3 results, no verbatim match
-  EXPECT_EQ(base::ASCIIToUTF16("search1"), provider_->matches()[0].contents);
-  EXPECT_EQ(base::ASCIIToUTF16("search2"), provider_->matches()[1].contents);
-  EXPECT_EQ(base::ASCIIToUTF16("search3"), provider_->matches()[2].contents);
+    ASSERT_EQ(3U, provider_->matches().size());  // 3 results, no verbatim match
+    EXPECT_EQ(base::ASCIIToUTF16("search1"), provider_->matches()[0].contents);
+    EXPECT_EQ(base::ASCIIToUTF16("search2"), provider_->matches()[1].contents);
+    EXPECT_EQ(base::ASCIIToUTF16("search3"), provider_->matches()[2].contents);
 #endif
+  }
 
   GURL suggest_url = GetSuggestURL(metrics::OmniboxEventProto::OTHER);
   EXPECT_TRUE(test_loader_factory()->IsPending(suggest_url.spec()));
@@ -695,22 +707,37 @@ TEST_F(ZeroSuggestProviderTest, TestPsuggestZeroSuggestHasCachedResults) {
 
   base::RunLoop().RunUntilIdle();
 
-  // Expect the same results after the response has been handled.
+  if (base::FeatureList::IsEnabled(omnibox::kOmniboxZeroSuggestCaching)) {
+    // Expect the same results after the response has been handled.
 #if defined(OS_ANDROID) || defined(OS_IOS)
-  ASSERT_EQ(4U, provider_->matches().size());  // 3 results + verbatim
-  EXPECT_EQ(base::ASCIIToUTF16("search1"), provider_->matches()[1].contents);
-  EXPECT_EQ(base::ASCIIToUTF16("search2"), provider_->matches()[2].contents);
-  EXPECT_EQ(base::ASCIIToUTF16("search3"), provider_->matches()[3].contents);
+    ASSERT_EQ(4U, provider_->matches().size());  // 3 results + verbatim
+    EXPECT_EQ(base::ASCIIToUTF16("search1"), provider_->matches()[1].contents);
+    EXPECT_EQ(base::ASCIIToUTF16("search2"), provider_->matches()[2].contents);
+    EXPECT_EQ(base::ASCIIToUTF16("search3"), provider_->matches()[3].contents);
 #else
-  ASSERT_EQ(3U, provider_->matches().size());  // 3 results, no verbatim match
-  EXPECT_EQ(base::ASCIIToUTF16("search1"), provider_->matches()[0].contents);
-  EXPECT_EQ(base::ASCIIToUTF16("search2"), provider_->matches()[1].contents);
-  EXPECT_EQ(base::ASCIIToUTF16("search3"), provider_->matches()[2].contents);
+    ASSERT_EQ(3U, provider_->matches().size());  // 3 results, no verbatim match
+    EXPECT_EQ(base::ASCIIToUTF16("search1"), provider_->matches()[0].contents);
+    EXPECT_EQ(base::ASCIIToUTF16("search2"), provider_->matches()[1].contents);
+    EXPECT_EQ(base::ASCIIToUTF16("search3"), provider_->matches()[2].contents);
 #endif
 
   // Expect the new results have been stored.
   EXPECT_EQ(json_response2,
             prefs->GetString(omnibox::kZeroSuggestCachedResults));
+  } else {
+    // Expect fresh results after the response has been handled.
+#if defined(OS_ANDROID) || defined(OS_IOS)
+    ASSERT_EQ(4U, provider_->matches().size());  // 3 results + verbatim
+    EXPECT_EQ(base::ASCIIToUTF16("search4"), provider_->matches()[1].contents);
+    EXPECT_EQ(base::ASCIIToUTF16("search5"), provider_->matches()[2].contents);
+    EXPECT_EQ(base::ASCIIToUTF16("search6"), provider_->matches()[3].contents);
+#else
+    ASSERT_EQ(3U, provider_->matches().size());  // 3 results, no verbatim match
+    EXPECT_EQ(base::ASCIIToUTF16("search4"), provider_->matches()[0].contents);
+    EXPECT_EQ(base::ASCIIToUTF16("search5"), provider_->matches()[1].contents);
+    EXPECT_EQ(base::ASCIIToUTF16("search6"), provider_->matches()[2].contents);
+#endif
+  }
 }
 
 TEST_F(ZeroSuggestProviderTest, TestPsuggestZeroSuggestReceivedEmptyResults) {
@@ -734,18 +761,22 @@ TEST_F(ZeroSuggestProviderTest, TestPsuggestZeroSuggestReceivedEmptyResults) {
 
   provider_->Start(input, false);
 
-  // Expect that matches get populated synchronously out of the cache.
+  if (base::FeatureList::IsEnabled(omnibox::kOmniboxZeroSuggestCaching)) {
+    // Expect that matches get populated synchronously out of the cache.
 #if defined(OS_ANDROID) || defined(OS_IOS)
-  ASSERT_EQ(4U, provider_->matches().size());  // 3 results + verbatim
-  EXPECT_EQ(base::ASCIIToUTF16("search1"), provider_->matches()[1].contents);
-  EXPECT_EQ(base::ASCIIToUTF16("search2"), provider_->matches()[2].contents);
-  EXPECT_EQ(base::ASCIIToUTF16("search3"), provider_->matches()[3].contents);
+    ASSERT_EQ(4U, provider_->matches().size());  // 3 results + verbatim
+    EXPECT_EQ(base::ASCIIToUTF16("search1"), provider_->matches()[1].contents);
+    EXPECT_EQ(base::ASCIIToUTF16("search2"), provider_->matches()[2].contents);
+    EXPECT_EQ(base::ASCIIToUTF16("search3"), provider_->matches()[3].contents);
 #else
-  ASSERT_EQ(3U, provider_->matches().size());  // 3 results, no verbatim match
-  EXPECT_EQ(base::ASCIIToUTF16("search1"), provider_->matches()[0].contents);
-  EXPECT_EQ(base::ASCIIToUTF16("search2"), provider_->matches()[1].contents);
-  EXPECT_EQ(base::ASCIIToUTF16("search3"), provider_->matches()[2].contents);
+    ASSERT_EQ(3U, provider_->matches().size());  // 3 results, no verbatim match
+    EXPECT_EQ(base::ASCIIToUTF16("search1"), provider_->matches()[0].contents);
+    EXPECT_EQ(base::ASCIIToUTF16("search2"), provider_->matches()[1].contents);
+    EXPECT_EQ(base::ASCIIToUTF16("search3"), provider_->matches()[2].contents);
 #endif
+  } else {
+    ASSERT_TRUE(provider_->matches().empty());
+  }
 
   GURL suggest_url = GetSuggestURL(metrics::OmniboxEventProto::OTHER);
   EXPECT_TRUE(test_loader_factory()->IsPending(suggest_url.spec()));
@@ -757,7 +788,9 @@ TEST_F(ZeroSuggestProviderTest, TestPsuggestZeroSuggestReceivedEmptyResults) {
   // Expect that the matches have been cleared.
   ASSERT_TRUE(provider_->matches().empty());
 
-  // Expect the new results have been stored.
-  EXPECT_EQ(empty_response,
-            prefs->GetString(omnibox::kZeroSuggestCachedResults));
+  if (base::FeatureList::IsEnabled(omnibox::kOmniboxZeroSuggestCaching)) {
+    // Expect the new results have been stored.
+    EXPECT_EQ(empty_response,
+              prefs->GetString(omnibox::kZeroSuggestCachedResults));
+  }
 }

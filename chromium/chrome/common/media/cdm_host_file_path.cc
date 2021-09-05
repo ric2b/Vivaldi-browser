@@ -20,7 +20,7 @@
 #include "base/mac/bundle_locations.h"
 #endif
 
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING) || defined(VIVALDI_BUILD)
 
 namespace {
 
@@ -56,7 +56,8 @@ void AddCdmHostFilePaths(
   base::FilePath chrome_exe_dir;
   if (!base::PathService::Get(base::DIR_EXE, &chrome_exe_dir))
     NOTREACHED();
-  base::FilePath version_dir(chrome_exe_dir.AppendASCII(CHROME_VERSION_STRING));
+  base::FilePath version_dir(
+      chrome_exe_dir.AppendASCII(VIVALDI_VERSION_STRING));
 
   cdm_host_file_paths->reserve(base::size(kUnversionedFiles) +
                                base::size(kVersionedFiles));

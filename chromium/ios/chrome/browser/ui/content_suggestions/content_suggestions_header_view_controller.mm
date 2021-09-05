@@ -133,13 +133,13 @@ const NSString* kScribbleFakeboxElementId = @"fakebox";
   void (^transition)(id<UIViewControllerTransitionCoordinatorContext>) =
       ^(id<UIViewControllerTransitionCoordinatorContext> context) {
         // Ensure omnibox is reset when not a regular tablet.
-        if (IsSplitToolbarMode()) {
+        if (IsSplitToolbarMode(newCollection)) {
           [self.toolbarDelegate setScrollProgressForTabletOmnibox:1];
         }
         // Fake Tap button only needs to work in portrait. Disable the button
         // in landscape because in landscape the button covers logoView (which
         // need to handle taps).
-        self.fakeTapButton.userInteractionEnabled = IsSplitToolbarMode();
+        self.fakeTapButton.userInteractionEnabled = IsSplitToolbarMode(self);
       };
 
   [coordinator animateAlongsideTransition:transition completion:nil];
@@ -156,12 +156,12 @@ const NSString* kScribbleFakeboxElementId = @"fakebox";
                     safeAreaInsets:(UIEdgeInsets)safeAreaInsets {
   if (self.isShowing) {
     CGFloat progress =
-        self.logoIsShowing || !IsRegularXRegularSizeClass()
+        self.logoIsShowing || !IsRegularXRegularSizeClass(self)
             ? [self.headerView searchFieldProgressForOffset:offset
                                              safeAreaInsets:safeAreaInsets]
             // RxR with no logo hides the fakebox, so always show the omnibox.
             : 1;
-    if (!IsSplitToolbarMode()) {
+    if (!IsSplitToolbarMode(self)) {
       [self.toolbarDelegate setScrollProgressForTabletOmnibox:progress];
     } else {
       // Ensure omnibox is reset when not a regular tablet.
@@ -182,7 +182,7 @@ const NSString* kScribbleFakeboxElementId = @"fakebox";
 
 - (void)updateFakeOmniboxForWidth:(CGFloat)width {
   self.fakeOmniboxWidthConstraint.constant =
-      content_suggestions::searchFieldWidth(width);
+      content_suggestions::searchFieldWidth(width, self.traitCollection);
 }
 
 - (void)unfocusOmnibox {
@@ -200,13 +200,15 @@ const NSString* kScribbleFakeboxElementId = @"fakebox";
 // Update the doodle top margin to the new -doodleTopMargin value.
 - (void)updateConstraints {
   self.doodleTopMarginConstraint.constant =
-      content_suggestions::doodleTopMargin(YES, [self topInset]);
+      content_suggestions::doodleTopMargin(YES, [self topInset],
+                                           self.traitCollection);
   [self.headerView updateForTopSafeAreaInset:[self topInset]];
 }
 
 - (CGFloat)pinnedOffsetY {
   CGFloat headerHeight = content_suggestions::heightForLogoHeader(
-      self.logoIsShowing, self.promoCanShow, YES, [self topInset]);
+      self.logoIsShowing, self.promoCanShow, YES, [self topInset],
+      self.traitCollection);
 
   CGFloat offsetY =
       headerHeight - ntp_header::kScrolledToTopOmniboxBottomMargin;
@@ -231,7 +233,8 @@ const NSString* kScribbleFakeboxElementId = @"fakebox";
 
 - (CGFloat)headerHeight {
   return content_suggestions::heightForLogoHeader(
-      self.logoIsShowing, self.promoCanShow, YES, [self topInset]);
+      self.logoIsShowing, self.promoCanShow, YES, [self topInset],
+      self.traitCollection);
 }
 
 #pragma mark - ContentSuggestionsHeaderProvider
@@ -271,7 +274,8 @@ const NSString* kScribbleFakeboxElementId = @"fakebox";
         0, width - safeAreaInsets.left - safeAreaInsets.right);
 
     self.fakeOmniboxWidthConstraint = [self.fakeOmnibox.widthAnchor
-        constraintEqualToConstant:content_suggestions::searchFieldWidth(width)];
+        constraintEqualToConstant:content_suggestions::searchFieldWidth(
+                                      width, self.traitCollection)];
     [self addConstraintsForLogoView:self.logoVendor.view
                         fakeOmnibox:self.fakeOmnibox
                       andHeaderView:self.headerView];
@@ -340,7 +344,7 @@ const NSString* kScribbleFakeboxElementId = @"fakebox";
   [self.headerView.voiceSearchButton addTarget:self
                                         action:@selector(preloadVoiceSearch:)
                               forControlEvents:UIControlEventTouchDown];
-  self.headerView.voiceSearchButton.enabled = self.voiceSearchIsEnabled;
+  [self updateVoiceSearchDisplay];
 }
 
 // On NTP in split toolbar mode the omnibox has different location (in the
@@ -353,7 +357,7 @@ const NSString* kScribbleFakeboxElementId = @"fakebox";
   UIView* toolbar = [[UIView alloc] init];
   toolbar.translatesAutoresizingMaskIntoConstraints = NO;
   self.fakeTapButton = [[UIButton alloc] init];
-  self.fakeTapButton.userInteractionEnabled = IsSplitToolbarMode();
+  self.fakeTapButton.userInteractionEnabled = IsSplitToolbarMode(self);
   self.fakeTapButton.isAccessibilityElement = NO;
   self.fakeTapButton.translatesAutoresizingMaskIntoConstraints = NO;
   [toolbar addSubview:self.fakeTapButton];
@@ -461,7 +465,8 @@ const NSString* kScribbleFakeboxElementId = @"fakebox";
 // shows fakebox if the logo is visible and hides otherwise
 - (void)updateFakeboxDisplay {
   [self.doodleHeightConstraint
-      setConstant:content_suggestions::doodleHeight(self.logoIsShowing)];
+      setConstant:content_suggestions::doodleHeight(self.logoIsShowing,
+                                                    self.traitCollection)];
   self.fakeOmnibox.hidden =
       IsRegularXRegularSizeClass(self) && !self.logoIsShowing;
   [self.collectionSynchronizer invalidateLayout];
@@ -476,6 +481,15 @@ const NSString* kScribbleFakeboxElementId = @"fakebox";
   }
 }
 
+// Ensures the state of the Voice Search button matches whether or not it's
+// enabled. If it's not, disables the button and removes it from the a11y loop
+// for VoiceOver.
+- (void)updateVoiceSearchDisplay {
+  self.headerView.voiceSearchButton.enabled = self.voiceSearchIsEnabled;
+  self.headerView.voiceSearchButton.isAccessibilityElement =
+      self.voiceSearchIsEnabled;
+}
+
 // Adds the constraints for the |logoView|, the |fakeomnibox| related to the
 // |headerView|. It also sets the properties constraints related to those views.
 - (void)addConstraintsForLogoView:(UIView*)logoView
@@ -484,10 +498,10 @@ const NSString* kScribbleFakeboxElementId = @"fakebox";
   self.doodleTopMarginConstraint = [logoView.topAnchor
       constraintEqualToAnchor:headerView.topAnchor
                      constant:content_suggestions::doodleTopMargin(
-                                  YES, [self topInset])];
+                                  YES, [self topInset], self.traitCollection)];
   self.doodleHeightConstraint = [logoView.heightAnchor
       constraintEqualToConstant:content_suggestions::doodleHeight(
-                                    self.logoIsShowing)];
+                                    self.logoIsShowing, self.traitCollection)];
   self.fakeOmniboxHeightConstraint = [fakeOmnibox.heightAnchor
       constraintEqualToConstant:ToolbarExpandedHeight(
                                     self.traitCollection
@@ -509,7 +523,7 @@ const NSString* kScribbleFakeboxElementId = @"fakebox";
 }
 
 - (void)shiftTilesDown {
-  if (IsSplitToolbarMode()) {
+  if (IsSplitToolbarMode(self)) {
     [self.dispatcher onFakeboxBlur];
   }
   [self.collectionSynchronizer shiftTilesDown];
@@ -580,7 +594,7 @@ const NSString* kScribbleFakeboxElementId = @"fakebox";
           // it's possible (and difficult) to unfocus the omnibox and initiate a
           // -shiftTilesDown before the animation here completes.
           [self.dispatcher fakeboxFocused];
-          if (IsSplitToolbarMode()) {
+          if (IsSplitToolbarMode(self)) {
             [self.dispatcher onFakeboxAnimationComplete];
           }
         }
@@ -700,12 +714,13 @@ const NSString* kScribbleFakeboxElementId = @"fakebox";
   if (_voiceSearchIsEnabled == voiceSearchIsEnabled)
     return;
   _voiceSearchIsEnabled = voiceSearchIsEnabled;
-  self.headerView.voiceSearchButton.enabled = _voiceSearchIsEnabled;
+  [self updateVoiceSearchDisplay];
 }
 
 #pragma mark - UserAccountImageUpdateDelegate
 
 - (void)updateAccountImage:(UIImage*)image {
+  self.identityDiscButton.hidden = !image;
   [self.identityDiscButton setImage:image forState:UIControlStateNormal];
   self.identityDiscButton.imageView.layer.cornerRadius = image.size.width / 2;
   self.identityDiscButton.imageView.layer.masksToBounds = YES;

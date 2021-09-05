@@ -97,6 +97,7 @@
 #include "third_party/blink/renderer/core/style/computed_style.h"
 #include "third_party/blink/renderer/core/style/cursor_data.h"
 #include "third_party/blink/renderer/core/svg/graphics/svg_image.h"
+#include "third_party/blink/renderer/core/svg/graphics/svg_image_for_container.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/cursors.h"
 #include "third_party/blink/renderer/platform/geometry/float_point.h"
@@ -622,9 +623,11 @@ base::Optional<ui::Cursor> EventHandler::SelectCursor(
       // If the image is an SVG, then adjust the scale to reflect the device
       // scale factor so that the SVG can be rasterized in the native
       // resolution and scaled down to the correct size for the cursor.
-      if (image && image->IsSVGImage()) {
-        scale *=
+      float device_scale_factor = 1;
+      if (image->IsSVGImage()) {
+        device_scale_factor =
             page->GetChromeClient().GetScreenInfo(*frame_).device_scale_factor;
+        scale *= device_scale_factor;
       }
 
       // Ensure no overflow possible in calculations above.
@@ -634,23 +637,21 @@ base::Optional<ui::Cursor> EventHandler::SelectCursor(
       // Convert from logical pixels to physical pixels.
       hot_spot.Scale(scale, scale);
 
-      ui::Cursor cursor(ui::mojom::blink::CursorType::kCustom);
-      if (image) {
-        // Special case for SVG so that it can be rasterized in the appropriate
-        // resolution for high DPI displays.
-        if (image->IsSVGImage()) {
-          SVGImage* svg = static_cast<SVGImage*>(image);
-          cursor.set_custom_bitmap(
-              svg->AsSkBitmapForCursor(page->GetChromeClient()
-                                           .GetScreenInfo(*frame_)
-                                           .device_scale_factor));
-        } else {
-          cursor.set_custom_bitmap(
-              image->AsSkBitmapForCurrentFrame(kRespectImageOrientation));
-        }
-      } else {
-        cursor.set_custom_bitmap(SkBitmap());
+      // Special case for SVG so that it can be rasterized in the appropriate
+      // resolution for high DPI displays.
+      scoped_refptr<Image> svg_image_holder;
+      if (auto* svg_image = DynamicTo<SVGImage>(image)) {
+        IntSize scaled_size(svg_image->Size());
+        scaled_size.Scale(device_scale_factor);
+        // TODO(fs): Should pass proper URL. Use StyleImage::GetImage.
+        svg_image_holder = SVGImageForContainer::Create(
+            svg_image, FloatSize(scaled_size), device_scale_factor, NullURL());
+        image = svg_image_holder.get();
       }
+
+      ui::Cursor cursor(ui::mojom::blink::CursorType::kCustom);
+      cursor.set_custom_bitmap(
+          image->AsSkBitmapForCurrentFrame(kRespectImageOrientation));
       cursor.set_custom_hotspot(
           DetermineHotSpot(*image, hot_spot_specified, hot_spot));
       cursor.set_image_scale_factor(scale);
@@ -785,6 +786,10 @@ WebInputEventResult EventHandler::HandleMousePressEvent(
       PhysicalOffset(FlooredIntPoint(mouse_event.PositionInRootFrame())));
   MouseEventWithHitTestResults mev = GetMouseEventTarget(request, mouse_event);
   if (!mev.InnerNode()) {
+    // An anonymous box can be scrollable.
+    if (PassMousePressEventToScrollbar(mev))
+      return WebInputEventResult::kHandledSystem;
+
     mouse_event_manager_->InvalidateClick();
     return WebInputEventResult::kNotHandled;
   }
@@ -1383,6 +1388,10 @@ Element* EventHandler::EffectiveMouseEventTargetElement(
   if (pointer_event_manager_->GetMouseCaptureTarget())
     new_element_under_mouse = pointer_event_manager_->GetMouseCaptureTarget();
   return new_element_under_mouse;
+}
+
+Element* EventHandler::GetElementUnderMouse() {
+  return mouse_event_manager_->GetElementUnderMouse();
 }
 
 bool EventHandler::IsPointerIdActiveOnFrame(PointerId pointer_id,
@@ -2129,7 +2138,7 @@ WebInputEventResult EventHandler::ShowNonLocatedContextMenu(
     // Intersect the selection rect and the visible bounds of focused_element.
     if (focused_element) {
       IntRect clipped_rect = view->ViewportToFrame(
-          focused_element->VisibleBoundsInVisualViewport());
+          GetFocusedElementRectForNonLocatedContextMenu(focused_element));
       left = std::max(clipped_rect.X(), left);
       top = std::max(clipped_rect.Y(), top);
       right = std::min(clipped_rect.MaxX(), right);
@@ -2146,7 +2155,8 @@ WebInputEventResult EventHandler::ShowNonLocatedContextMenu(
           view->ConvertToRootFrame(selection_rect.Center());
     }
   } else if (focused_element) {
-    IntRect clipped_rect = focused_element->VisibleBoundsInVisualViewport();
+    IntRect clipped_rect =
+        GetFocusedElementRectForNonLocatedContextMenu(focused_element);
     location_in_root_frame =
         visual_viewport.ViewportToRootFrame(clipped_rect.Center());
   } else {
@@ -2192,6 +2202,20 @@ WebInputEventResult EventHandler::ShowNonLocatedContextMenu(
   mouse_event.SetFrameScale(1);
 
   return SendContextMenuEvent(mouse_event, focused_element);
+}
+
+IntRect EventHandler::GetFocusedElementRectForNonLocatedContextMenu(
+    Element* focused_element) {
+  IntRect clipped_rect = focused_element->VisibleBoundsInVisualViewport();
+  // The bounding rect of multiline elements may include points that are
+  // not within the element. Intersect the clipped rect with the first
+  // outline rect to ensure that the selection rect only includes visible
+  // points within the focused element.
+  Vector<IntRect> outline_rects =
+      focused_element->OutlineRectsInVisualViewport();
+  if (outline_rects.size() > 1)
+    clipped_rect.Intersect(outline_rects[0]);
+  return clipped_rect;
 }
 
 void EventHandler::ScheduleHoverStateUpdate() {

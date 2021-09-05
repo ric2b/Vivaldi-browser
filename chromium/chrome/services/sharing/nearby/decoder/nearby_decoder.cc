@@ -229,7 +229,7 @@ void NearbySharingDecoder::DecodeAdvertisement(
 
   std::move(callback).Run(mojom::Advertisement::New(
       advertisement->salt(), advertisement->encrypted_metadata_key(),
-      advertisement->device_name()));
+      advertisement->device_type(), advertisement->device_name()));
 }
 
 void NearbySharingDecoder::DecodeFrame(const std::vector<uint8_t>& data,
@@ -239,6 +239,13 @@ void NearbySharingDecoder::DecodeFrame(const std::vector<uint8_t>& data,
 
   if (!proto_frame.ParseFromArray(data.data(), data.size())) {
     LOG(ERROR) << "Failed to parse incoming frame";
+    std::move(callback).Run(nullptr);
+    return;
+  }
+
+  if (!proto_frame.has_version() ||
+      proto_frame.version() != sharing::nearby::Frame_Version_V1) {
+    LOG(ERROR) << "Invalid or missing incoming frame version";
     std::move(callback).Run(nullptr);
     return;
   }

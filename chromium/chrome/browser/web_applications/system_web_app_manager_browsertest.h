@@ -9,6 +9,7 @@
 
 #include "base/macros.h"
 #include "base/test/scoped_feature_list.h"
+#include "chrome/browser/web_applications/test/profile_test_helper.h"
 #include "chrome/browser/web_applications/test/test_system_web_app_installation.h"
 #include "chrome/browser/web_applications/test/test_web_app_provider.h"
 #include "chrome/browser/web_applications/test/web_app_test.h"
@@ -40,15 +41,16 @@ class SystemWebAppManagerBrowserTestBase : public InProcessBrowserTest {
 
   ~SystemWebAppManagerBrowserTestBase() override;
 
-  // Returns the SystemWebAppManager for browser()->profile(). This will be a
-  // TestSystemWebAppManager if initialized with |install_mock| true.
+  // Returns the SystemWebAppManager for browser()->profile(). For incognito
+  // profiles, this will be the SystemWebAppManager of the original profile.
+  // Returns TestSystemWebAppManager if initialized with |install_mock| true.
   SystemWebAppManager& GetManager();
 
   // Returns SystemAppType of mocked app, only valid if |install_mock| is true.
   SystemAppType GetMockAppType();
 
-  // Returns the launch URL for based on the given |params|.
-  const GURL& GetLaunchURL(const apps::AppLaunchParams& params);
+  // Returns the start URL based on the given |params|.
+  GURL GetStartUrl(const apps::AppLaunchParams& params);
 
   void WaitForTestSystemAppInstall();
 
@@ -102,48 +104,86 @@ class SystemWebAppManagerBrowserTestBase : public InProcessBrowserTest {
 
 enum class InstallationType { kManifestInstall, kWebAppInfoInstall };
 
-using ProviderTypeAndInstallationType =
-    std::tuple<web_app::ProviderType, InstallationType>;
+using SystemWebAppManagerTestParams =
+    std::tuple<ProviderType, InstallationType, TestProfileType>;
 
 class SystemWebAppManagerBrowserTest
     : public SystemWebAppManagerBrowserTestBase,
-      public ::testing::WithParamInterface<ProviderTypeAndInstallationType> {
+      public ::testing::WithParamInterface<SystemWebAppManagerTestParams> {
  public:
   explicit SystemWebAppManagerBrowserTest(bool install_mock = true);
   ~SystemWebAppManagerBrowserTest() override = default;
-  web_app::ProviderType provider_type() const {
-    return std::get<0>(GetParam());
-  }
+
+  ProviderType provider_type() const { return std::get<0>(GetParam()); }
   bool install_from_web_app_info() const {
     return std::get<1>(GetParam()) == InstallationType::kWebAppInfoInstall;
   }
+  TestProfileType profile_type() const { return std::get<2>(GetParam()); }
+
+  // InProcessBrowserTest:
+  void SetUpCommandLine(base::CommandLine* command_line) override;
 
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
 };
 
-// A class for testing installation directly from a WebApplicationInfo. We can't
-// inherit from BrowserTestBase because we're templating on a different type.
-class SystemWebAppManagerWebAppInfoBrowserTest
-    : public SystemWebAppManagerBrowserTestBase,
-      public ::testing::WithParamInterface<ProviderTypeAndInstallationType> {
- public:
-  explicit SystemWebAppManagerWebAppInfoBrowserTest(bool install_mock = true);
-  ~SystemWebAppManagerWebAppInfoBrowserTest() override = default;
-  web_app::ProviderType provider_type() const {
-    return std::get<0>(GetParam());
-  }
-  bool install_from_web_app_info() const {
-    return std::get<1>(GetParam()) == InstallationType::kWebAppInfoInstall;
-  }
+using SystemWebAppManagerWebAppInfoBrowserTest = SystemWebAppManagerBrowserTest;
 
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
-};
+std::string SystemWebAppManagerTestParamsToString(
+    const ::testing::TestParamInfo<SystemWebAppManagerTestParams>& param_info);
 
-std::string ProviderAndInstallationTypeToString(
-    const ::testing::TestParamInfo<ProviderTypeAndInstallationType>&
-        provider_type);
 }  // namespace web_app
+
+#define INSTANTIATE_SYSTEM_WEB_APP_MANAGER_TEST_SUITE_P(SUITE, PARAMS) \
+  INSTANTIATE_TEST_SUITE_P(All, SUITE, PARAMS,                         \
+                           web_app::SystemWebAppManagerTestParamsToString)
+
+#define INSTANTIATE_SYSTEM_WEB_APP_MANAGER_TEST_SUITE_ALL_INSTALL_TYPES_P(  \
+    SUITE)                                                                  \
+  INSTANTIATE_SYSTEM_WEB_APP_MANAGER_TEST_SUITE_P(                          \
+      SUITE,                                                                \
+      ::testing::Combine(                                                   \
+          ::testing::Values(web_app::ProviderType::kBookmarkApps,           \
+                            web_app::ProviderType::kWebApps),               \
+          ::testing::Values(web_app::InstallationType::kManifestInstall,    \
+                            web_app::InstallationType::kWebAppInfoInstall), \
+          ::testing::Values(TestProfileType::kRegular)))
+
+#define INSTANTIATE_SYSTEM_WEB_APP_MANAGER_TEST_SUITE_MANIFEST_INSTALL_P( \
+    SUITE)                                                                \
+  INSTANTIATE_SYSTEM_WEB_APP_MANAGER_TEST_SUITE_P(                        \
+      SUITE,                                                              \
+      ::testing::Combine(                                                 \
+          ::testing::Values(web_app::ProviderType::kBookmarkApps,         \
+                            web_app::ProviderType::kWebApps),             \
+          ::testing::Values(web_app::InstallationType::kManifestInstall), \
+          ::testing::Values(TestProfileType::kRegular)))
+
+#define INSTANTIATE_SYSTEM_WEB_APP_MANAGER_TEST_SUITE_WEB_APP_INFO_INSTALL_P( \
+    SUITE)                                                                    \
+  INSTANTIATE_SYSTEM_WEB_APP_MANAGER_TEST_SUITE_P(                            \
+      SUITE,                                                                  \
+      ::testing::Combine(                                                     \
+          ::testing::Values(web_app::ProviderType::kBookmarkApps,             \
+                            web_app::ProviderType::kWebApps),                 \
+          ::testing::Values(web_app::InstallationType::kWebAppInfoInstall),   \
+          ::testing::Values(TestProfileType::kRegular)))
+
+// Instantiates 2x1x3 = 6 versions of each test in |SUITE| to ensure coverage of
+// Guest and Incognito profiles, as well as regular profiles. This is designed
+// for testing specific apps that are present in these profile types, so only
+// one |INSTALL_TYPE| is used: either kManifestInstall or kWebAppInfoInstall.
+// This is currently only used on ChromeOS. Other platforms will likely need a
+// differently defined macro because there is no such thing as Guest mode.
+#define INSTANTIATE_SYSTEM_WEB_APP_MANAGER_TEST_SUITE_ALL_PROFILE_TYPES_P(   \
+    SUITE, INSTALL_TYPE)                                                     \
+  INSTANTIATE_SYSTEM_WEB_APP_MANAGER_TEST_SUITE_P(                           \
+      SUITE, ::testing::Combine(                                             \
+                 ::testing::Values(web_app::ProviderType::kBookmarkApps,     \
+                                   web_app::ProviderType::kWebApps),         \
+                 ::testing::Values(web_app::InstallationType::INSTALL_TYPE), \
+                 ::testing::Values(TestProfileType::kRegular,                \
+                                   TestProfileType::kIncognito,              \
+                                   TestProfileType::kGuest)))
 
 #endif  // CHROME_BROWSER_WEB_APPLICATIONS_SYSTEM_WEB_APP_MANAGER_BROWSERTEST_H_

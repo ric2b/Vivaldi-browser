@@ -4,7 +4,7 @@
 
 // Keep in sync with
 // http://google3/google/internal/location/nearby/sharing/v1/rpcs/devices.proto
-// Messages not used in Chrome have been omitted. Last copied at cl/2228987.
+// Messages not used in Chrome have been omitted. Last copied at cl/325953873.
 
 syntax = "proto3";
 

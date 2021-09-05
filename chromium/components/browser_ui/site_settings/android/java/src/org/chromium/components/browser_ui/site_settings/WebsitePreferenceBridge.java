@@ -34,38 +34,40 @@ public class WebsitePreferenceBridge {
      */
     @SuppressWarnings("unchecked")
     public List<PermissionInfo> getPermissionInfo(
-            BrowserContextHandle browserContextHandle, @PermissionInfo.Type int type) {
+            BrowserContextHandle browserContextHandle, @ContentSettingsType int type) {
         ArrayList<PermissionInfo> list = new ArrayList<PermissionInfo>();
         // Camera, Location & Microphone can be managed by the custodian
         // of a supervised account or by enterprise policy.
-        if (type == PermissionInfo.Type.AUGMENTED_REALITY) {
+        if (type == ContentSettingsType.AR) {
             WebsitePreferenceBridgeJni.get().getArOrigins(browserContextHandle, list);
-        } else if (type == PermissionInfo.Type.CAMERA) {
-            boolean managedOnly = !isCameraUserModifiable(browserContextHandle);
+        } else if (type == ContentSettingsType.MEDIASTREAM_CAMERA) {
+            boolean managedOnly = !isContentSettingUserModifiable(browserContextHandle, type);
             WebsitePreferenceBridgeJni.get().getCameraOrigins(
                     browserContextHandle, list, managedOnly);
-        } else if (type == PermissionInfo.Type.CLIPBOARD) {
+        } else if (type == ContentSettingsType.CLIPBOARD_READ_WRITE) {
             WebsitePreferenceBridgeJni.get().getClipboardOrigins(browserContextHandle, list);
-        } else if (type == PermissionInfo.Type.GEOLOCATION) {
-            boolean managedOnly = !isAllowLocationUserModifiable(browserContextHandle);
+        } else if (type == ContentSettingsType.GEOLOCATION) {
+            boolean managedOnly = !isContentSettingUserModifiable(browserContextHandle, type);
             WebsitePreferenceBridgeJni.get().getGeolocationOrigins(
                     browserContextHandle, list, managedOnly);
-        } else if (type == PermissionInfo.Type.MICROPHONE) {
-            boolean managedOnly = !isMicUserModifiable(browserContextHandle);
+        } else if (type == ContentSettingsType.IDLE_DETECTION) {
+            WebsitePreferenceBridgeJni.get().getIdleDetectionOrigins(browserContextHandle, list);
+        } else if (type == ContentSettingsType.MEDIASTREAM_MIC) {
+            boolean managedOnly = !isContentSettingUserModifiable(browserContextHandle, type);
             WebsitePreferenceBridgeJni.get().getMicrophoneOrigins(
                     browserContextHandle, list, managedOnly);
-        } else if (type == PermissionInfo.Type.MIDI) {
+        } else if (type == ContentSettingsType.MIDI_SYSEX) {
             WebsitePreferenceBridgeJni.get().getMidiOrigins(browserContextHandle, list);
-        } else if (type == PermissionInfo.Type.NFC) {
+        } else if (type == ContentSettingsType.NFC) {
             WebsitePreferenceBridgeJni.get().getNfcOrigins(browserContextHandle, list);
-        } else if (type == PermissionInfo.Type.NOTIFICATION) {
+        } else if (type == ContentSettingsType.NOTIFICATIONS) {
             WebsitePreferenceBridgeJni.get().getNotificationOrigins(browserContextHandle, list);
-        } else if (type == PermissionInfo.Type.PROTECTED_MEDIA_IDENTIFIER) {
+        } else if (type == ContentSettingsType.PROTECTED_MEDIA_IDENTIFIER) {
             WebsitePreferenceBridgeJni.get().getProtectedMediaIdentifierOrigins(
                     browserContextHandle, list);
-        } else if (type == PermissionInfo.Type.SENSORS) {
+        } else if (type == ContentSettingsType.SENSORS) {
             WebsitePreferenceBridgeJni.get().getSensorsOrigins(browserContextHandle, list);
-        } else if (type == PermissionInfo.Type.VIRTUAL_REALITY) {
+        } else if (type == ContentSettingsType.VR) {
             WebsitePreferenceBridgeJni.get().getVrOrigins(browserContextHandle, list);
         } else {
             assert false;
@@ -73,9 +75,10 @@ public class WebsitePreferenceBridge {
         return list;
     }
 
-    private static void insertInfoIntoList(@PermissionInfo.Type int type,
+    private static void insertInfoIntoList(@ContentSettingsType int type,
             ArrayList<PermissionInfo> list, String origin, String embedder, boolean isEmbargoed) {
-        if (type == PermissionInfo.Type.CAMERA || type == PermissionInfo.Type.MICROPHONE) {
+        if (type == ContentSettingsType.MEDIASTREAM_CAMERA
+                || type == ContentSettingsType.MEDIASTREAM_MIC) {
             for (PermissionInfo info : list) {
                 if (info.getOrigin().equals(origin) && info.getEmbedder().equals(embedder)) {
                     return;
@@ -88,63 +91,71 @@ public class WebsitePreferenceBridge {
     @CalledByNative
     private static void insertArInfoIntoList(
             ArrayList<PermissionInfo> list, String origin, String embedder, boolean isEmbargoed) {
-        insertInfoIntoList(
-                PermissionInfo.Type.AUGMENTED_REALITY, list, origin, embedder, isEmbargoed);
+        insertInfoIntoList(ContentSettingsType.AR, list, origin, embedder, isEmbargoed);
     }
 
     @CalledByNative
     private static void insertCameraInfoIntoList(
             ArrayList<PermissionInfo> list, String origin, String embedder, boolean isEmbargoed) {
-        insertInfoIntoList(PermissionInfo.Type.CAMERA, list, origin, embedder, isEmbargoed);
+        insertInfoIntoList(
+                ContentSettingsType.MEDIASTREAM_CAMERA, list, origin, embedder, isEmbargoed);
     }
 
     @CalledByNative
     private static void insertClipboardInfoIntoList(
             ArrayList<PermissionInfo> list, String origin, String embedder, boolean isEmbargoed) {
-        insertInfoIntoList(PermissionInfo.Type.CLIPBOARD, list, origin, embedder, isEmbargoed);
+        insertInfoIntoList(
+                ContentSettingsType.CLIPBOARD_READ_WRITE, list, origin, embedder, isEmbargoed);
     }
 
     @CalledByNative
     private static void insertGeolocationInfoIntoList(
             ArrayList<PermissionInfo> list, String origin, String embedder, boolean isEmbargoed) {
-        insertInfoIntoList(PermissionInfo.Type.GEOLOCATION, list, origin, embedder, isEmbargoed);
+        insertInfoIntoList(ContentSettingsType.GEOLOCATION, list, origin, embedder, isEmbargoed);
+    }
+
+    @CalledByNative
+    private static void insertIdleDetectionInfoIntoList(
+            ArrayList<PermissionInfo> list, String origin, String embedder, boolean isEmbargoed) {
+        insertInfoIntoList(ContentSettingsType.IDLE_DETECTION, list, origin, embedder, isEmbargoed);
     }
 
     @CalledByNative
     private static void insertMicrophoneInfoIntoList(
             ArrayList<PermissionInfo> list, String origin, String embedder, boolean isEmbargoed) {
-        insertInfoIntoList(PermissionInfo.Type.MICROPHONE, list, origin, embedder, isEmbargoed);
+        insertInfoIntoList(
+                ContentSettingsType.MEDIASTREAM_MIC, list, origin, embedder, isEmbargoed);
     }
 
     @CalledByNative
     private static void insertMidiInfoIntoList(
             ArrayList<PermissionInfo> list, String origin, String embedder, boolean isEmbargoed) {
-        insertInfoIntoList(PermissionInfo.Type.MIDI, list, origin, embedder, isEmbargoed);
+        insertInfoIntoList(ContentSettingsType.MIDI_SYSEX, list, origin, embedder, isEmbargoed);
     }
 
     @CalledByNative
     private static void insertNfcInfoIntoList(
             ArrayList<PermissionInfo> list, String origin, String embedder, boolean isEmbargoed) {
-        insertInfoIntoList(PermissionInfo.Type.NFC, list, origin, embedder, isEmbargoed);
+        insertInfoIntoList(ContentSettingsType.NFC, list, origin, embedder, isEmbargoed);
     }
 
     @CalledByNative
     private static void insertNotificationIntoList(
             ArrayList<PermissionInfo> list, String origin, String embedder, boolean isEmbargoed) {
-        insertInfoIntoList(PermissionInfo.Type.NOTIFICATION, list, origin, embedder, isEmbargoed);
+        insertInfoIntoList(ContentSettingsType.NOTIFICATIONS, list, origin, embedder, isEmbargoed);
     }
 
     @CalledByNative
     private static void insertProtectedMediaIdentifierInfoIntoList(
             ArrayList<PermissionInfo> list, String origin, String embedder, boolean isEmbargoed) {
-        insertInfoIntoList(PermissionInfo.Type.PROTECTED_MEDIA_IDENTIFIER, list, origin, embedder,
+        insertInfoIntoList(ContentSettingsType.PROTECTED_MEDIA_IDENTIFIER, list, origin, embedder,
                 isEmbargoed);
     }
 
     @CalledByNative
     private static void insertSensorsInfoIntoList(
             ArrayList<PermissionInfo> list, String origin, String embedder, boolean isEmbargoed) {
-        insertInfoIntoList(PermissionInfo.Type.SENSORS, list, origin, embedder, isEmbargoed);
+        insertInfoIntoList(ContentSettingsType.SENSORS, list, origin, embedder, isEmbargoed);
     }
 
     @CalledByNative
@@ -156,8 +167,7 @@ public class WebsitePreferenceBridge {
     @CalledByNative
     private static void insertVrInfoIntoList(
             ArrayList<PermissionInfo> list, String origin, String embedder, boolean isEmbargoed) {
-        insertInfoIntoList(
-                PermissionInfo.Type.VIRTUAL_REALITY, list, origin, embedder, isEmbargoed);
+        insertInfoIntoList(ContentSettingsType.VR, list, origin, embedder, isEmbargoed);
     }
 
     @CalledByNative
@@ -228,8 +238,8 @@ public class WebsitePreferenceBridge {
      */
     @CalledByNative
     private static void insertChosenObjectInfoIntoList(ArrayList<ChosenObjectInfo> list,
-            int contentSettingsType, String origin, String embedder, String name, String object,
-            boolean isManaged) {
+            @ContentSettingsType int contentSettingsType, String origin, String embedder,
+            String name, String object, boolean isManaged) {
         list.add(new ChosenObjectInfo(
                 contentSettingsType, origin, embedder, name, object, isManaged));
     }
@@ -256,8 +266,8 @@ public class WebsitePreferenceBridge {
 
     @CalledByNative
     private static void addContentSettingExceptionToList(ArrayList<ContentSettingException> list,
-            int contentSettingsType, String primaryPattern, String secondaryPattern,
-            int contentSetting, String source) {
+            @ContentSettingsType int contentSettingsType, String primaryPattern,
+            String secondaryPattern, int contentSetting, String source) {
         ContentSettingException exception = new ContentSettingException(
                 contentSettingsType, primaryPattern, secondaryPattern, contentSetting, source);
         list.add(exception);
@@ -267,8 +277,8 @@ public class WebsitePreferenceBridge {
      * Returns whether a particular content setting type is enabled.
      * @param contentSettingsType The content setting type to check.
      */
-    public static boolean isContentSettingEnabled(
-            BrowserContextHandle browserContextHandle, int contentSettingsType) {
+    public static boolean isContentSettingEnabled(BrowserContextHandle browserContextHandle,
+            @ContentSettingsType int contentSettingsType) {
         return WebsitePreferenceBridgeJni.get().isContentSettingEnabled(
                 browserContextHandle, contentSettingsType);
     }
@@ -277,9 +287,20 @@ public class WebsitePreferenceBridge {
      * @return Whether a particular content setting type is managed by policy.
      * @param contentSettingsType The content setting type to check.
      */
-    public static boolean isContentSettingManaged(
-            BrowserContextHandle browserContextHandle, int contentSettingsType) {
+    public static boolean isContentSettingManaged(BrowserContextHandle browserContextHandle,
+            @ContentSettingsType int contentSettingsType) {
         return WebsitePreferenceBridgeJni.get().isContentSettingManaged(
+                browserContextHandle, contentSettingsType);
+    }
+
+    /**
+     * @return Whether a particular content setting type is managed by custodian.
+     * @param contentSettingsType The content setting type to check.
+     */
+    public static boolean isContentSettingManagedByCustodian(
+            BrowserContextHandle browserContextHandle,
+            @ContentSettingsType int contentSettingsType) {
+        return WebsitePreferenceBridgeJni.get().isContentSettingManagedByCustodian(
                 browserContextHandle, contentSettingsType);
     }
 
@@ -288,45 +309,17 @@ public class WebsitePreferenceBridge {
      * @param contentSettingsType The content setting type to check.
      * @param enabled Whether the default value should be disabled or enabled.
      */
-    public static void setContentSettingEnabled(
-            BrowserContextHandle browserContextHandle, int contentSettingsType, boolean enabled) {
+    public static void setContentSettingEnabled(BrowserContextHandle browserContextHandle,
+            @ContentSettingsType int contentSettingsType, boolean enabled) {
         WebsitePreferenceBridgeJni.get().setContentSettingEnabled(
                 browserContextHandle, contentSettingsType, enabled);
     }
 
     /**
-     * @return Whether JavaScript is managed by policy.
-     */
-    public static boolean javaScriptManaged(BrowserContextHandle browserContextHandle) {
-        return isContentSettingManaged(browserContextHandle, ContentSettingsType.JAVASCRIPT);
-    }
-
-    /**
-     * @return true if background sync is managed by policy.
-     */
-    public static boolean isBackgroundSyncManaged(BrowserContextHandle browserContextHandle) {
-        return isContentSettingManaged(browserContextHandle, ContentSettingsType.BACKGROUND_SYNC);
-    }
-
-    /**
-     * @return true if automatic downloads is managed by policy.
-     */
-    public static boolean isAutomaticDownloadsManaged(BrowserContextHandle browserContextHandle) {
-        return isContentSettingManaged(
-                browserContextHandle, ContentSettingsType.AUTOMATIC_DOWNLOADS);
-    }
-
-    /**
-     * @return Whether the setting to allow popups is configured by policy
-     */
-    public static boolean isPopupsManaged(BrowserContextHandle browserContextHandle) {
-        return isContentSettingManaged(browserContextHandle, ContentSettingsType.POPUPS);
-    }
-
-    /**
      * Whether the setting type requires tri-state (Allowed/Ask/Blocked) setting.
      */
-    public static boolean requiresTriStateContentSetting(int contentSettingsType) {
+    public static boolean requiresTriStateContentSetting(
+            @ContentSettingsType int contentSettingsType) {
         switch (contentSettingsType) {
             case ContentSettingsType.PROTECTED_MEDIA_IDENTIFIER:
                 return true;
@@ -339,123 +332,24 @@ public class WebsitePreferenceBridge {
      * Whether the setting type requires four-state
      * (Allow/BlockThirdPartyIncognito/BlockThirdParty/Block) setting.
      */
-    public static boolean requiresFourStateContentSetting(int contentSettingsType) {
+    public static boolean requiresFourStateContentSetting(
+            @ContentSettingsType int contentSettingsType) {
         return contentSettingsType == ContentSettingsType.COOKIES;
     }
 
     /**
      * Sets the preferences on whether to enable/disable given setting.
      */
-    public static void setCategoryEnabled(
-            BrowserContextHandle browserContextHandle, int contentSettingsType, boolean allow) {
+    public static void setCategoryEnabled(BrowserContextHandle browserContextHandle,
+            @ContentSettingsType int contentSettingsType, boolean allow) {
         assert !requiresTriStateContentSetting(contentSettingsType);
-
-        switch (contentSettingsType) {
-            case ContentSettingsType.ADS:
-            case ContentSettingsType.BLUETOOTH_GUARD:
-            case ContentSettingsType.BLUETOOTH_SCANNING:
-            case ContentSettingsType.JAVASCRIPT:
-            case ContentSettingsType.POPUPS:
-            case ContentSettingsType.USB_GUARD:
-                setContentSettingEnabled(browserContextHandle, contentSettingsType, allow);
-                break;
-            case ContentSettingsType.AR:
-                WebsitePreferenceBridgeJni.get().setArEnabled(browserContextHandle, allow);
-                break;
-            case ContentSettingsType.AUTOMATIC_DOWNLOADS:
-                WebsitePreferenceBridgeJni.get().setAutomaticDownloadsEnabled(
-                        browserContextHandle, allow);
-                break;
-            case ContentSettingsType.BACKGROUND_SYNC:
-                WebsitePreferenceBridgeJni.get().setBackgroundSyncEnabled(
-                        browserContextHandle, allow);
-                break;
-            case ContentSettingsType.CLIPBOARD_READ_WRITE:
-                WebsitePreferenceBridgeJni.get().setClipboardEnabled(browserContextHandle, allow);
-                break;
-            case ContentSettingsType.COOKIES:
-                WebsitePreferenceBridgeJni.get().setAllowCookiesEnabled(
-                        browserContextHandle, allow);
-                break;
-            case ContentSettingsType.GEOLOCATION:
-                WebsitePreferenceBridgeJni.get().setAllowLocationEnabled(
-                        browserContextHandle, allow);
-                break;
-            case ContentSettingsType.MEDIASTREAM_CAMERA:
-                WebsitePreferenceBridgeJni.get().setCameraEnabled(browserContextHandle, allow);
-                break;
-            case ContentSettingsType.MEDIASTREAM_MIC:
-                WebsitePreferenceBridgeJni.get().setMicEnabled(browserContextHandle, allow);
-                break;
-            case ContentSettingsType.NFC:
-                WebsitePreferenceBridgeJni.get().setNfcEnabled(browserContextHandle, allow);
-                break;
-            case ContentSettingsType.NOTIFICATIONS:
-                WebsitePreferenceBridgeJni.get().setNotificationsEnabled(
-                        browserContextHandle, allow);
-                break;
-            case ContentSettingsType.SENSORS:
-                WebsitePreferenceBridgeJni.get().setSensorsEnabled(browserContextHandle, allow);
-                break;
-            case ContentSettingsType.SOUND:
-                WebsitePreferenceBridgeJni.get().setSoundEnabled(browserContextHandle, allow);
-                break;
-            case ContentSettingsType.VR:
-                WebsitePreferenceBridgeJni.get().setVrEnabled(browserContextHandle, allow);
-                break;
-            default:
-                assert false;
-        }
+        setContentSettingEnabled(browserContextHandle, contentSettingsType, allow);
     }
 
-    public static boolean isCategoryEnabled(
-            BrowserContextHandle browserContextHandle, int contentSettingsType) {
+    public static boolean isCategoryEnabled(BrowserContextHandle browserContextHandle,
+            @ContentSettingsType int contentSettingsType) {
         assert !requiresTriStateContentSetting(contentSettingsType);
-
-        switch (contentSettingsType) {
-            case ContentSettingsType.ADS:
-            case ContentSettingsType.CLIPBOARD_READ_WRITE:
-                // Returns true if JavaScript is enabled. It may return the temporary value set by
-                // {@link #setJavaScriptEnabled}. The default is true.
-            case ContentSettingsType.JAVASCRIPT:
-            case ContentSettingsType.POPUPS:
-                // Returns true if websites are allowed to request permission to access USB devices.
-            case ContentSettingsType.USB_GUARD:
-                // Returns true if websites are allowed to request permission to access Bluetooth
-                // devices.
-            case ContentSettingsType.BLUETOOTH_GUARD:
-            case ContentSettingsType.BLUETOOTH_SCANNING:
-                return isContentSettingEnabled(browserContextHandle, contentSettingsType);
-            case ContentSettingsType.AR:
-                return WebsitePreferenceBridgeJni.get().getArEnabled(browserContextHandle);
-            case ContentSettingsType.AUTOMATIC_DOWNLOADS:
-                return WebsitePreferenceBridgeJni.get().getAutomaticDownloadsEnabled(
-                        browserContextHandle);
-            case ContentSettingsType.BACKGROUND_SYNC:
-                return WebsitePreferenceBridgeJni.get().getBackgroundSyncEnabled(
-                        browserContextHandle);
-            case ContentSettingsType.COOKIES:
-                return WebsitePreferenceBridgeJni.get().getAcceptCookiesEnabled(
-                        browserContextHandle);
-            case ContentSettingsType.MEDIASTREAM_CAMERA:
-                return WebsitePreferenceBridgeJni.get().getCameraEnabled(browserContextHandle);
-            case ContentSettingsType.MEDIASTREAM_MIC:
-                return WebsitePreferenceBridgeJni.get().getMicEnabled(browserContextHandle);
-            case ContentSettingsType.NFC:
-                return WebsitePreferenceBridgeJni.get().getNfcEnabled(browserContextHandle);
-            case ContentSettingsType.NOTIFICATIONS:
-                return WebsitePreferenceBridgeJni.get().getNotificationsEnabled(
-                        browserContextHandle);
-            case ContentSettingsType.SENSORS:
-                return WebsitePreferenceBridgeJni.get().getSensorsEnabled(browserContextHandle);
-            case ContentSettingsType.SOUND:
-                return WebsitePreferenceBridgeJni.get().getSoundEnabled(browserContextHandle);
-            case ContentSettingsType.VR:
-                return WebsitePreferenceBridgeJni.get().getVrEnabled(browserContextHandle);
-            default:
-                assert false;
-                return false;
-        }
+        return isContentSettingEnabled(browserContextHandle, contentSettingsType);
     }
 
     /**
@@ -465,8 +359,8 @@ public class WebsitePreferenceBridge {
      * @param contentSettingsType The settings type to get setting for.
      * @return The ContentSetting for |contentSettingsType|.
      */
-    public static int getContentSetting(
-            BrowserContextHandle browserContextHandle, int contentSettingsType) {
+    public static int getContentSetting(BrowserContextHandle browserContextHandle,
+            @ContentSettingsType int contentSettingsType) {
         return WebsitePreferenceBridgeJni.get().getContentSetting(
                 browserContextHandle, contentSettingsType);
     }
@@ -474,28 +368,10 @@ public class WebsitePreferenceBridge {
     /**
      * @param setting New ContentSetting to set for |contentSettingsType|.
      */
-    public static void setContentSetting(
-            BrowserContextHandle browserContextHandle, int contentSettingsType, int setting) {
+    public static void setContentSetting(BrowserContextHandle browserContextHandle,
+            @ContentSettingsType int contentSettingsType, int setting) {
         WebsitePreferenceBridgeJni.get().setContentSetting(
                 browserContextHandle, contentSettingsType, setting);
-    }
-
-    /**
-     * @return Whether cookies acceptance is modifiable by the user
-     */
-    public static boolean isAcceptCookiesUserModifiable(BrowserContextHandle browserContextHandle) {
-        return WebsitePreferenceBridgeJni.get().getAcceptCookiesUserModifiable(
-                browserContextHandle);
-    }
-
-    /**
-     * @return Whether cookies acceptance is configured by the user's custodian
-     * (for supervised users).
-     */
-    public static boolean isAcceptCookiesManagedByCustodian(
-            BrowserContextHandle browserContextHandle) {
-        return WebsitePreferenceBridgeJni.get().getAcceptCookiesManagedByCustodian(
-                browserContextHandle);
     }
 
     /**
@@ -510,13 +386,6 @@ public class WebsitePreferenceBridge {
     }
 
     /**
-     * @return Whether geolocation information can be shared with content.
-     */
-    public static boolean isAllowLocationEnabled(BrowserContextHandle browserContextHandle) {
-        return WebsitePreferenceBridgeJni.get().getAllowLocationEnabled(browserContextHandle);
-    }
-
-    /**
      * @return Whether geolocation information access is set to be shared with all sites, by policy.
      */
     public static boolean isLocationAllowedByPolicy(BrowserContextHandle browserContextHandle) {
@@ -524,59 +393,20 @@ public class WebsitePreferenceBridge {
     }
 
     /**
-     * @return Whether the location preference is modifiable by the user.
-     */
-    public static boolean isAllowLocationUserModifiable(BrowserContextHandle browserContextHandle) {
-        return WebsitePreferenceBridgeJni.get().getAllowLocationUserModifiable(
-                browserContextHandle);
-    }
-
-    /**
-     * @return Whether the location preference is
-     * being managed by the custodian of the supervised account.
-     */
-    public static boolean isAllowLocationManagedByCustodian(
-            BrowserContextHandle browserContextHandle) {
-        return WebsitePreferenceBridgeJni.get().getAllowLocationManagedByCustodian(
-                browserContextHandle);
-    }
-
-    /**
      * @return Whether location is enabled system-wide and the Chrome location setting is enabled.
      */
     public static boolean areAllLocationSettingsEnabled(BrowserContextHandle browserContextHandle) {
-        return isAllowLocationEnabled(browserContextHandle)
+        return isContentSettingEnabled(browserContextHandle, ContentSettingsType.GEOLOCATION)
                 && LocationUtils.getInstance().isSystemLocationSettingEnabled();
-    }
-
-    /**
-     * @return Whether the camera/microphone permission is managed
-     * by the custodian of the supervised account.
-     */
-    public static boolean isCameraManagedByCustodian(BrowserContextHandle browserContextHandle) {
-        return WebsitePreferenceBridgeJni.get().getCameraManagedByCustodian(browserContextHandle);
     }
 
     /**
      * @return Whether the camera permission is editable by the user.
      */
-    public static boolean isCameraUserModifiable(BrowserContextHandle browserContextHandle) {
-        return WebsitePreferenceBridgeJni.get().getCameraUserModifiable(browserContextHandle);
-    }
-
-    /**
-     * @return Whether the microphone permission is managed by the custodian of
-     * the supervised account.
-     */
-    public static boolean isMicManagedByCustodian(BrowserContextHandle browserContextHandle) {
-        return WebsitePreferenceBridgeJni.get().getMicManagedByCustodian(browserContextHandle);
-    }
-
-    /**
-     * @return Whether the microphone permission is editable by the user.
-     */
-    public static boolean isMicUserModifiable(BrowserContextHandle browserContextHandle) {
-        return WebsitePreferenceBridgeJni.get().getMicUserModifiable(browserContextHandle);
+    public static boolean isContentSettingUserModifiable(BrowserContextHandle browserContextHandle,
+            @ContentSettingsType int contentSettingsType) {
+        return WebsitePreferenceBridgeJni.get().isContentSettingUserModifiable(
+                browserContextHandle, contentSettingsType);
     }
 
     public static void setContentSettingForPattern(BrowserContextHandle browserContextHandle,
@@ -602,6 +432,7 @@ public class WebsitePreferenceBridge {
         void getClipboardOrigins(BrowserContextHandle browserContextHandle, Object list);
         void getGeolocationOrigins(
                 BrowserContextHandle browserContextHandle, Object list, boolean managedOnly);
+        void getIdleDetectionOrigins(BrowserContextHandle browserContextHandle, Object list);
         void getMicrophoneOrigins(
                 BrowserContextHandle browserContextHandle, Object list, boolean managedOnly);
         void getMidiOrigins(BrowserContextHandle browserContextHandle, Object list);
@@ -609,7 +440,6 @@ public class WebsitePreferenceBridge {
         void getNfcOrigins(BrowserContextHandle browserContextHandle, Object list);
         void getProtectedMediaIdentifierOrigins(
                 BrowserContextHandle browserContextHandle, Object list);
-        boolean getNfcEnabled(BrowserContextHandle browserContextHandle);
         void getSensorsOrigins(BrowserContextHandle browserContextHandle, Object list);
         void getVrOrigins(BrowserContextHandle browserContextHandle, Object list);
         int getArSettingForOrigin(
@@ -618,6 +448,8 @@ public class WebsitePreferenceBridge {
                 BrowserContextHandle browserContextHandle, String origin, String embedder);
         int getClipboardSettingForOrigin(BrowserContextHandle browserContextHandle, String origin);
         int getGeolocationSettingForOrigin(
+                BrowserContextHandle browserContextHandle, String origin, String embedder);
+        int getIdleDetectionSettingForOrigin(
                 BrowserContextHandle browserContextHandle, String origin, String embedder);
         int getMicrophoneSettingForOrigin(
                 BrowserContextHandle browserContextHandle, String origin, String embedder);
@@ -642,6 +474,8 @@ public class WebsitePreferenceBridge {
         void setClipboardSettingForOrigin(
                 BrowserContextHandle browserContextHandle, String origin, int value);
         void setGeolocationSettingForOrigin(BrowserContextHandle browserContextHandle,
+                String origin, String embedder, int value);
+        void setIdleDetectionSettingForOrigin(BrowserContextHandle browserContextHandle,
                 String origin, String embedder, int value);
         void setMicrophoneSettingForOrigin(
                 BrowserContextHandle browserContextHandle, String origin, int value);
@@ -687,46 +521,17 @@ public class WebsitePreferenceBridge {
         void setContentSettingEnabled(
                 BrowserContextHandle browserContextHandle, int contentSettingType, boolean allow);
         void getContentSettingsExceptions(BrowserContextHandle browserContextHandle,
-                int contentSettingsType, List<ContentSettingException> list);
+                @ContentSettingsType int contentSettingsType, List<ContentSettingException> list);
         void setContentSettingForPattern(BrowserContextHandle browserContextHandle,
                 int contentSettingType, String primaryPattern, String secondaryPattern,
                 int setting);
         int getContentSetting(BrowserContextHandle browserContextHandle, int contentSettingType);
         void setContentSetting(
                 BrowserContextHandle browserContextHandle, int contentSettingType, int setting);
-        boolean getAcceptCookiesEnabled(BrowserContextHandle browserContextHandle);
-        boolean getAcceptCookiesUserModifiable(BrowserContextHandle browserContextHandle);
-        boolean getAcceptCookiesManagedByCustodian(BrowserContextHandle browserContextHandle);
-        boolean getArEnabled(BrowserContextHandle browserContextHandle);
-        boolean getAutomaticDownloadsEnabled(BrowserContextHandle browserContextHandle);
-        boolean getBackgroundSyncEnabled(BrowserContextHandle browserContextHandle);
-        boolean getAllowLocationUserModifiable(BrowserContextHandle browserContextHandle);
+        boolean isContentSettingUserModifiable(
+                BrowserContextHandle browserContextHandle, int contentSettingType);
+        boolean isContentSettingManagedByCustodian(
+                BrowserContextHandle browserContextHandle, int contentSettingType);
         boolean getLocationAllowedByPolicy(BrowserContextHandle browserContextHandle);
-        boolean getAllowLocationManagedByCustodian(BrowserContextHandle browserContextHandle);
-        boolean getCameraEnabled(BrowserContextHandle browserContextHandle);
-        void setCameraEnabled(BrowserContextHandle browserContextHandle, boolean enabled);
-        boolean getCameraUserModifiable(BrowserContextHandle browserContextHandle);
-        boolean getCameraManagedByCustodian(BrowserContextHandle browserContextHandle);
-        boolean getMicEnabled(BrowserContextHandle browserContextHandle);
-        void setMicEnabled(BrowserContextHandle browserContextHandle, boolean enabled);
-        boolean getMicUserModifiable(BrowserContextHandle browserContextHandle);
-        boolean getMicManagedByCustodian(BrowserContextHandle browserContextHandle);
-        boolean getSensorsEnabled(BrowserContextHandle browserContextHandle);
-        boolean getSoundEnabled(BrowserContextHandle browserContextHandle);
-        boolean getVrEnabled(BrowserContextHandle browserContextHandle);
-        void setAutomaticDownloadsEnabled(
-                BrowserContextHandle browserContextHandle, boolean enabled);
-        void setAllowCookiesEnabled(BrowserContextHandle browserContextHandle, boolean enabled);
-        void setArEnabled(BrowserContextHandle browserContextHandle, boolean enabled);
-        void setBackgroundSyncEnabled(BrowserContextHandle browserContextHandle, boolean enabled);
-        void setClipboardEnabled(BrowserContextHandle browserContextHandle, boolean enabled);
-        boolean getAllowLocationEnabled(BrowserContextHandle browserContextHandle);
-        boolean getNotificationsEnabled(BrowserContextHandle browserContextHandle);
-        void setAllowLocationEnabled(BrowserContextHandle browserContextHandle, boolean enabled);
-        void setNotificationsEnabled(BrowserContextHandle browserContextHandle, boolean enabled);
-        void setNfcEnabled(BrowserContextHandle browserContextHandle, boolean enabled);
-        void setSensorsEnabled(BrowserContextHandle browserContextHandle, boolean enabled);
-        void setSoundEnabled(BrowserContextHandle browserContextHandle, boolean enabled);
-        void setVrEnabled(BrowserContextHandle browserContextHandle, boolean enabled);
     }
 }

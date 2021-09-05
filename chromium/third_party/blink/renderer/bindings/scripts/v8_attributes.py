@@ -132,8 +132,8 @@ def attribute_context(interface, attribute, interfaces, component_info):
     # [CachedAccessor]
     is_cached_accessor = 'CachedAccessor' in extended_attributes
 
-    # [LenientSetter]
-    is_lenient_setter = 'LenientSetter' in extended_attributes
+    # [LegacyLenientSetter]
+    is_lenient_setter = 'LegacyLenientSetter' in extended_attributes
 
     # [CachedAttribute]
     cached_attribute_validation_method = extended_attributes.get(
@@ -247,7 +247,7 @@ def attribute_context(interface, attribute, interfaces, component_info):
         'is_keep_alive_for_gc': keep_alive_for_gc,
         'is_lazy_data_attribute': is_lazy_data_attribute,
         'is_lenient_setter': is_lenient_setter,
-        'is_lenient_this': 'LenientThis' in extended_attributes,
+        'is_lenient_this': 'LegacyLenientThis' in extended_attributes,
         'is_nullable': idl_type.is_nullable,
         'is_explicit_nullable': idl_type.is_explicit_nullable,
         'is_named_constructor': is_named_constructor_attribute(attribute),
@@ -734,7 +734,7 @@ def cpp_content_attribute_value_name(interface, value):
 def is_writable(attribute):
     return (not attribute.is_read_only or any(
         keyword in attribute.extended_attributes
-        for keyword in ['PutForwards', 'Replaceable', 'LenientSetter']))
+        for keyword in ['PutForwards', 'Replaceable', 'LegacyLenientSetter']))
 
 
 def is_data_type_property(interface, attribute):
@@ -742,7 +742,7 @@ def is_data_type_property(interface, attribute):
             or 'CrossOrigin' in attribute.extended_attributes)
 
 
-# [PutForwards], [Replaceable], [LenientSetter]
+# [PutForwards], [Replaceable], [LegacyLenientSetter]
 def has_setter(interface, attribute):
     if (is_data_type_property(interface, attribute)
             and (is_constructor_attribute(attribute)

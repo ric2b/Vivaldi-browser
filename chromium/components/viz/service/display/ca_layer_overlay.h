@@ -5,21 +5,28 @@
 #ifndef COMPONENTS_VIZ_SERVICE_DISPLAY_CA_LAYER_OVERLAY_H_
 #define COMPONENTS_VIZ_SERVICE_DISPLAY_CA_LAYER_OVERLAY_H_
 
+#include <vector>
+
 #include "base/containers/flat_map.h"
 #include "base/memory/ref_counted.h"
-#include "components/viz/common/quads/render_pass.h"
+#include "base/optional.h"
+#include "components/viz/common/quads/aggregated_render_pass.h"
+#include "components/viz/common/quads/compositor_render_pass.h"
 #include "components/viz/service/viz_service_export.h"
 #include "gpu/command_buffer/common/mailbox.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "third_party/skia/include/core/SkMatrix44.h"
+#include "third_party/skia/include/core/SkRefCnt.h"
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/rrect_f.h"
 #include "ui/gl/ca_renderer_layer_params.h"
 
+class SkDeferredDisplayList;
+
 namespace viz {
+class AggregatedRenderPassDrawQuad;
 class DisplayResourceProvider;
 class DrawQuad;
-class RenderPassDrawQuad;
 
 // Holds information that is frequently shared between consecutive
 // CALayerOverlays.
@@ -51,6 +58,7 @@ class VIZ_SERVICE_EXPORT CALayerOverlay {
   CALayerOverlay();
   CALayerOverlay(const CALayerOverlay& other);
   ~CALayerOverlay();
+  CALayerOverlay& operator=(const CALayerOverlay& other);
 
   // State that is frequently shared between consecutive CALayerOverlays.
   scoped_refptr<CALayerOverlaySharedState> shared_state;
@@ -69,10 +77,14 @@ class VIZ_SERVICE_EXPORT CALayerOverlay {
   // The edge anti-aliasing mask property for the CALayer.
   unsigned edge_aa_mask = 0;
   // The minification and magnification filters for the CALayer.
-  unsigned filter;
+  unsigned filter = 0;
   // If |rpdq| is present, then the renderer must draw the filter effects and
   // copy the result into an IOSurface.
-  const RenderPassDrawQuad* rpdq = nullptr;
+  const AggregatedRenderPassDrawQuad* rpdq = nullptr;
+  // The DDL for generating render pass overlay buffer with SkiaRenderer.
+  sk_sp<SkDeferredDisplayList> ddl;
+  // The transform for render pass overlay.
+  base::Optional<SkMatrix44> transform;
 };
 
 typedef std::vector<CALayerOverlay> CALayerOverlayList;
@@ -90,9 +102,9 @@ class VIZ_SERVICE_EXPORT CALayerOverlayProcessor {
       DisplayResourceProvider* resource_provider,
       const gfx::RectF& display_rect,
       const QuadList& quad_list,
-      const base::flat_map<RenderPassId, cc::FilterOperations*>&
+      const base::flat_map<AggregatedRenderPassId, cc::FilterOperations*>&
           render_pass_filters,
-      const base::flat_map<RenderPassId, cc::FilterOperations*>&
+      const base::flat_map<AggregatedRenderPassId, cc::FilterOperations*>&
           render_pass_backdrop_filters,
       CALayerOverlayList* ca_layer_overlays) const;
 

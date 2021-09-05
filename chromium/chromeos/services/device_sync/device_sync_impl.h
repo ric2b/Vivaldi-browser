@@ -26,7 +26,6 @@
 #include "components/signin/public/identity_manager/account_info.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 
-class PrefRegistrySimple;
 class PrefService;
 
 namespace base {
@@ -85,7 +84,8 @@ class DeviceSyncImpl : public DeviceSyncBase,
         ClientAppMetadataProvider* client_app_metadata_provider,
         scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
         std::unique_ptr<base::OneShotTimer> timer);
-    static void SetFactoryForTesting(Factory* test_factory);
+    static void SetCustomFactory(Factory* custom_factory);
+    static bool IsCustomFactorySet();
 
    protected:
     virtual ~Factory();
@@ -99,10 +99,8 @@ class DeviceSyncImpl : public DeviceSyncBase,
         std::unique_ptr<base::OneShotTimer> timer) = 0;
 
    private:
-    static Factory* test_factory_instance_;
+    static Factory* custom_factory_instance_;
   };
-
-  static void RegisterProfilePrefs(PrefRegistrySimple* registry);
 
   ~DeviceSyncImpl() override;
 

@@ -14,10 +14,10 @@
 namespace web_app {
 
 ExternalInstallOptions::ExternalInstallOptions(
-    const GURL& url,
+    const GURL& install_url,
     DisplayMode user_display_mode,
     ExternalInstallSource install_source)
-    : url(url),
+    : install_url(install_url),
       user_display_mode(user_display_mode),
       install_source(install_source) {}
 
@@ -34,28 +34,34 @@ ExternalInstallOptions& ExternalInstallOptions::operator=(
 
 bool ExternalInstallOptions::operator==(
     const ExternalInstallOptions& other) const {
-  return std::tie(url, user_display_mode, install_source,
+  return std::tie(install_url, user_display_mode, install_source,
                   add_to_applications_menu, add_to_desktop,
                   add_to_quick_launch_bar, add_to_search, add_to_management,
                   is_disabled, override_previous_user_uninstall,
                   bypass_service_worker_check, require_manifest,
                   force_reinstall, wait_for_windows_closed, install_placeholder,
-                  reinstall_placeholder, uninstall_and_replace,
-                  additional_search_terms) ==
-         std::tie(other.url, other.user_display_mode, other.install_source,
-                  other.add_to_applications_menu, other.add_to_desktop,
-                  other.add_to_quick_launch_bar, other.add_to_search,
-                  other.add_to_management, other.is_disabled,
-                  other.override_previous_user_uninstall,
+                  reinstall_placeholder,
+                  load_and_await_service_worker_registration,
+                  service_worker_registration_url, uninstall_and_replace,
+                  additional_search_terms, only_use_app_info_factory) ==
+         std::tie(other.install_url, other.user_display_mode,
+                  other.install_source, other.add_to_applications_menu,
+                  other.add_to_desktop, other.add_to_quick_launch_bar,
+                  other.add_to_search, other.add_to_management,
+                  other.is_disabled, other.override_previous_user_uninstall,
                   other.bypass_service_worker_check, other.require_manifest,
                   other.force_reinstall, other.wait_for_windows_closed,
                   other.install_placeholder, other.reinstall_placeholder,
-                  other.uninstall_and_replace, other.additional_search_terms);
+                  other.load_and_await_service_worker_registration,
+                  other.service_worker_registration_url,
+                  other.uninstall_and_replace, other.additional_search_terms,
+                  other.only_use_app_info_factory);
 }
 
 std::ostream& operator<<(std::ostream& out,
                          const ExternalInstallOptions& install_options) {
-  return out << "url: " << install_options.url << "\n user_display_mode: "
+  return out << "install_url: " << install_options.install_url
+             << "\n user_display_mode: "
              << static_cast<int32_t>(install_options.user_display_mode)
              << "\n install_source: "
              << static_cast<int32_t>(install_options.install_source)
@@ -79,8 +85,14 @@ std::ostream& operator<<(std::ostream& out,
              << install_options.install_placeholder
              << "\n reinstall_placeholder: "
              << install_options.reinstall_placeholder
+             << "\n load_and_await_service_worker_registration: "
+             << install_options.load_and_await_service_worker_registration
+             << "\n service_worker_registration_url: "
+             << install_options.service_worker_registration_url.value_or(GURL())
              << "\n uninstall_and_replace:\n  "
              << base::JoinString(install_options.uninstall_and_replace, "\n  ")
+             << "\n only_use_app_info_factory:\n "
+             << install_options.only_use_app_info_factory
              << "\n additional_search_terms:\n "
              << base::JoinString(install_options.additional_search_terms,
                                  "\n ");
@@ -92,7 +104,7 @@ InstallManager::InstallParams ConvertExternalInstallOptionsToParams(
 
   params.user_display_mode = install_options.user_display_mode;
 
-  params.fallback_start_url = install_options.url;
+  params.fallback_start_url = install_options.install_url;
 
   params.add_to_applications_menu = install_options.add_to_applications_menu;
   params.add_to_desktop = install_options.add_to_desktop;
@@ -107,6 +119,8 @@ InstallManager::InstallParams ConvertExternalInstallOptionsToParams(
   params.require_manifest = install_options.require_manifest;
 
   params.additional_search_terms = install_options.additional_search_terms;
+
+  params.launch_query_params = install_options.launch_query_params;
 
   return params;
 }

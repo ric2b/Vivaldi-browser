@@ -31,6 +31,11 @@ class CORE_EXPORT LayoutNGFieldset final : public LayoutNGBlockFlow {
                        const HitTestLocation& hit_test_location,
                        const PhysicalOffset& accumulated_offset,
                        HitTestAction hit_test_action) override;
+
+  bool AllowsNonVisibleOverflow() const override { return false; }
+  // Override to forward to the anonymous fieldset content box.
+  LayoutUnit ScrollWidth() const override;
+  LayoutUnit ScrollHeight() const override;
 };
 
 }  // namespace blink

@@ -7,6 +7,7 @@
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/renderer/core/exported/web_view_impl.h"
 #include "third_party/blink/renderer/core/frame/local_frame_ukm_aggregator.h"
+#include "third_party/blink/renderer/core/frame/screen_metrics_emulator.h"
 #include "third_party/blink/renderer/core/frame/web_local_frame_impl.h"
 #include "third_party/blink/renderer/platform/scheduler/public/thread.h"
 #include "third_party/blink/renderer/platform/widget/widget_base.h"
@@ -25,16 +26,20 @@ WebViewFrameWidget::WebViewFrameWidget(
         widget_host,
     CrossVariantMojoAssociatedReceiver<mojom::blink::WidgetInterfaceBase>
         widget,
-    bool is_for_nested_main_frame)
+    bool is_for_nested_main_frame,
+    bool hidden,
+    bool never_composited)
     : WebFrameWidgetBase(client,
                          std::move(frame_widget_host),
                          std::move(frame_widget),
                          std::move(widget_host),
-                         std::move(widget)),
+                         std::move(widget),
+                         hidden,
+                         never_composited),
       web_view_(&web_view),
       is_for_nested_main_frame_(is_for_nested_main_frame),
       self_keep_alive_(PERSISTENT_FROM_HERE, this) {
-  web_view_->SetMainFrameWidgetBase(this);
+  web_view_->SetMainFrameViewWidget(this);
 }
 
 WebViewFrameWidget::~WebViewFrameWidget() = default;
@@ -44,7 +49,7 @@ void WebViewFrameWidget::Close(
   GetPage()->WillCloseAnimationHost(nullptr);
   // Closing the WebViewFrameWidget happens in response to the local main frame
   // being detached from the Page/WebViewImpl.
-  web_view_->SetMainFrameWidgetBase(nullptr);
+  web_view_->SetMainFrameViewWidget(nullptr);
   web_view_ = nullptr;
   WebFrameWidgetBase::Close(std::move(cleanup_runner));
   self_keep_alive_.Clear();
@@ -55,6 +60,7 @@ WebSize WebViewFrameWidget::Size() {
 }
 
 void WebViewFrameWidget::Resize(const WebSize& size) {
+  size_ = gfx::Size(size);
   web_view_->Resize(size);
 }
 
@@ -166,7 +172,6 @@ void WebViewFrameWidget::MouseCaptureLost() {
 
 void WebViewFrameWidget::FocusChanged(bool enable) {
   web_view_->SetFocus(enable);
-  Client()->FocusChanged(enable);
 }
 
 float WebViewFrameWidget::GetDeviceScaleFactorForTesting() {
@@ -179,6 +184,22 @@ gfx::Rect WebViewFrameWidget::ViewportVisibleRect() {
 
 bool WebViewFrameWidget::ShouldHandleImeEvents() {
   return HasFocus();
+}
+
+void WebViewFrameWidget::SetWindowRect(const gfx::Rect& window_rect) {
+  if (synchronous_resize_mode_for_testing_) {
+    // This is a web-test-only path. At one point, it was planned to be
+    // removed. See https://crbug.com/309760.
+    SetWindowRectSynchronously(window_rect);
+    return;
+  }
+  Client()->SetWindowRect(window_rect);
+}
+
+float WebViewFrameWidget::GetEmulatorScale() {
+  if (device_emulator_)
+    return device_emulator_->scale();
+  return 1.0f;
 }
 
 bool WebViewFrameWidget::SelectionBounds(WebRect& anchor,
@@ -196,11 +217,22 @@ WebString WebViewFrameWidget::GetLastToolTipTextForTesting() const {
 
 void WebViewFrameWidget::EnableDeviceEmulation(
     const DeviceEmulationParams& parameters) {
-  Client()->EnableDeviceEmulation(parameters);
+  if (!device_emulator_) {
+    gfx::Size size_in_dips = widget_base_->BlinkSpaceToFlooredDIPs(size_);
+
+    device_emulator_ = MakeGarbageCollected<ScreenMetricsEmulator>(
+        this, widget_base_->GetScreenInfo(), size_in_dips,
+        widget_base_->VisibleViewportSizeInDIPs(),
+        widget_base_->WidgetScreenRect(), widget_base_->WindowScreenRect());
+  }
+  device_emulator_->ChangeEmulationParams(parameters);
 }
 
 void WebViewFrameWidget::DisableDeviceEmulation() {
-  Client()->DisableDeviceEmulation();
+  if (!device_emulator_)
+    return;
+  device_emulator_->DisableAndApply();
+  device_emulator_ = nullptr;
 }
 
 void WebViewFrameWidget::DidDetachLocalFrameTree() {
@@ -242,6 +274,7 @@ void WebViewFrameWidget::ZoomToFindInPageRect(
 
 void WebViewFrameWidget::Trace(Visitor* visitor) const {
   WebFrameWidgetBase::Trace(visitor);
+  visitor->Trace(device_emulator_);
 }
 
 PageWidgetEventHandler* WebViewFrameWidget::GetPageWidgetEventHandler() {
@@ -270,6 +303,9 @@ void WebViewFrameWidget::ResetZoomLevelForTesting() {
 void WebViewFrameWidget::SetDeviceScaleFactorForTesting(float factor) {
   DCHECK_GE(factor, 0.f);
 
+  // Stash the window size before we adjust the scale factor, as subsequent
+  // calls to convert will use the new scale factor.
+  gfx::Size size_in_dips = widget_base_->BlinkSpaceToFlooredDIPs(size_);
   device_scale_factor_for_testing_ = factor;
 
   // Receiving a 0 is used to reset between tests, it removes the override in
@@ -280,6 +316,17 @@ void WebViewFrameWidget::SetDeviceScaleFactorForTesting(float factor) {
   // We are changing the device scale factor from the renderer, so allocate a
   // new viz::LocalSurfaceId to avoid surface invariants violations in tests.
   widget_base_->LayerTreeHost()->RequestNewLocalSurfaceId();
+
+  ScreenInfo info = widget_base_->GetScreenInfo();
+  info.device_scale_factor = factor;
+  gfx::Size size_with_dsf = gfx::ScaleToCeiledSize(size_in_dips, factor);
+  widget_base_->UpdateCompositorViewportAndScreenInfo(gfx::Rect(size_with_dsf),
+                                                      info);
+  if (!AutoResizeMode()) {
+    // This picks up the new device scale factor as
+    // UpdateCompositorViewportAndScreenInfo has applied a new value.
+    Resize(WebSize(widget_base_->DIPsToCeiledBlinkSpace(size_in_dips)));
+  }
 }
 
 void WebViewFrameWidget::SetZoomLevel(double zoom_level) {
@@ -327,20 +374,22 @@ void WebViewFrameWidget::SetPageScaleStateAndLimits(
 }
 
 void WebViewFrameWidget::DidAutoResize(const gfx::Size& size) {
-  WebRect new_size_in_window(0, 0, size.width(), size.height());
-  Client()->ConvertViewportToWindow(&new_size_in_window);
+  gfx::Size size_in_dips = widget_base_->BlinkSpaceToFlooredDIPs(size);
+  size_ = size;
+
+  if (synchronous_resize_mode_for_testing_) {
+    gfx::Rect new_pos(widget_base_->WindowRect());
+    new_pos.set_size(size_in_dips);
+    SetScreenRects(new_pos, new_pos);
+  }
 
   // TODO(ccameron): Note that this destroys any information differentiating
-  // |size| from the compositor's viewport size. Also note that the
-  // calculation of |new_compositor_viewport_pixel_rect| does not appear to
-  // take into account device emulation.
+  // |size| from the compositor's viewport size.
+  gfx::Rect size_with_dsf = gfx::Rect(gfx::ScaleToCeiledSize(
+      gfx::Rect(size_in_dips).size(),
+      widget_base_->GetScreenInfo().device_scale_factor));
   widget_base_->LayerTreeHost()->RequestNewLocalSurfaceId();
-  gfx::Rect new_compositor_viewport_pixel_rect =
-      gfx::Rect(gfx::ScaleToCeiledSize(
-          gfx::Rect(new_size_in_window).size(),
-          widget_base_->GetScreenInfo().device_scale_factor));
-  widget_base_->UpdateCompositorViewportRect(
-      new_compositor_viewport_pixel_rect);
+  widget_base_->UpdateCompositorViewportRect(size_with_dsf);
 }
 
 void WebViewFrameWidget::SetDeviceColorSpaceForTesting(
@@ -352,6 +401,160 @@ void WebViewFrameWidget::SetDeviceColorSpaceForTesting(
   blink::ScreenInfo info = widget_base_->GetScreenInfo();
   info.display_color_spaces = gfx::DisplayColorSpaces(color_space);
   widget_base_->UpdateScreenInfo(info);
+}
+
+bool WebViewFrameWidget::AutoResizeMode() {
+  return web_view_->AutoResizeMode();
+}
+
+bool WebViewFrameWidget::UpdateScreenRects(
+    const gfx::Rect& widget_screen_rect,
+    const gfx::Rect& window_screen_rect) {
+  if (!device_emulator_)
+    return false;
+  device_emulator_->OnUpdateScreenRects(widget_screen_rect, window_screen_rect);
+  return true;
+}
+
+const ScreenInfo& WebViewFrameWidget::GetOriginalScreenInfo() {
+  if (device_emulator_)
+    return device_emulator_->original_screen_info();
+  return GetScreenInfo();
+}
+
+ScreenMetricsEmulator* WebViewFrameWidget::DeviceEmulator() {
+  return device_emulator_;
+}
+
+void WebViewFrameWidget::SetScreenMetricsEmulationParameters(
+    bool enabled,
+    const DeviceEmulationParams& params) {
+  if (enabled)
+    View()->ActivateDevToolsTransform(params);
+  else
+    View()->DeactivateDevToolsTransform();
+}
+
+void WebViewFrameWidget::SetScreenInfoAndSize(
+    const ScreenInfo& screen_info,
+    const gfx::Size& widget_size_in_dips,
+    const gfx::Size& visible_viewport_size_in_dips) {
+  // Emulation happens on regular main frames which don't use auto-resize mode.
+  DCHECK(!web_view_->AutoResizeMode());
+
+  UpdateScreenInfo(screen_info);
+  widget_base_->SetVisibleViewportSizeInDIPs(visible_viewport_size_in_dips);
+  Resize(WebSize(widget_base_->DIPsToCeiledBlinkSpace(widget_size_in_dips)));
+}
+
+void WebViewFrameWidget::SetWindowRectSynchronouslyForTesting(
+    const gfx::Rect& new_window_rect) {
+  SetWindowRectSynchronously(new_window_rect);
+}
+
+void WebViewFrameWidget::SetWindowRectSynchronously(
+    const gfx::Rect& new_window_rect) {
+  // This method is only call in tests, and it applies the |new_window_rect| to
+  // all three of:
+  // a) widget size (in |size_|)
+  // b) blink viewport (in |visible_viewport_size_|)
+  // c) compositor viewport (in cc::LayerTreeHost)
+  // Normally the browser controls these three things independently, but this is
+  // used in tests to control the size from the renderer.
+
+  // We are resizing the window from the renderer, so allocate a new
+  // viz::LocalSurfaceId to avoid surface invariants violations in tests.
+  widget_base_->LayerTreeHost()->RequestNewLocalSurfaceId();
+
+  gfx::Rect compositor_viewport_pixel_rect(gfx::ScaleToCeiledSize(
+      new_window_rect.size(),
+      widget_base_->GetScreenInfo().device_scale_factor));
+  widget_base_->UpdateSurfaceAndScreenInfo(
+      widget_base_->local_surface_id_from_parent(),
+      compositor_viewport_pixel_rect, widget_base_->GetScreenInfo());
+
+  Resize(WebSize(new_window_rect.size()));
+  widget_base_->SetScreenRects(new_window_rect, new_window_rect);
+}
+
+void WebViewFrameWidget::UseSynchronousResizeModeForTesting(bool enable) {
+  synchronous_resize_mode_for_testing_ = enable;
+}
+
+gfx::Size WebViewFrameWidget::DIPsToCeiledBlinkSpace(const gfx::Size& size) {
+  return widget_base_->DIPsToCeiledBlinkSpace(size);
+}
+
+void WebViewFrameWidget::ApplyVisualPropertiesSizing(
+    const VisualProperties& visual_properties) {
+  if (size_ !=
+      widget_base_->DIPsToCeiledBlinkSpace(visual_properties.new_size)) {
+    // Only hide popups when the size changes. Eg https://crbug.com/761908.
+    web_view_->CancelPagePopup();
+  }
+
+  if (device_emulator_) {
+    device_emulator_->UpdateVisualProperties(visual_properties);
+    return;
+  }
+
+  SetWindowSegments(visual_properties.root_widget_window_segments);
+
+  // We can ignore browser-initialized resizing during synchronous
+  // (renderer-controlled) mode, unless it is switching us to/from
+  // fullsreen mode or changing the device scale factor.
+  bool ignore_resize = synchronous_resize_mode_for_testing_;
+  if (ignore_resize) {
+    // TODO(danakj): Does the browser actually change DSF inside a web test??
+    // TODO(danakj): Isn't the display mode check redundant with the
+    // fullscreen one?
+    if (visual_properties.is_fullscreen_granted != IsFullscreenGranted() ||
+        visual_properties.screen_info.device_scale_factor !=
+            widget_base_->GetScreenInfo().device_scale_factor)
+      ignore_resize = false;
+  }
+
+  // When controlling the size in the renderer, we should ignore sizes given
+  // by the browser IPC here.
+  // TODO(danakj): There are many things also being ignored that aren't the
+  // widget's size params. It works because tests that use this mode don't
+  // change those parameters, I guess. But it's more complicated then because
+  // it looks like they are related to sync resize mode. Let's move them out
+  // of this block.
+  gfx::Rect new_compositor_viewport_pixel_rect =
+      visual_properties.compositor_viewport_pixel_rect;
+  if (AutoResizeMode()) {
+    new_compositor_viewport_pixel_rect = gfx::Rect(gfx::ScaleToCeiledSize(
+        widget_base_->BlinkSpaceToFlooredDIPs(size_),
+        visual_properties.screen_info.device_scale_factor));
+  }
+
+  widget_base_->UpdateSurfaceAndScreenInfo(
+      visual_properties.local_surface_id.value_or(viz::LocalSurfaceId()),
+      new_compositor_viewport_pixel_rect, visual_properties.screen_info);
+
+  // Store this even when auto-resizing, it is the size of the full viewport
+  // used for clipping, and this value is propagated down the Widget
+  // hierarchy via the VisualProperties waterfall.
+  widget_base_->SetVisibleViewportSizeInDIPs(
+      visual_properties.visible_viewport_size);
+
+  if (!AutoResizeMode()) {
+    size_ = widget_base_->DIPsToCeiledBlinkSpace(visual_properties.new_size);
+
+    View()->ResizeWithBrowserControls(
+        WebSize(size_),
+        WebSize(widget_base_->DIPsToCeiledBlinkSpace(
+            widget_base_->VisibleViewportSizeInDIPs())),
+        visual_properties.browser_controls_params);
+  }
+}
+
+void WebViewFrameWidget::UpdateSurfaceAndCompositorRect(
+    const viz::LocalSurfaceId& new_local_surface_id,
+    const gfx::Rect& compositor_viewport_pixel_rect) {
+  widget_base_->UpdateSurfaceAndCompositorRect(new_local_surface_id,
+                                               compositor_viewport_pixel_rect);
 }
 
 }  // namespace blink

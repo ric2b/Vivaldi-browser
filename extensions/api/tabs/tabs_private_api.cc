@@ -761,11 +761,11 @@ ExtensionFunction::ResponseAction TabsPrivateStartDragFunction::Run() {
   drop_data_.url = GURL(params->drag_data.url);
   drop_data_.url_title = base::UTF8ToUTF16(params->drag_data.title);
 
-  event_info_.event_source =
+  event_info_.source =
       (params->drag_data.is_from_touch && *params->drag_data.is_from_touch)
           ? ui::mojom::DragEventSource::kTouch
           : ui::mojom::DragEventSource::kMouse;
-  event_info_.event_location =
+  event_info_.location =
       display::Screen::GetScreen()->GetCursorScreenPoint();
 
   image_offset_.set_x(params->drag_data.cursor_x);
@@ -802,9 +802,9 @@ void TabsPrivateStartDragFunction::OnCaptureDone(bool success,
 
     content::RenderViewHostDelegateView* view =
         rvh->GetDelegate()->GetDelegateView();
-    blink::WebDragOperationsMask allowed_ops =
-        static_cast<blink::WebDragOperationsMask>(
-            blink::WebDragOperation::kWebDragOperationMove);
+    blink::DragOperationsMask allowed_ops =
+        static_cast<blink::DragOperationsMask>(
+            blink::DragOperation::kDragOperationMove);
     gfx::ImageSkia image(gfx::ImageSkiaRep(bitmap, device_scale_factor));
 
     // On Linux and Windows StartDragging is synchronous, so enable tab dragging

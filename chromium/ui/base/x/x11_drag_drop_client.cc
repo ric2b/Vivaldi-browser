@@ -13,6 +13,7 @@
 #include "ui/gfx/x/connection.h"
 #include "ui/gfx/x/x11_atom_cache.h"
 #include "ui/gfx/x/xproto.h"
+#include "ui/gfx/x/xproto_util.h"
 
 // Reading recommended for understanding the implementation in this file:
 //
@@ -623,7 +624,7 @@ void XDragDropClient::SendXClientEvent(x11::Window window,
   //
   // I'm unsure if I have to jump through those hoops, or if XSendEvent is
   // sufficient.
-  ui::SendEvent(xev, window, x11::EventMask::NoEvent);
+  x11::SendEvent(xev, window, x11::EventMask::NoEvent);
 }
 
 void XDragDropClient::SendXdndEnter(x11::Window dest_window,
@@ -671,7 +672,7 @@ void XDragDropClient::SendXdndLeave(x11::Window dest_window) {
 
 void XDragDropClient::SendXdndDrop(x11::Window dest_window) {
   auto xev = PrepareXdndClientMessage(kXdndDrop, dest_window);
-  xev.data.data32[2] = x11::CurrentTime;
+  xev.data.data32[2] = static_cast<uint32_t>(x11::Time::CurrentTime);
   SendXClientEvent(dest_window, xev);
 }
 

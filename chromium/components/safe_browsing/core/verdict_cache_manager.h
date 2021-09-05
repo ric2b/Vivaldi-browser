@@ -97,6 +97,10 @@ class VerdictCacheManager : public history::HistoryServiceObserver,
   void HistoryServiceBeingDeleted(
       history::HistoryService* history_service) override;
 
+  // Returns true if an artificial unsafe URL has been provided using the
+  // command-line flag "mark_as_real_time_phishing".
+  static bool has_artificial_unsafe_url();
+
   void StopCleanUpTimerForTesting();
 
  private:
@@ -137,6 +141,10 @@ class VerdictCacheManager : public history::HistoryServiceObserver,
   // for this profile. This counts both expired and active verdicts.
   size_t GetStoredRealTimeUrlCheckVerdictCount();
 
+  // This adds a cached verdict for a URL that has artificially been marked as
+  // unsafe using the command line flag "mark_as_real_time_phishing".
+  void CacheArtificialVerdict();
+
   // Number of verdict stored for this profile for password on focus pings.
   base::Optional<size_t> stored_verdict_count_password_on_focus_;
 
@@ -156,6 +164,8 @@ class VerdictCacheManager : public history::HistoryServiceObserver,
   base::OneShotTimer cleanup_timer_;
 
   base::WeakPtrFactory<VerdictCacheManager> weak_factory_{this};
+
+  static bool has_artificial_unsafe_url_;
 };
 
 }  // namespace safe_browsing

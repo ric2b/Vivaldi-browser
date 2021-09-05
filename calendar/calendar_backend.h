@@ -112,7 +112,7 @@ class CalendarBackend
   void GetAllEvents(std::shared_ptr<EventQueryResults> results);
   // Updates an event
   void UpdateEvent(EventID event_id,
-                   const CalendarEvent& event,
+                   const EventRow& event,
                    std::shared_ptr<UpdateEventResult> result);
   void DeleteEvent(EventID event_id, std::shared_ptr<DeleteEventResult> result);
 
@@ -140,7 +140,11 @@ class CalendarBackend
   void GetAllNotifications(std::shared_ptr<GetAllNotificationResult> results);
 
   void CreateNotification(calendar::NotificationRow row,
-                          std::shared_ptr<CreateNotificationResult> result);
+                          std::shared_ptr<NotificationResult> result);
+
+  void UpdateNotification(calendar::UpdateNotificationRow row,
+                          std::shared_ptr<NotificationResult> result);
+
   void DeleteNotification(NotificationID notification_id,
                           std::shared_ptr<DeleteNotificationResult> result);
 

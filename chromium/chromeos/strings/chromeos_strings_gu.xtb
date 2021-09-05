@@ -5,12 +5,13 @@
 <translation id="1195447618553298278">અજ્ઞાત ભૂલ.</translation>
 <translation id="1413240736185167732">નિષ્ફળ થયું - ફિલ્ટર નિષ્ફળ થયું</translation>
 <translation id="1468664791493211953">ઑફરો</translation>
+<translation id="1478594628797167447">સ્કૅનર</translation>
 <translation id="1482734542997480527"><ph name="ENROLLMENT_DOMAIN" /> તમારા ડિવાઇસને મેનેજ કરે છે અને કદાચ તમારી પ્રવૃત્તિનું નિરીક્ષણ કરી શકે છે.</translation>
 <translation id="150962533380566081">અમાન્ય PUK.</translation>
 <translation id="1510238584712386396">લૉન્ચર</translation>
 <translation id="1644574205037202324">ઇતિહાસ</translation>
 <translation id="1662989795263954667">બંધ - શાહી ખલાસ થઈ ગઈ</translation>
-<translation id="1734367976349034509">આ ઉપકરણ એન્ટરપ્રાઇઝ દ્વારા સંચાલિત થાય છે</translation>
+<translation id="1734367976349034509">આ ડિવાઇસ એન્ટરપ્રાઇઝ દ્વારા મેનેજ થાય છે</translation>
 <translation id="1905710495812624430">મહત્તમ મંજૂર પ્રયત્નોની સંખ્યા ઓળંગાઈ.</translation>
 <translation id="1930797645656624981">Chrome OS ઇનપુટ પદ્ધતિ સેવા</translation>
 <translation id="1947737735496445907">પ્રિન્ટ થઈ ગયું</translation>
@@ -19,10 +20,12 @@
 <translation id="2161394479394250669">પ્રિન્ટ જોબ રદ કરો</translation>
 <translation id="2338501278241028356">નજીકનાં ડિવાઇસ શોધવા માટે Bluetooth ચાલુ કરો</translation>
 <translation id="2375079107209812402"><ph name="ATTEMPTS_LEFT" /> પ્રયત્ન બાકી</translation>
+<translation id="2517472476991765520">સ્કૅન કરો</translation>
 <translation id="2805756323405976993">એપ્સ</translation>
 <translation id="2872961005593481000">શટ ડાઉન કરો</translation>
 <translation id="3008341117444806826">રિફ્રેશ કરો</translation>
 <translation id="3091839911843451378">નિષ્ફળ થયું - પ્રિન્ટર બંધ થઈ ગયું છે</translation>
+<translation id="3246869037381808805">1 દિવસ કરતાં જૂના પ્રિન્ટ કાર્યો કાઢી નાખવામાં આવશે</translation>
 <translation id="3268178239013324452">નિષ્ફળ રહ્યું - પ્રિન્ટરનું ઢાંકણ ખૂલ્લું છે</translation>
 <translation id="3369013195428705271">શું તમે ખરેખર પ્રિન્ટનો બધો ઇતિહાસ સાફ કરવા માગો છો? તમારી હાલની પ્રિન્ટ જોબ સાફ કરવામાં આવશે નહીં.</translation>
 <translation id="3456078764689556234"><ph name="TOTAL_PAGES" />માંથી <ph name="PRINTED_PAGES" /> પેજ પ્રિન્ટ કર્યા.</translation>
@@ -33,13 +36,13 @@
 <translation id="38114475217616659">બધો ઇતિહાસ સાફ કરો</translation>
 <translation id="3820172043799983114">અમાન્ય PIN.</translation>
 <translation id="3838338534323494292">નવો પાસવર્ડ</translation>
+<translation id="39823212440917567"><ph name="NUMBER_OF_DAYS" /> દિવસ કરતાં જૂના પ્રિન્ટ કાર્યો કાઢી નાખવામાં આવશે</translation>
 <translation id="4003259559679196451"><ph name="ENROLLMENT_DOMAIN" /> આ ડિવાઇસને મેનેજ કરે છે અને મુલાકાત લીધેલા વેબપેજ, પાસવર્ડ અને ઇમેઇલ સહિત, બધી વપરાશકર્તા પ્રવૃત્તિઓનો ઍક્સેસ ધરાવે છે.</translation>
 <translation id="4003384961948020559">નિષ્ફળ થયું - પ્રિન્ટરનું આઉટપુટ ભરાઈ ગયું છે</translation>
 <translation id="4027485274696301677"><ph name="ENROLLMENT_DOMAIN" /> દ્વારા <ph name="DEVICE_TYPE" />ને મેનેજ કરવામાં આવે છે. વ્યવસ્થાપકો દ્વારા ડિવાઇસને રિમોટલી કન્ફિગર કરવામાં આવી શકે છે.</translation>
 <translation id="4034824040120875894">પ્રિન્ટર</translation>
 <translation id="4227825898293920515"><ph name="TIME" />માં પાસવર્ડની સમયસીમા સમાપ્ત થાય છે</translation>
 <translation id="4238516577297848345">કોઈ પ્રિન્ટ કામ ચાલુ નથી</translation>
-<translation id="428217921675623177">90 દિવસ કરતાં જૂનાં પ્રિન્ટ કાર્યો કાઢી નાખવામાં આવશે</translation>
 <translation id="4297501883039923494">બંધ - અજાણી ભૂલ</translation>
 <translation id="4429881212383817840">ટૂંક સમયમાં Kerberos ટિકિટની સમયસીમા સમાપ્ત થશે</translation>
 <translation id="445059817448385655">જૂનો પાસવર્ડ</translation>
@@ -52,6 +55,7 @@
 <translation id="4890353053343094602">તરત જ નવો પાસવર્ડ પસંદ કરો</translation>
 <translation id="4917889632206600977">બંધ - કાગળ ખલાસ થઈ ગયા</translation>
 <translation id="4932733599132424254">તારીખ</translation>
+<translation id="520299634122159966">કોઈ સ્કૅનર ઉપલબ્ધ નથી</translation>
 <translation id="5212543919916444558">મને તમારી સ્ક્રીન પર એવી કોઈપણ વસ્તુ મળી નથી કે જેમાં હું તમારી સહાય કરી શકું. મને કંઈપણ પૂછવા માટે માઇકને ટૅપ કરી જુઓ.</translation>
 <translation id="5222676887888702881">સાઇન આઉટ</translation>
 <translation id="5267975978099728568"><ph name="DOCUMENT_TITLE" />, <ph name="PRINTER_NAME" />, <ph name="CREATION_TIME" />, <ph name="ERROR_STATUS" /></translation>
@@ -70,6 +74,7 @@
 <translation id="649050271426829538">બંધ - કાગળ ફસાયો</translation>
 <translation id="6517239166834772319">શોધખોળ કરો</translation>
 <translation id="6564646048574748301">નિષ્ફળ થયું - પ્રિન્ટરથી કનેક્ટ થઈ શકાતું નથી</translation>
+<translation id="6620487321149975369">જ્યાં સુધી પ્રિન્ટ કાર્યોને મેન્યુઅલી કાઢી નાખવામાં નહીં આવે, ત્યાં સુધી તે ઇતિહાસમાં દેખાશે</translation>
 <translation id="6643016212128521049">સાફ કરો</translation>
 <translation id="6747215703636344499">બંધ - આઉટપુટ ભરાઈ ગયું છે</translation>
 <translation id="7162487448488904999">Gallery</translation>
@@ -80,7 +85,9 @@
 <translation id="7805768142964895445">સ્થિતિ</translation>
 <translation id="808894953321890993">પાસવર્ડ બદલો</translation>
 <translation id="8208861521865154048">લાભ</translation>
+<translation id="8294431847097064396">સ્રોત</translation>
 <translation id="8347227221149377169">પ્રિન્ટ કરવાના કામો</translation>
+<translation id="8352772353338965963">એકથી વધુ સાઇન ઇન કરવા એક એકાઉન્ટ ઉમેરો. બધા સાઇન ઇન એકાઉન્ટ પાસવર્ડ વગર ઉપયોગ કરી શકાય છે, તેથી આ સુવિધા માત્ર વિશ્વસનીય એકાઉન્ટ સાથે ઉપયોગમાં આવવી જોઇએ.</translation>
 <translation id="8701136875688985581"><ph name="ENROLLMENT_DOMAIN" /> આ વપરાશકર્તાને મેનેજ કરે છે. આ કદાચ સેટિંગ અને વપરાશકર્તાની પ્રવૃત્તિને દૂરથી મેનેજ અને તેનું નિરીક્ષણ કરી શકે.</translation>
 <translation id="871560550817059752">નિષ્ફળ થયું - પ્રિન્ટરમાં શાહી પૂરી થઈ ગઈ છે</translation>
 <translation id="8726019395068607495">બંધ - ઢાંકણ ખુલ્લું છે</translation>

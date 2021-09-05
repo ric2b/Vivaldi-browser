@@ -429,9 +429,9 @@ DedicatedWorker::CreateGlobalScopeCreationParams(
     settings = WorkerSettings::Copy(worker_global_scope->GetWorkerSettings());
   }
 
-  mojom::ScriptType script_type = (options_->type() == "classic")
-                                      ? mojom::ScriptType::kClassic
-                                      : mojom::ScriptType::kModule;
+  mojom::blink::ScriptType script_type =
+      (options_->type() == "classic") ? mojom::blink::ScriptType::kClassic
+                                      : mojom::blink::ScriptType::kModule;
 
   return std::make_unique<GlobalScopeCreationParams>(
       script_url, script_type, options_->name(),
@@ -444,12 +444,14 @@ DedicatedWorker::CreateGlobalScopeCreationParams(
       MakeGarbageCollected<WorkerClients>(), CreateWebContentSettingsClient(),
       response_address_space,
       OriginTrialContext::GetTokens(GetExecutionContext()).get(),
-      parent_devtools_token, std::move(settings), kV8CacheOptionsDefault,
+      parent_devtools_token, std::move(settings),
+      mojom::blink::V8CacheOptions::kDefault,
       nullptr /* worklet_module_responses_map */,
       std::move(browser_interface_broker_), CreateBeginFrameProviderParams(),
       GetExecutionContext()->GetSecurityContext().GetFeaturePolicy(),
       GetExecutionContext()->GetAgentClusterID(),
-      GetExecutionContext()->GetExecutionContextToken());
+      GetExecutionContext()->GetExecutionContextToken(),
+      GetExecutionContext()->CrossOriginIsolatedCapability());
 }
 
 scoped_refptr<WebWorkerFetchContext>

@@ -190,13 +190,16 @@ void ScrollManager::RecomputeScrollChain(const Node& start_node,
 
 bool ScrollManager::CanScroll(const ScrollState& scroll_state,
                               const Node& current_node) {
-  if (!current_node.GetLayoutBox())
+  LayoutBox* scrolling_box = current_node.GetLayoutBox();
+  if (auto* element = DynamicTo<Element>(current_node))
+    scrolling_box = element->GetLayoutBoxForScrolling();
+  if (!scrolling_box)
     return false;
 
   // We need to always add the global root scroller even if it isn't scrollable
   // since we can always pinch-zoom and scroll as well as for overscroll
   // effects.
-  if (current_node.GetLayoutBox()->IsGlobalRootScroller())
+  if (scrolling_box->IsGlobalRootScroller())
     return true;
 
   // If this is the main LayoutView, and it's not the root scroller, that means
@@ -205,13 +208,12 @@ bool ScrollManager::CanScroll(const ScrollState& scroll_state,
   // so ensure it gets added to the scroll chain. See LTHI::ApplyScroll for the
   // equivalent behavior in CC. Node::NativeApplyScroll contains a special
   // handler for this case.
-  if (IsA<LayoutView>(current_node.GetLayoutBox()) &&
+  if (IsA<LayoutView>(scrolling_box) &&
       current_node.GetDocument().GetFrame()->IsMainFrame()) {
     return true;
   }
 
-  ScrollableArea* scrollable_area =
-      current_node.GetLayoutBox()->GetScrollableArea();
+  ScrollableArea* scrollable_area = scrolling_box->GetScrollableArea();
 
   if (!scrollable_area)
     return false;
@@ -1079,7 +1081,7 @@ Node* ScrollManager::NodeTargetForScrollableAreaElementId(
 
   Node* event_target = nullptr;
   if (layout_box->GetDocument().GetFrame() == frame_) {
-    event_target = scrollable_area->GetLayoutBox()->GetNode();
+    event_target = scrollable_area->EventTargetNode();
   } else {
     // The targeted ScrollableArea may not belong to this frame. If that
     // is the case, target its ancestor HTMLFrameOwnerElement that exists

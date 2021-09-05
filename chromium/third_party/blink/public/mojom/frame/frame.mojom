@@ -46,6 +46,7 @@ import "third_party/blink/public/mojom/tokens/tokens.mojom";
 import "third_party/blink/public/mojom/web_feature/web_feature.mojom";
 import "ui/events/mojom/scroll_granularity.mojom";
 import "ui/gfx/geometry/mojom/geometry.mojom";
+import "ui/gfx/range/mojom/range.mojom";
 import "url/mojom/origin.mojom";
 import "url/mojom/url.mojom";
 
@@ -374,6 +375,13 @@ interface LocalFrameHost {
   FocusedElementChanged(bool is_editable_element,
                         gfx.mojom.Rect bounds_in_frame_widget, blink.mojom.FocusType focus_type);
 
+  // Notification that the text selection has changed.
+  // Note: The second parameter is the character based offset of the
+  // base::string16 text in the document.
+  TextSelectionChanged(mojo_base.mojom.String16 text,
+                       uint32 offset,
+                       gfx.mojom.Range range);
+
   // Show a popup menu using native controls on Mac or Android.
   // The popup menu is hidden when the mojo channel is closed.
   ShowPopupMenu(pending_remote<PopupMenuClient> popup_client,
@@ -466,8 +474,9 @@ interface LocalFrame {
   SetFrameOwnerProperties(FrameOwnerProperties properties);
 
   // Notifies the RenderFrame about a user activation detected in the browser
-  // side (e.g. during Android voice search).
-  NotifyUserActivation();
+  // side (e.g. during Android voice search). The |notification_type| parameter
+  // is used for histograms only.
+  NotifyUserActivation(UserActivationNotificationType notification_type);
 
   // Notifies the |LocalFrame| about the Virtual keyboard rectangle that is occluding the web
   // content.
@@ -900,11 +909,20 @@ interface LocalMainFrame {
 
   // Cross-Origin-Opener-Policy(COOP):
   // Check accesses made from this window to |accessed_window|. If this happens,
-  // a report will be sent to |reporter|.
+  // 1) A network report will be sent to |reporter|.
+  // 2) A ReportingObserver event will be dispatched.
+  // 3) Devtool will be notified.
+  //
+  // |endpoint_defined|: The COOP header defines at least one endpoint.
+  // |reported_window_url|: The reported window's sanitized URL. This
+  // corresponds to openerURL, openeeURL or otherDocumentURL depending on the
+  // |report_type|.
   InstallCoopAccessMonitor(
       network.mojom.CoopAccessReportType report_type,
       mojo_base.mojom.UnguessableToken accessed_window,
-      pending_remote<network.mojom.CrossOriginOpenerPolicyReporter> reporter);
+      pending_remote<network.mojom.CrossOriginOpenerPolicyReporter> reporter,
+      bool endpoint_defined,
+      string reported_window_url);
 
   // Called on the main frame of a page embedded in a Portal when it is
   // activated. The frame has the option to adopt the previous page as a portal
@@ -923,8 +941,7 @@ interface LocalMainFrame {
   // Forwards a message from a portal's host to the main frame in the portal's
   // guest contents.
   ForwardMessageFromHost(blink.mojom.TransferableMessage message,
-                         url.mojom.Origin source_origin,
-                         url.mojom.Origin? target_origin);
+                         url.mojom.Origin source_origin);
 };
 
 // Implemented in Blink, this interface defines remote main-frame-specific
@@ -958,6 +975,12 @@ interface LocalMainFrameHost {
 
   // Asks the browser process to activate the page associated to the main frame.
   FocusPage();
+
+  // Notifies the browser that we want to show a destination url for a potential
+  // action (e.g. when the user is hovering over a link). Implementation of this
+  // method will reply back to the renderer once the target URL gets received,
+  // in order to prevent target URLs spamming the browser.
+  UpdateTargetURL(url.mojom.Url url) => ();
 };
 
 // Implemented in Browser, this interface defines remote-main-frame-specific
@@ -965,6 +988,12 @@ interface LocalMainFrameHost {
 interface RemoteMainFrameHost {
   // Asks the browser process to activate the page associated to the main frame.
   FocusPage();
+
+  // Notifies the browser that we want to show a destination url for a potential
+  // action (e.g. when the user is hovering over a link). Implementation of this
+  // method will reply back to the renderer once the target URL gets received,
+  // in order to prevent target URLs spamming the browser.
+  UpdateTargetURL(url.mojom.Url url) => ();
 
   // Sent from an inactive renderer for the browser to route to the active
   // renderer, instructing it to close.

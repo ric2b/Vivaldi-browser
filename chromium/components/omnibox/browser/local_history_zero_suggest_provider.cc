@@ -94,18 +94,6 @@ bool AllowLocalHistoryZeroSuggestSuggestions(const AutocompleteInput& input) {
 #endif
 }
 
-// Helper function for calculating frecency of a visit based on this formula:
-// frecency = (frequency ^ 1.15 + 60) / (recency_in_seconds + 60)
-// a frecency score combines frequency and recency of occurrences favoring ones
-// that are more frequent and more recent (see go/local-zps-frecency-ranking).
-double CalculateFrecency(const history::NormalizedKeywordSearchTermVisit& visit,
-                         base::Time now) {
-  double recency_in_secs =
-      base::TimeDelta(now - visit.most_recent_visit_time).InSeconds();
-  double frequency_powered = pow(visit.visits, 1.15);
-  return (frequency_powered + 60) / (recency_in_secs + 60);
-}
-
 }  // namespace
 
 // static
@@ -125,6 +113,12 @@ void LocalHistoryZeroSuggestProvider::Start(const AutocompleteInput& input,
 
   done_ = true;
   matches_.clear();
+
+  if (!base::FeatureList::IsEnabled(
+          omnibox::kOmniboxLocalZeroSuggestForAuthenticatedUsers) &&
+      client_->IsAuthenticated()) {
+    return;
+  }
 
   // Allow local history query suggestions only when the user is not in an
   // off-the-record context.
@@ -246,12 +240,16 @@ void LocalHistoryZeroSuggestProvider::QueryURLDatabase(
   bool frecency_ranking = base::FeatureList::IsEnabled(
       omnibox::kOmniboxLocalZeroSuggestFrecencyRanking);
   const base::Time now = base::Time::Now();
-  std::sort(results.begin(), results.end(),
-            [frecency_ranking, now](const auto& a, const auto& b) {
-              return frecency_ranking
-                         ? CalculateFrecency(a, now) > CalculateFrecency(b, now)
-                         : a.most_recent_visit_time > b.most_recent_visit_time;
-            });
+  const int kRecencyDecayUnitSec = 60;
+  const double kFrequencyExponent = 1.15;
+  auto CompareByFrecency = [&](const auto& a, const auto& b) {
+    return frecency_ranking
+               ? a.GetFrecency(now, kRecencyDecayUnitSec, kFrequencyExponent) >
+                     b.GetFrecency(now, kRecencyDecayUnitSec,
+                                   kFrequencyExponent)
+               : a.most_recent_visit_time > b.most_recent_visit_time;
+  };
+  std::sort(results.begin(), results.end(), CompareByFrecency);
 
   int relevance = kLocalHistoryZeroSuggestRelevance;
   for (const auto& result : results) {

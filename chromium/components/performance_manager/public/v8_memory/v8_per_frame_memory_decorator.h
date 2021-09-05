@@ -22,7 +22,7 @@
 #include "components/performance_manager/public/graph/process_node.h"
 #include "components/performance_manager/public/render_process_host_id.h"
 #include "content/public/browser/global_routing_id.h"
-#include "third_party/blink/public/mojom/performance_manager/v8_per_frame_memory.mojom.h"
+#include "third_party/blink/public/mojom/performance_manager/v8_detailed_memory_reporter.mojom.h"
 
 namespace performance_manager {
 
@@ -248,6 +248,11 @@ class V8PerFrameMemoryDecorator
       public ProcessNode::ObserverDefaultImpl,
       public NodeDataDescriberDefaultImpl {
  public:
+  // A priority queue of memory requests. The decorator will hold a global
+  // queue of requests that measure every process, and each ProcessNode will
+  // have a queue of requests that measure only that process.
+  class MeasurementRequestQueue;
+
   V8PerFrameMemoryDecorator();
   ~V8PerFrameMemoryDecorator() override;
 
@@ -261,23 +266,27 @@ class V8PerFrameMemoryDecorator
 
   // ProcessNodeObserver overrides.
   void OnProcessNodeAdded(const ProcessNode* process_node) override;
+  void OnBeforeProcessNodeRemoved(const ProcessNode* process_node) override;
 
   // NodeDataDescriber overrides.
   base::Value DescribeFrameNodeData(const FrameNode* node) const override;
   base::Value DescribeProcessNodeData(const ProcessNode* node) const override;
 
   // Returns the next measurement request that should be scheduled.
-  V8PerFrameMemoryRequest* GetNextRequest() const;
+  const V8PerFrameMemoryRequest* GetNextRequest() const;
 
-  // Returns the next measurement request with mode kBounded that should be
-  // scheduled.
-  V8PerFrameMemoryRequest* GetNextBoundedRequest() const;
+  // Returns the next measurement request with mode kBounded or
+  // kEagerForTesting that should be scheduled.
+  const V8PerFrameMemoryRequest* GetNextBoundedRequest() const;
 
   // Implementation details below this point.
 
   // V8PerFrameMemoryRequest objects register themselves with the decorator.
+  // If |process_node| is null, the request will be sent to every process,
+  // otherwise it will be sent only to |process_node|.
   void AddMeasurementRequest(util::PassKey<V8PerFrameMemoryRequest>,
-                             V8PerFrameMemoryRequest* request);
+                             V8PerFrameMemoryRequest* request,
+                             const ProcessNode* process_node = nullptr);
   void RemoveMeasurementRequest(util::PassKey<V8PerFrameMemoryRequest>,
                                 V8PerFrameMemoryRequest* request);
 
@@ -289,13 +298,18 @@ class V8PerFrameMemoryDecorator
       const ProcessNode* process_node) const;
 
  private:
+  using RequestQueueCallback =
+      base::RepeatingCallback<void(MeasurementRequestQueue*)>;
+
+  // Runs the given |callback| for every MeasurementRequestQueue (global and
+  // per-process).
+  void ApplyToAllRequestQueues(RequestQueueCallback callback) const;
+
   void UpdateProcessMeasurementSchedules() const;
 
   Graph* graph_ = nullptr;
 
-  // Lists of requests sorted by min_time_between_requests (lowest first).
-  std::vector<V8PerFrameMemoryRequest*> bounded_measurement_requests_;
-  std::vector<V8PerFrameMemoryRequest*> lazy_measurement_requests_;
+  std::unique_ptr<MeasurementRequestQueue> measurement_requests_;
 
   SEQUENCE_CHECKER(sequence_checker_);
 };
@@ -310,6 +324,12 @@ class V8PerFrameMemoryRequest {
     // Measurements will only be taken at the next scheduled GC after a request
     // is received.
     kLazy,
+
+    // Measurements will be taken immediately when a request is received. This
+    // causes an extra GC so should only be done in tests. Attempts to use this
+    // mode will DCHECK if SetEagerMemoryMeasurementEnabledForTesting was not
+    // called.
+    kEagerForTesting,
 
     kDefault = kBounded,
   };
@@ -348,9 +368,15 @@ class V8PerFrameMemoryRequest {
 
   MeasurementMode mode() const { return mode_; }
 
-  // Requests measurements for all ProcessNode's in |graph|. This must only be
-  // called once for each V8PerFrameMemoryRequest.
+  // Requests measurements for all ProcessNode's in |graph|. There must be at
+  // most one call to this or StartMeasurementForProcess for each
+  // V8PerFrameMemoryRequest.
   void StartMeasurement(Graph* graph);
+
+  // Requests measurements only for the given |process_node|, which must be a
+  // renderer process. There must be at most one call to this or
+  // StartMeasurement for each V8PerFrameMemoryRequest.
+  void StartMeasurementForProcess(const ProcessNode* process_node);
 
   // Adds/removes an observer.
   void AddObserver(V8PerFrameMemoryObserver* observer);
@@ -368,17 +394,21 @@ class V8PerFrameMemoryRequest {
       MeasurementMode mode,
       base::WeakPtr<V8PerFrameMemoryRequestAnySeq> off_sequence_request);
 
-  // V8PerFrameMemoryDecorator calls OnDecoratorUnregistered when it is removed
-  // from the graph.
-  void OnDecoratorUnregistered(util::PassKey<V8PerFrameMemoryDecorator>);
+  // V8PerFrameMemoryDecorator::MeasurementRequestQueue calls
+  // OnOwnerUnregistered for all requests in the queue when the owning
+  // decorator or process node is removed from the graph.
+  void OnOwnerUnregistered(
+      util::PassKey<V8PerFrameMemoryDecorator::MeasurementRequestQueue>);
 
-  // V8PerFrameMemoryDecorator calls NotifyObserversOnMeasurementAvailable when
-  // a measurement is received.
+  // V8PerFrameMemoryDecorator::MeasurementRequestQueue calls
+  // NotifyObserversOnMeasurementAvailable when a measurement is received.
   void NotifyObserversOnMeasurementAvailable(
-      util::PassKey<V8PerFrameMemoryDecorator>,
+      util::PassKey<V8PerFrameMemoryDecorator::MeasurementRequestQueue>,
       const ProcessNode* process_node) const;
 
  private:
+  void StartMeasurementImpl(Graph* graph, const ProcessNode* process_node);
+
   base::TimeDelta min_time_between_requests_;
   MeasurementMode mode_;
   V8PerFrameMemoryDecorator* decorator_ = nullptr;
@@ -532,18 +562,23 @@ class V8PerFrameMemoryRequestAnySeq {
 
 namespace internal {
 
-// A callback that will bind a V8PerFrameMemoryReporter interface to
+// A callback that will bind a V8DetailedMemoryReporter interface to
 // communicate with the given process. Exposed so that it can be overridden to
 // implement the interface with a test fake.
-using BindV8PerFrameMemoryReporterCallback = base::RepeatingCallback<void(
-    mojo::PendingReceiver<blink::mojom::V8PerFrameMemoryReporter>,
+using BindV8DetailedMemoryReporterCallback = base::RepeatingCallback<void(
+    mojo::PendingReceiver<blink::mojom::V8DetailedMemoryReporter>,
     RenderProcessHostProxy)>;
 
 // Sets a callback that will be used to bind the V8PerFrameMemoryReporter
 // interface. The callback is owned by the caller and must live until this
 // function is called again with nullptr.
-void SetBindV8PerFrameMemoryReporterCallbackForTesting(
-    BindV8PerFrameMemoryReporterCallback* callback);
+void SetBindV8DetailedMemoryReporterCallbackForTesting(
+    BindV8DetailedMemoryReporterCallback* callback);
+
+// Enables or disables MeasurementMode::kEagerModeForTesting. Creating eager
+// measurement requests can have a high performance penalty so this should only
+// be enabled in tests.
+void SetEagerMemoryMeasurementEnabledForTesting(bool enable);
 
 }  // namespace internal
 

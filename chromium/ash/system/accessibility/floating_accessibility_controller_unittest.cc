@@ -318,7 +318,7 @@ TEST_F(FloatingAccessibilityControllerTest, CollisionWithAutoclicksMenu) {
   accessibility_controller()->SetFloatingMenuPosition(
       FloatingMenuPosition::kTopRight);
 
-  accessibility_controller()->SetAutoclickEnabled(true);
+  accessibility_controller()->autoclick().SetEnabled(true);
 
   // Get the full root window bounds to test the position.
   gfx::Rect window_bounds = Shell::GetPrimaryRootWindow()->bounds();
@@ -385,7 +385,7 @@ TEST_F(FloatingAccessibilityControllerTest, ActiveFeaturesButtons) {
                          {FloatingAccessibilityView::ButtonId::kVirtualKeyboard,
                           AccessibilityControllerImpl::kVirtualKeyboard}};
 
-  accessibility_controller()->SetDictationAcceleratorDialogAccepted();
+  accessibility_controller()->dictation().SetDialogAccepted();
 
   gfx::Rect original_bounds = GetMenuViewBounds();
 
@@ -490,7 +490,7 @@ TEST_F(FloatingAccessibilityControllerTest, AccelatorFocusMenu) {
 }
 
 TEST_F(FloatingAccessibilityControllerTest, ShowingAlreadyEnabledFeatures) {
-  accessibility_controller()->SetDictationAcceleratorDialogAccepted();
+  accessibility_controller()->dictation().SetDialogAccepted();
   accessibility_controller()->select_to_speak().SetEnabled(true);
   accessibility_controller()->dictation().SetEnabled(true);
   accessibility_controller()->virtual_keyboard().SetEnabled(true);

@@ -40,22 +40,23 @@ const char kSyncShortInitialRetryOverride[] =
 // sure that it's what you want.
 const char kSyncShortNudgeDelayForTest[] = "sync-short-nudge-delay-for-test";
 
+// If enabled, the sync engine will be shut down in the "paused" state.
+const base::Feature kStopSyncInPausedState{"StopSyncInPausedState",
+                                           base::FEATURE_ENABLED_BY_DEFAULT};
+
 // Allows custom passphrase users to receive Wallet data for secondary accounts
 // while in transport-only mode.
 const base::Feature kSyncAllowWalletDataInTransportModeWithCustomPassphrase{
     "SyncAllowAutofillWalletDataInTransportModeWithCustomPassphrase",
     base::FEATURE_DISABLED_BY_DEFAULT};
 
-// If enabled, the sync engine will be shut down in the "paused" state.
-const base::Feature kStopSyncInPausedState{"StopSyncInPausedState",
-                                           base::FEATURE_ENABLED_BY_DEFAULT};
+// Controls whether to enable syncing of Autofill Wallet offer data.
+const base::Feature kSyncAutofillWalletOfferData{
+    "SyncAutofillWalletOfferData", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Controls whether to enable syncing of Wi-Fi configurations.
 const base::Feature kSyncWifiConfigurations{"SyncWifiConfigurations",
                                             base::FEATURE_ENABLED_BY_DEFAULT};
-
-const base::Feature kSyncDeviceInfoInTransportMode{
-    "SyncDeviceInfoInTransportMode", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Stops honoring the Android master sync toggle.
 const base::Feature kDecoupleSyncFromAndroidMasterSync{

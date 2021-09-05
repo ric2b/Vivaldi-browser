@@ -129,14 +129,12 @@ StringView ConsumeUrlAsStringView(CSSParserTokenRange&,
                                   const CSSParserContext&);
 cssvalue::CSSURIValue* ConsumeUrl(CSSParserTokenRange&,
                                   const CSSParserContext&);
+CSSValue* ConsumeSelectorFunction(CSSParserTokenRange&);
 CORE_EXPORT CSSValue* ConsumeIdSelector(CSSParserTokenRange&);
 
 CSSValue* ConsumeColor(CSSParserTokenRange&,
                        const CSSParserContext&,
                        bool accept_quirky_colors = false);
-
-CSSValue* ConsumeInternalForcedBackgroundColor(CSSParserTokenRange&,
-                                               const CSSParserContext&);
 
 CSSValue* ConsumeLineWidth(CSSParserTokenRange&,
                            const CSSParserContext&,
@@ -246,6 +244,7 @@ bool IsCustomIdent(CSSValueID);
 bool IsTimelineName(const CSSParserToken&);
 
 CSSValue* ConsumeScrollOffset(CSSParserTokenRange&, const CSSParserContext&);
+CSSValue* ConsumeElementOffset(CSSParserTokenRange&, const CSSParserContext&);
 CSSValue* ConsumeSelfPositionOverflowPosition(CSSParserTokenRange&,
                                               IsPositionKeyword);
 CSSValue* ConsumeSimplifiedDefaultPosition(CSSParserTokenRange&,
@@ -354,6 +353,9 @@ CSSValue* ConsumeFontSize(CSSParserTokenRange&,
                           UnitlessQuirk = UnitlessQuirk::kForbid);
 
 CSSValue* ConsumeLineHeight(CSSParserTokenRange&, const CSSParserContext&);
+
+CSSValue* ConsumeMathDepth(CSSParserTokenRange& range,
+                           const CSSParserContext& context);
 
 CSSValueList* ConsumeFontFamily(CSSParserTokenRange&);
 CSSValue* ConsumeGenericFamily(CSSParserTokenRange&);

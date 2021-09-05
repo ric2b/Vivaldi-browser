@@ -177,8 +177,8 @@ void LiteVideoDecider::CanApplyLiteVideo(
   // LiteVideos.
   bool is_reload = PageTransitionCoreTypeIs(
       navigation_handle->GetPageTransition(), ui::PAGE_TRANSITION_RELOAD);
-  if (is_reload || (navigation_handle->GetPageTransition() &
-                    ui::PAGE_TRANSITION_FORWARD_BACK)) {
+  if (is_reload || features::IsLiteVideoNotAllowedForPageTransition(
+                       navigation_handle->GetPageTransition())) {
     user_blocklist_->AddNavigationToBlocklist(navigation_handle, true);
     blocklist_reason = is_reload
                            ? LiteVideoBlocklistReason::kNavigationReload
@@ -325,14 +325,12 @@ void LiteVideoDecider::OnOptimizationGuideHintAvailable(
   std::move(callback).Run(hint, blocklist_reason, decision);
 }
 
-void LiteVideoDecider::OnUserBlocklistedStatusChange(bool blocklisted) {
+void LiteVideoDecider::OnLoadingStateChanged(bool is_loaded) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  if (!blocklist_loaded_) {
-    blocklist_loaded_ = true;
-    // Local event used as a signal for testing.
+  blocklist_loaded_ = is_loaded;
+  if (blocklist_loaded_)
     LOCAL_HISTOGRAM_BOOLEAN("LiteVideo.UserBlocklist.BlocklistLoaded", true);
-  }
 }
 
 void LiteVideoDecider::OnEffectiveConnectionTypeChanged(

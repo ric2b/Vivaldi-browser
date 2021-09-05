@@ -56,8 +56,6 @@ static_library("browser") {
     "autofill_handler.h",
     "autofill_handler_proxy.cc",
     "autofill_handler_proxy.h",
-    "autofill_ie_toolbar_import_win.cc",
-    "autofill_ie_toolbar_import_win.h",
     "autofill_manager.cc",
     "autofill_manager.h",
     "autofill_manager_test_delegate.h",
@@ -83,10 +81,14 @@ static_library("browser") {
     "data_model/autofill_data_model.h",
     "data_model/autofill_metadata.cc",
     "data_model/autofill_metadata.h",
+    "data_model/autofill_offer_data.cc",
+    "data_model/autofill_offer_data.h",
     "data_model/autofill_profile.cc",
     "data_model/autofill_profile.h",
     "data_model/autofill_profile_comparator.cc",
     "data_model/autofill_profile_comparator.h",
+    "data_model/autofill_structured_address.cc",
+    "data_model/autofill_structured_address.h",
     "data_model/autofill_structured_address_component.cc",
     "data_model/autofill_structured_address_component.h",
     "data_model/autofill_structured_address_constants.cc",
@@ -121,6 +123,8 @@ static_library("browser") {
     "form_data_importer.h",
     "form_parsing/address_field.cc",
     "form_parsing/address_field.h",
+    "form_parsing/autofill_parsing_utils.cc",
+    "form_parsing/autofill_parsing_utils.h",
     "form_parsing/autofill_scanner.cc",
     "form_parsing/autofill_scanner.h",
     "form_parsing/credit_card_field.cc",
@@ -179,6 +183,8 @@ static_library("browser") {
     "metrics/form_event_logger_base.cc",
     "metrics/form_event_logger_base.h",
     "metrics/form_events.h",
+    "pattern_provider/pattern_provider.cc",
+    "pattern_provider/pattern_provider.h",
     "payments/account_info_getter.h",
     "payments/autofill_offer_manager.cc",
     "payments/autofill_offer_manager.h",
@@ -280,6 +286,8 @@ static_library("browser") {
     "webdata/autofill_table_encryptor_factory.h",
     "webdata/autofill_wallet_metadata_sync_bridge.cc",
     "webdata/autofill_wallet_metadata_sync_bridge.h",
+    "webdata/autofill_wallet_offer_sync_bridge.cc",
+    "webdata/autofill_wallet_offer_sync_bridge.h",
     "webdata/autofill_wallet_sync_bridge.cc",
     "webdata/autofill_wallet_sync_bridge.h",
     "webdata/autofill_webdata_backend.h",
@@ -294,6 +302,13 @@ static_library("browser") {
     "webdata/system_encryptor.h",
   ]
 
+  if (is_win) {
+    sources += [
+      "autofill_ie_toolbar_import_win.cc",
+      "autofill_ie_toolbar_import_win.h",
+    ]
+  }
+
   if (is_ios) {
     sources += [
       "keyboard_accessory_metrics_logger.h",
@@ -303,8 +318,6 @@ static_library("browser") {
 
   if (is_ios || is_android) {
     sources += [
-      "autofill_assistant.cc",
-      "autofill_assistant.h",
       "payments/autofill_credit_card_filling_infobar_delegate_mobile.cc",
       "payments/autofill_credit_card_filling_infobar_delegate_mobile.h",
       "payments/autofill_save_card_infobar_delegate_mobile.cc",
@@ -351,7 +364,6 @@ static_library("browser") {
   ]
   deps = [
     ":autofill_address_rewriter_resources",
-    "proto:legacy_proto_bridge",
     "//base",
     "//base:i18n",
     "//build:branding_buildflags",
@@ -359,6 +371,7 @@ static_library("browser") {
     "//components/history/core/browser",
     "//components/infobars/core",
     "//components/keyed_service/core",
+    "//components/language_usage_metrics",
     "//components/leveldb_proto",
     "//components/os_crypt",
     "//components/policy/core/browser",
@@ -369,6 +382,7 @@ static_library("browser") {
     "//components/signin/public/identity_manager",
     "//components/strings",
     "//components/sync",
+    "//components/translate/core/browser",
     "//components/variations/net",
     "//components/variations/service:service",
     "//components/version_info",
@@ -420,6 +434,8 @@ static_library("browser") {
 static_library("test_support") {
   testonly = true
   sources = [
+    "autofill_form_test_utils.cc",
+    "autofill_form_test_utils.h",
     "autofill_test_utils.cc",
     "autofill_test_utils.h",
     "data_driven_test.cc",
@@ -496,6 +512,8 @@ static_library("test_support") {
     "//components/prefs:test_support",
     "//components/signin/public/identity_manager:test_support",
     "//components/sync:test_support",
+    "//components/translate/core/browser",
+    "//components/translate/core/browser:test_support",
     "//components/ukm",
     "//components/ukm:test_support",
     "//google_apis:test_support",
@@ -567,7 +585,6 @@ source_set("unit_tests") {
     "autofill_driver_factory_unittest.cc",
     "autofill_experiments_unittest.cc",
     "autofill_external_delegate_unittest.cc",
-    "autofill_ie_toolbar_import_win_unittest.cc",
     "autofill_manager_unittest.cc",
     "autofill_merge_unittest.cc",
     "autofill_metrics_unittest.cc",
@@ -583,6 +600,9 @@ source_set("unit_tests") {
     "data_model/autofill_structured_address_component_unittest.cc",
     "data_model/autofill_structured_address_name_unittest.cc",
     "data_model/autofill_structured_address_regex_provider_unittest.cc",
+    "data_model/autofill_structured_address_test_utils.cc",
+    "data_model/autofill_structured_address_test_utils.h",
+    "data_model/autofill_structured_address_unittest.cc",
     "data_model/autofill_structured_address_utils_unittest.cc",
     "data_model/borrowed_transliterator_unittest.cc",
     "data_model/contact_info_unittest.cc",
@@ -608,6 +628,8 @@ source_set("unit_tests") {
     "logging/log_buffer_submitter_unittest.cc",
     "logging/log_manager_unittest.cc",
     "logging/log_router_unittest.cc",
+    "pattern_provider/pattern_provider_unittest.cc",
+    "payments/autofill_offer_manager_unittest.cc",
     "payments/credit_card_access_manager_unittest.cc",
     "payments/credit_card_cvc_authenticator_unittest.cc",
     "payments/credit_card_save_manager_unittest.cc",
@@ -619,7 +641,6 @@ source_set("unit_tests") {
     "payments/strike_database_integrator_test_strike_database_unittest.cc",
     "payments/strike_database_unittest.cc",
     "personal_data_manager_unittest.cc",
-    "proto/legacy_proto_bridge_unittest.cc",
     "randomized_encoder_unittest.cc",
     "rationalization_util_unittest.cc",
     "ui/address_combobox_model_unittest.cc",
@@ -634,13 +655,17 @@ source_set("unit_tests") {
     "webdata/autofill_sync_bridge_util_unittest.cc",
     "webdata/autofill_table_unittest.cc",
     "webdata/autofill_wallet_metadata_sync_bridge_unittest.cc",
+    "webdata/autofill_wallet_offer_sync_bridge_unittest.cc",
     "webdata/autofill_wallet_sync_bridge_unittest.cc",
     "webdata/web_data_service_unittest.cc",
   ]
 
+  if (is_win) {
+    sources += [ "autofill_ie_toolbar_import_win_unittest.cc" ]
+  }
+
   if (is_ios || is_android) {
     sources += [
-      "autofill_assistant_unittest.cc",
       "ui/mobile_label_formatter_unittest.cc",
       "ui/payments/card_expiration_date_fix_flow_controller_impl_unittest.cc",
       "ui/payments/card_name_fix_flow_controller_impl_unittest.cc",
@@ -674,7 +699,6 @@ source_set("unit_tests") {
     ":browser",
     ":test_support",
     ":unit_tests_bundle_data",
-    "proto:legacy_proto_bridge",
     "//base",
     "//base/test:test_support",
     "//components/autofill/core/common",
@@ -691,6 +715,7 @@ source_set("unit_tests") {
     "//components/sync",
     "//components/sync:test_support_model",
     "//components/sync/driver:test_support",
+    "//components/translate/core/browser",
     "//components/ukm",
     "//components/ukm:test_support",
     "//components/unified_consent",

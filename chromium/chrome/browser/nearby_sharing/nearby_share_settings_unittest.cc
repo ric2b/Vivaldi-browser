@@ -11,6 +11,7 @@
 #include "chrome/browser/browser_features.h"
 #include "chrome/browser/nearby_sharing/common/nearby_share_enums.h"
 #include "chrome/browser/nearby_sharing/common/nearby_share_prefs.h"
+#include "chrome/browser/nearby_sharing/local_device_data/fake_nearby_share_local_device_data_manager.h"
 #include "chrome/browser/ui/webui/nearby_share/public/mojom/nearby_share_settings.mojom-test-utils.h"
 #include "chrome/browser/ui/webui/nearby_share/public/mojom/nearby_share_settings.mojom.h"
 #include "chrome/test/base/testing_browser_process.h"
@@ -23,6 +24,12 @@
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+
+namespace {
+
+const char kDefaultDeviceName[] = "Josh's Chromebook";
+
+}  // namespace
 
 using NearbyShareSettingsAsyncWaiter =
     nearby_share::mojom::NearbyShareSettingsAsyncWaiter;
@@ -59,7 +66,7 @@ class FakeNearbyShareSettingsObserver
 
 class NearbyShareSettingsTest : public ::testing::Test {
  public:
-  NearbyShareSettingsTest() {
+  NearbyShareSettingsTest() : local_device_data_manager_(kDefaultDeviceName) {
     scoped_feature_list_.InitAndEnableFeature(features::kNearbySharing);
 
     RegisterNearbySharingPrefs(pref_service_.registry());
@@ -75,8 +82,10 @@ class NearbyShareSettingsTest : public ::testing::Test {
   content::BrowserTaskEnvironment task_environment_;
   base::test::ScopedFeatureList scoped_feature_list_;
   TestingPrefServiceSimple pref_service_;
+  FakeNearbyShareLocalDeviceDataManager local_device_data_manager_;
   FakeNearbyShareSettingsObserver observer_;
-  NearbyShareSettings nearby_share_settings_{&pref_service_};
+  NearbyShareSettings nearby_share_settings_{&pref_service_,
+                                             &local_device_data_manager_};
   NearbyShareSettingsAsyncWaiter nearby_share_settings_waiter_{
       &nearby_share_settings_};
 };
@@ -110,14 +119,46 @@ TEST_F(NearbyShareSettingsTest, GetAndSetEnabled) {
   EXPECT_EQ(true, observer_.enabled);
 }
 
+TEST_F(NearbyShareSettingsTest, ValidateDeviceName) {
+  auto result = nearby_share::mojom::DeviceNameValidationResult::kValid;
+  local_device_data_manager_.set_next_validation_result(
+      nearby_share::mojom::DeviceNameValidationResult::kErrorEmpty);
+  nearby_share_settings_waiter_.ValidateDeviceName("", &result);
+  EXPECT_EQ(result,
+            nearby_share::mojom::DeviceNameValidationResult::kErrorEmpty);
+
+  local_device_data_manager_.set_next_validation_result(
+      nearby_share::mojom::DeviceNameValidationResult::kValid);
+  nearby_share_settings_waiter_.ValidateDeviceName(
+      "this string is 32 bytes in UTF-8", &result);
+  EXPECT_EQ(result, nearby_share::mojom::DeviceNameValidationResult::kValid);
+}
+
 TEST_F(NearbyShareSettingsTest, GetAndSetDeviceName) {
   std::string name = "not_the_default";
   nearby_share_settings_waiter_.GetDeviceName(&name);
-  EXPECT_EQ("", name);
+  EXPECT_EQ(kDefaultDeviceName, name);
+
+  // When we get a validation error, setting the name should not succeed.
+  EXPECT_EQ("uncalled", observer_.device_name);
+  auto result = nearby_share::mojom::DeviceNameValidationResult::kValid;
+  local_device_data_manager_.set_next_validation_result(
+      nearby_share::mojom::DeviceNameValidationResult::kErrorEmpty);
+  nearby_share_settings_waiter_.SetDeviceName("", &result);
+  EXPECT_EQ(result,
+            nearby_share::mojom::DeviceNameValidationResult::kErrorEmpty);
+  EXPECT_EQ(kDefaultDeviceName, nearby_share_settings_.GetDeviceName());
+
+  // When the name is valid, setting should succeed.
+  EXPECT_EQ("uncalled", observer_.device_name);
+  result = nearby_share::mojom::DeviceNameValidationResult::kValid;
+  local_device_data_manager_.set_next_validation_result(
+      nearby_share::mojom::DeviceNameValidationResult::kValid);
+  nearby_share_settings_waiter_.SetDeviceName("d", &result);
+  EXPECT_EQ(result, nearby_share::mojom::DeviceNameValidationResult::kValid);
+  EXPECT_EQ("d", nearby_share_settings_.GetDeviceName());
 
   EXPECT_EQ("uncalled", observer_.device_name);
-  nearby_share_settings_.SetDeviceName("d");
-  EXPECT_EQ("d", nearby_share_settings_.GetDeviceName());
   FlushMojoMessages();
   EXPECT_EQ("d", observer_.device_name);
 

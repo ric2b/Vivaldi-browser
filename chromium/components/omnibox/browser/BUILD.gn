@@ -18,10 +18,10 @@ buildflag_header("buildflags") {
   flags = [ "ENABLE_VR=$enable_vr" ]
 }
 
-aggregate_vector_icons("omnibox_vector_icons") {
+aggregate_vector_icons2("omnibox_vector_icons") {
   icon_directory = "vector_icons"
 
-  icons = [
+  sources = [
     "answer_calculator.icon",
     "answer_currency.icon",
     "answer_default.icon",
@@ -50,6 +50,8 @@ aggregate_vector_icons("omnibox_vector_icons") {
     "http.icon",
     "https_valid.icon",
     "https_valid_in_chip.icon",
+    "install_desktop.icon",
+    "install_download.icon",
     "keyword_search.icon",
     "not_secure_warning.icon",
     "offline_pin.icon",
@@ -57,10 +59,11 @@ aggregate_vector_icons("omnibox_vector_icons") {
     "pedal.icon",
     "plus.icon",
     "product.icon",
-    "star_active.icon",
     "star.icon",
+    "star_active.icon",
     "switch.icon",
     "tab.icon",
+    "trending_up.icon",
   ]
 }
 
@@ -205,6 +208,7 @@ static_library("browser") {
   ]
 
   public_deps = [
+    ":buildflags",
     ":location_bar",
     "//base",
     "//base:i18n",
@@ -216,7 +220,6 @@ static_library("browser") {
     "//url",
   ]
   deps = [
-    ":buildflags",
     ":in_memory_url_index_cache_proto",
     "//components/bookmarks/browser",
     "//components/component_updater",
@@ -277,6 +280,8 @@ static_library("location_bar") {
     "location_bar_model_delegate.h",
     "location_bar_model_impl.cc",
     "location_bar_model_impl.h",
+    "location_bar_model_util.cc",
+    "location_bar_model_util.h",
   ]
 
   public_deps = [
@@ -337,7 +342,6 @@ if (is_android) {
       "//components/browser_ui/strings/android:browser_ui_strings_grd",
       "//ui/android:ui_java_resources",
     ]
-    create_srcjar = false
   }
 
   android_library("browser_java") {
@@ -512,6 +516,10 @@ source_set("unit_tests") {
     "zero_suggest_verbatim_match_provider_unittest.cc",
   ]
 
+  if ((!is_android || enable_vr) && !is_ios) {
+    sources += [ "location_bar_model_util_unittest.cc" ]
+  }
+
   deps = [
     ":browser",
     ":test_support",
@@ -523,6 +531,7 @@ source_set("unit_tests") {
     "//components/dom_distiller/core:core",
     "//components/favicon/core/test:test_support",
     "//components/history/core/test",
+    "//components/omnibox/common",
     "//components/open_from_clipboard:test_support",
     "//components/prefs:test_support",
     "//components/search",
@@ -544,6 +553,14 @@ source_set("unit_tests") {
     "//ui/gfx:test_support",
     "//url",
   ]
+
+  if ((!is_android || enable_vr) && !is_ios) {
+    deps += [
+      ":buildflags",
+      "//components/omnibox/browser:vector_icons",
+      "//components/vector_icons:vector_icons",
+    ]
+  }
 }
 
 fuzzer_test("autocomplete_input_fuzzer") {

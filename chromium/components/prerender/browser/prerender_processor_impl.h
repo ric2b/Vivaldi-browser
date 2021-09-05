@@ -7,6 +7,7 @@
 
 #include "components/prerender/browser/prerender_processor_impl_delegate.h"
 #include "third_party/blink/public/mojom/prerender/prerender.mojom.h"
+#include "url/origin.h"
 
 namespace content {
 class RenderFrameHost;
@@ -19,6 +20,7 @@ class PrerenderProcessorImpl : public blink::mojom::PrerenderProcessor {
   PrerenderProcessorImpl(
       int render_process_id,
       int render_frame_id,
+      const url::Origin& initiator_origin,
       std::unique_ptr<PrerenderProcessorImplDelegate> delegate);
   ~PrerenderProcessorImpl() override;
 
@@ -28,15 +30,23 @@ class PrerenderProcessorImpl : public blink::mojom::PrerenderProcessor {
       std::unique_ptr<PrerenderProcessorImplDelegate> delegate);
 
   // blink::mojom::PrerenderProcessor implementation
-  void AddPrerender(
-      blink::mojom::PrerenderAttributesPtr attributes,
-      mojo::PendingRemote<blink::mojom::PrerenderHandleClient> client,
-      mojo::PendingReceiver<blink::mojom::PrerenderHandle> handle) override;
+  void Start(blink::mojom::PrerenderAttributesPtr attributes,
+             mojo::PendingRemote<blink::mojom::PrerenderProcessorClient> client)
+      override;
+  void Cancel() override;
+  void Abandon() override;
 
  private:
-  int render_process_id_;
-  int render_frame_id_;
-  std::unique_ptr<PrerenderProcessorImplDelegate> delegate_;
+  PrerenderLinkManager* GetPrerenderLinkManager();
+
+  const int render_process_id_;
+  const int render_frame_id_;
+  const url::Origin initiator_origin_;
+  const std::unique_ptr<PrerenderProcessorImplDelegate> delegate_;
+
+  // The ID of PrerenderLinkManager::LinkPrerender. Used for canceling or
+  // abandoning prerendering.
+  base::Optional<int> prerender_id_;
 };
 
 }  // namespace prerender

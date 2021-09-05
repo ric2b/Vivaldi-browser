@@ -407,7 +407,7 @@ def _ProcessBaseHistogramAttribute(node, histogram_entry):
 # Variant: an analog of <variant> tag, represented as a JSON object like:
 # {
 #   'name': 'variant_name',
-#   'label': 'variant_label',
+#   'summary': 'variant_summary',
 #   'obsolete': 'Obsolete text.',
 #   'owners': ['me@chromium.org', 'you@chromium.org']
 # }
@@ -488,16 +488,18 @@ def _ExtractVariantNodes(node):
   """
   variant_list = []
   for variant_node in IterElementsWithTag(node, 'variant', 1):
-    variant = dict(name=variant_node.getAttribute('name'),
-                   label=variant_node.getAttribute('label'))
+    name = variant_node.getAttribute('name')
+    summary = variant_node.getAttribute('summary') if variant_node.hasAttribute(
+        'summary') else name
+    variant = dict(name=name, summary=summary)
 
     obsolete_text = _GetObsoleteReason(variant_node)
     if obsolete_text:
       variant['obsolete'] = obsolete_text
 
-    variant_owners, variant_has_owners = _ExtractOwners(variant_node)
+    owners, variant_has_owners = _ExtractOwners(variant_node)
     if variant_has_owners:
-      variant['owners'] = variant_owners
+      variant['owners'] = owners
 
     variant_list.append(variant)
 
@@ -565,8 +567,9 @@ def _ExtractHistogramsFromXmlTree(tree, enums):
       reason = _GetTextFromChildNodes(obsolete_nodes[0])
       histogram_entry['obsolete'] = reason
 
-    # Non-obsolete histograms should provide a <summary>.
-    if not obsolete_nodes and not summary_nodes:
+    # Non-obsolete histograms should provide a non-empty <summary>.
+    if not obsolete_nodes and (not summary_nodes or
+                               not histogram_entry['summary']):
       logging.error('histogram %s should provide a <summary>', name)
       have_errors = True
 
@@ -863,11 +866,11 @@ def _GenerateNewHistogramsFromTokens(histogram_name, histograms_dict,
     # Dictionaries of pairings used for string formatting of histogram name and
     # summary.
     token_name_pairings = {}
-    token_label_pairings = {}
+    token_summary_pairings = {}
 
     for token_key, variant in token_assignment.pairings.items():
       token_name_pairings[token_key] = variant['name']
-      token_label_pairings[token_key] = variant['label']
+      token_summary_pairings[token_key] = variant['summary']
 
       # If a variant has an obsolete reason, the new reason overwrites the
       # obsolete reason of the original histogram.
@@ -881,8 +884,8 @@ def _GenerateNewHistogramsFromTokens(histogram_name, histograms_dict,
 
     # Replace token in histogram name with variant name.
     new_histogram_name = histogram_name.format(**token_name_pairings)
-    # Replace token in summary with variant label.
-    new_summary_text = summary_text.format(**token_label_pairings)
+    # Replace token in summary with variant summary.
+    new_summary_text = summary_text.format(**token_summary_pairings)
 
     if new_histogram_name in new_histograms_dict:
       logging.error(

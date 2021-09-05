@@ -64,6 +64,13 @@ class SafeBrowsingTriggeredPopupBlockerTest
       subresource_filter::ActivationDecision* decision) override {
     return initial_activation_level;
   }
+  void OnAdsViolationTriggered(
+      content::RenderFrameHost*,
+      subresource_filter::mojom::AdsViolation) override {}
+  const scoped_refptr<safe_browsing::SafeBrowsingDatabaseManager>
+  GetSafeBrowsingDatabaseManager() override {
+    return nullptr;
+  }
 
   // content::RenderViewHostTestHarness:
   void SetUp() override {
@@ -77,7 +84,8 @@ class SafeBrowsingTriggeredPopupBlockerTest
         pref_service_.registry());
     HostContentSettingsMap::RegisterProfilePrefs(pref_service_.registry());
     settings_map_ = base::MakeRefCounted<HostContentSettingsMap>(
-        &pref_service_, false, false, false, false);
+        &pref_service_, false /* is_off_the_record */,
+        false /* store_last_modified */, false /* restore_session*/);
 
     scoped_feature_list_ = DefaultFeatureList();
     subresource_filter::SubresourceFilterObserverManager::CreateForWebContents(

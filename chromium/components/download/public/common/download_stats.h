@@ -14,7 +14,6 @@
 #include <vector>
 
 #include "base/callback.h"
-#include "base/optional.h"
 #include "build/build_config.h"
 #include "components/download/public/common/download_content.h"
 #include "components/download/public/common/download_danger_type.h"
@@ -23,7 +22,6 @@
 #include "components/download/public/common/download_source.h"
 #include "net/base/network_change_notifier.h"
 #include "net/http/http_response_info.h"
-#include "ui/base/page_transition_types.h"
 #include "url/gurl.h"
 
 namespace base {
@@ -220,21 +218,6 @@ enum class ParallelDownloadCreationEvent {
   COUNT,
 };
 
-// Reason for download to restart during resumption. These enum values are
-// persisted to logs, and should therefore never be renumbered nor removed.
-enum class ResumptionRestartCountTypes {
-  // The download is restarted due to server response.
-  kRequestedByServerCount = 0,
-
-  // Strong validator changes.
-  kStrongValidatorChangesCount = 1,
-
-  // No strong validators are present.
-  kMissingStrongValidatorsCount = 2,
-
-  kMaxValue = kMissingStrongValidatorsCount
-};
-
 // Events for user scheduled downloads. Used in histograms, don't reuse or
 // remove items. Keep in sync with DownloadLaterEvent in enums.xml.
 enum class DownloadLaterEvent {
@@ -429,9 +412,6 @@ COMPONENTS_DOWNLOAD_EXPORT void RecordDownloadConnectionSecurity(
     const GURL& download_url,
     const std::vector<GURL>& url_chain);
 
-COMPONENTS_DOWNLOAD_EXPORT void RecordDownloadSourcePageTransitionType(
-    const base::Optional<ui::PageTransition>& transition);
-
 COMPONENTS_DOWNLOAD_EXPORT void RecordDownloadHttpResponseCode(
     int response_code,
     bool is_background_mode);
@@ -449,9 +429,6 @@ COMPONENTS_DOWNLOAD_EXPORT void RecordResumptionRestartReason(
 // Records the interrupt reason that causes download to restart.
 COMPONENTS_DOWNLOAD_EXPORT void RecordResumptionStrongValidators(
     DownloadInterruptReason reason);
-
-COMPONENTS_DOWNLOAD_EXPORT void RecordResumptionRestartCount(
-    ResumptionRestartCountTypes type);
 
 COMPONENTS_DOWNLOAD_EXPORT void RecordDownloadManagerCreationTimeSinceStartup(
     base::TimeDelta elapsed_time);

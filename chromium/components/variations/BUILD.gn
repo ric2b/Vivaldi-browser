@@ -4,27 +4,41 @@
 
 import("//build/buildflag_header.gni")
 import("//build/config/chromecast_build.gni")
+import("//mojo/public/tools/bindings/mojom.gni")
 import("//testing/test.gni")
+
+mojom("variations_mojom") {
+  sources = [ "variations.mojom" ]
+}
 
 if (is_android) {
   import("//build/config/android/rules.gni")
 }
 
-large_variation_key_size_enabled =
-    is_chromecast
+large_variation_key_size_enabled = is_chromecast
 
 buildflag_header("buildflags") {
   header = "buildflags.h"
   flags = [ "LARGE_VARIATION_KEY_SIZE=$large_variation_key_size_enabled" ]
 }
 
+component("variations_features") {
+  output_name = "variations_features"
+
+  defines = [ "IS_VARIATIONS_FEATURES_IMPL" ]
+
+  sources = [
+    "variations_features.cc",
+    "variations_features.h",
+  ]
+
+  deps = [ "//base" ]
+}
+
 static_library("variations") {
   sources = [
     "active_field_trials.cc",
     "active_field_trials.h",
-    "android/variations_associated_data_android.cc",
-    "android/variations_seed_bridge.cc",
-    "android/variations_seed_bridge.h",
     "child_process_field_trial_syncer.cc",
     "child_process_field_trial_syncer.h",
     "client_filterable_state.cc",
@@ -82,8 +96,19 @@ static_library("variations") {
     ]
   }
 
+  if (is_android) {
+    sources += [
+      "android/variations_associated_data_android.cc",
+      "android/variations_seed_bridge.cc",
+      "android/variations_seed_bridge.h",
+    ]
+  }
+
+  public_deps = [ ":variations_features" ]
+
   deps = [
     ":buildflags",
+    ":variations_mojom",
     "proto",
     "//base",
     "//components/crash/core/common:crash_key",
@@ -126,7 +151,10 @@ static_library("test_support") {
     "variations_params_manager.h",
   ]
 
-  public_deps = [ ":variations" ]
+  public_deps = [
+    ":variations",
+    ":variations_mojom",
+  ]
 
   deps = [
     "field_trial_config:field_trial_config",
@@ -164,6 +192,7 @@ source_set("unit_tests") {
 
   deps = [
     ":variations",
+    ":variations_mojom",
     "net",
     "proto",
     "//base/test:test_support",

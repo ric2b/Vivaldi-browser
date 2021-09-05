@@ -36,7 +36,8 @@
 #include "third_party/blink/renderer/platform/geometry/float_rect.h"
 #include "third_party/blink/renderer/platform/geometry/float_rounded_rect.h"
 #include "third_party/blink/renderer/platform/geometry/int_rect.h"
-#include "third_party/blink/renderer/platform/graphics/dark_mode_filter.h"
+#include "third_party/blink/renderer/platform/graphics/dark_mode_filter_helper.h"
+#include "third_party/blink/renderer/platform/graphics/dark_mode_settings_builder.h"
 #include "third_party/blink/renderer/platform/graphics/graphics_context_state_saver.h"
 #include "third_party/blink/renderer/platform/graphics/interpolation_space.h"
 #include "third_party/blink/renderer/platform/graphics/paint/paint_canvas.h"
@@ -62,6 +63,29 @@
 
 namespace blink {
 
+namespace {
+
+SkRect GetRectForTextLine(FloatPoint pt, float width, float stroke_thickness) {
+  int thickness = std::max(static_cast<int>(stroke_thickness), 1);
+  SkRect r;
+  r.fLeft = WebCoreFloatToSkScalar(pt.X());
+  // Avoid anti-aliasing lines. Currently, these are always horizontal.
+  // Round to nearest pixel to match text and other content.
+  r.fTop = WebCoreFloatToSkScalar(floorf(pt.Y() + 0.5f));
+  r.fRight = r.fLeft + WebCoreFloatToSkScalar(width);
+  r.fBottom = r.fTop + SkIntToScalar(thickness);
+  return r;
+}
+
+std::pair<IntPoint, IntPoint> GetPointsForTextLine(FloatPoint pt,
+                                                   float width,
+                                                   float stroke_thickness) {
+  int y = floorf(pt.Y() + std::max<float>(stroke_thickness / 2.0f, 0.5f));
+  return {IntPoint(pt.X(), y), IntPoint(pt.X() + width, y)};
+}
+
+}  // namespace
+
 // Helper class that copies |flags| only when dark mode is enabled.
 //
 // TODO(gilmanmh): Investigate removing const from |flags| in the calling
@@ -71,13 +95,16 @@ class GraphicsContext::DarkModeFlags final {
 
  public:
   // This helper's lifetime should never exceed |flags|'.
-  DarkModeFlags(GraphicsContext* gc,
+  DarkModeFlags(GraphicsContext* context,
                 const PaintFlags& flags,
                 DarkModeFilter::ElementRole role) {
-    dark_mode_flags_ = gc->dark_mode_filter_.ApplyToFlagsIfNeeded(flags, role);
-    if (dark_mode_flags_) {
-      flags_ = &dark_mode_flags_.value();
-      return;
+    if (context->IsDarkModeEnabled()) {
+      dark_mode_flags_ =
+          context->GetDarkModeFilter()->ApplyToFlagsIfNeeded(flags, role);
+      if (dark_mode_flags_) {
+        flags_ = &dark_mode_flags_.value();
+        return;
+      }
     }
     flags_ = &flags;
   }
@@ -103,9 +130,11 @@ GraphicsContext::GraphicsContext(PaintController& paint_controller,
       disable_destruction_checks_(false),
 #endif
       device_scale_factor_(1.0f),
+      dark_mode_filter_(nullptr),
       printing_(false),
       is_painting_preview_(false),
-      in_drawing_recorder_(false) {
+      in_drawing_recorder_(false),
+      is_dark_mode_enabled_(false) {
   // FIXME: Do some tests to determine how many states are typically used, and
   // allocate several here.
   paint_state_stack_.push_back(std::make_unique<GraphicsContextState>());
@@ -121,6 +150,20 @@ GraphicsContext::~GraphicsContext() {
     DCHECK(!SaveCount());
   }
 #endif
+}
+
+DarkModeFilter* GraphicsContext::GetDarkModeFilter() {
+  if (!dark_mode_filter_) {
+    dark_mode_filter_ = std::make_unique<DarkModeFilter>();
+    dark_mode_filter_->UpdateSettings(GetCurrentDarkModeSettings());
+  }
+
+  return dark_mode_filter_.get();
+}
+
+void GraphicsContext::UpdateDarkModeSettingsForTest(
+    const DarkModeSettings& settings) {
+  GetDarkModeFilter()->UpdateSettings(settings);
 }
 
 void GraphicsContext::Save() {
@@ -159,10 +202,6 @@ unsigned GraphicsContext::SaveCount() const {
   return count;
 }
 #endif
-
-void GraphicsContext::SetDarkMode(const DarkModeSettings& settings) {
-  dark_mode_filter_.UpdateSettings(settings);
-}
 
 void GraphicsContext::SaveLayer(const SkRect* bounds, const PaintFlags* flags) {
   DCHECK(canvas_);
@@ -354,8 +393,8 @@ void GraphicsContext::DrawFocusRingPath(const SkPath& path,
                                         float border_radius) {
   DrawPlatformFocusRing(
       path, canvas_,
-      dark_mode_filter_.InvertColorIfNeeded(
-          color.Rgb(), DarkModeFilter::ElementRole::kBackground),
+      DarkModeFilterHelper::ApplyToColorIfNeeded(
+          this, color.Rgb(), DarkModeFilter::ElementRole::kBackground),
       width, border_radius);
 }
 
@@ -365,8 +404,8 @@ void GraphicsContext::DrawFocusRingRect(const SkRect& rect,
                                         float border_radius) {
   DrawPlatformFocusRing(
       rect, canvas_,
-      dark_mode_filter_.InvertColorIfNeeded(
-          color.Rgb(), DarkModeFilter::ElementRole::kBackground),
+      DarkModeFilterHelper::ApplyToColorIfNeeded(
+          this, color.Rgb(), DarkModeFilter::ElementRole::kBackground),
       width, border_radius);
 }
 
@@ -420,14 +459,14 @@ void GraphicsContext::DrawFocusRing(const Vector<IntRect>& rects,
                                     float border_radius,
                                     float min_border_width,
                                     const Color& color,
-                                    WebColorScheme color_scheme) {
+                                    ColorScheme color_scheme) {
 #if defined(OS_MAC)
-  const Color& inner_color = color_scheme == WebColorScheme::kDark
+  const Color& inner_color = color_scheme == ColorScheme::kDark
                                  ? SkColorSetRGB(0x99, 0xC8, 0xFF)
                                  : color;
 #else
   const Color& inner_color =
-      color_scheme == WebColorScheme::kDark ? SK_ColorWHITE : color;
+      color_scheme == ColorScheme::kDark ? SK_ColorWHITE : color;
 #endif
   if (::features::IsFormControlsRefreshEnabled()) {
     // The focus ring is made of two borders which have a 2:1 ratio.
@@ -439,7 +478,7 @@ void GraphicsContext::DrawFocusRing(const Vector<IntRect>& rects,
     if (min_border_width >= inside_border_width) {
       offset -= inside_border_width;
     }
-    const Color& outer_color = color_scheme == WebColorScheme::kDark
+    const Color& outer_color = color_scheme == ColorScheme::kDark
                                    ? SkColorSetRGB(0x10, 0x10, 0x10)
                                    : SK_ColorWHITE;
     // The outer ring is drawn first, and we overdraw to ensure no gaps or AA
@@ -477,8 +516,8 @@ void GraphicsContext::DrawInnerShadow(const FloatRoundedRect& rect,
                                       float shadow_blur,
                                       float shadow_spread,
                                       Edges clipped_edges) {
-  SkColor shadow_color = dark_mode_filter_.InvertColorIfNeeded(
-      orig_shadow_color.Rgb(), DarkModeFilter::ElementRole::kBackground);
+  SkColor shadow_color = DarkModeFilterHelper::ApplyToColorIfNeeded(
+      this, orig_shadow_color.Rgb(), DarkModeFilter::ElementRole::kBackground);
 
   FloatRect hole_rect(rect.Rect());
   hole_rect.Inflate(-shadow_spread);
@@ -687,38 +726,21 @@ void GraphicsContext::DrawLineForText(const FloatPoint& pt, float width) {
   if (width <= 0)
     return;
 
-  PaintFlags flags;
-  switch (GetStrokeStyle()) {
-    case kNoStroke:
-    case kSolidStroke:
-    case kDoubleStroke: {
-      int thickness = std::max(static_cast<int>(StrokeThickness()), 1);
-      SkRect r;
-      r.fLeft = WebCoreFloatToSkScalar(pt.X());
-      // Avoid anti-aliasing lines. Currently, these are always horizontal.
-      // Round to nearest pixel to match text and other content.
-      r.fTop = WebCoreFloatToSkScalar(floorf(pt.Y() + 0.5f));
-      r.fRight = r.fLeft + WebCoreFloatToSkScalar(width);
-      r.fBottom = r.fTop + SkIntToScalar(thickness);
-      flags = ImmutableState()->FillFlags();
-      // Text lines are drawn using the stroke color.
-      flags.setColor(StrokeColor().Rgb());
-      DrawRect(r, flags, DarkModeFilter::ElementRole::kText);
-      return;
-    }
-    case kDottedStroke:
-    case kDashedStroke: {
-      int y = floorf(pt.Y() + std::max<float>(StrokeThickness() / 2.0f, 0.5f));
-      DrawLine(IntPoint(pt.X(), y), IntPoint(pt.X() + width, y),
-               DarkModeFilter::ElementRole::kText, true);
-      return;
-    }
-    case kWavyStroke:
-    default:
-      break;
+  auto stroke_style = GetStrokeStyle();
+  DCHECK_NE(stroke_style, kWavyStroke);
+  if (ShouldUseStrokeForTextLine(stroke_style)) {
+    IntPoint start;
+    IntPoint end;
+    std::tie(start, end) = GetPointsForTextLine(pt, width, StrokeThickness());
+    DrawLine(start, end, DarkModeFilter::ElementRole::kText, true);
+  } else {
+    SkRect r = GetRectForTextLine(pt, width, StrokeThickness());
+    PaintFlags flags;
+    flags = ImmutableState()->FillFlags();
+    // Text lines are drawn using the stroke color.
+    flags.setColor(StrokeColor().Rgb());
+    DrawRect(r, flags, DarkModeFilter::ElementRole::kText);
   }
-
-  NOTREACHED();
 }
 
 // Draws a filled rectangle with a stroked border.
@@ -871,10 +893,9 @@ void GraphicsContext::DrawImage(
   image_flags.setFilterQuality(ComputeFilterQuality(image, dest, src));
 
   // Do not classify the image if the element has any CSS filters.
-  if (!has_filter_property && dark_mode_filter_.IsDarkModeActive() &&
-      dark_mode_filter_.AnalyzeShouldApplyToImage(src, dest)) {
-    dark_mode_filter_.ApplyToImageFlagsIfNeeded(
-        src, dest, image->PaintImageForCurrentFrame(), &image_flags);
+  if (!has_filter_property) {
+    DarkModeFilterHelper::ApplyToImageIfNeeded(this, image, &image_flags, src,
+                                               dest);
   }
 
   image->Draw(canvas_, image_flags, dest, src, should_respect_image_orientation,
@@ -912,12 +933,8 @@ void GraphicsContext::DrawImageRRect(
   image_flags.setFilterQuality(
       ComputeFilterQuality(image, dest.Rect(), src_rect));
 
-  if (dark_mode_filter_.IsDarkModeActive() &&
-      dark_mode_filter_.AnalyzeShouldApplyToImage(src_rect, dest.Rect())) {
-    dark_mode_filter_.ApplyToImageFlagsIfNeeded(
-        src_rect, dest.Rect(), image->PaintImageForCurrentFrame(),
-        &image_flags);
-  }
+  DarkModeFilterHelper::ApplyToImageIfNeeded(this, image, &image_flags,
+                                             src_rect, dest.Rect());
 
   bool use_shader = (visible_src == src_rect) &&
                     (respect_orientation == kDoNotRespectImageOrientation ||
@@ -1122,8 +1139,8 @@ void GraphicsContext::FillDRRect(const FloatRoundedRect& outer,
       canvas_->drawDRRect(outer, inner, ImmutableState()->FillFlags());
     } else {
       PaintFlags flags(ImmutableState()->FillFlags());
-      flags.setColor(dark_mode_filter_.InvertColorIfNeeded(
-          color.Rgb(), DarkModeFilter::ElementRole::kBackground));
+      flags.setColor(DarkModeFilterHelper::ApplyToColorIfNeeded(
+          this, color.Rgb(), DarkModeFilter::ElementRole::kBackground));
       canvas_->drawDRRect(outer, inner, flags);
     }
 
@@ -1136,8 +1153,8 @@ void GraphicsContext::FillDRRect(const FloatRoundedRect& outer,
   stroke_r_rect.inset(stroke_width / 2, stroke_width / 2);
 
   PaintFlags stroke_flags(ImmutableState()->FillFlags());
-  stroke_flags.setColor(dark_mode_filter_.InvertColorIfNeeded(
-      color.Rgb(), DarkModeFilter::ElementRole::kBackground));
+  stroke_flags.setColor(DarkModeFilterHelper::ApplyToColorIfNeeded(
+      this, color.Rgb(), DarkModeFilter::ElementRole::kBackground));
   stroke_flags.setStyle(PaintFlags::kStroke_Style);
   stroke_flags.setStrokeWidth(stroke_width);
 
@@ -1292,8 +1309,8 @@ void GraphicsContext::FillRectWithRoundedHole(
     const FloatRoundedRect& rounded_hole_rect,
     const Color& color) {
   PaintFlags flags(ImmutableState()->FillFlags());
-  flags.setColor(dark_mode_filter_.InvertColorIfNeeded(
-      color.Rgb(), DarkModeFilter::ElementRole::kBackground));
+  flags.setColor(DarkModeFilterHelper::ApplyToColorIfNeeded(
+      this, color.Rgb(), DarkModeFilter::ElementRole::kBackground));
   canvas_->drawDRRect(SkRRect::MakeRect(rect), rounded_hole_rect, flags);
 }
 
@@ -1315,6 +1332,39 @@ void GraphicsContext::AdjustLineToPixelBoundaries(FloatPoint& p1,
       p1.SetY(p1.Y() + 0.5f);
       p2.SetY(p2.Y() + 0.5f);
     }
+  }
+}
+
+Path GraphicsContext::GetPathForTextLine(const FloatPoint& pt,
+                                         float width,
+                                         float stroke_thickness,
+                                         StrokeStyle stroke_style) {
+  Path path;
+  DCHECK_NE(stroke_style, kWavyStroke);
+  if (ShouldUseStrokeForTextLine(stroke_style)) {
+    IntPoint start;
+    IntPoint end;
+    std::tie(start, end) = GetPointsForTextLine(pt, width, stroke_thickness);
+    path.MoveTo(FloatPoint(start));
+    path.AddLineTo(FloatPoint(end));
+  } else {
+    SkRect r = GetRectForTextLine(pt, width, stroke_thickness);
+    path.AddRect(r);
+  }
+  return path;
+}
+
+bool GraphicsContext::ShouldUseStrokeForTextLine(StrokeStyle stroke_style) {
+  switch (stroke_style) {
+    case kNoStroke:
+    case kSolidStroke:
+    case kDoubleStroke:
+      return false;
+    case kDottedStroke:
+    case kDashedStroke:
+    case kWavyStroke:
+    default:
+      return true;
   }
 }
 

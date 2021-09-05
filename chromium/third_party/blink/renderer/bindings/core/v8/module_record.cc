@@ -5,6 +5,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/module_record.h"
 #include "base/feature_list.h"
 #include "third_party/blink/public/common/features.h"
+#include "third_party/blink/public/mojom/v8_cache_options.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/boxed_v8_module.h"
 #include "third_party/blink/renderer/bindings/core/v8/referrer_script_info.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
@@ -18,48 +19,6 @@
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
 
 namespace blink {
-
-// static
-ModuleEvaluationResult ModuleEvaluationResult::Empty() {
-  return ModuleEvaluationResult(true, {});
-}
-
-// static
-ModuleEvaluationResult ModuleEvaluationResult::FromResult(
-    v8::Local<v8::Value> promise) {
-  DCHECK(base::FeatureList::IsEnabled(features::kTopLevelAwait) ||
-         promise.IsEmpty());
-  DCHECK(!base::FeatureList::IsEnabled(features::kTopLevelAwait) ||
-         promise->IsPromise());
-  return ModuleEvaluationResult(true, promise);
-}
-
-// static
-ModuleEvaluationResult ModuleEvaluationResult::FromException(
-    v8::Local<v8::Value> exception) {
-  DCHECK(!exception.IsEmpty());
-  return ModuleEvaluationResult(false, exception);
-}
-
-ModuleEvaluationResult& ModuleEvaluationResult::Escape(
-    ScriptState::EscapableScope* scope) {
-  value_ = scope->Escape(value_);
-  return *this;
-}
-
-v8::Local<v8::Value> ModuleEvaluationResult::GetException() const {
-  DCHECK(IsException());
-  DCHECK(!value_.IsEmpty());
-  return value_;
-}
-
-ScriptPromise ModuleEvaluationResult::GetPromise(
-    ScriptState* script_state) const {
-  DCHECK(base::FeatureList::IsEnabled(features::kTopLevelAwait));
-  DCHECK(IsSuccess());
-  DCHECK(!value_.IsEmpty());
-  return ScriptPromise(script_state, value_);
-}
 
 ModuleRecordProduceCacheData::ModuleRecordProduceCacheData(
     v8::Isolate* isolate,
@@ -93,7 +52,7 @@ v8::Local<v8::Module> ModuleRecord::Compile(
     const ScriptFetchOptions& options,
     const TextPosition& text_position,
     ExceptionState& exception_state,
-    V8CacheOptions v8_cache_options,
+    mojom::blink::V8CacheOptions v8_cache_options,
     SingleCachedMetadataHandler* cache_handler,
     ScriptSourceLocationType source_location_type,
     ModuleRecordProduceCacheData** out_produce_cache_data) {
@@ -101,10 +60,11 @@ v8::Local<v8::Module> ModuleRecord::Compile(
   v8::Local<v8::Module> module;
 
   // Module scripts currently don't support |kEagerCompile| which can be
-  // used for |kV8CacheOptionsFullCodeWithoutHeatCheck|, so use
-  // |kV8CacheOptionsCodeWithoutHeatCheck| instead.
-  if (v8_cache_options == kV8CacheOptionsFullCodeWithoutHeatCheck) {
-    v8_cache_options = kV8CacheOptionsCodeWithoutHeatCheck;
+  // used for |mojom::blink::V8CacheOptions::kFullCodeWithoutHeatCheck|, so use
+  // |mojom::blink::V8CacheOptions::kCodeWithoutHeatCheck| instead.
+  if (v8_cache_options ==
+      mojom::blink::V8CacheOptions::kFullCodeWithoutHeatCheck) {
+    v8_cache_options = mojom::blink::V8CacheOptions::kCodeWithoutHeatCheck;
   }
 
   v8::ScriptCompiler::CompileOptions compile_options;
@@ -137,7 +97,6 @@ v8::Local<v8::Module> ModuleRecord::Compile(
 
 ScriptValue ModuleRecord::Instantiate(ScriptState* script_state,
                                       v8::Local<v8::Module> record,
-
                                       const KURL& source_url) {
   v8::Isolate* isolate = script_state->GetIsolate();
   v8::TryCatch try_catch(isolate);
@@ -145,7 +104,14 @@ ScriptValue ModuleRecord::Instantiate(ScriptState* script_state,
 
   DCHECK(!record.IsEmpty());
   v8::Local<v8::Context> context = script_state->GetContext();
-  probe::ExecuteScript probe(ExecutionContext::From(script_state), source_url);
+
+  // Script IDs are not available on errored modules or on non-source text
+  // modules, so we give them a default value.
+  probe::ExecuteScript probe(ExecutionContext::From(script_state), source_url,
+                             record->GetStatus() != v8::Module::kErrored &&
+                                     record->IsSourceTextModule()
+                                 ? record->ScriptId()
+                                 : v8::UnboundScript::kNoScriptId);
   bool success;
   if (!record->InstantiateModule(context, &ResolveModuleCallback)
            .To(&success) ||
@@ -157,7 +123,7 @@ ScriptValue ModuleRecord::Instantiate(ScriptState* script_state,
   return ScriptValue();
 }
 
-ModuleEvaluationResult ModuleRecord::Evaluate(ScriptState* script_state,
+ScriptEvaluationResult ModuleRecord::Evaluate(ScriptState* script_state,
                                               v8::Local<v8::Module> record,
                                               const KURL& source_url) {
   v8::Isolate* isolate = script_state->GetIsolate();
@@ -168,19 +134,22 @@ ModuleEvaluationResult ModuleRecord::Evaluate(ScriptState* script_state,
   v8::TryCatch try_catch(isolate);
 
   ExecutionContext* execution_context = ExecutionContext::From(script_state);
-  probe::ExecuteScript probe(execution_context, source_url);
+
+  // Script IDs are not available on errored modules or on non-source text
+  // modules, so we give them a default value.
+  probe::ExecuteScript probe(execution_context, source_url,
+                             record->GetStatus() != v8::Module::kErrored &&
+                                     record->IsSourceTextModule()
+                                 ? record->ScriptId()
+                                 : v8::UnboundScript::kNoScriptId);
 
   v8::Local<v8::Value> result;
   if (!V8ScriptRunner::EvaluateModule(isolate, execution_context, record,
                                       script_state->GetContext())
            .ToLocal(&result)) {
-    return ModuleEvaluationResult::FromException(try_catch.Exception());
+    return ScriptEvaluationResult::FromModuleException(try_catch.Exception());
   }
-  if (base::FeatureList::IsEnabled(features::kTopLevelAwait)) {
-    return ModuleEvaluationResult::FromResult(result);
-  } else {
-    return ModuleEvaluationResult::Empty();
-  }
+  return ScriptEvaluationResult::FromModuleSuccess(result);
 }
 
 void ModuleRecord::ReportException(ScriptState* script_state,
@@ -188,38 +157,25 @@ void ModuleRecord::ReportException(ScriptState* script_state,
   V8ScriptRunner::ReportException(script_state->GetIsolate(), exception);
 }
 
-Vector<String> ModuleRecord::ModuleRequests(ScriptState* script_state,
-                                            v8::Local<v8::Module> record) {
-  if (record.IsEmpty())
-    return Vector<String>();
-
-  Vector<String> ret;
-
-  int length = record->GetModuleRequestsLength();
-  ret.ReserveInitialCapacity(length);
-  for (int i = 0; i < length; ++i) {
-    v8::Local<v8::String> v8_name = record->GetModuleRequest(i);
-    ret.push_back(ToCoreString(v8_name));
-  }
-  return ret;
-}
-
-Vector<TextPosition> ModuleRecord::ModuleRequestPositions(
+Vector<ModuleRequest> ModuleRecord::ModuleRequests(
     ScriptState* script_state,
     v8::Local<v8::Module> record) {
   if (record.IsEmpty())
-    return Vector<TextPosition>();
+    return Vector<ModuleRequest>();
 
-  Vector<TextPosition> ret;
-
+  Vector<ModuleRequest> requests;
   int length = record->GetModuleRequestsLength();
-  ret.ReserveInitialCapacity(length);
+  requests.ReserveInitialCapacity(length);
+
   for (int i = 0; i < length; ++i) {
+    v8::Local<v8::String> v8_name = record->GetModuleRequest(i);
     v8::Location v8_loc = record->GetModuleRequestLocation(i);
-    ret.emplace_back(OrdinalNumber::FromZeroBasedInt(v8_loc.GetLineNumber()),
-                     OrdinalNumber::FromZeroBasedInt(v8_loc.GetColumnNumber()));
+    TextPosition position(
+        OrdinalNumber::FromZeroBasedInt(v8_loc.GetLineNumber()),
+        OrdinalNumber::FromZeroBasedInt(v8_loc.GetColumnNumber()));
+    requests.emplace_back(ToCoreString(v8_name), position);
   }
-  return ret;
+  return requests;
 }
 
 v8::Local<v8::Value> ModuleRecord::V8Namespace(v8::Local<v8::Module> record) {

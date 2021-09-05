@@ -141,7 +141,7 @@ void VideoSender::InsertRawVideoFrame(
   LogVideoCaptureTimestamps(cast_environment_.get(), *video_frame,
                             rtp_timestamp);
 
-  // Used by chrome/browser/extension/api/cast_streaming/performance_test.cc
+  // Used by chrome/browser/media/cast_mirroring_performance_browsertest.cc
   TRACE_EVENT_INSTANT2("cast_perf_test", "InsertRawVideoFrame",
                        TRACE_EVENT_SCOPE_THREAD, "timestamp",
                        (reference_time - base::TimeTicks()).InMicroseconds(),
@@ -326,7 +326,7 @@ void VideoSender::OnEncodedVideoFrame(
     // Key frames are artificially capped to 1.0 because their actual
     // utilization is atypical compared to the other frames in the stream, and
     // this can misguide the producer of the input video frames.
-    video_frame->metadata()->resource_utilization =
+    video_frame->feedback()->resource_utilization =
         encoded_frame->dependency == EncodedFrame::KEY
             ? std::min(1.0, attenuated_utilization)
             : attenuated_utilization;

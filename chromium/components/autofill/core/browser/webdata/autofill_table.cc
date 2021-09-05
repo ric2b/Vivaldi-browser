@@ -25,6 +25,7 @@
 #include "base/time/time.h"
 #include "components/autofill/core/browser/autofill_type.h"
 #include "components/autofill/core/browser/data_model/autofill_metadata.h"
+#include "components/autofill/core/browser/data_model/autofill_offer_data.h"
 #include "components/autofill/core/browser/data_model/autofill_profile.h"
 #include "components/autofill/core/browser/data_model/credit_card.h"
 #include "components/autofill/core/browser/data_model/credit_card_cloud_token_data.h"
@@ -249,8 +250,13 @@ bool AddAutofillProfileNames(const AutofillProfile& profile,
 
 bool AddAutofillProfileAddresses(const AutofillProfile& profile,
                                  sql::Database* db) {
+  // The structured table is only populated if either the full support for
+  // structured addresses is enabled or the creation of address enhancement
+  // votes.
   if (base::FeatureList::IsEnabled(
-          features::kAutofillAddressEnhancementVotes)) {
+          features::kAutofillAddressEnhancementVotes) ||
+      base::FeatureList::IsEnabled(
+          features::kAutofillEnableSupportForMoreStructureInAddresses)) {
     sql::Statement s(db->GetUniqueStatement(
         "INSERT INTO autofill_profile_addresses "
         "(guid, "
@@ -259,8 +265,14 @@ bool AddAutofillProfileAddresses(const AutofillProfile& profile,
         "dependent_street_name, dependent_street_name_status, "
         "house_number, house_number_status, "
         "subpremise, subpremise_status, "
-        "premise_name, premise_name_status) "
-        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)"));
+        "premise_name, premise_name_status, "
+        "dependent_locality, dependent_locality_status, "
+        "city, city_status, "
+        "state, state_status, "
+        "zip_code, zip_code_status, "
+        "sorting_code, sorting_code_status, "
+        "country_code, country_code_status) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"));
 
     s.BindString(0, profile.guid());
     s.BindString16(1, profile.GetRawInfo(ADDRESS_HOME_STREET_ADDRESS));
@@ -276,6 +288,19 @@ bool AddAutofillProfileAddresses(const AutofillProfile& profile,
     s.BindInt(10, profile.GetVerificationStatusInt(ADDRESS_HOME_SUBPREMISE));
     s.BindString16(11, profile.GetRawInfo(ADDRESS_HOME_PREMISE_NAME));
     s.BindInt(12, profile.GetVerificationStatusInt(ADDRESS_HOME_PREMISE_NAME));
+    s.BindString16(13, profile.GetRawInfo(ADDRESS_HOME_DEPENDENT_LOCALITY));
+    s.BindInt(
+        14, profile.GetVerificationStatusInt(ADDRESS_HOME_DEPENDENT_LOCALITY));
+    s.BindString16(15, profile.GetRawInfo(ADDRESS_HOME_CITY));
+    s.BindInt(16, profile.GetVerificationStatusInt(ADDRESS_HOME_CITY));
+    s.BindString16(17, profile.GetRawInfo(ADDRESS_HOME_STATE));
+    s.BindInt(18, profile.GetVerificationStatusInt(ADDRESS_HOME_STATE));
+    s.BindString16(19, profile.GetRawInfo(ADDRESS_HOME_ZIP));
+    s.BindInt(20, profile.GetVerificationStatusInt(ADDRESS_HOME_ZIP));
+    s.BindString16(21, profile.GetRawInfo(ADDRESS_HOME_SORTING_CODE));
+    s.BindInt(22, profile.GetVerificationStatusInt(ADDRESS_HOME_SORTING_CODE));
+    s.BindString16(23, profile.GetRawInfo(ADDRESS_HOME_COUNTRY));
+    s.BindInt(24, profile.GetVerificationStatusInt(ADDRESS_HOME_COUNTRY));
 
     return s.Run();
   }
@@ -346,7 +371,9 @@ bool AddAutofillProfileNamesToProfile(sql::Database* db,
 bool AddAutofillProfileAddressesToProfile(sql::Database* db,
                                           AutofillProfile* profile) {
   if (base::FeatureList::IsEnabled(
-          features::kAutofillAddressEnhancementVotes)) {
+          features::kAutofillAddressEnhancementVotes) ||
+      base::FeatureList::IsEnabled(
+          features::kAutofillEnableSupportForMoreStructureInAddresses)) {
     sql::Statement s(db->GetUniqueStatement(
         "SELECT "
         "guid, "
@@ -355,7 +382,13 @@ bool AddAutofillProfileAddressesToProfile(sql::Database* db,
         "dependent_street_name, dependent_street_name_status, "
         "house_number, house_number_status, "
         "subpremise, subpremise_status, "
-        "premise_name, premise_name_status "
+        "premise_name, premise_name_status, "
+        "dependent_locality, dependent_locality_status, "
+        "city, city_status, "
+        "state, state_status, "
+        "zip_code, zip_code_status, "
+        "sorting_code, sorting_code_status, "
+        "country_code, country_code_status "
         "FROM autofill_profile_addresses "
         "WHERE guid=? "
         "LIMIT 1"));
@@ -367,13 +400,37 @@ bool AddAutofillProfileAddressesToProfile(sql::Database* db,
     if (s.Step()) {
       DCHECK_EQ(profile->guid(), s.ColumnString(0));
       base::string16 street_address = s.ColumnString16(1);
-      // At this stage, the unstructured street address was already written to
-      // the profile. If the street address was changed by a legacy client, the
+      base::string16 dependent_locality = s.ColumnString16(13);
+      base::string16 city = s.ColumnString16(15);
+      base::string16 state = s.ColumnString16(17);
+      base::string16 zip_code = s.ColumnString16(19);
+      base::string16 sorting_code = s.ColumnString16(21);
+      base::string16 country = s.ColumnString16(23);
+
+      base::string16 street_address_legacy =
+          profile->GetRawInfo(ADDRESS_HOME_STREET_ADDRESS);
+      base::string16 dependent_locality_legacy =
+          profile->GetRawInfo(ADDRESS_HOME_DEPENDENT_LOCALITY);
+      base::string16 city_legacy = profile->GetRawInfo(ADDRESS_HOME_CITY);
+      base::string16 state_legacy = profile->GetRawInfo(ADDRESS_HOME_STATE);
+      base::string16 zip_code_legacy = profile->GetRawInfo(ADDRESS_HOME_ZIP);
+      base::string16 sorting_code_legacy =
+          profile->GetRawInfo(ADDRESS_HOME_SORTING_CODE);
+      base::string16 country_legacy = profile->GetRawInfo(ADDRESS_HOME_COUNTRY);
+
+      // At this stage, the unstructured address was already written to
+      // the profile. If the address was changed by a legacy client, the
       // information diverged from the one in this table that is only written by
-      // new clients. If this is not the case, read the structured information.
-      if (street_address == profile->GetRawInfo(ADDRESS_HOME_STREET_ADDRESS)) {
+      // new clients. In this case remove the corresponding row from this table.
+      // Otherwise, read the new structured tokens and set the verification
+      // statuses for all tokens.
+      if (street_address == street_address_legacy &&
+          dependent_locality == dependent_locality_legacy &&
+          city == city_legacy && state == state_legacy &&
+          zip_code == zip_code_legacy && sorting_code == sorting_code_legacy &&
+          country == country_legacy) {
         profile->SetRawInfoWithVerificationStatusInt(
-            ADDRESS_HOME_STREET_ADDRESS, s.ColumnString16(1), s.ColumnInt(2));
+            ADDRESS_HOME_STREET_ADDRESS, street_address, s.ColumnInt(2));
         profile->SetRawInfoWithVerificationStatusInt(
             ADDRESS_HOME_STREET_NAME, s.ColumnString16(3), s.ColumnInt(4));
         profile->SetRawInfoWithVerificationStatusInt(
@@ -385,8 +442,21 @@ bool AddAutofillProfileAddressesToProfile(sql::Database* db,
             ADDRESS_HOME_SUBPREMISE, s.ColumnString16(9), s.ColumnInt(10));
         profile->SetRawInfoWithVerificationStatusInt(
             ADDRESS_HOME_PREMISE_NAME, s.ColumnString16(11), s.ColumnInt(12));
+        profile->SetRawInfoWithVerificationStatusInt(
+            ADDRESS_HOME_DEPENDENT_LOCALITY, dependent_locality,
+            s.ColumnInt(14));
+        profile->SetRawInfoWithVerificationStatusInt(ADDRESS_HOME_CITY, city,
+                                                     s.ColumnInt(16));
+        profile->SetRawInfoWithVerificationStatusInt(ADDRESS_HOME_STATE, state,
+                                                     s.ColumnInt(18));
+        profile->SetRawInfoWithVerificationStatusInt(ADDRESS_HOME_ZIP, zip_code,
+                                                     s.ColumnInt(20));
+        profile->SetRawInfoWithVerificationStatusInt(
+            ADDRESS_HOME_SORTING_CODE, sorting_code, s.ColumnInt(22));
+        profile->SetRawInfoWithVerificationStatusInt(ADDRESS_HOME_COUNTRY,
+                                                     country, s.ColumnInt(24));
       } else {
-        // Otherwise remove the structured information from the table for
+        // Remove the structured information from the table for
         // eventual deletion consistency.
         sql::Statement s1(db->GetUniqueStatement(
             "DELETE FROM autofill_profile_addresses WHERE guid = ?"));
@@ -590,7 +660,8 @@ bool AutofillTable::CreateTablesIfNecessary() {
           InitServerAddressesTable() && InitServerAddressMetadataTable() &&
           InitAutofillSyncMetadataTable() && InitModelTypeStateTable() &&
           InitPaymentsCustomerDataTable() && InitPaymentsUPIVPATable() &&
-          InitServerCreditCardCloudTokenDataTable());
+          InitServerCreditCardCloudTokenDataTable() && InitOfferDataTable() &&
+          InitOfferEligibleInstrumentTable() && InitOfferMerchantDomainTable());
 }
 
 bool AutofillTable::IsSyncable() {
@@ -682,6 +753,12 @@ bool AutofillTable::MigrateToVersion(int version,
     case 88:
       *update_compatible_version = false;
       return MigrateToVersion88AddNewNameColumns();
+    case 89:
+      *update_compatible_version = false;
+      return MigrateToVersion89AddInstrumentIdColumnToMaskedCreditCard();
+    case 90:
+      *update_compatible_version = false;
+      return MigrateToVersion90AddNewStructuredAddressColumns();
   }
   return true;
 }
@@ -1131,11 +1208,15 @@ std::unique_ptr<AutofillProfile> AutofillTable::GetAutofillProfile(
   // The details should be added after the other info to make sure they don't
   // change when we change the names/emails/phones.
   AddAutofillProfileDetailsFromStatement(s, profile.get());
+  bool validation_status = profile->is_client_validity_states_updated();
 
   // The structured address information should be added after the street_address
   // from the query above was  written because this information is used to
   // detect changes by a legacy client.
   AddAutofillProfileAddressesToProfile(db_, profile.get());
+  // Set the validation status again to prevent a change due to the repeated
+  // writing.
+  profile->set_is_client_validity_states_updated(validation_status);
 
   // For more-structured profiles, the profile must be finalized to fully
   // populate the name fields.
@@ -1429,7 +1510,8 @@ bool AutofillTable::GetServerCreditCards(
       "metadata.billing_address_id,"  // 10
       "bank_name,"                    // 11
       "nickname,"                     // 12
-      "card_issuer "                  // 13
+      "card_issuer,"                  // 13
+      "instrument_id "                // 14
       "FROM masked_credit_cards masked "
       "LEFT OUTER JOIN unmasked_credit_cards USING (id) "
       "LEFT OUTER JOIN server_card_metadata metadata USING (id)"));
@@ -1475,6 +1557,7 @@ bool AutofillTable::GetServerCreditCards(
     card->SetNickname(s.ColumnString16(index++));
     card->set_card_issuer(
         static_cast<CreditCard::Issuer>(s.ColumnInt(index++)));
+    card->set_instrument_id(s.ColumnInt64(index++));
     credit_cards->push_back(std::move(card));
   }
   return s.Succeeded();
@@ -1725,17 +1808,18 @@ void AutofillTable::SetServerCardsData(
   // Add all the masked cards.
   sql::Statement masked_insert(
       db_->GetUniqueStatement("INSERT INTO masked_credit_cards("
-                              "id,"            // 0
-                              "network,"       // 1
-                              "status,"        // 2
-                              "name_on_card,"  // 3
-                              "last_four,"     // 4
-                              "exp_month,"     // 5
-                              "exp_year,"      // 6
-                              "bank_name,"     // 7
-                              "nickname,"      // 8
-                              "card_issuer)"   // 9
-                              "VALUES (?,?,?,?,?,?,?,?,?,?)"));
+                              "id,"             // 0
+                              "network,"        // 1
+                              "status,"         // 2
+                              "name_on_card,"   // 3
+                              "last_four,"      // 4
+                              "exp_month,"      // 5
+                              "exp_year,"       // 6
+                              "bank_name,"      // 7
+                              "nickname,"       // 8
+                              "card_issuer,"    // 9
+                              "instrument_id)"  // 10
+                              "VALUES (?,?,?,?,?,?,?,?,?,?,?)"));
   int index;
   for (const CreditCard& card : credit_cards) {
     DCHECK_EQ(CreditCard::MASKED_SERVER_CARD, card.record_type());
@@ -1752,6 +1836,7 @@ void AutofillTable::SetServerCardsData(
     masked_insert.BindString(index++, card.bank_name());
     masked_insert.BindString16(index++, card.nickname());
     masked_insert.BindInt(index++, static_cast<int>(card.card_issuer()));
+    masked_insert.BindInt64(index++, card.instrument_id());
     masked_insert.Run();
     masked_insert.Reset(true);
   }
@@ -1919,6 +2004,128 @@ bool AutofillTable::GetPaymentsCustomerData(
   return s.Succeeded();
 }
 
+void AutofillTable::SetCreditCardOffers(
+    const std::vector<AutofillOfferData>& autofill_offer_data) {
+  sql::Transaction transaction(db_);
+  if (!transaction.Begin())
+    return;
+
+  // Delete all old values.
+  sql::Statement delete_offers(
+      db_->GetUniqueStatement("DELETE FROM offer_data"));
+  sql::Statement delete_offer_eligible_instruments(
+      db_->GetUniqueStatement("DELETE FROM offer_eligible_instrument"));
+  sql::Statement delete_offer_merchant_domains(
+      db_->GetUniqueStatement("DELETE FROM offer_merchant_domain"));
+  delete_offers.Run();
+  delete_offer_eligible_instruments.Run();
+  delete_offer_merchant_domains.Run();
+
+  // Insert new values.
+  sql::Statement insert_offers(
+      db_->GetUniqueStatement("INSERT INTO offer_data("
+                              "offer_id, "             // 0
+                              "offer_reward_amount, "  // 1
+                              "expiry, "               // 2
+                              "offer_details_url) "    // 3
+                              "VALUES (?,?,?,?)"));
+
+  for (const AutofillOfferData& data : autofill_offer_data) {
+    insert_offers.BindInt64(0, data.offer_id);
+    insert_offers.BindString(1, data.offer_reward_amount);
+    insert_offers.BindInt64(
+        2, data.expiry.ToDeltaSinceWindowsEpoch().InMilliseconds());
+    insert_offers.BindString(3, data.offer_details_url.spec());
+    insert_offers.Run();
+    insert_offers.Reset(true);
+
+    for (const int64_t instrument_id : data.eligible_instrument_id) {
+      // Insert new offer_eligible_instrument values.
+      sql::Statement insert_offer_eligible_instruments(
+          db_->GetUniqueStatement("INSERT INTO offer_eligible_instrument("
+                                  "offer_id, "       // 0
+                                  "instrument_id) "  // 1
+                                  "VALUES (?,?)"));
+      insert_offer_eligible_instruments.BindInt64(0, data.offer_id);
+      insert_offer_eligible_instruments.BindInt64(1, instrument_id);
+      insert_offer_eligible_instruments.Run();
+      insert_offer_eligible_instruments.Reset(true);
+    }
+
+    for (const GURL& merchant_domain : data.merchant_domain) {
+      // Insert new offer_merchant_domain values.
+      sql::Statement insert_offer_merchant_domains(
+          db_->GetUniqueStatement("INSERT INTO offer_merchant_domain("
+                                  "offer_id, "         // 0
+                                  "merchant_domain) "  // 1
+                                  "VALUES (?,?)"));
+      insert_offer_merchant_domains.BindInt64(0, data.offer_id);
+      insert_offer_merchant_domains.BindString(
+          1, merchant_domain.GetOrigin().spec());
+      insert_offer_merchant_domains.Run();
+      insert_offer_merchant_domains.Reset(true);
+    }
+  }
+  transaction.Commit();
+}
+
+bool AutofillTable::GetCreditCardOffers(
+    std::vector<std::unique_ptr<AutofillOfferData>>* autofill_offer_data) {
+  autofill_offer_data->clear();
+
+  sql::Statement s(
+      db_->GetUniqueStatement("SELECT "
+                              "offer_id, "             // 0
+                              "offer_reward_amount, "  // 1
+                              "expiry, "               // 2
+                              "offer_details_url "     // 3
+                              "FROM offer_data"));
+
+  while (s.Step()) {
+    int index = 0;
+    std::unique_ptr<AutofillOfferData> data =
+        std::make_unique<AutofillOfferData>();
+    data->offer_id = s.ColumnInt64(index++);
+    data->offer_reward_amount = s.ColumnString(index++);
+    data->expiry = base::Time::FromDeltaSinceWindowsEpoch(
+        base::TimeDelta::FromMilliseconds(s.ColumnInt64(index++)));
+    data->offer_details_url = GURL(s.ColumnString(index++));
+
+    sql::Statement s_offer_eligible_instrument(
+        db_->GetUniqueStatement("SELECT "
+                                "offer_id, "      // 0
+                                "instrument_id "  // 1
+                                "FROM offer_eligible_instrument "
+                                "WHERE offer_id = ?"));
+    s_offer_eligible_instrument.BindInt64(0, data->offer_id);
+    while (s_offer_eligible_instrument.Step()) {
+      const int64_t instrument_id = s_offer_eligible_instrument.ColumnInt64(1);
+      if (instrument_id != 0) {
+        data->eligible_instrument_id.push_back(instrument_id);
+      }
+    }
+
+    sql::Statement s_offer_merchant_domain(
+        db_->GetUniqueStatement("SELECT "
+                                "offer_id, "        // 0
+                                "merchant_domain "  // 1
+                                "FROM offer_merchant_domain "
+                                "WHERE offer_id = ?"));
+    s_offer_merchant_domain.BindInt64(0, data->offer_id);
+    while (s_offer_merchant_domain.Step()) {
+      const std::string merchant_domain =
+          s_offer_merchant_domain.ColumnString(1);
+      if (!merchant_domain.empty()) {
+        data->merchant_domain.emplace_back(merchant_domain);
+      }
+    }
+
+    autofill_offer_data->emplace_back(std::move(data));
+  }
+
+  return s.Succeeded();
+}
+
 bool AutofillTable::InsertUpiId(const std::string& upi_id) {
   sql::Transaction transaction(db_);
   if (!transaction.Begin())
@@ -1983,6 +2190,21 @@ bool AutofillTable::ClearAllServerData() {
   sql::Statement cloud_token_data(
       db_->GetUniqueStatement("DELETE FROM server_card_cloud_token_data"));
   cloud_token_data.Run();
+  changed |= db_->GetLastChangeCount() > 0;
+
+  sql::Statement autofill_offer_data(
+      db_->GetUniqueStatement("DELETE FROM offer_data"));
+  autofill_offer_data.Run();
+  changed |= db_->GetLastChangeCount() > 0;
+
+  sql::Statement autofill_offer_eligible_instrument(
+      db_->GetUniqueStatement("DELETE FROM offer_eligible_instrument"));
+  autofill_offer_eligible_instrument.Run();
+  changed |= db_->GetLastChangeCount() > 0;
+
+  sql::Statement autofill_offer_merchant_domain(
+      db_->GetUniqueStatement("DELETE FROM offer_merchant_domain"));
+  autofill_offer_merchant_domain.Run();
   changed |= db_->GetLastChangeCount() > 0;
 
   transaction.Commit();
@@ -3009,10 +3231,9 @@ bool AutofillTable::MigrateToVersion85AddCardIssuerColumnToMaskedCreditCard() {
 }
 
 bool AutofillTable::MigrateToVersion88AddNewNameColumns() {
-  for (const std::string& column :
-       {"honorific_prefix", "first_last_name", "conjunction_last_name",
-        "second_last_name"}) {
-    if (!db_->DoesColumnExist("autofill_profile_names", column.c_str()) &&
+  for (const char* column : {"honorific_prefix", "first_last_name",
+                             "conjunction_last_name", "second_last_name"}) {
+    if (!db_->DoesColumnExist("autofill_profile_names", column) &&
         !db_->Execute(
             base::StrCat({"ALTER TABLE autofill_profile_names ADD COLUMN ",
                           column, " VARCHAR"})
@@ -3021,14 +3242,14 @@ bool AutofillTable::MigrateToVersion88AddNewNameColumns() {
     }
   }
 
-  for (const std::string& column :
+  for (const char* column :
        {"honorific_prefix_status", "first_name_status", "middle_name_status",
         "last_name_status", "first_last_name_status",
         "conjunction_last_name_status", "second_last_name_status",
         "full_name_status"}) {
     // The default value of 0 corresponds to the verification status
     // |kNoStatus|.
-    if (!db_->DoesColumnExist("autofill_profile_names", column.c_str()) &&
+    if (!db_->DoesColumnExist("autofill_profile_names", column) &&
         !db_->Execute(
             base::StrCat({"ALTER TABLE autofill_profile_names ADD COLUMN ",
                           column, " INTEGER DEFAULT 0"})
@@ -3064,6 +3285,47 @@ bool AutofillTable::MigrateToVersion87AddCreditCardNicknameColumn() {
   // Add the nickname column to the credit_card table.
   return db_->DoesColumnExist("credit_cards", "nickname") ||
          db_->Execute("ALTER TABLE credit_cards ADD COLUMN nickname VARCHAR");
+}
+
+bool AutofillTable::MigrateToVersion90AddNewStructuredAddressColumns() {
+  if (!db_->DoesTableExist("autofill_profile_addresses"))
+    InitProfileAddressesTable();
+
+  for (const char* column : {"dependent_locality", "city", "state", "zip_code",
+                             "sorting_code", "country_code"}) {
+    if (!db_->DoesColumnExist("autofill_profile_addresses", column) &&
+        !db_->Execute(
+            base::StrCat({"ALTER TABLE autofill_profile_addresses ADD COLUMN ",
+                          column, " VARCHAR"})
+                .c_str())) {
+      return false;
+    }
+  }
+
+  for (const char* column :
+       {"dependent_locality_status", "city_status", "state_status",
+        "zip_code_status", "sorting_code_status", "country_code_status"}) {
+    // The default value of 0 corresponds to the verification status
+    // |kNoStatus|.
+    if (!db_->DoesColumnExist("autofill_profile_addresses", column) &&
+        !db_->Execute(
+            base::StrCat({"ALTER TABLE autofill_profile_addresses ADD COLUMN ",
+                          column, " INTEGER DEFAULT 0"})
+                .c_str())) {
+      return false;
+    }
+  }
+  return true;
+}
+bool AutofillTable::
+    MigrateToVersion89AddInstrumentIdColumnToMaskedCreditCard() {
+  // Add the new instrument_id column to the masked_credit_cards table and set
+  // the default value to 0.
+  return db_->DoesColumnExist("masked_credit_cards", "instrument_id") ||
+         db_->Execute(
+             "ALTER TABLE masked_credit_cards "
+             "ADD COLUMN instrument_id INTEGER "
+             "DEFAULT 0");
 }
 
 bool AutofillTable::AddFormFieldValuesTime(
@@ -3135,7 +3397,8 @@ bool AutofillTable::SupportsMetadataForModelType(
   return (model_type == syncer::AUTOFILL ||
           model_type == syncer::AUTOFILL_PROFILE ||
           model_type == syncer::AUTOFILL_WALLET_DATA ||
-          model_type == syncer::AUTOFILL_WALLET_METADATA);
+          model_type == syncer::AUTOFILL_WALLET_METADATA ||
+          model_type == syncer::AUTOFILL_WALLET_OFFER);
 }
 
 int AutofillTable::GetKeyValueForModelType(syncer::ModelType model_type) const {
@@ -3225,17 +3488,18 @@ void AutofillTable::AddMaskedCreditCards(
   DCHECK_GT(db_->transaction_nesting(), 0);
   sql::Statement masked_insert(
       db_->GetUniqueStatement("INSERT INTO masked_credit_cards("
-                              "id,"            // 0
-                              "network,"       // 1
-                              "status,"        // 2
-                              "name_on_card,"  // 3
-                              "last_four,"     // 4
-                              "exp_month,"     // 5
-                              "exp_year,"      // 6
-                              "bank_name,"     // 7
-                              "nickname,"      // 8
-                              "card_issuer)"   // 9
-                              "VALUES (?,?,?,?,?,?,?,?,?,?)"));
+                              "id,"             // 0
+                              "network,"        // 1
+                              "status,"         // 2
+                              "name_on_card,"   // 3
+                              "last_four,"      // 4
+                              "exp_month,"      // 5
+                              "exp_year,"       // 6
+                              "bank_name,"      // 7
+                              "nickname,"       // 8
+                              "card_issuer,"    // 9
+                              "instrument_id)"  // 10
+                              "VALUES (?,?,?,?,?,?,?,?,?,?,?)"));
   int index;
   for (const CreditCard& card : credit_cards) {
     DCHECK_EQ(CreditCard::MASKED_SERVER_CARD, card.record_type());
@@ -3252,6 +3516,7 @@ void AutofillTable::AddMaskedCreditCards(
     masked_insert.BindString(index++, card.bank_name());
     masked_insert.BindString16(index++, card.nickname());
     masked_insert.BindInt(index++, static_cast<int>(card.card_issuer()));
+    masked_insert.BindInt64(index++, card.instrument_id());
     masked_insert.Run();
     masked_insert.Reset(true);
 
@@ -3410,7 +3675,19 @@ bool AutofillTable::InitProfileAddressesTable() {
                       "dependent_street_name_status INTEGER DEFAULT 0, "
                       "house_number_status INTEGER DEFAULT 0, "
                       "subpremise_status INTEGER DEFAULT 0, "
-                      "premise_name_status INTEGER DEFAULT 0)")) {
+                      "premise_name_status INTEGER DEFAULT 0, "
+                      "dependent_locality VARCHAR, "
+                      "city VARCHAR, "
+                      "state VARCHAR, "
+                      "zip_code VARCHAR, "
+                      "sorting_code VARCHAR, "
+                      "country_code VARCHAR, "
+                      "dependent_locality_status INTEGER DEFAULT 0, "
+                      "city_status INTEGER DEFAULT 0, "
+                      "state_status INTEGER DEFAULT 0, "
+                      "zip_code_status INTEGER DEFAULT 0, "
+                      "sorting_code_status INTEGER DEFAULT 0, "
+                      "country_code_status INTEGER DEFAULT 0)")) {
       NOTREACHED();
       return false;
     }
@@ -3465,7 +3742,8 @@ bool AutofillTable::InitMaskedCreditCardsTable() {
                       "exp_year INTEGER DEFAULT 0, "
                       "bank_name VARCHAR, "
                       "nickname VARCHAR, "
-                      "card_issuer INTEGER DEFAULT 0)")) {
+                      "card_issuer INTEGER DEFAULT 0, "
+                      "instrument_id INTEGER DEFAULT 0)")) {
       NOTREACHED();
       return false;
     }
@@ -3595,6 +3873,45 @@ bool AutofillTable::InitServerCreditCardCloudTokenDataTable() {
                       "exp_year INTEGER DEFAULT 0, "
                       "card_art_url VARCHAR, "
                       "instrument_token VARCHAR)")) {
+      NOTREACHED();
+      return false;
+    }
+  }
+  return true;
+}
+
+bool AutofillTable::InitOfferDataTable() {
+  if (!db_->DoesTableExist("offer_data")) {
+    if (!db_->Execute("CREATE TABLE offer_data ( "
+                      "offer_id UNSIGNED LONG, "
+                      "offer_reward_amount VARCHAR, "
+                      "expiry UNSIGNED LONG, "
+                      "offer_details_url VARCHAR, "
+                      "merchant_domain VARCHAR)")) {
+      NOTREACHED();
+      return false;
+    }
+  }
+  return true;
+}
+
+bool AutofillTable::InitOfferEligibleInstrumentTable() {
+  if (!db_->DoesTableExist("offer_eligible_instrument")) {
+    if (!db_->Execute("CREATE TABLE offer_eligible_instrument ( "
+                      "offer_id UNSIGNED LONG,"
+                      "instrument_id UNSIGNED LONG)")) {
+      NOTREACHED();
+      return false;
+    }
+  }
+  return true;
+}
+
+bool AutofillTable::InitOfferMerchantDomainTable() {
+  if (!db_->DoesTableExist("offer_merchant_domain")) {
+    if (!db_->Execute("CREATE TABLE offer_merchant_domain ( "
+                      "offer_id UNSIGNED LONG,"
+                      "merchant_domain VARCHAR)")) {
       NOTREACHED();
       return false;
     }

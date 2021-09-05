@@ -1,6 +1,4 @@
 
-if(is_mac) {
-  declare_args() {
-    is_full_mac_signer = false
-  }
+declare_args() {
+  is_full_signer = false
 }

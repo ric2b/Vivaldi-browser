@@ -318,7 +318,7 @@ TEST_F(SmsServiceTest, CleansUp) {
 
   NiceMock<MockSmsWebContentsDelegate> delegate;
   WebContentsImpl* web_contents_impl =
-      reinterpret_cast<WebContentsImpl*>(web_contents());
+      static_cast<WebContentsImpl*>(web_contents());
   web_contents_impl->SetDelegate(&delegate);
 
   NiceMock<MockSmsProvider> provider;
@@ -337,7 +337,7 @@ TEST_F(SmsServiceTest, CleansUp) {
 
   service->Receive(base::BindLambdaForTesting(
       [&reload](SmsStatus status, const Optional<string>& otp) {
-        EXPECT_EQ(SmsStatus::kTimeout, status);
+        EXPECT_EQ(SmsStatus::kUnhandledRequest, status);
         EXPECT_EQ(base::nullopt, otp);
         reload.Quit();
       }));
@@ -404,7 +404,7 @@ TEST_F(SmsServiceTest, RecordMetricsForNewPage) {
   NavigateAndCommit(GURL(kTestUrl));
   NiceMock<MockSmsWebContentsDelegate> delegate;
   WebContentsImpl* web_contents_impl =
-      reinterpret_cast<WebContentsImpl*>(web_contents());
+      static_cast<WebContentsImpl*>(web_contents());
   web_contents_impl->SetDelegate(&delegate);
 
   NiceMock<MockSmsProvider> provider;
@@ -423,7 +423,7 @@ TEST_F(SmsServiceTest, RecordMetricsForNewPage) {
 
   service->Receive(base::BindLambdaForTesting(
       [&reload](SmsStatus status, const Optional<string>& otp) {
-        EXPECT_EQ(SmsStatus::kTimeout, status);
+        EXPECT_EQ(SmsStatus::kUnhandledRequest, status);
         EXPECT_EQ(base::nullopt, otp);
         reload.Quit();
       }));
@@ -442,7 +442,7 @@ TEST_F(SmsServiceTest, RecordMetricsForSamePage) {
   NavigateAndCommit(GURL(kTestUrl));
   NiceMock<MockSmsWebContentsDelegate> delegate;
   WebContentsImpl* web_contents_impl =
-      reinterpret_cast<WebContentsImpl*>(web_contents());
+      static_cast<WebContentsImpl*>(web_contents());
   web_contents_impl->SetDelegate(&delegate);
 
   NiceMock<MockSmsProvider> provider;
@@ -461,7 +461,7 @@ TEST_F(SmsServiceTest, RecordMetricsForSamePage) {
 
   service->Receive(base::BindLambdaForTesting(
       [&reload](SmsStatus status, const Optional<string>& otp) {
-        EXPECT_EQ(SmsStatus::kTimeout, status);
+        EXPECT_EQ(SmsStatus::kUnhandledRequest, status);
         EXPECT_EQ(base::nullopt, otp);
         reload.Quit();
       }));
@@ -762,7 +762,7 @@ TEST_F(SmsServiceTest, RecordMetricsForExistingPage) {
 
   NiceMock<MockSmsWebContentsDelegate> delegate;
   WebContentsImpl* web_contents_impl =
-      reinterpret_cast<WebContentsImpl*>(web_contents());
+      static_cast<WebContentsImpl*>(web_contents());
   web_contents_impl->SetDelegate(&delegate);
 
   NiceMock<MockSmsProvider> provider;
@@ -781,7 +781,7 @@ TEST_F(SmsServiceTest, RecordMetricsForExistingPage) {
 
   service->Receive(base::BindLambdaForTesting(
       [&reload](SmsStatus status, const Optional<string>& otp) {
-        EXPECT_EQ(SmsStatus::kTimeout, status);
+        EXPECT_EQ(SmsStatus::kUnhandledRequest, status);
         EXPECT_EQ(base::nullopt, otp);
         reload.Quit();
       }));

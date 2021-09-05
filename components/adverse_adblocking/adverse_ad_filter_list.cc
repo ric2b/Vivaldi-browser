@@ -100,9 +100,8 @@ void AdverseAdFilterListService::DoChecksumBeforeDownload() {
   auto resource_request = std::make_unique<network::ResourceRequest>();
   resource_request->url = url;
   resource_request->method = "GET";
-  resource_request->load_flags = net::LOAD_DO_NOT_SEND_COOKIES |
-                                 net::LOAD_DO_NOT_SAVE_COOKIES |
-                                 net::LOAD_BYPASS_CACHE;
+  resource_request->load_flags = net::LOAD_BYPASS_CACHE;
+  resource_request->credentials_mode = network::mojom::CredentialsMode::kOmit;
 
   // See
   // https://chromium.googlesource.com/chromium/src/+/lkgr/docs/network_traffic_annotations.md
@@ -150,9 +149,8 @@ void AdverseAdFilterListService::DownloadBlockList() {
   auto resource_request = std::make_unique<network::ResourceRequest>();
   resource_request->url = url;
   resource_request->method = "GET";
-  resource_request->load_flags = net::LOAD_DO_NOT_SEND_COOKIES |
-                                 net::LOAD_DO_NOT_SAVE_COOKIES |
-                                 net::LOAD_BYPASS_CACHE;
+  resource_request->load_flags = net::LOAD_BYPASS_CACHE;
+  resource_request->credentials_mode = network::mojom::CredentialsMode::kOmit;
 
   // See
   // https://chromium.googlesource.com/chromium/src/+/lkgr/docs/network_traffic_annotations.md

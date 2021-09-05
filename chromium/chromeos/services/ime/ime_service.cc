@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "base/bind.h"
+#include "base/feature_list.h"
 #include "base/files/file_util.h"
 #include "base/location.h"
 #include "base/notreached.h"
@@ -70,7 +71,7 @@ void ImeService::SimpleDownloadFinished(SimpleDownloadCallback callback,
   if (file.empty()) {
     callback(SIMPLE_DOWNLOAD_ERROR_FAILED, "");
   } else {
-    // Convert downloaded file path to an whitelisted path.
+    // Convert downloaded file path to an allowlisted path.
     base::FilePath target(kUserInputMethodsDirPath);
     target = target.Append(kLanguageDataDirName).Append(file.BaseName());
     callback(SIMPLE_DOWNLOAD_ERROR_OK, target.MaybeAsASCII().c_str());
@@ -97,6 +98,14 @@ void ImeService::RunInMainSequence(ImeSequencedTask task, int task_id) {
   // invoked Mojo call from other threads (sequences) should be posted to
   // main_task_runner_ by this function.
   main_task_runner_->PostTask(FROM_HERE, base::BindOnce(task, task_id));
+}
+
+bool ImeService::IsFeatureEnabled(const char* feature_name) {
+  if (strcmp(feature_name, "SystemLatinPhysicalTyping") == 0) {
+    return base::FeatureList::IsEnabled(
+        chromeos::features::kSystemLatinPhysicalTyping);
+  }
+  return false;
 }
 
 int ImeService::SimpleDownloadToFile(const char* url,

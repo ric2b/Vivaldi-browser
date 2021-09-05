@@ -45,6 +45,11 @@
     _observers = [SceneStateObserverList
         observersWithProtocol:@protocol(SceneStateObserver)];
     _agents = [[NSMutableArray alloc] init];
+
+    // AppState might be nil in tests.
+    if (appState) {
+      [self addObserver:appState];
+    }
   }
   return self;
 }
@@ -91,6 +96,14 @@
   return _window;
 }
 
+- (NSString*)sceneSessionID {
+  NSString* sessionID = nil;
+  if (@available(ios 13, *)) {
+    sessionID = _scene.session.persistentIdentifier;
+  }
+  return sessionID;
+}
+
 - (void)setActivationLevel:(SceneActivationLevel)newLevel {
   if (_activationLevel == newLevel) {
     return;
@@ -100,11 +113,24 @@
   [self.observers sceneState:self transitionedToActivationLevel:newLevel];
 }
 
+- (void)setHasInitializedUI:(BOOL)hasInitializedUI {
+  if (_hasInitializedUI == hasInitializedUI) {
+    return;
+  }
+  _hasInitializedUI = hasInitializedUI;
+  if (hasInitializedUI) {
+    [self.observers sceneStateHasInitializedUI:self];
+  }
+}
+
 - (id<BrowserInterfaceProvider>)interfaceProvider {
   return self.controller.interfaceProvider;
 }
 
 - (void)setPresentingModalOverlay:(BOOL)presentingModalOverlay {
+  if (_presentingModalOverlay == presentingModalOverlay) {
+    return;
+  }
   if (presentingModalOverlay) {
     [self.observers sceneStateWillShowModalOverlay:self];
   } else {
@@ -112,6 +138,10 @@
   }
 
   _presentingModalOverlay = presentingModalOverlay;
+
+  if (!presentingModalOverlay) {
+    [self.observers sceneStateDidHideModalOverlay:self];
+  }
 }
 
 - (void)setURLContextsToOpen:(NSSet<UIOpenURLContext*>*)URLContextsToOpen {

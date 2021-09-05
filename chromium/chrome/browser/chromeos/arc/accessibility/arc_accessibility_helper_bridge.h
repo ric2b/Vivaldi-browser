@@ -98,7 +98,7 @@ class ArcAccessibilityHelperBridge
 
   // AXTreeSourceArc::Delegate overrides.
   void OnAction(const ui::AXActionData& data) const override;
-  bool IsScreenReaderEnabled() const override;
+  bool UseFullFocusMode() const override;
 
   // ArcAppListPrefs::Observer overrides.
   void OnTaskDestroyed(int32_t task_id) override;
@@ -177,8 +177,8 @@ class ArcAccessibilityHelperBridge
   AXTreeSourceArc* GetFromTreeId(ui::AXTreeID tree_id) const;
 
   bool activation_observer_added_ = false;
-  bool is_focus_highlight_enabled_ = false;
-  bool is_screen_reader_enabled_ = false;
+  bool is_focus_event_enabled_ = false;
+  bool use_full_focus_mode_ = false;
   Profile* const profile_;
   ArcBridgeService* const arc_bridge_service_;
   TreeMap trees_;

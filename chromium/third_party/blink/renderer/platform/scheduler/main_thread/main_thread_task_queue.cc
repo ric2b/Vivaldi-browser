@@ -100,38 +100,6 @@ bool MainThreadTaskQueue::IsPerFrameTaskQueue(
   return false;
 }
 
-MainThreadTaskQueue::QueueClass MainThreadTaskQueue::QueueClassForQueueType(
-    QueueType type) {
-  switch (type) {
-    case QueueType::kControl:
-    case QueueType::kDefault:
-    case QueueType::kIdle:
-    case QueueType::kTest:
-    case QueueType::kV8:
-    case QueueType::kNonWaking:
-      return QueueClass::kNone;
-    case QueueType::kFrameLoading:
-    case QueueType::kFrameLoadingControl:
-      return QueueClass::kLoading;
-    case QueueType::kFrameThrottleable:
-    case QueueType::kFrameDeferrable:
-    case QueueType::kFramePausable:
-    case QueueType::kFrameUnpausable:
-    case QueueType::kWebScheduling:
-      return QueueClass::kTimer;
-    case QueueType::kCompositor:
-    case QueueType::kInput:
-      return QueueClass::kCompositor;
-    case QueueType::kDetached:
-    case QueueType::kOther:
-    case QueueType::kCount:
-      DCHECK(false);
-      return QueueClass::kCount;
-  }
-  NOTREACHED();
-  return QueueClass::kNone;
-}
-
 MainThreadTaskQueue::MainThreadTaskQueue(
     std::unique_ptr<internal::TaskQueueImpl> impl,
     const TaskQueue::Spec& spec,
@@ -139,8 +107,6 @@ MainThreadTaskQueue::MainThreadTaskQueue(
     MainThreadSchedulerImpl* main_thread_scheduler)
     : TaskQueue(std::move(impl), spec),
       queue_type_(params.queue_type),
-      queue_class_(QueueClassForQueueType(params.queue_type)),
-      fixed_priority_(params.fixed_priority),
       queue_traits_(params.queue_traits),
       freeze_when_keep_active_(params.freeze_when_keep_active),
       web_scheduling_priority_(params.web_scheduling_priority),
@@ -221,10 +187,25 @@ void MainThreadTaskQueue::ShutdownTaskQueue() {
   TaskQueue::ShutdownTaskQueue();
 }
 
+AgentGroupSchedulerImpl* MainThreadTaskQueue::GetAgentGroupScheduler() {
+  DCHECK(task_runner()->BelongsToCurrentThread());
+  if (agent_group_scheduler_) {
+    DCHECK(!frame_scheduler_);
+    return agent_group_scheduler_;
+  }
+  if (frame_scheduler_) {
+    return frame_scheduler_->GetAgentGroupScheduler();
+  }
+  // If this MainThreadTaskQueue was created for MainThreadSchedulerImpl, this
+  // queue will not be associated with AgentGroupScheduler or FrameScheduler.
+  return nullptr;
+}
+
 void MainThreadTaskQueue::ClearReferencesToSchedulers() {
   if (main_thread_scheduler_)
     main_thread_scheduler_->OnShutdownTaskQueue(this);
   main_thread_scheduler_ = nullptr;
+  agent_group_scheduler_ = nullptr;
   frame_scheduler_ = nullptr;
 }
 

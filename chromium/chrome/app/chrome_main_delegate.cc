@@ -69,7 +69,6 @@
 #include "pdf/buildflags.h"
 #include "ppapi/buildflags/buildflags.h"
 #include "printing/buildflags/buildflags.h"
-#include "services/service_manager/embedder/switches.h"
 #include "services/tracing/public/cpp/stack_sampling/tracing_sampler_profiler.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/ui_base_switches.h"
@@ -133,8 +132,8 @@
 #include "chrome/browser/android/crash/pure_java_exception_handler.h"
 #include "chrome/browser/android/metrics/uma_session_stats.h"
 #include "chrome/browser/flags/android/chrome_feature_list.h"
-#include "chrome/common/android/cpu_affinity_experiments.h"
 #include "chrome/common/chrome_descriptors.h"
+#include "content/public/common/cpu_affinity.h"
 #include "net/android/network_change_notifier_factory_android.h"
 #else  // defined(OS_ANDROID)
 // Diagnostics is only available on non-android platforms.
@@ -179,6 +178,11 @@
 
 #if BUILDFLAG(ENABLE_GWP_ASAN)
 #include "components/gwp_asan/client/gwp_asan.h"  // nogncheck
+#endif
+
+#if BUILDFLAG(IS_LACROS)
+#include "chrome/browser/lacros/lacros_chrome_service_delegate_impl.h"
+#include "chromeos/lacros/lacros_chrome_service_impl.h"
 #endif
 
 base::LazyInstance<ChromeContentGpuClient>::DestructorAtExit
@@ -269,7 +273,6 @@ void AdjustLinuxOOMScore(const std::string& process_type) {
   } else if (process_type == switches::kUtilityProcess ||
              process_type == switches::kGpuProcess ||
              process_type == switches::kCloudPrintServiceProcess ||
-             process_type == service_manager::switches::kProcessTypeService ||
              process_type == switches::kPpapiBrokerProcess) {
     score = content::kMiscOomScore;
 #if BUILDFLAG(ENABLE_NACL)
@@ -277,10 +280,7 @@ void AdjustLinuxOOMScore(const std::string& process_type) {
              process_type == switches::kNaClLoaderNonSfiProcess) {
     score = content::kPluginOomScore;
 #endif
-  } else if (process_type == service_manager::switches::kZygoteProcess ||
-             process_type ==
-                 service_manager::switches::kProcessTypeServiceManager ||
-             process_type.empty()) {
+  } else if (process_type == switches::kZygoteProcess || process_type.empty()) {
     // For zygotes and unlabeled process types, we want to still make
     // them killable by the OOM killer.
     score = content::kZygoteOomScore;
@@ -308,7 +308,7 @@ bool SubprocessNeedsResourceBundle(const std::string& process_type) {
   return
 #if defined(OS_LINUX) || defined(OS_CHROMEOS)
       // The zygote process opens the resources for the renderers.
-      process_type == service_manager::switches::kZygoteProcess ||
+      process_type == switches::kZygoteProcess ||
 #endif
 #if defined(OS_MAC)
       // Mac needs them too for scrollbar related images and for sandbox
@@ -577,6 +577,13 @@ void ChromeMainDelegate::PostEarlyInitialization(bool is_running_tests) {
   chromeos::InitializeFeatureListDependentDBus();
 #endif
 
+#if BUILDFLAG(IS_LACROS)
+  // LacrosChromeServiceImpl instance is needs the sequence of the main thread,
+  // and needs to be created earlier than incoming Mojo invitation handling.
+  lacros_chrome_service_ = std::make_unique<chromeos::LacrosChromeServiceImpl>(
+      std::make_unique<LacrosChromeServiceDelegateImpl>());
+#endif
+
 #if defined(OS_ANDROID)
   startup_data_->CreateProfilePrefService();
   net::NetworkChangeNotifier::SetFactory(
@@ -611,10 +618,13 @@ void ChromeMainDelegate::PostFieldTrialInitialization() {
   bool is_browser_process = process_type.empty();
 
 #if defined(OS_ANDROID)
-  // For child processes, this requires whitelisting of the sched_setaffinity()
+  // For child processes, this requires allowlisting of the sched_setaffinity()
   // syscall in the sandbox (baseline_policy_android.cc). When this call is
-  // removed, the sandbox whitelist should be updated too.
-  chrome::InitializeCpuAffinityExperiments();
+  // removed, the sandbox allowlist should be updated too.
+  if (base::FeatureList::IsEnabled(
+          features::kCpuAffinityRestrictToLittleCores)) {
+    content::EnforceProcessCpuAffinity(base::CpuAffinityMode::kLittleCoresOnly);
+  }
 #endif
 
 #if defined(OS_CHROMEOS)
@@ -996,13 +1006,13 @@ void ChromeMainDelegate::PreSandboxStartup() {
     // browser process as a command line flag.
 #if !BUILDFLAG(ENABLE_NACL)
     DCHECK(command_line.HasSwitch(switches::kLang) ||
-           process_type == service_manager::switches::kZygoteProcess ||
+           process_type == switches::kZygoteProcess ||
            process_type == switches::kGpuProcess ||
            process_type == switches::kPpapiBrokerProcess ||
            process_type == switches::kPpapiPluginProcess);
 #else
     DCHECK(command_line.HasSwitch(switches::kLang) ||
-           process_type == service_manager::switches::kZygoteProcess ||
+           process_type == switches::kZygoteProcess ||
            process_type == switches::kGpuProcess ||
            process_type == switches::kNaClLoaderProcess ||
            process_type == switches::kPpapiBrokerProcess ||
@@ -1016,7 +1026,7 @@ void ChromeMainDelegate::PreSandboxStartup() {
     // this value could be passed in a different way.
     std::string locale = command_line.GetSwitchValueASCII(switches::kLang);
 #if defined(OS_CHROMEOS)
-    if (process_type == service_manager::switches::kZygoteProcess) {
+    if (process_type == switches::kZygoteProcess) {
       DCHECK(locale.empty());
       // See comment at ReadAppLocale() for why we do this.
       locale = chromeos::startup_settings_cache::ReadAppLocale();
@@ -1076,7 +1086,7 @@ void ChromeMainDelegate::PreSandboxStartup() {
 
 #if defined(OS_POSIX) && !defined(OS_MAC)
   // Zygote needs to call InitCrashReporter() in RunZygote().
-  if (process_type != service_manager::switches::kZygoteProcess) {
+  if (process_type != switches::kZygoteProcess) {
 #if defined(OS_ANDROID)
     crash_reporter::InitializeCrashpad(process_type.empty(), process_type);
     if (process_type.empty()) {
@@ -1252,16 +1262,6 @@ ChromeMainDelegate::CreateContentRendererClient() {
 content::ContentUtilityClient*
 ChromeMainDelegate::CreateContentUtilityClient() {
   return g_chrome_content_utility_client.Pointer();
-}
-
-service_manager::ProcessType ChromeMainDelegate::OverrideProcessType() {
-  const auto& command_line = *base::CommandLine::ForCurrentProcess();
-  if (command_line.GetSwitchValueASCII(switches::kProcessType) ==
-      service_manager::switches::kProcessTypeService) {
-    // Don't mess with embedded service command lines.
-    return service_manager::ProcessType::kDefault;
-  }
-  return service_manager::ProcessType::kDefault;
 }
 
 void ChromeMainDelegate::PreCreateMainMessageLoop() {

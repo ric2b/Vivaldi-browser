@@ -220,11 +220,11 @@ NET_EXPORT extern const base::Feature kCertVerifierBuiltinFeature;
 
 NET_EXPORT extern const base::Feature kAppendFrameOriginToNetworkIsolationKey;
 
-NET_EXPORT extern const base::Feature
-    kUseRegistrableDomainInNetworkIsolationKey;
+// Turns off streaming media caching to disk when on battery power.
+NET_EXPORT extern const base::Feature kTurnOffStreamingMediaCachingOnBattery;
 
-// Turns off streaming media caching to disk.
-NET_EXPORT extern const base::Feature kTurnOffStreamingMediaCaching;
+// Turns off streaming media caching to disk always.
+NET_EXPORT extern const base::Feature kTurnOffStreamingMediaCachingAlways;
 
 // When enabled, sites that use TLS versions below the |version_min_warn|
 // threshold are marked with the LEGACY_TLS CertStatus and return an
@@ -265,6 +265,28 @@ NET_EXPORT extern const base::Feature kLimitOpenUDPSockets;
 // Sets the maximum allowed open UDP sockets. Provisioning more sockets than
 // this will result in a failure (ERR_INSUFFICIENT_RESOURCES).
 NET_EXPORT extern const base::FeatureParam<int> kLimitOpenUDPSocketsMax;
+
+// Enables a timeout on individual TCP connect attempts, based on
+// the parameter values.
+NET_EXPORT extern const base::Feature kTimeoutTcpConnectAttempt;
+
+// FeatureParams associated with kTimeoutTcpConnectAttempt.
+
+// When there is an estimated RTT available, the experimental TCP connect
+// attempt timeout is calculated as:
+//
+//  clamp(kTimeoutTcpConnectAttemptMin,
+//        kTimeoutTcpConnectAttemptMax,
+//        <Estimated RTT> * kTimeoutTcpConnectAttemptRTTMultiplier);
+//
+// Otherwise the TCP connect attempt timeout is set to
+// kTimeoutTcpConnectAttemptMax.
+NET_EXPORT extern const base::FeatureParam<double>
+    kTimeoutTcpConnectAttemptRTTMultiplier;
+NET_EXPORT extern const base::FeatureParam<base::TimeDelta>
+    kTimeoutTcpConnectAttemptMin;
+NET_EXPORT extern const base::FeatureParam<base::TimeDelta>
+    kTimeoutTcpConnectAttemptMax;
 
 }  // namespace features
 }  // namespace net

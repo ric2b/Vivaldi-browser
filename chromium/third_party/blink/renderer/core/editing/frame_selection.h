@@ -166,6 +166,8 @@ class CORE_EXPORT FrameSelection final
                               const SetSelectionOptions&);
   void DidSetSelectionDeprecated(const SelectionInDOMTree&,
                                  const SetSelectionOptions&);
+  void SetSelectionForAccessibility(const SelectionInDOMTree&,
+                                    const SetSelectionOptions&);
 
   // Call this after doing user-triggered selections to make it easy to delete
   // the frame you entirely selected.
@@ -214,7 +216,7 @@ class CORE_EXPORT FrameSelection final
 
   void DidLayout();
   void CommitAppearanceIfNeeded();
-  void SetCaretVisible(bool caret_is_visible);
+  void SetCaretEnabled(bool caret_is_visible);
   void ScheduleVisualUpdate() const;
   void ScheduleVisualUpdateForPaintInvalidationIfNeeded() const;
 

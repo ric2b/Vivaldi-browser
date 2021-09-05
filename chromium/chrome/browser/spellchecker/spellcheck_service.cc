@@ -391,6 +391,10 @@ void SpellcheckService::InitForRenderer(content::RenderProcessHost* host) {
 
     custom_words.assign(custom_dictionary_->GetWords().begin(),
                         custom_dictionary_->GetWords().end());
+  } else {
+    // Disabling spell check should also disable spelling service.
+    user_prefs::UserPrefs::Get(context)->SetBoolean(
+        spellcheck::prefs::kSpellCheckUseSpellingService, false);
   }
 
   GetSpellCheckerForProcess(host)->Initialize(std::move(dictionaries),
@@ -416,19 +420,19 @@ void SpellcheckService::LoadDictionaries() {
   const base::ListValue* forced_dictionaries =
       prefs->GetList(spellcheck::prefs::kSpellCheckForcedDictionaries);
 
-  // Build a lookup of blacklisted dictionaries to skip loading them.
-  const base::ListValue* blacklisted_dictionaries =
+  // Build a lookup of blocked dictionaries to skip loading them.
+  const base::ListValue* blocked_dictionaries =
       prefs->GetList(spellcheck::prefs::kSpellCheckBlocklistedDictionaries);
-  std::unordered_set<std::string> blacklisted_dictionaries_lookup;
-  for (const auto& blacklisted_dict : blacklisted_dictionaries->GetList()) {
-    blacklisted_dictionaries_lookup.insert(blacklisted_dict.GetString());
+  std::unordered_set<std::string> blocked_dictionaries_lookup;
+  for (const auto& blocked_dict : blocked_dictionaries->GetList()) {
+    blocked_dictionaries_lookup.insert(blocked_dict.GetString());
   }
 
   // Merge both lists of dictionaries. Use a set to avoid duplicates.
   std::set<std::string> dictionaries;
   for (const auto& dictionary_value : user_dictionaries->GetList()) {
-    if (blacklisted_dictionaries_lookup.find(dictionary_value.GetString()) ==
-        blacklisted_dictionaries_lookup.end())
+    if (blocked_dictionaries_lookup.find(dictionary_value.GetString()) ==
+        blocked_dictionaries_lookup.end())
       dictionaries.insert(dictionary_value.GetString());
   }
   for (const auto& dictionary_value : forced_dictionaries->GetList()) {
@@ -825,8 +829,15 @@ void SpellcheckService::OnSpellCheckDictionariesChanged() {
 
   // If there are no hunspell dictionaries to load, then immediately let the
   // renderers know the new state.
-  if (hunspell_dictionaries_.empty())
+  if (hunspell_dictionaries_.empty()) {
+#if !defined(OS_MAC)
+    // Only update non-MacOS platform because basic spell check on Mac OS
+    // is controlled by OS and doesn't depend on users' dictionaries pref
+    user_prefs::UserPrefs::Get(context_)->SetBoolean(
+        spellcheck::prefs::kSpellCheckEnable, false);
+#endif  // !defined(OS_MAC)
     InitForAllRenderers();
+  }
 }
 
 void SpellcheckService::OnUseSpellingServiceChanged() {

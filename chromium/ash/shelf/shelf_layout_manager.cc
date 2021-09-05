@@ -617,6 +617,7 @@ void ShelfLayoutManager::UpdateContextualNudges() {
 
   const bool in_app_shelf = ShelfConfig::Get()->is_in_app();
   const bool in_tablet_mode = ShelfConfig::Get()->in_tablet_mode();
+  const bool in_overview_mode = ShelfConfig::Get()->in_overview_mode();
 
   contextual_tooltip::SetDragHandleNudgeDisabledForHiddenShelf(!IsVisible());
 
@@ -635,7 +636,7 @@ void ShelfLayoutManager::UpdateContextualNudges() {
   // allowed by the current shelf state.
   const bool allow_home_to_overview_nudge =
       in_tablet_mode && !in_app_shelf &&
-      !ShelfConfig::Get()->shelf_controls_shown();
+      !ShelfConfig::Get()->shelf_controls_shown() && !in_overview_mode;
   if (allow_home_to_overview_nudge && !home_to_overview_nudge_controller_) {
     home_to_overview_nudge_controller_ =
         std::make_unique<HomeToOverviewNudgeController>(
@@ -1040,6 +1041,7 @@ void ShelfLayoutManager::OnOverviewModeWillStart() {
 void ShelfLayoutManager::OnOverviewModeStarting() {
   overview_mode_will_start_ = false;
   overview_suspend_work_area_update_.emplace(this);
+  UpdateContextualNudges();
 }
 
 void ShelfLayoutManager::OnOverviewModeStartingAnimationComplete(
@@ -1848,7 +1850,7 @@ ShelfAutoHideState ShelfLayoutManager::CalculateAutoHideState(
   const bool in_tablet_mode = Shell::Get()->IsInTabletMode();
   // Don't let the shelf auto-hide when in tablet mode and Chromevox is on.
   if (in_tablet_mode &&
-      Shell::Get()->accessibility_controller()->spoken_feedback_enabled()) {
+      Shell::Get()->accessibility_controller()->spoken_feedback().enabled()) {
     return SHELF_AUTO_HIDE_SHOWN;
   }
 
@@ -2691,7 +2693,7 @@ bool ShelfLayoutManager::MaybeStartDragWindowFromShelf(
     return false;
 
   window_drag_controller_ = std::make_unique<DragWindowFromShelfController>(
-      window, event_in_screen.location_f(), hotseat_state());
+      window, event_in_screen.location_f());
   return true;
 }
 

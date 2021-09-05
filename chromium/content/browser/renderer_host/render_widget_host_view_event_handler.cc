@@ -38,7 +38,7 @@
 #include "ui/touch_selection/touch_selection_controller.h"
 
 #if defined(OS_WIN)
-#include "content/browser/frame_host/render_frame_host_impl.h"
+#include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/display/screen.h"
 #endif  // defined(OS_WIN)
@@ -402,7 +402,9 @@ void RenderWidgetHostViewEventHandler::HandleMouseWheelEvent(
 
 void RenderWidgetHostViewEventHandler::ForwardDelegatedInkPoint(
     ui::LocatedEvent* event) {
-  if (host_view_->is_drawing_delegated_ink_trails()) {
+  const cc::RenderFrameMetadata& last_metadata =
+      host_->render_frame_metadata_provider()->LastRenderFrameMetadata();
+  if (last_metadata.has_delegated_ink_metadata) {
     if (!delegated_ink_point_renderer_.is_bound()) {
       ui::Compositor* compositor = window_ && window_->layer()
                                        ? window_->layer()->GetCompositor()

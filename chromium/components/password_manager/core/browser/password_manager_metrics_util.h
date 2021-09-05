@@ -17,6 +17,9 @@ namespace password_manager {
 
 namespace metrics_util {
 
+using IsUsernameChanged = util::StrongAlias<class IsUsernameChangedTag, bool>;
+using IsPasswordChanged = util::StrongAlias<class IsPasswordChangedTag, bool>;
+
 // These values are persisted to logs. Entries should not be renumbered and
 // numeric values should never be reused.
 // Metrics: "PasswordBubble.DisplayDisposition"
@@ -259,7 +262,7 @@ enum class DeleteCorruptedPasswordsResult {
   kMaxValue = kEncryptionUnavailable,
 };
 
-#if defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
+#if defined(PASSWORD_REUSE_DETECTION_ENABLED)
 enum class GaiaPasswordHashChange {
   // These values are persisted to logs. Entries should not be renumbered and
   // numeric values should never be reused.
@@ -456,6 +459,37 @@ enum class MoveToAccountStoreTrigger {
   kMaxValue = kExplicitlyTriggeredInSettings,
 };
 
+// Used to record metrics for the usage and timing of the GetChangePasswordUrl
+// call. These values are persisted to logs. Entries should not be renumbered
+// and numeric values should never be reused.
+enum class GetChangePasswordUrlMetric {
+  // Used when GetChangePasswordUrl is called before the response
+  // arrives.
+  kNotFetchedYet = 0,
+  // Used when a url was used, which corresponds to the requested site.
+  kUrlOverrideUsed = 1,
+  // Used when no override url was available.
+  kNoUrlOverrideAvailable = 2,
+  // Used when a url was used, which corresponds to a site from within same
+  // FacetGroup.
+  kGroupUrlOverrideUsed = 3,
+  kMaxValue = kGroupUrlOverrideUsed,
+};
+
+// Used to record what exactly was updated during password editing flow.
+// Entries should not be renumbered and numeric values should never be reused.
+enum class PasswordEditUpdatedValues {
+  // Nothing was updated.
+  kNone = 0,
+  // Only username was changed.
+  kUsername = 1,
+  // Only password was changed.
+  kPassword = 2,
+  // Both password and username were updated.
+  kBoth = 3,
+  kMaxValue = kBoth,
+};
+
 std::string GetPasswordAccountStorageUserStateHistogramSuffix(
     PasswordAccountStorageUserState user_state);
 
@@ -482,8 +516,7 @@ void LogGeneralUIDismissalReason(UIDismissalReason reason);
 
 // Log the |reason| a user dismissed the save password bubble. If
 // |user_state| is set, the |reason| is also logged to a separate
-// user-state-specific histogram. |user_state| must be non-null iff the feature
-// kEnablePasswordsAccountStorage is enabled.
+// user-state-specific histogram.
 void LogSaveUIDismissalReason(
     UIDismissalReason reason,
     base::Optional<PasswordAccountStorageUserState> user_state);
@@ -584,7 +617,7 @@ void LogGenerationDialogChoice(
     GenerationDialogChoice choice,
     autofill::password_generation::PasswordGenerationType type);
 
-#if defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
+#if defined(PASSWORD_REUSE_DETECTION_ENABLED)
 // Log a save gaia password change event.
 void LogGaiaPasswordHashChange(GaiaPasswordHashChange event,
                                bool is_sync_password);
@@ -601,6 +634,10 @@ void LogProtectedPasswordHashCounts(size_t gaia_hash_count,
                                     bool is_signed_in);
 
 #endif
+
+// Log the result of the password edit action.
+void LogPasswordEditResult(IsUsernameChanged password_changed,
+                           IsPasswordChanged username_changed);
 
 }  // namespace metrics_util
 

@@ -51,7 +51,11 @@ namespace {
 
 std::string CleanUpPath(const std::string& path) {
   // Remove the query string for named resource lookups.
-  return path.substr(0, path.find_first_of('?'));
+  std::string clean_path = path.substr(0, path.find_first_of('?'));
+  // Remove a URL fragment (for example #foo) if it exists.
+  clean_path = clean_path.substr(0, path.find_first_of('#'));
+
+  return clean_path;
 }
 
 const int kNonExistentResource = -1;
@@ -158,6 +162,10 @@ void WebUIDataSourceImpl::AddBoolean(base::StringPiece name, bool value) {
 
 void WebUIDataSourceImpl::AddInteger(base::StringPiece name, int32_t value) {
   localized_strings_.SetInteger(name, value);
+}
+
+void WebUIDataSourceImpl::AddDouble(base::StringPiece name, double value) {
+  localized_strings_.SetDouble(name, value);
 }
 
 void WebUIDataSourceImpl::UseStringsJs() {

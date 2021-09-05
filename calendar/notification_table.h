@@ -36,13 +36,15 @@ class NotificationTable {
 
   NotificationID CreateNotification(NotificationRow notification);
   bool GetAllNotifications(NotificationRows* notifications);
-
+  bool GetNotificationRow(NotificationID notification_id,
+                          NotificationRow* out_notification);
   bool UpdateNotificationRow(const NotificationRow& notification_id);
   bool DeleteNotification(NotificationID notification_id);
   bool DeleteNotificationsForEvent(EventID event_id);
   bool GetAllNotificationsForEvent(EventID event_id,
                                    NotificationRows* notifications);
   bool DoesNotificationExistForEvent(EventID event_id);
+  bool DeleteNotificationsForCalendar(CalendarID calendar_id);
 
  protected:
   virtual sql::Database& GetDB() = 0;

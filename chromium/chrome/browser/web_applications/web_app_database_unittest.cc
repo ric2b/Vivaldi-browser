@@ -29,6 +29,7 @@
 #include "chrome/browser/web_applications/web_app_sync_bridge.h"
 #include "components/services/app_service/public/cpp/file_handler.h"
 #include "components/services/app_service/public/cpp/protocol_handler_info.h"
+#include "components/services/app_service/public/cpp/share_target.h"
 #include "components/sync/model/model_type_store.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
@@ -98,6 +99,34 @@ class WebAppDatabaseTest : public WebAppTest {
     return file_handlers;
   }
 
+  static apps::ShareTarget CreateShareTarget(uint32_t suffix) {
+    apps::ShareTarget share_target;
+    share_target.action =
+        GURL("https://example.com/path/target/" + base::NumberToString(suffix));
+    share_target.method = (suffix % 2 == 0) ? apps::ShareTarget::Method::kPost
+                                            : apps::ShareTarget::Method::kGet;
+    share_target.enctype = (suffix / 2 % 2 == 0)
+                               ? apps::ShareTarget::Enctype::kMultipartFormData
+                               : apps::ShareTarget::Enctype::kFormUrlEncoded;
+
+    if (suffix % 3 != 0)
+      share_target.params.title = "title" + base::NumberToString(suffix);
+    if (suffix % 3 != 1)
+      share_target.params.text = "text" + base::NumberToString(suffix);
+    if (suffix % 3 != 2)
+      share_target.params.url = "url" + base::NumberToString(suffix);
+
+    for (uint32_t index = 0; index < suffix % 5; ++index) {
+      apps::ShareTarget::Files files;
+      files.name = "files" + base::NumberToString(index);
+      files.accept.push_back(".extension" + base::NumberToString(index));
+      files.accept.push_back("type/subtype" + base::NumberToString(index));
+      share_target.params.files.push_back(files);
+    }
+
+    return share_target;
+  }
+
   static std::vector<apps::ProtocolHandlerInfo> CreateProtocolHandlers(
       uint32_t suffix) {
     std::vector<apps::ProtocolHandlerInfo> protocol_handlers;
@@ -157,8 +186,8 @@ class WebAppDatabaseTest : public WebAppTest {
     RandomHelper random(seed);
 
     const std::string seed_str = base::NumberToString(seed);
-    const auto launch_url = base_url + seed_str;
-    const AppId app_id = GenerateAppIdFromURL(GURL(launch_url));
+    const auto start_url = base_url + seed_str;
+    const AppId app_id = GenerateAppIdFromURL(GURL(start_url));
     const std::string name = "Name" + seed_str;
     const std::string description = "Description" + seed_str;
     const std::string scope = base_url + "/scope" + seed_str;
@@ -184,7 +213,7 @@ class WebAppDatabaseTest : public WebAppTest {
 
     app->SetName(name);
     app->SetDescription(description);
-    app->SetLaunchUrl(GURL(launch_url));
+    app->SetStartUrl(GURL(start_url));
     app->SetScope(GURL(scope));
     app->SetThemeColor(theme_color);
     app->SetBackgroundColor(background_color);
@@ -215,6 +244,9 @@ class WebAppDatabaseTest : public WebAppTest {
       display_mode_override.insert(display_modes[random.next_uint(4)]);
     app->SetDisplayModeOverride(std::vector<DisplayMode>(
         display_mode_override.begin(), display_mode_override.end()));
+
+    if (random.next_bool())
+      app->SetLaunchQueryParams(base::NumberToString(random.next_uint()));
 
     const RunOnOsLoginMode run_on_os_login_modes[3] = {
         RunOnOsLoginMode::kUndefined, RunOnOsLoginMode::kWindowed,
@@ -248,6 +280,8 @@ class WebAppDatabaseTest : public WebAppTest {
     app->SetIsGeneratedIcon(random.next_bool());
 
     app->SetFileHandlers(CreateFileHandlers(random.next_uint()));
+    if (random.next_bool())
+      app->SetShareTarget(CreateShareTarget(random.next_uint()));
     app->SetProtocolHandlers(CreateProtocolHandlers(random.next_uint()));
 
     const int num_additional_search_terms = random.next_uint(8);
@@ -348,7 +382,7 @@ TEST_F(WebAppDatabaseTest, WriteAndReadRegistry) {
   controller().Init();
   EXPECT_TRUE(registrar().is_empty());
 
-  const int num_apps = 100;
+  const int num_apps = 20;
   const std::string base_url = "https://example.com/path";
 
   auto app = CreateWebApp(base_url, 0);
@@ -429,15 +463,15 @@ TEST_F(WebAppDatabaseTest, WriteAndDeleteAppsWithCallbacks) {
 }
 
 TEST_F(WebAppDatabaseTest, OpenDatabaseAndReadRegistry) {
-  Registry registry = WriteWebApps("https://example.com/path", 100);
+  Registry registry = WriteWebApps("https://example.com/path", 20);
 
   controller().Init();
   EXPECT_TRUE(IsRegistryEqual(mutable_registrar().registry(), registry));
 }
 
 TEST_F(WebAppDatabaseTest, BackwardCompatibility_WebAppWithOnlyRequiredFields) {
-  const GURL launch_url{"https://example.com/"};
-  const AppId app_id = GenerateAppIdFromURL(launch_url);
+  const GURL start_url{"https://example.com/"};
+  const AppId app_id = GenerateAppIdFromURL(start_url);
   const std::string name = "App Name";
   const auto user_display_mode = DisplayMode::kBrowser;
   const bool is_locally_installed = true;
@@ -449,7 +483,7 @@ TEST_F(WebAppDatabaseTest, BackwardCompatibility_WebAppWithOnlyRequiredFields) {
   auto proto = std::make_unique<WebAppProto>();
   {
     sync_pb::WebAppSpecifics sync_proto;
-    sync_proto.set_launch_url(launch_url.spec());
+    sync_proto.set_start_url(start_url.spec());
     sync_proto.set_user_display_mode(
         ToWebAppSpecificsUserDisplayMode(user_display_mode));
     *(proto->mutable_sync_data()) = std::move(sync_proto);
@@ -480,7 +514,7 @@ TEST_F(WebAppDatabaseTest, BackwardCompatibility_WebAppWithOnlyRequiredFields) {
 
   const WebApp* app = registrar().GetAppById(app_id);
   EXPECT_EQ(app_id, app->app_id());
-  EXPECT_EQ(launch_url, app->launch_url());
+  EXPECT_EQ(start_url, app->start_url());
   EXPECT_EQ(name, app->name());
   EXPECT_EQ(user_display_mode, app->user_display_mode());
   EXPECT_EQ(is_locally_installed, app->is_locally_installed());
@@ -500,15 +534,15 @@ TEST_F(WebAppDatabaseTest, BackwardCompatibility_WebAppWithOnlyRequiredFields) {
 TEST_F(WebAppDatabaseTest, WebAppWithoutOptionalFields) {
   controller().Init();
 
-  const auto launch_url = GURL("https://example.com/");
-  const AppId app_id = GenerateAppIdFromURL(GURL(launch_url));
+  const auto start_url = GURL("https://example.com/");
+  const AppId app_id = GenerateAppIdFromURL(GURL(start_url));
   const std::string name = "Name";
   const auto user_display_mode = DisplayMode::kBrowser;
 
   auto app = std::make_unique<WebApp>(app_id);
 
   // Required fields:
-  app->SetLaunchUrl(launch_url);
+  app->SetStartUrl(start_url);
   app->SetName(name);
   app->SetUserDisplayMode(user_display_mode);
   app->SetIsLocallyInstalled(false);
@@ -539,6 +573,7 @@ TEST_F(WebAppDatabaseTest, WebAppWithoutOptionalFields) {
   EXPECT_FALSE(app->sync_fallback_data().scope.is_valid());
   EXPECT_TRUE(app->sync_fallback_data().icon_infos.empty());
   EXPECT_TRUE(app->file_handlers().empty());
+  EXPECT_FALSE(app->share_target().has_value());
   EXPECT_TRUE(app->additional_search_terms().empty());
   EXPECT_TRUE(app->protocol_handlers().empty());
   EXPECT_TRUE(app->last_launch_time().is_null());
@@ -555,7 +590,7 @@ TEST_F(WebAppDatabaseTest, WebAppWithoutOptionalFields) {
 
   // Required fields were serialized:
   EXPECT_EQ(app_id, app_copy->app_id());
-  EXPECT_EQ(launch_url, app_copy->launch_url());
+  EXPECT_EQ(start_url, app_copy->start_url());
   EXPECT_EQ(name, app_copy->name());
   EXPECT_EQ(user_display_mode, app_copy->user_display_mode());
   EXPECT_FALSE(app_copy->is_locally_installed());
@@ -595,6 +630,7 @@ TEST_F(WebAppDatabaseTest, WebAppWithoutOptionalFields) {
   EXPECT_FALSE(app_copy->sync_fallback_data().scope.is_valid());
   EXPECT_TRUE(app_copy->sync_fallback_data().icon_infos.empty());
   EXPECT_TRUE(app_copy->file_handlers().empty());
+  EXPECT_FALSE(app_copy->share_target().has_value());
   EXPECT_TRUE(app_copy->additional_search_terms().empty());
   EXPECT_TRUE(app_copy->protocol_handlers().empty());
   EXPECT_TRUE(app_copy->shortcuts_menu_item_infos().empty());
@@ -670,6 +706,28 @@ TEST_F(WebAppDatabaseTest, WebAppWithFileHandlersRoundTrip) {
   file_handlers.push_back(std::move(file_handler2));
 
   app->SetFileHandlers(std::move(file_handlers));
+
+  controller().RegisterApp(std::move(app));
+
+  Registry registry = database_factory().ReadRegistry();
+  EXPECT_TRUE(IsRegistryEqual(mutable_registrar().registry(), registry));
+}
+
+TEST_F(WebAppDatabaseTest, WebAppWithShareTargetRoundTrip) {
+  controller().Init();
+
+  const std::string base_url = "https://example.com/path";
+  auto app = CreateWebApp(base_url, 0);
+  auto app_id = app->app_id();
+
+  apps::ShareTarget share_target;
+  share_target.action = GURL("https://example.com/path/target");
+  share_target.method = apps::ShareTarget::Method::kPost;
+  share_target.enctype = apps::ShareTarget::Enctype::kMultipartFormData;
+  share_target.params.title = "Title";
+  share_target.params.text = "Text";
+  share_target.params.url = "Url";
+  app->SetShareTarget(std::move(share_target));
 
   controller().RegisterApp(std::move(app));
 

@@ -5,7 +5,6 @@
 // Include test fixture.
 GEN_INCLUDE([
   '../testing/chromevox_next_e2e_test_base.js',
-  '//chrome/browser/resources/chromeos/accessibility/chromevox/testing/mock_feedback.js'
 ]);
 
 /**
@@ -35,14 +34,6 @@ ChromeVoxLearnModeTest = class extends ChromeVoxNextE2ETest {
           });
       CommandHandler.onCommand('showKbExplorerPage');
     });
-  }
-
-  /** @return {!MockFeedback} */
-  createMockFeedback() {
-    const mockFeedback =
-        new MockFeedback(this.newCallback(), this.newCallback.bind(this));
-    mockFeedback.install();
-    return mockFeedback;
   }
 
   getLearnModeWindow() {
@@ -96,18 +87,18 @@ ChromeVoxLearnModeTest = class extends ChromeVoxNextE2ETest {
 TEST_F('ChromeVoxLearnModeTest', 'KeyboardInput', function() {
   this.runOnLearnModePage((mockFeedback, evt) => {
     // Press Search+Right.
-    mockFeedback.call(doKeyDown({keyCode: 91, metaKey: true}))
+    mockFeedback.call(doKeyDown({keyCode: KeyCode.SEARCH, metaKey: true}))
         .expectSpeechWithQueueMode('Search', QueueMode.FLUSH)
-        .call(doKeyDown({keyCode: 39, metaKey: true}))
+        .call(doKeyDown({keyCode: KeyCode.RIGHT, metaKey: true}))
         .expectSpeechWithQueueMode('Right arrow', QueueMode.QUEUE)
         .expectSpeechWithQueueMode('Next Object', QueueMode.QUEUE)
-        .call(doKeyUp({keyCode: 39, metaKey: true}))
+        .call(doKeyUp({keyCode: KeyCode.RIGHT, metaKey: true}))
 
         // Hit 'Right' again. We should get flushed output.
-        .call(doKeyDown({keyCode: 39, metaKey: true}))
+        .call(doKeyDown({keyCode: KeyCode.RIGHT, metaKey: true}))
         .expectSpeechWithQueueMode('Right arrow', QueueMode.FLUSH)
         .expectSpeechWithQueueMode('Next Object', QueueMode.QUEUE)
-        .call(doKeyUp({keyCode: 39, metaKey: true}))
+        .call(doKeyUp({keyCode: KeyCode.RIGHT, metaKey: true}))
 
         .replay();
   });
@@ -116,17 +107,17 @@ TEST_F('ChromeVoxLearnModeTest', 'KeyboardInput', function() {
 TEST_F('ChromeVoxLearnModeTest', 'KeyboardInputRepeat', function() {
   this.runOnLearnModePage((mockFeedback, evt) => {
     // Press Search repeatedly.
-    mockFeedback.call(doKeyDown({keyCode: 91, metaKey: true}))
+    mockFeedback.call(doKeyDown({keyCode: KeyCode.SEARCH, metaKey: true}))
         .expectSpeechWithQueueMode('Search', QueueMode.FLUSH)
 
         // This in theory should never happen (no repeat set).
-        .call(doKeyDown({keyCode: 91, metaKey: true}))
+        .call(doKeyDown({keyCode: KeyCode.SEARCH, metaKey: true}))
         .expectSpeechWithQueueMode('Search', QueueMode.QUEUE)
 
         // Hit Search again with the right underlying data. Then hit Control to
         // generate some speech.
-        .call(doKeyDown({keyCode: 91, metaKey: true, repeat: true}))
-        .call(doKeyDown({keyCode: 17, ctrlKey: true}))
+        .call(doKeyDown({keyCode: KeyCode.SEARCH, metaKey: true, repeat: true}))
+        .call(doKeyDown({keyCode: KeyCode.CONTROL, ctrlKey: true}))
         .expectNextSpeechUtteranceIsNot('Search')
         .expectSpeechWithQueueMode('Control', QueueMode.QUEUE)
 
@@ -147,6 +138,11 @@ TEST_F('ChromeVoxLearnModeTest', 'Gesture', function() {
 
         .call(doGesture('touchExplore'))
         .expectSpeechWithQueueMode('Touch explore', QueueMode.FLUSH)
+
+        // Test for inclusion of commandDescriptionMsgId when provided.
+        .call(doGesture('swipeLeft2'))
+        .expectSpeechWithQueueMode('Swipe two fingers left', QueueMode.FLUSH)
+        .expectSpeechWithQueueMode('Escape', QueueMode.QUEUE)
 
         .replay();
   });
@@ -177,24 +173,24 @@ TEST_F('ChromeVoxLearnModeTest', 'Braille', function() {
 
 TEST_F('ChromeVoxLearnModeTest', 'HardwareFunctionKeys', function() {
   this.runOnLearnModePage((mockFeedback, evt) => {
-    mockFeedback.call(doKeyDown({keyCode: 217}))
+    mockFeedback.call(doKeyDown({keyCode: KeyCode.BRIGHTNESS_UP}))
         .expectSpeechWithQueueMode('Brightness up', QueueMode.FLUSH)
-        .call(doKeyUp({keyCode: 217}))
+        .call(doKeyUp({keyCode: KeyCode.BRIGHTNESS_UP}))
 
-        .call(doKeyDown({keyCode: 91, metaKey: true}))
+        .call(doKeyDown({keyCode: KeyCode.SEARCH, metaKey: true}))
         .expectSpeechWithQueueMode('Search', QueueMode.FLUSH)
-        .call(doKeyDown({keyCode: 217, metaKey: true}))
+        .call(doKeyDown({keyCode: KeyCode.BRIGHTNESS_UP, metaKey: true}))
         .expectSpeechWithQueueMode('Brightness up', QueueMode.QUEUE)
         .expectSpeechWithQueueMode('Toggle dark screen', QueueMode.QUEUE)
-        .call(doKeyUp({keyCode: 217, metaKey: true}))
+        .call(doKeyUp({keyCode: KeyCode.BRIGHTNESS_UP, metaKey: true}))
 
         // Search+Volume Down has no associated command.
-        .call(doKeyDown({keyCode: 174, metaKey: true}))
+        .call(doKeyDown({keyCode: KeyCode.VOLUME_DOWN, metaKey: true}))
         .expectSpeechWithQueueMode('volume down', QueueMode.FLUSH)
-        .call(doKeyUp({keyCode: 174, metaKey: true}))
+        .call(doKeyUp({keyCode: KeyCode.VOLUME_DOWN, metaKey: true}))
 
         // Search+Volume Mute does though.
-        .call(doKeyDown({keyCode: 173, metaKey: true}))
+        .call(doKeyDown({keyCode: KeyCode.VOLUME_MUTE, metaKey: true}))
         .expectSpeechWithQueueMode('volume mute', QueueMode.FLUSH)
         .expectSpeechWithQueueMode('Toggle speech on or off', QueueMode.QUEUE)
 

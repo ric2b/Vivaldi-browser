@@ -26,6 +26,7 @@
 <translation id="1208421848177517699">ಲಿಪ್ಯಂತರಣ (namaste → નમસ્તે)</translation>
 <translation id="1243314992276662751">ಅಪ್‌ಲೋಡ್</translation>
 <translation id="1249250836236328755">ಪ್ರಕಾರ</translation>
+<translation id="1276362640455948667">ಯುಎಸ್ ಅಂತರರಾಷ್ಟ್ರೀಯ ಕೀಬೋರ್ಡ್‌ನ ಜೊತೆ ಪೋರ್ಚುಗೀಸ್</translation>
 <translation id="1278813325885878377">ಹಂಗೇರಿಯನ್ QWERTY ಕೀಬೋರ್ಡ್</translation>
 <translation id="1293556467332435079">Files</translation>
 <translation id="1297922636971898492">Google ಡ್ರೈವ್‌ ಇದೀಗ ಲಭ್ಯವಿಲ್ಲ. Google ಡ್ರೈವ್‌ ಒಮ್ಮೆ ಹಿಂತಿರುಗಿದರೆ ಅಪ್‌ಲೋಡ್‌ ಆಗುವುದು ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಮರುಪ್ರಾರಂಭಗೊಳ್ಳುತ್ತದೆ.</translation>
@@ -59,6 +60,7 @@
 <translation id="1572585716423026576">ವಾಲ್‌ಪೇಪರ್ ಆಗಿ ಹೊಂದಿಸಿ</translation>
 <translation id="158809615184981282">ಫರೋಸಿ ಕೀಬೋರ್ಡ್</translation>
 <translation id="1589128298353575783"><ph name="NUMBER_OF_PB" /> PB</translation>
+<translation id="1620510694547887537">ಕ್ಯಾಮರಾ</translation>
 <translation id="1646136617204068573">ಹಂಗೇರಿಯನ್ ಕೀಬೋರ್ಡ್</translation>
 <translation id="164729547906544836">ತಮಿಳು ಕೀಬೋರ್ಡ್ (ಐಟ್ರಾನ್ಸ್)</translation>
 <translation id="164969095109328410">Chrome ಸಾಧನ</translation>
@@ -66,6 +68,7 @@
 <translation id="1673103856845176271">ಸುರಕ್ಷತಾ ಕಾರಣಗಳಿಗಾಗಿ ಫೈಲ್ ಅನ್ನು ಪ್ರವೇಶಿಸಲಾಗಲಿಲ್ಲ.</translation>
 <translation id="169515659049020177">Shift</translation>
 <translation id="1722487484194605434"><ph name="NUMBER_OF_ITEMS" /> ಐಟಂಗಳನ್ನು ಝಿಪ್ ಮಾಡಲಾಗುತ್ತಿದೆ...</translation>
+<translation id="1731889557567069540"><ph name="NUMBER_OF_ITEMS" /> ಐಟಂಗಳನ್ನು ನಕಲಿಸಲಾಗಿದೆ.</translation>
 <translation id="174173592514158117">ಎಲ್ಲ Play ಫೋಲ್ಡರ್‌‌ಗಳನ್ನು ತೋರಿಸಿ</translation>
 <translation id="174937106936716857">ಒಟ್ಟು ಫೈಲ್‌ ಎಣಿಕೆ</translation>
 <translation id="1775381402323441512">ವೀಡಿಯೊ ಮಾಹಿತಿ</translation>
@@ -110,7 +113,9 @@
 <translation id="2208158072373999562">ಜಿಪ್  ಆರ್ಕೈವ್</translation>
 <translation id="2225536596944493418">ನೀವು ಖಂಡಿತವಾಗಿಯೂ <ph name="NUMBER_OF_ITEMS" /> ಐಟಂಗಳನ್ನು ಅಳಿಸಲು ಬಯಸುವಿರಾ?</translation>
 <translation id="2230062665678605299">"<ph name="FOLDER_NAME" />" ಫೋಲ್ಡರ್ ಅನ್ನು ರಚಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. <ph name="ERROR_MESSAGE" /></translation>
+<translation id="2275059641601412272">ಸರಿಸಲಾಗಿದೆ.</translation>
 <translation id="2278988676849463018">ಕನ್ನಡ ಕೀಬೋರ್ಡ್ (ಫೋನೆಟಿಕ್)</translation>
+<translation id="2287742181953707290">ಯುಎಸ್ ಅಂತರರಾಷ್ಟ್ರೀಯ PC ಕೀಬೋರ್ಡ್‌ನ ಜೊತೆ ಪೋರ್ಚುಗೀಸ್</translation>
 <translation id="2288278176040912387">ರೆಕಾರ್ಡ್ ಪ್ಲೇಯರ್</translation>
 <translation id="2291538123825441971"><ph name="NUMBER_OF_FILES" /> ಫೈಲ್‌ಗಳನ್ನು ತೆರೆಯಲಾಗುತ್ತಿದೆ.</translation>
 <translation id="2303301624314357662"><ph name="FILE_NAME" /> ಫೈಲ್ ಅನ್ನು ತೆರೆಯಲಾಗುತ್ತಿದೆ.</translation>
@@ -181,7 +186,6 @@
 <translation id="3064388234319122767">ಲಿಪ್ಯಂತರಣ (zdravo → здраво)</translation>
 <translation id="3067790092342515856">Windows ಫೈಲ್‌ಗಳು</translation>
 <translation id="3078461028045006476"><ph name="EXTENSION_NAME" /> ಜೊತೆಗೆ ಹಂಚಿಕೊಳ್ಳಿ</translation>
-<translation id="3088034400796962477">ಲಿಪ್ಯಂತರಣ (salam ← سلام)</translation>
 <translation id="3116361045094675131">ಯುಕೆ ಕೀಬೋರ್ಡ್</translation>
 <translation id="3126026824346185272">Ctrl</translation>
 <translation id="3144126448740580210">ಮುಗಿದಿದೆ</translation>
@@ -215,6 +219,7 @@
 <translation id="3473378059788601120"><ph name="FOLDER_NAME" /> ಗೆ ನಕಲಿಸಲಾಗಿದೆ.</translation>
 <translation id="3475447146579922140">Google ಸ್ಪ್ರೆಡ್‌ಶೀಟ್‌</translation>
 <translation id="3495304270784461826"><ph name="COUNT" /> ದೋಷಗಳು.</translation>
+<translation id="349603508045926994">ಪರ್ಶಿಯನ್ ಲಿಪ್ಯಂತರಣ</translation>
 <translation id="3519867315646775981">ಲಿಪ್ಯಂತರಣ (shalom ← שלום)</translation>
 <translation id="3522708245912499433">ಪೋರ್ಚುಗೀಸ್</translation>
 <translation id="3524311639100184459">ಎಚ್ಚರಿಕೆ: ಈ ಫೈಲ್‌ಗಳು ತಾತ್ಕಾಲಿಕವಾಗಿರುತ್ತವೆ ಹಾಗೂ ಡಿಸ್ಕ್ ಸ್ಥಳವನ್ನು ಮುಕ್ತಗೊಳಿಸಲು ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಅವುಗಳನ್ನು ಅಳಿಸಬಹುದು.  <ph name="BEGIN_LINK" />ಇನ್ನಷ್ಟು ತಿಳಿಯಿರಿ<ph name="END_LINK" /></translation>
@@ -231,6 +236,7 @@
 <translation id="3620292326130836921">ಎಲ್ಲವನ್ನೂ ಬ್ಯಾಕಪ್ ಮಾಡಲಾಗಿದೆ!</translation>
 <translation id="3626281679859535460">ಪ್ರಕಾಶಮಾನ</translation>
 <translation id="3644896802912593514">ಅಗಲ</translation>
+<translation id="3645233063072417428"><ph name="NUMBER_OF_ITEMS" /> ಐಟಂಗಳನ್ನು ಸರಿಸಲಾಗಿದೆ.</translation>
 <translation id="3645531960514756307">ಫೋಲ್ಡರ್ ಅನ್ನು ಅನ್‌ಪಿನ್ ಮಾಡಿ</translation>
 <translation id="3678559383040232393">ಮಾಲ್ಟೀಸ್ ಕೀಬೋರ್ಡ್</translation>
 <translation id="3685122418104378273">ಮೊಬೈಲ್ ಡೇಟಾವನ್ನು ಬಳಸುತ್ತಿರುವಾಗ, Google ಡ್ರೈವ್ ಸಿಂಕ್ ಅನ್ನು ಡೀಫಾಲ್ಟ್ ಮೂಲಕ ನಿಷ್ಕ್ರಿಯಗೊಳಿಸಲಾಗಿದೆ.</translation>
@@ -272,6 +278,7 @@
 <translation id="4072248638558688893">ತಮಿಳು ಕೀಬೋರ್ಡ್ (ಫೋನೆಟಿಕ್)</translation>
 <translation id="4124935795427217608">ಯುನಿಕಾರ್ನ್</translation>
 <translation id="4158739975813877944">ಪ್ಲೇಪಟ್ಟಿ ತೆರೆಯಿರಿ</translation>
+<translation id="4159731583141908892"><ph name="FILE_NAME" /> ಐಟಂಗಳನ್ನು ಸರಿಸಲಾಗಿದೆ.</translation>
 <translation id="418179967336296930">ರಷ್ಯನ್ ಫೋನೆಟಿಕ್ (YaZHert) ಕೀಬೋರ್ಡ್</translation>
 <translation id="4193154014135846272">Google ಡಾಕ್ಯುಮೆಂಟ್‌</translation>
 <translation id="4195249722193633765">Linux (ಬೀಟಾ) ನೊಂದಿಗೆ ಆ್ಯಪ್‌ ಇನ್‌ಸ್ಟಾಲ್ ಮಾಡಿ</translation>
@@ -285,6 +292,7 @@
 <translation id="4298972503445160211">ಡ್ಯಾನಿಶ್ ಕೀಬೋರ್ಡ್</translation>
 <translation id="4299729908419173967">ಬ್ರೆಜಿಲಿಯನ್</translation>
 <translation id="4309915981827077375">ಸಾಮಾನ್ಯ ಮಾಹಿತಿ</translation>
+<translation id="4315949787858895817">ಡಚ್ (ಬೆಲ್ಜಿಯಂ)</translation>
 <translation id="4326192123064055915">ಕಾಫಿ</translation>
 <translation id="4336032328163998280">ನಕಲು ಕಾರ್ಯಾಚರಣೆ ವಿಫಲವಾಗಿದೆ. <ph name="ERROR_MESSAGE" /></translation>
 <translation id="4364327530094270451">ಕರಬೂಜ ಹಣ್ಣು</translation>
@@ -296,7 +304,6 @@
 <translation id="4477219268485577442">ಬಲ್ಗೇರಿಯನ್ ಫೊನೆಟಿಕ್</translation>
 <translation id="4479812471636796472">ಯುಎಸ್ ಡಿವೊರಾಕ್ ಕೀಬೋರ್ಡ್</translation>
 <translation id="4481711095103932593">ಈ ಫೋಲ್ಡರ್ ಅನ್ನು Windows ಮೂಲಕ ಹಂಚಿಕೊಳ್ಳಲಾಗಿದೆ</translation>
-<translation id="4487088045714738411">ಬೆಲ್ಜಿಯನ್ ಕೀಬೋರ್ಡ್</translation>
 <translation id="4522570452068850558">ವಿವರಗಳು</translation>
 <translation id="4542387084127299777">"<ph name="PATH" />" ತೆರೆಯಲು ಸಾಧ್ಯವಾಗುತ್ತಿಲ್ಲ</translation>
 <translation id="4552678318981539154">ಇನ್ನಷ್ಟು ಸಂಗ್ರಹಣೆಯನ್ನು ಖರೀದಿಸಿ</translation>
@@ -307,6 +314,7 @@
 <translation id="4582497162516204941">Linux (ಬೀಟಾ) ನೊಂದಿಗೆ ಇನ್‌ಸ್ಟಾಲ್ ಮಾಡಿ</translation>
 <translation id="4594543368593301662"><ph name="SEARCH_TERM" /> ಗಾಗಿ ಫಲಿತಾಂಶಗಳನ್ನು ತೋರಿಸಲಾಗುತ್ತಿದೆ.</translation>
 <translation id="4603392156942865207"><ph name="FILE_NAME" /> ಅನ್ನು <ph name="FOLDER_NAME" /> ಗೆ ನಕಲಿಸಲಾಗುತ್ತಿದೆ</translation>
+<translation id="4627439232948440198">ಸಂಸ್ಕೃತ</translation>
 <translation id="4631887759990505102">ಕಲೆಗಾರ</translation>
 <translation id="4656293982926141856">ಈ ಕಂಪ್ಯೂಟರ್</translation>
 <translation id="4669606053856530811"><ph name="SOURCE_NAME" /> ನ ಸದಸ್ಯರೊಂದಿಗೆ ಈ ಐಟಂಗಳನ್ನು ಹಂಚಿಕೊಳ್ಳದ ಹೊರತು ಅವರು ಪ್ರವೇಶವನ್ನು ಕಳೆದುಕೊಳ್ಳುತ್ತಾರೆ.</translation>
@@ -332,6 +340,7 @@
 <translation id="4804827417948292437">ಆವಕಾಡೊ</translation>
 <translation id="4823651846660089135">ಸಾಧನ ಓದಲು ಮಾತ್ರ ಆಗಿದೆ</translation>
 <translation id="4839847978919684242"><ph name="SELCTED_FILES_COUNT" /> ಐಟಂಗಳನ್ನು ಆಯ್ಕೆ ಮಾಡಲಾಗಿದೆ</translation>
+<translation id="4849981557599196363">ಜರ್ಮನ್ (ಬೆಲ್ಜಿಯಂ)</translation>
 <translation id="4850886885716139402">ವೀಕ್ಷಣೆ</translation>
 <translation id="485316830061041779">ಜರ್ಮನ್</translation>
 <translation id="4867079195717347957">ಕಾಲಮ್ ಅನ್ನು ಕೆಳಗಿನಿಂದ ಮೇಲಕ್ಕೆ ಕ್ರಮದಲ್ಲಿ ವಿಂಗಡಿಸಲು ಕ್ಲಿಕ್ ಮಾಡಿ.</translation>
@@ -357,6 +366,7 @@
 <translation id="5010406651457630570">ಕಂಪ್ಯೂಟರ್‌ಗಳು</translation>
 <translation id="5011233892417813670">Chromebook</translation>
 <translation id="5024856940085636730">ಕಾರ್ಯಾಚರಣೆಯು ನಿರೀಕ್ಷಿಸಿದ್ದಕ್ಕಿಂತ ಹೆಚ್ಚಿನ ಕಾಲವನ್ನು ತೆಗೆದುಕೊಳ್ಳುತ್ತಿದೆ. ನೀವು ಅದನ್ನು ಸ್ಥಗಿತಗೊಳಿಸಲು ಬಯಸುವಿರಾ?</translation>
+<translation id="5026887030745057099">ಹಿಂದಿ</translation>
 <translation id="5036159836254554629">Parallels Desktop ಹಂಚಿಕೊಳ್ಳುವಿಕೆಯನ್ನು ನಿರ್ವಹಿಸಿ</translation>
 <translation id="5038625366300922036">ಇನ್ನಷ್ಟು ನೋಡಿ...</translation>
 <translation id="5061708541166515394">ಕಾಂಟ್ರಾಸ್ಟ್‌‌</translation>
@@ -367,6 +377,7 @@
 <translation id="5098629044894065541">Hebrew</translation>
 <translation id="5123433949759960244">ಬ್ಯಾಸ್ಕೆಟ್‌ಬಾಲ್‌</translation>
 <translation id="5129662217315786329">ಪೋಲಿಶ್</translation>
+<translation id="5132435854979302863">ಫಿಲಿಪಿನೋ</translation>
 <translation id="5144820558584035333">ಹಂಗುಲ್ 3 ಸೆಟ್ (390)</translation>
 <translation id="5145331109270917438">ದಿನಾಂಕ ಮಾರ್ಪಡಿಸಿದೆ</translation>
 <translation id="515594325917491223">ಚದುರಂಗ</translation>
@@ -393,7 +404,9 @@
         ಫೈಲ್‌ಗಳಲ್ಲಿ ಇತರರೊಂದಿಗೆ ಒಂದೇ ಸ್ಥಳದಲ್ಲಿ<ph name="MARKUP_8" />
     
         ಹಂಚಿ, ರಚಿಸಿ ಮತ್ತು ಸಹಯೋಗಿಸಿ.<ph name="MARKUP_9" /></translation>
+<translation id="5274350207900771082">ನಕಲಿಸಲಾಗಿದೆ.</translation>
 <translation id="5275973617553375938">Google ಡ್ರೈವ್‌ನಿಂದ ಮರುಪಡೆಯಲಾದ ಫೈಲ್‌ಗಳು</translation>
+<translation id="5283140566205748520">ಫ್ರೆಂಚ್ (ಬೆಲ್ಜಿಯಂ)</translation>
 <translation id="5288481194217812690"><ph name="FILENAME" /></translation>
 <translation id="5317780077021120954">ಉಳಿಸು</translation>
 <translation id="5318819489018851358">Linux ನೊಂದಿಗೆ ಹಂಚಿಕೊಳ್ಳಿ</translation>
@@ -410,16 +423,17 @@
 <translation id="5418923334382419584">ಮ್ಯಾನ್ಮಾರ್ ಕೀಬೋರ್ಡ್</translation>
 <translation id="5428105026674456456">ಸ್ಪ್ಯಾನಿಶ್</translation>
 <translation id="5438282218546237410"><ph name="SEARCH_TERM" /> ಗಾಗಿ ಯಾವುದೇ ಫಲಿತಾಂಶಗಳಿಲ್ಲ.</translation>
+<translation id="5449551289610225147">ಅಮಾನ್ಯ ಪಾಸ್‌ವರ್ಡ್</translation>
 <translation id="5464696796438641524">ಪೋಲಿಷ್ ಕೀಬೋರ್ಡ್</translation>
 <translation id="5465122519792752163">ನೇಪಾಳಿ ಕೀಬೋರ್ಡ್‌ (ಇನ್‌ಸ್ಕ್ರಿಪ್ಟ್)</translation>
 <translation id="5469868506864199649">ಇಟಾಲಿಯನ್</translation>
+<translation id="5484429245813572665">ಇಂಡೋನೇಷಿಯನ್</translation>
 <translation id="5494920125229734069">ಎಲ್ಲವನ್ನೂ ಆಯ್ಕೆ ಮಾಡಿ</translation>
 <translation id="5500122897333236901">ಐಸ್‌ಲ್ಯಾಂಡಿಕ್</translation>
 <translation id="5508696409934741614">ಚುಕ್ಕೆಗಳು</translation>
 <translation id="5522908512596376669">ಫೈಲ್ ಪಟ್ಟಿಯನ್ನು, ಪಟ್ಟಿ ವೀಕ್ಷಣೆಗೆ ಬದಲಾಯಿಸಲಾಗಿದೆ.</translation>
 <translation id="5524517123096967210">ಫೈಲ್ ಅನ್ನು ಓದಲಾಗಲಿಲ್ಲ.</translation>
 <translation id="5533102081734025921"><ph name="IMAGE_TYPE" /> ಚಿತ್ರ</translation>
-<translation id="5533555070048896610">ಲಿಪ್ಯಂತರಣ (namaste → नमस्ते)</translation>
 <translation id="5534520101572674276">ಗಾತ್ರವನ್ನು ಲೆಕ್ಕಹಾಕಲಾಗುತ್ತಿದೆ</translation>
 <translation id="5583640892426849032">Backspace</translation>
 <translation id="5605830556594064952">US ಡ್ವೋರಕ್</translation>
@@ -585,6 +599,7 @@
 <translation id="751507702149411736">ಬೆಲರೂಸಿಯನ್</translation>
 <translation id="7544853251252956727">ಶಫಲ್ ಮಾಡಿ</translation>
 <translation id="7547811415869834682">ಡಚ್</translation>
+<translation id="7551643184018910560">ಶೆಲ್ಫ್‌ಗೆ ಪಿನ್‌ ಮಾಡು</translation>
 <translation id="7576032389798113292">6x4</translation>
 <translation id="7589661784326793847">ಸ್ವಲ್ಪ ಕಾಯಿರಿ</translation>
 <translation id="7603724359189955920">ಗ್ರಿಡ್‌ಗಳು</translation>
@@ -593,8 +608,10 @@
 <translation id="7649070708921625228">ಸಹಾಯ</translation>
 <translation id="7654209398114106148"><ph name="NUMBER_OF_ITEMS" /> ಐಟಂಗಳನ್ನು ಸರಿಸಲಾಗುತ್ತಿದೆ...</translation>
 <translation id="7658239707568436148">ರದ್ದುಮಾಡಿ</translation>
+<translation id="7693909743393669729">ಡ್ರೈವ್ ಅನ್ನು ಫಾರ್ಮ್ಯಾಟ್ ಮಾಡುವುದರಿಂದ ಅದರಲ್ಲಿ ಸಂಗ್ರಹವಾಗಿರುವ ಎಲ್ಲಾ ಡೇಟಾವನ್ನು ಅಳಿಸುತ್ತದೆ ಹಾಗೂ ಗೋಚರಿಸದ ವಿಭಾಗಗಳನ್ನು ಒಳಗೊಂಡಂತೆ ಅಸ್ತಿತ್ವದಲ್ಲಿರುವ ಎಲ್ಲಾ ವಿಭಾಗಗಳನ್ನು ತೆಗೆದುಹಾಕುತ್ತದೆ. ಈ ಕ್ರಿಯೆಯನ್ನು ರದ್ದುಮಾಡಲಾಗುವುದಿಲ್ಲ.</translation>
 <translation id="7695430100978772476"><ph name="DRIVE_NAME" /> ಅನ್ನು ಫಾರ್ಮ್ಯಾಟ್ ಮಾಡಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ</translation>
 <translation id="770015031906360009">ಗ್ರೀಕ್</translation>
+<translation id="7705251383879779343"><ph name="FILE_NAME" /> ಐಟಂಗಳನ್ನು ನಕಲಿಸಲಾಗಿದೆ.</translation>
 <translation id="7706319470528945664">ಪೋರ್ಚುಗೀಸ್ ಕೀಬೋರ್ಡ್</translation>
 <translation id="7711920809702896782">ಚಿತ್ರ ಮಾಹಿತಿ</translation>
 <translation id="7724603315864178912">ಕತ್ತರಿಸು</translation>
@@ -620,6 +637,7 @@
 <translation id="78946041517601018">ಹಂಚಿಕೊಂಡಿರುವ ಡ್ರೈವ್‌ಗಳು</translation>
 <translation id="7896906914454843592">ಯುಎಸ್ ವಿಸ್ತರಿಸಲಾದ ಕೀಬೋರ್ಡ್</translation>
 <translation id="7898607018410277265">ಗುಜರಾತಿ ಕೀಬೋರ್ಡ್ (ಹೊಸ ಫೋನೆಟಿಕ್)</translation>
+<translation id="7908793776359722643">ವಿಭಾಗವನ್ನು ಫಾರ್ಮ್ಯಾಟ್ ಮಾಡಿದರೆ, ಅದರಲ್ಲಿ ಸಂಗ್ರಹವಾಗಿರುವ ಎಲ್ಲಾ ಡೇಟಾವನ್ನು ಅಳಿಸಿಹೋಗುತ್ತದೆ. ಈ ಕ್ರಿಯೆಯನ್ನು ರದ್ದುಮಾಡಲಾಗುವುದಿಲ್ಲ.</translation>
 <translation id="7917972308273378936">ಲಿಥುವೇನಿಯನ್ ಕೀಬೋರ್ಡ್</translation>
 <translation id="7925686952655276919">ಸಿಂಕ್ ಮಾಡುವುದಕ್ಕಾಗಿ ಮೊಬೈಲ್ ಡೇಟಾವನ್ನು ಬಳಸಬೇಡಿ</translation>
 <translation id="7928710562641958568">ಸಾಧನ ತೆಗೆದುಹಾಕು</translation>
@@ -664,7 +682,9 @@
 <translation id="8299269255470343364">ಜಪಾನೀಸ್</translation>
 <translation id="8312871300878166382">ಫೋಲ್ಡರ್‌ಗೆ ಅಂಟಿಸಿ</translation>
 <translation id="8329978297633540474">ಸರಳ ಪಠ್ಯ</translation>
+<translation id="8335587457941836791">ಶೆಲ್ಫ್‌ನಿಂದ ಅನ್‌ಪಿನ್‌ ಮಾಡು</translation>
 <translation id="8336153091935557858">ನಿನ್ನೆ <ph name="YESTERDAY_DAYTIME" /></translation>
+<translation id="8336524887811696057">ನೇಪಾಳಿ ಲಿಪ್ಯಂತರಣ</translation>
 <translation id="8336579025507394412">ಐಸ್‌ಲ್ಯಾಂಡಿಕ್ ಕೀಬೋರ್ಡ್</translation>
 <translation id="8342318071240498787">ಒಂದೇ ಹೆಸರಿನೊಂದಿಗೆ ಫೈಲ್ ಅಥವಾ ಡೈರೆಕ್ಟರಿ ಈಗಾಗಲೇ ಅಸ್ತಿತ್ವದಲ್ಲಿದೆ.</translation>
 <translation id="8382450452152102026"><ph name="FOLDER_NAME" /> ಗೆ</translation>
@@ -690,12 +710,14 @@
 <translation id="8600173386174225982">ಫೈಲ್ ಪಟ್ಟಿಯನ್ನು, ಥಂಬ್‌ನೇಲ್ ವೀಕ್ಷಣೆಗೆ ಬದಲಿಸಲಾಗಿದೆ.</translation>
 <translation id="8601932370724196034">Crostini ಚಿತ್ರದ ಫೈಲ್</translation>
 <translation id="8669949407341943408">ಸರಿಸಲಾಗುತ್ತಿದೆ...</translation>
+<translation id="8694836330346852143">ಉರ್ದು</translation>
 <translation id="8698464937041809063">Google ರೇಖಾಚಿತ್ರ</translation>
 <translation id="8714406895390098252">ಬೈಸಿಕಲ್</translation>
 <translation id="8719721339511222681"><ph name="ENTRY_NAME" /> ಅನ್ನು ಆಯ್ಕೆ ಮಾಡಲಾಗಿದೆ.</translation>
 <translation id="8722421161699219904">ಯುಎಸ್ ಅಂತರರಾಷ್ಟ್ರೀಯ ಕೀಬೋರ್ಡ್</translation>
 <translation id="872537912056138402">ಕ್ರೋಯೇಶಿಯನ್</translation>
 <translation id="874420130893181774">ಸಾಂಪ್ರದಾಯಿಕ ಪಿನ್‌ಯಿನ್ ಇನ್‌ಪುಟ್ ವಿಧಾನ</translation>
+<translation id="8770002329960263418">ಯುಎಸ್ ಅಂತರರಾಷ್ಟ್ರೀಯ PC ಕೀಬೋರ್ಡ್‌ನ ಜೊತೆ ಡಚ್ (ನೆದರ್‌ಲ್ಯಾಂಡ್ಸ್)</translation>
 <translation id="8775404590947523323">ನಿಮ್ಮ ಸಂಪಾದನೆಗಳನ್ನು ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಉಳಿಸಲಾಗಿದೆ. <ph name="BREAKS" /> ಮೂಲ ಚಿತ್ರದ ನಕಲೊಂದನ್ನು ಇರಿಸಿಕೊಳ್ಳಲು, "ಮೂಲವನ್ನು ಮೇಲ್ಬರಹಗೊಳಿಸು" ಅನ್ನು ಅನ್‌ಚೆಕ್ ಮಾಡಿ.</translation>
 <translation id="8803496343472038847">ರಷ್ಯನ್ ಫೋನೆಟಿಕ್ ಕೀಬೋರ್ಡ್</translation>
 <translation id="8808686172382650546">ಬೆಕ್ಕು</translation>
@@ -706,6 +728,7 @@
 <translation id="8900820606136623064">ಹಂಗೇರಿಯನ್</translation>
 <translation id="8901822611024316615">ಝೆಕ್ QWERTY ಕೀಬೋರ್ಡ್</translation>
 <translation id="8919081441417203123">ಡ್ಯಾನಿಶ್</translation>
+<translation id="8941776146379310519">ಮಲೈ</translation>
 <translation id="8960999352790021682">ಬೆಂಗಾಲಿ ಕೀಬೋರ್ಡ್ (ಫೋನೆಟಿಕ್)</translation>
 <translation id="8965697826696209160">ಸಾಕಷ್ಟು ಸ್ಥಳಾವಕಾಶವಿಲ್ಲ.</translation>
 <translation id="9017798300203431059">ರಷ್ಯನ್ ಫೋನೆಟಿಕ್</translation>

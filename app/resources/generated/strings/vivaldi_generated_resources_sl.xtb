@@ -13,12 +13,12 @@
 <translation id="1163931534039071049">&amp;Ogled vira okvirja</translation>
 <translation id="1165039591588034296">Napaka</translation>
 <translation id="1175364870820465910">&amp;Natisni ...</translation>
-<translation id="1177863135347784049">Po meri</translation>
 <translation id="1181037720776840403">Odstrani</translation>
 <translation id="1187722533808055681">Prekinitev mirovanja</translation>
 <translation id="119944043368869598">Počisti vse</translation>
 <translation id="1221825588892235038">Samo izbor</translation>
 <translation id="1244303850296295656">Napaka razširitve</translation>
+<translation id="125220115284141797">Privzeto</translation>
 <translation id="1274977772557788323">Nastavitve shranjevanja za Adobe Flash Player</translation>
 <translation id="1297175357211070620">Cilj</translation>
 <translation id="1303101771013849280">Datoteka HTML z zaznamki</translation>
@@ -45,9 +45,11 @@
 <translation id="1723824996674794290">&amp;Novo okno</translation>
 <translation id="1725149567830788547">Pokaži &amp;kontrolnike</translation>
 <translation id="1729533290416704613">Določa tudi, katera stran je prikazana, ko iščete v naslovni vrstici.</translation>
+<translation id="174123615272205933">Po meri</translation>
 <translation id="1744108098763830590">stran v ozadju</translation>
 <translation id="176587472219019965">&amp;Novo okno</translation>
 <translation id="1769104665586091481">Odpri povezavo v novem &amp;oknu</translation>
+<translation id="1779468444204342338">Najmanj</translation>
 <translation id="1815083418640426271">Prilepi kot navadno besedilo</translation>
 <translation id="1828901632669367785">Natisni v sistemskem pogovornem oknu...</translation>
 <translation id="1850508293116537636">Zasukaj v &amp;smeri urinega kazalca</translation>
@@ -87,7 +89,6 @@
 <translation id="2381756643783702095">Vprašaj pred pošiljanjem (priporočljivo)</translation>
 <translation id="241082044617551207">Neznani vtičnik</translation>
 <translation id="2423578206845792524">Sh&amp;rani sliko kot...</translation>
-<translation id="2436707352762155834">Najmanj</translation>
 <translation id="2439110203301358333">Drug program v računalniku je dodal razširitev, ki lahko spremeni način delovanja Chroma.</translation>
 <translation id="2445081178310039857">Potreben je korenski imenik razširitve.</translation>
 <translation id="2470702053775288986">Nepodprte razširitve onemogočene</translation>
@@ -138,6 +139,7 @@
 <translation id="3222066309010235055">Vnaprejšnje upodabljanje: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3227137524299004712">Mikrofon</translation>
 <translation id="3241680850019875542">Izberite korenski imenik razširitve, ki jo želite zapakirati. Če želite posodobiti razširitev, izberite tudi datoteko z zasebnim ključem, ki jo želite znova uporabiti.</translation>
+<translation id="3266179261140759675">Zaprtim spletnim mestom prepreči pošiljanje in prejemanje podatkov</translation>
 <translation id="3280237271814976245">Shrani &amp;kot ...</translation>
 <translation id="3285322247471302225">Nov &amp;zavihek</translation>
 <translation id="3288047731229977326">Razširitve, ki se izvajajo v razvijalskem načinu, lahko škodijo vašemu računalniku. Če niste razvijalec, zaradi varnosti onemogočite razširitve, ki se izvajajo v razvijalskem načinu.</translation>
@@ -245,7 +247,6 @@
 <translation id="5039804452771397117">Dovoli</translation>
 <translation id="5057110919553308744">Ko kliknete razširitev</translation>
 <translation id="5063480226653192405">Uporaba</translation>
-<translation id="5068918910148307423">Nedavno zaprtim spletnim mestom ne dovoli dokončanje pošiljanja in prejemanja podatkov</translation>
 <translation id="5116628073786783676">Shr&amp;ani zvočni zapis kot...</translation>
 <translation id="5143374789336132547">Zaradi razširitve <ph name="EXTENSION_NAME" /> se je spremenila stran, ki je prikazana, ko kliknete gumb za začetno stran.</translation>
 <translation id="5154108062446123722">Dodatne nastavitve za: <ph name="PRINTING_DESTINATION" /></translation>
@@ -264,6 +265,7 @@
 <translation id="5355926466126177564">Zaradi razširitve »<ph name="EXTENSION_NAME" />« se je spremenila stran, ki je prikazana, ko iščete v naslovni vrstici.</translation>
 <translation id="5360150013186312835">Prikaži v orodni vrstici</translation>
 <translation id="5362741141255528695">Izberite datoteko z zasebnim ključem.</translation>
+<translation id="536638840841140142">Brez</translation>
 <translation id="5370819323174483825">&amp;Znova naloži</translation>
 <translation id="5398572795982417028">Sklic na stran zunaj dovoljenega razpona, omejitev je <ph name="MAXIMUM_PAGE" /></translation>
 <translation id="5425042808445046667">Nadaljuj prenašanje</translation>
@@ -388,7 +390,6 @@
 <translation id="7663719505383602579">Sprejemnik: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Namestil skrbnik</translation>
 <translation id="7685049629764448582">JavaScript pomnilnik</translation>
-<translation id="7701040980221191251">Brez</translation>
 <translation id="7701869757853594372">USER ročaji</translation>
 <translation id="7704305437604973648">Opravilo</translation>
 <translation id="7710568461918838723">&amp;Preklopi…</translation>

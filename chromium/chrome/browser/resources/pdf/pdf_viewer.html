@@ -26,6 +26,13 @@
     width: 0;
   }
 
+  @media(max-width: 500px),
+  (max-height: 250px) {
+    #sidenav-container {
+      display: none;
+    }
+  }
+
   #content-focus-rectangle {
     border: 2px solid var(--google-grey-600);
     border-radius: 2px;
@@ -62,6 +69,13 @@
     z-index: 1;
   }
 
+  @media(max-width: 200px),
+  (max-height: 250px) {
+    viewer-pdf-toolbar-new {
+      display: none;
+    }
+  }
+
   :host-context([pdf-viewer-update-enabled]):host {
     display: flex;
     flex-direction: column;
@@ -93,8 +107,17 @@
     z-index: initial;
   }
 
+  /* #main and #scroller are intentionally different elements so that a
+   * ResizeObserver can be used on #main without triggering
+   * "ResizeObserver loop limit exceeded".
+   */
   #main {
     flex: 1;
+    overflow: hidden;
+  }
+
+  #scroller {
+    height: 100%;
     overflow: auto;
     position: relative;
   }
@@ -128,13 +151,17 @@
 </template>
 <template is="dom-if" if="[[pdfViewerUpdateEnabled_]]">
   <viewer-pdf-toolbar-new id="toolbar"
+    annotation-mode="[[annotationMode_]]"
     doc-title="[[title_]]" doc-length="[[docLength_]]" page-no="[[pageNo_]]"
     load-progress="[[loadProgress_]]" has-edits="[[hasEdits_]]"
     has-entered-annotation-mode="[[hasEnteredAnnotationMode_]]"
     pdf-form-save-enabled="[[pdfFormSaveEnabled_]]"
     printing-enabled="[[printingEnabled_]]"
+    rotated="[[isRotated_(clockwiseRotations_)]]"
     is-form-field-focused="[[isFormFieldFocused_]]"
-    viewport-zoom="[[viewportZoom_]]"
+    sidenav-collapsed="[[sidenavCollapsed_]]"
+    two-up-view-enabled="[[twoUpViewEnabled_]]"
+    viewport-zoom="[[viewportZoom_]]" zoom-bounds="[[zoomBounds_]]"
 <if expr="chromeos">
     annotation-available="[[annotationAvailable_]]"
     ink-controller="[[inkController_]]"
@@ -144,6 +171,7 @@
     on-display-annotations-changed="onDisplayAnnotationsChanged_"
     on-dropdown-opened="onDropdownOpened_"
     on-fit-to-changed="onFitToChanged"
+    on-annotation-mode-dialog-confirmed="onResetView_"
     on-sidenav-toggle-click="onSidenavToggleClick_"
     on-two-up-view-changed="onTwoUpViewChanged_"
     on-zoom-changed="onZoomChanged" on-zoom-in="onZoomIn"
@@ -157,18 +185,22 @@
 
 <template is="dom-if" if="[[pdfViewerUpdateEnabled_]]">
   <div id="container">
-    <div id="sidenav-container" closed$="[[sidenavCollapsed_]]">
+    <div id="sidenav-container" closed$="[[sidenavCollapsed_]]"
+        hidden$="[[!toolbarEnabled_]]">
       <viewer-pdf-sidenav id="sidenav"
-          bookmarks="[[bookmarks_]]" doc-length="[[docLength_]]"
-          on-change-page="onChangePage_"
-          on-change-page-and-xy="onChangePageAndXy_"
-          on-navigate="onNavigate_">
+          active-page="[[pageNo_]]" bookmarks="[[bookmarks_]]"
+          clockwise-rotations="[[clockwiseRotations_]]"
+          doc-length="[[docLength_]]" on-change-page="onChangePage_"
+          on-change-page-and-xy="onChangePageAndXy_" on-navigate="onNavigate_"
+          on-paint-thumbnail="onPaintThumbnail_">
       </viewer-pdf-sidenav>
     </div>
-    <div id="main" on-scroll="onScroll_">
-      <div id="sizer"></div>
-      <div id="content"></div>
-    </div>
+    <div id="main">
+      <div id="scroller" on-scroll="onScroll_">
+        <div id="sizer"></div>
+        <div id="content"></div>
+      </div>
+    <div>
   </div>
 </template>
 

@@ -1,4 +1,5 @@
 import("//vivaldi/gn/config/features.gni")
+import("//vivaldi/gn/config/locales.gni")
 import("//build/config/locales.gni")
 
 import("//vivaldi/app/resources/generate_untranslated.gni")

@@ -5,6 +5,7 @@
 <translation id="1195447618553298278">កំហុសឆ្គងមិនស្គាល់។</translation>
 <translation id="1413240736185167732">មិនបានសម្រេច - ​តម្រងមានបញ្ហា</translation>
 <translation id="1468664791493211953">ការផ្តល់ជូន</translation>
+<translation id="1478594628797167447">ម៉ាស៊ីនស្កេន</translation>
 <translation id="1482734542997480527"><ph name="ENROLLMENT_DOMAIN" /> គ្រប់គ្រង​ឧបករណ៍នេះ ហើយ​ប្រហែលជាអាច​តាមដាន​សកម្មភាព​របស់អ្នកបាន។</translation>
 <translation id="150962533380566081">PUK មិនត្រឹមត្រូវ។</translation>
 <translation id="1510238584712386396">ឡាន់ឆ័រ</translation>
@@ -19,10 +20,12 @@
 <translation id="2161394479394250669">បោះបង់​ការងារ​បោះពុម្ព</translation>
 <translation id="2338501278241028356">បើកប៊្លូធូស​ដើម្បី​ស្វែងរក​ឧបករណ៍​ដែល​នៅជិត</translation>
 <translation id="2375079107209812402">អាច​ព្យាយាម​បាន <ph name="ATTEMPTS_LEFT" /> ដង​ទៀត</translation>
+<translation id="2517472476991765520">ស្កេន</translation>
 <translation id="2805756323405976993">កម្មវិធី</translation>
 <translation id="2872961005593481000">បិទ</translation>
 <translation id="3008341117444806826">ផ្ទុក​ឡើង​វិញ</translation>
 <translation id="3091839911843451378">មិនបានសម្រេច - ​​​ម៉ាស៊ីន​បោះពុម្ពបានឈប់</translation>
+<translation id="3246869037381808805">កិច្ចការបោះពុម្ពដែលចាស់ជាង 1 ថ្ងៃនឹងត្រូវលុបចេញ</translation>
 <translation id="3268178239013324452">មិនបានសម្រេច - ​​​ទ្វារចំហ</translation>
 <translation id="3369013195428705271">តើអ្នក​ពិតជាចង់​សម្អាត​ប្រវត្តិបោះពុម្ព​ទាំងអស់​មែនឬ? ការងារ​បោះពុម្ព​របស់អ្នកដែល​កំពុងដំណើរការ​នឹងមិនត្រូវបាន​សម្អាតទេ។</translation>
 <translation id="3456078764689556234">បានបោះពុម្ព​ទំព័រទី <ph name="PRINTED_PAGES" /> ក្នុងចំណោម <ph name="TOTAL_PAGES" />។</translation>
@@ -33,13 +36,13 @@
 <translation id="38114475217616659">សម្អាត​ប្រវត្តិ​ទាំងអស់</translation>
 <translation id="3820172043799983114">លេខ​កូដ PIN ​មិន​ត្រឹមត្រូវ។</translation>
 <translation id="3838338534323494292">ពាក្យសម្ងាត់ថ្មី</translation>
+<translation id="39823212440917567">កិច្ចការបោះពុម្ព​ដែលចាស់ជាង <ph name="NUMBER_OF_DAYS" /> ថ្ងៃ​នឹងត្រូវបាន​លុបចេញ</translation>
 <translation id="4003259559679196451"><ph name="ENROLLMENT_DOMAIN" /> គ្រប់គ្រង​ឧបករណ៍​នេះ និង​មានសិទ្ធិ​ចូលមើល​សកម្មភាព​អ្នកប្រើប្រាស់​ទាំងអស់ រួមទាំង​ទំព័របណ្ដាញ​ដែលបាន​ចូលមើល ពាក្យសម្ងាត់ និង​អ៊ីមែល​ផងដែរ។</translation>
 <translation id="4003384961948020559">មិនបានសម្រេច - កន្លែងចេញក្រដាសបោះពុម្ព​ពេញហើយ</translation>
 <translation id="4027485274696301677"><ph name="DEVICE_TYPE" /> នេះត្រូវបានគ្រប់គ្រង​ដោយ <ph name="ENROLLMENT_DOMAIN" />។ អ្នកគ្រប់គ្រង​អាចកំណត់រចនាសម្ព័ន្ធ​ឧបករណ៍​នេះពីចម្ងាយបាន។</translation>
 <translation id="4034824040120875894">ម៉ាស៊ីន​បោះពុម្ព</translation>
 <translation id="4227825898293920515">ពាក្យសម្ងាត់ផុតកំណត់​ក្នុងរយៈពេល <ph name="TIME" /></translation>
 <translation id="4238516577297848345">មិនមានកិច្ចការបោះពុម្ពកំពុងដំណើរការទេ</translation>
-<translation id="428217921675623177">ការងារ​បោះពុម្ព​ដែលមានអាយុកាល​លើសពី 90 ថ្ងៃ​នឹងត្រូវបាន​លុបចេញ</translation>
 <translation id="4297501883039923494">បានឈប់ - មានបញ្ហា​ដែលមិនស្គាល់</translation>
 <translation id="4429881212383817840">សំបុត្រ Kerberos ជិតផុត​កំណត់ហើយ</translation>
 <translation id="445059817448385655">ពាក្យ​សម្ងាត់​ចាស់</translation>
@@ -52,6 +55,7 @@
 <translation id="4890353053343094602">សូមជ្រើសរើស​ពាក្យសម្ងាត់​ថ្មីភ្លាមៗ</translation>
 <translation id="4917889632206600977">បានឈប់ - អស់​ក្រដាស</translation>
 <translation id="4932733599132424254">កាលបរិច្ឆេទ</translation>
+<translation id="520299634122159966">មិនមាន​ឧបករណ៍ស្កេន​ទេ</translation>
 <translation id="5212543919916444558">ខ្ញុំរកមិនឃើញអ្វីដែលខ្ញុំអាចជួយបាននៅលើអេក្រង់របស់អ្នកទេ។ សាកល្បងចុចមីក្រូហ្វូន ដើម្បីសួរខ្ញុំអំពីអ្វីម្យ៉ាង។</translation>
 <translation id="5222676887888702881">ចាកចេញ</translation>
 <translation id="5267975978099728568"><ph name="DOCUMENT_TITLE" />, <ph name="PRINTER_NAME" />, <ph name="CREATION_TIME" />, <ph name="ERROR_STATUS" /></translation>
@@ -70,6 +74,7 @@
 <translation id="649050271426829538">បានឈប់ - ជាប់​ក្រដាស</translation>
 <translation id="6517239166834772319">រុករក</translation>
 <translation id="6564646048574748301">មិនបានសម្រេច - ​​មិនអាចភ្ជាប់​ម៉ាស៊ីនបោះពុម្ព​បាន</translation>
+<translation id="6620487321149975369">កិច្ចការបោះពុម្ពនឹងបង្ហាញនៅក្នុងប្រវត្តិ ប្រសិនបើអ្នកមិនលុបវាដោយដៃទេ</translation>
 <translation id="6643016212128521049">ជម្រះ</translation>
 <translation id="6747215703636344499">បានឈប់ - ថាសដាក់​ក្រដាស​បោះពុម្ព​ពេញហើយ</translation>
 <translation id="7162487448488904999">សាល​រូបភាព</translation>
@@ -80,7 +85,9 @@
 <translation id="7805768142964895445">ស្ថានភាព</translation>
 <translation id="808894953321890993">ប្ដូរ​ពាក្យ​សម្ងាត់</translation>
 <translation id="8208861521865154048">អត្ថប្រយោជន៍</translation>
+<translation id="8294431847097064396">ប្រភព</translation>
 <translation id="8347227221149377169">ការងារ​បោះពុម្ព</translation>
+<translation id="8352772353338965963">បន្ថែមគណនីមួយដើម្បីចូលពីគណនីច្រើន។ គណនីដែលចូលទាំងអស់អាចចូលប្រើដោយគ្មានពាក្យសម្ងាត់ ដូច្នេះលក្ខណពិសេសនេះគួរត្រូវបានប្រើជាមួយគណនីដែលគួរជឿជាក់តែប៉ុណ្ណោះ។</translation>
 <translation id="8701136875688985581"><ph name="ENROLLMENT_DOMAIN" /> គ្រប់គ្រង​អ្នកប្រើប្រាស់​នេះ។ ដែននេះអាច​តាមដាន​សកម្មភាព​អ្នកប្រើប្រាស់ និង​គ្រប់គ្រង​ការកំណត់​ពីចម្ងាយ​បាន។</translation>
 <translation id="871560550817059752">មិនបានសម្រេច - ​​អស់ទឹកថ្នាំ</translation>
 <translation id="8726019395068607495">បានឈប់ - ទ្វារចំហ</translation>

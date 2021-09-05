@@ -52,6 +52,7 @@
 <translation id="1291286136605998134">ปุ่มเปิด-ปิด</translation>
 <translation id="1299774449519412690">สีฟ้าท้องฟ้าอ่อน</translation>
 <translation id="1303806948938513162">ใช้ 4 นิ้วแตะเพื่อเข้าสู่เมนู ChromeVox</translation>
+<translation id="1313373992684326101">ไปที่ส่วนก่อนหน้า เช่น ถาดสถานะและ Launcher</translation>
 <translation id="1325363694295259631">ยกเลิกการเลือกปุ่มตัวเลือกรายการในเมนู <ph name="NAME" /> แล้ว</translation>
 <translation id="1325946044405407859">สีแทน</translation>
 <translation id="1331702245475014624"><ph name="INDEX" /> จาก <ph name="TOTAL" /></translation>
@@ -79,6 +80,7 @@
 <translation id="1506187449813838456">เพิ่มระดับเสียง</translation>
 <translation id="151784044608172266">ประโยคถัดไป</translation>
 <translation id="1524531499102321782">เบรลล์บรรทัดถัดไป</translation>
+<translation id="1542513807034338907">เลื่อนไปที่หน้าก่อนหน้านี้</translation>
 <translation id="1546370775711804143">แถบเลื่อน</translation>
 <translation id="1555130319947370107">สีน้ำเงิน</translation>
 <translation id="1559739829547075274">นำทางกลับหลัง</translation>
@@ -280,6 +282,7 @@
 <translation id="3103579948980282461">สีแดงอมม่วงปานกลาง</translation>
 <translation id="3104705064753753826">ข้อความแจ้งเตือน</translation>
 <translation id="3109724472072898302">ยุบแล้ว</translation>
+<translation id="311015743332597320">เลื่อน 4 นิ้วไปทางขวา</translation>
 <translation id="3112457281078985179">หากต้องการเปิดหรือปิด ChromeVox ให้ใช้ Control+Alt+Z</translation>
 <translation id="3131002934070407451">อ่านหมายเลขเป็น</translation>
 <translation id="3134461040845705080">อ่านอย่างเดียว</translation>
@@ -345,6 +348,7 @@
 <translation id="3549141990712742152">ตัด <ph name="TEXT" /></translation>
 <translation id="3549680091535286226">ใช้ 2 นิ้วแตะเพื่อหยุดเสียงพูดชั่วคราว</translation>
 <translation id="3564729643041517261">รูปแบบการแสดงผลปัจจุบันคือการแสดงคู่กัน</translation>
+<translation id="3587482841069643663">ทั้งหมด</translation>
 <translation id="3589661172894441357">อภิธานศัพท์</translation>
 <translation id="3591784666823501596">สีน้ำเงินรอยัลบลู</translation>
 <translation id="3594207934078151302">สีเขียวน้ำทะเลปานกลาง</translation>
@@ -436,6 +440,7 @@
 <translation id="4278486392851938658">ไม่มีลิงก์ที่เคยเข้าชมก่อนหน้า</translation>
 <translation id="4281245629646759298">สีเหลืองอ่อน</translation>
 <translation id="4289540628985791613">ภาพรวม</translation>
+<translation id="4294967782363273192">จัดเรียงจากน้อยไปมาก</translation>
 <translation id="4300318234632215983">แจ้ง URL ของลิงก์</translation>
 <translation id="4322625298640984693">สีน้ำตาลดิน</translation>
 <translation id="4342180618051828363">{COUNT,plural, =1{จุด}=3{จุดไข่ปลา}other{# จุด}}</translation>
@@ -447,6 +452,7 @@
 <translation id="4384583879834880242">ถามและตอบ</translation>
 <translation id="4391478986194775161">cntntinfo</translation>
 <translation id="4402014469255336455">สีฟ้าท้องฟ้าเข้ม</translation>
+<translation id="4406249099130339147">เสียงสะท้อนของเครื่องหมายวรรคตอน</translation>
 <translation id="4432457053224379116">สีแดงอินเดียนเรด</translation>
 <translation id="4437615272777527928">พิมพ์เพื่อค้นหาเมนู ใช้ลูกศรขึ้นและลงเพื่อวนดูผลการค้นหา ใช้แป้นลูกศรซ้ายและขวาเพื่อปรับเครื่องหมาย Caret ของข้อความและเพื่อย้ายระหว่างเมนู</translation>
 <translation id="4457472090507035117">เลือกเสียงปัจจุบัน:</translation>
@@ -481,6 +487,7 @@
 <translation id="4763480195061959176">วิดีโอ</translation>
 <translation id="4764692524839457597">ค่าเริ่มต้น</translation>
 <translation id="4772771694153161212">ไม่ขีดเส้นใต้</translation>
+<translation id="4780458943471935919">เลื่อนไปที่หน้าถัดไป</translation>
 <translation id="4784215347943747396">ควบคุมอุปกรณ์ด้วยสวิตช์เพียง 1 หรือ 2 ปุ่ม</translation>
 <translation id="4786285211967466855">ไม่มีส่วนหัวระดับ 1 ก่อนหน้า</translation>
 <translation id="4787577491510559358">ประกาศการจัดรูปแบบของรายการปัจจุบัน</translation>
@@ -644,6 +651,7 @@
 <translation id="5999630716831179808">เสียง</translation>
 <translation id="6006050241733874051">ฟอร์ม</translation>
 <translation id="6006064078185310784">{COUNT,plural, =1{เครื่องหมายแบ็คสแลช}other{# เครื่องหมายแบ็คสแลช}}</translation>
+<translation id="6010616110396250088">จัดเรียงจากมากไปน้อย</translation>
 <translation id="6017514345406065928">สีเขียว</translation>
 <translation id="602001110135236999">เลื่อนไปทางซ้าย</translation>
 <translation id="6034000775414344507">เทาอ่อน</translation>
@@ -814,6 +822,7 @@
 <translation id="744163271241493234">pwded</translation>
 <translation id="7484805699335881122">เปลี่ยนระดับเสียงสูงต่ำเมื่อพูดประเภทขององค์ประกอบและข้อความในเครื่องหมายคำพูด ข้อความที่ถูกลบ เป็นตัวหนา อยู่ในวงเล็บ หรือเป็นตัวพิมพ์ใหญ่</translation>
 <translation id="7491962110804786152">แท็บ</translation>
+<translation id="7492497529767769458">ไปที่ส่วนถัดไป เช่น ถาดสถานะและ Launcher</translation>
 <translation id="7505149250476994901">พูด "ตัวพิมพ์ใหญ่" ต่อจากตัวอักษร</translation>
 <translation id="7518543783849163354">หากต้องการหยุดคำอธิบายของ ChromeVox ชั่วคราว ให้กดปุ่ม Control</translation>
 <translation id="7533226154149229506">สีเหลืองโกลเด้นร็อดอ่อน</translation>
@@ -821,6 +830,7 @@
 <translation id="7552432549459840808">แป้นพิมพ์ลัดของ Chrome ที่มีประโยชน์</translation>
 <translation id="7569983096843329377">สีดำ</translation>
 <translation id="7579911500627256166">จุด <ph name="DOT" /></translation>
+<translation id="7592060599656252486">บางอย่าง</translation>
 <translation id="7595446402663080101">ไม่มีตารางก่อนหน้า</translation>
 <translation id="7596131838331109045">สีส้มแซลมอนอ่อน</translation>
 <translation id="7604026522577407655">ไปที่ด้านบนของคอลัมน์ปัจจุบัน</translation>
@@ -840,6 +850,7 @@
 <translation id="7684431668231950609">แก้ไขข้อความ, รายการ URL</translation>
 <translation id="7685589220304187312">tlbar</translation>
 <translation id="7693840228159394336">ปุ่มตัวเลือกก่อนหน้า</translation>
+<translation id="7701040980221191251">ไม่มี</translation>
 <translation id="7701196182766842984">autolst</translation>
 <translation id="7714340021005120797">ไม่มีช่องตัวเลือกรวมถัดไป</translation>
 <translation id="772146615414628379">ยินดีด้วย! คุณได้เรียนรู้ข้อมูลสำคัญเกี่ยวกับการใช้งาน ChromeVox เรียบร้อยแล้ว โปรดทราบว่าคุณเปิดเมนูคำสั่ง ChromeVox ได้ทุกเมื่อด้วยการกดแป้นค้นหา + เครื่องหมายจุด ดูข้อมูลเพิ่มเติมเกี่ยวกับ ChromeVox และ Chrome OS ได้ที่บทความต่อไปนี้
@@ -898,7 +909,9 @@
 <translation id="812886159861361726">หยุดดาวน์โหลด <ph name="FILE_NAME" /> แล้ว</translation>
 <translation id="8129445297241948503">ไม่มีเซลล์ด้านบน</translation>
 <translation id="8138880386467279117">การแตะ</translation>
+<translation id="8173092779156526980">เลื่อน 4 นิ้วไปทางซ้าย</translation>
 <translation id="817440585505441544">{COUNT,plural, =1{เครื่องหมายขีดล่าง}other{# เครื่องหมายขีดล่าง}}</translation>
+<translation id="8179976553408161302">Enter</translation>
 <translation id="8184828902145951186">แถว</translation>
 <translation id="8186185314313222077">เปลี่ยนเป็นเต็มหน้าจอ</translation>
 <translation id="8199231515320852133">แจ้งส่วนหัวของเซลล์ปัจจุบัน</translation>
@@ -984,6 +997,7 @@
 <translation id="8946628535652548639">ถ<ph name="TABLECELLROWINDEX" />ค<ph name="TABLECELLCOLUMNINDEX" /></translation>
 <translation id="8952400011684167587">ไม่มีปุ่มตัวเลือกก่อนหน้า</translation>
 <translation id="8970172509886453271">ไม่มีส่วนก่อนหน้า</translation>
+<translation id="89720367119469899">Escape</translation>
 <translation id="8978496506222343566">tltip</translation>
 <translation id="8986362086234534611">ไม่จำ</translation>
 <translation id="9040132695316389094">ส่วนหัวระดับ 1</translation>

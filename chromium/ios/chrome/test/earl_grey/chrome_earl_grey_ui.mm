@@ -7,7 +7,9 @@
 #import "base/test/ios/wait_util.h"
 #include "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/ui/popup_menu/popup_menu_constants.h"
+#import "ios/chrome/browser/ui/table_view/table_view_constants.h"
 #include "ios/chrome/grit/ios_strings.h"
+#import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
 #import "ios/chrome/test/earl_grey/chrome_matchers.h"
 #import "ios/testing/earl_grey/earl_grey_test.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -51,18 +53,11 @@ id<GREYAction> ScrollDown() {
 }
 
 bool IsAppCompactWidth() {
-#if defined(CHROME_EARL_GREY_1)
-  UIApplication* application = [UIApplication sharedApplication];
-  UIWindow* keyWindow = application.keyWindow;
-  UIUserInterfaceSizeClass sizeClass =
-      keyWindow.traitCollection.horizontalSizeClass;
-#elif defined(CHROME_EARL_GREY_2)
   UIApplication* remoteApplication =
       [GREY_REMOTE_CLASS_IN_APP(UIApplication) sharedApplication];
   UIWindow* remoteKeyWindow = remoteApplication.keyWindow;
   UIUserInterfaceSizeClass sizeClass =
       remoteKeyWindow.traitCollection.horizontalSizeClass;
-#endif
 
   return sizeClass == UIUserInterfaceSizeClassCompact;
 }
@@ -174,11 +169,23 @@ class ScopedDisableTimerTracking {
 }
 
 - (void)assertHistoryHasNoEntries {
-  id<GREYMatcher> noHistoryMessageMatcher =
-      grey_allOf(grey_text(l10n_util::GetNSString(IDS_HISTORY_NO_RESULTS)),
-                 grey_sufficientlyVisible(), nil);
-  [[EarlGrey selectElementWithMatcher:noHistoryMessageMatcher]
-      assertWithMatcher:grey_notNil()];
+  if ([ChromeEarlGrey isIllustratedEmptyStatesEnabled]) {
+    [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
+                                            kTableViewIllustratedEmptyViewID)]
+        assertWithMatcher:grey_notNil()];
+
+    id<GREYMatcher> noHistoryMessageMatcher = grey_allOf(
+        grey_text(l10n_util::GetNSString(IDS_IOS_HISTORY_EMPTY_TITLE)),
+        grey_sufficientlyVisible(), nil);
+    [[EarlGrey selectElementWithMatcher:noHistoryMessageMatcher]
+        assertWithMatcher:grey_notNil()];
+  } else {
+    id<GREYMatcher> noHistoryMessageMatcher =
+        grey_allOf(grey_text(l10n_util::GetNSString(IDS_HISTORY_NO_RESULTS)),
+                   grey_sufficientlyVisible(), nil);
+    [[EarlGrey selectElementWithMatcher:noHistoryMessageMatcher]
+        assertWithMatcher:grey_notNil()];
+  }
 
   id<GREYMatcher> historyEntryMatcher =
       grey_allOf(grey_kindOfClassName(@"TableViewURLCell"),

@@ -153,6 +153,7 @@
 <translation id="6165508094623778733">Saiba mais</translation>
 <translation id="6177128806592000436">A sua ligação a este website não é segura</translation>
 <translation id="6203231073485539293">Verificar a ligação à Internet</translation>
+<translation id="6225522625585012689">Visite &lt;strong&gt;vivaldi://policy&lt;/strong&gt; para ver a lista dos URLs bloqueados e outras políticas aplicadas pelo seu administrador do sistema.</translation>
 <translation id="625755898061068298">Optou por desativar os avisos de segurança para este website.</translation>
 <translation id="6264485186158353794">Voltar para um local seguro</translation>
 <translation id="6305205051461490394"><ph name="URL" /> está inacessível.</translation>
@@ -202,7 +203,6 @@
 <translation id="8041940743680923270">Utilizar pré-definição global (Perguntar)</translation>
 <translation id="808894953321890993">Alterar palavra-passe</translation>
 <translation id="8119307142152921512">rastreios e anúncios</translation>
-<translation id="8142868475871995937">Visite &lt;strong&gt;vivaldi://policy&lt;/strong&gt; para ver os URLs que foram colocados na lista negra e outras políticas aplicadas pelo administrador do sistema.</translation>
 <translation id="8149426793427495338">O computador entrou em suspensão.</translation>
 <translation id="8150722005171944719">O ficheiro em <ph name="URL" /> não é legível. Pode ter sido removido, movido ou as permissões do ficheiro podem estar a impedir o acesso.</translation>
 <translation id="8184538546369750125">Utilizar pré-definição global (Permitir)</translation>

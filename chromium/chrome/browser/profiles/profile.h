@@ -16,6 +16,7 @@
 #include "base/observer_list.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "content/public/browser/browser_context.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "services/network/public/mojom/network_context.mojom-forward.h"
@@ -240,10 +241,8 @@ class Profile : public content::BrowserContext {
   // WARNING II: Once a profile is no longer used, use
   // ProfileDestroyer::DestroyProfileWhenAppropriate or
   // ProfileDestroyer::DestroyOffTheRecordProfileNow to destroy it.
-  //
-  // TODO(https://crbug.com/1033903): Remove the default value.
   virtual Profile* GetOffTheRecordProfile(
-      const OTRProfileID& otr_profile_id = OTRProfileID::PrimaryID()) = 0;
+      const OTRProfileID& otr_profile_id) = 0;
 
   // Returns all OffTheRecord profiles.
   virtual std::vector<Profile*> GetAllOffTheRecordProfiles() = 0;
@@ -256,9 +255,7 @@ class Profile : public content::BrowserContext {
   virtual void DestroyOffTheRecordProfile(Profile* otr_profile) = 0;
 
   // True if an OffTheRecord profile with given id exists.
-  // TODO(https://crbug.com/1033903): Remove the default value.
-  virtual bool HasOffTheRecordProfile(
-      const OTRProfileID& otr_profile_id = OTRProfileID::PrimaryID()) = 0;
+  virtual bool HasOffTheRecordProfile(const OTRProfileID& otr_profile_id) = 0;
 
   // Returns true if the profile has any OffTheRecord profiles.
   virtual bool HasAnyOffTheRecordProfile() = 0;
@@ -421,6 +418,13 @@ class Profile : public content::BrowserContext {
   // Returns whether it is a system profile.
   virtual bool IsSystemProfile() const;
 
+#if BUILDFLAG(IS_LACROS)
+  // TODO(https://crbug.com/1129543): Implement this method.
+  // In Lacros, there is exactly one profile associated with the currently
+  // logged in user on ChromeOS.
+  bool IsDefaultProfile() const { return false; }
+#endif
+
   bool CanUseDiskWhenOffTheRecord() override;
 
   // Did the user restore the last session? This is set by SessionRestore.
@@ -495,6 +499,8 @@ class Profile : public content::BrowserContext {
   void Wipe();
 
   virtual void SetCreationTimeForTesting(base::Time creation_time) = 0;
+
+  virtual void RecordMainFrameNavigation() = 0;
 
  protected:
   void set_is_guest_profile(bool is_guest_profile) {

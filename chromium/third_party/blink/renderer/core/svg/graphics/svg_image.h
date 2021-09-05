@@ -118,15 +118,7 @@ class CORE_EXPORT SVGImage final : public Image {
   // object size is non-empty.)
   bool HasIntrinsicDimensions() const;
 
-  sk_sp<PaintRecord> PaintRecordForContainer(const KURL&,
-                                             const IntSize& container_size,
-                                             const IntRect& draw_src_rect,
-                                             const IntRect& draw_dst_rect,
-                                             bool flip_y) override;
-
   PaintImage PaintImageForCurrentFrame() override;
-
-  SkBitmap AsSkBitmapForCursor(float device_scale_factor);
 
  protected:
   // Whether or not size is available yet.
@@ -181,8 +173,9 @@ class CORE_EXPORT SVGImage final : public Image {
                                const KURL&);
   void PopulatePaintRecordForCurrentFrameForContainer(
       PaintImageBuilder&,
-      const KURL&,
-      const IntSize& container_size);
+      const IntSize& container_size,
+      float zoom,
+      const KURL&);
 
   // Paints the current frame. Returns new PaintRecord.
   sk_sp<PaintRecord> PaintRecordForCurrentFrame(const KURL&);

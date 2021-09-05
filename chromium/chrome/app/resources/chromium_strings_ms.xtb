@@ -7,10 +7,12 @@
 <translation id="1098170124587656448">Chromium dapat membantu untuk memastikan anda selamat daripada pelanggaran data, sambungan tidak elok dan pelbagai lagi</translation>
 <translation id="1104942323762546749">Chromium mahu mengeksport kata laluan anda. Taip kata laluan Windows anda untuk membenarkannya.</translation>
 <translation id="113122355610423240">Chromium ialah penyemak imbas lalai anda</translation>
+<translation id="1131805035311359397">Untuk menyemak sama ada kata laluan anda selamat daripada pelanggaran data dan isu keselamatan lain, <ph name="BEGIN_LINK" />log masuk ke Chromium<ph name="END_LINK" />.</translation>
 <translation id="1185134272377778587">Mengenai Chromium</translation>
 <translation id="1315551408014407711">Sediakan profil Chromium baharu anda</translation>
 <translation id="1396446129537741364">Chromium sedang cuba memaparkan kata laluan.</translation>
 <translation id="1414495520565016063">Anda log masuk ke Chromium!</translation>
+<translation id="1414973082589232775">Untuk menggunakan Rosetta untuk memainkan media yang dilindungi, anda mesti memulakan semula Chromium.</translation>
 <translation id="151962892725702025">OS Chromium tidak dapat menyegerakkan data anda kerana Segerak tidak tersedia untuk domain anda.</translation>
 <translation id="1524282610922162960">Kongsi tab Chromium</translation>
 <translation id="1553461853655228091">Chromium memerlukan kebenaran untuk mengakses kamera anda untuk membuat peta 3D persekitaran anda</translation>
@@ -24,10 +26,12 @@
 <translation id="1929939181775079593">Chromium tidak responsif. Lancarkan semula sekarang?</translation>
 <translation id="1966382378801805537">Chromium tidak dapat menentukan atau menetapkan penyemak imbas lalai</translation>
 <translation id="2008474315282236005">Tindakan ini akan memadamkan 1 item daripada peranti ini. Untuk mendapatkan kembali data anda kemudian, log masuk ke Chromium sebagai <ph name="USER_EMAIL" />.</translation>
+<translation id="2020032459870799438">Untuk menyemak sama ada kata laluan anda yang lain selamat daripada pelanggaran data dan isu keselamatan lain, <ph name="BEGIN_LINK" />log masuk ke Chromium<ph name="END_LINK" />.</translation>
 <translation id="2185166961232948079">Chromium - Log Masuk Rangkaian - <ph name="PAGE_TITLE" /></translation>
 <translation id="2225696941839557119">OS Chromium tidak dapat menyegerakkan kata laluan anda.</translation>
 <translation id="2241627712206172106">Jika anda berkongsi komputer, rakan dan keluarga boleh menyemak imbas secara berasingan dan menyediakan Chromium sebagaimana yang mereka mahukan.</translation>
 <translation id="2294245788148774212">Pilihan: Bantu kami mempertingkat ciri dan prestasi OS Chromium dengan menghantar data diagnostik dan penggunaan kepada Google secara automatik.</translation>
+<translation id="2343156876103232566">Untuk menghantar nombor dari sini ke telefon Android anda, log masuk ke Chromium pada kedua-dua peranti.</translation>
 <translation id="2347108572062610441">Sambungan ini telah menukar halaman yang ditunjukkan apabila anda memulakan Chromium.</translation>
 <translation id="2396765026452590966">Sambungan "<ph name="EXTENSION_NAME" />" telah menukar halaman yang ditunjukkan apabila anda memulakan Chromium.</translation>
 <translation id="2483889755041906834">Dalam Chromium</translation>
@@ -37,6 +41,7 @@
 <translation id="2560420686485554789">Chromium memerlukan akses storan untuk memuat turun fail</translation>
 <translation id="2572494885440352020">Pembantu Chromium</translation>
 <translation id="2587578672395088481">Chromium OS perlu dimulakan semula untuk melaksanakan kemas kini.</translation>
+<translation id="2615699638672665509">Komputer ini akan berhenti menerima kemas kini Chromium kerana perkakasan komputer ini tidak lagi disokong.</translation>
 <translation id="2648074677641340862">Ralat sistem pengendalian berlaku semasa pemasangan. Sila muat turun Chromium semula.</translation>
 <translation id="2711502716910134313">Tab Chromium</translation>
 <translation id="2718390899429598676">Untuk keselamatan tambahan, Chromium akan menyulitkan data anda.</translation>
@@ -72,6 +77,7 @@
 <translation id="3575459661164320785">Terdapat perisian yang berbahaya pada komputer anda. Chromium boleh mengalih keluar perisian tersebut, memulihkan tetapan anda dan melumpuhkan sambungan supaya penyemak imbas anda dapat berfungsi seperti biasa semula.</translation>
 <translation id="3639635944603682591">Data semakan imbas orang ini akan dipadamkan daripada peranti ini. Untuk memulihkan data itu, log masuk ke Chromium sebagai <ph name="USER_EMAIL" />.</translation>
 <translation id="364817392622123556">{COUNT,plural, =0{Kemas kini baharu tersedia untuk Chromium dan akan digunakan sebaik sahaja anda melancarkan semula Chromium.}=1{Kemas kini baharu tersedia untuk Chromium dan akan digunakan sebaik sahaja anda melancarkan semula Chromium. Tetingkap Inkognito anda tidak dapat dibuka semula.}other{Kemas kini baharu tersedia untuk Chromium dan akan digunakan sebaik sahaja anda melancarkan semula Chromium. # tetingkap Inkognito anda tidak dapat dibuka semula.}}</translation>
+<translation id="3651803019964686660">Untuk menghantar nombor daripada <ph name="ORIGIN" /> ke telefon Android anda, log masuk ke Chromium pada kedua-dua peranti.</translation>
 <translation id="3685209450716071127">Chromium tidak dapat menyemak kata laluan anda. Cuba periksa sambungan Internet anda.</translation>
 <translation id="370962675267501463">{COUNT,plural, =0{Pentadbir anda meminta anda melancarkan semula Chromium untuk menggunakan kemas kini ini}=1{Pentadbir anda meminta anda melancarkan semula Chromium untuk menggunakan kemas kini ini. Tetingkap Inkognito anda tidak dapat dibuka semula.}other{Pentadbir anda meminta anda melancarkan semula Chromium untuk menggunakan kemas kini ini. # tetingkap Inkognito anda tidak dapat dibuka semula.}}</translation>
 <translation id="3713809861844741608">Buka pautan dalam &amp;tab Chromium baharu</translation>
@@ -127,6 +133,7 @@
 <translation id="5634636535844844681">Chromium memerlukan Windows 7 atau lebih tinggi.</translation>
 <translation id="5653831366781983928">Sila mulakan semula Chromium sekarang</translation>
 <translation id="5698481217667032250">Paparkan Chromium dalam bahasa ini</translation>
+<translation id="5736967399513123100">Untuk membolehkan Chromium memainkan media yang dilindungi, anda perlu memasang Rosetta. Adakah anda ingin memasang Rosetta sekarang?</translation>
 <translation id="5820394555380036790">Chromium OS</translation>
 <translation id="5862307444128926510">Selamat datang ke Chromium</translation>
 <translation id="5895138241574237353">Mulakan Semula</translation>
@@ -142,6 +149,7 @@
 <translation id="6120345080069858279">Chromium akan menyimpan kata laluan ini dalam Akaun Google anda. Anda tidak perlu mengingati kata laluan tersebut.</translation>
 <translation id="6129621093834146363"><ph name="FILE_NAME" /> berbahaya, jadi Chromium telah menyekat fail itu.</translation>
 <translation id="6134968993075716475">Penyemakan Imbas Selamat dimatikan. Chromium mengesyorkan agar ciri ini dihidupkan.</translation>
+<translation id="6183079672144801177">Pastikan anda telah log masuk ke Chromium pada <ph name="TARGET_DEVICE_NAME" /> anda, kemudian cuba hantar lagi.</translation>
 <translation id="6212496753309875659">Komputer ini telah mempunyai versi Chromium yang lebih baharu. Jika perisian tidak berfungsi, sila nyahpasang Chromium dan cuba lagi.</translation>
 <translation id="6219195342503754812">{0,plural, =0{Chromium akan dilancarkan semula sekarang}=1{Chromium akan dilancarkan semula dalam masa sesaat}other{Chromium akan dilancarkan semula dalam masa # saat}}</translation>
 <translation id="623836266260425961">OS Chromium tidak dapat menyegerakkan data anda.</translation>
@@ -153,7 +161,6 @@
 <translation id="6333502561965082103">Terdapat operasi lain sedang dijalankan pada Chromium. Sila cuba sebentar lagi.</translation>
 <translation id="6334986366598267305">Kini lebih mudah menggunakan Chromium dengan Akaun Google anda dan pada komputer yang dikongsi.</translation>
 <translation id="6373523479360886564">Adakah anda pasti mahu menyahpasang Chromium?</translation>
-<translation id="6400072781405947421">Chromium mungkin tidak akan berfungsi dengan betul kerana tidak lagi disokong pada Mac OS X 10.9.</translation>
 <translation id="6403826409255603130">Chromium merupakan penyemak imbas yang mengendalikan laman web dan aplikasi dengan kelajuan sepantas kilat. Chromium cepat, stabil dan mudah digunakan. Semak imbas web lebih selamat dengan perlindungan perisian hasad dan pancingan data terbina dalam Chromium.</translation>
 <translation id="6434250628340475518">Sistem OS Chromium</translation>
 <translation id="6457450909262716557">{SECONDS,plural, =1{Chromium akan dimulakan semula dalam 1 saat}other{Chromium akan dimulakan semula dalam # saat}}</translation>
@@ -174,7 +181,9 @@ Beberapa ciri mungkin tidak tersedia. Sila nyatakan direktori profil yang berbez
 <translation id="6863361426438995919">Google Pay (disalin ke Chromium)</translation>
 <translation id="6863846675160669383">{NUM_DAYS,plural, =1{Chromium menyemak perisian yang tidak diingini seminggu sekali. Terakhir disemak: 1 hari yang lalu.}other{Chromium menyemak perisian yang tidak diingini seminggu sekali. Terakhir disemak: {NUM_DAYS} hari yang lalu.}}</translation>
 <translation id="6893813176749746474">Chromium telah dikemas kini, tetapi anda belum menggunakannya untuk sekurang-kurangnya 30 hari.</translation>
+<translation id="6897548120660295439">Rosetta membolehkan Chromium memainkan media yang dilindungi pada halaman ini.</translation>
 <translation id="6964305034639999644">Buka pautan dalam tetingkap inko&amp;gnito Chromium</translation>
+<translation id="6978145336957848883">Kata laluan lemah mudah diteka. Biar Chromium <ph name="BEGIN_LINK" />membuat dan mengingat kata laluan kukuh untuk anda<ph name="END_LINK" />.</translation>
 <translation id="6990124437352146030">Chromium memerlukan kebenaran untuk mengakses mikrofon anda bagi tapak ini</translation>
 <translation id="701244094609242530">Chromium tidak dapat menyemak sambungan anda. Cuba lagi nanti.</translation>
 <translation id="705851970750939768">Kemas kini Chromium</translation>
@@ -213,6 +222,7 @@ Chromium tidak dapat mengembalikan tetapan anda.</translation>
 <translation id="7773960292263897147">Amaran: Chromium tidak dapat menghalang sambungan daripada merakamkan sejarah penyemakan imbas anda. Untuk melumpuhkan sambungan ini dalam mod inkognito, nyahpilih pilihan ini.</translation>
 <translation id="7790626492778995050"><ph name="PAGE_TITLE" /> - Chromium Canary</translation>
 <translation id="7827169012280634081">Kosongkan kuki dan data tapak apabila anda keluar daripada Chromium</translation>
+<translation id="7857220146454061152">Untuk mendapatkan kemaskinian Chromium yang akan datang, anda memerlukan OS X 10.11 atau yang lebih baharu. Komputer ini menggunakan OS X 10.10.</translation>
 <translation id="7867198900892795913">Chromium tidak dapat mengemas kini kepada versi terkini, maka anda terlepas ciri baharu dan penyelesaian keselamatan.</translation>
 <translation id="7898472181347242998">Untuk melihat sama ada peranti anda telah dikemas kini, pergi ke <ph name="LINK_BEGIN" />Tetapan OS Chromium<ph name="LINK_END" /></translation>
 <translation id="7937630085815544518">Anda telah log masuk ke Chromium sebagai <ph name="USER_EMAIL_ADDRESS" />. Sila gunakan akaun yang sama untuk log masuk lagi.</translation>

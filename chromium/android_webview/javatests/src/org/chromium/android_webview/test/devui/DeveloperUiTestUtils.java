@@ -6,12 +6,11 @@ package org.chromium.android_webview.test.devui;
 
 import static org.hamcrest.Matchers.is;
 
+import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.view.View;
-import android.widget.LinearLayout;
 import android.widget.ListView;
-import android.widget.TextView;
 
 import org.hamcrest.Description;
 import org.hamcrest.Matcher;
@@ -56,82 +55,23 @@ public class DeveloperUiTestUtils {
         return withCount(is(itemCount));
     }
 
-    /**
-     * Matches a view that has this layout
-     * android_webview/nonembedded/java/res_devui/layout/two_line_list_item.xml and has the given
-     * title.
-     */
-    public static Matcher<View> withTitle(final Matcher<String> stringMatcher) {
-        return new TypeSafeMatcher<View>() {
-            @Override
-            public boolean matchesSafely(View view) {
-                if (!(view instanceof LinearLayout)) {
-                    return false;
-                }
-                TextView textView = (TextView) view.findViewById(android.R.id.text1);
-                // Make sure only the immediate parent View is matched.
-                return textView != null && textView.getParent() == view
-                        && stringMatcher.matches(textView.getText());
-            }
-
-            @Override
-            public void describeTo(Description description) {
-                description.appendText("with title: ");
-                stringMatcher.describeTo(description);
-            }
-        };
-    }
-
-    /**
-     * Matches a view that has this layout
-     * android_webview/nonembedded/java/res_devui/layout/two_line_list_item.xml and has the given
-     * title.
-     */
-    public static Matcher<View> withTitle(String title) {
-        return withTitle(is(title));
-    }
-
-    /**
-     * Matches a view that has this layout
-     * android_webview/nonembedded/java/res_devui/layout/two_line_list_item.xml and has the given
-     * subtitle.
-     */
-    public static Matcher<View> withSubtitle(final Matcher<String> stringMatcher) {
-        return new TypeSafeMatcher<View>() {
-            @Override
-            public boolean matchesSafely(View view) {
-                if (!(view instanceof LinearLayout)) {
-                    return false;
-                }
-                TextView textView = (TextView) view.findViewById(android.R.id.text2);
-                // Make sure only the immediate parent View is matched.
-                return textView != null && textView.getParent() == view
-                        && stringMatcher.matches(textView.getText());
-            }
-
-            @Override
-            public void describeTo(Description description) {
-                description.appendText("with subtitle: ");
-                stringMatcher.describeTo(description);
-            }
-        };
-    }
-
-    /**
-     * Matches a view that has this layout
-     * android_webview/nonembedded/java/res_devui/layout/two_line_list_item.xml and has the given
-     * subtitle.
-     */
-    public static Matcher<View> withSubtitle(String subtitle) {
-        return withSubtitle(is(subtitle));
-    }
-
     public static String getClipBoardTextOnUiThread(Context context) throws ExecutionException {
         // ClipManager service has to be called on the UI main thread.
         return TestThreadUtils.runOnUiThreadBlocking(() -> {
             ClipboardManager clipboardManager =
                     (ClipboardManager) context.getSystemService(Context.CLIPBOARD_SERVICE);
             return clipboardManager.getPrimaryClip().getItemAt(0).getText().toString();
+        });
+    }
+
+    public static void setClipBoardTextOnUiThread(Context context, String key, String value)
+            throws ExecutionException {
+        // ClipManager service has to be called on the UI main thread.
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            ClipboardManager clipboardManager =
+                    (ClipboardManager) context.getSystemService(Context.CLIPBOARD_SERVICE);
+            ClipData clip = ClipData.newPlainText(key, value);
+            clipboardManager.setPrimaryClip(clip);
         });
     }
 

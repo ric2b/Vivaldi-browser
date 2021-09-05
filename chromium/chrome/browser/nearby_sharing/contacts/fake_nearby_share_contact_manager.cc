@@ -9,7 +9,14 @@ FakeNearbyShareContactManager::Factory::Factory() = default;
 FakeNearbyShareContactManager::Factory::~Factory() = default;
 
 std::unique_ptr<NearbyShareContactManager>
-FakeNearbyShareContactManager::Factory::CreateInstance() {
+FakeNearbyShareContactManager::Factory::CreateInstance(
+    PrefService* pref_service,
+    NearbyShareClientFactory* http_client_factory,
+    NearbyShareLocalDeviceDataManager* local_device_data_manager) {
+  latest_pref_service_ = pref_service;
+  latest_http_client_factory_ = http_client_factory;
+  latest_local_device_data_manager_ = local_device_data_manager;
+
   auto instance = std::make_unique<FakeNearbyShareContactManager>();
   instances_.push_back(instance.get());
 
@@ -20,21 +27,8 @@ FakeNearbyShareContactManager::FakeNearbyShareContactManager() = default;
 
 FakeNearbyShareContactManager::~FakeNearbyShareContactManager() = default;
 
-void FakeNearbyShareContactManager::NotifyObservers(
-    bool contacts_list_changed,
-    bool contacts_added_to_allowlist,
-    bool contacts_removed_from_allowlist,
-    const std::set<std::string>& allowed_contact_ids,
-    const base::Optional<std::vector<nearbyshare::proto::ContactRecord>>&
-        contacts) {
-  NotifyContactsUpdated(contacts_list_changed, contacts_added_to_allowlist,
-                        contacts_removed_from_allowlist, allowed_contact_ids,
-                        contacts);
-}
-
-void FakeNearbyShareContactManager::DownloadContacts(
-    bool only_download_if_changed) {
-  download_contacts_calls_.push_back(only_download_if_changed);
+void FakeNearbyShareContactManager::DownloadContacts() {
+  ++num_download_contacts_calls_;
 }
 
 void FakeNearbyShareContactManager::SetAllowedContacts(
@@ -45,3 +39,10 @@ void FakeNearbyShareContactManager::SetAllowedContacts(
 void FakeNearbyShareContactManager::OnStart() {}
 
 void FakeNearbyShareContactManager::OnStop() {}
+
+void FakeNearbyShareContactManager::Bind(
+    mojo::PendingReceiver<nearby_share::mojom::ContactManager> receiver) {}
+
+void FakeNearbyShareContactManager::AddDownloadContactsObserver(
+    ::mojo::PendingRemote<nearby_share::mojom::DownloadContactsObserver>
+        observer) {}

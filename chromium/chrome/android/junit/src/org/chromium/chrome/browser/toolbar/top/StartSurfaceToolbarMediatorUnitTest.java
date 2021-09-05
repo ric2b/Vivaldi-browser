@@ -41,6 +41,7 @@ import org.mockito.MockitoAnnotations;
 import org.robolectric.annotation.Config;
 
 import org.chromium.base.Callback;
+import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.chrome.browser.compositor.layouts.OverviewModeBehavior;
 import org.chromium.chrome.browser.compositor.layouts.OverviewModeBehavior.OverviewModeObserver;
@@ -52,6 +53,7 @@ import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorObserver;
 import org.chromium.chrome.browser.toolbar.ButtonData;
+import org.chromium.chrome.browser.toolbar.menu_button.MenuButtonCoordinator;
 import org.chromium.chrome.browser.user_education.IPHCommandBuilder;
 import org.chromium.components.search_engines.TemplateUrlService;
 import org.chromium.components.search_engines.TemplateUrlService.TemplateUrlServiceObserver;
@@ -87,6 +89,8 @@ public class StartSurfaceToolbarMediatorUnitTest {
     Callback<IPHCommandBuilder> mMockCallback;
     @Mock
     Tab mMockIncognitoTab;
+    @Mock
+    MenuButtonCoordinator mMenuButtonCoordinator;
     @Captor
     private ArgumentCaptor<OverviewModeObserver> mOverviewModeObserverCaptor;
     @Captor
@@ -96,6 +100,7 @@ public class StartSurfaceToolbarMediatorUnitTest {
 
     private ButtonData mButtonData;
     private ButtonData mDisabledButtonData;
+    private ObservableSupplierImpl<Boolean> mIdentityDiscStateSupplier;
 
     @Before
     public void setUp() {
@@ -110,6 +115,7 @@ public class StartSurfaceToolbarMediatorUnitTest {
                         .build();
         mButtonData = new ButtonData(false, mDrawable, mOnClickListener, 0, false, null, true);
         mDisabledButtonData = new ButtonData(false, null, null, 0, false, null, true);
+        mIdentityDiscStateSupplier = new ObservableSupplierImpl<>();
         doReturn(mButtonData)
                 .when(mIdentityDiscController)
                 .getForStartSurface(OverviewModeState.SHOWN_HOMEPAGE);
@@ -136,7 +142,7 @@ public class StartSurfaceToolbarMediatorUnitTest {
 
     @Test
     public void showAndHide() {
-        createMediator(false);
+        createMediator(false, false);
         assertEquals(mPropertyModel.get(IN_START_SURFACE_MODE), false);
         assertEquals(mPropertyModel.get(IS_VISIBLE), true);
 
@@ -173,7 +179,7 @@ public class StartSurfaceToolbarMediatorUnitTest {
 
     @Test
     public void showAndHideSetClickable() {
-        createMediator(false);
+        createMediator(false, false);
         mMediator.setStartSurfaceMode(true);
         assertEquals(mPropertyModel.get(BUTTONS_CLICKABLE), false);
 
@@ -186,7 +192,7 @@ public class StartSurfaceToolbarMediatorUnitTest {
 
     @Test
     public void showAndHideHomePage() {
-        createMediator(false);
+        createMediator(false, false);
         mMediator.setTabModelSelector(mTabModelSelector);
 
         doReturn(false).when(mTemplateUrlService).isDefaultSearchEngineGoogle();
@@ -220,8 +226,39 @@ public class StartSurfaceToolbarMediatorUnitTest {
     }
 
     @Test
+    public void showAndHideHomePage_HideIncognitoSwitch() {
+        createMediator(false, true);
+        mMediator.setTabModelSelector(mTabModelSelector);
+
+        doReturn(true).when(mTemplateUrlService).isDefaultSearchEngineGoogle();
+        mMediator.onNativeLibraryReady();
+        verify(mTemplateUrlService).addObserver(mTemplateUrlServiceObserver.capture());
+        mMediator.setStartSurfaceMode(true);
+
+        mOverviewModeObserverCaptor.getValue().onOverviewModeStartedShowing(false);
+        mOverviewModeObserverCaptor.getValue().onOverviewModeFinishedShowing();
+        mOverviewModeObserverCaptor.getValue().onOverviewModeStateChanged(
+                OverviewModeState.SHOWN_HOMEPAGE, true);
+        assertEquals(mPropertyModel.get(LOGO_IS_VISIBLE), true);
+        assertEquals(mPropertyModel.get(IDENTITY_DISC_IS_VISIBLE), false);
+        assertEquals(mPropertyModel.get(INCOGNITO_SWITCHER_VISIBLE), false);
+        assertEquals(mPropertyModel.get(NEW_TAB_BUTTON_AT_START), false);
+        assertEquals(mPropertyModel.get(IN_START_SURFACE_MODE), true);
+        assertEquals(mPropertyModel.get(IS_VISIBLE), true);
+
+        mOverviewModeObserverCaptor.getValue().onOverviewModeStateChanged(
+                OverviewModeState.SHOWN_TABSWITCHER, true);
+        assertEquals(mPropertyModel.get(LOGO_IS_VISIBLE), false);
+        assertEquals(mPropertyModel.get(IDENTITY_DISC_IS_VISIBLE), false);
+        assertEquals(mPropertyModel.get(INCOGNITO_SWITCHER_VISIBLE), true);
+        assertEquals(mPropertyModel.get(NEW_TAB_BUTTON_AT_START), false);
+        assertEquals(mPropertyModel.get(IN_START_SURFACE_MODE), true);
+        assertEquals(mPropertyModel.get(IS_VISIBLE), true);
+    }
+
+    @Test
     public void showAndHideHomePageNoIncognitoTabs() {
-        createMediator(true);
+        createMediator(true, false);
         mMediator.setTabModelSelector(mTabModelSelector);
         doReturn(0).when(mIncognitoTabModel).getCount();
 
@@ -272,7 +309,7 @@ public class StartSurfaceToolbarMediatorUnitTest {
 
     @Test
     public void showHomePageWithLogo() {
-        createMediator(false);
+        createMediator(false, false);
         verify(mOverviewModeBehavior)
                 .addOverviewModeObserver(mOverviewModeObserverCaptor.capture());
 
@@ -292,7 +329,7 @@ public class StartSurfaceToolbarMediatorUnitTest {
 
     @Test
     public void enableDisableLogo() {
-        createMediator(false);
+        createMediator(false, false);
         doReturn(false).when(mTemplateUrlService).isDefaultSearchEngineGoogle();
         mMediator.onNativeLibraryReady();
         verify(mTemplateUrlService).addObserver(mTemplateUrlServiceObserver.capture());
@@ -312,7 +349,7 @@ public class StartSurfaceToolbarMediatorUnitTest {
 
     @Test
     public void showHomePageWithIdentityDisc() {
-        createMediator(false);
+        createMediator(false, false);
         mMediator.setTabModelSelector(mTabModelSelector);
         assertEquals(mPropertyModel.get(IDENTITY_DISC_IS_VISIBLE), false);
 
@@ -344,7 +381,7 @@ public class StartSurfaceToolbarMediatorUnitTest {
 
     @Test
     public void hideIdentityDiscInIncognito() {
-        createMediator(false);
+        createMediator(false, false);
         mMediator.setTabModelSelector(mTabModelSelector);
         verify(mTabModelSelector).addObserver(mTabModelSelectorObserver.capture());
 
@@ -367,7 +404,7 @@ public class StartSurfaceToolbarMediatorUnitTest {
 
     @Test
     public void showIPHOnIdentityDisc() {
-        createMediator(false);
+        createMediator(false, false);
         mMediator.setTabModelSelector(mTabModelSelector);
         assertEquals(mPropertyModel.get(IDENTITY_DISC_IS_VISIBLE), false);
 
@@ -385,7 +422,7 @@ public class StartSurfaceToolbarMediatorUnitTest {
 
     @Test
     public void showTabSwitcher() {
-        createMediator(false);
+        createMediator(false, false);
         mMediator.setTabModelSelector(mTabModelSelector);
         mMediator.onNativeLibraryReady();
         verify(mTemplateUrlService).addObserver(mTemplateUrlServiceObserver.capture());
@@ -421,7 +458,7 @@ public class StartSurfaceToolbarMediatorUnitTest {
 
     @Test
     public void showTabSwitcherNoIncognitoTabs() {
-        createMediator(true);
+        createMediator(true, false);
         mMediator.setTabModelSelector(mTabModelSelector);
         doReturn(0).when(mIncognitoTabModel).getCount();
         mMediator.onNativeLibraryReady();
@@ -472,7 +509,7 @@ public class StartSurfaceToolbarMediatorUnitTest {
 
     @Test
     public void homePageToTabswitcher() {
-        createMediator(false);
+        createMediator(false, false);
         mMediator.setTabModelSelector(mTabModelSelector);
 
         mMediator.onNativeLibraryReady();
@@ -498,7 +535,7 @@ public class StartSurfaceToolbarMediatorUnitTest {
 
     @Test
     public void showTabswitcherTasksOnly() {
-        createMediator(false);
+        createMediator(false, false);
         mMediator.setTabModelSelector(mTabModelSelector);
         mMediator.onNativeLibraryReady();
         verify(mTemplateUrlService).addObserver(mTemplateUrlServiceObserver.capture());
@@ -522,7 +559,7 @@ public class StartSurfaceToolbarMediatorUnitTest {
 
     @Test
     public void showTabswitcherOmniboxOnlyNoIncognitoTabs() {
-        createMediator(true);
+        createMediator(true, false);
         mMediator.setTabModelSelector(mTabModelSelector);
         doReturn(0).when(mIncognitoTabModel).getCount();
         mMediator.onNativeLibraryReady();
@@ -545,7 +582,7 @@ public class StartSurfaceToolbarMediatorUnitTest {
 
     @Test
     public void testIdentityDiscStateChanges() {
-        createMediator(false);
+        createMediator(false, false);
         mMediator.setTabModelSelector(mTabModelSelector);
         assertEquals(mPropertyModel.get(IDENTITY_DISC_IS_VISIBLE), false);
 
@@ -555,23 +592,23 @@ public class StartSurfaceToolbarMediatorUnitTest {
         assertEquals(mPropertyModel.get(IDENTITY_DISC_IS_VISIBLE), false);
 
         mButtonData.canShow = true;
-        mMediator.identityDiscStateChanged(true);
+        mIdentityDiscStateSupplier.set(true);
         assertEquals(mPropertyModel.get(IDENTITY_DISC_IS_VISIBLE), true);
 
         mButtonData.canShow = false;
-        mMediator.identityDiscStateChanged(false);
+        mIdentityDiscStateSupplier.set(false);
         assertEquals(mPropertyModel.get(IDENTITY_DISC_IS_VISIBLE), false);
 
         // updateIdentityDisc() should properly handle a hint that contradicts the true value of
         // canShow.
         mButtonData.canShow = false;
-        mMediator.identityDiscStateChanged(true);
+        mIdentityDiscStateSupplier.set(true);
         assertEquals(mPropertyModel.get(IDENTITY_DISC_IS_VISIBLE), false);
     }
 
     @Test
     public void testShowAndHideHomePageWithNewTabAndIdentityDiscAtStart() {
-        createMediator(false, true);
+        createMediator(false, false, true);
         mMediator.setTabModelSelector(mTabModelSelector);
         doReturn(0).when(mIncognitoTabModel).getCount();
 
@@ -626,7 +663,7 @@ public class StartSurfaceToolbarMediatorUnitTest {
 
     @Test
     public void testShowAndHideTabSwitcherWithNewTabAndIdentityDiscAtStart() {
-        createMediator(false, true);
+        createMediator(false, false, true);
         mMediator.setTabModelSelector(mTabModelSelector);
         doReturn(0).when(mIncognitoTabModel).getCount();
         mMediator.onNativeLibraryReady();
@@ -679,14 +716,19 @@ public class StartSurfaceToolbarMediatorUnitTest {
         assertEquals(mPropertyModel.get(IS_VISIBLE), true);
     }
 
-    private void createMediator(boolean hideIncognitoSwitchWhenNoTabs) {
-        createMediator(hideIncognitoSwitchWhenNoTabs, false);
+    private void createMediator(
+            boolean hideIncognitoSwitchWhenNoTabs, boolean hideIncognitoSwitchOnHomePage) {
+        createMediator(hideIncognitoSwitchWhenNoTabs, hideIncognitoSwitchOnHomePage, false);
     }
 
-    private void createMediator(
-            boolean hideIncognitoSwitchWhenNoTabs, boolean showNewTabAndIdentityDiscAtStart) {
-        mMediator = new StartSurfaceToolbarMediator(mPropertyModel, mIdentityDiscController,
-                mMockCallback, hideIncognitoSwitchWhenNoTabs, showNewTabAndIdentityDiscAtStart);
+    private void createMediator(boolean hideIncognitoSwitchWhenNoTabs,
+            boolean hideIncognitoSwitchOnHomePage, boolean showNewTabAndIdentityDiscAtStart) {
+        mMediator = new StartSurfaceToolbarMediator(mPropertyModel, mMockCallback,
+                hideIncognitoSwitchWhenNoTabs, hideIncognitoSwitchOnHomePage,
+                showNewTabAndIdentityDiscAtStart, mMenuButtonCoordinator,
+                mIdentityDiscStateSupplier,
+                () -> mIdentityDiscController.getForStartSurface(
+                        mMediator.getOverviewModeStateForTesting()));
         mMediator.setOverviewModeBehavior(mOverviewModeBehavior);
         verify(mOverviewModeBehavior)
                 .addOverviewModeObserver(mOverviewModeObserverCaptor.capture());

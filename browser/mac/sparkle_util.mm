@@ -3,8 +3,10 @@
 #include "browser/mac/sparkle_util.h"
 
 #import <AppKit/AppKit.h>
-#import "thirdparty/macsparkle/Sparkle/SUUpdater.h"
 
+#ifndef VIVALDI_SPARKLE_DISABLED
+#import "thirdparty/macsparkle/Sparkle/SUUpdater.h"
+#endif
 
 @interface SparkleUtils : NSObject
 

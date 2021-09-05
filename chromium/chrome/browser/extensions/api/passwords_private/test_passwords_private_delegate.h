@@ -27,7 +27,8 @@ class TestPasswordsPrivateDelegate : public PasswordsPrivateDelegate {
   // list of entries has each of the ids, vector of ids isn't empty and if the
   // new password isn't empty.
   bool ChangeSavedPassword(const std::vector<int>& ids,
-                           base::string16 new_password) override;
+                           const base::string16& new_username,
+                           const base::string16& new_password) override;
   void RemoveSavedPasswords(const std::vector<int>& id) override;
   void RemovePasswordExceptions(const std::vector<int>& ids) override;
   // Simplified version of undo logic, only use for testing.
@@ -47,25 +48,29 @@ class TestPasswordsPrivateDelegate : public PasswordsPrivateDelegate {
   bool IsOptedInForAccountStorage() override;
   void SetAccountStorageOptIn(bool opt_in,
                               content::WebContents* web_contents) override;
-  std::vector<api::passwords_private::CompromisedCredential>
+  std::vector<api::passwords_private::InsecureCredential>
   GetCompromisedCredentials() override;
-  void GetPlaintextCompromisedPassword(
-      api::passwords_private::CompromisedCredential credential,
+  std::vector<api::passwords_private::InsecureCredential> GetWeakCredentials()
+      override;
+  void GetPlaintextInsecurePassword(
+      api::passwords_private::InsecureCredential credential,
       api::passwords_private::PlaintextReason reason,
       content::WebContents* web_contents,
-      PlaintextCompromisedPasswordCallback callback) override;
-  // Fake implementation of ChangeCompromisedCredential. This succeeds if the
-  // delegate knows of a compromised credential with the same id.
-  bool ChangeCompromisedCredential(
-      const api::passwords_private::CompromisedCredential& credential,
+      PlaintextInsecurePasswordCallback callback) override;
+  // Fake implementation of ChangeInsecureCredential. This succeeds if the
+  // delegate knows of a insecure credential with the same id.
+  bool ChangeInsecureCredential(
+      const api::passwords_private::InsecureCredential& credential,
       base::StringPiece new_password) override;
-  // Fake implementation of RemoveCompromisedCredential. This succeeds if the
-  // delegate knows of a compromised credential with the same id.
-  bool RemoveCompromisedCredential(
-      const api::passwords_private::CompromisedCredential& credential) override;
+  // Fake implementation of RemoveInsecureCredential. This succeeds if the
+  // delegate knows of a insecure credential with the same id.
+  bool RemoveInsecureCredential(
+      const api::passwords_private::InsecureCredential& credential) override;
   void StartPasswordCheck(StartPasswordCheckCallback callback) override;
   void StopPasswordCheck() override;
   api::passwords_private::PasswordCheckStatus GetPasswordCheckStatus() override;
+  password_manager::InsecureCredentialsManager* GetInsecureCredentialsManager()
+      override;
 
   void SetProfile(Profile* profile);
   void SetOptedInForAccountStorage(bool opted_in);
@@ -114,9 +119,8 @@ class TestPasswordsPrivateDelegate : public PasswordsPrivateDelegate {
   base::Optional<base::string16> plaintext_password_ =
       base::ASCIIToUTF16("plaintext");
 
-  // List of compromised credentials.
-  std::vector<api::passwords_private::CompromisedCredential>
-      compromised_credentials_;
+  // List of insecure credentials.
+  std::vector<api::passwords_private::InsecureCredential> insecure_credentials_;
   Profile* profile_ = nullptr;
 
   bool is_opted_in_for_account_storage_ = false;

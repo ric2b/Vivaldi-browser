@@ -169,12 +169,22 @@ class SyncPrefs : public CryptoSyncPrefs,
   bool IsPassphrasePrompted() const;
   void SetPassphrasePrompted(bool value);
 
+#if defined(OS_ANDROID)
+  // Sets a boolean pref representing that Sync should no longer respect whether
+  // Android master sync is enabled/disabled.
+  void SetDecoupledFromAndroidMasterSync();
+
+  // Gets the value for the boolean pref representing whether Sync should no
+  // longer respect if Android master sync is enabled/disabled. Returns false
+  // until |SetDecoupledFromAndroidMasterSync()| is called.
+  bool GetDecoupledFromAndroidMasterSync();
+#endif  // defined(OS_ANDROID)
+
   // For testing.
   void SetManagedForTest(bool is_managed);
 
   // Get/set for the last known sync invalidation versions.
-  void GetInvalidationVersions(
-      std::map<ModelType, int64_t>* invalidation_versions) const;
+  std::map<ModelType, int64_t> GetInvalidationVersions() const;
   void UpdateInvalidationVersions(
       const std::map<ModelType, int64_t>& invalidation_versions);
 
@@ -228,11 +238,7 @@ void ClearObsoleteClearServerDataPrefs(PrefService* pref_service);
 void ClearObsoleteAuthErrorPrefs(PrefService* pref_service);
 void ClearObsoleteFirstSyncTime(PrefService* pref_service);
 void ClearObsoleteSyncLongPollIntervalSeconds(PrefService* pref_service);
-#if defined(OS_CHROMEOS)
-void ClearObsoleteSyncSpareBootstrapToken(PrefService* pref_service);
-#endif  // defined(OS_CHROMEOS)
 void MigrateSyncSuppressedPref(PrefService* pref_service);
-void ClearObsoleteMemoryPressurePrefs(PrefService* pref_service);
 
 }  // namespace syncer
 

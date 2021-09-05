@@ -22,14 +22,11 @@ class CONTENT_EXPORT AccessibilityTreeFormatterBlink
   std::unique_ptr<base::DictionaryValue> BuildAccessibilityTree(
       BrowserAccessibility* root) override;
 
-  std::unique_ptr<base::DictionaryValue> BuildAccessibilityTreeForProcess(
-      base::ProcessId pid) override;
-
   std::unique_ptr<base::DictionaryValue> BuildAccessibilityTreeForWindow(
       gfx::AcceleratedWidget widget) override;
 
-  std::unique_ptr<base::DictionaryValue> BuildAccessibilityTreeForPattern(
-      const base::StringPiece& pattern) override;
+  std::unique_ptr<base::DictionaryValue> BuildAccessibilityTreeForSelector(
+      const TreeSelector& selector) override;
 
   void AddDefaultFilters(
       std::vector<PropertyFilter>* property_filters) override;
@@ -54,7 +51,7 @@ class CONTENT_EXPORT AccessibilityTreeFormatterBlink
   void AddProperties(const BrowserAccessibility& node,
                      base::DictionaryValue* dict) const;
 
-  base::string16 ProcessTreeForOutput(
+  std::string ProcessTreeForOutput(
       const base::DictionaryValue& node,
       base::DictionaryValue* filtered_dict_result = nullptr) override;
 };

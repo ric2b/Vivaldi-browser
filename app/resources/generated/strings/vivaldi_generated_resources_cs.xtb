@@ -13,12 +13,12 @@
 <translation id="1163931534039071049">Zobrazit zdrojo&amp;vý kód rámu</translation>
 <translation id="1165039591588034296">Chyba</translation>
 <translation id="1175364870820465910">&amp;Tisk…</translation>
-<translation id="1177863135347784049">Vlastní</translation>
 <translation id="1181037720776840403">Odebrat</translation>
 <translation id="1187722533808055681">Probuzení z nečinnosti</translation>
 <translation id="119944043368869598">Vymazat vše</translation>
 <translation id="1221825588892235038">Pouze výběr</translation>
 <translation id="1244303850296295656">Chyba rozšíření</translation>
+<translation id="125220115284141797">Výchozí</translation>
 <translation id="1274977772557788323">Nastavení úložiště přehrávače Adobe Flash Player</translation>
 <translation id="1297175357211070620">Cíl</translation>
 <translation id="1303101771013849280">Soubor HTML záložek</translation>
@@ -45,9 +45,11 @@
 <translation id="1723824996674794290">Nové okno</translation>
 <translation id="1725149567830788547">Zobrazit &amp;ovládací prvky</translation>
 <translation id="1729533290416704613">Také řídí, která stránka se zobrazí, když budete vyhledávat v omniboxu.</translation>
+<translation id="174123615272205933">Vlastní</translation>
 <translation id="1744108098763830590">Prozkoumat stránku na &amp;pozadí</translation>
 <translation id="176587472219019965">&amp;Nové okno</translation>
 <translation id="1769104665586091481">Otevřít odkaz v &amp;novém okně</translation>
+<translation id="1779468444204342338">Minimální</translation>
 <translation id="1815083418640426271">Vložit jako prostý text</translation>
 <translation id="1828901632669367785">Pro tisk použít systémové okno…</translation>
 <translation id="1850508293116537636">Otočit &amp;ve směru hodinových ručiček</translation>
@@ -87,7 +89,6 @@
 <translation id="2381756643783702095">Před odesláním se zeptat (doporučeno)</translation>
 <translation id="241082044617551207">Neznámý zásuvný modul</translation>
 <translation id="2423578206845792524">Uložit o&amp;brázek jako…</translation>
-<translation id="2436707352762155834">Minimální</translation>
 <translation id="2439110203301358333">Jiný program ve vašem počítači nainstaloval rozšíření, které může měnit funkce prohlížeče Vivaldi.</translation>
 <translation id="2445081178310039857">Je vyžadován kořenový adresář rozšíření.</translation>
 <translation id="2470702053775288986">Nepodporovaná rozšíření byla zakázána</translation>
@@ -138,6 +139,7 @@
 <translation id="3222066309010235055">Předběžně vykreslit: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3227137524299004712">Mikrofon</translation>
 <translation id="3241680850019875542">Vyberte kořenový adresář rozšíření, které chcete zabalit. Chcete-li rozšíření aktualizovat, vyberte také soubor soukromého klíče, jenž chcete znovu použít.</translation>
+<translation id="3266179261140759675">Nedovolit nedávno zavřeným webům odesílat a přijímat data</translation>
 <translation id="3280237271814976245">Uložit &amp;jako…</translation>
 <translation id="3285322247471302225">Nový &amp;list</translation>
 <translation id="3288047731229977326">Rozšíření spuštěná ve vývojářském režimu mohou poškodit počítač. Pokud nejste vývojář, měli byste s ohledem na svou bezpečnost rozšíření spuštěná v tomto režimu zakázat.</translation>
@@ -245,7 +247,6 @@
 <translation id="5039804452771397117">Povolit</translation>
 <translation id="5057110919553308744">Když kliknete na rozšíření</translation>
 <translation id="5063480226653192405">Využití</translation>
-<translation id="5068918910148307423">Odepřít nedávno zavřeným webům dokončit odeslání a příjem dat</translation>
 <translation id="5116628073786783676">Uložit &amp;zvuk jako…</translation>
 <translation id="5143374789336132547">Rozšíření <ph name="EXTENSION_NAME" /> změnilo stránku, která se zobrazí po kliknutí na tlačítko Domovská stránka.</translation>
 <translation id="5154108062446123722">Rozšířené nastavení tiskárny <ph name="PRINTING_DESTINATION" /></translation>
@@ -264,6 +265,7 @@
 <translation id="5355926466126177564">Rozšíření <ph name="EXTENSION_NAME" /> změnilo stránku, která se zobrazí při vyhledávání z omniboxu.</translation>
 <translation id="5360150013186312835">Zobrazit na liště</translation>
 <translation id="5362741141255528695">Vyberte soubor soukromého klíče.</translation>
+<translation id="536638840841140142">Žádné</translation>
 <translation id="5370819323174483825">Načíst &amp;znovu</translation>
 <translation id="5398572795982417028">Odkaz na stránku je mimo rozsah, limit je <ph name="MAXIMUM_PAGE" /></translation>
 <translation id="5425042808445046667">Pokračovat ve stahování</translation>
@@ -362,7 +364,7 @@
 <translation id="6991665348624301627">Vybrat cíl</translation>
 <translation id="7005848115657603926">Neplatný rozsah stránek. použijte formát: <ph name="EXAMPLE_PAGE_RANGE" /></translation>
 <translation id="7006634003215061422">Dolní okraj</translation>
-<translation id="7053983685419859001">Zamezit</translation>
+<translation id="7053983685419859001">Blokovat</translation>
 <translation id="7070484045139057854">Rozšíření může číst a měnit data webů</translation>
 <translation id="708060913198414444">K&amp;opírovat adresu zvukového souboru</translation>
 <translation id="7175353351958621980">Načteno z:</translation>
@@ -388,7 +390,6 @@
 <translation id="7663719505383602579">Příjemce: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Nainstalováno vaším administrátorem</translation>
 <translation id="7685049629764448582">Paměť JavaScriptu</translation>
-<translation id="7701040980221191251">Žádné</translation>
 <translation id="7701869757853594372">Popisovače – UŽIVATEL</translation>
 <translation id="7704305437604973648">Úloha</translation>
 <translation id="7710568461918838723">&amp;Odeslat…</translation>

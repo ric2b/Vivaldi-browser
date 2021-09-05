@@ -62,6 +62,7 @@ class PageBloomFilter;
 class PagePool;
 class ProcessHeapReporter;
 class RegionTree;
+class MarkingSchedulingOracle;
 
 using MarkingItem = TraceDescriptor;
 using NotFullyConstructedItem = const void*;
@@ -70,11 +71,6 @@ struct EphemeronPairItem {
   const void* key;
   const void* value;
   TraceCallback value_trace_callback;
-};
-
-struct BackingStoreCallbackItem {
-  const void* backing;
-  MovingObjectCallback callback;
 };
 
 struct CustomCallbackItem {
@@ -103,8 +99,6 @@ using MovableReferenceWorklist =
     Worklist<const MovableReference*, 256 /* local entries */>;
 using EphemeronPairsWorklist =
     Worklist<EphemeronPairItem, 64 /* local entries */>;
-using BackingStoreCallbackWorklist =
-    Worklist<BackingStoreCallbackItem, 16 /* local entries */>;
 using V8ReferencesWorklist = Worklist<V8Reference, 16 /* local entries */>;
 using NotSafeToConcurrentlyTraceWorklist =
     Worklist<NotSafeToConcurrentlyTraceItem, 64 /* local entries */>;
@@ -241,10 +235,6 @@ class PLATFORM_EXPORT ThreadHeap {
     return ephemeron_pairs_to_process_worklist_.get();
   }
 
-  BackingStoreCallbackWorklist* GetBackingStoreCallbackWorklist() const {
-    return backing_store_callback_worklist_.get();
-  }
-
   V8ReferencesWorklist* GetV8ReferencesWorklist() const {
     return v8_references_worklist_.get();
   }
@@ -301,8 +291,13 @@ class PLATFORM_EXPORT ThreadHeap {
 
   // Returns true if concurrent markers will have work to steal
   bool HasWorkForConcurrentMarking() const;
+  // Returns the amount of work currently available for stealing (there could be
+  // work remaining even if this is 0).
+  size_t ConcurrentMarkingGlobalWorkSize() const;
   // Returns true if marker is done
-  bool AdvanceConcurrentMarking(ConcurrentMarkingVisitor*, base::TimeTicks);
+  bool AdvanceConcurrentMarking(ConcurrentMarkingVisitor*,
+                                base::JobDelegate*,
+                                MarkingSchedulingOracle* marking_scheduler);
 
   // Conservatively checks whether an address is a pointer in any of the
   // thread heaps.  If so marks the object pointed to as live.
@@ -444,10 +439,6 @@ class PLATFORM_EXPORT ThreadHeap {
   // MarkingVisitor to ThreadHeap.
   std::unique_ptr<EphemeronPairsWorklist> discovered_ephemeron_pairs_worklist_;
   std::unique_ptr<EphemeronPairsWorklist> ephemeron_pairs_to_process_worklist_;
-
-  // This worklist is used to passing backing store callback to HeapCompact.
-  std::unique_ptr<BackingStoreCallbackWorklist>
-      backing_store_callback_worklist_;
 
   // Worklist for storing the V8 references until ThreadHeap can flush them
   // to V8.

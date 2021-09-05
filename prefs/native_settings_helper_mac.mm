@@ -56,11 +56,11 @@ bool getSwipeDirection() {
 
 int getSystemDarkMode() {
   vivaldiprefs::SystemDesktopThemeColorValues theme_color =
-      vivaldiprefs::SystemDesktopThemeColorValues::LIGHT;
+      vivaldiprefs::SystemDesktopThemeColorValues::kLight;
   NSString *osxMode =
     [[NSUserDefaults standardUserDefaults] stringForKey:@"AppleInterfaceStyle"];
   if (osxMode && [osxMode isEqual:@"Dark"]) {
-    theme_color = vivaldiprefs::SystemDesktopThemeColorValues::DARK;
+    theme_color = vivaldiprefs::SystemDesktopThemeColorValues::kDark;
   }
   return static_cast<int>(theme_color);
 }

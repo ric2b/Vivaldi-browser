@@ -26,7 +26,6 @@ android_library("animated_poodle_java") {
 
 android_resources("animated_poodle_resources") {
   sources = [ "java/res_poodle/drawable/ic_autofill_assistant_24dp.xml" ]
-  create_srcjar = false
 }
 
 android_library("java") {
@@ -37,6 +36,7 @@ android_library("java") {
     "//base:jni_java",
     "//chrome/android:chrome_java",
     "//chrome/browser/browser_controls/android:java",
+    "//chrome/browser/feedback/android:java",
     "//chrome/browser/image_fetcher:java",
     "//chrome/browser/profiles/android:java",
     "//chrome/browser/settings:java",
@@ -44,10 +44,12 @@ android_library("java") {
     "//chrome/browser/ui/android/favicon:java",
     "//chrome/browser/ui/messages/android:java",
     "//chrome/browser/util:java",
+    "//chrome/browser/version:java",
     "//components/autofill/android:autofill_java",
     "//components/browser_ui/android/bottomsheet:java",
     "//components/browser_ui/modaldialog/android:java",
     "//components/browser_ui/widget/android:java",
+    "//components/payments/content/android:java",
     "//components/policy/android:policy_java",
     "//components/signin/core/browser/android:java",
     "//components/signin/public/android:java",
@@ -61,8 +63,6 @@ android_library("java") {
     "//third_party/android_deps:androidx_coordinatorlayout_coordinatorlayout_java",
     "//third_party/android_deps:androidx_core_core_java",
     "//third_party/android_deps:androidx_gridlayout_gridlayout_java",
-    "//third_party/android_deps:androidx_legacy_legacy_support_core_ui_java",
-    "//third_party/android_deps:androidx_legacy_legacy_support_core_utils_java",
     "//third_party/android_deps:androidx_lifecycle_lifecycle_common_java",
     "//third_party/android_deps:androidx_lifecycle_lifecycle_runtime_java",
     "//third_party/android_deps:androidx_recyclerview_recyclerview_java",
@@ -393,7 +393,6 @@ android_resources("java_resources") {
     ":java_strings_grd",
     "//chrome/android:chrome_app_java_resources",
   ]
-  create_srcjar = false
 }
 
 java_strings_grd("java_strings_grd") {

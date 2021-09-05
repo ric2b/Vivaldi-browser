@@ -63,6 +63,10 @@ class ForceInstalledMetrics : public ForceInstalledTracker::Observer {
   // observers.
   void OnForceInstalledExtensionsLoaded() override;
 
+  // Calls ReportMetricsOnExtensionsReady method if there is a non-empty list of
+  // force-installed extensions.
+  void OnForceInstalledExtensionsReady() override;
+
   // Reports cache status for the force installed extensions.
   void OnExtensionDownloadCacheStatusRetrieved(
       const ExtensionId& id,
@@ -73,13 +77,6 @@ class ForceInstalledMetrics : public ForceInstalledTracker::Observer {
   // which is not yet installed or loaded.
   bool IsStatusGood(ForceInstalledTracker::ExtensionStatus status);
 
-  // Returns true only in case of some well-known misconfigurations which are
-  // easy to detect. Can return false for misconfigurations which are hard to
-  // distinguish with other errors.
-  bool IsMisconfiguration(
-      const InstallStageTracker::InstallationData& installation_data,
-      const ExtensionId& id);
-
   // Reports disable reasons for the extensions which are installed but not
   // loaded.
   void ReportDisableReason(const ExtensionId& extension_id);
@@ -89,6 +86,10 @@ class ForceInstalledMetrics : public ForceInstalledTracker::Observer {
   // why they were not installed.
   void ReportMetrics();
 
+  // Reports metrics for sessions when all force installed extensions are ready
+  // for use.
+  void ReportMetricsOnExtensionsReady();
+
   ExtensionRegistry* const registry_;
   Profile* const profile_;
   ForceInstalledTracker* const tracker_;
@@ -96,8 +97,12 @@ class ForceInstalledMetrics : public ForceInstalledTracker::Observer {
   // Moment when the class was initialized.
   base::Time start_time_;
 
-  // Tracks whether stats were already reported for the session.
-  bool reported_ = false;
+  // Tracks whether extensions load stats were already for the session.
+  bool load_reported_ = false;
+
+  // Tracks whether extensions ready stats were already reported for the
+  // session.
+  bool ready_reported_ = false;
 
   ScopedObserver<ForceInstalledTracker, ForceInstalledTracker::Observer>
       tracker_observer_{this};

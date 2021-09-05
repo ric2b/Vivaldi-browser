@@ -34,7 +34,8 @@ std::unique_ptr<VideoEncodeAccelerator> CreateAndInitializeFakeVEA(
     bool will_initialization_succeed,
     const VideoEncodeAccelerator::Config& config,
     VideoEncodeAccelerator::Client* client,
-    const gpu::GpuPreferences& gpu_preferences) {
+    const gpu::GpuPreferences& gpu_preferences,
+    const gpu::GpuDriverBugWorkarounds& gpu_workarounds) {
   // Use FakeVEA as scoped_ptr to guarantee proper destruction via Destroy().
   auto vea = std::make_unique<FakeVideoEncodeAccelerator>(
       base::ThreadTaskRunnerHandle::Get());
@@ -327,6 +328,26 @@ TEST_F(MojoVideoEncodeAcceleratorServiceTest, CallsBeforeInitializeAreIgnored) {
                                                         kNewFramerate);
     base::RunLoop().RunUntilIdle();
   }
+}
+
+// This test verifies that IsFlushSupported/Flush on FakeVEA.
+TEST_F(MojoVideoEncodeAcceleratorServiceTest, IsFlushSupportedAndFlush) {
+  CreateMojoVideoEncodeAccelerator();
+  BindAndInitialize();
+
+  ASSERT_TRUE(fake_vea());
+
+  // media::VideoEncodeAccelerator::IsFlushSupported and Flush are return
+  // false as default, so here expect false for both IsFlushSupported and
+  // Flush.
+  auto flush_support =
+      base::BindOnce([](bool status) { EXPECT_EQ(status, false); });
+  mojo_vea_service()->IsFlushSupported(std::move(flush_support));
+  base::RunLoop().RunUntilIdle();
+
+  auto flush_callback =
+      base::BindOnce([](bool status) { EXPECT_EQ(status, false); });
+  mojo_vea_service()->IsFlushSupported(std::move(flush_callback));
 }
 
 }  // namespace media

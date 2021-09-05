@@ -119,6 +119,7 @@ void SomeValuesCallback(scoped_refptr<base::RefCountedMemory> data) {
   EXPECT_NE(result.find("\"flag\":true"), std::string::npos);
   EXPECT_NE(result.find("\"counter\":10"), std::string::npos);
   EXPECT_NE(result.find("\"debt\":-456"), std::string::npos);
+  EXPECT_NE(result.find("\"threshold\":0.55"), std::string::npos);
   EXPECT_NE(result.find("\"planet\":\"pluto\""), std::string::npos);
   EXPECT_NE(result.find("\"button\":\"foo\""), std::string::npos);
 }
@@ -128,6 +129,7 @@ TEST_F(WebUIDataSourceTest, SomeValues) {
   source()->AddBoolean("flag", true);
   source()->AddInteger("counter", 10);
   source()->AddInteger("debt", -456);
+  source()->AddDouble("threshold", 0.55);
   source()->AddString("planet", base::ASCIIToUTF16("pluto"));
   source()->AddLocalizedString("button", kDummyStringId);
   StartDataRequest("strings.js", base::BindOnce(&SomeValuesCallback));
@@ -179,6 +181,19 @@ TEST_F(WebUIDataSourceTest, NamedResourceWithQueryString) {
   source()->AddResourcePath("foobar", kDummyResourceId);
   StartDataRequest("foobar?query?string",
                    base::BindOnce(&NamedResourceWithQueryStringCallback));
+}
+
+void NamedResourceWithUrlFragmentCallback(
+    scoped_refptr<base::RefCountedMemory> data) {
+  EXPECT_NE(data, nullptr);
+  std::string result(data->front_as<char>(), data->size());
+  EXPECT_NE(result.find(kDummyResource), std::string::npos);
+}
+
+TEST_F(WebUIDataSourceTest, NamedResourceWithUrlFragment) {
+  source()->AddResourcePath("foobar", kDummyResourceId);
+  StartDataRequest("foobar#fragment",
+                   base::BindOnce(&NamedResourceWithUrlFragmentCallback));
 }
 
 void WebUIDataSourceTest::RequestFilterQueryStringCallback(

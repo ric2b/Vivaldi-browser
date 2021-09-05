@@ -135,11 +135,11 @@ int NonClientFrameView::GetSystemMenuY() const {
 }
 #endif
 
-BEGIN_METADATA(NonClientFrameView)
-METADATA_PARENT_CLASS(View)
-END_METADATA()
+BEGIN_METADATA(NonClientFrameView, View)
+END_METADATA
 
-NonClientView::NonClientView() {
+NonClientView::NonClientView(views::ClientView* client_view)
+    : client_view_(client_view) {
   SetEventTargeter(std::make_unique<views::ViewTargeter>(this));
 }
 
@@ -323,8 +323,7 @@ View* NonClientView::TargetForRect(View* root, const gfx::Rect& rect) {
   return ViewTargeterDelegate::TargetForRect(root, rect);
 }
 
-BEGIN_METADATA(NonClientView)
-METADATA_PARENT_CLASS(View)
-END_METADATA()
+BEGIN_METADATA(NonClientView, View)
+END_METADATA
 
 }  // namespace views

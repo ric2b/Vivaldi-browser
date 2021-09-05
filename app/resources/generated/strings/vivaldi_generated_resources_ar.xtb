@@ -86,6 +86,7 @@
 <translation id="5301954838959518834">موافق وأعي ذلك</translation>
 <translation id="5355926466126177564">غيّرت الإضافة "<ph name="EXTENSION_NAME" />" الصفحة التي تظهر عند البحث في المربع متعدد الاستخدامات.</translation>
 <translation id="5362741141255528695">حدد ملف المفتاح الخاص.</translation>
+<translation id="536638840841140142">لا شيء</translation>
 <translation id="5370819323174483825">&amp;إعادة تحميل</translation>
 <translation id="5431318178759467895">اللون</translation>
 <translation id="5483785310822538350">إبطال الوصول للملف والجهاز</translation>
@@ -124,7 +125,6 @@
 <translation id="7427348830195639090">صفحة الخلفية: <ph name="BACKGROUND_PAGE_URL" /></translation>
 <translation id="7629827748548208700">علامة التبويب: <ph name="TAB_NAME" /></translation>
 <translation id="7663719505383602579">المتلقي: <ph name="ARC_PROCESS_NAME" /></translation>
-<translation id="7701040980221191251">لا شيء</translation>
 <translation id="7704305437604973648">المهمة</translation>
 <translation id="7760004034676677601">هل هذه هي صفحة بدء التشغيل التي كنت تتوقع ظهورها؟</translation>
 <translation id="7791543448312431591">إضافة</translation>

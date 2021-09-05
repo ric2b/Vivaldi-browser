@@ -260,7 +260,7 @@ bool CSSParser::ParseColor(Color& color, const String& string, bool strict) {
 
 bool CSSParser::ParseSystemColor(Color& color,
                                  const String& color_string,
-                                 WebColorScheme color_scheme) {
+                                 ColorScheme color_scheme) {
   CSSValueID id = CssValueKeywordID(color_string);
   if (!StyleColor::IsSystemColor(id))
     return false;
@@ -291,6 +291,22 @@ CSSPrimitiveValue* CSSParser::ParseLengthPercentage(
   CSSParserTokenRange range(tokens);
   return css_parsing_utils::ConsumeLengthOrPercent(range, *context,
                                                    kValueRangeAll);
+}
+
+MutableCSSPropertyValueSet* CSSParser::ParseFont(const String& string,
+                                                 SecureContextMode mode) {
+  auto* set =
+      MakeGarbageCollected<MutableCSSPropertyValueSet>(kHTMLStandardMode);
+  ParseValue(set, CSSPropertyID::kFont, string, true /* important */, mode);
+  if (set->IsEmpty())
+    return nullptr;
+  const CSSValue* font_size =
+      set->GetPropertyCSSValue(CSSPropertyID::kFontSize);
+  if (!font_size || font_size->IsCSSWideKeyword())
+    return nullptr;
+  if (font_size->IsPendingSubstitutionValue())
+    return nullptr;
+  return set;
 }
 
 }  // namespace blink

@@ -81,6 +81,7 @@ class TouchSelectionControllerClientAura;
 class CONTENT_EXPORT RenderWidgetHostViewAura
     : public RenderWidgetHostViewBase,
       public RenderWidgetHostViewEventHandler::Delegate,
+      public RenderFrameMetadataProvider::Observer,
       public TextInputManager::Observer,
       public ui::TextInputClient,
       public display::DisplayObserver,
@@ -169,8 +170,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   void DidStopFlinging() override;
   void OnDidNavigateMainFrameToNewPage() override;
   const viz::FrameSinkId& GetFrameSinkId() const override;
-  const viz::LocalSurfaceIdAllocation& GetLocalSurfaceIdAllocation()
-      const override;
+  const viz::LocalSurfaceId& GetLocalSurfaceId() const override;
   bool TransformPointToCoordSpaceForView(
       const gfx::PointF& point,
       RenderWidgetHostViewBase* target_view,
@@ -304,8 +304,13 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   void OnHostMovedInPixels(aura::WindowTreeHost* host,
                            const gfx::Point& new_origin_in_pixels) override;
 
-  // RenderFrameMetadataProvider::Observer
+  // RenderFrameMetadataProvider::Observer implementation.
+  void OnRenderFrameMetadataChangedBeforeActivation(
+      const cc::RenderFrameMetadata& metadata) override {}
   void OnRenderFrameMetadataChangedAfterActivation() override;
+  void OnRenderFrameSubmission() override {}
+  void OnLocalSurfaceIdChanged(
+      const cc::RenderFrameMetadata& metadata) override {}
 
 #if defined(OS_WIN)
   // Gets the HWND of the host window.
@@ -343,7 +348,6 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   RenderFrameHostImpl* GetFocusedFrame() const;
   bool NeedsMouseCapture() override;
   void SetTooltipsEnabled(bool enable) override;
-  void ShowContextMenu(const ContextMenuParams& params) override;
   void Shutdown() override;
 
   bool ShouldVirtualKeyboardOverlayContent() const;
@@ -430,6 +434,10 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
                            DiscardDelegatedFramesWithMemoryPressure);
   FRIEND_TEST_ALL_PREFIXES(RenderWidgetHostViewAuraInputMethodTest,
                            OnCaretBoundsChanged);
+  FRIEND_TEST_ALL_PREFIXES(RenderWidgetHostViewAuraInputMethodTest,
+                           OnCaretBoundsChangedInputModeNone);
+  FRIEND_TEST_ALL_PREFIXES(RenderWidgetHostViewAuraInputMethodFocusTest,
+                           OnFocusLost);
   FRIEND_TEST_ALL_PREFIXES(RenderWidgetHostViewAuraKeyboardTest,
                            KeyboardObserverDestroyed);
   FRIEND_TEST_ALL_PREFIXES(RenderWidgetHostViewAuraKeyboardTest,
@@ -466,6 +474,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
                            DiscardDelegatedFrames);
   FRIEND_TEST_ALL_PREFIXES(SitePerProcessHitTestBrowserTest,
                            ScrollOOPIFEditableElement);
+  FRIEND_TEST_ALL_PREFIXES(RenderWidgetHostViewAuraTest, OcclusionHidesTooltip);
 
   class WindowObserver;
   friend class WindowObserver;
@@ -489,8 +498,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
 
   bool SynchronizeVisualProperties(
       const cc::DeadlinePolicy& deadline_policy,
-      const base::Optional<viz::LocalSurfaceIdAllocation>&
-          child_local_surface_id_allocation);
+      const base::Optional<viz::LocalSurfaceId>& child_local_surface_id);
 
   void OnDidUpdateVisualPropertiesComplete(
       const cc::RenderFrameMetadata& metadata);
@@ -580,7 +588,6 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   blink::mojom::FrameWidgetInputHandler*
   GetFrameWidgetInputHandlerForFocusedWidget();
 
-  // NOTE: this is null if |is_mus_browser_plugin_guest_| is true.
   aura::Window* window_;
 
   std::unique_ptr<DelegatedFrameHostClient> delegated_frame_host_client_;
@@ -695,7 +702,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
       ui::EventPointerType::kUnknown;
 
   bool is_first_navigation_ = true;
-  viz::LocalSurfaceIdAllocation inset_surface_id_allocation_;
+  viz::LocalSurfaceId inset_surface_id_;
 
   // See OnDisplayMetricsChanged() for details.
   bool needs_to_update_display_metrics_ = false;

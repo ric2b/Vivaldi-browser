@@ -11,7 +11,7 @@
 #include "base/containers/flat_map.h"
 #include "base/macros.h"
 #include "build/build_config.h"
-#include "components/viz/common/quads/render_pass.h"
+#include "components/viz/common/quads/aggregated_render_pass.h"
 #include "components/viz/service/display/ca_layer_overlay.h"
 #include "components/viz/service/display/overlay_candidate.h"
 #include "components/viz/service/display/overlay_processor_interface.h"
@@ -27,9 +27,7 @@ class VIZ_SERVICE_EXPORT OverlayProcessorMac
  public:
   using CandidateList = CALayerOverlayList;
 
-  OverlayProcessorMac(bool could_overlay,
-                      bool enable_ca_overlay,
-                      bool enable_render_pass);
+  OverlayProcessorMac(bool could_overlay, bool enable_ca_overlay);
   // For testing.
   explicit OverlayProcessorMac(
       std::unique_ptr<CALayerOverlayProcessor> ca_layer_overlay_processor);
@@ -50,7 +48,7 @@ class VIZ_SERVICE_EXPORT OverlayProcessorMac
   // or CALayers. This must be called every frame.
   void ProcessForOverlays(
       DisplayResourceProvider* resource_provider,
-      RenderPassList* render_passes,
+      AggregatedRenderPassList* render_passes,
       const SkMatrix44& output_color_matrix,
       const FilterOperationsMap& render_pass_filters,
       const FilterOperationsMap& render_pass_backdrop_filters,
@@ -70,7 +68,6 @@ class VIZ_SERVICE_EXPORT OverlayProcessorMac
  private:
   const bool could_overlay_;
   const bool enable_ca_overlay_;
-  const bool enable_render_pass_;
   gfx::Rect ca_overlay_damage_rect_;
   gfx::Rect previous_frame_full_bounding_rect_;
 

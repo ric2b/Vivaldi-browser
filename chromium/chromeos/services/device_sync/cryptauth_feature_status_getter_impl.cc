@@ -32,7 +32,7 @@ namespace {
 constexpr base::TimeDelta kWaitingForBatchGetFeatureStatusesResponseTimeout =
     kMaxAsyncExecutionTime;
 
-constexpr std::array<multidevice::SoftwareFeature, 10> kAllSoftwareFeatures = {
+constexpr std::array<multidevice::SoftwareFeature, 12> kAllSoftwareFeatures = {
     multidevice::SoftwareFeature::kBetterTogetherHost,
     multidevice::SoftwareFeature::kBetterTogetherClient,
     multidevice::SoftwareFeature::kSmartLockHost,
@@ -42,7 +42,9 @@ constexpr std::array<multidevice::SoftwareFeature, 10> kAllSoftwareFeatures = {
     multidevice::SoftwareFeature::kMessagesForWebHost,
     multidevice::SoftwareFeature::kMessagesForWebClient,
     multidevice::SoftwareFeature::kPhoneHubHost,
-    multidevice::SoftwareFeature::kPhoneHubClient};
+    multidevice::SoftwareFeature::kPhoneHubClient,
+    multidevice::SoftwareFeature::kWifiSyncHost,
+    multidevice::SoftwareFeature::kWifiSyncClient};
 
 CryptAuthDeviceSyncResult::ResultCode
 BatchGetFeatureStatusesNetworkRequestErrorToResultCode(
@@ -218,10 +220,10 @@ void CryptAuthFeatureStatusGetterImpl::OnAttemptStarted(
   cryptauth_client_ = client_factory_->CreateInstance();
   cryptauth_client_->BatchGetFeatureStatuses(
       request,
-      base::Bind(
+      base::BindOnce(
           &CryptAuthFeatureStatusGetterImpl::OnBatchGetFeatureStatusesSuccess,
           base::Unretained(this), device_ids),
-      base::Bind(
+      base::BindOnce(
           &CryptAuthFeatureStatusGetterImpl::OnBatchGetFeatureStatusesFailure,
           base::Unretained(this)));
 }

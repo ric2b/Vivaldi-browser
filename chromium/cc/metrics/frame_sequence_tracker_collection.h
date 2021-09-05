@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/callback.h"
 #include "base/containers/flat_map.h"
 #include "base/optional.h"
 #include "cc/cc_export.h"
@@ -106,22 +107,17 @@ class CC_EXPORT FrameSequenceTrackerCollection {
   // each type.
   ActiveFrameSequenceTrackers FrameSequenceTrackerActiveTypes();
 
-  // Reports the accumulated kCustom tracker results and clears it.
-  CustomTrackerResults TakeCustomTrackerResults();
-
   FrameSequenceTracker* GetRemovalTrackerForTesting(
       FrameSequenceTrackerType type);
 
   void SetUkmManager(UkmManager* manager);
 
-  // These methods directly calls corresponding APIs in ThroughputUkmReporter,
-  // please refer to the ThroughputUkmReporter for details.
-  bool HasThroughputData() const;
-  int TakeLastAggregatedPercent();
-  int TakeLastImplPercent();
-  base::Optional<int> TakeLastMainPercent();
-
-  void ComputeUniversalThroughputForTesting();
+  using NotifyCustomerTrackerResutlsCallback =
+      base::RepeatingCallback<void(CustomTrackerResults)>;
+  void set_custom_tracker_results_added_callback(
+      NotifyCustomerTrackerResutlsCallback callback) {
+    custom_tracker_results_added_callback_ = std::move(callback);
+  }
 
  private:
   friend class FrameSequenceTrackerTest;
@@ -163,7 +159,10 @@ class CC_EXPORT FrameSequenceTrackerCollection {
   // Custom trackers are keyed by a custom sequence id.
   base::flat_map<int, std::unique_ptr<FrameSequenceTracker>>
       custom_frame_trackers_;
-  CustomTrackerResults custom_tracker_results_;
+
+  // Called when throughput metrics are available for custom trackers added by
+  // |AddCustomTrackerResult()|.
+  NotifyCustomerTrackerResutlsCallback custom_tracker_results_added_callback_;
 
   std::vector<std::unique_ptr<FrameSequenceTracker>> removal_trackers_;
   CompositorFrameReportingController* const
@@ -173,6 +172,10 @@ class CC_EXPORT FrameSequenceTrackerCollection {
       std::pair<FrameSequenceTrackerType, FrameSequenceMetrics::ThreadType>,
       std::unique_ptr<FrameSequenceMetrics>>
       accumulated_metrics_;
+
+  // Tracks how many smoothness effects are driven by each thread.
+  size_t main_thread_driving_smoothness_ = 0;
+  size_t compositor_thread_driving_smoothness_ = 0;
 };
 
 }  // namespace cc

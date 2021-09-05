@@ -5,7 +5,6 @@
 #include "ui/events/test/events_test_utils_x11.h"
 
 #include <stddef.h>
-#include <xcb/xproto.h>
 
 #include "base/check_op.h"
 #include "base/notreached.h"
@@ -19,33 +18,39 @@
 #include "ui/gfx/x/connection.h"
 #include "ui/gfx/x/x11.h"
 #include "ui/gfx/x/xinput.h"
+#include "ui/gfx/x/xproto.h"
 
 namespace {
 
 // Converts ui::EventType to state for X*Events.
-unsigned int XEventState(int flags) {
-  return ((flags & ui::EF_SHIFT_DOWN) ? ShiftMask : 0) |
-         ((flags & ui::EF_CAPS_LOCK_ON) ? LockMask : 0) |
-         ((flags & ui::EF_CONTROL_DOWN) ? ControlMask : 0) |
-         ((flags & ui::EF_ALT_DOWN) ? Mod1Mask : 0) |
-         ((flags & ui::EF_NUM_LOCK_ON) ? Mod2Mask : 0) |
-         ((flags & ui::EF_MOD3_DOWN) ? Mod3Mask : 0) |
-         ((flags & ui::EF_COMMAND_DOWN) ? Mod4Mask : 0) |
-         ((flags & ui::EF_ALTGR_DOWN) ? Mod5Mask : 0) |
-         ((flags & ui::EF_LEFT_MOUSE_BUTTON) ? Button1Mask : 0) |
-         ((flags & ui::EF_MIDDLE_MOUSE_BUTTON) ? Button2Mask : 0) |
-         ((flags & ui::EF_RIGHT_MOUSE_BUTTON) ? Button3Mask : 0);
+x11::KeyButMask XEventState(int flags) {
+  constexpr auto kNoMask = x11::KeyButMask{};
+  return ((flags & ui::EF_SHIFT_DOWN) ? x11::KeyButMask::Shift : kNoMask) |
+         ((flags & ui::EF_CAPS_LOCK_ON) ? x11::KeyButMask::Lock : kNoMask) |
+         ((flags & ui::EF_CONTROL_DOWN) ? x11::KeyButMask::Control : kNoMask) |
+         ((flags & ui::EF_ALT_DOWN) ? x11::KeyButMask::Mod1 : kNoMask) |
+         ((flags & ui::EF_NUM_LOCK_ON) ? x11::KeyButMask::Mod2 : kNoMask) |
+         ((flags & ui::EF_MOD3_DOWN) ? x11::KeyButMask::Mod3 : kNoMask) |
+         ((flags & ui::EF_COMMAND_DOWN) ? x11::KeyButMask::Mod4 : kNoMask) |
+         ((flags & ui::EF_ALTGR_DOWN) ? x11::KeyButMask::Mod5 : kNoMask) |
+         ((flags & ui::EF_LEFT_MOUSE_BUTTON) ? x11::KeyButMask::Button1
+                                             : kNoMask) |
+         ((flags & ui::EF_MIDDLE_MOUSE_BUTTON) ? x11::KeyButMask::Button2
+                                               : kNoMask) |
+         ((flags & ui::EF_RIGHT_MOUSE_BUTTON) ? x11::KeyButMask::Button3
+                                              : kNoMask);
 }
 
 // Converts EventType to XKeyEvent type.
-int XKeyEventType(ui::EventType type) {
+x11::KeyEvent::Opcode XKeyEventType(ui::EventType type) {
   switch (type) {
     case ui::ET_KEY_PRESSED:
       return x11::KeyEvent::Press;
     case ui::ET_KEY_RELEASED:
       return x11::KeyEvent::Release;
     default:
-      return 0;
+      NOTREACHED();
+      return {};
   }
 }
 
@@ -115,7 +120,7 @@ x11::Event CreateXInput2Event(int deviceid,
   event.detail = tracking_id;
   event.event_x = ToFp1616(location.x()),
   event.event_y = ToFp1616(location.y()),
-  event.event = static_cast<x11::Window>(DefaultRootWindow(gfx::GetXDisplay()));
+  event.event = x11::Connection::Get()->default_root();
   event.button_mask = {0, 0};
   return x11::Event(std::move(event));
 }
@@ -130,76 +135,49 @@ ScopedXI2Event::~ScopedXI2Event() = default;
 void ScopedXI2Event::InitKeyEvent(EventType type,
                                   KeyboardCode key_code,
                                   int flags) {
-  auto* connection = x11::Connection::Get();
-  xcb_generic_event_t ge;
-  memset(&ge, 0, sizeof(ge));
-  auto* key = reinterpret_cast<xcb_key_press_event_t*>(&ge);
-  key->response_type = XKeyEventType(type);
-  CHECK_NE(0, key->response_type);
-  key->sequence = 0;
-  key->time = 0;
-  key->event = 0;
-  key->root = 0;
-  key->child = 0;
-  key->event_x = 0;
-  key->event_y = 0;
-  key->root_x = 0;
-  key->root_y = 0;
-  key->state = XEventState(flags);
-  key->detail = XKeyCodeForWindowsKeyCode(key_code, flags, connection);
-  key->same_screen = 1;
+  x11::KeyEvent key_event{
+      .opcode = XKeyEventType(type),
+      .detail = static_cast<x11::KeyCode>(
+          XKeyCodeForWindowsKeyCode(key_code, flags, x11::Connection::Get())),
+      .state = static_cast<x11::KeyButMask>(XEventState(flags)),
+      .same_screen = true,
+  };
 
-  x11::Event x11_event(&ge, connection);
+  x11::Event x11_event(key_event);
   event_ = std::move(x11_event);
 }
 
 void ScopedXI2Event::InitMotionEvent(const gfx::Point& location,
                                      const gfx::Point& root_location,
                                      int flags) {
-  auto* connection = x11::Connection::Get();
-  xcb_generic_event_t ge;
-  memset(&ge, 0, sizeof(ge));
-  auto* motion = reinterpret_cast<xcb_motion_notify_event_t*>(&ge);
-  motion->response_type = MotionNotify;
-  motion->sequence = 0;
-  motion->time = 0;
-  motion->event = 0;
-  motion->root = 0;
-  motion->child = 0;
-  motion->event_x = location.x();
-  motion->event_y = location.y();
-  motion->root_x = root_location.x();
-  motion->root_y = root_location.y();
-  motion->state = XEventState(flags);
-  motion->same_screen = 1;
+  x11::MotionNotifyEvent motion_event{
+      .root_x = root_location.x(),
+      .root_y = root_location.y(),
+      .event_x = location.x(),
+      .event_y = location.y(),
+      .state = static_cast<x11::KeyButMask>(XEventState(flags)),
+      .same_screen = true,
+  };
 
-  x11::Event x11_event(&ge, connection);
+  x11::Event x11_event(motion_event);
   event_ = std::move(x11_event);
 }
 
 void ScopedXI2Event::InitButtonEvent(EventType type,
                                      const gfx::Point& location,
                                      int flags) {
-  auto* connection = x11::Connection::Get();
-  xcb_generic_event_t ge;
-  memset(&ge, 0, sizeof(ge));
-  auto* button = reinterpret_cast<xcb_button_press_event_t*>(&ge);
-  button->response_type = (type == ui::ET_MOUSE_PRESSED)
-                              ? x11::ButtonEvent::Press
-                              : x11::ButtonEvent::Release;
-  button->sequence = 0;
-  button->time = 0;
-  button->event = 0;
-  button->root = 0;
-  button->event_x = location.x();
-  button->event_y = location.y();
-  button->root_x = location.x();
-  button->root_y = location.y();
-  button->state = 0;
-  button->detail = XButtonEventButton(type, flags);
-  button->same_screen = 1;
+  x11::ButtonEvent button_event{
+      .opcode = type == ui::ET_MOUSE_PRESSED ? x11::ButtonEvent::Press
+                                             : x11::ButtonEvent::Release,
+      .detail = static_cast<x11::Button>(XButtonEventButton(type, flags)),
+      .root_x = location.x(),
+      .root_y = location.y(),
+      .event_x = location.x(),
+      .event_y = location.y(),
+      .same_screen = true,
+  };
 
-  x11::Event x11_event(&ge, connection);
+  x11::Event x11_event(button_event);
   event_ = std::move(x11_event);
 }
 
@@ -210,7 +188,7 @@ void ScopedXI2Event::InitGenericKeyEvent(int deviceid,
                                          int flags) {
   event_ = CreateXInput2Event(deviceid, XIKeyEventType(type), 0, gfx::Point());
   auto* dev_event = event_.As<x11::Input::DeviceEvent>();
-  dev_event->mods.effective = XEventState(flags);
+  dev_event->mods.effective = static_cast<uint32_t>(XEventState(flags));
   dev_event->detail =
       XKeyCodeForWindowsKeyCode(key_code, flags, x11::Connection::Get());
   dev_event->sourceid = static_cast<x11::Input::DeviceId>(sourceid);
@@ -224,7 +202,7 @@ void ScopedXI2Event::InitGenericButtonEvent(int deviceid,
       CreateXInput2Event(deviceid, XIButtonEventType(type), 0, gfx::Point());
 
   auto* dev_event = event_.As<x11::Input::DeviceEvent>();
-  dev_event->mods.effective = XEventState(flags);
+  dev_event->mods.effective = static_cast<uint32_t>(XEventState(flags));
   dev_event->detail = XButtonEventButton(type, flags);
   dev_event->event_x = ToFp1616(location.x()),
   dev_event->event_y = ToFp1616(location.y()),

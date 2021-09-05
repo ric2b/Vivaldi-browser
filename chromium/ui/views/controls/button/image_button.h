@@ -12,6 +12,7 @@
 #include "ui/base/layout.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/views/controls/button/button.h"
+#include "ui/views/metadata/view_factory.h"
 
 namespace views {
 
@@ -29,7 +30,8 @@ class VIEWS_EXPORT ImageButton : public Button {
   // An enum describing the vertical alignment of images on Buttons.
   enum VerticalAlignment { ALIGN_TOP = 0, ALIGN_MIDDLE, ALIGN_BOTTOM };
 
-  explicit ImageButton(ButtonListener* listener = nullptr);
+  explicit ImageButton(PressedCallback callback = PressedCallback());
+  explicit ImageButton(ButtonListener* listener);
   ~ImageButton() override;
 
   // Returns the image for a given |state|.
@@ -110,6 +112,14 @@ class VIEWS_EXPORT ImageButton : public Button {
   DISALLOW_COPY_AND_ASSIGN(ImageButton);
 };
 
+BEGIN_VIEW_BUILDER(VIEWS_EXPORT, ImageButton, Button)
+VIEW_BUILDER_PROPERTY(bool, DrawImageMirrored)
+VIEW_BUILDER_PROPERTY(ImageButton::HorizontalAlignment,
+                      ImageHorizontalAlignment)
+VIEW_BUILDER_PROPERTY(ImageButton::VerticalAlignment, ImageVerticalAlignment)
+VIEW_BUILDER_PROPERTY(gfx::Size, MinimumImageSize)
+END_VIEW_BUILDER(VIEWS_EXPORT, ImageButton)
+
 ////////////////////////////////////////////////////////////////////////////////
 //
 // ToggleImageButton
@@ -119,12 +129,14 @@ class VIEWS_EXPORT ImageButton : public Button {
 ////////////////////////////////////////////////////////////////////////////////
 class VIEWS_EXPORT ToggleImageButton : public ImageButton {
  public:
+  METADATA_HEADER(ToggleImageButton);
+
+  explicit ToggleImageButton(PressedCallback callback = PressedCallback());
   explicit ToggleImageButton(ButtonListener* listener);
   ~ToggleImageButton() override;
 
-  bool toggled() const { return toggled_; }
-
   // Change the toggled state.
+  bool GetToggled() const;
   void SetToggled(bool toggled);
 
   // Like ImageButton::SetImage(), but to set the graphics used for the
@@ -132,10 +144,12 @@ class VIEWS_EXPORT ToggleImageButton : public ImageButton {
   // before the button is toggled.
   void SetToggledImage(ButtonState state, const gfx::ImageSkia* image);
 
-  // Set the tooltip text displayed when the button is toggled.
+  // Get/Set the tooltip text displayed when the button is toggled.
+  base::string16 GetToggledTooltipText() const;
   void SetToggledTooltipText(const base::string16& tooltip);
 
-  // Set the accessible text used when the button is toggled.
+  // Get/Set the accessible text used when the button is toggled.
+  base::string16 GetToggledAccessibleName() const;
   void SetToggledAccessibleName(const base::string16& name);
 
   // Overridden from ImageButton:
@@ -153,7 +167,7 @@ class VIEWS_EXPORT ToggleImageButton : public ImageButton {
   gfx::ImageSkia alternate_images_[STATE_COUNT];
 
   // True if the button is currently toggled.
-  bool toggled_;
+  bool toggled_ = false;
 
   // The parent class's tooltip_text_ is displayed when not toggled, and
   // this one is shown when toggled.
@@ -165,6 +179,12 @@ class VIEWS_EXPORT ToggleImageButton : public ImageButton {
 
   DISALLOW_COPY_AND_ASSIGN(ToggleImageButton);
 };
+
+BEGIN_VIEW_BUILDER(VIEWS_EXPORT, ToggleImageButton, ImageButton)
+VIEW_BUILDER_PROPERTY(bool, Toggled)
+VIEW_BUILDER_PROPERTY(base::string16, ToggledTooltipText)
+VIEW_BUILDER_PROPERTY(base::string16, ToggledAccessibleName)
+END_VIEW_BUILDER(VIEWS_EXPORT, ToggleImageButton)
 
 }  // namespace views
 

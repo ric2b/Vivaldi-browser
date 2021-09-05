@@ -15,7 +15,7 @@
 #include "base/sequenced_task_runner.h"
 #include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "build/lacros_buildflags.h"
+#include "build/chromeos_buildflags.h"
 #include "components/network_session_configurator/common/network_switches.h"
 #include "content/browser/browser_child_process_host_impl.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
@@ -36,7 +36,6 @@
 #include "sandbox/policy/sandbox_type.h"
 #include "sandbox/policy/switches.h"
 #include "services/network/public/cpp/network_switches.h"
-#include "services/service_manager/embedder/switches.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/gl/gl_switches.h"
@@ -320,6 +319,13 @@ bool UtilityProcessHost::StartProcess() {
     std::unique_ptr<UtilitySandboxedProcessLauncherDelegate> delegate =
         std::make_unique<UtilitySandboxedProcessLauncherDelegate>(
             sandbox_type_, env_, *cmd_line);
+
+#if defined(OS_MAC) && defined(ARCH_CPU_ARM64)
+    if (child_flags == ChildProcessHost::CHILD_LAUNCH_X86_64) {
+      delegate->set_launch_x86_64(true);
+    }
+#endif  // OS_MAC && ARCH_CPU_ARM64
+
     process_->LaunchWithPreloadedFiles(std::move(delegate), std::move(cmd_line),
                                        GetV8SnapshotFilesToPreload(), true);
   }

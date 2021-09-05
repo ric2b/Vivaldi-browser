@@ -18,8 +18,6 @@
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "net/base/load_states.h"
 
-class GURL;
-
 namespace IPC {
 class Message;
 }
@@ -27,6 +25,9 @@ class Message;
 namespace blink {
 namespace mojom {
 class RendererPreferences;
+}
+namespace web_pref {
+struct WebPreferences;
 }
 }  // namespace blink
 
@@ -45,7 +46,6 @@ class RenderViewHostDelegateView;
 class SessionStorageNamespace;
 class SiteInstance;
 class WebContents;
-struct WebPreferences;
 
 //
 // RenderViewHostDelegate
@@ -90,10 +90,6 @@ class CONTENT_EXPORT RenderViewHostDelegate {
   // The RenderView is going to be deleted. This is called when each
   // RenderView is going to be destroyed
   virtual void RenderViewDeleted(RenderViewHost* render_view_host) {}
-
-  // The destination URL has changed should be updated.
-  virtual void UpdateTargetURL(RenderViewHost* render_view_host,
-                               const GURL& url) {}
 
   // The page is trying to close the RenderView's representation in the client.
   virtual void Close(RenderViewHost* render_view_host) {}
@@ -156,7 +152,8 @@ class CONTENT_EXPORT RenderViewHostDelegate {
   // WebPreferences. If we want to guarantee that the value reflects the current
   // state of the WebContents, NotifyPreferencesChanged() should be called
   // before calling this.
-  virtual const WebPreferences& GetOrCreateWebPreferences() = 0;
+  virtual const blink::web_pref::WebPreferences&
+  GetOrCreateWebPreferences() = 0;
 
   // Returns true if the WebPreferences for this RenderViewHost is not null.
   virtual bool IsWebPreferencesSet() const;
@@ -164,7 +161,8 @@ class CONTENT_EXPORT RenderViewHostDelegate {
   // Sets the WebPreferences for the WebContents associated with this
   // RenderViewHost to |prefs| and send the new value to all renderers in the
   // WebContents.
-  virtual void SetWebPreferences(const WebPreferences& prefs) {}
+  virtual void SetWebPreferences(const blink::web_pref::WebPreferences& prefs) {
+  }
 
   // Triggers a total recomputation of WebPreferences by resetting the current
   // cached WebPreferences to null and triggering the recomputation path for

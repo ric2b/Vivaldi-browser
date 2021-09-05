@@ -29,7 +29,6 @@
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/css/element_rule_collector.h"
 #include "third_party/blink/renderer/core/css/pseudo_style_request.h"
-#include "third_party/blink/renderer/core/css/resolver/css_property_priority.h"
 #include "third_party/blink/renderer/core/css/resolver/matched_properties_cache.h"
 #include "third_party/blink/renderer/core/css/resolver/style_builder.h"
 #include "third_party/blink/renderer/core/css/selector_checker.h"
@@ -88,7 +87,7 @@ class CORE_EXPORT StyleResolver final : public GarbageCollected<StyleResolver> {
       const ComputedStyle* layout_parent_style);
 
   scoped_refptr<const ComputedStyle> StyleForPage(
-      int page_index,
+      uint32_t page_index,
       const AtomicString& page_name);
   scoped_refptr<const ComputedStyle> StyleForText(Text*);
   scoped_refptr<ComputedStyle> StyleForViewport();
@@ -139,6 +138,10 @@ class CORE_EXPORT StyleResolver final : public GarbageCollected<StyleResolver> {
   void UpdateMediaType();
 
   static bool CanReuseBaseComputedStyle(const StyleResolverState& state);
+
+  static const CSSValue* ComputeValue(Element* element,
+                                      const CSSPropertyName&,
+                                      const CSSValue&);
 
   scoped_refptr<ComputedStyle> StyleForInterpolations(
       Element& element,
@@ -195,6 +198,7 @@ class CORE_EXPORT StyleResolver final : public GarbageCollected<StyleResolver> {
                      bool include_smil_properties);
   void CollectTreeBoundaryCrossingRulesV0CascadeOrder(const Element&,
                                                       ElementRuleCollector&);
+  void ApplyMathMLCustomStyleProperties(Element*, StyleResolverState&);
 
   struct CacheSuccess {
     STACK_ALLOCATED();

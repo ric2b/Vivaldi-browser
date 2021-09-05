@@ -36,12 +36,15 @@
 #include "third_party/blink/renderer/core/dom/container_node.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/element.h"
+#include "third_party/blink/renderer/core/dom/flat_tree_traversal.h"
 #include "third_party/blink/renderer/core/dom/node_computed_style.h"
 #include "third_party/blink/renderer/core/dom/shadow_root.h"
+#include "third_party/blink/renderer/core/frame/event_handler_registry.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/frame/web_feature.h"
+#include "third_party/blink/renderer/core/html/forms/html_field_set_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_input_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_text_area_element.h"
 #include "third_party/blink/renderer/core/html/html_iframe_element.h"
@@ -49,15 +52,13 @@
 #include "third_party/blink/renderer/core/html/html_plugin_element.h"
 #include "third_party/blink/renderer/core/html/html_table_cell_element.h"
 #include "third_party/blink/renderer/core/html/media/html_media_element.h"
+#include "third_party/blink/renderer/core/html/shadow/shadow_element_names.h"
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/core/input_type_names.h"
 #include "third_party/blink/renderer/core/layout/layout_object.h"
 #include "third_party/blink/renderer/core/layout/layout_replaced.h"
 #include "third_party/blink/renderer/core/layout/layout_theme.h"
 #include "third_party/blink/renderer/core/layout/list_marker.h"
-#include "third_party/blink/renderer/core/mathml/mathml_fraction_element.h"
-#include "third_party/blink/renderer/core/mathml/mathml_padded_element.h"
-#include "third_party/blink/renderer/core/mathml/mathml_space_element.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
 #include "third_party/blink/renderer/core/style/computed_style_constants.h"
 #include "third_party/blink/renderer/core/svg/svg_svg_element.h"
@@ -67,10 +68,31 @@
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/transforms/transform_operations.h"
 #include "third_party/blink/renderer/platform/wtf/assertions.h"
+#include "ui/base/ui_base_features.h"
 
 namespace blink {
 
 namespace {
+
+bool IsOverflowClipOrVisible(EOverflow overflow) {
+  return overflow == EOverflow::kClip || overflow == EOverflow::kVisible;
+}
+
+bool IsEditableElement(Element* element, const ComputedStyle& style) {
+  if (style.UserModify() != EUserModify::kReadOnly)
+    return true;
+
+  if (!element)
+    return false;
+
+  if (auto* textarea = DynamicTo<HTMLTextAreaElement>(*element))
+    return !textarea->IsDisabledOrReadOnly();
+
+  if (auto* input = DynamicTo<HTMLInputElement>(*element))
+    return !input->IsDisabledOrReadOnly() && input->IsTextField();
+
+  return false;
+}
 
 TouchAction AdjustTouchActionForElement(TouchAction touch_action,
                                         const ComputedStyle& style,
@@ -87,23 +109,6 @@ TouchAction AdjustTouchActionForElement(TouchAction touch_action,
   if ((!is_body_and_viewport && style.ScrollsOverflow()) || is_child_document)
     return touch_action | TouchAction::kPan;
   return touch_action;
-}
-
-void AdjustBackgroundForForcedColorsMode(StyleResolverState& state,
-                                         ComputedStyle& style,
-                                         Element* element) {
-  if (!element || !element->GetDocument().InForcedColorsMode() ||
-      style.ForcedColorAdjust() == EForcedColorAdjust::kNone)
-    return;
-
-  int bg_color_alpha =
-      LayoutObject::ResolveColor(style, GetCSSPropertyBackgroundColor())
-          .Alpha();
-  Color bg_color_rbg = StyleColor::ColorFromKeyword(
-      style.InternalForcedBackgroundColorRgb(), WebColorScheme::kLight);
-  StyleColor bg_color(Color(bg_color_rbg.Red(), bg_color_rbg.Green(),
-                            bg_color_rbg.Blue(), bg_color_alpha));
-  style.SetBackgroundColor(bg_color);
 }
 
 bool HostIsInputFile(const Element* element) {
@@ -125,7 +130,7 @@ static EDisplay EquivalentBlockDisplay(EDisplay display) {
     case EDisplay::kWebkitBox:
     case EDisplay::kFlex:
     case EDisplay::kGrid:
-    case EDisplay::kMath:
+    case EDisplay::kBlockMath:
     case EDisplay::kListItem:
     case EDisplay::kFlowRoot:
     case EDisplay::kLayoutCustom:
@@ -138,8 +143,8 @@ static EDisplay EquivalentBlockDisplay(EDisplay display) {
       return EDisplay::kFlex;
     case EDisplay::kInlineGrid:
       return EDisplay::kGrid;
-    case EDisplay::kInlineMath:
-      return EDisplay::kMath;
+    case EDisplay::kMath:
+      return EDisplay::kBlockMath;
     case EDisplay::kInlineLayoutCustom:
       return EDisplay::kLayoutCustom;
 
@@ -417,8 +422,7 @@ void StyleAdjuster::AdjustOverflow(ComputedStyle& style) {
   DCHECK(style.OverflowX() != EOverflow::kVisible ||
          style.OverflowY() != EOverflow::kVisible);
 
-  if (style.Display() == EDisplay::kTable ||
-      style.Display() == EDisplay::kInlineTable) {
+  if (style.IsDisplayTableBox()) {
     // Tables only support overflow:hidden and overflow:visible and ignore
     // anything else, see https://drafts.csswg.org/css2/visufx.html#overflow. As
     // a table is not a block container box the rules for resolving conflicting
@@ -431,17 +435,25 @@ void StyleAdjuster::AdjustOverflow(ComputedStyle& style) {
     // If we are left with conflicting overflow values for the x and y axes on a
     // table then resolve both to OverflowVisible. This is interoperable
     // behaviour but is not specced anywhere.
+    // TODO(https://crbug.com/966283): figure out how 'clip' should be handled.
     if (style.OverflowX() == EOverflow::kVisible)
       style.SetOverflowY(EOverflow::kVisible);
     else if (style.OverflowY() == EOverflow::kVisible)
       style.SetOverflowX(EOverflow::kVisible);
-  } else if (style.OverflowX() == EOverflow::kVisible &&
-             style.OverflowY() != EOverflow::kVisible) {
-    // If either overflow value is not visible, change to auto.
-    style.SetOverflowX(EOverflow::kAuto);
-  } else if (style.OverflowY() == EOverflow::kVisible &&
-             style.OverflowX() != EOverflow::kVisible) {
-    style.SetOverflowY(EOverflow::kAuto);
+  } else if (!IsOverflowClipOrVisible(style.OverflowY())) {
+    // Values of 'clip' and 'visible' can only be used with 'clip' and
+    // 'visible.' If they aren't, 'clip' and 'visible' is reset.
+    if (style.OverflowX() == EOverflow::kVisible)
+      style.SetOverflowX(EOverflow::kAuto);
+    else if (style.OverflowX() == EOverflow::kClip)
+      style.SetOverflowX(EOverflow::kHidden);
+  } else if (!IsOverflowClipOrVisible(style.OverflowX())) {
+    // Values of 'clip' and 'visible' can only be used with 'clip' and
+    // 'visible.' If they aren't, 'clip' and 'visible' is reset.
+    if (style.OverflowY() == EOverflow::kVisible)
+      style.SetOverflowY(EOverflow::kAuto);
+    else if (style.OverflowY() == EOverflow::kClip)
+      style.SetOverflowY(EOverflow::kHidden);
   }
 }
 
@@ -474,18 +486,6 @@ static void AdjustStyleForDisplay(ComputedStyle& style,
       style.GetWritingMode() != layout_parent_style.GetWritingMode())
     style.SetDisplay(EDisplay::kInlineBlock);
 
-  // We do not honor position: relative or sticky for table rows, headers, and
-  // footers. This is correct for position: relative in CSS2.1 (and caused a
-  // crash in containingBlock() on some sites) and position: sticky is defined
-  // as following position: relative behavior for table elements. It is
-  // incorrect for CSS3.
-  if ((style.Display() == EDisplay::kTableHeaderGroup ||
-       style.Display() == EDisplay::kTableRowGroup ||
-       style.Display() == EDisplay::kTableFooterGroup ||
-       style.Display() == EDisplay::kTableRow) &&
-      style.HasInFlowPosition())
-    style.SetPosition(EPosition::kStatic);
-
   // Cannot support position: sticky for table columns and column groups because
   // current code is only doing background painting through columns / column
   // groups.
@@ -496,15 +496,12 @@ static void AdjustStyleForDisplay(ComputedStyle& style,
 
   // writing-mode does not apply to table row groups, table column groups, table
   // rows, and table columns.
-  // FIXME: Table cells should be allowed to be perpendicular or flipped with
-  // respect to the table, though.
   if (style.Display() == EDisplay::kTableColumn ||
       style.Display() == EDisplay::kTableColumnGroup ||
       style.Display() == EDisplay::kTableFooterGroup ||
       style.Display() == EDisplay::kTableHeaderGroup ||
       style.Display() == EDisplay::kTableRow ||
-      style.Display() == EDisplay::kTableRowGroup ||
-      style.Display() == EDisplay::kTableCell) {
+      style.Display() == EDisplay::kTableRowGroup) {
     style.SetWritingMode(layout_parent_style.GetWritingMode());
     style.UpdateFontOrientation();
   }
@@ -594,6 +591,13 @@ static void AdjustEffectiveTouchAction(ComputedStyle& style,
   TouchAction enforced_by_policy = TouchAction::kNone;
   if (element->GetDocument().IsVerticalScrollEnforced())
     enforced_by_policy = TouchAction::kPanY;
+  if (base::FeatureList::IsEnabled(::features::kSwipeToMoveCursor) &&
+      IsEditableElement(element, style)) {
+    EventHandlerRegistry& registry =
+        element->GetDocument().GetFrame()->GetEventHandlerRegistry();
+    registry.DidAddEventHandler(
+        *element, EventHandlerRegistry::kTouchStartOrMoveEventBlocking);
+  }
 
   // Apply the adjusted parent effective touch actions.
   style.SetEffectiveTouchAction((element_touch_action & inherited_action) |
@@ -661,6 +665,15 @@ void StyleAdjuster::AdjustComputedStyle(StyleResolverState& state,
     if (is_document_element)
       style.SetDisplay(EquivalentBlockDisplay(style.Display()));
 
+    // math display values on non-MathML elements compute to flow display
+    // values.
+    if ((!element || !element->IsMathMLElement()) &&
+        style.IsDisplayMathBox(style.Display())) {
+      style.SetDisplay(style.Display() == EDisplay::kBlockMath
+                           ? EDisplay::kBlock
+                           : EDisplay::kInline);
+    }
+
     // We don't adjust the first letter style earlier because we may change the
     // display setting in adjustStyeForTagName() above.
     AdjustStyleForFirstLetter(style);
@@ -669,6 +682,20 @@ void StyleAdjuster::AdjustComputedStyle(StyleResolverState& state,
 
     AdjustStyleForDisplay(style, layout_parent_style, element,
                           element ? &element->GetDocument() : nullptr);
+
+    // TOOD(crbug.com/1146925): Sticky content in a scrollable FIELDSET triggers
+    // a DHCECK failure in |StickyPositionScrollingConstraints::
+    // AncestorContainingBlockOffset()|. We disable it until the root cause is
+    // fixed.
+    if (style.GetPosition() == EPosition::kSticky && element) {
+      for (const Node& ancestor : FlatTreeTraversal::AncestorsOf(*element)) {
+        if (const auto* fieldset = DynamicTo<HTMLFieldSetElement>(ancestor)) {
+          if (!fieldset->ComputedStyleRef().IsOverflowVisibleAlongBothAxes())
+            style.SetPosition(EPosition::kStatic);
+          break;
+        }
+      }
+    }
 
     // If this is a child of a LayoutNGCustom, we need the name of the parent
     // layout function for invalidation purposes.
@@ -718,7 +745,7 @@ void StyleAdjuster::AdjustComputedStyle(StyleResolverState& state,
   style.AdjustMaskLayers();
 
   // Let the theme also have a crack at adjusting the style.
-  LayoutTheme::GetTheme().AdjustStyle(style, element);
+  LayoutTheme::GetTheme().AdjustStyle(element, style);
 
   AdjustStyleForEditing(style);
 
@@ -759,20 +786,7 @@ void StyleAdjuster::AdjustComputedStyle(StyleResolverState& state,
       // https://drafts.csswg.org/css-display/#unbox-mathml
       style.SetDisplay(EDisplay::kNone);
     }
-    if (auto* space = DynamicTo<MathMLSpaceElement>(*element)) {
-      space->AddMathBaselineIfNeeded(style, state.CssToLengthConversionData());
-    } else if (auto* padded = DynamicTo<MathMLPaddedElement>(*element)) {
-      padded->AddMathBaselineIfNeeded(style, state.CssToLengthConversionData());
-      padded->AddMathPaddedDepthIfNeeded(style,
-                                         state.CssToLengthConversionData());
-      padded->AddMathPaddedLSpaceIfNeeded(style,
-                                          state.CssToLengthConversionData());
-      padded->AddMathPaddedVOffsetIfNeeded(style,
-                                           state.CssToLengthConversionData());
-    } else if (auto* fraction = DynamicTo<MathMLFractionElement>(*element)) {
-      fraction->AddMathFractionBarThicknessIfNeeded(
-          style, state.CssToLengthConversionData());
-    }
+
     if (style.GetWritingMode() != WritingMode::kHorizontalTb) {
       // TODO(rbuis): this will not work with logical CSS properties.
       // Disable vertical writing-mode for now.
@@ -810,8 +824,8 @@ void StyleAdjuster::AdjustComputedStyle(StyleResolverState& state,
 
   if (element && style.TextOverflow() == ETextOverflow::kEllipsis) {
     const AtomicString& pseudo_id = element->ShadowPseudoId();
-    if (pseudo_id == "-webkit-input-placeholder" ||
-        pseudo_id == "-internal-input-suggested") {
+    if (pseudo_id == shadow_element_names::kPseudoInputPlaceholder ||
+        pseudo_id == shadow_element_names::kPseudoInternalInputSuggested) {
       TextControlElement* text_control =
           ToTextControl(element->OwnerShadowHost());
       DCHECK(text_control);
@@ -837,7 +851,5 @@ void StyleAdjuster::AdjustComputedStyle(StyleResolverState& state,
         (element && element->GetDocument().Printing()))
       style.SetInsideNGFragmentationContext(true);
   }
-
-  AdjustBackgroundForForcedColorsMode(state, style, element);
 }
 }  // namespace blink

@@ -1,5 +1,16 @@
+import("//vivaldi/gn/config/features.gni")
 import("//vivaldi/gn/config/product.gni")
 import("//vivaldi/gn/config/version.gni")
+import("//build/config/compiler/pgo/pgo.gni")
+
+if (is_win || is_mac) {
+  import("//vivaldi/installer/widevine.gni")
+}
+
+_pgo_suffix = ""
+if (chrome_pgo_phase > 0) {
+  _pgo_suffix = ".pgo"
+}
 
 if (!is_android && !is_mac) {
   update_target("//chrome:chrome_initial") {
@@ -60,7 +71,7 @@ if (is_win) {
     deps+= [
       "//vivaldi/update_notifier",
       "//vivaldi/installer/win:vivaldi_release",
-      "//vivaldi/tools/vivaldi_proxy"
+      "//vivaldi/tools/vivaldi_proxy",
     ]
     sign_executables =
         defined(invoker.sign_executables) && invoker.sign_executables
@@ -96,10 +107,18 @@ if (is_win) {
         "--vivaldi-sign-cmd", vivaldi_signing_command,
       ]
     }
+    if (enable_widevine_signing) {
+      args += [
+        "--vivaldi-widevine-sign-cmd", rebase_path(widevine_signing_script),
+        "--vivaldi-widevine-verify-cmd", rebase_path(widevine_verify_script),
+        "--vivaldi-widevine-private-key", rebase_path(widevine_private_key),
+        "--vivaldi-widevine-cert", rebase_path(widevine_signing_cert),
+      ]
+    }
   }
 
   update_target("//chrome/installer/mini_installer:mini_installer") {
-    output_name = "Vivaldi.${vivaldi_version_full}${_platform_suffix}"
+    output_name = "Vivaldi.${vivaldi_version_full}${_platform_suffix}${_pgo_suffix}"
   }
 
   update_template_instance("//chrome:chrome_dll_version") {
@@ -136,11 +155,11 @@ if (is_android) {
 }
 
 update_template_instance("//chrome/app/vector_icons:chrome_vector_icons") {
-  icons -= ["${branding_path_component}/product.icon"]
-  icons += ["//vivaldi/app/resources/vector_icons/product.icon"]
+  sources -= ["${branding_path_component}/product.icon"]
+  sources += ["//vivaldi/app/resources/vector_icons/product.icon"]
 }
 
 update_template_instance("//ui/message_center:message_center_vector_icons") {
-  icons -= ["product.icon"]
-  icons += ["//vivaldi/app/resources/message_center_vector_icons/product.icon"]
+  sources -= ["product.icon"]
+  sources += ["//vivaldi/app/resources/message_center_vector_icons/product.icon"]
 }

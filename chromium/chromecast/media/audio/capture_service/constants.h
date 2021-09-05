@@ -54,10 +54,10 @@ enum class AudioCodec : uint8_t {
 };
 
 enum class MessageType : uint8_t {
-  // Request message that has stream header but empty body. It is used by
+  // Handshake message that has stream header but empty body. It is used by
   // receiver notifying the stream it is observing, and sender can confirm the
-  // parameters are all correct.
-  kRequest = 0,
+  // types/codec are supported and send back more detailed parameters.
+  kHandshake = 0,
   // PCM audio message that has stream header and audio data in the message
   // body. The audio data will match the parameters in the header.
   kPcmAudio,
@@ -78,16 +78,8 @@ struct StreamInfo {
   int frames_per_buffer = 0;
 };
 
-// Info describes the message packet. PacketInfo is only for message types that
-// support packet header, i.e., kRequest and kPcmAudio. |timestamp_us| is about
-// when the buffer is captured. If the audio source is from ALSA, i.e., stream
-// type is raw mic, it's the ALSA capture timestamp; otherwise, it may be
-// shifted based on the samples and sample rate upon raw mic input.
-struct PacketInfo {
-  MessageType message_type;
-  StreamInfo stream_info;
-  int64_t timestamp_us = 0;
-};
+// Size of a PCM audio message header.
+constexpr size_t kPcmAudioHeaderBytes = 10;
 
 }  // namespace capture_service
 }  // namespace media

@@ -44,7 +44,6 @@
 <translation id="19085484004813472">Este é um recurso novo</translation>
 <translation id="2006524834898217237">Verifique se o dispositivo está conectado à Internet.</translation>
 <translation id="208586643495776849">Tente novamente</translation>
-<translation id="2090963878406559571">Para enviar um número de <ph name="ORIGIN" /> para seu smartphone Android, <ph name="TROUBLESHOOT_LINK" /> para os dois dispositivos nas configurações.</translation>
 <translation id="2141853158323869627">{DAYS,plural, =1{1 d}one{# d}other{# d}}</translation>
 <translation id="2148716181193084225">Hoje</translation>
 <translation id="2161656808144014275">Texto</translation>
@@ -135,8 +134,8 @@
 <translation id="520299402983819650"><ph name="QUANTITY" /> PB</translation>
 <translation id="5266161281976477809">Triângulo de divulgação</translation>
 <translation id="5278860589123563674">Falha ao enviar</translation>
+<translation id="5283099933536931082"><ph name="APP_ITEM_TITLE" /> precisa de atenção.</translation>
 <translation id="528468243742722775">Fim</translation>
-<translation id="5327567770033251652">ative a sincronização</translation>
 <translation id="5329858601952122676">&amp;Excluir</translation>
 <translation id="5395308026110844773"><ph name="DRAGGED_APP_NAME" /> sobre <ph name="IN_PLACE_APP" />, solte para criar pasta.</translation>
 <translation id="5463830097259460683">Emojis e símbolos</translation>
@@ -146,6 +145,7 @@
 <translation id="5574202486608032840">Sistema <ph name="IDS_SHORT_PRODUCT_OS_NAME" /></translation>
 <translation id="5583640892426849032">Backspace</translation>
 <translation id="5613020302032141669">Seta para a esquerda</translation>
+<translation id="5652575806481723716"><ph name="FOCUSED_APP_NAME" /> precisa de atenção.</translation>
 <translation id="5675363643668471212">Item da estante</translation>
 <translation id="5754277640426581776">{MINUTES,plural, =1{1 minuto}one{# minutos}other{# minutos}}</translation>
 <translation id="5763338081255973061">{DAYS,plural, =0{Ativo hoje}=1{Ativo há um dia}one{Ativo há # dia}other{Ativo há # dias}}</translation>
@@ -183,10 +183,8 @@
 <translation id="6578407462441924264">Sem nome</translation>
 <translation id="6612467943526193239">Para sair da calibração pressione Esc.</translation>
 <translation id="6620110761915583480">Salvar arquivo</translation>
-<translation id="6656912866303152668">Verifique se a sincronização do <ph name="TARGET_DEVICE_NAME" /> está ativada no Chrome e tente novamente.</translation>
 <translation id="6699343763173986273">Próxima faixa da mídia</translation>
 <translation id="6710213216561001401">Anterior</translation>
-<translation id="6779314412797872738">Para enviar um número daqui para seu smartphone Android, <ph name="TROUBLESHOOT_LINK" /> para os dois dispositivos nas configurações.</translation>
 <translation id="6786750046913594791">Fechar pasta</translation>
 <translation id="6808150112686056157">Parar mídia</translation>
 <translation id="6845383723252244143">Selecionar pasta</translation>

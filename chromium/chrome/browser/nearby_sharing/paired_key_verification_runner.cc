@@ -10,7 +10,6 @@
 #include "base/bind.h"
 #include "chrome/browser/nearby_sharing/certificates/common.h"
 #include "chrome/browser/nearby_sharing/certificates/constants.h"
-#include "chrome/browser/nearby_sharing/certificates/nearby_share_visibility.h"
 #include "chrome/browser/nearby_sharing/logging/logging.h"
 #include "chrome/browser/nearby_sharing/proto/rpc_resources.pb.h"
 #include "chrome/services/sharing/public/proto/wire_format.pb.h"
@@ -39,22 +38,6 @@ PairedKeyVerificationRunner::PairedKeyVerificationResult Convert(
 
     case sharing::mojom::PairedKeyResultFrame_Status::kUnable:
       return PairedKeyVerificationRunner::PairedKeyVerificationResult::kUnable;
-  }
-}
-
-NearbyShareVisibility Convert(nearby_share::mojom::Visibility visibility) {
-  switch (visibility) {
-    case nearby_share::mojom::Visibility::kAllContacts:
-      return NearbyShareVisibility::kAllContacts;
-
-    case nearby_share::mojom::Visibility::kSelectedContacts:
-      return NearbyShareVisibility::kSelectedContacts;
-
-    case nearby_share::mojom::Visibility::kNoOne:
-      return NearbyShareVisibility::kNoOne;
-
-    case nearby_share::mojom::Visibility::kUnknown:
-      return NearbyShareVisibility::kNoOne;
   }
 }
 
@@ -186,7 +169,9 @@ void PairedKeyVerificationRunner::OnReadPairedKeyResultFrame(
 void PairedKeyVerificationRunner::SendPairedKeyResultFrame(
     PairedKeyVerificationResult result) {
   sharing::nearby::Frame frame;
+  frame.set_version(sharing::nearby::Frame::V1);
   sharing::nearby::V1Frame* v1_frame = frame.mutable_v1();
+  v1_frame->set_type(sharing::nearby::V1Frame::PAIRED_KEY_RESULT);
   sharing::nearby::PairedKeyResultFrame* result_frame =
       v1_frame->mutable_paired_key_result();
 
@@ -222,7 +207,9 @@ void PairedKeyVerificationRunner::SendCertificateInfo() {
     return;
 
   sharing::nearby::Frame frame;
+  frame.set_version(sharing::nearby::Frame::V1);
   sharing::nearby::V1Frame* v1_frame = frame.mutable_v1();
+  v1_frame->set_type(sharing::nearby::V1Frame::CERTIFICATE_INFO);
   sharing::nearby::CertificateInfoFrame* cert_frame =
       v1_frame->mutable_certificate_info();
   for (const auto& certificate : certificates) {
@@ -245,15 +232,16 @@ void PairedKeyVerificationRunner::SendCertificateInfo() {
 }
 
 void PairedKeyVerificationRunner::SendPairedKeyEncryptionFrame() {
-  NearbySharePrivateCertificate private_certificate =
-      certificate_manager_->GetValidPrivateCertificate(Convert(visibility_));
-
   sharing::nearby::Frame frame;
+  frame.set_version(sharing::nearby::Frame::V1);
+  sharing::nearby::V1Frame* v1_frame = frame.mutable_v1();
+  v1_frame->set_type(sharing::nearby::V1Frame::PAIRED_KEY_ENCRYPTION);
   sharing::nearby::PairedKeyEncryptionFrame* encryption_frame =
-      frame.mutable_v1()->mutable_paired_key_encryption();
+      v1_frame->mutable_paired_key_encryption();
 
   base::Optional<std::vector<uint8_t>> signature =
-      private_certificate.Sign(PadPrefix(local_prefix_, raw_token_));
+      certificate_manager_->SignWithPrivateCertificate(
+          visibility_, PadPrefix(local_prefix_, raw_token_));
   if (signature) {
     std::vector<uint8_t> certificate_id_hash;
     if (certificate_)
@@ -278,11 +266,10 @@ void PairedKeyVerificationRunner::SendPairedKeyEncryptionFrame() {
 PairedKeyVerificationRunner::PairedKeyVerificationResult
 PairedKeyVerificationRunner::VerifyRemotePublicCertificate(
     const sharing::mojom::V1FramePtr& frame) {
-  NearbySharePrivateCertificate private_certificate =
-      certificate_manager_->GetValidPrivateCertificate(Convert(visibility_));
-
-  if (private_certificate.HashAuthenticationToken(raw_token_) ==
-      frame->get_paired_key_encryption()->secret_id_hash) {
+  base::Optional<std::vector<uint8_t>> hash =
+      certificate_manager_->HashAuthenticationTokenWithPrivateCertificate(
+          visibility_, raw_token_);
+  if (hash && *hash == frame->get_paired_key_encryption()->secret_id_hash) {
     NS_LOG(VERBOSE) << __func__
                     << ": Successfully verified remote public certificate.";
     return PairedKeyVerificationResult::kSuccess;

@@ -19,6 +19,7 @@
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/layout/layout_provider.h"
+#include "ui/views/metadata/view_factory.h"
 #include "ui/views/native_theme_delegate.h"
 #include "ui/views/style/typography.h"
 #include "ui/views/widget/widget.h"
@@ -33,10 +34,13 @@ class VIEWS_EXPORT LabelButton : public Button, public NativeThemeDelegate {
  public:
   METADATA_HEADER(LabelButton);
 
-  // Creates a LabelButton with ButtonPressed() events sent to |listener| and
-  // label |text|. |button_context| is a value from views::style::TextContext
-  // and determines the appearance of |text|.
-  explicit LabelButton(ButtonListener* listener = nullptr,
+  // Creates a LabelButton with pressed events sent to |callback| and label
+  // |text|. |button_context| is a value from views::style::TextContext and
+  // determines the appearance of |text|.
+  explicit LabelButton(PressedCallback callback = PressedCallback(),
+                       const base::string16& text = base::string16(),
+                       int button_context = style::CONTEXT_BUTTON);
+  explicit LabelButton(ButtonListener* listener,
                        const base::string16& text = base::string16(),
                        int button_context = style::CONTEXT_BUTTON);
   ~LabelButton() override;
@@ -155,8 +159,8 @@ class VIEWS_EXPORT LabelButton : public Button, public NativeThemeDelegate {
   virtual void UpdateBackgroundColor() {}
 
   // Returns the current visual appearance of the button. This takes into
-  // account both the button's underlying state and the state of the containing
-  // widget.
+  // account both the button's underlying state, the state of the containing
+  // widget, and the parent of the containing widget.
   ButtonState GetVisualState() const;
 
   // Fills |params| with information about the button.
@@ -263,6 +267,16 @@ class VIEWS_EXPORT LabelButton : public Button, public NativeThemeDelegate {
 
   DISALLOW_COPY_AND_ASSIGN(LabelButton);
 };
+
+BEGIN_VIEW_BUILDER(VIEWS_EXPORT, LabelButton, Button)
+VIEW_BUILDER_PROPERTY(base::string16, Text)
+VIEW_BUILDER_PROPERTY(gfx::HorizontalAlignment, HorizontalAlignment)
+VIEW_BUILDER_PROPERTY(gfx::Size, MinSize)
+VIEW_BUILDER_PROPERTY(gfx::Size, MaxSize)
+VIEW_BUILDER_PROPERTY(bool, IsDefault)
+VIEW_BUILDER_PROPERTY(int, ImageLabelSpacing)
+VIEW_BUILDER_PROPERTY(bool, ImageCentered)
+END_VIEW_BUILDER(VIEWS_EXPORT, LabelButton)
 
 }  // namespace views
 

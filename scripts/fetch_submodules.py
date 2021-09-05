@@ -7,7 +7,7 @@ import subprocess
 import tools.gittools.gittools as Git
 from git_urls import BASE_URL, CHROMIUM_URL
 
-SRC = os.path.dirname(os.path.dirname(__file__))
+SRC = os.path.dirname(os.path.dirname(os.path.relpath(__file__)))
 
 BLACKLISTED_MODULES = []
 BLACKLISTED_OS = ["android_sdk_sources"]
@@ -33,7 +33,7 @@ def __GetModuleInfoFromDeps(deps_info, selected_os=None, git=None):
         if selected_os not in condition:
           continue
       if ref.get("dep_type",None) == "cipd":
-        submodules.setdefault("__cipd__", {})[mod] = ref.get("packages",[])
+        submodules.setdefault("__cipd__", {})[mod] = ref
         continue
       if "url" not in ref:
         continue
@@ -64,19 +64,21 @@ def GetSubmodules(checkout_platform, checkout_filter=None):
     ensure_file += "$ParanoidMode CheckPresence\n"
     for path, packages in mod_packages.items():
       ensure_file += "@Subdir %s\n" % path
-      for package in packages:
+      for package in packages["packages"]:
         ensure_file += "%s %s\n" % (package["package"], package.get("version", ""))
     #print "==========="
     #print ensure_file
     #print "==========="
     cmd = [
-          os.path.join(SRC, "chromium", "third_party", "depot_tools", "cipd"),
+          os.path.join(SRC, "chromium", "third_party", "depot_tools", "cipd").replace("\\","/"),
           "ensure",
           "-log-level", "info",
-          "-root",  os.path.join(SRC, "chromium"),
-          "-cache-dir", os.path.join(SRC, "chromium", ".cipd"),
+          "-root",  os.path.join(SRC, "chromium").replace("\\","/"),
+          "-cache-dir", os.path.join(SRC, "chromium", ".cipd").replace("\\","/"),
           "-ensure-file=-"
           ]
+    if sys.platform == "win32":
+      cmd.insert(0, "bash")
     print(os.getcwd(),":", " ".join(cmd))
     command = subprocess.Popen(cmd, stdin=subprocess.PIPE)
     command.communicate(ensure_file)

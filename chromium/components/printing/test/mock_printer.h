@@ -19,8 +19,6 @@
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 
-struct PrintMsg_PrintPages_Params;
-
 // A class which represents an output page used in the MockPrinter class.
 // The MockPrinter class stores output pages in a vector, so, this class
 // inherits the base::RefCounted<> class so that the MockPrinter class can use
@@ -76,19 +74,21 @@ class MockPrinter {
   void UseInvalidPageSize();
   void UseInvalidContentSize();
 
+  // Functions that handle mojo messages.
+  printing::mojom::PrintParamsPtr GetDefaultPrintSettings();
+  void SetPrintedPagesCount(int cookie, uint32_t number_pages);
+
   // Functions that handles IPC events.
-  void GetDefaultPrintSettings(printing::mojom::PrintParams* params);
   void ScriptedPrint(int cookie,
-                     int expected_pages_count,
+                     uint32_t expected_pages_count,
                      bool has_selection,
-                     PrintMsg_PrintPages_Params* settings);
+                     printing::mojom::PrintPagesParams* settings);
   void UpdateSettings(int cookie,
-                      PrintMsg_PrintPages_Params* params,
-                      const std::vector<int>& page_range_array,
+                      printing::mojom::PrintPagesParams* params,
+                      const std::vector<uint32_t>& page_range_array,
                       int margins_type,
                       const gfx::Size& page_size,
                       int scale_factor);
-  void SetPrintedPagesCount(int cookie, int number_pages);
   void PrintPage(const printing::mojom::DidPrintDocumentParams& params);
 
   // Functions that retrieve the output pages.
@@ -138,8 +138,8 @@ class MockPrinter {
   Status printer_status_;
 
   // The output of a printing job.
-  int number_pages_;
-  int page_number_;
+  uint32_t number_pages_;
+  uint32_t page_number_;
 
   // Used only in the preview sequence.
   bool is_first_request_;

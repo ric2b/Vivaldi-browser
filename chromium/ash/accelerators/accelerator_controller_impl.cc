@@ -850,7 +850,7 @@ bool CanHandleToggleAppList(const ui::Accelerator& accelerator,
     // When spoken feedback is enabled, we should neither toggle the list nor
     // consume the key since Search+Shift is one of the shortcuts the a11y
     // feature uses. crbug.com/132296
-    if (Shell::Get()->accessibility_controller()->spoken_feedback_enabled())
+    if (Shell::Get()->accessibility_controller()->spoken_feedback().enabled())
       return false;
   }
   return true;
@@ -1184,7 +1184,7 @@ void HandleToggleCapsLock() {
 }
 
 bool CanHandleToggleDictation() {
-  return Shell::Get()->accessibility_controller()->dictation_enabled();
+  return Shell::Get()->accessibility_controller()->dictation().enabled();
 }
 
 void HandleToggleDictation() {
@@ -1313,8 +1313,7 @@ void HandleToggleDockedMagnifier() {
 
   const bool current_enabled = docked_magnifier_controller->GetEnabled();
   const bool dialog_ever_accepted =
-      accessibility_controller
-          ->HasDockedMagnifierAcceleratorDialogBeenAccepted();
+      accessibility_controller->docked_magnifier().WasDialogAccepted();
 
   if (!current_enabled && !dialog_ever_accepted) {
     shell->accelerator_controller()->MaybeShowConfirmationDialog(
@@ -1322,7 +1321,8 @@ void HandleToggleDockedMagnifier() {
         base::BindOnce([]() {
           Shell::Get()
               ->accessibility_controller()
-              ->SetDockedMagnifierAcceleratorDialogAccepted();
+              ->docked_magnifier()
+              .SetDialogAccepted();
           SetDockedMagnifierEnabled(true);
         }),
         base::DoNothing());
@@ -1342,7 +1342,7 @@ void SetFullscreenMagnifierEnabled(bool enabled) {
   DCHECK(IsAccessibilityShortcutEnabled(
       prefs::kAccessibilityScreenMagnifierEnabled));
 
-  shell->accessibility_controller()->SetFullscreenMagnifierEnabled(enabled);
+  shell->accessibility_controller()->fullscreen_magnifier().SetEnabled(enabled);
 
   RemoveStickyNotitification(kFullscreenMagnifierToggleAccelNotificationId);
   if (shell->magnification_controller()->IsEnabled()) {
@@ -1361,10 +1361,10 @@ void SetHighContrastEnabled(bool enabled) {
   DCHECK(
       IsAccessibilityShortcutEnabled(prefs::kAccessibilityHighContrastEnabled));
 
-  shell->accessibility_controller()->SetHighContrastEnabled(enabled);
+  shell->accessibility_controller()->high_contrast().SetEnabled(enabled);
 
   RemoveStickyNotitification(kHighContrastToggleAccelNotificationId);
-  if (shell->accessibility_controller()->high_contrast_enabled()) {
+  if (shell->accessibility_controller()->high_contrast().enabled()) {
     CreateAndShowStickyNotification(IDS_HIGH_CONTRAST_ACCEL_TITLE,
                                     IDS_HIGH_CONTRAST_ACCEL_MSG,
                                     kHighContrastToggleAccelNotificationId);
@@ -1386,15 +1386,15 @@ void HandleToggleHighContrast() {
   if (!is_shortcut_enabled) {
     NotifyAccessibilityFeatureDisabledByAdmin(
         IDS_ASH_HIGH_CONTRAST_SHORTCUT_DISABLED,
-        shell->accessibility_controller()->high_contrast_enabled(),
+        shell->accessibility_controller()->high_contrast().enabled(),
         kHighContrastToggleAccelNotificationId);
     return;
   }
 
   AccessibilityControllerImpl* controller = shell->accessibility_controller();
-  const bool current_enabled = controller->high_contrast_enabled();
+  const bool current_enabled = controller->high_contrast().enabled();
   const bool dialog_ever_accepted =
-      controller->HasHighContrastAcceleratorDialogBeenAccepted();
+      controller->high_contrast().WasDialogAccepted();
 
   if (!current_enabled && !dialog_ever_accepted) {
     shell->accelerator_controller()->MaybeShowConfirmationDialog(
@@ -1402,7 +1402,8 @@ void HandleToggleHighContrast() {
         base::BindOnce([]() {
           Shell::Get()
               ->accessibility_controller()
-              ->SetHighContrastAcceleratorDialogAccepted();
+              ->high_contrast()
+              .SetDialogAccepted();
           SetHighContrastEnabled(true);
         }),
         base::DoNothing());
@@ -1438,8 +1439,7 @@ void HandleToggleFullscreenMagnifier() {
 
   const bool current_enabled = magnification_controller->IsEnabled();
   const bool dialog_ever_accepted =
-      accessibility_controller
-          ->HasScreenMagnifierAcceleratorDialogBeenAccepted();
+      accessibility_controller->fullscreen_magnifier().WasDialogAccepted();
 
   if (!current_enabled && !dialog_ever_accepted) {
     shell->accelerator_controller()->MaybeShowConfirmationDialog(
@@ -1447,7 +1447,8 @@ void HandleToggleFullscreenMagnifier() {
         base::BindOnce([]() {
           Shell::Get()
               ->accessibility_controller()
-              ->SetScreenMagnifierAcceleratorDialogAccepted();
+              ->fullscreen_magnifier()
+              .SetDialogAccepted();
           SetFullscreenMagnifierEnabled(true);
         }),
         base::DoNothing());
@@ -1467,7 +1468,7 @@ void HandleToggleSpokenFeedback() {
 
   Shell* shell = Shell::Get();
   const bool old_value =
-      shell->accessibility_controller()->spoken_feedback_enabled();
+      shell->accessibility_controller()->spoken_feedback().enabled();
 
   RemoveStickyNotitification(kSpokenFeedbackToggleAccelNotificationId);
   if (!is_shortcut_enabled) {

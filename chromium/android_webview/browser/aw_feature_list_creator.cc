@@ -44,6 +44,7 @@
 #include "components/variations/service/safe_seed_manager.h"
 #include "components/variations/service/variations_service.h"
 #include "content/public/common/content_switch_dependent_feature_overrides.h"
+#include "net/nqe/pref_names.h"
 #include "services/preferences/tracked/segregated_pref_store.h"
 
 namespace android_webview {
@@ -74,9 +75,13 @@ const char* const kPersistentPrefsAllowlist[] = {
     metrics::prefs::kStabilityRendererHangCount,
     metrics::prefs::kStabilityRendererLaunchCount,
     metrics::prefs::kUninstallMetricsPageLoadCount,
+    // Unsent logs.
+    metrics::prefs::kMetricsInitialLogs,
+    metrics::prefs::kMetricsOngoingLogs,
     // Unsent logs metadata.
     metrics::prefs::kMetricsInitialLogsMetadata,
     metrics::prefs::kMetricsOngoingLogsMetadata,
+    net::nqe::kNetworkQualities,
     // Current and past country codes, to filter variations studies by country.
     variations::prefs::kVariationsCountry,
     variations::prefs::kVariationsPermanentConsistencyCountry,
@@ -185,7 +190,8 @@ void AwFeatureListCreator::SetUpFieldTrials() {
   client_ = std::make_unique<AwVariationsServiceClient>();
   auto seed_store = std::make_unique<variations::VariationsSeedStore>(
       local_state_.get(), /*initial_seed=*/std::move(seed),
-      /*signature_verification_enabled=*/g_signature_verification_enabled);
+      /*signature_verification_enabled=*/g_signature_verification_enabled,
+      /*use_first_run_prefs=*/false);
 
   if (!seed_date.is_null())
     seed_store->RecordLastFetchTime(seed_date);

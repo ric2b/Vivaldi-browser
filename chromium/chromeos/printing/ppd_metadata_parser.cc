@@ -59,29 +59,17 @@ base::Optional<base::Value> ParseJsonAndUnnestKey(
   return unnested;
 }
 
-// Returns a well-formed Restrictions struct from a dictionary |value|.
-// A well-formed Restrictions struct has at least one member that
-// for which calling base::Version::IsValid() will evaluate true.
-base::Optional<PpdProvider::Restrictions> ParseRestrictionsFromValue(
-    const base::Value& value) {
+// Returns a Restrictions struct from a dictionary |value|.
+Restrictions ParseRestrictionsFromValue(const base::Value& value) {
+  Restrictions restrictions;
   auto min_as_double = value.FindDoubleKey("minMilestone");
   auto max_as_double = value.FindDoubleKey("maxMilestone");
-  if (!min_as_double.has_value() && !max_as_double.has_value()) {
-    return base::nullopt;
-  }
 
-  // While we don't want to deliberately store trivial base::Version
-  // members into the Restrictions struct, take heed that a
-  // calling IsValid() on a default-constructed base::Version returns
-  // false.
-  PpdProvider::Restrictions restrictions;
-  bool restrictions_is_nontrivial = false;
   if (min_as_double.has_value()) {
     base::Version min_milestone =
         base::Version(base::NumberToString(int{min_as_double.value()}));
     if (min_milestone.IsValid()) {
       restrictions.min_milestone = min_milestone;
-      restrictions_is_nontrivial = true;
     }
   }
   if (max_as_double.has_value()) {
@@ -89,14 +77,9 @@ base::Optional<PpdProvider::Restrictions> ParseRestrictionsFromValue(
         base::Version(base::NumberToString(int{max_as_double.value()}));
     if (max_milestone.IsValid()) {
       restrictions.max_milestone = max_milestone;
-      restrictions_is_nontrivial = true;
     }
   }
-
-  if (restrictions_is_nontrivial) {
-    return restrictions;
-  }
-  return base::nullopt;
+  return restrictions;
 }
 
 // Returns a ParsedPrinter from a leaf |value| from Printers metadata.
@@ -139,6 +122,12 @@ base::Optional<ParsedIndexLeaf> ParsedIndexLeafFrom(const base::Value& value) {
   if (restrictions_value) {
     leaf.restrictions = ParseRestrictionsFromValue(*restrictions_value);
   }
+
+  const std::string* const ppd_license = value.FindStringKey("license");
+  if (ppd_license && !ppd_license->empty()) {
+    leaf.license = *ppd_license;
+  }
+
   return leaf;
 }
 
@@ -168,6 +157,11 @@ base::Optional<ParsedIndexValues> UnnestPpdMetadata(const base::Value& value) {
 }
 
 }  // namespace
+
+Restrictions::Restrictions() = default;
+Restrictions::~Restrictions() = default;
+Restrictions::Restrictions(const Restrictions&) = default;
+Restrictions& Restrictions::operator=(const Restrictions&) = default;
 
 ParsedPrinter::ParsedPrinter() = default;
 ParsedPrinter::~ParsedPrinter() = default;
@@ -234,7 +228,7 @@ base::Optional<ParsedIndex> ParseForwardIndex(
   // Firstly, we unnest the dictionary keyed by "ppdIndex."
   base::Optional<base::Value> ppd_index = ParseJsonAndUnnestKey(
       forward_index_json, "ppdIndex", base::Value::Type::DICTIONARY);
-  if (!ppd_index || ppd_index->DictSize() == 0) {
+  if (!ppd_index.has_value()) {
     return base::nullopt;
   }
 
@@ -258,7 +252,7 @@ base::Optional<ParsedIndex> ParseForwardIndex(
 base::Optional<ParsedUsbIndex> ParseUsbIndex(base::StringPiece usb_index_json) {
   base::Optional<base::Value> usb_index = ParseJsonAndUnnestKey(
       usb_index_json, "usbIndex", base::Value::Type::DICTIONARY);
-  if (!usb_index || usb_index->DictSize() == 0) {
+  if (!usb_index.has_value()) {
     return base::nullopt;
   }
 
@@ -281,6 +275,36 @@ base::Optional<ParsedUsbIndex> ParseUsbIndex(base::StringPiece usb_index_json) {
     return base::nullopt;
   }
   return parsed_usb_index;
+}
+
+base::Optional<ParsedUsbVendorIdMap> ParseUsbVendorIdMap(
+    base::StringPiece usb_vendor_id_map_json) {
+  base::Optional<base::Value> as_value = ParseJsonAndUnnestKey(
+      usb_vendor_id_map_json, "entries", base::Value::Type::LIST);
+  if (!as_value.has_value()) {
+    return base::nullopt;
+  }
+
+  ParsedUsbVendorIdMap usb_vendor_ids;
+  for (const auto& usb_vendor_description : as_value->GetList()) {
+    if (!usb_vendor_description.is_dict()) {
+      continue;
+    }
+
+    base::Optional<int> vendor_id =
+        usb_vendor_description.FindIntKey("vendorId");
+    const std::string* const vendor_name =
+        usb_vendor_description.FindStringKey("vendorName");
+    if (!vendor_id.has_value() || !vendor_name || vendor_name->empty()) {
+      continue;
+    }
+    usb_vendor_ids.insert_or_assign(vendor_id.value(), *vendor_name);
+  }
+
+  if (usb_vendor_ids.empty()) {
+    return base::nullopt;
+  }
+  return usb_vendor_ids;
 }
 
 base::Optional<ParsedPrinters> ParsePrinters(base::StringPiece printers_json) {
@@ -312,7 +336,7 @@ base::Optional<ParsedReverseIndex> ParseReverseIndex(
     base::StringPiece reverse_index_json) {
   const base::Optional<base::Value> makes_and_models = ParseJsonAndUnnestKey(
       reverse_index_json, "reverseIndex", base::Value::Type::DICTIONARY);
-  if (!makes_and_models.has_value() || makes_and_models->DictSize() == 0) {
+  if (!makes_and_models.has_value()) {
     return base::nullopt;
   }
 

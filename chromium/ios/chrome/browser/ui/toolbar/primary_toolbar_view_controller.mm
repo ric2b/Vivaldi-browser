@@ -74,8 +74,15 @@
 
 #pragma mark - viewRevealingAnimatee
 
-- (void)animateViewReveal:(BOOL)viewRevealed {
-  self.view.topCornersRounded = !viewRevealed;
+- (void)willAnimateViewReveal:(ViewRevealState)currentViewRevealState {
+}
+
+- (void)animateViewReveal:(ViewRevealState)nextViewRevealState {
+  self.view.topCornersRounded =
+      (nextViewRevealState != ViewRevealState::Hidden);
+}
+
+- (void)didAnimateViewReveal:(ViewRevealState)viewRevealState {
 }
 
 #pragma mark - AdaptiveToolbarViewController
@@ -204,8 +211,12 @@
 
 #pragma mark - ActivityServicePositioner
 
-- (UIView*)shareButtonView {
+- (UIView*)sourceView {
   return self.view.shareButton;
+}
+
+- (CGRect)sourceRect {
+  return self.view.shareButton.bounds;
 }
 
 #pragma mark - FullscreenUIElement

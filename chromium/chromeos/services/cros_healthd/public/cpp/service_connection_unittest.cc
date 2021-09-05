@@ -231,7 +231,7 @@ class CrosHealthdServiceConnectionTest : public testing::Test {
     CrosHealthdClient::Shutdown();
 
     // Wait for ServiceConnection to observe the destruction of the client.
-    base::RunLoop().RunUntilIdle();
+    ServiceConnection::GetInstance()->FlushForTesting();
   }
 
  private:
@@ -480,6 +480,60 @@ TEST_F(CrosHealthdServiceConnectionTest, RunBatteryDischargeRoutine) {
   ServiceConnection::GetInstance()->RunBatteryDischargeRoutine(
       /*exec_duration=*/base::TimeDelta::FromSeconds(12),
       /*maximum_discharge_percent_allowed=*/99,
+      base::BindLambdaForTesting([&](mojom::RunRoutineResponsePtr response) {
+        EXPECT_EQ(response, MakeRunRoutineResponse());
+        run_loop.Quit();
+      }));
+  run_loop.Run();
+}
+
+// Test that we can run the battery charge routine.
+TEST_F(CrosHealthdServiceConnectionTest, RunBatteryChargeRoutine) {
+  auto response = MakeRunRoutineResponse();
+  FakeCrosHealthdClient::Get()->SetRunRoutineResponseForTesting(response);
+  base::RunLoop run_loop;
+  ServiceConnection::GetInstance()->RunBatteryChargeRoutine(
+      /*exec_duration=*/base::TimeDelta::FromSeconds(30),
+      /*minimum_charge_percent_required=*/10,
+      base::BindLambdaForTesting([&](mojom::RunRoutineResponsePtr response) {
+        EXPECT_EQ(response, MakeRunRoutineResponse());
+        run_loop.Quit();
+      }));
+  run_loop.Run();
+}
+
+// Test that we can run the memory routine.
+TEST_F(CrosHealthdServiceConnectionTest, RunMemoryRoutine) {
+  auto response = MakeRunRoutineResponse();
+  FakeCrosHealthdClient::Get()->SetRunRoutineResponseForTesting(response);
+  base::RunLoop run_loop;
+  ServiceConnection::GetInstance()->RunMemoryRoutine(
+      base::BindLambdaForTesting([&](mojom::RunRoutineResponsePtr response) {
+        EXPECT_EQ(response, MakeRunRoutineResponse());
+        run_loop.Quit();
+      }));
+  run_loop.Run();
+}
+
+// Test that we can run the LAN connectivity routine.
+TEST_F(CrosHealthdServiceConnectionTest, RunLanConnectivityRoutine) {
+  auto response = MakeRunRoutineResponse();
+  FakeCrosHealthdClient::Get()->SetRunRoutineResponseForTesting(response);
+  base::RunLoop run_loop;
+  ServiceConnection::GetInstance()->RunLanConnectivityRoutine(
+      base::BindLambdaForTesting([&](mojom::RunRoutineResponsePtr response) {
+        EXPECT_EQ(response, MakeRunRoutineResponse());
+        run_loop.Quit();
+      }));
+  run_loop.Run();
+}
+
+TEST_F(CrosHealthdServiceConnectionTest, RunSignalStrengthRoutine) {
+  // Test that we can run the signal strength routine.
+  auto response = MakeRunRoutineResponse();
+  FakeCrosHealthdClient::Get()->SetRunRoutineResponseForTesting(response);
+  base::RunLoop run_loop;
+  ServiceConnection::GetInstance()->RunSignalStrengthRoutine(
       base::BindLambdaForTesting([&](mojom::RunRoutineResponsePtr response) {
         EXPECT_EQ(response, MakeRunRoutineResponse());
         run_loop.Quit();

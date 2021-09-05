@@ -29,7 +29,6 @@
 #include "components/viz/common/frame_sinks/copy_output_request.h"
 #include "components/viz/common/resources/transferable_resource.h"
 #include "ui/compositor/compositor_switches.h"
-#include "ui/compositor/dip_util.h"
 #include "ui/compositor/layer_animator.h"
 #include "ui/compositor/layer_observer.h"
 #include "ui/compositor/paint_context.h"
@@ -38,6 +37,7 @@
 #include "ui/gfx/geometry/dip_util.h"
 #include "ui/gfx/geometry/point3_f.h"
 #include "ui/gfx/geometry/point_conversions.h"
+#include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/geometry/size_conversions.h"
 #include "ui/gfx/interpolated_transform.h"
 
@@ -273,6 +273,7 @@ std::unique_ptr<Layer> Layer::Clone() const {
   clone->SetMasksToBounds(GetMasksToBounds());
   clone->SetOpacity(GetTargetOpacity());
   clone->SetVisible(GetTargetVisibility());
+  clone->SetClipRect(GetTargetClipRect());
   clone->SetAcceptEvents(accept_events());
   clone->SetFillsBoundsOpaquely(fills_bounds_opaquely_);
   clone->SetFillsBoundsCompletely(fills_bounds_completely_);
@@ -495,6 +496,14 @@ void Layer::SetMasksToBounds(bool masks_to_bounds) {
 
 bool Layer::GetMasksToBounds() const {
   return cc_layer_->masks_to_bounds();
+}
+
+gfx::Rect Layer::GetTargetClipRect() const {
+  if (animator_ &&
+      animator_->IsAnimatingProperty(LayerAnimationElement::CLIP)) {
+    return animator_->GetTargetClipRect();
+  }
+  return clip_rect();
 }
 
 void Layer::SetClipRect(const gfx::Rect& clip_rect) {
@@ -1067,7 +1076,10 @@ void Layer::UpdateNinePatchLayerAperture(const gfx::Rect& aperture_in_dip) {
   DCHECK_EQ(type_, LAYER_NINE_PATCH);
   DCHECK(nine_patch_layer_.get());
   nine_patch_layer_aperture_ = aperture_in_dip;
-  gfx::Rect aperture_in_pixel = ConvertRectToPixel(this, aperture_in_dip);
+  // TODO(danakj): Specifying the aperture in DIPs as integers is not sufficient
+  // and means the resulting aperture in pixels will not be exact.
+  gfx::Rect aperture_in_pixel = gfx::ToEnclosingRect(
+      gfx::ConvertRectToPixels(aperture_in_dip, device_scale_factor()));
   nine_patch_layer_->SetAperture(aperture_in_pixel);
 }
 
@@ -1391,8 +1403,14 @@ void Layer::SetBoundsFromAnimation(const gfx::Rect& bounds,
   if (old_bounds.origin() != bounds_.origin())
     RecomputePosition();
 
+  auto ptr = weak_ptr_factory_.GetWeakPtr();
+
   if (delegate_)
     delegate_->OnLayerBoundsChanged(old_bounds, reason);
+
+  // The layer may be deleted in the observer.
+  if (!ptr)
+    return;
 
   if (bounds.size() == old_bounds.size()) {
     // Don't schedule a draw if we're invisible. We'll schedule one

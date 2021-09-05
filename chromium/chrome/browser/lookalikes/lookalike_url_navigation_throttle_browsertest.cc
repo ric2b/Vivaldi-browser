@@ -9,6 +9,7 @@
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/simple_test_clock.h"
+#include "build/build_config.h"
 #include "chrome/browser/engagement/site_engagement_score.h"
 #include "chrome/browser/engagement/site_engagement_service.h"
 #include "chrome/browser/history/history_service_factory.h"
@@ -32,7 +33,9 @@
 #include "components/security_interstitials/core/metrics_helper.h"
 #include "components/ukm/test_ukm_recorder.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/content_features.h"
 #include "content/public/test/browser_test.h"
+#include "content/public/test/signed_exchange_browser_test_helper.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/http_request.h"
@@ -194,6 +197,7 @@ class LookalikeUrlNavigationThrottleBrowserTest
       base::FieldTrialParams params;
       enabled_features.emplace_back(
           lookalikes::features::kDetectTargetEmbeddingLookalikes, params);
+      enabled_features.emplace_back(features::kSignedHTTPExchange, params);
     } else {
       disabled_features.push_back(
           lookalikes::features::kDetectTargetEmbeddingLookalikes);
@@ -575,14 +579,13 @@ IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleBrowserTest,
 
   if (!punycode_interstitial_enabled()) {
     TestInterstitialNotShown(browser(), kNavigatedUrl);
-    CheckNoUkm();
   } else {
     TestPunycodeInterstitialShown(
         browser(), kNavigatedUrl,
         NavigationSuggestionEvent::kFailedSpoofChecks);
-    CheckUkm({kNavigatedUrl}, "MatchType",
-             LookalikeUrlMatchType::kFailedSpoofChecks);
   }
+  CheckUkm({kNavigatedUrl}, "MatchType",
+           LookalikeUrlMatchType::kFailedSpoofChecks);
 }
 
 // The navigated domain will fall back to punycode because it fails spoof checks
@@ -805,12 +808,19 @@ IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleBrowserTest,
                            custom_test_server.GetURL("googlé.com", "/"));
 }
 
+// TODO(https://crbug.com/1122078): Enable test when MacOS flake is fixed.
+#if defined(OS_MAC)
+#define MAYBE_Idn_SiteEngagement_Match DISABLED_Idn_SiteEngagement_Match
+#else
+#define MAYBE_Idn_SiteEngagement_Match Idn_SiteEngagement_Match
+#endif
+
 // Navigate to a domain whose visual representation looks like a domain with a
 // site engagement score above a certain threshold. This should record metrics.
 // It should also show lookalike warning interstitial if configured via
 // a feature param.
 IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleBrowserTest,
-                       Idn_SiteEngagement_Match) {
+                       MAYBE_Idn_SiteEngagement_Match) {
   const char* const kEngagedSites[] = {
       "http://site1.com", "http://www.site2.com", "http://sité3.com",
       "http://www.sité4.com"};
@@ -879,20 +889,18 @@ IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleBrowserTest,
 
 // The site redirects to the matched site, but the redirect chain has more than
 // two redirects.
-// TODO(meacer): Consider allowing this case.
 IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleBrowserTest,
-                       Idn_SiteEngagement_UnsafeRedirect) {
-  const GURL kExpectedSuggestedUrl = GetURLWithoutPath("site1.com");
+                       Idn_SiteEngagement_MidRedirectSpoofsIgnored) {
+  const GURL kFinalUrl = GetURLWithoutPath("site1.com");
   const GURL kMidUrl = embedded_test_server()->GetURL(
-      "sité1.com", "/server-redirect?" + kExpectedSuggestedUrl.spec());
+      "sité1.com", "/server-redirect?" + kFinalUrl.spec());
   const GURL kNavigatedUrl = embedded_test_server()->GetURL(
       "other-site.test", "/server-redirect?" + kMidUrl.spec());
 
   SetEngagementScore(browser(), kNavigatedUrl, kLowEngagement);
-  SetEngagementScore(browser(), kExpectedSuggestedUrl, kHighEngagement);
-  TestMetricsRecordedAndInterstitialShown(
-      browser(), kNavigatedUrl, kExpectedSuggestedUrl,
-      NavigationSuggestionEvent::kMatchSiteEngagement);
+  SetEngagementScore(browser(), kFinalUrl, kHighEngagement);
+  TestInterstitialNotShown(browser(), kNavigatedUrl);
+  CheckNoUkm();
 }
 
 // The site is allowed by the component updater.
@@ -1115,17 +1123,17 @@ IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleBrowserTest,
   NavigateToURLSync(browser(), GetURL("example.com"));
 
   {
-    // ...or when it's later in the chain
+    // ...but not when it's in the middle of the chain
     const GURL kNavigatedUrl =
         GetLongRedirect("example.net", "googlé.com", "example.com");
     SetEngagementScore(browser(), kNavigatedUrl, kLowEngagement);
-    LoadAndCheckInterstitialAt(browser(), kNavigatedUrl);
+    TestInterstitialNotShown(browser(), kNavigatedUrl);
   }
 
   NavigateToURLSync(browser(), GetURL("example.com"));
 
   {
-    // ...or when it's last in the chain
+    // ...but definitely when it's last in the chain.
     const GURL kNavigatedUrl =
         GetLongRedirect("example.net", "example.com", "googlé.com");
     SetEngagementScore(browser(), kNavigatedUrl, kLowEngagement);
@@ -1250,4 +1258,102 @@ IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleBrowserTest,
   // interstitial.
   TestInterstitialNotShown(browser(),
                            embedded_test_server()->GetURL("example.net", "/"));
+}
+
+// Tests for Signed Exchanges.
+class LookalikeUrlNavigationThrottleSignedExchangeBrowserTest
+    : public LookalikeUrlNavigationThrottleBrowserTest {
+ public:
+  void SetUpOnMainThread() override {
+    sxg_test_helper_.SetUp();
+
+    embedded_test_server()->ServeFilesFromSourceDirectory("content/test/data");
+    embedded_test_server()->RegisterRequestMonitor(base::BindRepeating(
+        &LookalikeUrlNavigationThrottleSignedExchangeBrowserTest::
+            MonitorRequest,
+        base::Unretained(this)));
+    LookalikeUrlNavigationThrottleBrowserTest::SetUpOnMainThread();
+  }
+
+  void TearDownOnMainThread() override {
+    sxg_test_helper_.TearDownOnMainThread();
+  }
+
+  bool HadSignedExchangeInAcceptHeader(const GURL& url) const {
+    const auto it = url_accept_header_map_.find(url);
+    if (it == url_accept_header_map_.end())
+      return false;
+    return it->second.find("application/signed-exchange") != std::string::npos;
+  }
+
+ protected:
+  content::SignedExchangeBrowserTestHelper sxg_test_helper_;
+
+ private:
+  void MonitorRequest(const net::test_server::HttpRequest& request) {
+    const auto it = request.headers.find("Accept");
+    if (it == request.headers.end())
+      return;
+    url_accept_header_map_[request.base_url.Resolve(request.relative_url)] =
+        it->second;
+  }
+
+  std::map<GURL, std::string> url_accept_header_map_;
+};
+
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    LookalikeUrlNavigationThrottleSignedExchangeBrowserTest,
+    testing::Combine(testing::Bool(), testing::Bool()));
+
+// Navigates to a 127.0.0.1 URL that serves a signed exchange for
+// google-com.example.org. This navigation should be blocked by the target
+// embedding interstitial. We only test target embedding here because we can
+// test it with a subdomain of example.org (which is the domain used by SGX test
+// code). Testing an ETLD+1 such as googlé.com would require generating a custom
+// cert.
+IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleSignedExchangeBrowserTest,
+                       SignedExchange_ShouldBlockTarget) {
+  if (!target_embedding_enabled()) {
+    return;
+  }
+  sxg_test_helper_.InstallUrlInterceptor(
+      GURL("https://google-com.example.org/test/"),
+      "content/test/data/sxg/fallback.html");
+  const GURL kNavigatedUrl =
+      embedded_test_server()->GetURL("/sxg/google-com.example.org_test.sxg");
+  const GURL kExpectedSuggestedUrl("https://google.com");
+
+  TestMetricsRecordedAndInterstitialShown(
+      browser(), kNavigatedUrl, kExpectedSuggestedUrl,
+      NavigationSuggestionEvent::kMatchTargetEmbedding);
+
+  // Check that the SXG file was handled as a Signed Exchange.
+  ASSERT_TRUE(HadSignedExchangeInAcceptHeader(kNavigatedUrl));
+}
+
+// Navigates to a lookalike URL that serves a signed exchange for
+// test.example.org. This should also be blocked by the lookalike interstitial,
+// even though the URL that serves the signed exchange is never visible to
+// the user.
+IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleSignedExchangeBrowserTest,
+                       SignedExchange_ShouldBlockCacheUrl) {
+  if (!target_embedding_enabled()) {
+    return;
+  }
+  const GURL kSgxTargetUrl("https://test.example.org/test/");
+  sxg_test_helper_.InstallUrlInterceptor(kSgxTargetUrl,
+                                         "content/test/data/sxg/fallback.html");
+  const GURL kNavigatedUrl = embedded_test_server()->GetURL(
+      "google-com.test.com", "/sxg/test.example.org_test.sxg");
+  const GURL kExpectedSuggestedUrl =
+      embedded_test_server()->GetURL("google.com", "/");
+
+  TestMetricsRecordedAndInterstitialShown(
+      browser(), kNavigatedUrl, kExpectedSuggestedUrl,
+      NavigationSuggestionEvent::kMatchTargetEmbedding);
+
+  // Check that no SXG response was handled.
+  ASSERT_FALSE(HadSignedExchangeInAcceptHeader(kNavigatedUrl));
+  ASSERT_FALSE(HadSignedExchangeInAcceptHeader(kSgxTargetUrl));
 }

@@ -37,14 +37,14 @@ message WebAppSpecifics {
   // chrome/browser/web_applications/proto/web_app.proto and
   // third_party/blink/public/mojom/manifest/display_mode.mojom
   enum UserDisplayMode {
-    // UNDEFINED is never serialized.
+    UNSPECIFIED = 0;
     BROWSER = 1;
     // MINIMAL_UI is never serialized.
     STANDALONE = 3;
     // FULLSCREEN is never serialized.
   }
 
-  optional string launch_url = 1;
+  optional string start_url = 1;
   optional string name = 2;
   optional UserDisplayMode user_display_mode = 3;
   optional uint32 theme_color = 4;

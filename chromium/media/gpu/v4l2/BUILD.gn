@@ -8,7 +8,6 @@ import("//media/gpu/args.gni")
 import("//testing/test.gni")
 import("//tools/generate_stubs/rules.gni")
 import("//ui/gl/features.gni")
-import("//ui/ozone/ozone.gni")
 
 assert(use_v4l2_codec)
 
@@ -24,6 +23,8 @@ if (use_v4lplugin) {
 source_set("v4l2") {
   defines = [ "MEDIA_GPU_IMPLEMENTATION" ]
   sources = [
+    "buffer_affinity_tracker.cc",
+    "buffer_affinity_tracker.h",
     "generic_v4l2_device.cc",
     "generic_v4l2_device.h",
     "v4l2_decode_surface.cc",
@@ -61,8 +62,8 @@ source_set("v4l2") {
     "v4l2_vp8_accelerator.h",
     "v4l2_vp8_accelerator_legacy.cc",
     "v4l2_vp8_accelerator_legacy.h",
-    "v4l2_vp9_accelerator.cc",
-    "v4l2_vp9_accelerator.h",
+    "v4l2_vp9_accelerator_legacy.cc",
+    "v4l2_vp9_accelerator_legacy.h",
   ]
 
   libs = [

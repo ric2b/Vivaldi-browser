@@ -445,11 +445,7 @@ base::Value ReadPrefsJson() {
   // window, so need to allow IO.
   base::ThreadRestrictions::ScopedAllowIO allow_io;
   base::FilePath prefs_definition_file;
-#if !defined(OS_ANDROID)
-  GetDeveloperFilePath(kPrefsDefinitionFileName, &prefs_definition_file);
-#endif  // !OS_ANDROID
-
-std::string prefs_definitions_content;
+  std::string prefs_definitions_content;
 
 #if defined(OS_ANDROID)
   // For Android, get the prefs definitions from assets.
@@ -472,6 +468,7 @@ std::string prefs_definitions_content;
         mapped_file->length());
   }
 #else  // defined(OS_ANDROID)
+  GetDeveloperFilePath(kPrefsDefinitionFileName, &prefs_definition_file);
   if (prefs_definition_file.empty() ||
       !base::PathExists(prefs_definition_file)) {
     base::PathService::Get(chrome::DIR_RESOURCES, &prefs_definition_file);

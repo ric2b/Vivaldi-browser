@@ -6,7 +6,7 @@
 
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/mock_callback.h"
-#include "chrome/browser/safe_browsing/dm_token_utils.h"
+#include "chrome/browser/policy/dm_token_utils.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/policy/core/common/cloud/dm_token.h"
@@ -43,7 +43,6 @@ class ChromeEnterpriseRealTimeUrlLookupServiceTest : public PlatformTest {
     content_setting_map_ = new HostContentSettingsMap(
         &test_pref_service_, false /* is_off_the_record */,
         false /* store_last_modified */,
-        false /* migrate_requesting_and_top_level_origin_settings */,
         false /* restore_session */);
     cache_manager_ = std::make_unique<VerdictCacheManager>(
         nullptr, content_setting_map_.get());

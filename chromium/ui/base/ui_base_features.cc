@@ -4,6 +4,8 @@
 
 #include "ui/base/ui_base_features.h"
 
+#include "build/chromeos_buildflags.h"
+
 #if defined(OS_WIN)
 #include "base/win/windows_version.h"
 #endif
@@ -13,7 +15,7 @@ namespace features {
 #if defined(OS_WIN)
 // If enabled, calculate native window occlusion - Windows-only.
 const base::Feature kCalculateNativeWinOcclusion{
-    "CalculateNativeWinOcclusion", base::FEATURE_DISABLED_BY_DEFAULT};
+    "CalculateNativeWinOcclusion", base::FEATURE_ENABLED_BY_DEFAULT};
 #endif  // OW_WIN
 
 // Whether or not to delegate color queries to the color provider.
@@ -229,7 +231,7 @@ bool IsUsingOzonePlatform() {
   // Only allow enabling and disabling the OzonePlatform on USE_X11 && USE_OZONE
   // builds.
   static const bool using_ozone_platform =
-#if defined(USE_X11) && defined(USE_OZONE)
+#if defined(USE_X11) && defined(USE_OZONE) && !BUILDFLAG(IS_LACROS)
       base::FeatureList::IsEnabled(kUseOzonePlatform);
 #elif defined(USE_X11) && !defined(USE_OZONE)
       // This shouldn't be switchable for pure X11 builds.
@@ -252,5 +254,8 @@ const char kPredictorNameEmpty[] = "empty";
 
 const char kFilterNameEmpty[] = "empty_filter";
 const char kFilterNameOneEuro[] = "one_euro_filter";
+
+const base::Feature kSwipeToMoveCursor{"SwipeToMoveCursor",
+                                       base::FEATURE_DISABLED_BY_DEFAULT};
 
 }  // namespace features

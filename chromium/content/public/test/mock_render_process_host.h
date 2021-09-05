@@ -153,7 +153,6 @@ class MockRenderProcessHost : public RenderProcessHost {
   void DecrementKeepAliveRefCount() override;
   void DisableKeepAliveRefCount() override;
   bool IsKeepAliveRefCountDisabled() override;
-  void Resume() override;
   mojom::Renderer* GetRendererInterface() override;
   void CreateURLLoaderFactory(
       mojo::PendingReceiver<network::mojom::URLLoaderFactory> receiver,
@@ -166,7 +165,7 @@ class MockRenderProcessHost : public RenderProcessHost {
   bool HostHasNotBeenUsed() override;
   void SetProcessLock(const IsolationContext& isolation_context,
                       const ProcessLock& process_lock) override;
-  bool IsProcessLockedForTesting() override;
+  bool IsProcessLockedToSiteForTesting() override;
   void BindCacheStorage(
       const network::CrossOriginEmbedderPolicy&,
       mojo::PendingRemote<network::mojom::CrossOriginEmbedderPolicyReporter>,
@@ -199,6 +198,12 @@ class MockRenderProcessHost : public RenderProcessHost {
       int render_frame_id,
       const url::Origin& origin,
       mojo::PendingReceiver<blink::mojom::LockManager> receiver) override {}
+  void CreateOneShotSyncService(
+      mojo::PendingReceiver<blink::mojom::OneShotBackgroundSyncService>
+          receiver) override {}
+  void CreatePeriodicSyncService(
+      mojo::PendingReceiver<blink::mojom::PeriodicBackgroundSyncService>
+          receiver) override {}
   void CreatePermissionService(
       const url::Origin& origin,
       mojo::PendingReceiver<blink::mojom::PermissionService> receiver)

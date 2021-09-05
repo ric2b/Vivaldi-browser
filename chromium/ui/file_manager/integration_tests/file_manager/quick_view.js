@@ -528,6 +528,10 @@
 
     // Open a DocumentsProvider file in Quick View.
     await openQuickView(appId, ENTRIES.hello.nameText);
+
+    // crbug.com/1131298 The text file content is not displayed. The <webview>
+    // instead shows a "site cannot be reached" error.
+    return IGNORE_APP_ERRORS;
   };
 
   /**
@@ -614,6 +618,58 @@
       'files-metadata-entry[key="Type"]', '#box[hidden]'
     ];
     await remoteCall.waitForElement(appId, mimeTypeQuery);
+  };
+
+  /**
+   * Tests opening Quick View with a text file containing some UTF-8 encoded
+   * characters: crbug.com/1064855
+   */
+  testcase.openQuickViewUtf8Text = async () => {
+    const caller = getCaller();
+
+    /**
+     * The text <webview> resides in the #quick-view shadow DOM, as a child of
+     * the #dialog element.
+     */
+    const webView = ['#quick-view', '#dialog[open] webview.text-content'];
+
+    // Open Files app on Downloads containing ENTRIES.utf8Text.
+    const appId = await setupAndWaitUntilReady(
+        RootPath.DOWNLOADS, [ENTRIES.utf8Text], []);
+
+    // Open the file in Quick View.
+    await openQuickView(appId, ENTRIES.utf8Text.nameText);
+
+    // Wait for the Quick View <webview> to load and display its content.
+    function checkWebViewTextLoaded(elements) {
+      let haveElements = Array.isArray(elements) && elements.length === 1;
+      if (haveElements) {
+        haveElements = elements[0].styles.display.includes('block');
+      }
+      if (!haveElements || !elements[0].attributes.src) {
+        return pending(caller, 'Waiting for <webview> to load.');
+      }
+      return;
+    }
+    await repeatUntil(async () => {
+      return checkWebViewTextLoaded(await remoteCall.callRemoteTestUtil(
+          'deepQueryAllElements', appId, [webView, ['display']]));
+    });
+
+    // Wait until the <webview> displays the file's content.
+    await repeatUntil(async () => {
+      const getTextContent = 'window.document.body.textContent';
+      const text = await remoteCall.callRemoteTestUtil(
+          'deepExecuteScriptInWebView', appId, [webView, getTextContent]);
+      // Check: the content of ENTRIES.utf8Text should be shown.
+      if (!text || !text[0].includes('їсти मुझे |∊☀✌✂♁ 🙂\n')) {
+        return pending(caller, 'Waiting for <webview> content.');
+      }
+    });
+
+    // Check: the correct file size should be shown.
+    const size = await getQuickViewMetadataBoxField(appId, 'Size');
+    chrome.test.assertEq('191 bytes', size);
   };
 
   /**
@@ -1249,7 +1305,7 @@
     const size = await getQuickViewMetadataBoxField(appId, 'Dimensions');
     chrome.test.assertEq('378 x 272', size);
     const model = await getQuickViewMetadataBoxField(appId, 'Device model');
-    chrome.test.assertEq(model, 'FinePix S5000');
+    chrome.test.assertEq('FinePix S5000', model);
     const film = await getQuickViewMetadataBoxField(appId, 'Device settings');
     chrome.test.assertEq('f/2.8 0.004 5.7mm ISO200', film);
   };
@@ -1299,7 +1355,7 @@
     const size = await getQuickViewMetadataBoxField(appId, 'Dimensions');
     chrome.test.assertEq('4608 x 3456', size);
     const model = await getQuickViewMetadataBoxField(appId, 'Device model');
-    chrome.test.assertEq(model, 'E-M1');
+    chrome.test.assertEq('E-M1', model);
     const film = await getQuickViewMetadataBoxField(appId, 'Device settings');
     chrome.test.assertEq('f/8 0.002 12mm ISO200', film);
   };
@@ -2308,7 +2364,7 @@
       const result = await sendTestMessage(
           {name: 'dispatchTabKey', shift: query.shift || false});
       chrome.test.assertEq(
-          result, 'tabKeyDispatched', 'Tab key dispatch failure');
+          'tabKeyDispatched', result, 'Tab key dispatch failure');
 
       // Note: Allow 500ms between key events to filter out the focus
       // traversal problems noted in crbug.com/907380#c10.
@@ -2346,7 +2402,44 @@
       const result = await sendTestMessage(
           {name: 'dispatchTabKey', shift: query.shift || false});
       chrome.test.assertEq(
-          result, 'tabKeyDispatched', 'Tab key dispatch failure');
+          'tabKeyDispatched', result, 'Tab key dispatch failure');
+
+      // Note: Allow 500ms between key events to filter out the focus
+      // traversal problems noted in crbug.com/907380#c10.
+      await wait(500);
+
+      // Check: the queried element should gain the focus.
+      await remoteCall.waitForElement(appId, query.query);
+    }
+  };
+
+  /**
+   * Tests the tab-index focus order when sending tab keys when an HTML file is
+   * shown in Quick View.
+   */
+  testcase.openQuickViewTabIndexHtml = async () => {
+    // Prepare a list of tab-index focus queries.
+    const tabQueries = [
+      {'query': ['#quick-view', '[aria-label="Back"]:focus']},
+      {'query': ['#quick-view', '[aria-label="Open"]:focus']},
+      {'query': ['#quick-view', '[aria-label="Delete"]:focus']},
+      {'query': ['#quick-view', '[aria-label="File info"]:focus']},
+      {'query': ['#quick-view', '[aria-label="Back"]:focus']},
+    ];
+
+    // Open Files app on Downloads containing ENTRIES.tallHtml.
+    const appId = await setupAndWaitUntilReady(
+        RootPath.DOWNLOADS, [ENTRIES.tallHtml], []);
+
+    // Open the file in Quick View.
+    await openQuickView(appId, ENTRIES.tallHtml.nameText);
+
+    for (const query of tabQueries) {
+      // Make the browser dispatch a tab key event to FilesApp.
+      const result = await sendTestMessage(
+          {name: 'dispatchTabKey', shift: query.shift || false});
+      chrome.test.assertEq(
+          'tabKeyDispatched', result, 'Tab key dispatch failure');
 
       // Note: Allow 500ms between key events to filter out the focus
       // traversal problems noted in crbug.com/907380#c10.
@@ -2382,7 +2475,7 @@
       const result = await sendTestMessage(
           {name: 'dispatchTabKey', shift: query.shift || false});
       chrome.test.assertEq(
-          result, 'tabKeyDispatched', 'Tab key dispatch failure');
+          'tabKeyDispatched', result, 'Tab key dispatch failure');
 
       // Note: Allow 500ms between key events to filter out the focus
       // traversal problems noted in crbug.com/907380#c10.
@@ -2398,7 +2491,7 @@
       const result =
           await sendTestMessage({name: 'dispatchTabKey', shift: false});
       chrome.test.assertEq(
-          result, 'tabKeyDispatched', 'Tab key dispatch failure');
+          'tabKeyDispatched', result, 'Tab key dispatch failure');
 
       // Note: Allow 500ms between key events to filter out the focus
       // traversal problems noted in crbug.com/907380#c10.
@@ -2438,7 +2531,7 @@
       const result = await sendTestMessage(
           {name: 'dispatchTabKey', shift: query.shift || false});
       chrome.test.assertEq(
-          result, 'tabKeyDispatched', 'Tab key dispatch failure');
+          'tabKeyDispatched', result, 'Tab key dispatch failure');
 
       // Note: Allow 500ms between key events to filter out the focus
       // traversal problems noted in crbug.com/907380#c10.
@@ -2454,7 +2547,7 @@
       const result =
           await sendTestMessage({name: 'dispatchTabKey', shift: false});
       chrome.test.assertEq(
-          result, 'tabKeyDispatched', 'Tab key dispatch failure');
+          'tabKeyDispatched', result, 'Tab key dispatch failure');
 
       // Note: Allow 500ms between key events to filter out the focus
       // traversal problems noted in crbug.com/907380#c10.
@@ -2502,7 +2595,7 @@
       const result = await sendTestMessage(
           {name: 'dispatchTabKey', shift: query.shift || false});
       chrome.test.assertEq(
-          result, 'tabKeyDispatched', 'Tab key dispatch failure');
+          'tabKeyDispatched', result, 'Tab key dispatch failure');
 
       // Note: Allow 500ms between key events to filter out the focus
       // traversal problems noted in crbug.com/907380#c10.
@@ -2608,11 +2701,10 @@
           'deepQueryAllElements', appId, [videoWebView, ['display']]));
     });
 
-    // Check: The MIME type of |world.ogv| is audio/ogg
+    // Check: The MIME type of |world.ogv| is video/ogg
     const mimeType = await getQuickViewMetadataBoxField(appId, 'Type');
-    chrome.test.assertEq(mimeType, 'audio/ogg');
+    chrome.test.assertEq('video/ogg', mimeType);
   };
-
 
   /**
    * Tests that deleting all items in a check-selection closes the Quick View.
@@ -2984,7 +3076,7 @@
     await repeatUntil(async () => {
       const result = await sendTestMessage({name: 'dispatchTabKey'});
       chrome.test.assertEq(
-          result, 'tabKeyDispatched', 'Tab key dispatch failure');
+          'tabKeyDispatched', result, 'Tab key dispatch failure');
 
       const element =
           await remoteCall.callRemoteTestUtil('getActiveElement', appId, []);

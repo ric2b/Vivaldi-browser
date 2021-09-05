@@ -32,13 +32,9 @@ if (use_gnome_keyring) {
 
 component("os_crypt") {
   sources = [
-    "keychain_password_mac.h",
-    "keychain_password_mac.mm",
     "os_crypt.h",
-    "os_crypt_mac.mm",
     "os_crypt_switches.cc",
     "os_crypt_switches.h",
-    "os_crypt_win.cc",
   ]
 
   deps = [
@@ -53,22 +49,21 @@ component("os_crypt") {
 
   defines = [ "IS_OS_CRYPT_IMPL" ]
 
-  if ((is_posix || is_fuchsia) && !is_mac && !is_ios &&
+  if ((is_posix || is_fuchsia) && !is_apple &&
       (!is_desktop_linux || is_chromecast)) {
     sources += [ "os_crypt_posix.cc" ]
   }
 
-  if (is_ios) {
-    set_sources_assignment_filter([])
+  if (is_apple) {
     sources += [
       "keychain_password_mac.h",
       "keychain_password_mac.mm",
       "os_crypt_mac.mm",
     ]
-    set_sources_assignment_filter(sources_assignment_filter)
   }
 
   if (is_win) {
+    sources += [ "os_crypt_win.cc" ]
     libs = [ "crypt32.lib" ]
   }
 
@@ -148,10 +143,7 @@ static_library("test_support") {
 
 source_set("unit_tests") {
   testonly = true
-  sources = [
-    "keychain_password_mac_unittest.mm",
-    "os_crypt_unittest.cc",
-  ]
+  sources = [ "os_crypt_unittest.cc" ]
   deps = [
     ":os_crypt",
     ":test_support",
@@ -164,10 +156,8 @@ source_set("unit_tests") {
     "//testing/gtest",
   ]
 
-  if (is_ios) {
-    set_sources_assignment_filter([])
+  if (is_apple) {
     sources += [ "keychain_password_mac_unittest.mm" ]
-    set_sources_assignment_filter(sources_assignment_filter)
   }
 
   if (is_desktop_linux && !is_chromecast) {

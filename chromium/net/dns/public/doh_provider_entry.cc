@@ -33,6 +33,13 @@ const DohProviderEntry::List& DohProviderEntry::GetList() {
   // DohProviderId histogram suffix list in
   // tools/metrics/histograms/histograms.xml.
   static const base::NoDestructor<DohProviderEntry::List> providers{{
+      new DohProviderEntry("AlekBergNl", DohProviderIdForHistogram::kAlekBergNl,
+                           {} /* ip_strs */, {} /* dns_over_tls_hostnames */,
+                           "https://dnsnl.alekberg.net/dns-query{?dns}",
+                           "alekberg.net (NL)" /* ui_name */,
+                           "https://alekberg.net/privacy" /* privacy_policy */,
+                           false /* display_globally */,
+                           {"NL"} /* display_countries */),
       new DohProviderEntry(
           "CleanBrowsingAdult", base::nullopt /* provider_id_for_histogram */,
           {"185.228.168.10", "185.228.169.11", "2a0d:2a00:1::1",
@@ -79,11 +86,12 @@ const DohProviderEntry::List& DohProviderEntry::GetList() {
           "" /* privacy_policy */, false /* display_globally */,
           {} /* display_countries */),
       new DohProviderEntry(
-          "Cznic", base::nullopt /* provider_id_for_histogram */,
+          "Cznic", DohProviderIdForHistogram::kCznic,
           {"185.43.135.1", "2001:148f:fffe::1"},
           {"odvr.nic.cz"} /* dns_over_tls_hostnames */,
-          "https://odvr.nic.cz/doh", "" /* ui_name */, "" /* privacy_policy */,
-          false /* display_globally */, {} /* display_countries */),
+          "https://odvr.nic.cz/doh", "CZ.NIC ODVR" /* ui_name */,
+          "https://www.nic.cz/odvr/" /* privacy_policy */,
+          false /* display_globally */, {"CZ"} /* display_countries */),
       // Note: DNS.SB has separate entries for autoupgrade and settings UI to
       // allow the extra |no_ecs| parameter for autoupgrade. This parameter
       // disables EDNS Client Subnet (ECS) handling in order to match the
@@ -112,6 +120,13 @@ const DohProviderEntry::List& DohProviderEntry::GetList() {
                            "privacy" /* privacy_policy */,
                            true /* display_globally */,
                            {} /* display_countries */),
+      new DohProviderEntry(
+          "GoogleDns64", base::nullopt /* provider_id_for_histogram */,
+          {"2001:4860:4860::64", "2001:4860:4860::6464"},
+          {"dns64.dns.google"} /* dns_over_tls_hostnames */,
+          "https://dns64.dns.google/dns-query{?dns}", "" /* ui_name */,
+          "" /* privacy_policy */, false /* display_globally */,
+          {} /* display_countries */),
       new DohProviderEntry("Iij", DohProviderIdForHistogram::kIij,
                            {} /* ip_strs */, {} /* dns_over_tls_hostnames */,
                            "https://public.dns.iij.jp/dns-query",
@@ -120,13 +135,20 @@ const DohProviderEntry::List& DohProviderEntry::GetList() {
                            false /* display_globally */,
                            {"JP"} /* display_countries */),
       new DohProviderEntry(
-          "OpenDNS", base::nullopt /* provider_id_for_histogram */,
+          "NextDns", DohProviderIdForHistogram::kNextDns, {} /* ip_strs */,
+          {} /* dns_over_tls_hostnames */, "https://chromium.dns.nextdns.io",
+          "NextDNS" /* ui_name */,
+          "https://nextdns.io/privacy" /* privacy_policy */,
+          false /* display_globally */, {"US"} /* display_countries */),
+      new DohProviderEntry(
+          "OpenDNS", DohProviderIdForHistogram::kOpenDns,
           {"208.67.222.222", "208.67.220.220", "2620:119:35::35",
            "2620:119:53::53"},
           {""} /* dns_over_tls_hostnames */,
-          "https://doh.opendns.com/dns-query{?dns}", "" /* ui_name */,
-          "" /* privacy_policy */, false /* display_globally */,
-          {} /* display_countries */),
+          "https://doh.opendns.com/dns-query{?dns}", "OpenDNS" /* ui_name */,
+          "https://www.cisco.com/c/en/us/about/legal/"
+          "privacy-full.html" /* privacy_policy */,
+          true /* display_globally */, {} /* display_countries */),
       new DohProviderEntry(
           "OpenDNSFamily", base::nullopt /* provider_id_for_histogram */,
           {"208.67.222.123", "208.67.220.123", "2620:119:35::123",
@@ -156,6 +178,30 @@ const DohProviderEntry::List& DohProviderEntry::GetList() {
           "https://dns.quad9.net/dns-query", "Quad9 (9.9.9.9)" /* ui_name */,
           "https://www.quad9.net/home/privacy/" /* privacy_policy */,
           true /* display_globally */, {} /* display_countries */),
+      new DohProviderEntry(
+          "Quickline", base::nullopt /* provider_id_for_histogram */,
+          {"212.60.61.246", "212.60.63.246", "2001:1a88:10:ffff::1",
+           "2001:1a88:10:ffff::2"},
+          {"dot.quickline.ch"} /* dns_over_tls_hostnames */,
+          "https://doh.quickline.ch/dns-query{?dns}", "" /* ui_name */,
+          "" /* privacy_policy */, false /* display_globally */,
+          {} /* display_countries */),
+      new DohProviderEntry(
+          "Spectrum1", base::nullopt /* provider_id_for_histogram */,
+          {"209.18.47.61", "209.18.47.62", "2001:1998:0f00:0001::1",
+           "2001:1998:0f00:0002::1"},
+          {""} /* dns_over_tls_hostnames */,
+          "https://doh-01.spectrum.com/dns-query{?dns}", "" /* ui_name */,
+          "" /* privacy_policy */, false /* display_globally */,
+          {} /* display_countries */),
+      new DohProviderEntry(
+          "Spectrum2", base::nullopt /* provider_id_for_histogram */,
+          {"209.18.47.61", "209.18.47.62", "2001:1998:0f00:0001::1",
+           "2001:1998:0f00:0002::1"},
+          {""} /* dns_over_tls_hostnames */,
+          "https://doh-02.spectrum.com/dns-query{?dns}", "" /* ui_name */,
+          "" /* privacy_policy */, false /* display_globally */,
+          {} /* display_countries */),
       new DohProviderEntry(
           "Switch", base::nullopt /* provider_id_for_histogram */,
           {"130.59.31.251", "130.59.31.248", "2001:620:0:ff::2",

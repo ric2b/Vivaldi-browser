@@ -513,8 +513,12 @@ UIImage* CropImage(UIImage* image, const CGRect& cropRect) {
   return result;
 }
 
-UIInterfaceOrientation GetInterfaceOrientation() {
+UIInterfaceOrientation GetInterfaceOrientation(UIWindow* window) {
+#if !defined(__IPHONE_13_0) || __IPHONE_OS_VERSION_MIN_REQUIRED < __IPHONE_13_0
   return [[UIApplication sharedApplication] statusBarOrientation];
+#else
+  return window.windowScene.interfaceOrientation;
+#endif
 }
 
 CGFloat CurrentKeyboardHeight(NSValue* keyboardFrameValue) {
@@ -571,36 +575,30 @@ UIColor* InterpolateFromColorToColor(UIColor* firstColor,
                          alpha:Lerp(a1, a2, fraction)];
 }
 
+bool IsPortrait(UIWindow* window) {
+  UIInterfaceOrientation orient = GetInterfaceOrientation(window);
+  return UIInterfaceOrientationIsPortrait(orient) ||
+         orient == UIInterfaceOrientationUnknown;
+}
+
+bool IsLandscape(UIWindow* window) {
+  return UIInterfaceOrientationIsLandscape(GetInterfaceOrientation(window));
+}
+
 bool IsCompactWidth(id<UITraitEnvironment> environment) {
-  return environment.traitCollection.horizontalSizeClass ==
-         UIUserInterfaceSizeClassCompact;
+  return IsCompactWidth(environment.traitCollection);
 }
 
-bool IsCompactWidth() {
-  UIWindow* keyWindow = [UIApplication sharedApplication].keyWindow;
-  return IsCompactWidth(keyWindow);
-}
-
-bool IsCompactTablet(id<UITraitEnvironment> environment) {
-  return IsIPadIdiom() && IsCompactWidth(environment);
-}
-
-bool IsCompactTablet() {
-  return IsIPadIdiom() && IsCompactWidth();
-}
-
-bool IsCompactHeight() {
-  return IsCompactHeight([UIApplication sharedApplication].keyWindow);
+bool IsCompactWidth(UITraitCollection* traitCollection) {
+  return traitCollection.horizontalSizeClass == UIUserInterfaceSizeClassCompact;
 }
 
 bool IsCompactHeight(id<UITraitEnvironment> environment) {
-  return environment.traitCollection.verticalSizeClass ==
-         UIUserInterfaceSizeClassCompact;
+  return IsCompactHeight(environment.traitCollection);
 }
 
-bool IsRegularXRegularSizeClass() {
-  UIWindow* keyWindow = [UIApplication sharedApplication].keyWindow;
-  return IsRegularXRegularSizeClass(keyWindow);
+bool IsCompactHeight(UITraitCollection* traitCollection) {
+  return traitCollection.verticalSizeClass == UIUserInterfaceSizeClassCompact;
 }
 
 bool IsRegularXRegularSizeClass(id<UITraitEnvironment> environment) {
@@ -612,20 +610,20 @@ bool IsRegularXRegularSizeClass(UITraitCollection* traitCollection) {
          traitCollection.horizontalSizeClass == UIUserInterfaceSizeClassRegular;
 }
 
+bool ShouldShowCompactToolbar(id<UITraitEnvironment> environment) {
+  return ShouldShowCompactToolbar(environment.traitCollection);
+}
+
 bool ShouldShowCompactToolbar(UITraitCollection* traitCollection) {
   return !IsRegularXRegularSizeClass(traitCollection);
 }
 
-bool ShouldShowCompactToolbar() {
-  return !IsRegularXRegularSizeClass();
-}
-
-bool IsSplitToolbarMode() {
-  return IsCompactWidth() && !IsCompactHeight();
-}
-
 bool IsSplitToolbarMode(id<UITraitEnvironment> environment) {
-  return IsCompactWidth(environment) && !IsCompactHeight(environment);
+  return IsSplitToolbarMode(environment.traitCollection);
+}
+
+bool IsSplitToolbarMode(UITraitCollection* traitCollection) {
+  return IsCompactWidth(traitCollection) && !IsCompactHeight(traitCollection);
 }
 
 UIView* GetFirstResponderSubview(UIView* view) {

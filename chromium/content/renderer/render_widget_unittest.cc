@@ -28,10 +28,10 @@
 #include "content/public/common/content_features.h"
 #include "content/public/test/fake_render_widget_host.h"
 #include "content/public/test/mock_render_thread.h"
+#include "content/renderer/agent_scheduling_group.h"
 #include "content/renderer/render_frame_proxy.h"
 #include "content/renderer/render_process.h"
 #include "content/renderer/render_widget_delegate.h"
-#include "content/renderer/render_widget_screen_metrics_emulator.h"
 #include "content/test/fake_compositor_dependencies.h"
 #include "ipc/ipc_test_sink.h"
 #include "mojo/public/cpp/bindings/pending_associated_receiver.h"
@@ -146,15 +146,28 @@ class MockWebExternalWidgetClient : public blink::WebExternalWidgetClient {
   bool SupportsBufferedTouchEvents() override { return true; }
 };
 
+std::unique_ptr<AgentSchedulingGroup> CreateAgentSchedulingGroup(
+    RenderThread& render_thread) {
+  mojo::PendingAssociatedRemote<mojom::AgentSchedulingGroupHost>
+      agent_scheduling_group_host;
+  ignore_result(
+      agent_scheduling_group_host.InitWithNewEndpointAndPassReceiver());
+  mojo::PendingAssociatedReceiver<mojom::AgentSchedulingGroup>
+      agent_scheduling_group_mojo;
+  return std::make_unique<AgentSchedulingGroup>(
+      render_thread, std::move(agent_scheduling_group_host),
+      std::move(agent_scheduling_group_mojo));
+}
+
 }  // namespace
 
 class InteractiveRenderWidget : public RenderWidget {
  public:
-  explicit InteractiveRenderWidget(CompositorDependencies* compositor_deps)
-      : RenderWidget(++next_routing_id_,
-                     compositor_deps,
-                     /*is_hidden=*/false,
-                     /*never_composited=*/false) {}
+  explicit InteractiveRenderWidget(AgentSchedulingGroup& agent_scheduling_group,
+                                   CompositorDependencies* compositor_deps)
+      : RenderWidget(agent_scheduling_group,
+                     ++next_routing_id_,
+                     compositor_deps) {}
 
   void Init(blink::WebWidget* widget, const blink::ScreenInfo& screen_info) {
     Initialize(base::NullCallback(), widget, screen_info);
@@ -164,7 +177,7 @@ class InteractiveRenderWidget : public RenderWidget {
 
   void SendInputEvent(const blink::WebInputEvent& event,
                       blink::WebWidget::HandledEventCallback callback) {
-    GetWebWidget()->ProcessInputEventSynchronously(
+    GetWebWidget()->ProcessInputEventSynchronouslyForTesting(
         blink::WebCoalescedInputEvent(event.Clone(), {}, {}, ui::LatencyInfo()),
         std::move(callback));
   }
@@ -211,30 +224,30 @@ class RenderWidgetUnittest : public testing::Test {
     mojo::AssociatedRemote<blink::mojom::FrameWidget> frame_widget_remote;
     mojo::PendingAssociatedReceiver<blink::mojom::FrameWidget>
         frame_widget_receiver =
-            frame_widget_remote
-                .BindNewEndpointAndPassDedicatedReceiverForTesting();
+            frame_widget_remote.BindNewEndpointAndPassDedicatedReceiver();
 
     mojo::AssociatedRemote<blink::mojom::FrameWidgetHost> frame_widget_host;
     mojo::PendingAssociatedReceiver<blink::mojom::FrameWidgetHost>
         frame_widget_host_receiver =
-            frame_widget_host
-                .BindNewEndpointAndPassDedicatedReceiverForTesting();
+            frame_widget_host.BindNewEndpointAndPassDedicatedReceiver();
 
     mojo::AssociatedRemote<blink::mojom::Widget> widget_remote;
     mojo::PendingAssociatedReceiver<blink::mojom::Widget> widget_receiver =
-        widget_remote.BindNewEndpointAndPassDedicatedReceiverForTesting();
+        widget_remote.BindNewEndpointAndPassDedicatedReceiver();
 
     mojo::AssociatedRemote<blink::mojom::WidgetHost> widget_host;
     mojo::PendingAssociatedReceiver<blink::mojom::WidgetHost>
         widget_host_receiver =
-            widget_host.BindNewEndpointAndPassDedicatedReceiverForTesting();
+            widget_host.BindNewEndpointAndPassDedicatedReceiver();
 
     web_view_ = blink::WebView::Create(/*client=*/&web_view_client_,
                                        /*is_hidden=*/false,
                                        /*is_inside_portal=*/false,
                                        /*compositing_enabled=*/true, nullptr,
                                        mojo::NullAssociatedReceiver());
-    widget_ = std::make_unique<InteractiveRenderWidget>(&compositor_deps_);
+    agent_scheduling_group_ = CreateAgentSchedulingGroup(render_thread_);
+    widget_ = std::make_unique<InteractiveRenderWidget>(
+        *agent_scheduling_group_, &compositor_deps_);
     web_local_frame_ = blink::WebLocalFrame::CreateMainFrame(
         web_view_, &web_frame_client_, nullptr,
         base::UnguessableToken::Create(), nullptr);
@@ -280,6 +293,7 @@ class RenderWidgetUnittest : public testing::Test {
   blink::WebFrameWidget* web_frame_widget_;
   blink::WebLocalFrameClient web_frame_client_;
   FakeCompositorDependencies compositor_deps_;
+  std::unique_ptr<AgentSchedulingGroup> agent_scheduling_group_;
   std::unique_ptr<InteractiveRenderWidget> widget_;
   base::HistogramTester histogram_tester_;
   const bool is_for_nested_main_frame_;
@@ -296,7 +310,9 @@ class RenderWidgetExternalWidgetUnittest : public testing::Test {
         &mock_web_external_widget_client_, blink::WebURL(),
         std::move(widget_host_remote), std::move(widget_receiver));
 
-    widget_ = std::make_unique<InteractiveRenderWidget>(&compositor_deps_);
+    agent_scheduling_group_ = CreateAgentSchedulingGroup(render_thread_);
+    widget_ = std::make_unique<InteractiveRenderWidget>(
+        *agent_scheduling_group_, &compositor_deps_);
     widget_->Init(external_web_widget_.get(), blink::ScreenInfo());
   }
 
@@ -337,6 +353,7 @@ class RenderWidgetExternalWidgetUnittest : public testing::Test {
   FakeCompositorDependencies compositor_deps_;
   MockWebExternalWidgetClient mock_web_external_widget_client_;
   std::unique_ptr<blink::WebExternalWidget> external_web_widget_;
+  std::unique_ptr<AgentSchedulingGroup> agent_scheduling_group_;
   std::unique_ptr<InteractiveRenderWidget> widget_;
   base::HistogramTester histogram_tester_;
 };
@@ -538,16 +555,11 @@ class StubRenderWidgetDelegate : public RenderWidgetDelegate {
   void SetActiveForWidget(bool active) override {}
   bool SupportsMultipleWindowsForWidget() override { return true; }
   bool ShouldAckSyntheticInputImmediately() override { return true; }
-  void ScrollFocusedNodeIntoViewForWidget() override {}
-  void DidReceiveSetFocusEventForWidget() override {}
   void DidCommitCompositorFrameForWidget() override {}
   void DidCompletePageScaleAnimationForWidget() override {}
   void ResizeWebWidgetForWidget(const gfx::Size& main_frame_widget_size,
                                 const gfx::Size& visible_viewport_size,
                                 cc::BrowserControlsParams) override {}
-  void SetScreenMetricsEmulationParametersForWidget(
-      bool enabled,
-      const blink::DeviceEmulationParams& params) override {}
 };
 
 class RenderWidgetSubFrameUnittest : public RenderWidgetUnittest {
@@ -598,19 +610,13 @@ class NotifySwapTimesRenderWidgetUnittest : public RenderWidgetUnittest {
     RenderWidgetUnittest::SetUp();
 
     viz::ParentLocalSurfaceIdAllocator allocator;
-    WidgetMsg_WasShown msg(widget()->routing_id(),
-                           /*show_request_timestamp=*/base::TimeTicks(),
-                           /*was_evicted=*/false,
-                           /*record_tab_switch_time_request=*/base::nullopt);
-    widget()->OnMessageReceived(msg);
 
     // TODO(danakj): This usually happens through
     // RenderWidget::UpdateVisualProperties() and we are cutting past that for
     // some reason.
     allocator.GenerateId();
     widget()->layer_tree_host()->SetViewportRectAndScale(
-        gfx::Rect(200, 100), 1.f,
-        allocator.GetCurrentLocalSurfaceIdAllocation());
+        gfx::Rect(200, 100), 1.f, allocator.GetCurrentLocalSurfaceId());
 
     auto root_layer = cc::SolidColorLayer::Create();
     root_layer->SetBounds(gfx::Size(200, 100));

@@ -56,11 +56,11 @@
 
 namespace blink {
 
-static bool HasOverflowClip(const PaintLayer& layer) {
+static bool HasNonVisibleOverflow(const PaintLayer& layer) {
   if (!layer.GetLayoutObject().IsBox())
     return false;
   const LayoutBox& box = ToLayoutBox(layer.GetLayoutObject());
-  return box.ShouldClipOverflow();
+  return box.ShouldClipOverflowAlongEitherAxis();
 }
 
 bool ClipRectsContext::ShouldRespectRootLayerClip() const {
@@ -96,11 +96,11 @@ static void ApplyClipRects(const ClipRectsContext& context,
   DCHECK(layout_object.IsBox());
   const LayoutBox& box = *ToLayoutBox(&layout_object);
 
-  DCHECK(box.ShouldClipOverflow() || box.HasClip());
+  DCHECK(box.ShouldClipOverflowAlongEitherAxis() || box.HasClip());
   LayoutView* view = box.View();
   DCHECK(view);
 
-  if (box.ShouldClipOverflow()) {
+  if (box.ShouldClipOverflowAlongEitherAxis()) {
     ClipRect new_overflow_clip =
         box.OverflowClipRect(offset, context.overlay_scrollbar_clip_behavior);
     new_overflow_clip.SetHasRadius(box.StyleRef().HasBorderRadius());
@@ -288,7 +288,7 @@ void PaintLayerClipper::CalculateRectsWithGeometryMapper(
   if (cull_rect)
     background_rect.Intersect(PhysicalRect(cull_rect->Rect()));
 
-  if (ShouldClipOverflow(context)) {
+  if (ShouldClipOverflowAlongEitherAxis(context)) {
     LayoutBoxModelObject& layout_object = layer_.GetLayoutObject();
     foreground_rect =
         ToLayoutBox(layout_object)
@@ -345,7 +345,7 @@ void PaintLayerClipper::CalculateRects(
   layer_bounds = PhysicalRect(offset, PhysicalSize(layer_.PixelSnappedSize()));
 
   // Update the clip rects that will be passed to child layers.
-  if (ShouldClipOverflow(context)) {
+  if (ShouldClipOverflowAlongEitherAxis(context)) {
     PhysicalRect overflow_and_clip_rect =
         ToLayoutBox(layout_object)
             .OverflowClipRect(offset, context.overlay_scrollbar_clip_behavior);
@@ -400,7 +400,7 @@ void PaintLayerClipper::CalculateClipRects(const ClipRectsContext& context,
 
   // Computing paint offset is expensive, skip the computation if the object
   // is known to have no clip. This check is redundant otherwise.
-  if (HasOverflowClip(layer_) || layout_object.HasClip()) {
+  if (HasNonVisibleOverflow(layer_) || layout_object.HasClip()) {
     // This offset cannot use convertToLayerCoords, because sometimes our
     // rootLayer may be across some transformed layer boundary, for example, in
     // the PaintLayerCompositor overlapMap, where clipRects are needed in view
@@ -467,7 +467,7 @@ void PaintLayerClipper::CalculateBackgroundClipRectWithGeometryMapper(
   // rects, so we should add methods to GeometryMapper that guarantee there
   // are tight results, or else signal an error.
   if ((should_apply_self_overflow_clip == kRespectOverflowClip) &&
-      HasOverflowClip(layer_)) {
+      HasNonVisibleOverflow(layer_)) {
     // Implement the following special case: if computing clip rects with
     // respect to the root, don't exclude overlay scrollbars for the background
     // rect if layer_ is the same as the root.
@@ -475,7 +475,7 @@ void PaintLayerClipper::CalculateBackgroundClipRectWithGeometryMapper(
         context.overlay_scrollbar_clip_behavior;
 
     if (is_clipping_root)
-      clip_behavior = kIgnorePlatformOverlayScrollbarSize;
+      clip_behavior = kIgnoreOverlayScrollbarSize;
 
     FloatClipRect clip_rect(FloatRect(LocalVisualRect(context)));
     clip_rect.MoveBy(FloatPoint(fragment_data.PaintOffset()));
@@ -572,7 +572,7 @@ void PaintLayerClipper::GetOrCalculateClipRects(const ClipRectsContext& context,
     CalculateClipRects(context, clip_rects);
 }
 
-bool PaintLayerClipper::ShouldClipOverflow(
+bool PaintLayerClipper::ShouldClipOverflowAlongEitherAxis(
     const ClipRectsContext& context) const {
   if (&layer_ == context.root_layer && !context.ShouldRespectRootLayerClip())
     return false;
@@ -580,7 +580,7 @@ bool PaintLayerClipper::ShouldClipOverflow(
   // painting child mask layers. We do not have access to paint phases here,
   // so always claim to clip and ignore it later when painting the foreground
   // phases.
-  return HasOverflowClip(layer_) ||
+  return HasNonVisibleOverflow(layer_) ||
          (layer_.GetLayoutObject().IsLayoutEmbeddedContent() &&
           layer_.GetLayoutObject().StyleRef().HasBorderRadius());
 }

@@ -8,7 +8,7 @@ import "mojo/public/mojom/base/string16.mojom";
 import "mojo/public/mojom/base/string16.mojom";
 import "mojo/public/mojom/base/time.mojom";
 import "third_party/blink/public/mojom/blob/blob.mojom";
-import "third_party/blink/public/mojom/native_file_system/native_file_system_transfer_token.mojom";
+import "third_party/blink/public/mojom/file_system_access/native_file_system_transfer_token.mojom";
 
 // kIDBMaxMessageSize is 128MB, originally based on
 // IPC::Channel::kMaximumMessageSize.  The "usable" size is this value less
@@ -85,7 +85,7 @@ enum IDBTransactionDurability {
   Relaxed,
 };
 
-union IDBKeyData {
+union IDBKey {
   array<IDBKey> key_array;
   array<uint8> binary;
   mojo_base.mojom.String16 string;
@@ -93,11 +93,6 @@ union IDBKeyData {
   double number;
   // TODO(jsbell): Consider using Optional<> instead.
   bool other_none;
-};
-
-// Defined as a structure so that it can by typemapped with StructTraits.
-struct IDBKey {
-  IDBKeyData data;
 };
 
 // In order of the least to the highest precedent in terms of sort order.

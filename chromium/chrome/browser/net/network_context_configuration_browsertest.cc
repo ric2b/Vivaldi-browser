@@ -54,7 +54,6 @@
 #include "content/public/browser/network_service_instance.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/storage_partition_config.h"
-#include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/network_service_util.h"
 #include "content/public/common/url_constants.h"
@@ -98,6 +97,7 @@
 #include "services/network/test/test_dns_util.h"
 #include "services/network/test/test_url_loader_client.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/common/features.h"
 #include "url/gurl.h"
 
 #if defined(OS_MAC)
@@ -167,11 +167,13 @@ class ConnectionTypeWaiter
 
   void Wait(network::mojom::ConnectionType expected_type) {
     auto current_type = network::mojom::ConnectionType::CONNECTION_UNKNOWN;
-    network::NetworkConnectionTracker::ConnectionTypeCallback callback =
-        base::BindOnce(&ConnectionTypeWaiter::OnConnectionChanged,
-                       base::Unretained(this));
-    while (!tracker_->GetConnectionType(&current_type, std::move(callback)) ||
-           current_type != expected_type) {
+    for (;;) {
+      network::NetworkConnectionTracker::ConnectionTypeCallback callback =
+          base::BindOnce(&ConnectionTypeWaiter::OnConnectionChanged,
+                         base::Unretained(this));
+      if (tracker_->GetConnectionType(&current_type, std::move(callback)) &&
+          current_type == expected_type)
+        break;
       run_loop_ = std::make_unique<base::RunLoop>(
           base::RunLoop::Type::kNestableTasksAllowed);
       run_loop_->Run();
@@ -795,8 +797,12 @@ IN_PROC_BROWSER_TEST_P(NetworkContextConfigurationBrowserTest,
   net::EmbeddedTestServer https_server(net::EmbeddedTestServer::TYPE_HTTPS);
   net::test_server::RegisterDefaultHandlers(&https_server);
   ASSERT_TRUE(https_server.Start());
-  if (GetPrefService()->FindPreference(prefs::kBlockThirdPartyCookies))
-    GetPrefService()->SetBoolean(prefs::kBlockThirdPartyCookies, true);
+  if (GetPrefService()->FindPreference(prefs::kCookieControlsMode)) {
+    GetPrefService()->SetInteger(
+        prefs::kCookieControlsMode,
+        static_cast<int>(
+            content_settings::CookieControlsMode::kBlockThirdParty));
+  }
   SetCookie(CookieType::kFirstParty, CookiePersistenceType::kPersistent,
             embedded_test_server());
 
@@ -849,7 +855,9 @@ IN_PROC_BROWSER_TEST_P(NetworkContextConfigurationBrowserTest,
   test_server.RegisterRequestHandler(base::BindRepeating(&EchoCookieHeader));
   ASSERT_TRUE(test_server.Start());
 
-  GetPrefService()->SetBoolean(prefs::kBlockThirdPartyCookies, true);
+  GetPrefService()->SetInteger(
+      prefs::kCookieControlsMode,
+      static_cast<int>(content_settings::CookieControlsMode::kBlockThirdParty));
   SetCookie(CookieType::kFirstParty, CookiePersistenceType::kPersistent,
             embedded_test_server());
 
@@ -1574,7 +1582,9 @@ IN_PROC_BROWSER_TEST_P(NetworkContextConfigurationBrowserTest,
   if (system)
     return;
 
-  GetPrefService()->SetBoolean(prefs::kBlockThirdPartyCookies, true);
+  GetPrefService()->SetInteger(
+      prefs::kCookieControlsMode,
+      static_cast<int>(content_settings::CookieControlsMode::kBlockThirdParty));
   SetCookie(CookieType::kThirdParty, CookiePersistenceType::kSession,
             https_server());
 
@@ -1593,33 +1603,19 @@ IN_PROC_BROWSER_TEST_P(NetworkContextConfigurationBrowserTest,
   if (system)
     return;
 
-  // The preference is expected to be reset in incognito mode.
-  if (is_incognito()) {
-    EXPECT_FALSE(GetPrefService()->GetBoolean(prefs::kBlockThirdPartyCookies));
-    EXPECT_EQ(
-        static_cast<int>(content_settings::CookieControlsMode::kIncognitoOnly),
-        GetPrefService()->GetInteger(prefs::kCookieControlsMode));
-    return;
-  }
-
-  // For regular sessions, the kBlockThirdpartyCookies preference gets migrated
-  // to kCookieControlsMode. Reset it so it doesn't interfere with the test.
+  // The third-party cookies pref should carry over to the next session.
   EXPECT_EQ(
       static_cast<int>(content_settings::CookieControlsMode::kBlockThirdParty),
       GetPrefService()->GetInteger(prefs::kCookieControlsMode));
-  GetPrefService()->SetInteger(
-      prefs::kCookieControlsMode,
-      static_cast<int>(content_settings::CookieControlsMode::kIncognitoOnly));
-
-  // The kBlockThirdPartyCookies pref should carry over to the next session.
-  EXPECT_TRUE(GetPrefService()->GetBoolean(prefs::kBlockThirdPartyCookies));
   SetCookie(CookieType::kThirdParty, CookiePersistenceType::kSession,
             https_server());
 
   EXPECT_TRUE(GetCookies(https_server()->base_url()).empty());
 
   // Set pref to false, third party cookies should be allowed now.
-  GetPrefService()->SetBoolean(prefs::kBlockThirdPartyCookies, false);
+  GetPrefService()->SetInteger(
+      prefs::kCookieControlsMode,
+      static_cast<int>(content_settings::CookieControlsMode::kOff));
   // Set a third-party cookie. It should actually get set this time.
   SetCookie(CookieType::kThirdParty, CookiePersistenceType::kSession,
             https_server());
@@ -1886,7 +1882,7 @@ class NetworkContextConfigurationFtpPacBrowserTest
  public:
   NetworkContextConfigurationFtpPacBrowserTest()
       : ftp_server_(net::SpawnedTestServer::TYPE_FTP, GetChromeTestDataDir()) {
-    scoped_feature_list_.InitAndEnableFeature(features::kFtpProtocol);
+    scoped_feature_list_.InitAndEnableFeature(blink::features::kFtpProtocol);
     EXPECT_TRUE(ftp_server_.Start());
   }
   ~NetworkContextConfigurationFtpPacBrowserTest() override {}

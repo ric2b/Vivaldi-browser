@@ -23,6 +23,10 @@
 #include "content/public/browser/notification_registrar.h"
 #include "printing/buildflags/buildflags.h"
 
+#if BUILDFLAG(ENABLE_TAGGED_PDF)
+#include "ui/accessibility/ax_tree_update_forward.h"
+#endif
+
 namespace base {
 class RefCountedMemory;
 }
@@ -72,7 +76,16 @@ class PrintViewManagerBase : public content::NotificationObserver,
   }
 
   // mojom::PrintManagerHost:
-  void DidGetPrintedPagesCount(int32_t cookie, int32_t number_pages) override;
+  void DidGetPrintedPagesCount(int32_t cookie, uint32_t number_pages) override;
+#if BUILDFLAG(ENABLE_TAGGED_PDF)
+  void SetAccessibilityTree(
+      int32_t cookie,
+      const ui::AXTreeUpdate& accessibility_tree) override;
+#endif
+  void GetDefaultPrintSettings(
+      GetDefaultPrintSettingsCallback callback) override;
+  void ShowInvalidPrinterSettingsError() override;
+  void PrintingFailed(int32_t cookie) override;
 
  protected:
   explicit PrintViewManagerBase(content::WebContents* web_contents);
@@ -88,8 +101,6 @@ class PrintViewManagerBase : public content::NotificationObserver,
 
   // content::WebContentsObserver implementation.
   void RenderFrameDeleted(content::RenderFrameHost* render_frame_host) override;
-  bool OnMessageReceived(const IPC::Message& message,
-                         content::RenderFrameHost* render_frame_host) override;
 
   // Creates a new empty print job. It has no settings loaded. If there is
   // currently a print job, safely disconnect from it. Returns false if it is
@@ -121,14 +132,9 @@ class PrintViewManagerBase : public content::NotificationObserver,
       content::RenderFrameHost* render_frame_host,
       const mojom::DidPrintDocumentParams& params,
       std::unique_ptr<DelayedFrameDispatchHelper> helper) override;
-  void OnGetDefaultPrintSettings(content::RenderFrameHost* render_frame_host,
-                                 IPC::Message* reply_msg) override;
-  void OnPrintingFailed(int cookie) override;
   void OnScriptedPrint(content::RenderFrameHost* render_frame_host,
-                       const PrintHostMsg_ScriptedPrint_Params& params,
+                       const mojom::ScriptedPrintParams& params,
                        IPC::Message* reply_msg) override;
-
-  void OnShowInvalidPrinterSettingsError();
 
   // IPC message handlers for service.
   void OnComposePdfDone(const gfx::Size& page_size,
@@ -141,12 +147,12 @@ class PrintViewManagerBase : public content::NotificationObserver,
 // Helpers for PrintForPrintPreview();
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
   void OnPrintSettingsDone(scoped_refptr<base::RefCountedMemory> print_data,
-                           int page_count,
+                           uint32_t page_count,
                            PrinterHandler::PrintCallback callback,
                            std::unique_ptr<PrinterQuery> printer_query);
 
   void StartLocalPrintJob(scoped_refptr<base::RefCountedMemory> print_data,
-                          int page_count,
+                          uint32_t page_count,
                           int cookie,
                           PrinterHandler::PrintCallback callback);
 #endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW)
@@ -206,10 +212,10 @@ class PrintViewManagerBase : public content::NotificationObserver,
   content::NotificationRegistrar registrar_;
 
   // The current RFH that is printing with a system printing dialog.
-  content::RenderFrameHost* printing_rfh_;
+  content::RenderFrameHost* printing_rfh_ = nullptr;
 
   // Indication of success of the print job.
-  bool printing_succeeded_;
+  bool printing_succeeded_ = false;
 
   // Set while running an inner message loop inside RenderAllMissingPagesNow().
   // This means we are _blocking_ until all the necessary pages have been
@@ -219,7 +225,7 @@ class PrintViewManagerBase : public content::NotificationObserver,
   // Whether printing is enabled.
   BooleanPrefMember printing_enabled_;
 
-  scoped_refptr<PrintQueriesQueue> queue_;
+  const scoped_refptr<PrintQueriesQueue> queue_;
 
   base::WeakPtrFactory<PrintViewManagerBase> weak_ptr_factory_{this};
 

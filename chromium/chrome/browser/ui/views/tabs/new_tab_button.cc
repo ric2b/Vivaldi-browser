@@ -54,20 +54,20 @@ class NewTabButton::HighlightPathGenerator
   }
 };
 
-NewTabButton::NewTabButton(TabStrip* tab_strip, views::ButtonListener* listener)
-    : views::ImageButton(listener), tab_strip_(tab_strip) {
-  set_animate_on_state_change(true);
+NewTabButton::NewTabButton(TabStrip* tab_strip, PressedCallback callback)
+    : views::ImageButton(std::move(callback)), tab_strip_(tab_strip) {
+  SetAnimateOnStateChange(true);
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
-  set_triggerable_event_flags(triggerable_event_flags() |
-                              ui::EF_MIDDLE_MOUSE_BUTTON);
+  SetTriggerableEventFlags(GetTriggerableEventFlags() |
+                           ui::EF_MIDDLE_MOUSE_BUTTON);
 #endif
 
   ink_drop_container_ =
       AddChildView(std::make_unique<views::InkDropContainerView>());
 
   SetInkDropMode(InkDropMode::ON);
-  set_ink_drop_highlight_opacity(0.16f);
-  set_ink_drop_visible_opacity(0.14f);
+  SetInkDropHighlightOpacity(0.16f);
+  SetInkDropVisibleOpacity(0.14f);
 
   SetInstallFocusRingOnFocus(true);
   views::HighlightPathGenerator::Install(
@@ -265,6 +265,6 @@ SkPath NewTabButton::GetBorderPath(const gfx::Point& origin,
 }
 
 void NewTabButton::UpdateInkDropBaseColor() {
-  set_ink_drop_base_color(
+  SetInkDropBaseColor(
       color_utils::GetColorWithMaxContrast(GetButtonFillColor()));
 }

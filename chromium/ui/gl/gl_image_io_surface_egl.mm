@@ -250,9 +250,9 @@ bool GLImageIOSurfaceEGL::CopyTexImage(unsigned target) {
     return false;
   }
 
-  // TODO(crbug.com/1115621): We should support gfx::BufferFormat::P010 here,
-  // but EGL doesn't seem to be able to sample from the P010 Y and UV textures.
-  if (format_ != gfx::BufferFormat::YUV_420_BIPLANAR) {
+  if (format_ != gfx::BufferFormat::YUV_420_BIPLANAR &&
+      format_ != gfx::BufferFormat::P010) {
+    LOG(ERROR) << "non-YUV buffer format passed to CopyTexImage";
     return false;
   }
 
@@ -302,6 +302,15 @@ bool GLImageIOSurfaceEGL::CopyTexImage(unsigned target) {
     return false;
   }
 
+  // Disable mipmap filtering since iosurface doesn't have mipmap. Rectangle
+  // textures have mipmap disabled by default but other types of texture don't.
+  glTexParameteri(target_gl, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(target_gl, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  glTexParameteri(target_gl, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+  const EGLint texture_type =
+      format_ == gfx::BufferFormat::P010 ? GL_UNSIGNED_SHORT : GL_UNSIGNED_BYTE;
+
   // clang-format off
   const EGLint yAttribs[] = {
     EGL_WIDTH,                         size_.width(),
@@ -310,7 +319,7 @@ bool GLImageIOSurfaceEGL::CopyTexImage(unsigned target) {
     EGL_TEXTURE_TARGET,                texture_target_,
     EGL_TEXTURE_INTERNAL_FORMAT_ANGLE, GL_RED,
     EGL_TEXTURE_FORMAT,                EGL_TEXTURE_RGBA,
-    EGL_TEXTURE_TYPE_ANGLE,            GL_UNSIGNED_BYTE,
+    EGL_TEXTURE_TYPE_ANGLE,            texture_type,
     EGL_NONE,                          EGL_NONE,
   };
   // clang-format on
@@ -336,6 +345,10 @@ bool GLImageIOSurfaceEGL::CopyTexImage(unsigned target) {
     return false;
   }
 
+  glTexParameteri(target_gl, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(target_gl, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  glTexParameteri(target_gl, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
   // clang-format off
   const EGLint uvAttribs[] = {
     EGL_WIDTH,                         size_.width() / 2,
@@ -344,7 +357,7 @@ bool GLImageIOSurfaceEGL::CopyTexImage(unsigned target) {
     EGL_TEXTURE_TARGET,                texture_target_,
     EGL_TEXTURE_INTERNAL_FORMAT_ANGLE, GL_RG,
     EGL_TEXTURE_FORMAT,                EGL_TEXTURE_RGBA,
-    EGL_TEXTURE_TYPE_ANGLE,            GL_UNSIGNED_BYTE,
+    EGL_TEXTURE_TYPE_ANGLE,            texture_type,
     EGL_NONE,                          EGL_NONE,
   };
   // clang-format on
@@ -365,7 +378,7 @@ bool GLImageIOSurfaceEGL::CopyTexImage(unsigned target) {
   }
 
   yuv_to_rgb_converter->CopyYUV420ToRGB(target, size_, rgb_texture,
-                                        GL_UNSIGNED_BYTE);
+                                        texture_type);
   if (glGetError() != GL_NO_ERROR) {
     LOG(ERROR) << "Failed converting from YUV to RGB";
     return false;

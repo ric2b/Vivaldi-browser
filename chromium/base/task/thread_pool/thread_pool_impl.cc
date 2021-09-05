@@ -23,10 +23,10 @@
 #include "base/task/task_features.h"
 #include "base/task/thread_pool/pooled_parallel_task_runner.h"
 #include "base/task/thread_pool/pooled_sequenced_task_runner.h"
-#include "base/task/thread_pool/sequence_sort_key.h"
 #include "base/task/thread_pool/service_thread.h"
 #include "base/task/thread_pool/task.h"
 #include "base/task/thread_pool/task_source.h"
+#include "base/task/thread_pool/task_source_sort_key.h"
 #include "base/task/thread_pool/thread_group_impl.h"
 #include "base/task/thread_pool/worker_thread.h"
 #include "base/threading/platform_thread.h"
@@ -438,7 +438,7 @@ bool ThreadPoolImpl::ShouldYield(const TaskSource* task_source) const {
   if (!thread_group->IsBoundToCurrentThread())
     return true;
   return GetThreadGroupForTraits({priority, task_source->thread_policy()})
-      ->ShouldYield(priority);
+      ->ShouldYield(task_source->GetSortKey());
 }
 
 bool ThreadPoolImpl::EnqueueJobTaskSource(

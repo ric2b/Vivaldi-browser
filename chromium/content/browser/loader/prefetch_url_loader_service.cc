@@ -7,8 +7,8 @@
 #include "base/bind.h"
 #include "base/feature_list.h"
 #include "base/time/default_tick_clock.h"
-#include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/browser/loader/prefetch_url_loader.h"
+#include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/browser/url_loader_factory_getter.h"
 #include "content/browser/web_package/prefetched_signed_exchange_cache.h"
 #include "content/public/browser/content_browser_client.h"
@@ -161,10 +161,11 @@ void PrefetchURLLoaderService::CreateLoaderAndStart(
 
   // Recursive prefetch from a cross-origin main resource prefetch.
   if (resource_request.recursive_prefetch_token) {
-    // A request's |recursive_prefetch_token| is only provided if the request is
-    // a recursive prefetch. This means it is expected that the current
-    // context's |cross_origin_factory| was already created.
-    DCHECK(current_context.cross_origin_factory);
+    // TODO(crbug.com/1123715): Figure out why we're seeing this condition hold
+    // true in the field.
+    if (!current_context.cross_origin_factory) {
+      return;
+    }
 
     // Resurrect the request's IsolationInfo from the current context's map, and
     // use it for this request.

@@ -251,7 +251,8 @@ ExtensionFunction::ResponseAction WindowPrivateCreateFunction::Run() {
   }
   Profile* profile = Profile::FromBrowserContext(browser_context());
   if (incognito) {
-    profile = profile->GetOffTheRecordProfile();
+    profile =
+        profile->GetOffTheRecordProfile(Profile::OTRProfileID::PrimaryID());
   } else {
     profile = profile->GetOriginalProfile();
   }

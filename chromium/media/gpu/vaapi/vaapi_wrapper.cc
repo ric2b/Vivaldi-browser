@@ -58,8 +58,13 @@
 #include "ui/gl/gl_implementation.h"
 
 #if defined(USE_X11)
-#include <va/va_x11.h>
 #include "ui/gfx/x/x11_types.h"  // nogncheck
+
+typedef XID Drawable;
+
+extern "C" {
+#include "media/gpu/vaapi/va_x11.sigs"
+}
 #endif
 
 #if defined(USE_OZONE)
@@ -330,39 +335,46 @@ bool ClearNV12Padding(const VAImage& image,
   return true;
 }
 
-// Map of the supported VaProfiles indexed by media's VideoCodecProfile.
-const std::map<VideoCodecProfile, VAProfile> kMediaToVAProfileMap = {
-    // VAProfileH264Baseline is deprecated in <va/va.h> since libva 2.0.0.
-    {H264PROFILE_BASELINE, VAProfileH264ConstrainedBaseline},
-    {H264PROFILE_MAIN, VAProfileH264Main},
-    // TODO(posciak): See if we can/want to support other variants of
-    // H264PROFILE_HIGH*.
-    {H264PROFILE_HIGH, VAProfileH264High},
-    {VP8PROFILE_ANY, VAProfileVP8Version0_3},
-    {VP9PROFILE_PROFILE0, VAProfileVP9Profile0},
-    // VaapiWrapper does not support VP9 Profile 1, see b/153680337.
-    // {VP9PROFILE_PROFILE1, VAProfileVP9Profile1},
-    {VP9PROFILE_PROFILE2, VAProfileVP9Profile2},
-    // VaapiWrapper does not support Profile 3.
-    //{VP9PROFILE_PROFILE3, VAProfileVP9Profile3},
-};
+// Can't statically initialize the profile map:
+// https://google.github.io/styleguide/cppguide.html#Static_and_Global_Variables
+using ProfileCodecMap = std::map<VideoCodecProfile, VAProfile>;
+const ProfileCodecMap& GetProfileCodecMap() {
+  static const base::NoDestructor<ProfileCodecMap> kMediaToVAProfileMap({
+      // VAProfileH264Baseline is deprecated in <va/va.h> since libva 2.0.0.
+      {H264PROFILE_BASELINE, VAProfileH264ConstrainedBaseline},
+      {H264PROFILE_MAIN, VAProfileH264Main},
+      // TODO(posciak): See if we can/want to support other variants of
+      // H264PROFILE_HIGH*.
+      {H264PROFILE_HIGH, VAProfileH264High},
+      {VP8PROFILE_ANY, VAProfileVP8Version0_3},
+      {VP9PROFILE_PROFILE0, VAProfileVP9Profile0},
+      // VaapiWrapper does not support VP9 Profile 1, see b/153680337.
+      // {VP9PROFILE_PROFILE1, VAProfileVP9Profile1},
+      {VP9PROFILE_PROFILE2, VAProfileVP9Profile2},
+      // VaapiWrapper does not support Profile 3.
+      //{VP9PROFILE_PROFILE3, VAProfileVP9Profile3},
+  });
+  return *kMediaToVAProfileMap;
+}
 
 // Maps a VideoCodecProfile |profile| to a VAProfile, or VAProfileNone.
 VAProfile ProfileToVAProfile(VideoCodecProfile profile,
                              VaapiWrapper::CodecMode mode) {
-  if (!base::Contains(kMediaToVAProfileMap, profile))
+  const auto& profiles = GetProfileCodecMap();
+  const auto& maybe_profile = profiles.find(profile);
+  if (maybe_profile == profiles.end())
     return VAProfileNone;
-  return kMediaToVAProfileMap.at(profile);
+  return maybe_profile->second;
 }
 
-// Returns true if |va_profile| is present in kMediaToVAProfileMap.
 bool IsVAProfileSupported(VAProfile va_profile) {
   // VAProfileJPEGBaseline is always recognized but is not a video codec per se.
+  const auto& profiles = GetProfileCodecMap();
   return va_profile == VAProfileJPEGBaseline ||
-         std::find_if(kMediaToVAProfileMap.begin(), kMediaToVAProfileMap.end(),
+         std::find_if(profiles.begin(), profiles.end(),
                       [va_profile](const auto& entry) {
                         return entry.second == va_profile;
-                      }) != kMediaToVAProfileMap.end();
+                      }) != profiles.end();
 }
 
 bool IsBlockedDriver(VaapiWrapper::CodecMode mode, VAProfile va_profile) {
@@ -410,6 +422,8 @@ class VADisplayState {
 
   // Implementation of Initialize() called only once.
   bool InitializeOnce() EXCLUSIVE_LOCKS_REQUIRED(va_lock_);
+  bool InitializeVaDisplay_Locked() EXCLUSIVE_LOCKS_REQUIRED(va_lock_);
+  bool InitializeVaDriver_Locked() EXCLUSIVE_LOCKS_REQUIRED(va_lock_);
 
   int refcount_ GUARDED_BY(va_lock_);
 
@@ -473,11 +487,7 @@ bool VADisplayState::Initialize() {
   return success;
 }
 
-bool VADisplayState::InitializeOnce() {
-  static_assert(
-      VA_MAJOR_VERSION >= 2 || (VA_MAJOR_VERSION == 1 && VA_MINOR_VERSION >= 1),
-      "Requires VA-API >= 1.1.0");
-
+bool VADisplayState::InitializeVaDisplay_Locked() {
   switch (gl::GetGLImplementation()) {
     case gl::kGLImplementationEGLGLES2:
       va_display_ = vaGetDisplayDRM(drm_fd_.get());
@@ -520,25 +530,10 @@ bool VADisplayState::InitializeOnce() {
     return false;
   }
 
-  // Set VA logging level and driver name, unless already set.
-  constexpr char libva_log_level_env[] = "LIBVA_MESSAGING_LEVEL";
-  std::unique_ptr<base::Environment> env(base::Environment::Create());
-  if (!env->HasVar(libva_log_level_env))
-    env->SetVar(libva_log_level_env, "1");
+  return true;
+}
 
-#if defined(USE_X11)
-  if (gl::GetGLImplementation() == gl::kGLImplementationEGLANGLE) {
-    DCHECK(!features::IsUsingOzonePlatform());
-    constexpr char libva_driver_impl_env[] = "LIBVA_DRIVER_NAME";
-    // TODO(crbug/1116703) The libva intel-media driver has a known segfault in
-    // vaPutSurface, so until this is fixed, fall back to the i965 driver. There
-    // is discussion of the issue here:
-    // https://github.com/intel/media-driver/issues/818
-    if (!env->HasVar(libva_driver_impl_env))
-      env->SetVar(libva_driver_impl_env, "i965");
-  }
-#endif  // USE_X11
-
+bool VADisplayState::InitializeVaDriver_Locked() {
   // The VAAPI version.
   int major_version, minor_version;
   VAStatus va_res = vaInitialize(va_display_, &major_version, &minor_version);
@@ -546,15 +541,14 @@ bool VADisplayState::InitializeOnce() {
     LOG(ERROR) << "vaInitialize failed: " << vaErrorStr(va_res);
     return false;
   }
-
-  va_initialized_ = true;
-
   const std::string va_vendor_string = vaQueryVendorString(va_display_);
   DLOG_IF(WARNING, va_vendor_string.empty())
       << "Vendor string empty or error reading.";
   DVLOG(1) << "VAAPI version: " << major_version << "." << minor_version << " "
            << va_vendor_string;
   implementation_type_ = VendorStringToImplementationType(va_vendor_string);
+
+  va_initialized_ = true;
 
   // The VAAPI version is determined from what is loaded on the system by
   // calling vaInitialize(). Since the libva is now ABI-compatible, relax the
@@ -569,6 +563,45 @@ bool VADisplayState::InitializeOnce() {
                << VA_MAJOR_VERSION << "." << VA_MINOR_VERSION;
     return false;
   }
+  return true;
+}
+
+bool VADisplayState::InitializeOnce() {
+  static_assert(
+      VA_MAJOR_VERSION >= 2 || (VA_MAJOR_VERSION == 1 && VA_MINOR_VERSION >= 1),
+      "Requires VA-API >= 1.1.0");
+
+  // Set VA logging level, unless already set.
+  constexpr char libva_log_level_env[] = "LIBVA_MESSAGING_LEVEL";
+  std::unique_ptr<base::Environment> env(base::Environment::Create());
+  if (!env->HasVar(libva_log_level_env))
+    env->SetVar(libva_log_level_env, "1");
+
+  if (!InitializeVaDisplay_Locked() || !InitializeVaDriver_Locked())
+    return false;
+
+#if defined(USE_X11)
+  if (gl::GetGLImplementation() == gl::kGLImplementationEGLANGLE &&
+      implementation_type_ == VAImplementation::kIntelIHD) {
+    DCHECK(!features::IsUsingOzonePlatform());
+    constexpr char libva_driver_impl_env[] = "LIBVA_DRIVER_NAME";
+    // TODO(crbug/1116703) The libva intel-media driver has a known segfault in
+    // vaPutSurface, so until this is fixed, fall back to the i965 driver. There
+    // is discussion of the issue here:
+    // https://github.com/intel/media-driver/issues/818
+    if (!env->HasVar(libva_driver_impl_env))
+      env->SetVar(libva_driver_impl_env, "i965");
+
+    // Re-initialize with the new driver.
+    va_display_ = nullptr;
+    va_initialized_ = false;
+    implementation_type_ = VAImplementation::kInvalid;
+
+    if (!InitializeVaDisplay_Locked() || !InitializeVaDriver_Locked())
+      return false;
+  }
+#endif  // USE_X11
+
   return true;
 }
 
@@ -741,8 +774,8 @@ bool AreAttribsSupported(const base::Lock* va_lock,
     if (attribs[i].type != required_attribs[i].type ||
         (attribs[i].value & required_attribs[i].value) !=
             required_attribs[i].value) {
-      DVLOG(1) << "Unsupported value " << required_attribs[i].value
-               << " for attribute type " << required_attribs[i].type;
+      DVLOG(1) << "Unsupported value " << required_attribs[i].value << " for "
+               << vaConfigAttribTypeStr(required_attribs[i].type);
       return false;
     }
   }
@@ -1229,11 +1262,10 @@ VideoEncodeAccelerator::SupportedProfiles
 VaapiWrapper::GetSupportedEncodeProfiles() {
   VideoEncodeAccelerator::SupportedProfiles profiles;
 
-  for (const auto& media_to_va_profile_map_entry : kMediaToVAProfileMap) {
+  for (const auto& media_to_va_profile_map_entry : GetProfileCodecMap()) {
     const VideoCodecProfile media_profile = media_to_va_profile_map_entry.first;
-    const VAProfile va_profile = ProfileToVAProfile(media_profile, kEncode);
-    if (va_profile == VAProfileNone)
-      continue;
+    const VAProfile va_profile = media_to_va_profile_map_entry.second;
+    DCHECK(va_profile != VAProfileNone);
 
     const VASupportedProfiles::ProfileInfo* profile_info =
         VASupportedProfiles::Get().IsProfileSupported(kEncode, va_profile);
@@ -1263,17 +1295,15 @@ VaapiWrapper::GetSupportedDecodeProfiles(
     const gpu::GpuDriverBugWorkarounds& workarounds) {
   VideoDecodeAccelerator::SupportedProfiles profiles;
 
-  for (const auto& media_to_va_profile_map_entry : kMediaToVAProfileMap) {
+  for (const auto& media_to_va_profile_map_entry : GetProfileCodecMap()) {
     const VideoCodecProfile media_profile = media_to_va_profile_map_entry.first;
+    const VAProfile va_profile = media_to_va_profile_map_entry.second;
+    DCHECK(va_profile != VAProfileNone);
 
     if (media_profile == VP8PROFILE_ANY &&
         workarounds.disable_accelerated_vp8_decode) {
       continue;
     }
-
-    const VAProfile va_profile = ProfileToVAProfile(media_profile, kDecode);
-    if (va_profile == VAProfileNone)
-      continue;
 
     const VASupportedProfiles::ProfileInfo* profile_info =
         VASupportedProfiles::Get().IsProfileSupported(kDecode, va_profile);
@@ -1787,59 +1817,20 @@ bool VaapiWrapper::SyncSurface(VASurfaceID va_surface_id) {
 
 bool VaapiWrapper::SubmitBuffer(VABufferType va_buffer_type,
                                 size_t size,
-                                const void* buffer) {
-  DCHECK_LT(va_buffer_type, VABufferTypeMax);
-  DCHECK(buffer);
+                                const void* data) {
   TRACE_EVENT0("media,gpu", "VaapiWrapper::SubmitBuffer");
   base::AutoLock auto_lock(*va_lock_);
-  TRACE_EVENT0("media,gpu", "VaapiWrapper::SubmitBufferLocked");
-
-  VABufferID buffer_id;
-  {
-    TRACE_EVENT0("media,gpu", "VaapiWrapper::SubmitBuffer_vaCreateBuffer");
-    const VAStatus va_res =
-        vaCreateBuffer(va_display_, va_context_id_, va_buffer_type, size, 1,
-                       nullptr, &buffer_id);
-    VA_SUCCESS_OR_RETURN(va_res, VaapiFunctions::kVACreateBuffer, false);
-  }
-
-  ScopedVABufferMapping mapping(
-      va_lock_, va_display_, buffer_id,
-      base::BindOnce(base::IgnoreResult(&vaDestroyBuffer), va_display_));
-  if (!mapping.IsValid())
-    return false;
-
-  // TODO(selcott): Investigate potentially faster alternatives to memcpy here
-  // such as libyuv::CopyX and family.
-  memcpy(mapping.data(), buffer, size);
-
-  pending_va_buffers_.push_back(buffer_id);
-  return true;
+  return SubmitBuffer_Locked({va_buffer_type, size, data});
 }
 
-bool VaapiWrapper::SubmitVAEncMiscParamBuffer(
-    VAEncMiscParameterType misc_param_type,
-    size_t size,
-    const void* buffer) {
+bool VaapiWrapper::SubmitBuffers(
+    const std::vector<VABufferDescriptor>& va_buffers) {
+  TRACE_EVENT0("media,gpu", "VaapiWrapper::SubmitBuffers");
   base::AutoLock auto_lock(*va_lock_);
-
-  VABufferID buffer_id;
-  VAStatus va_res = vaCreateBuffer(
-      va_display_, va_context_id_, VAEncMiscParameterBufferType,
-      sizeof(VAEncMiscParameterBuffer) + size, 1, NULL, &buffer_id);
-  VA_SUCCESS_OR_RETURN(va_res, VaapiFunctions::kVACreateBuffer, false);
-
-  ScopedVABufferMapping mapping(
-      va_lock_, va_display_, buffer_id,
-      base::BindOnce(base::IgnoreResult(&vaDestroyBuffer), va_display_));
-  if (!mapping.IsValid())
-    return false;
-
-  auto* params = reinterpret_cast<VAEncMiscParameterBuffer*>(mapping.data());
-  params->type = misc_param_type;
-  memcpy(params->data, buffer, size);
-
-  pending_va_buffers_.push_back(buffer_id);
+  for (const VABufferDescriptor& va_buffer : va_buffers) {
+    if (!SubmitBuffer_Locked(va_buffer))
+      return false;
+  }
   return true;
 }
 
@@ -1861,9 +1852,32 @@ void VaapiWrapper::DestroyPendingBuffers_Locked() {
 
 bool VaapiWrapper::ExecuteAndDestroyPendingBuffers(VASurfaceID va_surface_id) {
   base::AutoLock auto_lock(*va_lock_);
-  bool result = Execute_Locked(va_surface_id);
+  bool result = Execute_Locked(va_surface_id, pending_va_buffers_);
   DestroyPendingBuffers_Locked();
   return result;
+}
+
+bool VaapiWrapper::MapAndCopyAndExecute(
+    VASurfaceID va_surface_id,
+    const std::vector<std::pair<VABufferID, VABufferDescriptor>>& va_buffers) {
+  DCHECK_NE(va_surface_id, VA_INVALID_SURFACE);
+
+  TRACE_EVENT0("media,gpu", "VaapiWrapper::MapAndCopyAndExecute");
+  base::AutoLock auto_lock(*va_lock_);
+  std::vector<VABufferID> va_buffer_ids;
+
+  for (const auto& va_buffer : va_buffers) {
+    const VABufferID va_buffer_id = va_buffer.first;
+    const VABufferDescriptor& descriptor = va_buffer.second;
+    DCHECK_NE(va_buffer_id, VA_INVALID_ID);
+
+    if (!MapAndCopy_Locked(va_buffer_id, descriptor))
+      return false;
+
+    va_buffer_ids.push_back(va_buffer_id);
+  }
+
+  return Execute_Locked(va_surface_id, va_buffer_ids);
 }
 
 #if defined(USE_X11)
@@ -1920,12 +1934,11 @@ bool VaapiWrapper::UploadVideoFrameToSurface(const VideoFrame& frame,
   }
 
   const gfx::Size visible_size = frame.visible_rect().size();
-  bool va_create_put_fallback = false;
+  bool needs_va_put_image = false;
   VAImage image;
   VAStatus va_res = vaDeriveImage(va_display_, va_surface_id, &image);
   if (va_res == VA_STATUS_ERROR_OPERATION_FAILED) {
     DVLOG(4) << "vaDeriveImage failed and fallback to Create_PutImage";
-    va_create_put_fallback = true;
     constexpr VAImageFormat kImageFormatNV12{.fourcc = VA_FOURCC_NV12,
                                              .byte_order = VA_LSB_FIRST,
                                              .bits_per_pixel = 12};
@@ -1934,6 +1947,7 @@ bool VaapiWrapper::UploadVideoFrameToSurface(const VideoFrame& frame,
     va_res = vaCreateImage(va_display_, &image_format, va_surface_size.width(),
                            va_surface_size.height(), &image);
     VA_SUCCESS_OR_RETURN(va_res, VaapiFunctions::kVACreateImage, false);
+    needs_va_put_image = true;
   }
   base::ScopedClosureRunner vaimage_deleter(
       base::Bind(&DestroyVAImage, va_display_, image));
@@ -1966,6 +1980,8 @@ bool VaapiWrapper::UploadVideoFrameToSurface(const VideoFrame& frame,
 
   int ret = 0;
   {
+    TRACE_EVENT0("media,gpu", "VaapiWrapper::UploadVideoFrameToSurface_copy");
+
     base::AutoUnlock auto_unlock(*va_lock_);
     switch (frame.format()) {
       case PIXEL_FORMAT_I420:
@@ -2005,27 +2021,24 @@ bool VaapiWrapper::UploadVideoFrameToSurface(const VideoFrame& frame,
         return false;
     }
   }
-  if (va_create_put_fallback) {
-    va_res = vaPutImage(va_display_, va_surface_id, image.image_id, 0, 0,
-                        visible_size.width(), visible_size.height(), 0, 0,
-                        visible_size.width(), visible_size.height());
+  if (needs_va_put_image) {
+    const VAStatus va_res =
+        vaPutImage(va_display_, va_surface_id, image.image_id, 0, 0,
+                   visible_size.width(), visible_size.height(), 0, 0,
+                   visible_size.width(), visible_size.height());
     VA_SUCCESS_OR_RETURN(va_res, VaapiFunctions::kVAPutImage, false);
   }
   return ret == 0;
 }
 
-bool VaapiWrapper::CreateVABuffer(size_t size, VABufferID* buffer_id) {
+std::unique_ptr<ScopedVABuffer> VaapiWrapper::CreateVABuffer(VABufferType type,
+                                                             size_t size) {
   TRACE_EVENT0("media,gpu", "VaapiWrapper::CreateVABuffer");
   base::AutoLock auto_lock(*va_lock_);
   TRACE_EVENT0("media,gpu", "VaapiWrapper::CreateVABufferLocked");
-  VAStatus va_res =
-      vaCreateBuffer(va_display_, va_context_id_, VAEncCodedBufferType, size, 1,
-                     NULL, buffer_id);
-  VA_SUCCESS_OR_RETURN(va_res, VaapiFunctions::kVACreateBuffer, false);
 
-  const auto is_new_entry = va_buffers_.insert(*buffer_id).second;
-  DCHECK(is_new_entry);
-  return true;
+  return ScopedVABuffer::Create(va_lock_, va_display_, va_context_id_, type,
+                                size);
 }
 
 uint64_t VaapiWrapper::GetEncodedChunkSize(VABufferID buffer_id,
@@ -2060,8 +2073,11 @@ bool VaapiWrapper::DownloadFromVABuffer(VABufferID buffer_id,
   base::AutoLock auto_lock(*va_lock_);
   TRACE_EVENT0("media,gpu", "VaapiWrapper::DownloadFromVABufferLocked");
 
-  VAStatus va_res = vaSyncSurface(va_display_, sync_surface_id);
-  VA_SUCCESS_OR_RETURN(va_res, VaapiFunctions::kVASyncSurface, false);
+  {
+    TRACE_EVENT0("media,gpu", "VaapiWrapper::DownloadFromVABuffer_SyncSurface");
+    const VAStatus va_res = vaSyncSurface(va_display_, sync_surface_id);
+    VA_SUCCESS_OR_RETURN(va_res, VaapiFunctions::kVASyncSurface, false);
+  }
 
   ScopedVABufferMapping mapping(va_lock_, va_display_, buffer_id);
   if (!mapping.IsValid())
@@ -2073,7 +2089,7 @@ bool VaapiWrapper::DownloadFromVABuffer(VABufferID buffer_id,
   // cause another thread to acquire the lock and we'd have to wait delaying the
   // notification that the encode is done.
   {
-    TRACE_EVENT0("media,gpu", "VaapiWrapper::DownloadFromVABufferCopyEncoded");
+    TRACE_EVENT0("media,gpu", "VaapiWrapper::DownloadFromVABuffer_copy");
     *coded_data_size = 0;
 
     while (buffer_segment) {
@@ -2113,27 +2129,6 @@ bool VaapiWrapper::GetVAEncMaxNumOfRefFrames(VideoCodecProfile profile,
   return true;
 }
 
-void VaapiWrapper::DestroyVABuffer(VABufferID buffer_id) {
-  base::AutoLock auto_lock(*va_lock_);
-  VAStatus va_res = vaDestroyBuffer(va_display_, buffer_id);
-  VA_LOG_ON_ERROR(va_res, VaapiFunctions::kVADestroyBuffer);
-  // If this |buffer_id| comes from CreateVABuffer() it'll be in |va_buffers_|,
-  // but otherwise (BlitSurface() - |va_buffer_for_vpp_|), it won't. This is
-  // needed temporarily while moving the VABufferID lifetime management to the
-  // clients, see crbug.com/1016219 and b/162962069.
-  va_buffers_.erase(buffer_id);
-}
-
-void VaapiWrapper::DestroyVABuffers() {
-  base::AutoLock auto_lock(*va_lock_);
-
-  for (const VABufferID va_buffer_id : va_buffers_) {
-    VAStatus va_res = vaDestroyBuffer(va_display_, va_buffer_id);
-    VA_LOG_ON_ERROR(va_res, VaapiFunctions::kVADestroyBuffer);
-  }
-  va_buffers_.clear();
-}
-
 bool VaapiWrapper::IsRotationSupported() {
   base::AutoLock auto_lock(*va_lock_);
   VAProcPipelineCaps pipeline_caps;
@@ -2155,20 +2150,18 @@ bool VaapiWrapper::BlitSurface(const VASurface& va_surface_src,
                                base::Optional<gfx::Rect> src_rect,
                                base::Optional<gfx::Rect> dest_rect,
                                VideoRotation rotation) {
+  DCHECK_EQ(mode_, kVideoProcess);
   base::AutoLock auto_lock(*va_lock_);
 
   // Create a buffer for VPP if it has not been created.
   if (!va_buffer_for_vpp_) {
     DCHECK_NE(VA_INVALID_ID, va_context_id_);
-    VABufferID buffer_id = VA_INVALID_ID;
-    const VAStatus va_res = vaCreateBuffer(
-        va_display_, va_context_id_, VAProcPipelineParameterBufferType,
-        sizeof(VAProcPipelineParameterBuffer), 1, nullptr, &buffer_id);
-    VA_SUCCESS_OR_RETURN(va_res, VaapiFunctions::kVACreateBuffer, false);
-    DCHECK_NE(buffer_id, VA_INVALID_ID);
-
-    va_buffer_for_vpp_ = std::make_unique<ScopedID<VABufferID>>(
-        buffer_id, base::BindOnce(&VaapiWrapper::DestroyVABuffer, this));
+    va_buffer_for_vpp_ =
+        ScopedVABuffer::Create(va_lock_, va_display_, va_context_id_,
+                               VAProcPipelineParameterBufferType,
+                               sizeof(VAProcPipelineParameterBuffer));
+    if (!va_buffer_for_vpp_)
+      return false;
   }
 
   {
@@ -2284,8 +2277,10 @@ VaapiWrapper::VaapiWrapper(CodecMode mode)
       va_context_id_(VA_INVALID_ID) {}
 
 VaapiWrapper::~VaapiWrapper() {
+  // Destroy ScopedVABuffer before VaapiWrappers are destroyed to ensure
+  // VADisplay is valid on ScopedVABuffer's destruction.
+  va_buffer_for_vpp_.reset();
   DestroyPendingBuffers();
-  DestroyVABuffers();
   DestroyContext();
   Deinitialize();
 }
@@ -2460,13 +2455,8 @@ void VaapiWrapper::DestroySurface(VASurfaceID va_surface_id) {
   VA_LOG_ON_ERROR(va_res, VaapiFunctions::kVADestroySurfaces);
 }
 
-bool VaapiWrapper::Execute(VASurfaceID va_surface_id) {
-  TRACE_EVENT0("media,gpu", "VaapiWrapper::Execute");
-  base::AutoLock auto_lock(*va_lock_);
-  return Execute_Locked(va_surface_id);
-}
-
-bool VaapiWrapper::Execute_Locked(VASurfaceID va_surface_id) {
+bool VaapiWrapper::Execute_Locked(VASurfaceID va_surface_id,
+                                  const std::vector<VABufferID>& va_buffers) {
   TRACE_EVENT0("media,gpu", "VaapiWrapper::Execute_Locked");
   va_lock_->AssertAcquired();
 
@@ -2478,11 +2468,11 @@ bool VaapiWrapper::Execute_Locked(VASurfaceID va_surface_id) {
   VAStatus va_res = vaBeginPicture(va_display_, va_context_id_, va_surface_id);
   VA_SUCCESS_OR_RETURN(va_res, VaapiFunctions::kVABeginPicture, false);
 
-  if (pending_va_buffers_.size() > 0) {
-    // Commit parameter and slice buffers.
-    va_res =
-        vaRenderPicture(va_display_, va_context_id_, &pending_va_buffers_[0],
-                        pending_va_buffers_.size());
+  if (!va_buffers.empty()) {
+    // vaRenderPicture() needs a non-const pointer, possibly unnecessarily.
+    VABufferID* va_buffers_data = const_cast<VABufferID*>(va_buffers.data());
+    va_res = vaRenderPicture(va_display_, va_context_id_, va_buffers_data,
+                             base::checked_cast<int>(va_buffers.size()));
     VA_SUCCESS_OR_RETURN(va_res, VaapiFunctions::kVARenderPicture_VABuffers,
                          false);
   }
@@ -2497,6 +2487,53 @@ bool VaapiWrapper::Execute_Locked(VASurfaceID va_surface_id) {
                       base::TimeTicks::Now() - decode_start_time);
 
   return true;
+}
+
+bool VaapiWrapper::SubmitBuffer_Locked(const VABufferDescriptor& va_buffer) {
+  TRACE_EVENT0("media,gpu", "VaapiWrapper::SubmitBuffer_Locked");
+  va_lock_->AssertAcquired();
+
+  DCHECK_LT(va_buffer.type, VABufferTypeMax);
+  DCHECK(va_buffer.data);
+
+  unsigned int va_buffer_size;
+  if (!base::CheckedNumeric<size_t>(va_buffer.size)
+           .AssignIfValid(&va_buffer_size)) {
+    return false;
+  }
+
+  VABufferID buffer_id;
+  {
+    TRACE_EVENT0("media,gpu",
+                 "VaapiWrapper::SubmitBuffer_Locked_vaCreateBuffer");
+    const VAStatus va_res =
+        vaCreateBuffer(va_display_, va_context_id_, va_buffer.type,
+                       va_buffer_size, 1, nullptr, &buffer_id);
+    VA_SUCCESS_OR_RETURN(va_res, VaapiFunctions::kVACreateBuffer, false);
+  }
+
+  if (!MapAndCopy_Locked(buffer_id, va_buffer))
+    return false;
+
+  pending_va_buffers_.push_back(buffer_id);
+  return true;
+}
+
+bool VaapiWrapper::MapAndCopy_Locked(VABufferID va_buffer_id,
+                                     const VABufferDescriptor& va_buffer) {
+  va_lock_->AssertAcquired();
+
+  DCHECK_NE(va_buffer_id, VA_INVALID_ID);
+  DCHECK_LT(va_buffer.type, VABufferTypeMax);
+  DCHECK(va_buffer.data);
+
+  ScopedVABufferMapping mapping(
+      va_lock_, va_display_, va_buffer_id,
+      base::BindOnce(base::IgnoreResult(&vaDestroyBuffer), va_display_));
+  if (!mapping.IsValid())
+    return false;
+
+  return memcpy(mapping.data(), va_buffer.data, va_buffer.size);
 }
 
 }  // namespace media

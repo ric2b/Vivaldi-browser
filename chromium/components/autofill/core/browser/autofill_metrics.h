@@ -32,6 +32,7 @@ namespace autofill {
 
 class AutofillField;
 class CreditCard;
+struct AutofillOfferData;
 
 // A given maximum is enforced to minimize the number of buckets generated.
 extern const int kMaxBucketsCount;
@@ -254,6 +255,9 @@ class AutofillMetrics {
     SAVE_CARD_PROMPT_NOT_INTERACTED,
     // The prompt lost focus and was deactivated.
     SAVE_CARD_PROMPT_LOST_FOCUS,
+    // The reason why the prompt is closed is not clear. Possible reason is the
+    // logging function is invoked before the closed reason is correctly set.
+    SAVE_CARD_PROMPT_RESULT_UNKNOWN,
     NUM_SAVE_CARD_PROMPT_RESULT_METRICS,
   };
 
@@ -567,6 +571,9 @@ class AutofillMetrics {
     LOCAL_CARD_MIGRATION_BUBBLE_NOT_INTERACTED = 2,
     // The bubble lost its focus and was deactivated.
     LOCAL_CARD_MIGRATION_BUBBLE_LOST_FOCUS = 3,
+    // The reason why the prompt is closed is not clear. Possible reason is the
+    // logging function is invoked before the closed reason is correctly set.
+    LOCAL_CARD_MIGRATION_BUBBLE_RESULT_UNKNOWN = 4,
     NUM_LOCAL_CARD_MIGRATION_BUBBLE_RESULT_METRICS,
   };
 
@@ -1417,6 +1424,14 @@ class AutofillMetrics {
       const std::vector<std::unique_ptr<CreditCard>>& server_cards,
       base::TimeDelta disused_data_threshold);
 
+  // Logs metrics about the offer data associated with a profile. This should be
+  // called each time a chrome profile is launched.
+  static void LogStoredOfferMetrics(
+      const std::vector<std::unique_ptr<AutofillOfferData>>& offers);
+
+  // Logs whether the synced autofill offer data is valid.
+  static void LogSyncedOfferDataBeingValid(bool invalid);
+
   // Log the number of autofill credit card suggestions suppressed because they
   // have not been used for a long time and are expired. Note that these cards
   // are only suppressed when the user has not typed any data into the field
@@ -1600,6 +1615,12 @@ class AutofillMetrics {
 
   static void LogAddressFormImportStatustMetric(
       AddressProfileImportStatusMetric metric);
+
+  // Records if the page was translated upon form submission.
+  static void LogFieldParsingPageTranslationStatusMetric(bool metric);
+
+  // Records the visible page language upon form submission.
+  static void LogFieldParsingTranslatedFormLanguageMetric(base::StringPiece);
 
   static const char* GetMetricsSyncStateSuffix(
       AutofillSyncSigninState sync_state);

@@ -85,19 +85,16 @@ _SWAP_CHAIN_GET_FRAME_STATISTICS_MEDIA_FAILED = -1
 _GET_STATISTICS_EVENT_NAME = 'GetFrameStatisticsMedia'
 _SWAP_CHAIN_PRESENT_EVENT_NAME = 'SwapChain::Present'
 _PRESENT_TO_SWAP_CHAIN_EVENT_NAME = 'SwapChainPresenter::PresentToSwapChain'
+_PRESENT_MAIN_SWAP_CHAIN_EVENT_NAME =\
+    'DirectCompositionChildSurfaceWin::PresentSwapChain'
 
 
 class _TraceTestArguments(object):
   """Struct-like object for passing trace test arguments instead of dicts."""
 
   def __init__(  # pylint: disable=too-many-arguments
-      self,
-      browser_args,
-      category,
-      test_harness_script,
-      finish_js_condition,
-      success_eval_func,
-      other_args=None):
+      self, browser_args, category, test_harness_script, finish_js_condition,
+      success_eval_func, other_args):
     self.browser_args = browser_args
     self.category = category
     self.test_harness_script = test_harness_script
@@ -124,19 +121,12 @@ class TraceIntegrationTest(gpu_integration_test.GpuIntegrationTest):
     for p in namespace.DefaultPages('TraceTest'):
       yield (p.name, gpu_relative_path + p.url,
              _TraceTestArguments(
-                 browser_args=[],
+                 browser_args=p.browser_args,
                  category=cls._DisabledByDefaultTraceCategory('gpu.service'),
                  test_harness_script=webgl_test_harness_script,
                  finish_js_condition='domAutomationController._finished',
-                 success_eval_func='CheckGLCategory'))
-    for p in namespace.DefaultPages('DeviceTraceTest'):
-      yield (p.name, gpu_relative_path + p.url,
-             _TraceTestArguments(
-                 browser_args=[],
-                 category=cls._DisabledByDefaultTraceCategory('gpu.device'),
-                 test_harness_script=webgl_test_harness_script,
-                 finish_js_condition='domAutomationController._finished',
-                 success_eval_func='CheckGLCategory'))
+                 success_eval_func='CheckGLCategory',
+                 other_args=p.other_args))
     for p in namespace.DirectCompositionPages('VideoPathTraceTest'):
       yield (p.name, gpu_relative_path + p.url,
              _TraceTestArguments(
@@ -167,6 +157,15 @@ class TraceIntegrationTest(gpu_integration_test.GpuIntegrationTest):
                  test_harness_script=basic_test_harness_script,
                  finish_js_condition='domAutomationController._finished',
                  success_eval_func='CheckOverlayMode',
+                 other_args=p.other_args))
+    for p in namespace.ForceFullDamagePages('SwapChainTraceTest'):
+      yield (p.name, gpu_relative_path + p.url,
+             _TraceTestArguments(
+                 browser_args=p.browser_args,
+                 category='gpu',
+                 test_harness_script=basic_test_harness_script,
+                 finish_js_condition='domAutomationController._finished',
+                 success_eval_func='CheckMainSwapChainPath',
                  other_args=p.other_args))
 
   def RunActualGpuTest(self, test_path, *args):
@@ -425,8 +424,7 @@ class TraceIntegrationTest(gpu_integration_test.GpuIntegrationTest):
 
   def _EvaluateSuccess_CheckSwapChainPath(self, category, event_iterator,
                                           other_args):
-    """Verified that swap chains were used for low latency canvas."""
-    del other_args  # Unused in this particular success evaluation.
+    """Verifies that swap chains are used as expected for low latency canvas."""
     os_name = self.browser.platform.GetOSName()
     assert os_name and os_name.lower() == 'win'
 
@@ -434,6 +432,10 @@ class TraceIntegrationTest(gpu_integration_test.GpuIntegrationTest):
     if overlay_bot_config is None:
       self.fail('Overlay bot config can not be determined')
     assert overlay_bot_config.get('direct_composition', False)
+
+    expect_no_overlay = other_args and other_args.get('no_overlay', False)
+    expect_overlay = not expect_no_overlay
+    found_overlay = False
 
     # Verify expectations through captured trace events.
     for event in event_iterator:
@@ -443,10 +445,53 @@ class TraceIntegrationTest(gpu_integration_test.GpuIntegrationTest):
         continue
       presentation_mode = event.args.get('image_type', None)
       if presentation_mode == 'swap chain':
+        found_overlay = True
         break
-    else:
+    if expect_overlay and not found_overlay:
       self.fail(
-          'Events with name %s were not found' % _SWAP_CHAIN_PRESENT_EVENT_NAME)
+          'Overlay expected but not found: matching %s events were not found' %
+          _PRESENT_TO_SWAP_CHAIN_EVENT_NAME)
+    elif expect_no_overlay and found_overlay:
+      self.fail(
+          'Overlay not expected but found: matching %s events were found' %
+          _PRESENT_TO_SWAP_CHAIN_EVENT_NAME)
+
+  def _EvaluateSuccess_CheckMainSwapChainPath(self, category, event_iterator,
+                                              other_args):
+    """Verified that Chrome's main swap chain is presented with full damage."""
+    os_name = self.browser.platform.GetOSName()
+    assert os_name and os_name.lower() == 'win'
+
+    overlay_bot_config = self.GetOverlayBotConfig()
+    if overlay_bot_config is None:
+      self.fail('Overlay bot config can not be determined')
+    assert overlay_bot_config.get('direct_composition', False)
+
+    expect_full_damage = other_args and other_args.get('full_damage', False)
+
+    partial_damage_encountered = False
+    full_damage_encountered = False
+    # Verify expectations through captured trace events.
+    for event in event_iterator:
+      if event.category != category:
+        continue
+      if event.name != _PRESENT_MAIN_SWAP_CHAIN_EVENT_NAME:
+        continue
+      dirty_rect = event.args.get('dirty_rect', None)
+      if dirty_rect is None:
+        continue
+      if dirty_rect == 'full_damage':
+        full_damage_encountered = True
+      else:
+        partial_damage_encountered = True
+
+    # Today Chrome either run with full damage or partial damage, but not both.
+    # This may change in the future.
+    if (expect_full_damage != full_damage_encountered
+        or expect_full_damage == partial_damage_encountered):
+      self.fail('Expected events with name %s of %s, got others' %
+                (_PRESENT_MAIN_SWAP_CHAIN_EVENT_NAME,
+                 'full damage' if expect_full_damage else 'partial damage'))
 
   @classmethod
   def ExpectationsFiles(cls):

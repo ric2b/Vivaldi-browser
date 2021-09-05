@@ -12,11 +12,12 @@ import "mojo/public/mojom/base/unguessable_token.mojom";
 import "mojo/public/mojom/base/values.mojom";
 import "services/network/public/mojom/address_list.mojom";
 import "services/network/public/mojom/cert_verifier_service.mojom";
+import "services/network/public/mojom/client_security_state.mojom";
 import "services/network/public/mojom/cookie_access_observer.mojom";
 import "services/network/public/mojom/cookie_manager.mojom";
-import "services/network/public/mojom/default_credentials.mojom";
 import "services/network/public/mojom/cors_origin_pattern.mojom";
 import "services/network/public/mojom/cross_origin_embedder_policy.mojom";
+import "services/network/public/mojom/default_credentials.mojom";
 import "services/network/public/mojom/host_resolver.mojom";
 import "services/network/public/mojom/http_request_headers.mojom";
 import "services/network/public/mojom/ip_address.mojom";
@@ -371,6 +372,14 @@ struct NetworkContextParams {
   [EnableIf=is_ct_supported]
   bool enable_expect_ct_reporting = false;
 
+  // Enables SCT auditing, which sends reports for SCTs found in connections
+  // made by this network context. Can also be dynamically configured via
+  // NetworkContext::SetSCTAuditingEnabled(). This must be set to true and
+  // auditing must be enabled and configured globally via
+  // NetworkService::ConfigureSCTAuditing().
+  [EnableIf=is_ct_supported]
+  bool enable_sct_auditing = false;
+
   // The Certificate Transparency logs that are known to the client. SCTs from
   // these logs will be extracted and verified; other SCTs will be treated as
   // unrecognized.
@@ -440,13 +449,6 @@ struct NetworkContextParams {
   // List of single-label hostnames that are exempted from the HSTS upgrade
   // policy.
   array<string> hsts_policy_bypass_list;
-
-  // Specifies the CORS mode.
-  //   kDefault - Decided by base::Feature
-  //   kEnable  - Enable CORS in Network Service (aka OOR-CORS)
-  //   kDisable - Don't enable CORS (Blink will take care of it)
-  enum CorsMode {kDefault, kDisable, kEnable};
-  CorsMode cors_mode = kDefault;
 
   // Points to a sqlite database containing persisted Reporting clients and NEL
   // policies. If Reporting and NEL persistence is disabled, then we'll ignore
@@ -571,37 +573,6 @@ struct URLLoaderFactoryOverride {
   bool skip_cors_enabled_scheme_check = false;
 };
 
-// How to treat private network requests.
-//
-// Private network requests are any requests to a resource served by a
-// non-public IP address.
-//
-// See the CORS-RFC1918 spec for details: https://wicg.github.io/cors-rfc1918.
-enum PrivateNetworkRequestPolicy {
-  // Allow all requests.
-  kAllow,
-
-  // Forbid requests to more-private address spaces than that of the initiator,
-  // when the initiator is not in a secure context.
-  kBlockFromInsecureToMorePrivate,
-};
-
-struct ClientSecurityState {
-  // https://mikewest.github.io/corpp/#integration-html
-  // https://mikewest.github.io/corpp/#initialize-embedder-policy-for-global
-  CrossOriginEmbedderPolicy cross_origin_embedder_policy;
-
-  // Whether the initiator of the requests is in a web secure context.
-  // See: https://developer.mozilla.org/en-US/docs/Web/Security/Secure_Contexts
-  bool is_web_secure_context = false;
-
-  // The initiator's IP AddressSpace.
-  IPAddressSpace ip_address_space = kUnknown;
-
-  // The policy to apply to private network requests.
-  PrivateNetworkRequestPolicy private_network_request_policy = kAllow;
-};
-
 // Whether to forbid all Trust Tokens redemption and signing operations
 // (https://github.com/wicg/trust-token-api).
 enum TrustTokenRedemptionPolicy {
@@ -610,8 +581,19 @@ enum TrustTokenRedemptionPolicy {
 };
 
 struct URLLoaderFactoryParams {
-  // Process requesting the URLLoaderFactory.
+  // Process that will be using the URLLoaderFactory to initiate HTTP requests.
+  // (This is *not* necessarily the same process that creates the factory,
+  // since only the Browser process should be able to call
+  // NetworkContext::CreateURLLoaderFactory.)
+  //
   // Set to kBrowserProcessId to indicate the browser process.
+  // SECURITY NOTE: Factories with kBrowserProcessId should not be sent
+  // to untrustworthy processes.
+  //
+  // Set to RenderProcessHost::GetID() to indicate a renderer process.
+  // SECURITY NOTE: Factories should not be shared among multiple renderer
+  // processes (e.g. |request_initiator_origin_lock| is specific to a single
+  // renderer process).
   int32 process_id = kInvalidProcessId;
 
   // If specified, then |request_initiator_origin_lock| locks
@@ -715,6 +697,10 @@ struct URLLoaderFactoryParams {
   // trusted source, it would be good to set this depending on the headers'
   // values, too.
   TrustTokenRedemptionPolicy trust_token_redemption_policy = kPotentiallyPermit;
+
+  // TODO(lukasza): https://crbug.com/1056949: Remove this diagnostic aid once
+  // the bug is understood.
+  string debug_tag = "<uninitialized>";
 };
 
 // The |credentials| output parameter is given to URLRequest::SetAuth()
@@ -863,10 +849,6 @@ interface NetworkContextClient {
   // Notification that a trust anchor was used for the given user.
   [EnableIf=is_chromeos]
   OnTrustAnchorUsed();
-
-  // Notification that a report was enqueued in the SCT auditing cache.
-  [EnableIf=is_ct_supported]
-  OnSCTReportReady(string cache_key);
 };
 
 // Represents a distinct context for making network requests, with its own
@@ -942,13 +924,14 @@ interface NetworkContext {
   ClearTrustTokenData(ClearDataFilter? filter) => ();
 
   // Clears network objects with implicit URL history information. Data related
-  // to events that happened prior to |start_time| may be retained. Only applies
-  // to network objects without more specific methods (Cookies,
-  // and the cache have, or will have, their own clearing APIs). This currently
-  // only covers server properties and transport security state.
+  // to events that happened prior to |start_time| and after |end_time| may be
+  // retained. Only applies to network objects without more specific methods
+  // (Cookies, and the cache have, or will have, their own clearing APIs). This
+  // currently only covers server properties and transport security state.
   //
   // The callback will be invoked once the data has been deleted.
-  ClearNetworkingHistorySince(mojo_base.mojom.Time start_time) => ();
+  ClearNetworkingHistoryBetween(mojo_base.mojom.Time start_time,
+                                mojo_base.mojom.Time end_time) => ();
 
   // Clears content from the HTTP cache. A specific range of time can be
   // specified with |start_time| and |end_time|. This supports unbounded deletes
@@ -991,9 +974,10 @@ interface NetworkContext {
   // non-null, |filter.origins| must be empty.
   ClearHostCache(ClearDataFilter? filter) => ();
 
-  // Clears all entries from the HTTP Auth cache that were added since
-  // |start_time|. Supports unbounded delete using null Time value.
-  ClearHttpAuthCache(mojo_base.mojom.Time start_time) => ();
+  // Clears all entries from the HTTP Auth cache that were between |start_time|
+  // and |end_time|, with |start_time| being inclusive and |end_time| exclusive.
+  ClearHttpAuthCache(mojo_base.mojom.Time start_time,
+                     mojo_base.mojom.Time end_time) => ();
 
   // Clears all report entries from the reporting cache. Should not be called if
   // the ENABLE_REPORTING build flag is false.

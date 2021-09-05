@@ -34,8 +34,7 @@ CaptureModeTypeView::CaptureModeTypeView()
                                                     kCaptureModeVideoIcon))) {
   auto* color_provider = AshColorProvider::Get();
   const SkColor bg_color = color_provider->GetControlsLayerColor(
-      AshColorProvider::ControlsLayerType::kControlBackgroundColorInactive,
-      AshColorProvider::AshColorMode::kDark);
+      AshColorProvider::ControlsLayerType::kControlBackgroundColorInactive);
   SetBackground(
       views::CreateRoundedRectBackground(bg_color, kBackgroundCornerRadius));
   SetBorder(views::CreateEmptyBorder(kViewInsets));
@@ -52,7 +51,8 @@ CaptureModeTypeView::~CaptureModeTypeView() = default;
 void CaptureModeTypeView::OnCaptureTypeChanged(CaptureModeType new_type) {
   image_toggle_button_->SetToggled(new_type == CaptureModeType::kImage);
   video_toggle_button_->SetToggled(new_type == CaptureModeType::kVideo);
-  DCHECK_NE(image_toggle_button_->toggled(), video_toggle_button_->toggled());
+  DCHECK_NE(image_toggle_button_->GetToggled(),
+            video_toggle_button_->GetToggled());
 }
 
 const char* CaptureModeTypeView::GetClassName() const {

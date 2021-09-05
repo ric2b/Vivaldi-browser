@@ -16,6 +16,42 @@
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "content/public/browser/storage_partition.h"
 
+AccessContextAuditService::CookieAccessHelper::CookieAccessHelper(
+    AccessContextAuditService* service)
+    : service_(service) {
+  DCHECK(service);
+  deletion_observer_.Add(service);
+}
+
+AccessContextAuditService::CookieAccessHelper::~CookieAccessHelper() {
+  FlushCookieRecords();
+}
+
+void AccessContextAuditService::CookieAccessHelper::OnCookieDeleted(
+    const net::CanonicalCookie& cookie) {
+  accessed_cookies_.erase(cookie);
+}
+
+void AccessContextAuditService::CookieAccessHelper::RecordCookieAccess(
+    const net::CookieList& accessed_cookies,
+    const url::Origin& top_frame_origin) {
+  if (top_frame_origin != last_seen_top_frame_origin_) {
+    FlushCookieRecords();
+    last_seen_top_frame_origin_ = top_frame_origin;
+  }
+
+  for (const auto& cookie : accessed_cookies)
+    accessed_cookies_.insert(cookie);
+}
+
+void AccessContextAuditService::CookieAccessHelper::FlushCookieRecords() {
+  if (accessed_cookies_.empty())
+    return;
+
+  service_->RecordCookieAccess(accessed_cookies_, last_seen_top_frame_origin_);
+  accessed_cookies_.clear();
+}
+
 AccessContextAuditService::AccessContextAuditService(Profile* profile)
     : clock_(base::DefaultClock::GetInstance()), profile_(profile) {}
 AccessContextAuditService::~AccessContextAuditService() = default;
@@ -53,7 +89,7 @@ bool AccessContextAuditService::Init(
 }
 
 void AccessContextAuditService::RecordCookieAccess(
-    const net::CookieList& accessed_cookies,
+    const canonical_cookie::CookieHashSet& accessed_cookies,
     const url::Origin& top_frame_origin) {
   // Opaque top frame origins are not supported.
   if (top_frame_origin.opaque())
@@ -68,8 +104,8 @@ void AccessContextAuditService::RecordCookieAccess(
       continue;
 
     access_records.emplace_back(top_frame_origin, cookie.Name(),
-                                cookie.Domain(), cookie.Path(),
-                                cookie.LastAccessDate(), cookie.IsPersistent());
+                                cookie.Domain(), cookie.Path(), now,
+                                cookie.IsPersistent());
   }
   database_task_runner_->PostTask(
       FROM_HERE, base::BindOnce(&AccessContextAuditDatabase::AddRecords,
@@ -97,6 +133,9 @@ void AccessContextAuditService::GetAllAccessRecords(
     AccessContextRecordsCallback callback) {
   if (!user_visible_tasks_in_progress++)
     database_task_runner_->UpdatePriority(base::TaskPriority::USER_VISIBLE);
+
+  for (auto& helper : cookie_access_helpers_)
+    helper.FlushCookieRecords();
 
   database_task_runner_->PostTaskAndReplyWithResult(
       FROM_HERE,
@@ -129,6 +168,7 @@ void AccessContextAuditService::RemoveAllRecordsForOriginKeyedStorage(
 }
 
 void AccessContextAuditService::Shutdown() {
+  DCHECK(!cookie_access_helpers_.might_have_observers());
   ClearSessionOnlyRecords();
 }
 
@@ -198,6 +238,10 @@ void AccessContextAuditService::OnCookieChange(
     case net::CookieChangeCause::EXPIRED:
     case net::CookieChangeCause::EVICTED:
     case net::CookieChangeCause::EXPIRED_OVERWRITE: {
+      // Notify helpers so that future accesses to this cookie are reported.
+      for (auto& helper : cookie_access_helpers_) {
+        helper.OnCookieDeleted(change.cookie);
+      }
       // Remove records of deleted cookie from database.
       database_task_runner_->PostTask(
           FROM_HERE,
@@ -249,6 +293,14 @@ void AccessContextAuditService::OnURLsDeleted(
             &AccessContextAuditDatabase::RemoveAllRecordsForTopFrameOrigins,
             database_, std::move(deleted_origins)));
   }
+}
+
+void AccessContextAuditService::AddObserver(CookieAccessHelper* helper) {
+  cookie_access_helpers_.AddObserver(helper);
+}
+
+void AccessContextAuditService::RemoveObserver(CookieAccessHelper* helper) {
+  cookie_access_helpers_.RemoveObserver(helper);
 }
 
 void AccessContextAuditService::SetClockForTesting(base::Clock* clock) {

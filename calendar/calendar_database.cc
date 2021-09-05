@@ -41,8 +41,8 @@ namespace {
 // Current version number. We write databases at the "current" version number,
 // but any previous version that can read the "compatible" one can make do with
 // our database without *too* many bad effects.
-const int kCurrentVersionNumber = 7;
-const int kCompatibleVersionNumber = 7;
+const int kCurrentVersionNumber = 9;
+const int kCompatibleVersionNumber = 9;
 
 sql::InitStatus LogMigrationFailure(int from_version) {
   LOG(ERROR) << "Calendar DB failed to migrate from version " << from_version
@@ -117,6 +117,17 @@ sql::InitStatus CalendarDatabase::Init(const base::FilePath& calendar_name) {
     return sql::INIT_FAILURE;
 
   bool firstRun = !GetDB().DoesTableExist("accounts");
+
+  int cur_version = meta_table_.GetVersionNumber();
+  // NOTE(arnar): Drop tables for non-upgradable versions.
+  if (cur_version <= 7) {
+    if (!db_.Execute("DROP TABLE IF EXISTS events") ||
+        !db_.Execute("DROP TABLE IF EXISTS calendar") ||
+        !db_.Execute("DROP TABLE IF EXISTS event_type") ||
+        !db_.Execute("DROP TABLE IF EXISTS recurring_events")) {
+      return sql::INIT_FAILURE;
+    }
+  }
 
   if (!CreateCalendarTable() || !CreateEventTable() ||
       !CreateEventTypeTable() || !CreateRecurringExceptionTable() ||
@@ -271,6 +282,28 @@ sql::InitStatus CalendarDatabase::EnsureCurrentVersion() {
   if (cur_version == 7) {
     // Version prior to adding is_template column to events table
     if (!MigrateCalendarToVersion8()) {
+      return LogMigrationFailure(cur_version);
+    }
+    ++cur_version;
+    meta_table_.SetVersionNumber(cur_version);
+    meta_table_.SetCompatibleVersionNumber(
+        std::min(cur_version, kCompatibleVersionNumber));
+  }
+
+  if (cur_version == 8) {
+    // Version prior to adding due, priority, status etc
+    if (!MigrateCalendarToVersion9()) {
+      return LogMigrationFailure(cur_version);
+    }
+    ++cur_version;
+    meta_table_.SetVersionNumber(cur_version);
+    meta_table_.SetCompatibleVersionNumber(
+        std::min(cur_version, kCompatibleVersionNumber));
+  }
+
+  if (cur_version == 9) {
+    // Version prior to adding supported_component_set
+    if (!MigrateCalendarToVersion10()) {
       return LogMigrationFailure(cur_version);
     }
     ++cur_version;

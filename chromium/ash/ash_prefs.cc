@@ -8,6 +8,7 @@
 #include "ash/ambient/ambient_controller.h"
 #include "ash/app_list/app_list_controller_impl.h"
 #include "ash/assistant/assistant_controller_impl.h"
+#include "ash/clipboard/clipboard_nudge_controller.h"
 #include "ash/detachable_base/detachable_base_handler.h"
 #include "ash/display/display_prefs.h"
 #include "ash/display/privacy_screen_controller.h"
@@ -19,9 +20,11 @@
 #include "ash/public/cpp/ash_pref_names.h"
 #include "ash/shelf/contextual_tooltip.h"
 #include "ash/shelf/shelf_controller.h"
+#include "ash/style/ash_color_provider.h"
 #include "ash/system/bluetooth/bluetooth_power_controller.h"
 #include "ash/system/caps_lock_notification_controller.h"
 #include "ash/system/gesture_education/gesture_education_notification_controller.h"
+#include "ash/system/media/media_tray.h"
 #include "ash/system/message_center/message_center_controller.h"
 #include "ash/system/network/vpn_list_view.h"
 #include "ash/system/night_light/night_light_controller_impl.h"
@@ -33,7 +36,9 @@
 #include "ash/touch/touch_devices_controller.h"
 #include "ash/wallpaper/wallpaper_controller_impl.h"
 #include "ash/wm/desks/desks_restore_util.h"
+#include "ash/wm/gestures/wm_gesture_handler.h"
 #include "chromeos/components/quick_answers/public/cpp/quick_answers_prefs.h"
+#include "chromeos/constants/chromeos_pref_names.h"
 #include "chromeos/services/assistant/public/cpp/assistant_prefs.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 
@@ -46,10 +51,12 @@ void RegisterProfilePrefs(PrefRegistrySimple* registry, bool for_test) {
   AccessibilityControllerImpl::RegisterProfilePrefs(registry);
   AppListControllerImpl::RegisterProfilePrefs(registry);
   AssistantControllerImpl::RegisterProfilePrefs(registry);
+  AshColorProvider::RegisterProfilePrefs(registry);
   AmbientController::RegisterProfilePrefs(registry);
   BluetoothPowerController::RegisterProfilePrefs(registry);
   CapsLockNotificationController::RegisterProfilePrefs(registry, for_test);
   contextual_tooltip::RegisterProfilePrefs(registry);
+  ClipboardNudgeController::RegisterProfilePrefs(registry);
   desks_restore_util::RegisterProfilePrefs(registry);
   DockedMagnifierControllerImpl::RegisterProfilePrefs(registry);
   GestureEducationNotificationController::RegisterProfilePrefs(registry,
@@ -66,6 +73,8 @@ void RegisterProfilePrefs(PrefRegistrySimple* registry, bool for_test) {
   ShelfController::RegisterProfilePrefs(registry);
   TouchDevicesController::RegisterProfilePrefs(registry, for_test);
   tray::VPNListView::RegisterProfilePrefs(registry);
+  WmGestureHandler::RegisterProfilePrefs(registry);
+  MediaTray::RegisterProfilePrefs(registry);
 
   // Provide prefs registered in the browser for ash_unittests.
   if (for_test) {
@@ -74,6 +83,9 @@ void RegisterProfilePrefs(PrefRegistrySimple* registry, bool for_test) {
     registry->RegisterBooleanPref(
         prefs::kMouseReverseScroll, false,
         user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PRIORITY_PREF);
+    registry->RegisterBooleanPref(
+        chromeos::prefs::kSuggestedContentEnabled, true,
+        user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PREF);
   }
 }
 
