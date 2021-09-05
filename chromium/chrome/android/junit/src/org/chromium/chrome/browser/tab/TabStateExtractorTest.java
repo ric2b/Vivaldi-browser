@@ -19,9 +19,11 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.robolectric.annotation.Config;
 
+import org.chromium.base.UserDataHost;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.JniMocker;
 import org.chromium.content_public.browser.LoadUrlParams;
+import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.common.Referrer;
 import org.chromium.url.Origin;
 
@@ -45,6 +47,8 @@ public class TabStateExtractorTest {
     @Mock
     private TabImpl mTabMock;
     @Mock
+    private WebContents mWebContentsMock;
+    @Mock
     private ByteBuffer mByteBufferMock;
     @Mock
     private Origin mMockOrigin;
@@ -53,15 +57,18 @@ public class TabStateExtractorTest {
     public void setUp() {
         MockitoAnnotations.initMocks(this);
         mocker.mock(WebContentsStateBridgeJni.TEST_HOOKS, mWebContentsBridgeJni);
+
+        doReturn(new UserDataHost()).when(mTabMock).getUserDataHost();
     }
 
     @Test
     @SmallTest
     public void testGetWebContentsState_notPending() {
         doReturn(null).when(mTabMock).getPendingLoadParams();
+        doReturn(mWebContentsMock).when(mTabMock).getWebContents();
         doReturn(mByteBufferMock)
                 .when(mWebContentsBridgeJni)
-                .getContentsStateAsByteBuffer(eq(mTabMock));
+                .getContentsStateAsByteBuffer(eq(mWebContentsMock));
 
         WebContentsState result = TabStateExtractor.getWebContentsState(mTabMock);
 

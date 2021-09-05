@@ -98,8 +98,6 @@ class ArcContainerClientAdapter
     request.set_play_store_auto_update(
         ToLoginManagerPlayStoreAutoUpdate(params.play_store_auto_update));
     request.set_arc_custom_tabs_experiment(params.arc_custom_tabs_experiment);
-    request.set_arc_print_spooler_experiment(
-        params.arc_print_spooler_experiment);
     request.set_disable_system_default_app(
         params.arc_disable_system_default_app);
 
@@ -112,6 +110,8 @@ class ArcContainerClientAdapter
     login_manager::UpgradeArcContainerRequest request;
     request.set_account_id(params.account_id);
     request.set_is_account_managed(params.is_account_managed);
+    request.set_is_managed_adb_sideloading_allowed(
+        params.is_managed_adb_sideloading_allowed);
     request.set_skip_boot_completed_broadcast(
         params.skip_boot_completed_broadcast);
     request.set_packages_cache_mode(

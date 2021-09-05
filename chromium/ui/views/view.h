@@ -23,14 +23,15 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/optional.h"
 #include "build/build_config.h"
 #include "third_party/skia/include/core/SkPath.h"
 #include "ui/accessibility/ax_enums.mojom-forward.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/class_property.h"
 #include "ui/base/clipboard/clipboard_format_type.h"
-#include "ui/base/dragdrop/drag_drop_types.h"
 #include "ui/base/dragdrop/drop_target_event.h"
+#include "ui/base/dragdrop/mojom/drag_drop_types.mojom-forward.h"
 #include "ui/base/dragdrop/os_exchange_data.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/compositor/layer_delegate.h"
@@ -43,6 +44,7 @@
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/vector2d.h"
+#include "ui/gfx/geometry/vector2d_conversions.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/views/layout/layout_types.h"
 #include "ui/views/metadata/metadata_header_macros.h"
@@ -125,7 +127,7 @@ struct VIEWS_EXPORT ViewHierarchyChangedDetails {
 // Used to identify the CallbackList<> within the PropertyChangedVectors map.
 using PropertyKey = const void*;
 
-using PropertyChangedCallbacks = base::CallbackList<void()>;
+using PropertyChangedCallbacks = base::RepeatingClosureList;
 using PropertyChangedCallback = PropertyChangedCallbacks::CallbackType;
 using PropertyChangedSubscription =
     std::unique_ptr<PropertyChangedCallbacks::Subscription>;
@@ -358,9 +360,8 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
 
       // Since pixels cannot be fractional, we need to round the offset to get
       // the correct physical pixel coordinate.
-      gfx::Vector2dF integral_pixel_offset(
-          gfx::ToRoundedInt(fractional_pixel_offset.x()),
-          gfx::ToRoundedInt(fractional_pixel_offset.y()));
+      gfx::Vector2d integral_pixel_offset =
+          gfx::ToRoundedVector2d(fractional_pixel_offset);
 
       // |integral_pixel_offset - fractional_pixel_offset| gives the subpixel
       // offset amount for |offset_to_parent|. This is added to
@@ -907,7 +908,7 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   // Enables or disables flipping of the gfx::Canvas during Paint(). Note that
   // if canvas flipping is enabled, the canvas will be flipped only if the UI
   // layout is right-to-left; that is, the canvas will be flipped only if
-  // base::i18n::IsRTL() returns true.
+  // GetMirrored() is true.
   //
   // Enabling canvas flipping is useful for leaf views that draw an image that
   // needs to be flipped horizontally when the UI layout is right-to-left
@@ -915,6 +916,19 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   // because their drawing logic stays the same and they can become agnostic to
   // the UI directionality.
   virtual void EnableCanvasFlippingForRTLUI(bool enable);
+
+  // When set, this view will ignore base::l18n::IsRTL() and instead be drawn
+  // according to |is_mirrored|.
+  //
+  // This is useful for views that should be displayed the same regardless of UI
+  // direction. Unlike EnableCanvasFlippingForRTLUI this setting has an effect
+  // on the visual order of child views.
+  //
+  // This setting does not propagate to child views. So while the visual order
+  // of this view's children may change, the visual order of this view's
+  // grandchildren in relation to their parents are unchanged.
+  void SetMirrored(bool is_mirrored) { is_mirrored_ = is_mirrored; }
+  bool GetMirrored() const;
 
   // Input ---------------------------------------------------------------------
   // The points, rects, mouse locations, and touch locations in the following
@@ -1574,14 +1588,9 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
 
   PropertyChangedSubscription AddPropertyChangedCallback(
       PropertyKey property,
-      PropertyChangedCallback callback);
+      PropertyChangedCallback callback) WARN_UNUSED_RESULT;
   void OnPropertyChanged(PropertyKey property,
                          PropertyEffects property_effects);
-
-  // Empty function called in HandlePropertyChangeEffects to be overridden in
-  // subclasses if they have custom functions for property changes.
-  virtual void OnHandlePropertyChangeEffects(PropertyEffects property_effects) {
-  }
 
  private:
   friend class internal::PreEventDispatchHandler;
@@ -1859,7 +1868,7 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   // Returns true if a drag was started.
   bool DoDrag(const ui::LocatedEvent& event,
               const gfx::Point& press_pt,
-              ui::DragDropTypes::DragEventSource source);
+              ui::mojom::DragEventSource source);
 
   // Property support ----------------------------------------------------------
 
@@ -1980,6 +1989,13 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   // to be flipped horizontally (using the appropriate transform) on
   // right-to-left locales for this View.
   bool flip_canvas_on_paint_for_rtl_ui_ = false;
+
+  // Controls whether GetTransform(), the mirroring functions, and the like
+  // horizontally mirror. This controls how child views are physically
+  // positioned onscreen. The default behavior should be correct in most cases,
+  // but can be overridden if a particular view must always be laid out in some
+  // direction regardless of the application's default UI direction.
+  base::Optional<bool> is_mirrored_;
 
   // Accelerated painting ------------------------------------------------------
 

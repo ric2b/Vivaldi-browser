@@ -17,6 +17,7 @@
 #include "chrome/browser/chromeos/child_accounts/time_limits/app_types.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_utils.h"
+#include "chrome/common/chrome_features.h"
 #include "components/services/app_service/public/cpp/app_update.h"
 #include "components/services/app_service/public/cpp/instance_update.h"
 #include "components/services/app_service/public/mojom/types.mojom.h"
@@ -169,20 +170,25 @@ void AppServiceWrapper::GetAppIcon(
     const {
   apps::AppServiceProxy* proxy =
       apps::AppServiceProxyFactory::GetForProfile(profile_);
-  DCHECK(proxy);
   const std::string app_service_id = AppServiceIdFromAppId(app_id, profile_);
   DCHECK(!app_service_id.empty());
 
+  auto icon_type =
+      (base::FeatureList::IsEnabled(features::kAppServiceAdaptiveIcon))
+          ? apps::mojom::IconType::kStandard
+          : apps::mojom::IconType::kUncompressed;
   proxy->LoadIconFromIconKey(
-      app_id.app_type(), app_service_id, apps::mojom::IconKey::New(),
-      apps::mojom::IconCompression::kUncompressed, size_hint_in_dp,
+      app_id.app_type(), app_service_id, apps::mojom::IconKey::New(), icon_type,
+      size_hint_in_dp,
       /* allow_placeholder_icon */ false,
       base::BindOnce(
           [](base::OnceCallback<void(base::Optional<gfx::ImageSkia>)> callback,
              apps::mojom::IconValuePtr icon_value) {
-            if (!icon_value ||
-                icon_value->icon_compression !=
-                    apps::mojom::IconCompression::kUncompressed) {
+            auto icon_type = (base::FeatureList::IsEnabled(
+                                 features::kAppServiceAdaptiveIcon))
+                                 ? apps::mojom::IconType::kStandard
+                                 : apps::mojom::IconType::kUncompressed;
+            if (!icon_value || icon_value->icon_type != icon_type) {
               std::move(callback).Run(base::nullopt);
             } else {
               std::move(callback).Run(icon_value->uncompressed);
@@ -291,24 +297,17 @@ void AppServiceWrapper::OnInstanceRegistryWillBeDestroyed(
 }
 
 apps::AppServiceProxy* AppServiceWrapper::GetAppProxy() {
-  apps::AppServiceProxy* proxy =
-      apps::AppServiceProxyFactory::GetForProfile(profile_);
-  DCHECK(proxy);
-  return proxy;
+  return apps::AppServiceProxyFactory::GetForProfile(profile_);
 }
 
 apps::AppRegistryCache& AppServiceWrapper::GetAppCache() const {
-  apps::AppServiceProxy* proxy =
-      apps::AppServiceProxyFactory::GetForProfile(profile_);
-  DCHECK(proxy);
-  return proxy->AppRegistryCache();
+  return apps::AppServiceProxyFactory::GetForProfile(profile_)
+      ->AppRegistryCache();
 }
 
 apps::InstanceRegistry& AppServiceWrapper::GetInstanceRegistry() const {
-  apps::AppServiceProxy* proxy =
-      apps::AppServiceProxyFactory::GetForProfile(profile_);
-  DCHECK(proxy);
-  return proxy->InstanceRegistry();
+  return apps::AppServiceProxyFactory::GetForProfile(profile_)
+      ->InstanceRegistry();
 }
 
 bool AppServiceWrapper::ShouldIncludeApp(const AppId& app_id) const {

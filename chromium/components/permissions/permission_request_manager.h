@@ -18,6 +18,10 @@
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
 
+namespace content {
+class RenderFrameHost;
+}
+
 namespace test {
 class PermissionRequestManagerTestApi;
 }
@@ -84,7 +88,8 @@ class PermissionRequestManager
   // bubble closes. A request with message text identical to an outstanding
   // request will be merged with the outstanding request, and will have the same
   // callbacks called as the outstanding request.
-  void AddRequest(PermissionRequest* request);
+  void AddRequest(content::RenderFrameHost* source_frame,
+                  PermissionRequest* request);
 
   // Will reposition the bubble (may change parent if necessary).
   void UpdateAnchorPosition();
@@ -207,6 +212,8 @@ class PermissionRequestManager
 
   void DoAutoResponseForTesting();
 
+  int CountQueuedPermissionRequests(PermissionRequest* request);
+
   // Factory to be used to create views when needed.
   PermissionPrompt::Factory view_factory_;
 
@@ -222,7 +229,16 @@ class PermissionRequestManager
   // When this is non-empty, the |view_| is generally non-null as long as the
   // tab is visible.
   std::vector<PermissionRequest*> requests_;
-  base::circular_deque<PermissionRequest*> queued_requests_;
+
+  struct RequestAndSource {
+    int render_process_id;
+    int render_frame_id;
+    PermissionRequest* request;
+
+    bool IsSourceFrameInactiveAndDisallowReactivation() const;
+  };
+
+  base::circular_deque<RequestAndSource> queued_requests_;
   // Maps from the first request of a kind to subsequent requests that were
   // duped against it.
   std::unordered_multimap<PermissionRequest*, PermissionRequest*>

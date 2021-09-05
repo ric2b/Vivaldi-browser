@@ -7,12 +7,14 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "base/command_line.h"
 #include "base/logging.h"
 #include "base/system/sys_info.h"
 #include "build/build_config.h"
 #include "gpu/config/gpu_info.h"
 #include "gpu/config/gpu_info_collector.h"
 #include "gpu/config/gpu_test_expectations_parser.h"
+#include "ui/gl/gl_utils.h"
 
 #if defined(OS_WIN)
 #include "base/win/windows_version.h"
@@ -44,37 +46,45 @@ GPUTestConfig::OS GetCurrentOS() {
   if (major_version == 10)
     return GPUTestConfig::kOsWin10;
   return GPUTestConfig::kOsUnknown;
-#elif defined(OS_MACOSX)
+#elif defined(OS_MAC)
   int32_t major_version = 0;
   int32_t minor_version = 0;
   int32_t bugfix_version = 0;
   base::SysInfo::OperatingSystemVersionNumbers(
       &major_version, &minor_version, &bugfix_version);
-  if (major_version == 10) {
-    switch (minor_version) {
-      case 5:
-        return GPUTestConfig::kOsMacLeopard;
-      case 6:
-        return GPUTestConfig::kOsMacSnowLeopard;
-      case 7:
-        return GPUTestConfig::kOsMacLion;
-      case 8:
-        return GPUTestConfig::kOsMacMountainLion;
-      case 9:
-        return GPUTestConfig::kOsMacMavericks;
-      case 10:
-        return GPUTestConfig::kOsMacYosemite;
-      case 11:
-        return GPUTestConfig::kOsMacElCapitan;
-      case 12:
-        return GPUTestConfig::kOsMacSierra;
-      case 13:
-        return GPUTestConfig::kOsMacHighSierra;
-      case 14:
-        return GPUTestConfig::kOsMacMojave;
-      case 15:
-        return GPUTestConfig::kOsMacCatalina;
-    }
+  switch (major_version) {
+    case 10:
+      switch (minor_version) {
+        case 5:
+          return GPUTestConfig::kOsMacLeopard;
+        case 6:
+          return GPUTestConfig::kOsMacSnowLeopard;
+        case 7:
+          return GPUTestConfig::kOsMacLion;
+        case 8:
+          return GPUTestConfig::kOsMacMountainLion;
+        case 9:
+          return GPUTestConfig::kOsMacMavericks;
+        case 10:
+          return GPUTestConfig::kOsMacYosemite;
+        case 11:
+          return GPUTestConfig::kOsMacElCapitan;
+        case 12:
+          return GPUTestConfig::kOsMacSierra;
+        case 13:
+          return GPUTestConfig::kOsMacHighSierra;
+        case 14:
+          return GPUTestConfig::kOsMacMojave;
+        case 15:
+          return GPUTestConfig::kOsMacCatalina;
+      }
+      break;
+    case 11:
+      switch (minor_version) {
+        case 0:
+          return GPUTestConfig::kOsMacBigSur;
+      }
+      break;
   }
   return GPUTestConfig::kOsUnknown;
 #elif defined(OS_ANDROID)
@@ -92,7 +102,8 @@ GPUTestConfig::GPUTestConfig()
     : os_(kOsUnknown),
       gpu_device_id_(0),
       build_type_(kBuildTypeUnknown),
-      api_(kAPIUnknown) {}
+      api_(kAPIUnknown),
+      command_decoder_(kCommandDecoderUnknown) {}
 
 GPUTestConfig::GPUTestConfig(const GPUTestConfig& other) = default;
 
@@ -123,6 +134,12 @@ void GPUTestConfig::set_build_type(int32_t build_type) {
 void GPUTestConfig::set_api(int32_t api) {
   DCHECK_EQ(0, api & ~(kAPID3D9 | kAPID3D11 | kAPIGLDesktop | kAPIGLES));
   api_ = api;
+}
+
+void GPUTestConfig::set_command_decoder(int32_t command_decoder) {
+  DCHECK_EQ(0, command_decoder &
+                   ~(kCommandDecoderPassthrough | kCommandDecoderValidating));
+  command_decoder_ = command_decoder;
 }
 
 bool GPUTestConfig::IsValid() const {
@@ -179,6 +196,11 @@ bool GPUTestBotConfig::SetGPUInfo(const GPUInfo& gpu_info) {
   ClearGPUVendor();
   AddGPUVendor(gpu_info.gpu.vendor_id);
   set_gpu_device_id(gpu_info.gpu.device_id);
+  if (gpu_info.passthrough_cmd_decoder) {
+    set_command_decoder(kCommandDecoderPassthrough);
+  } else {
+    set_command_decoder(kCommandDecoderValidating);
+  }
   return true;
 }
 
@@ -200,6 +222,7 @@ bool GPUTestBotConfig::IsValid() const {
     case kOsMacHighSierra:
     case kOsMacMojave:
     case kOsMacCatalina:
+    case kOsMacBigSur:
     case kOsLinux:
     case kOsChromeOS:
     case kOsAndroid:
@@ -246,6 +269,9 @@ bool GPUTestBotConfig::Matches(const GPUTestConfig& config) const {
     return false;
   if (config.api() != 0 && (api() & config.api()) == 0)
     return false;
+  if (config.command_decoder() != 0 &&
+      command_decoder() != config.command_decoder())
+    return false;
   return true;
 }
 
@@ -266,7 +292,8 @@ bool GPUTestBotConfig::LoadCurrentConfig(const GPUInfo* gpu_info) {
     rt = false;
 #else
     GPUInfo my_gpu_info;
-    if (!CollectBasicGraphicsInfo(&my_gpu_info)) {
+    if (!CollectBasicGraphicsInfo(base::CommandLine::ForCurrentProcess(),
+                                  &my_gpu_info)) {
       LOG(ERROR) << "Fail to identify GPU";
       rt = false;
     } else {
@@ -311,7 +338,7 @@ bool GPUTestBotConfig::CurrentConfigMatches(
 }
 
 // static
-bool GPUTestBotConfig::GpuBlacklistedOnBot() {
+bool GPUTestBotConfig::GpuBlocklistedOnBot() {
   return false;
 }
 

@@ -281,6 +281,17 @@ ScopedJavaLocalRef<jobject> WebContentsAndroid::GetFocusedFrame(
   return rfh->GetJavaRenderFrameHost();
 }
 
+ScopedJavaLocalRef<jobject> WebContentsAndroid::GetRenderFrameHostFromId(
+    JNIEnv* env,
+    jint render_process_id,
+    jint render_frame_id) const {
+  RenderFrameHost* rfh =
+      RenderFrameHost::FromID(render_process_id, render_frame_id);
+  if (!rfh)
+    return nullptr;
+  return rfh->GetJavaRenderFrameHost();
+}
+
 ScopedJavaLocalRef<jstring> WebContentsAndroid::GetTitle(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj) const {
@@ -454,7 +465,7 @@ jboolean WebContentsAndroid::FocusLocationBarByDefault(
 bool WebContentsAndroid::IsFullscreenForCurrentTab(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj) {
-  return web_contents_->IsFullscreenForCurrentTab();
+  return web_contents_->IsFullscreen();
 }
 
 void WebContentsAndroid::ExitFullscreen(JNIEnv* env,
@@ -832,9 +843,7 @@ void WebContentsAndroid::SetDisplayCutoutSafeArea(
 void WebContentsAndroid::NotifyRendererPreferenceUpdate(
     JNIEnv* env,
     const base::android::JavaParamRef<jobject>& obj) {
-  RenderViewHost* rvh = web_contents_->GetRenderViewHost();
-  DCHECK(rvh);
-  rvh->OnWebkitPreferencesChanged();
+  web_contents_->OnWebPreferencesChanged();
 }
 
 void WebContentsAndroid::NotifyBrowserControlsHeightChanged(

@@ -21,13 +21,10 @@
 #include "chrome/browser/ui/app_list/arc/arc_app_utils.h"
 #include "chrome/browser/ui/app_list/internal_app/internal_app_metadata.h"
 #include "chrome/browser/ui/ash/launcher/app_service/app_service_shelf_context_menu.h"
-#include "chrome/browser/ui/ash/launcher/arc_shelf_context_menu.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller_util.h"
-#include "chrome/browser/ui/ash/launcher/crostini_shelf_context_menu.h"
 #include "chrome/browser/ui/ash/launcher/extension_shelf_context_menu.h"
 #include "chrome/browser/ui/ash/launcher/extension_uninstaller.h"
-#include "chrome/browser/ui/ash/launcher/internal_app_shelf_context_menu.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/vector_icons/vector_icons.h"
@@ -41,7 +38,6 @@ namespace {
 void UninstallApp(Profile* profile, const std::string& app_id) {
   apps::AppServiceProxy* proxy =
       apps::AppServiceProxyFactory::GetForProfile(profile);
-  DCHECK(proxy);
   if (proxy->AppRegistryCache().GetAppType(app_id) !=
       apps::mojom::AppType::kUnknown) {
     proxy->Uninstall(app_id, nullptr /* parent_window */);
@@ -67,39 +63,17 @@ std::unique_ptr<ShelfContextMenu> ShelfContextMenu::Create(
   DCHECK(item);
   DCHECK(!item->id.IsNull());
 
-  if (base::FeatureList::IsEnabled(features::kAppServiceContextMenu)) {
-    apps::AppServiceProxy* proxy =
-        apps::AppServiceProxyFactory::GetForProfile(controller->profile());
+  apps::AppServiceProxy* proxy =
+      apps::AppServiceProxyFactory::GetForProfile(controller->profile());
 
-    // AppServiceShelfContextMenu supports context menus for apps registered in
-    // AppService, Arc shortcuts and Crostini apps with the prefix "crostini:".
-    if (proxy && (proxy->AppRegistryCache().GetAppType(item->id.app_id) !=
-                      apps::mojom::AppType::kUnknown ||
-                  crostini::IsUnmatchedCrostiniShelfAppId(item->id.app_id) ||
-                  arc::IsArcItem(controller->profile(), item->id.app_id))) {
-      return std::make_unique<AppServiceShelfContextMenu>(controller, item,
-                                                          display_id);
-    }
-
-    // Create an ExtensionShelfContextMenu for other items.
-    return std::make_unique<ExtensionShelfContextMenu>(controller, item,
-                                                       display_id);
-  }
-
-  // Create an ArcShelfContextMenu if the item is an ARC app.
-  if (arc::IsArcItem(controller->profile(), item->id.app_id))
-    return std::make_unique<ArcShelfContextMenu>(controller, item, display_id);
-
-  // Use CrostiniShelfContextMenu for crostini apps and Terminal System App.
-  if (crostini::IsCrostiniShelfAppId(controller->profile(), item->id.app_id) ||
-      item->id.app_id == crostini::kCrostiniTerminalSystemAppId) {
-    return std::make_unique<CrostiniShelfContextMenu>(controller, item,
-                                                      display_id);
-  }
-
-  if (app_list::IsInternalApp(item->id.app_id)) {
-    return std::make_unique<InternalAppShelfContextMenu>(controller, item,
-                                                         display_id);
+  // AppServiceShelfContextMenu supports context menus for apps registered in
+  // AppService, Arc shortcuts and Crostini apps with the prefix "crostini:".
+  if (proxy->AppRegistryCache().GetAppType(item->id.app_id) !=
+          apps::mojom::AppType::kUnknown ||
+      crostini::IsUnmatchedCrostiniShelfAppId(item->id.app_id) ||
+      arc::IsArcItem(controller->profile(), item->id.app_id)) {
+    return std::make_unique<AppServiceShelfContextMenu>(controller, item,
+                                                        display_id);
   }
 
   // Create an ExtensionShelfContextMenu for other items.

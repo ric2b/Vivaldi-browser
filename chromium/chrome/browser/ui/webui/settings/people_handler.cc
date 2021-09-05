@@ -175,9 +175,12 @@ std::string GetSyncErrorAction(sync_ui_util::ActionType action_type) {
       return "retrieveTrustedVaultKeys";
     case sync_ui_util::CONFIRM_SYNC_SETTINGS:
       return "confirmSyncSettings";
-    default:
+    case sync_ui_util::NO_ACTION:
       return "noAction";
   }
+
+  NOTREACHED();
+  return std::string();
 }
 
 // Returns the base::Value associated with the account, to use in the stored
@@ -286,7 +289,7 @@ void PeopleHandler::RegisterMessages() {
                           base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       "SyncSetupShowSetupUI",
-      base::BindRepeating(&PeopleHandler::HandleShowSetupUI,
+      base::BindRepeating(&PeopleHandler::HandleShowSyncSetupUI,
                           base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       "SyncSetupGetSyncStatus",
@@ -615,7 +618,7 @@ void PeopleHandler::HandleSetEncryption(const base::ListValue* args) {
     ProfileMetrics::LogProfileSyncInfo(ProfileMetrics::SYNC_PASSPHRASE);
 }
 
-void PeopleHandler::HandleShowSetupUI(const base::ListValue* args) {
+void PeopleHandler::HandleShowSyncSetupUI(const base::ListValue* args) {
   AllowJavascript();
 
   syncer::SyncService* service = GetSyncService();
@@ -634,6 +637,8 @@ void PeopleHandler::HandleShowSetupUI(const base::ListValue* args) {
 
   // Observe the web contents for a before unload event.
   Observe(web_ui()->GetWebContents());
+
+  MaybeMarkSyncConfiguring();
 
   PushSyncPrefs();
 
@@ -697,10 +702,13 @@ void PeopleHandler::HandleSignout(const base::ListValue* args) {
           delete_profile ? signin_metrics::SignoutDelete::DELETED
                          : signin_metrics::SignoutDelete::KEEPING;
 
-      // Do not remove the accounts: the Gaia logout tab will remove them in a
-      // better way (see http://crbug.com/1068978).
+      // Use ClearAccountsAction::kDefault: if the primary account is still
+      // valid, it will be removed by the Gaia logout tab
+      // (see http://crbug.com/1068978). If the account is already invalid, drop
+      // the token now (because it's already invalid on the web, so the Gaia
+      // logout tab won't affect it, see http://crbug.com/1114646).
       identity_manager->GetPrimaryAccountMutator()->ClearPrimaryAccount(
-          signin::PrimaryAccountMutator::ClearAccountsAction::kKeepAll,
+          signin::PrimaryAccountMutator::ClearAccountsAction::kDefault,
           signin_metrics::USER_CLICKED_SIGNOUT_SETTINGS, delete_metric);
     } else {
       DCHECK(!delete_profile)
@@ -862,9 +870,10 @@ void PeopleHandler::OnPrimaryAccountCleared(
 
 void PeopleHandler::OnStateChanged(syncer::SyncService* sync) {
   UpdateSyncStatus();
-
-  // When the SyncService changes its state, we should also push the updated
-  // sync preferences.
+  // TODO(crbug.com/1106764): Re-evaluate marking sync as configuring here,
+  // since this gets called whenever ProfileSyncService changes state. Inline
+  // MaybeMarkSyncConfiguring() then.
+  MaybeMarkSyncConfiguring();
   PushSyncPrefs();
 }
 
@@ -952,21 +961,13 @@ std::unique_ptr<base::DictionaryValue> PeopleHandler::GetSyncStatusDictionary()
 }
 
 void PeopleHandler::PushSyncPrefs() {
-#if !defined(OS_CHROMEOS)
-  // Early exit if the user has not signed in yet.
-  if (IsProfileAuthNeededOrHasErrors())
-    return;
-#endif
-
   syncer::SyncService* service = GetSyncService();
   // The sync service may be nullptr if it has been just disabled by policy.
   if (!service || !service->IsEngineInitialized()) {
     return;
   }
 
-  configuring_sync_ = true;
-
-  // Setup args for the sync configure screen:
+  // Setup values for the JSON response:
   //   syncAllDataTypes: true if the user wants to sync everything
   //   <data_type>Registered: true if the associated data type is supported
   //   <data_type>Synced: true if the user wants to sync that specific data type
@@ -1062,6 +1063,17 @@ void PeopleHandler::MarkFirstSetupComplete() {
   service->GetUserSettings()->SetFirstSetupComplete(
       syncer::SyncFirstSetupCompleteSource::ADVANCED_FLOW_CONFIRM);
   FireWebUIListener("sync-settings-saved");
+}
+
+void PeopleHandler::MaybeMarkSyncConfiguring() {
+#if !defined(OS_CHROMEOS)
+  if (IsProfileAuthNeededOrHasErrors())
+    return;
+#endif
+  syncer::SyncService* service = GetSyncService();
+  // The sync service may be nullptr if it has been just disabled by policy.
+  if (service && service->IsEngineInitialized())
+    configuring_sync_ = true;
 }
 
 bool PeopleHandler::IsProfileAuthNeededOrHasErrors() {

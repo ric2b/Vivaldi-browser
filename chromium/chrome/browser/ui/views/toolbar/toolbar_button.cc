@@ -23,6 +23,7 @@
 #include "chrome/browser/ui/views/toolbar/toolbar_ink_drop_util.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node_data.h"
+#include "ui/base/models/image_model.h"
 #include "ui/base/models/menu_model.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
@@ -95,13 +96,11 @@ ToolbarButton::ToolbarButton(views::ButtonListener* listener,
   SetProperty(views::kInternalPaddingKey, gfx::Insets());
 
   UpdateColorsAndInsets();
+
+  SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
 }
 
 ToolbarButton::~ToolbarButton() {}
-
-void ToolbarButton::Init() {
-  SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
-}
 
 void ToolbarButton::SetHighlight(const base::string16& highlight_text,
                                  base::Optional<SkColor> highlight_color) {
@@ -200,14 +199,14 @@ void ToolbarButton::UpdateIconsWithColors(const gfx::VectorIcon& icon,
                                           SkColor hovered_color,
                                           SkColor pressed_color,
                                           SkColor disabled_color) {
-  SetImage(ButtonState::STATE_NORMAL,
-           gfx::CreateVectorIcon(icon, normal_color));
-  SetImage(ButtonState::STATE_HOVERED,
-           gfx::CreateVectorIcon(icon, hovered_color));
-  SetImage(ButtonState::STATE_PRESSED,
-           gfx::CreateVectorIcon(icon, pressed_color));
-  SetImage(views::Button::STATE_DISABLED,
-           gfx::CreateVectorIcon(icon, disabled_color));
+  SetImageModel(ButtonState::STATE_NORMAL,
+                ui::ImageModel::FromVectorIcon(icon, normal_color));
+  SetImageModel(ButtonState::STATE_HOVERED,
+                ui::ImageModel::FromVectorIcon(icon, hovered_color));
+  SetImageModel(ButtonState::STATE_PRESSED,
+                ui::ImageModel::FromVectorIcon(icon, pressed_color));
+  SetImageModel(Button::STATE_DISABLED,
+                ui::ImageModel::FromVectorIcon(icon, disabled_color));
 }
 
 void ToolbarButton::UpdateIconsWithStandardColors(const gfx::VectorIcon& icon) {
@@ -279,9 +278,12 @@ void ToolbarButton::OnBoundsChanged(const gfx::Rect& previous_bounds) {
 }
 
 void ToolbarButton::OnThemeChanged() {
-  LabelButton::OnThemeChanged();
   if (installable_ink_drop_)
     installable_ink_drop_->SetConfig(GetToolbarInstallableInkDropConfig(this));
+  UpdateIcon();
+
+  // Call this after UpdateIcon() to properly reset images.
+  LabelButton::OnThemeChanged();
 }
 
 gfx::Rect ToolbarButton::GetAnchorBoundsInScreen() const {
@@ -351,7 +353,7 @@ void ToolbarButton::OnMouseExited(const ui::MouseEvent& event) {
   // Starting a drag results in a MouseExited, we need to ignore it.
   // A right click release triggers an exit event. We want to
   // remain in a PUSHED state until the drop down menu closes.
-  if (state() != STATE_DISABLED && !InDrag() && state() != STATE_PRESSED)
+  if (GetState() != STATE_DISABLED && !InDrag() && GetState() != STATE_PRESSED)
     SetState(STATE_NORMAL);
 }
 
@@ -511,7 +513,7 @@ void ToolbarButton::OnMenuClosed() {
   menu_showing_ = false;
 
   // Set the state back to normal after the drop down menu is closed.
-  if (state() != STATE_DISABLED) {
+  if (GetState() != STATE_DISABLED) {
     GetInkDrop()->SetHovered(IsMouseHovered());
     SetState(STATE_NORMAL);
   }

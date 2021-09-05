@@ -8,7 +8,7 @@
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/waitable_event.h"
-#include "chrome/browser/password_manager/account_storage/account_password_store_factory.h"
+#include "chrome/browser/password_manager/account_password_store_factory.h"
 #include "chrome/browser/password_manager/password_store_factory.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/sync/test/integration/passwords_helper.h"
@@ -41,20 +41,20 @@ class PasswordsCounterTest : public InProcessBrowserTest {
 
   void AddLogin(const std::string& origin,
                 const std::string& username,
-                bool blacklisted) {
+                bool blocked_by_user) {
     // Add login and wait until the password store actually changes.
     // on the database thread.
     passwords_helper::AddLogin(
-        store_.get(), CreateCredentials(origin, username, blacklisted));
+        store_.get(), CreateCredentials(origin, username, blocked_by_user));
   }
 
   void RemoveLogin(const std::string& origin,
                    const std::string& username,
-                   bool blacklisted) {
+                   bool blocked_by_user) {
     // Remove login and wait until the password store actually changes
     // on the database thread.
     passwords_helper::RemoveLogin(
-        store_.get(), CreateCredentials(origin, username, blacklisted));
+        store_.get(), CreateCredentials(origin, username, blocked_by_user));
   }
 
   void SetPasswordsDeletionPref(bool value) {
@@ -122,13 +122,13 @@ class PasswordsCounterTest : public InProcessBrowserTest {
  private:
   PasswordForm CreateCredentials(const std::string& origin,
                                  const std::string& username,
-                                 bool blacklisted) {
+                                 bool blocked_by_user) {
     PasswordForm result;
     result.signon_realm = origin;
     result.url = GURL(origin);
     result.username_value = base::ASCIIToUTF16(username);
     result.password_value = base::ASCIIToUTF16("hunter2");
-    result.blacklisted_by_user = blacklisted;
+    result.blocked_by_user = blocked_by_user;
     result.date_created = time_;
     result.times_used = times_used_;
     return result;
@@ -171,8 +171,8 @@ IN_PROC_BROWSER_TEST_F(PasswordsCounterTest, SameDomain) {
   EXPECT_EQ(5u, GetResult());
 }
 
-// Tests that the counter doesn't count blacklisted entries.
-IN_PROC_BROWSER_TEST_F(PasswordsCounterTest, Blacklisted) {
+// Tests that the counter doesn't count blocklisted entries.
+IN_PROC_BROWSER_TEST_F(PasswordsCounterTest, blocklisted) {
   AddLogin("https://www.google.com", "user1", false);
   AddLogin("https://www.google.com", "user2", true);
   AddLogin("https://www.chrome.com", "user3", true);

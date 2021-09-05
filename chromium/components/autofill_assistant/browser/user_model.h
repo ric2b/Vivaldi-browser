@@ -17,6 +17,8 @@
 #include "components/autofill/core/browser/data_model/credit_card.h"
 #include "components/autofill_assistant/browser/model.pb.h"
 #include "components/autofill_assistant/browser/value_util.h"
+#include "url/gurl.h"
+
 namespace autofill_assistant {
 
 // Manages a map of |ValueProto| instances and notifies observers of changes.
@@ -74,17 +76,6 @@ class UserModel {
     return values;
   }
 
-  // Adds a set of placeholders (overwrite if necessary). When looking up values
-  // by identifier, all occurrences of ${key} are automatically replaced by
-  // their value. Example: the current set of placeholders contains "i" -> "1".
-  // Looking up the value "value[${i}]" will now actually lookup "value[1]".
-  void AddIdentifierPlaceholders(
-      const std::map<std::string, std::string> placeholders);
-
-  // Removes a set of placeholders.
-  void RemoveIdentifierPlaceholders(
-      const std::map<std::string, std::string> placeholders);
-
   // Replaces the set of available autofill credit cards.
   void SetAutofillCreditCards(
       std::unique_ptr<std::vector<std::unique_ptr<autofill::CreditCard>>>
@@ -95,11 +86,15 @@ class UserModel {
       std::unique_ptr<std::vector<std::unique_ptr<autofill::AutofillProfile>>>
           profiles);
 
+  void SetCurrentURL(GURL current_url);
+
   // Returns the credit card with |guid| or nullptr if there is no such card.
   const autofill::CreditCard* GetCreditCard(const std::string& guid) const;
 
   // Returns the profile with |guid| or nullptr if there is no such profile.
   const autofill::AutofillProfile* GetProfile(const std::string& guid) const;
+
+  GURL GetCurrentURL() const;
 
   void AddObserver(Observer* observer);
   void RemoveObserver(Observer* observer);
@@ -118,9 +113,9 @@ class UserModel {
   friend class UserModelTest;
 
   std::map<std::string, ValueProto> values_;
-  std::map<std::string, std::string> identifier_placeholders_;
   std::map<std::string, std::unique_ptr<autofill::CreditCard>> credit_cards_;
   std::map<std::string, std::unique_ptr<autofill::AutofillProfile>> profiles_;
+  GURL current_url_;
   base::ObserverList<Observer> observers_;
   base::WeakPtrFactory<UserModel> weak_ptr_factory_{this};
   DISALLOW_COPY_AND_ASSIGN(UserModel);

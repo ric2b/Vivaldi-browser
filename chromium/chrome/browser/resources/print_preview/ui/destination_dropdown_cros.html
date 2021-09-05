@@ -1,18 +1,17 @@
-<style include="cr-shared-style cr-hidden-style md-select">
-  :host([opened_]) cr-input {
-    --cr-input-border-radius: 4px 4px 0 0;
+<style include="cr-shared-style cr-hidden-style">
+  #destination-dropdown {
+    outline: none;
+    position: relative;
   }
 
-  iron-dropdown,
-  cr-input {
-    width: var(--md-select-width);
+  #destination-dropdown:focus {
+    border-radius: 4px;
+    box-shadow: 0 0 0 2px rgba(var(--google-blue-600-rgb), .4);
   }
 
-  cr-input::part(input) {
-    opacity: 1;
-    padding-inline-end: 32px;
-    padding-inline-start: 8px;
-    text-overflow: clip;
+  #destination-dropdown,
+  iron-dropdown {
+    width: var(--print-preview-dropdown-width);
   }
 
   iron-dropdown {
@@ -23,27 +22,14 @@
   iron-dropdown [slot='dropdown-content'] {
     background-color: white;
     box-shadow: 0 2px 6px var(--google-grey-600);
-    min-width: var(--md-select-width);
     padding: 8px 0;
   }
 
-  #input-overlay {
-    border-radius: 4px;
-    height: 100%;
-    left: 0;
-    overflow: hidden;
-    pointer-events: none;
-    position: absolute;
-    top: 0;
-    width: 100%;
-  }
-
   #dropdown-icon {
-    --iron-icon-height: 20px;
-    --iron-icon-width: 20px;
-    margin-top: -10px;
-    padding-inline-end: 6px;
-    position: absolute;
+    --iron-icon-height: 24px;
+    --iron-icon-width: 44px;
+    align-items: center;
+    margin-inline-start: -4px;
     right: 0;
     top: 50%;
   }
@@ -53,20 +39,15 @@
     right: unset;
   }
 
-  cr-input:focus-within #dropdown-icon {
-    --iron-icon-fill-color: var(--google-blue-600);
-  }
-
-  #input-box {
+  #dropdown-box {
+    border-radius: 4px;
     height: 100%;
     left: 0;
-    pointer-events: none;
-    top: 0;
-    width: 100%;
-  }
-
-  #dropdown-box {
+    margin-top: 24px;
+    overflow: hidden;
     pointer-events: initial;
+    position: absolute;
+    top: 0;
     width: 100%;
   }
 
@@ -74,6 +55,7 @@
     background: none;
     border: none;
     box-sizing: border-box;
+    cursor: pointer;
     font: inherit;
     min-height: 32px;
     padding: 0 8px;
@@ -85,66 +67,107 @@
     outline: none;
   }
 
-  .list-item[selected_] {
+  .list-item.highlighted {
     background-color: var(--google-blue-refresh-100);
   }
 
-  .dot {
-    background-color: #bbb;
-    border-radius: 50%;
-    display: inline-block;
-    height: 10px;
-    width: 10px;
-  }
-
-  #pre-input-box,
+  #destination-icon-box,
   .printer-display-name {
     padding-inline-start: 8px;
   }
+
+  #destination-display-container {
+    align-items: center;
+    background-color: var(--google-grey-refresh-100);
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    width: 100%;
+  }
+
+  :host([disabled]) #destination-display-container {
+    cursor: default;
+    opacity: var(--cr-disabled-opacity);
+  }
+
+  #destination-display {
+    box-sizing: border-box;
+    overflow: hidden;
+    padding-inline-end: 32px;
+    padding-inline-start: 8px;
+    text-overflow: clip;
+    white-space: nowrap;
+    width: 100%;
+  }
 </style>
-<cr-input id="dropdownInput" on-keydown="onKeyDown_"
-    value="[[value.displayName]]" disabled="[[disabled]]" readonly>
-  <div id="pre-input-overlay" slot="inline-prefix">
-    <div id="pre-input-box">
-      <iron-icon icon="[[destinationIcon]]"></iron-icon>
+<div id="destination-dropdown" on-keydown="onKeyDown_" tabindex="0"
+    on-blur="onBlur_" on-click="onClick_" role="button" aria-haspopup="true"
+    aria-label="$i18n{destinationLabel} [[value.displayName]]"
+    aria-description$="[[destinationStatusText]]">
+  <div id="destination-display-container">
+    <div id="destination-icon-box">
+      <iron-icon icon="[[destinationIcon]]"
+          hidden="[[isCurrentDestinationCrosLocal]]">
+      </iron-icon>
+      <printer-status-icon-cros id="destination-badge"
+          hidden="[[!isCurrentDestinationCrosLocal]]"
+          icon-location="[[IconLocation.DISPLAY]]"
+          printer-state="[[computePrinterState_( value.printerStatusReason)]]">
+      </printer-status-icon-cros>
     </div>
+    <div id="destination-display">[[value.displayName]]</div>
+    <iron-icon id="dropdown-icon" icon="cr:arrow-drop-down"></iron-icon>
   </div>
-  <div id="input-overlay" slot="suffix">
-    <div id="input-box">
-      <iron-icon id="dropdown-icon" icon="cr:arrow-drop-down"></iron-icon>
-    </div>
-    <div id="dropdown-box">
-      <iron-dropdown horizontal-align="left" vertical-align="top"
-          vertical-offset="0" no-cancel-on-outside-click
-          no-cancel-on-esc-key>
-        <div slot="dropdown-content">
-          <template is="dom-repeat" items="[[itemList]]">
-            <button id="[[item.key]]" class="list-item" on-click="onSelect_"
-                tabindex="-1" value="[[item.key]]">
-              <printer-status-icon-cros background="white"
-                  state$="[[computePrinterState_(item.printerStatusReason)]]">
-              </printer-status-icon-cros>
-              <span class="printer-display-name">[[item.displayName]]</span>
-            </button>
-          </template>
-          <button class="list-item" on-click="onSelect_" tabindex="-1"
-            value="[[pdfDestinationKey]]" hidden$="[[pdfPrinterDisabled]]">
-            $i18n{printToPDF}
+  <div id="dropdown-box">
+    <iron-dropdown horizontal-align="left" vertical-align="top"
+        vertical-offset="0" no-cancel-on-outside-click
+        no-cancel-on-esc-key>
+      <div slot="dropdown-content">
+        <template is="dom-repeat" items="[[itemList]]">
+          <button id="[[item.key]]" tabindex="-1" value="[[item.key]]"
+              on-click="onSelect_" on-blur="onBlur_" role="menuitem"
+              aria-setsize$="[[dropdownLength_]]"
+              class$="list-item [[getHighlightedClass_(item.key,
+                  highlightedIndex_)]]"
+              aria-description$="[[getPrinterStatusErrorString_(
+                  item.printerStatusReason)]]">
+            <printer-status-icon-cros icon-location="[[IconLocation.DROPDOWN]]"
+                printer-state="[[computePrinterState_(
+                    item.printerStatusReason)]]"
+                class$="[[getHighlightedClass_(item.key, highlightedIndex_)]]">
+            </printer-status-icon-cros>
+            <span class="printer-display-name">[[item.displayName]]</span>
           </button>
-          <button class="list-item" on-click="onSelect_" tabindex="-1"
-            value="[[driveDestinationKey]]" hidden$="[[!driveDestinationKey]]">
-            $i18n{printToGoogleDrive}
-          </button>
-          <button class="list-item" on-click="onSelect_" tabindex="-1"
-            value="noDestinations" hidden$="[[!noDestinations]]">
-            $i18n{noDestinationsMessage}
-          </button>
-          <button class="list-item" on-click="onSelect_" tabindex="-1"
-            value="seeMore" aria-label$="[[i18n(seeMoreDestinationsLabel)]]">
-            $i18n{seeMore}
-          </button>
-        </div>
-      </iron-dropdown>
-    </div>
+        </template>
+        <button on-click="onSelect_" tabindex="-1" value="[[pdfDestinationKey]]"
+          hidden$="[[pdfPrinterDisabled]]" on-blur="onBlur_" role="menuitem"
+          aria-setsize$="[[dropdownLength_]]"
+          class$="list-item [[getHighlightedClass_(pdfDestinationKey,
+              highlightedIndex_)]]">
+          $i18n{printToPDF}
+        </button>
+        <button on-click="onSelect_" tabindex="-1" on-blur="onBlur_"
+          value="[[driveDestinationKey]]" hidden$="[[!driveDestinationKey]]"
+          role="menuitem" aria-setsize$="[[dropdownLength_]]"
+          class$="list-item [[getHighlightedClass_(driveDestinationKey,
+              highlightedIndex_)]]">
+          $i18n{printToGoogleDrive}
+        </button>
+        <button on-click="onSelect_" tabindex="-1" value="noDestinations"
+          hidden$="[[!noDestinations]]" on-blur="onBlur_" role="menuitem"
+          aria-setsize$="[[dropdownLength_]]"
+          class$="list-item [[getHighlightedClass_('noDestinations',
+              highlightedIndex_)]]">
+          $i18n{noDestinationsMessage}
+        </button>
+        <button on-click="onSelect_" tabindex="-1" value="seeMore"
+          aria-label="$i18n{seeMoreDestinationsLabel}" on-blur="onBlur_"
+          role="menuitem" aria-setsize$="[[dropdownLength_]]"
+          class$="list-item [[getHighlightedClass_('seeMore',
+              highlightedIndex_)]]">
+          $i18n{seeMore}
+        </button>
+      </div>
+    </iron-dropdown>
   </div>
-</cr-input>
+</div>

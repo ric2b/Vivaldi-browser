@@ -30,6 +30,7 @@
 #include "net/base/load_timing_info.h"
 #include "net/base/net_errors.h"
 #include "net/base/proxy_server.h"
+#include "net/base/transport_info.h"
 #include "net/base/upload_data_stream.h"
 #include "net/base/url_util.h"
 #include "net/cert/cert_status_flags.h"
@@ -405,8 +406,7 @@ int HttpNetworkTransaction::Read(IOBuffer* buf,
     // also don't worry about this for an HTTPS Proxy, because the
     // communication with the proxy is secure.
     // See http://crbug.com/8473.
-    DCHECK(proxy_info_.is_http() || proxy_info_.is_https() ||
-           proxy_info_.is_quic());
+    DCHECK(proxy_info_.is_http_like());
     DCHECK_EQ(headers->response_code(), HTTP_PROXY_AUTHENTICATION_REQUIRED);
     return ERR_TUNNEL_CONNECTION_FAILED;
   }
@@ -514,8 +514,13 @@ void HttpNetworkTransaction::SetWebSocketHandshakeStreamCreateHelper(
 }
 
 void HttpNetworkTransaction::SetBeforeNetworkStartCallback(
-    const BeforeNetworkStartCallback& callback) {
-  before_network_start_callback_ = callback;
+    BeforeNetworkStartCallback callback) {
+  before_network_start_callback_ = std::move(callback);
+}
+
+void HttpNetworkTransaction::SetConnectedCallback(
+    const ConnectedCallback& callback) {
+  connected_callback_ = callback;
 }
 
 void HttpNetworkTransaction::SetRequestHeadersCallback(
@@ -663,8 +668,7 @@ bool HttpNetworkTransaction::IsSecureRequest() const {
 }
 
 bool HttpNetworkTransaction::UsingHttpProxyWithoutTunnel() const {
-  return (proxy_info_.is_http() || proxy_info_.is_https() ||
-          proxy_info_.is_quic()) &&
+  return proxy_info_.is_http_like() &&
          !(request_->url.SchemeIs("https") || request_->url.SchemeIsWSOrWSS());
 }
 
@@ -797,7 +801,7 @@ int HttpNetworkTransaction::DoNotifyBeforeCreateStream() {
   next_state_ = STATE_CREATE_STREAM;
   bool defer = false;
   if (!before_network_start_callback_.is_null())
-    before_network_start_callback_.Run(&defer);
+    std::move(before_network_start_callback_).Run(&defer);
   if (!defer)
     return OK;
   return ERR_IO_PENDING;
@@ -857,9 +861,7 @@ int HttpNetworkTransaction::DoInitStream() {
 }
 
 int HttpNetworkTransaction::DoInitStreamComplete(int result) {
-  if (result == OK) {
-    next_state_ = STATE_GENERATE_PROXY_AUTH_TOKEN;
-  } else {
+  if (result != OK) {
     if (result < 0)
       result = HandleIOError(result);
 
@@ -869,8 +871,24 @@ int HttpNetworkTransaction::DoInitStreamComplete(int result) {
       total_sent_bytes_ += stream_->GetTotalSentBytes();
     }
     CacheNetErrorDetailsAndResetStream();
+
+    return result;
   }
 
+  // Fire off notification that we have successfully connected.
+  if (!connected_callback_.is_null()) {
+    TransportType type = TransportType::kDirect;
+    if (!proxy_info_.is_direct()) {
+      type = TransportType::kProxied;
+    }
+    result = connected_callback_.Run(TransportInfo(type, remote_endpoint_));
+    DCHECK_NE(result, ERR_IO_PENDING);
+  }
+
+  if (result == OK) {
+    // Only transition if we succeeded. Otherwise stop at STATE_NONE.
+    next_state_ = STATE_GENERATE_PROXY_AUTH_TOKEN;
+  }
   return result;
 }
 
@@ -1453,7 +1471,8 @@ int HttpNetworkTransaction::HandleSSLClientAuthError(int error) {
                 : proxy_info_.proxy_server().host_port_pair();
 
   if (error == ERR_SSL_PROTOCOL_ERROR || IsClientCertificateError(error)) {
-    DCHECK((is_server && IsSecureRequest()) || proxy_info_.is_https());
+    DCHECK((is_server && IsSecureRequest()) ||
+           proxy_info_.is_secure_http_like());
     if (session_->ssl_client_context()->ClearClientCertificate(
             host_port_pair)) {
       // The private key handle may have gone stale due to, e.g., the user
@@ -1713,7 +1732,10 @@ GURL HttpNetworkTransaction::AuthURL(HttpAuth::Target target) const {
           proxy_info_.proxy_server().is_direct()) {
         return GURL();  // There is no proxy server.
       }
-      const char* scheme = proxy_info_.is_https() ? "https://" : "http://";
+      // TODO(https://crbug.com/1103768): Mapping proxy addresses to
+      // URLs is a lossy conversion, shouldn't do this.
+      const char* scheme =
+          proxy_info_.is_secure_http_like() ? "https://" : "http://";
       return GURL(scheme +
                   proxy_info_.proxy_server().host_port_pair().ToString());
     }

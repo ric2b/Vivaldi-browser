@@ -12,7 +12,11 @@
 #include "chromeos/services/cros_healthd/public/mojom/cros_healthd_diagnostics.mojom.h"
 #include "chromeos/services/cros_healthd/public/mojom/cros_healthd_events.mojom.h"
 #include "chromeos/services/cros_healthd/public/mojom/cros_healthd_probe.mojom.h"
+#include "chromeos/services/network_health/public/mojom/network_diagnostics.mojom.h"
+#include "chromeos/services/network_health/public/mojom/network_health.mojom.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
+#include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/bindings/remote_set.h"
 
 namespace chromeos {
@@ -36,6 +40,13 @@ class FakeCrosHealthdService final
   void GetDiagnosticsService(
       mojom::CrosHealthdDiagnosticsServiceRequest service) override;
   void GetEventService(mojom::CrosHealthdEventServiceRequest service) override;
+  void SendNetworkHealthService(
+      mojo::PendingRemote<chromeos::network_health::mojom::NetworkHealthService>
+          remote) override;
+  void SendNetworkDiagnosticsRoutines(
+      mojo::PendingRemote<
+          chromeos::network_diagnostics::mojom::NetworkDiagnosticsRoutines>
+          network_diagnostics_routines) override;
 
   // CrosHealthdDiagnosticsService overrides:
   void GetAvailableRoutines(GetAvailableRoutinesCallback callback) override;
@@ -93,6 +104,9 @@ class FakeCrosHealthdService final
       const std::vector<mojom::ProbeCategoryEnum>& categories,
       ProbeTelemetryInfoCallback callback) override;
 
+  void ProbeProcessInfo(const uint32_t process_id,
+                        ProbeProcessInfoCallback callback) override;
+
   // Set the list of routines that will be used in the response to any
   // GetAvailableRoutines IPCs received.
   void SetAvailableRoutinesForTesting(
@@ -111,6 +125,10 @@ class FakeCrosHealthdService final
   void SetProbeTelemetryInfoResponseForTesting(
       mojom::TelemetryInfoPtr& response_info);
 
+  // Set the ProcessResultPtr that will be used in the response to any
+  // ProbeProcessInfo IPCs received.
+  void SetProbeProcessInfoResponseForTesting(mojom::ProcessResultPtr& result);
+
   // Calls the power event OnAcInserted for all registered power observers.
   void EmitAcInsertedEventForTesting();
 
@@ -120,6 +138,16 @@ class FakeCrosHealthdService final
 
   // Calls the lid event OnLidClosed for all registered lid observers.
   void EmitLidClosedEventForTesting();
+
+  // Requests the network health state using the network_health_remote_.
+  void RequestNetworkHealthForTesting(
+      chromeos::network_health::mojom::NetworkHealthService::
+          GetHealthSnapshotCallback callback);
+
+  // Calls the LanConnectivity routine on |network_diagnostics_routines_|.
+  void RunLanConnectivityRoutineForTesting(
+      chromeos::network_diagnostics::mojom::NetworkDiagnosticsRoutines::
+          LanConnectivityCallback callback);
 
  private:
   // Used as the response to any GetAvailableRoutines IPCs received.
@@ -131,6 +159,9 @@ class FakeCrosHealthdService final
   mojom::RoutineUpdatePtr routine_update_response_{mojom::RoutineUpdate::New()};
   // Used as the response to any ProbeTelemetryInfo IPCs received.
   mojom::TelemetryInfoPtr telemetry_response_info_{mojom::TelemetryInfo::New()};
+  // Used as the response to any ProbeProcessInfo IPCs received.
+  mojom::ProcessResultPtr process_response_{
+      mojom::ProcessResult::NewProcessInfo(mojom::ProcessInfo::New())};
 
   // Allows the remote end to call the probe, diagnostics and event service
   // methods.
@@ -139,12 +170,21 @@ class FakeCrosHealthdService final
       diagnostics_receiver_set_;
   mojo::ReceiverSet<mojom::CrosHealthdEventService> event_receiver_set_;
 
+  // NetworkHealthService remote.
+  mojo::Remote<chromeos::network_health::mojom::NetworkHealthService>
+      network_health_remote_;
+
   // Collection of registered Bluetooth observers.
   mojo::RemoteSet<mojom::CrosHealthdBluetoothObserver> bluetooth_observers_;
   // Collection of registered lid observers.
   mojo::RemoteSet<mojom::CrosHealthdLidObserver> lid_observers_;
   // Collection of registered power observers.
   mojo::RemoteSet<mojom::CrosHealthdPowerObserver> power_observers_;
+
+  // Allow |this| to call the methods on the NetworkDiagnosticsRoutines
+  // interface.
+  mojo::Remote<chromeos::network_diagnostics::mojom::NetworkDiagnosticsRoutines>
+      network_diagnostics_routines_;
 
   DISALLOW_COPY_AND_ASSIGN(FakeCrosHealthdService);
 };

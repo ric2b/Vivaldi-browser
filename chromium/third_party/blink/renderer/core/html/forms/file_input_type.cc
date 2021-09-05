@@ -207,14 +207,6 @@ void FileInputType::CustomStyleForLayoutObject(ComputedStyle& style) {
   style.SetShouldIgnoreOverflowPropertyForInlineBlockBaseline();
 }
 
-bool FileInputType::TypeShouldForceLegacyLayout() const {
-  if (RuntimeEnabledFeatures::LayoutNGForControlsEnabled())
-    return false;
-  UseCounter::Count(GetElement().GetDocument(),
-                    WebFeature::kLegacyLayoutByFileUploadControl);
-  return true;
-}
-
 LayoutObject* FileInputType::CreateLayoutObject(const ComputedStyle& style,
                                                 LegacyLayout legacy) const {
   return LayoutObjectFactory::CreateFileUploadControl(GetElement(), style,
@@ -434,7 +426,8 @@ void FileInputType::FilesChosen(FileChooserFileInfoList files,
     }
     ++i;
   }
-  SetFilesAndDispatchEvents(CreateFileList(files, base_dir));
+  if (!will_be_destroyed_)
+    SetFilesAndDispatchEvents(CreateFileList(files, base_dir));
   if (HasConnectedFileChooser())
     DisconnectFileChooser();
 }

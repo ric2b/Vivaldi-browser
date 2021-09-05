@@ -25,13 +25,31 @@
         "enum": ["pointer", "topLeft", "bottomLeft", "topRight", "bottomRight"]
       },
       {
-        "id": "ExpandType",
+        "id": "ItemType",
+        "type": "string",
+        "description": "What kind of item.",
+        "enum": [ "command", "checkbox", "radiobutton", "folder"]
+      },
+      {
+        "id": "Icons",
+        "type": "array",
+        "description": "Icons encoded as base64.",
+        "items": { "type": "string" }
+      },
+      {
+        "id": "ContainerMode",
+        "type": "string",
+        "description": "Defines container layouts.",
+        "enum": [ "inline", "folder"]
+      },
+      {
+        "id": "ContainerContent",
         "type": "string",
         "description": "Defines functionality to set up on the C++ side. One or more menu items may be created.",
         "enum": ["pwa"]
       },
       {
-        "id": "MenuItem",
+        "id": "Item",
         "type": "object",
         "description": "One menu item.",
         "properties": {
@@ -43,16 +61,10 @@
             "type": "integer",
             "description": "The unique id of item."
           },
-          "items": {
-            "type": "array",
-            "optional": true,
-            "items": {"$ref": "MenuItem"},
-            "description": "Child menu items."
-          },
           "type": {
-            "type": "string",
+            "$ref": "ItemType",
             "optional": false,
-            "description": "'normal' or 'checkbox'. Defaults to 'normal'."
+            "description": "The kind of menu element"
           },
           "radiogroup": {
             "type": "integer",
@@ -64,46 +76,58 @@
             "optional": true,
             "description": "true if the checkbox is checked, otherwise false. Only applies for type='checkbox'."
           },
-          "disabled": {
-            "type": "boolean",
-            "optional": true,
-            "description": "true if the item should appear as grayed out."
-          },
-          "emphasized": {
-            "type": "boolean",
-            "optional": true,
-            "description": "true if the item should appear in an emphasized style (typically bold)."
-          },
-          "shortcut": {
-            "type": "string",
-            "optional": true,
-            "description": "String which illustrates a shortcut. The presence of a string will not execute menu action."
-          },
           "url": {
             "type": "string",
             "optional": true,
             "description": "Url that can be used to determine a corresponding icon."
           },
-          "parameter": {
-            "type": "string",
-            "optional": true,
-            "description": "Parameter to command. Sent back unaltered."
-          },
-          "expand": {
-            "$ref": "ExpandType",
-            "optional": true,
-            "description": "Specifies an element to expand in C++ to one or more elements. How it is expanded is implementation specific."
-          },
-          "index": {
-            "type": "integer",
-            "optional": true,
-            "description": "Index in menu list. Can only be used insert into an existing list"
-          },
-          "icon": {
-            "type": "string",
+          "icons": {
+            "$ref": "Icons",
             "optional": true,
             "description": "Icon in PNG format encoded as base64."
           }
+        }
+      },
+      {
+        "id": "Container",
+        "type": "object",
+        "description": "Container to expand",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "The unique id of item."
+          },
+          "name": {
+            "type": "string",
+            "description": "Text in item when mode is folder"
+          },
+          "content": {
+            "$ref": "ContainerContent",
+            "description": "Specifies an element to expand in C++ to one or more elements. How it is expanded is implementation specific."
+          },
+          "mode": {
+            "$ref": "ContainerMode",
+            "description": "Container content format"
+          }
+        }
+      },
+      {
+        "id": "Separator",
+        "type": "object",
+        "description": "One separator",
+        "properties": {
+          "label": {"type": "string", "optional": true, "description": "Text in item."}
+        }
+      },
+      {
+        "id": "Element",
+        "type": "object",
+        "description": "One element in menu. All optional, but one and only one of 'item', 'separator' or 'container' should be set. 'children' is only considered when 'item' is set.",
+        "properties": {
+          "item": {"$ref": "Item", "optional": true},
+          "container": {"$ref": "Container", "optional": true},
+          "separator": {"$ref": "Separator", "optional": true},
+          "children": {"type": "array", "items": {"$ref": "Element"}, "optional": true, "description": "Child menu items."}
         }
       }
     ],
@@ -117,10 +141,11 @@
             "name": "properties",
             "type": "object",
             "properties": {
-              "items": { "type": "array", "items": {"$ref": "MenuItem"}, "description": "List of menu entries."},
+              "children": {"type": "array", "items": {"$ref": "Element"}},
               "rect": {"$ref": "Rect"},
               "origin": {"$ref": "Origin"},
-              "windowId": {"type": "integer"}
+              "windowId": {"type": "integer"},
+              "icons": {"$ref": "Icons", "description": "Default and folder icons."}
             }
           },
           {

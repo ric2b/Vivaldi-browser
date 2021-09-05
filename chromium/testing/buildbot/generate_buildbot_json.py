@@ -172,38 +172,6 @@ class JUnitGenerator(BaseGenerator):
     return sorted(tests, key=lambda x: x['test'])
 
 
-class CTSGenerator(BaseGenerator):
-  def __init__(self, bb_gen):
-    super(CTSGenerator, self).__init__(bb_gen)
-
-  def generate(self, waterfall, tester_name, tester_config, input_tests):
-    # These only contain one entry and it's the contents of the input tests'
-    # dictionary, verbatim.
-    cts_tests = []
-    cts_tests.append(input_tests)
-    return cts_tests
-
-  def sort(self, tests):
-    return tests
-
-
-class InstrumentationTestGenerator(BaseGenerator):
-  def __init__(self, bb_gen):
-    super(InstrumentationTestGenerator, self).__init__(bb_gen)
-
-  def generate(self, waterfall, tester_name, tester_config, input_tests):
-    scripts = []
-    for test_name, test_config in sorted(input_tests.iteritems()):
-      test = self.bb_gen.generate_instrumentation_test(
-        waterfall, tester_name, tester_config, test_name, test_config)
-      if test:
-        scripts.append(test)
-    return scripts
-
-  def sort(self, tests):
-    return sorted(tests, cmp=cmp_tests)
-
-
 def check_compound_references(other_test_suites=None,
                               sub_suite=None,
                               suite=None,
@@ -715,7 +683,7 @@ class BBJSONGenerator(object):
           '--bucket',
           bucket,
           '--test-name',
-          test_name
+          result.get('name', test_name)
         ],
         'script': '//build/android/pylib/results/presentation/'
           'test_results_presentation.py',
@@ -751,7 +719,8 @@ class BBJSONGenerator(object):
       return None
     result = copy.deepcopy(test_config)
     if 'test' in result:
-      result['name'] = test_name
+      if 'name' not in result:
+        result['name'] = test_name
     else:
       result['test'] = test_name
     self.initialize_swarming_dictionary_for_test(result, tester_config)
@@ -839,21 +808,6 @@ class BBJSONGenerator(object):
     self.substitute_magic_args(result)
     return result
 
-  def generate_instrumentation_test(self, waterfall, tester_name, tester_config,
-                                    test_name, test_config):
-    if not self.should_run_on_tester(waterfall, tester_name, test_name,
-                                     test_config):
-      return None
-    result = copy.deepcopy(test_config)
-    if 'test' in result and result['test'] != test_name:
-      result['name'] = test_name
-    else:
-      result['test'] = test_name
-    result = self.update_and_cleanup_test(
-        result, test_name, tester_name, tester_config, waterfall)
-    self.substitute_magic_args(result)
-    return result
-
   def substitute_gpu_args(self, tester_config, swarming_config, args):
     substitutions = {
       # Any machine in waterfalls.pyl which desires to run GPU tests
@@ -894,7 +848,7 @@ class BBJSONGenerator(object):
     gn_entry = (
         self.gn_isolate_map.get(result['isolate_name']) or
         self.gn_isolate_map.get('telemetry_gpu_integration_test'))
-    result['test_id_prefix'] = 'ninja:%s/%s/' % (gn_entry['label'], step_name)
+    result['test_id_prefix'] = 'ninja:%s/' % gn_entry['label']
 
     args = result.get('args', [])
     test_to_run = result.pop('telemetry_test_name', test_name)
@@ -912,6 +866,15 @@ class BBJSONGenerator(object):
 
     browser = ('android-webview-instrumentation'
                if is_android_webview else tester_config['browser_config'])
+
+    # Most platforms require --enable-logging=stderr to get useful browser logs.
+    # However, this actively messes with logging on CrOS (because Chrome's
+    # stderr goes nowhere on CrOS) AND --log-level=0 is required for some reason
+    # in order to see JavaScript console messages. See
+    # https://chromium.googlesource.com/chromium/src.git/+/HEAD/docs/chrome_os_logging.md
+    logging_arg = '--log-level=0' if self.is_chromeos(
+        tester_config) else '--enable-logging=stderr'
+
     args = [
         test_to_run,
         '--show-stdout',
@@ -921,7 +884,7 @@ class BBJSONGenerator(object):
         # being expected to fail, but passing.
         '--passthrough',
         '-v',
-        '--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc',
+        '--extra-browser-args=%s --js-flags=--expose-gc' % logging_arg,
     ] + args
     result['args'] = self.maybe_fixup_args_array(self.substitute_gpu_args(
       tester_config, result['swarming'], args))
@@ -931,14 +894,10 @@ class BBJSONGenerator(object):
     return {
         'android_webview_gpu_telemetry_tests':
             GPUTelemetryTestGenerator(self, is_android_webview=True),
-        'cts_tests':
-            CTSGenerator(self),
         'gpu_telemetry_tests':
             GPUTelemetryTestGenerator(self),
         'gtest_tests':
             GTestGenerator(self),
-        'instrumentation_tests':
-            InstrumentationTestGenerator(self),
         'isolated_scripts':
             IsolatedScriptTestGenerator(self),
         'junit_tests':
@@ -1003,10 +962,7 @@ class BBJSONGenerator(object):
   def resolve_test_id_prefixes(self):
     for suite in self.test_suites['basic_suites'].itervalues():
       for key, test in suite.iteritems():
-        if not isinstance(test, dict):
-          # Some test definitions are just strings, such as CTS.
-          # Skip them.
-          continue
+        assert isinstance(test, dict)
 
         # This assumes the recipe logic which prefers 'test' to 'isolate_name'
         # https://source.chromium.org/chromium/chromium/tools/build/+/master:scripts/slave/recipe_modules/chromium_tests/generators.py;l=89;drc=14c062ba0eb418d3c4623dde41a753241b9df06b
@@ -1050,7 +1006,7 @@ class BBJSONGenerator(object):
         full_suite.update(suite)
       compound_suites[name] = full_suite
 
-  def resolve_variants(self, basic_test_definition, variants):
+  def resolve_variants(self, basic_test_definition, variants, mixins):
     """ Merge variant-defined configurations to each test case definition in a
     test suite.
 
@@ -1088,7 +1044,7 @@ class BBJSONGenerator(object):
         cloned_config['args'] = (cloned_config.get('args', []) +
                                  cloned_variant.get('args', []))
         cloned_config['mixins'] = (cloned_config.get('mixins', []) +
-                                   cloned_variant.get('mixins', []))
+                                   cloned_variant.get('mixins', []) + mixins)
 
         basic_swarming_def = cloned_config.get('swarming', {})
         variant_swarming_def = cloned_variant.get('swarming', {})
@@ -1133,8 +1089,10 @@ class BBJSONGenerator(object):
         basic_test_def = copy.deepcopy(basic_suites[test_suite])
 
         if 'variants' in mtx_test_suite_config:
+          mixins = mtx_test_suite_config.get('mixins', [])
           result = self.resolve_variants(basic_test_def,
-                                         mtx_test_suite_config['variants'])
+                                         mtx_test_suite_config['variants'],
+                                         mixins)
           full_suite.update(result)
       matrix_compound_suites[test_name] = full_suite
 
@@ -1428,57 +1386,55 @@ class BBJSONGenerator(object):
     # are defined only to be mirrored into trybots, and don't actually
     # exist on any of the waterfalls or consoles.
     return [
-      'GPU FYI Fuchsia Builder',
-      'ANGLE GPU Android Release (Nexus 5X)',
-      'ANGLE GPU Linux Release (Intel HD 630)',
-      'ANGLE GPU Linux Release (NVIDIA)',
-      'ANGLE GPU Mac Release (Intel)',
-      'ANGLE GPU Mac Retina Release (AMD)',
-      'ANGLE GPU Mac Retina Release (NVIDIA)',
-      'ANGLE GPU Win10 x64 Release (Intel HD 630)',
-      'ANGLE GPU Win10 x64 Release (NVIDIA)',
-      'Optional Android Release (Nexus 5X)',
-      'Optional Linux Release (Intel HD 630)',
-      'Optional Linux Release (NVIDIA)',
-      'Optional Mac Release (Intel)',
-      'Optional Mac Retina Release (AMD)',
-      'Optional Mac Retina Release (NVIDIA)',
-      'Optional Win10 x64 Release (Intel HD 630)',
-      'Optional Win10 x64 Release (NVIDIA)',
-      'Win7 ANGLE Tryserver (AMD)',
-      # chromium.fyi
-      'linux-blink-rel-dummy',
-      'linux-blink-optional-highdpi-rel-dummy',
-      'mac10.10-blink-rel-dummy',
-      'mac10.11-blink-rel-dummy',
-      'mac10.12-blink-rel-dummy',
-      'mac10.13_retina-blink-rel-dummy',
-      'mac10.13-blink-rel-dummy',
-      'mac10.14-blink-rel-dummy',
-      'mac10.15-blink-rel-dummy',
-      'win7-blink-rel-dummy',
-      'win10-blink-rel-dummy',
-      'Dummy WebKit Mac10.13',
-      'WebKit Linux composite_after_paint Dummy Builder',
-      'WebKit Linux layout_ng_disabled Builder',
-      # chromium, due to https://crbug.com/878915
-      'win-dbg',
-      'win32-dbg',
-      'win-archive-dbg',
-      'win32-archive-dbg',
-      # TODO(crbug.com/1033753) Delete these when coverage is enabled by default
-      # on Windows tryjobs.
-      'GPU Win x64 Builder Code Coverage',
-      'Win x64 Builder Code Coverage',
-      'Win10 Tests x64 Code Coverage',
-      'Win10 x64 Release (NVIDIA) Code Coverage',
-      # TODO(crbug.com/1024915) Delete these when coverage is enabled by default
-      # on Mac OS tryjobs.
-      'Mac Builder Code Coverage',
-      'Mac10.13 Tests Code Coverage',
-      'GPU Mac Builder Code Coverage',
-      'Mac Release (Intel) Code Coverage',
-      'Mac Retina Release (AMD) Code Coverage',
+        'GPU FYI Fuchsia Builder',
+        'ANGLE GPU Android Release (Nexus 5X)',
+        'ANGLE GPU Linux Release (Intel HD 630)',
+        'ANGLE GPU Linux Release (NVIDIA)',
+        'ANGLE GPU Mac Release (Intel)',
+        'ANGLE GPU Mac Retina Release (AMD)',
+        'ANGLE GPU Mac Retina Release (NVIDIA)',
+        'ANGLE GPU Win10 x64 Release (Intel HD 630)',
+        'ANGLE GPU Win10 x64 Release (NVIDIA)',
+        'Optional Android Release (Nexus 5X)',
+        'Optional Linux Release (Intel HD 630)',
+        'Optional Linux Release (NVIDIA)',
+        'Optional Mac Release (Intel)',
+        'Optional Mac Retina Release (AMD)',
+        'Optional Mac Retina Release (NVIDIA)',
+        'Optional Win10 x64 Release (Intel HD 630)',
+        'Optional Win10 x64 Release (NVIDIA)',
+        'Win7 ANGLE Tryserver (AMD)',
+        # chromium.chromiumos
+        'linux-lacros-rel',
+        # chromium.fyi
+        'linux-blink-rel-dummy',
+        'linux-blink-optional-highdpi-rel-dummy',
+        'mac10.12-blink-rel-dummy',
+        'mac10.13-blink-rel-dummy',
+        'mac10.14-blink-rel-dummy',
+        'mac10.15-blink-rel-dummy',
+        'win7-blink-rel-dummy',
+        'win10-blink-rel-dummy',
+        'WebKit Linux composite_after_paint Dummy Builder',
+        'WebKit Linux layout_ng_disabled Builder',
+        # chromium, due to https://crbug.com/878915
+        'win-dbg',
+        'win32-dbg',
+        'win-archive-dbg',
+        'win32-archive-dbg',
+        # TODO(crbug.com/1033753) Delete these when coverage is enabled by
+        # default on Windows tryjobs.
+        'GPU Win x64 Builder Code Coverage',
+        'Win x64 Builder Code Coverage',
+        'Win10 Tests x64 Code Coverage',
+        'Win10 x64 Release (NVIDIA) Code Coverage',
+        # TODO(crbug.com/1024915) Delete these when coverage is enabled by
+        # default on Mac OS tryjobs.
+        'Mac Builder Code Coverage',
+        'Mac10.13 Tests Code Coverage',
+        'GPU Mac Builder Code Coverage',
+        'Mac Release (Intel) Code Coverage',
+        'Mac Retina Release (AMD) Code Coverage',
     ]
 
   def get_internal_waterfalls(self):
@@ -1586,11 +1542,7 @@ class BBJSONGenerator(object):
         continue
 
       for test in suite.values():
-        if not isinstance(test, dict):
-          # Some test suites have top level keys, which currently can't be
-          # swarming mixin entries. Ignore them
-          continue
-
+        assert isinstance(test, dict)
         seen_mixins = seen_mixins.union(test.get('mixins', set()))
 
     missing_mixins = set(self.mixins.keys()) - seen_mixins

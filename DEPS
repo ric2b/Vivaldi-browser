@@ -108,6 +108,13 @@ hooks = [
     ]
   },
   {
+    # Update the Windows toolchain if necessary.  Must run before 'clang' below.
+    'name': 'win_toolchain',
+    'pattern': '.',
+    'condition': 'checkout_win',
+    'action': ['python', "-u", 'scripts/vivaldi_update_toolchain.py'],
+  },
+  {
     # Update the prebuilt clang toolchain.
     # Note: On Win, this should run after win_toolchain, as it may use it.
     'name': 'clang',

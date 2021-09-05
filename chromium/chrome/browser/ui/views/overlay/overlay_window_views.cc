@@ -188,9 +188,9 @@ class OverlayWindowWidgetDelegate : public views::WidgetDelegate {
   void DeleteDelegate() override { delete this; }
   views::Widget* GetWidget() override { return widget_; }
   const views::Widget* GetWidget() const override { return widget_; }
-  views::NonClientFrameView* CreateNonClientFrameView(
+  std::unique_ptr<views::NonClientFrameView> CreateNonClientFrameView(
       views::Widget* widget) override {
-    return new OverlayWindowFrameView(widget);
+    return std::make_unique<OverlayWindowFrameView>(widget);
   }
 
  private:
@@ -1058,8 +1058,12 @@ gfx::Rect OverlayWindowViews::GetWorkAreaForWindow() const {
 
 gfx::Size OverlayWindowViews::UpdateMaxSize(const gfx::Rect& work_area,
                                             const gfx::Size& window_size) {
+#if defined(VIVALDI_BUILD)
+  // 1.1 allows for the window to be almost as large as the monitor.
+  max_size_ = gfx::Size(work_area.width() / 1.1, work_area.height() / 1.1);
+#else
   max_size_ = gfx::Size(work_area.width() / 2, work_area.height() / 2);
-
+#endif  // defined(VIVALDI_BUILD)
   if (!native_widget())
     return window_size;
 

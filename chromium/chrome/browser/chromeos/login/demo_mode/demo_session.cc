@@ -343,8 +343,7 @@ bool DemoSession::ShouldDisplayInAppLauncher(const std::string& app_id) {
   if (!IsDeviceInDemoMode())
     return true;
   return app_id != GetScreensaverAppId() &&
-         app_id != extensions::kWebStoreAppId &&
-         app_id != extension_misc::kGeniusAppId;
+         app_id != extensions::kWebStoreAppId;
 }
 
 // static
@@ -572,7 +571,7 @@ void DemoSession::OnExtensionInstalled(content::BrowserContext* browser_context,
   DCHECK(profile);
   apps::AppServiceProxyFactory::GetForProfile(profile)
       ->BrowserAppLauncher()
-      .LaunchAppWithParams(apps::AppLaunchParams(
+      ->LaunchAppWithParams(apps::AppLaunchParams(
           extension->id(), apps::mojom::LaunchContainer::kLaunchContainerWindow,
           WindowOpenDisposition::NEW_WINDOW,
           apps::mojom::AppLaunchSource::kSourceChromeInternal));

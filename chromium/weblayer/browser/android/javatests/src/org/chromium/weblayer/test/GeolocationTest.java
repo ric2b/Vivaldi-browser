@@ -52,7 +52,6 @@ public final class GeolocationTest {
     private TestWebLayer mTestWebLayer;
     private TestWebServer mTestServer;
     private int mLocationPermission = PackageManager.PERMISSION_GRANTED;
-    private String mTestUrl;
 
     private static final String RAW_JAVASCRIPT =
             "var positionCount = 0;"
@@ -71,17 +70,6 @@ public final class GeolocationTest {
             + "  navigator.geolocation.watchPosition("
             + "      gotPos, errorCallback, {});"
             + "}";
-
-    private static final String RAW_HTML =
-            "<!doctype html>"
-            + "<html>"
-            + "  <head>"
-            + "    <title>Geolocation</title>"
-            + "    <script>" + RAW_JAVASCRIPT + "</script>"
-            + "  </head>"
-            + "  <body>"
-            + "  </body>"
-            + "</html>";
 
     @TargetApi(Build.VERSION_CODES.M)
     private class PermissionCompatDelegate implements ActivityCompat.PermissionCompatDelegate {
@@ -132,9 +120,8 @@ public final class GeolocationTest {
         mTestWebLayer.setMockLocationProvider(true /* enable */);
 
         mTestServer = TestWebServer.start();
-        mTestUrl = mTestServer.setResponse("/geolocation.html", RAW_HTML, null);
 
-        mActivityTestRule.navigateAndWait(mTestUrl);
+        mActivityTestRule.navigateAndWait(mActivityTestRule.getTestDataURL("geolocation.html"));
         ensureGeolocationIsRunning(false);
     }
 
@@ -225,7 +212,7 @@ public final class GeolocationTest {
         mTestWebLayer.clickPermissionDialogButton(true);
 
         // Reload and deny the system permission, so it is prompted on the next call to geolocation.
-        mActivityTestRule.navigateAndWait(mTestUrl);
+        mActivityTestRule.navigateAndWait(mActivityTestRule.getTestDataURL("geolocation.html"));
 
         PermissionCompatDelegate delegate = new PermissionCompatDelegate();
         ActivityCompat.setPermissionCompatDelegate(delegate);

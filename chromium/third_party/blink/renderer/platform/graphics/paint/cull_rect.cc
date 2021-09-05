@@ -18,16 +18,6 @@ bool CullRect::Intersects(const IntRect& rect) const {
   return IsInfinite() || rect.Intersects(rect_);
 }
 
-bool CullRect::Intersects(const LayoutRect& rect) const {
-  return IsInfinite() || rect_.Intersects(EnclosingIntRect(rect));
-}
-
-bool CullRect::Intersects(const LayoutRect& rect,
-                          const LayoutPoint& offset) const {
-  return IsInfinite() || rect_.Intersects(EnclosingIntRect(LayoutRect(
-                             rect.Location() + offset, rect.Size())));
-}
-
 bool CullRect::IntersectsTransformed(const AffineTransform& transform,
                                      const FloatRect& rect) const {
   return IsInfinite() || transform.MapRect(rect).Intersects(rect_);
@@ -113,7 +103,7 @@ void CullRect::ApplyTransforms(const TransformPaintPropertyNode& source,
   DCHECK(RuntimeEnabledFeatures::CompositeAfterPaintEnabled());
 
   Vector<const TransformPaintPropertyNode*> scroll_translations;
-  for (const auto* t = &destination; t != &source; t = t->Parent()) {
+  for (const auto* t = &destination; t != &source; t = t->UnaliasedParent()) {
     if (!t) {
       // |source| is not an ancestor of |destination|. Simply map.
       if (!IsInfinite())

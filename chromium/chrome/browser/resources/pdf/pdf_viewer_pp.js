@@ -4,6 +4,7 @@
 
 import './elements/viewer-error-screen.js';
 import './elements/viewer-page-indicator.js';
+import './elements/viewer-zoom-toolbar.js';
 import './elements/shared-vars.js';
 import './pdf_viewer_shared_style.js';
 
@@ -56,11 +57,6 @@ class PDFViewerPPElement extends PDFViewerBaseElement {
   }
 
   /** @override */
-  getZoomToolbar() {
-    return /** @type {!ViewerZoomToolbarElement} */ (this.$$('#zoom-toolbar'));
-  }
-
-  /** @override */
   getErrorScreen() {
     return /** @type {!ViewerErrorScreenElement} */ (this.$$('#error-screen'));
   }
@@ -70,12 +66,20 @@ class PDFViewerPPElement extends PDFViewerBaseElement {
     return PRINT_PREVIEW_BACKGROUND_COLOR;
   }
 
+  /**
+   * @return {!ViewerZoomToolbarElement}
+   * @private
+   */
+  getZoomToolbar_() {
+    return /** @type {!ViewerZoomToolbarElement} */ (this.$$('#zoom-toolbar'));
+  }
+
   /** @param {!BrowserApi} browserApi */
   init(browserApi) {
     super.init(browserApi);
 
     this.toolbarManager_ =
-        new ToolbarManager(window, null, this.getZoomToolbar());
+        new ToolbarManager(window, null, this.getZoomToolbar_());
 
     // Setup the keyboard event listener.
     document.addEventListener(
@@ -120,7 +124,7 @@ class PDFViewerPPElement extends PDFViewerBaseElement {
         return;
       case '\\':
         if (e.ctrlKey) {
-          this.getZoomToolbar().fitToggleFromHotKey();
+          this.getZoomToolbar_().fitToggleFromHotKey();
         }
         return;
       case ']':
@@ -165,7 +169,7 @@ class PDFViewerPPElement extends PDFViewerBaseElement {
     // than the spec. In LTR layout, the zoom toolbar is on the left
     // left side, but the scrollbar is still on the right, so this is not
     // necessary.
-    const zoomToolbar = this.getZoomToolbar();
+    const zoomToolbar = this.getZoomToolbar_();
     if (isRTL()) {
       zoomToolbar.style.right =
           -verticalScrollbarWidth + (scrollbarWidth / 2) + 'px';
@@ -205,7 +209,8 @@ class PDFViewerPPElement extends PDFViewerBaseElement {
 
     switch (message.data.type.toString()) {
       case 'getSelectedText':
-        this.pluginController.getSelectedText();
+        this.pluginController.getSelectedText().then(
+            this.sendScriptingMessage.bind(this));
         break;
       case 'selectAll':
         this.pluginController.selectAll();
@@ -234,7 +239,8 @@ class PDFViewerPPElement extends PDFViewerBaseElement {
         if (!this.inPrintPreviewMode_) {
           this.inPrintPreviewMode_ = true;
           this.isUserInitiatedEvent = false;
-          this.getZoomToolbar().forceFit(FittingType.FIT_TO_PAGE);
+          this.forceFit(FittingType.FIT_TO_PAGE);
+          this.updateViewportFit(FittingType.FIT_TO_PAGE);
           this.isUserInitiatedEvent = true;
         }
 
@@ -284,10 +290,6 @@ class PDFViewerPPElement extends PDFViewerBaseElement {
         this.setDocumentDimensions(
             /** @type {!DocumentDimensionsMessageData} */ (data));
         return;
-      case 'getSelectedTextReply':
-        this.handleSelectedTextReply(
-            /** @type {{ selectedText: string }} */ (data).selectedText);
-        return;
       case 'loadProgress':
         this.updateProgress(
             /** @type {{ progress: number }} */ (data).progress);
@@ -304,10 +306,6 @@ class PDFViewerPPElement extends PDFViewerBaseElement {
       case 'setIsSelecting':
         this.viewportScroller.setEnableScrolling(
             /** @type {{ isSelecting: boolean }} */ (data).isSelecting);
-        return;
-      case 'getNamedDestinationReply':
-        this.paramsParser.onNamedDestinationReceived(
-            /** @type {{ pageNumber: number }} */ (data).pageNumber);
         return;
       case 'touchSelectionOccurred':
         this.sendScriptingMessage({
@@ -345,9 +343,13 @@ class PDFViewerPPElement extends PDFViewerBaseElement {
   }
 
   /** @override */
+  forceFit(view) {
+    this.getZoomToolbar_().forceFit(view);
+  }
+
+  /** @override */
   handleStrings(strings) {
     super.handleStrings(strings);
-
     if (!strings) {
       return;
     }

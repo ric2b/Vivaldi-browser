@@ -37,6 +37,7 @@
 #include "components/viz/test/test_latest_local_surface_id_lookup_delegate.h"
 #include "content/browser/browser_main_loop.h"
 #include "content/browser/compositor/test/test_image_transport_factory.h"
+#include "content/browser/frame_host/frame_tree.h"
 #include "content/browser/gpu/compositor_util.h"
 #include "content/browser/renderer_host/delegated_frame_host.h"
 #include "content/browser/renderer_host/delegated_frame_host_client_aura.h"
@@ -51,6 +52,7 @@
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_view_event_handler.h"
 #include "content/browser/renderer_host/text_input_manager.h"
+#include "content/browser/web_contents/web_contents_impl.h"
 #include "content/browser/web_contents/web_contents_view_aura.h"
 #include "content/common/input_messages.h"
 #include "content/common/view_messages.h"
@@ -58,12 +60,14 @@
 #include "content/public/browser/context_menu_params.h"
 #include "content/public/browser/keyboard_event_processing_result.h"
 #include "content/public/browser/render_widget_host_view.h"
+#include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_view_delegate.h"
 #include "content/public/common/content_features.h"
 #include "content/public/test/fake_frame_widget.h"
 #include "content/public/test/mock_render_process_host.h"
 #include "content/public/test/test_browser_context.h"
 #include "content/test/mock_render_widget_host_delegate.h"
+#include "content/test/mock_widget.h"
 #include "content/test/test_overscroll_delegate.h"
 #include "content/test/test_render_view_host.h"
 #include "content/test/test_web_contents.h"
@@ -72,9 +76,11 @@
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "services/viz/public/mojom/compositing/delegated_ink_point.mojom.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/input/synthetic_web_input_event_builders.h"
+#include "third_party/blink/public/mojom/input/touch_event.mojom.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/window_parenting_client.h"
 #include "ui/aura/env.h"
@@ -281,6 +287,9 @@ class FakeRenderWidgetHostViewAura : public RenderWidgetHostViewAura {
     return event_handler()->pointer_state();
   }
 
+  // Flush the mojo remote on the event handler for testing purposes.
+  void FlushForTest() { event_handler()->FlushForTest(); }
+
   void SetRenderFrameMetadata(cc::RenderFrameMetadata metadata) {
     host()->render_frame_metadata_provider()->SetLastRenderFrameMetadataForTest(
         metadata);
@@ -363,6 +372,24 @@ class MockRenderWidgetHostImpl : public RenderWidgetHostImpl {
     return ret;
   }
 
+  void ClearVisualProperties() {
+    base::RunLoop().RunUntilIdle();
+    widget_.ClearVisualProperties();
+  }
+
+  void ClearScreenRects() {
+    base::RunLoop().RunUntilIdle();
+    widget_.ClearScreenRects();
+  }
+
+  const std::vector<blink::VisualProperties>& visual_properties() {
+    return widget_.ReceivedVisualProperties();
+  }
+
+  const std::vector<std::pair<gfx::Rect, gfx::Rect>>& screen_rects() {
+    return widget_.ReceivedScreenRects();
+  }
+
   static MockRenderWidgetHostImpl* Create(RenderWidgetHostDelegate* delegate,
                                           RenderProcessHost* process,
                                           int32_t routing_id) {
@@ -384,6 +411,10 @@ class MockRenderWidgetHostImpl : public RenderWidgetHostImpl {
     return new_content_rendering_timeout_fired_;
   }
 
+  void SetTouchActionFromMain(cc::TouchAction touch_action) {
+    widget_.SetTouchActionFromMain(touch_action);
+  }
+
  private:
   MockRenderWidgetHostImpl(RenderWidgetHostDelegate* delegate,
                            RenderProcessHost* process,
@@ -395,12 +426,9 @@ class MockRenderWidgetHostImpl : public RenderWidgetHostImpl {
                              std::make_unique<FrameTokenMessageQueue>()) {
     lastWheelOrTouchEventLatencyInfo = ui::LatencyInfo();
     mojo::AssociatedRemote<blink::mojom::WidgetHost> blink_widget_host;
-    mojo::AssociatedRemote<blink::mojom::Widget> blink_widget;
-    auto blink_widget_receiver =
-        blink_widget.BindNewEndpointAndPassDedicatedReceiverForTesting();
     BindWidgetInterfaces(
         blink_widget_host.BindNewEndpointAndPassDedicatedReceiverForTesting(),
-        blink_widget.Unbind());
+        widget_.GetNewRemote());
   }
 
   void NotifyNewContentRenderingTimeoutForTesting() override {
@@ -409,6 +437,7 @@ class MockRenderWidgetHostImpl : public RenderWidgetHostImpl {
 
   bool new_content_rendering_timeout_fired_ = false;
   MockWidgetInputHandler input_handler_;
+  MockWidget widget_;
   base::Optional<WebGestureEvent> last_forwarded_gesture_event_;
 };
 
@@ -477,8 +506,14 @@ class RenderWidgetHostViewAuraTest : public testing::Test {
     auto* widget_host = MockRenderWidgetHostImpl::Create(
         delegates_.back().get(), process_host_, routing_id);
     delegates_.back()->set_widget_host(widget_host);
+    delegates_.back()->set_frame_tree(GetFrameTree());
     widget_host->Init();
     return new FakeRenderWidgetHostViewAura(widget_host);
+  }
+
+  FrameTree* GetFrameTree() {
+    DCHECK(web_contents_);
+    return static_cast<WebContentsImpl*>(web_contents_.get())->GetFrameTree();
   }
 
   void DestroyView(FakeRenderWidgetHostViewAura* view) {
@@ -504,11 +539,15 @@ class RenderWidgetHostViewAuraTest : public testing::Test {
 
     sink_ = &process_host_->sink();
 
+    web_contents_ = WebContents::Create(WebContents::CreateParams(
+        browser_context_.get(), SiteInstance::Create(browser_context_.get())));
+
     int32_t routing_id = process_host_->GetNextRoutingID();
     delegates_.push_back(std::make_unique<MockRenderWidgetHostDelegate>());
     parent_host_ = MockRenderWidgetHostImpl::Create(delegates_.back().get(),
                                                     process_host_, routing_id);
     delegates_.back()->set_widget_host(parent_host_);
+    delegates_.back()->set_frame_tree(GetFrameTree());
     parent_view_ = new RenderWidgetHostViewAura(parent_host_);
     parent_view_->InitAsChild(nullptr);
     aura::client::ParentWindowWithContext(parent_view_->GetNativeView(),
@@ -525,12 +564,18 @@ class RenderWidgetHostViewAuraTest : public testing::Test {
   void TearDownEnvironment() {
     sink_ = nullptr;
     process_host_ = nullptr;
-    if (view_)
+    if (view_) {
       DestroyView(view_);
+    } else if (widget_host_) {
+      // Delete |widget_host_| in cases where |view_| gets destroyed
+      // by its parent, but the host does not get destroyed.
+      delete widget_host_;
+    }
 
     parent_view_->Destroy();
     delete parent_host_;
 
+    web_contents_.reset();
     browser_context_.reset();
     aura_test_helper_->TearDown();
 
@@ -566,6 +611,9 @@ class RenderWidgetHostViewAuraTest : public testing::Test {
   }
 
   const ui::MotionEventAura& pointer_state() { return view_->pointer_state(); }
+
+  bool HasTouchEventHandlers(bool has_handlers) { return has_handlers; }
+  bool HasHitTestableScrollbar(bool has_scrollbar) { return has_scrollbar; }
 
  protected:
   BrowserContext* browser_context() { return browser_context_.get(); }
@@ -611,6 +659,7 @@ class RenderWidgetHostViewAuraTest : public testing::Test {
   BrowserTaskEnvironment task_environment_;
   std::unique_ptr<aura::test::AuraTestHelper> aura_test_helper_;
   std::unique_ptr<BrowserContext> browser_context_;
+  std::unique_ptr<WebContents> web_contents_;
   std::vector<std::unique_ptr<MockRenderWidgetHostDelegate>> delegates_;
   MockRenderProcessHost* process_host_;
 
@@ -878,7 +927,7 @@ class RenderWidgetHostViewAuraOverscrollTest
   void PressAndSetTouchActionAuto() {
     PressTouchPoint(0, 1);
     SendTouchEvent();
-    widget_host_->input_router()->OnSetTouchAction(cc::TouchAction::kAuto);
+    widget_host_->SetTouchActionFromMain(cc::TouchAction::kAuto);
     MockWidgetInputHandler::MessageVector events =
         GetAndResetDispatchedMessages();
     EXPECT_EQ("TouchStart", GetMessageNames(events));
@@ -1066,41 +1115,25 @@ TEST_F(RenderWidgetHostViewAuraTest, ParentMovementUpdatesScreenRect) {
   view_ = nullptr;
 
   // Flush the state after initial setup is done.
-  widget_host_->OnMessageReceived(
-      WidgetHostMsg_UpdateScreenRects_ACK(widget_host_->GetRoutingID()));
-  widget_host_->OnMessageReceived(
-      WidgetHostMsg_UpdateScreenRects_ACK(widget_host_->GetRoutingID()));
-  sink_->ClearMessages();
+  widget_host_->ClearScreenRects();
 
   // Move parents.
   parent2->SetBounds(gfx::Rect(20, 20, 200, 200));
-  ASSERT_EQ(1U, sink_->message_count());
-  const IPC::Message* msg = sink_->GetMessageAt(0);
-  ASSERT_EQ(static_cast<uint32_t>(WidgetMsg_UpdateScreenRects::ID),
-            msg->type());
-  WidgetMsg_UpdateScreenRects::Param params;
-  WidgetMsg_UpdateScreenRects::Read(msg, &params);
-  EXPECT_EQ(gfx::Rect(21, 21, 100, 100), std::get<0>(params));
-  EXPECT_EQ(gfx::Rect(1, 1, 300, 300), std::get<1>(params));
-  sink_->ClearMessages();
-  widget_host_->OnMessageReceived(
-      WidgetHostMsg_UpdateScreenRects_ACK(widget_host_->GetRoutingID()));
-  // There should not be any pending update.
-  EXPECT_EQ(0U, sink_->message_count());
+  base::RunLoop().RunUntilIdle();
+  ASSERT_EQ(1U, widget_host_->screen_rects().size());
+  EXPECT_EQ(gfx::Rect(21, 21, 100, 100),
+            widget_host_->screen_rects().at(0).first);
+  EXPECT_EQ(gfx::Rect(1, 1, 300, 300),
+            widget_host_->screen_rects().at(0).second);
+  widget_host_->ClearScreenRects();
 
   parent1->SetBounds(gfx::Rect(10, 10, 300, 300));
-  ASSERT_EQ(1U, sink_->message_count());
-  msg = sink_->GetMessageAt(0);
-  ASSERT_EQ(static_cast<uint32_t>(WidgetMsg_UpdateScreenRects::ID),
-            msg->type());
-  WidgetMsg_UpdateScreenRects::Read(msg, &params);
-  EXPECT_EQ(gfx::Rect(30, 30, 100, 100), std::get<0>(params));
-  EXPECT_EQ(gfx::Rect(10, 10, 300, 300), std::get<1>(params));
-  sink_->ClearMessages();
-  widget_host_->OnMessageReceived(
-      WidgetHostMsg_UpdateScreenRects_ACK(widget_host_->GetRoutingID()));
-  // There should not be any pending update.
-  EXPECT_EQ(0U, sink_->message_count());
+  base::RunLoop().RunUntilIdle();
+  ASSERT_EQ(1U, widget_host_->screen_rects().size());
+  EXPECT_EQ(gfx::Rect(30, 30, 100, 100),
+            widget_host_->screen_rects().at(0).first);
+  EXPECT_EQ(gfx::Rect(10, 10, 300, 300),
+            widget_host_->screen_rects().at(0).second);
 }
 
 // Checks that a fullscreen view is destroyed when it loses the focus.
@@ -1382,7 +1415,9 @@ TEST_F(RenderWidgetHostViewAuraTest, TouchEventState) {
   view_->Show();
 
   // Start with no touch-event handler in the renderer.
-  widget_host_->SetHasTouchEventHandlers(false);
+  auto touch_event_consumers = blink::mojom::TouchEventConsumers::New(
+      HasTouchEventHandlers(false), HasHitTestableScrollbar(false));
+  widget_host_->SetHasTouchEventConsumers(std::move(touch_event_consumers));
 
   ui::TouchEvent press(ui::ET_TOUCH_PRESSED, gfx::Point(30, 30),
                        ui::EventTimeForNow(),
@@ -1424,7 +1459,9 @@ TEST_F(RenderWidgetHostViewAuraTest, TouchEventState) {
   // Now install some touch-event handlers and do the same steps. The touch
   // events should now be consumed. However, the touch-event state should be
   // updated as before.
-  widget_host_->SetHasTouchEventHandlers(true);
+  touch_event_consumers = blink::mojom::TouchEventConsumers::New(
+      HasTouchEventHandlers(true), HasHitTestableScrollbar(false));
+  widget_host_->SetHasTouchEventConsumers(std::move(touch_event_consumers));
 
   view_->OnTouchEvent(&press);
   base::RunLoop().RunUntilIdle();
@@ -1433,7 +1470,7 @@ TEST_F(RenderWidgetHostViewAuraTest, TouchEventState) {
   EXPECT_TRUE(press.synchronous_handling_disabled());
   EXPECT_EQ(ui::MotionEvent::Action::DOWN, pointer_state().GetAction());
   EXPECT_EQ(1U, pointer_state().GetPointerCount());
-  widget_host_->input_router()->OnSetTouchAction(cc::TouchAction::kAuto);
+  widget_host_->SetTouchActionFromMain(cc::TouchAction::kAuto);
 
   view_->OnTouchEvent(&move);
   base::RunLoop().RunUntilIdle();
@@ -1453,7 +1490,9 @@ TEST_F(RenderWidgetHostViewAuraTest, TouchEventState) {
   events = GetAndResetDispatchedMessages();
   EXPECT_EQ(3U, events.size());
 
-  widget_host_->SetHasTouchEventHandlers(false);
+  touch_event_consumers = blink::mojom::TouchEventConsumers::New(
+      HasTouchEventHandlers(false), HasHitTestableScrollbar(false));
+  widget_host_->SetHasTouchEventConsumers(std::move(touch_event_consumers));
 
   // All outstanding events should have already been sent but no new events
   // should get sent.
@@ -2370,8 +2409,8 @@ TEST_F(RenderWidgetHostViewAuraTest, MultiTouchPointsStates) {
                         ui::PointerDetails(ui::EventPointerType::kTouch, 0));
 
   view_->OnTouchEvent(&press0);
-  view_->GetFocusedWidget()->input_router()->OnSetTouchAction(
-      cc::TouchAction::kAuto);
+  static_cast<InputRouterImpl*>(view_->GetFocusedWidget()->input_router())
+      ->SetTouchActionFromMain(cc::TouchAction::kAuto);
   base::RunLoop().RunUntilIdle();
 
   MockWidgetInputHandler::MessageVector events =
@@ -2477,7 +2516,9 @@ TEST_F(RenderWidgetHostViewAuraTest, TouchEventSyncAsync) {
   view_->InitAsChild(nullptr);
   view_->Show();
 
-  widget_host_->SetHasTouchEventHandlers(true);
+  auto touch_event_consumers = blink::mojom::TouchEventConsumers::New(
+      HasTouchEventHandlers(true), HasHitTestableScrollbar(false));
+  widget_host_->SetHasTouchEventConsumers(std::move(touch_event_consumers));
 
   ui::TouchEvent press(ui::ET_TOUCH_PRESSED, gfx::Point(30, 30),
                        ui::EventTimeForNow(),
@@ -2518,20 +2559,18 @@ TEST_F(RenderWidgetHostViewAuraTest, CompositorViewportPixelSizeWithScale) {
       parent_view_->GetNativeView()->GetRootWindow(),
       gfx::Rect());
 
-  sink_->ClearMessages();
+  widget_host_->ClearVisualProperties();
 
   view_->SetSize(gfx::Size(100, 100));
 
   // Physical pixel size.
   EXPECT_EQ(gfx::Size(100, 100), view_->GetCompositorViewportPixelSize());
   // Update to the renderer.
-  ASSERT_EQ(1u, sink_->message_count());
+  base::RunLoop().RunUntilIdle();
+  ASSERT_EQ(1u, widget_host_->visual_properties().size());
   {
-    const IPC::Message* msg = sink_->GetMessageAt(0);
-    ASSERT_EQ(WidgetMsg_UpdateVisualProperties::ID, msg->type());
-    WidgetMsg_UpdateVisualProperties::Param params;
-    WidgetMsg_UpdateVisualProperties::Read(msg, &params);
-    VisualProperties visual_properties = std::get<0>(params);
+    blink::VisualProperties visual_properties =
+        widget_host_->visual_properties().at(0);
     // DIP size.
     EXPECT_EQ(gfx::Size(100, 100), visual_properties.new_size);
     // Physical pixel size.
@@ -2547,6 +2586,7 @@ TEST_F(RenderWidgetHostViewAuraTest, CompositorViewportPixelSizeWithScale) {
         ->OnLocalSurfaceIdChanged(metadata);
   }
   sink_->ClearMessages();
+  widget_host_->ClearVisualProperties();
 
   // Device scale factor changes to 2, so the physical pixel sizes should
   // change, while the DIP sizes do not.
@@ -2555,13 +2595,11 @@ TEST_F(RenderWidgetHostViewAuraTest, CompositorViewportPixelSizeWithScale) {
   // Physical pixel size.
   EXPECT_EQ(gfx::Size(200, 200), view_->GetCompositorViewportPixelSize());
   // Update to the renderer.
-  ASSERT_EQ(1u, sink_->message_count());
+  base::RunLoop().RunUntilIdle();
+  ASSERT_EQ(1u, widget_host_->visual_properties().size());
   {
-    const IPC::Message* msg = sink_->GetMessageAt(0);
-    ASSERT_EQ(WidgetMsg_UpdateVisualProperties::ID, msg->type());
-    WidgetMsg_UpdateVisualProperties::Param params;
-    WidgetMsg_UpdateVisualProperties::Read(msg, &params);
-    VisualProperties visual_properties = std::get<0>(params);
+    blink::VisualProperties visual_properties =
+        widget_host_->visual_properties().at(0);
     // DIP size.
     EXPECT_EQ(gfx::Size(100, 100), visual_properties.new_size);
     // Physical pixel size.
@@ -2576,20 +2614,18 @@ TEST_F(RenderWidgetHostViewAuraTest, CompositorViewportPixelSizeWithScale) {
     static_cast<RenderFrameMetadataProvider::Observer*>(widget_host_)
         ->OnLocalSurfaceIdChanged(metadata);
   }
-  sink_->ClearMessages();
+  widget_host_->ClearVisualProperties();
 
   aura_test_helper_->GetTestScreen()->SetDeviceScaleFactor(1.0f);
 
   // Physical pixel size.
   EXPECT_EQ(gfx::Size(100, 100), view_->GetCompositorViewportPixelSize());
   // Update to the renderer.
-  ASSERT_EQ(1u, sink_->message_count());
+  base::RunLoop().RunUntilIdle();
+  ASSERT_EQ(1u, widget_host_->visual_properties().size());
   {
-    const IPC::Message* msg = sink_->GetMessageAt(0);
-    ASSERT_EQ(WidgetMsg_UpdateVisualProperties::ID, msg->type());
-    WidgetMsg_UpdateVisualProperties::Param params;
-    WidgetMsg_UpdateVisualProperties::Read(msg, &params);
-    VisualProperties visual_properties = std::get<0>(params);
+    blink::VisualProperties visual_properties =
+        widget_host_->visual_properties().at(0);
     // DIP size.
     EXPECT_EQ(gfx::Size(100, 100), visual_properties.new_size);
     // Physical pixel size.
@@ -2599,7 +2635,7 @@ TEST_F(RenderWidgetHostViewAuraTest, CompositorViewportPixelSizeWithScale) {
 }
 
 // This test verifies that in AutoResize mode a new
-// WidgetMsg_UpdateVisualProperties message is sent when ScreenInfo
+// blink::mojom::Widget::UpdateVisualProperties message is sent when ScreenInfo
 // changes and that message contains the latest ScreenInfo.
 TEST_F(RenderWidgetHostViewAuraTest, AutoResizeWithScale) {
   view_->InitAsChild(nullptr);
@@ -2611,18 +2647,16 @@ TEST_F(RenderWidgetHostViewAuraTest, AutoResizeWithScale) {
       view_->GetLocalSurfaceIdAllocation();
   EXPECT_TRUE(host_local_surface_id_allocation.IsValid());
 
-  sink_->ClearMessages();
+  widget_host_->ClearVisualProperties();
 
   view_->EnableAutoResize(gfx::Size(50, 50), gfx::Size(100, 100));
 
   // Update to the renderer. It includes the current LocalSurfaceIdAllocation.
-  ASSERT_EQ(1u, sink_->message_count());
+  base::RunLoop().RunUntilIdle();
+  ASSERT_EQ(1u, widget_host_->visual_properties().size());
   {
-    const IPC::Message* msg = sink_->GetMessageAt(0);
-    ASSERT_EQ(WidgetMsg_UpdateVisualProperties::ID, msg->type());
-    WidgetMsg_UpdateVisualProperties::Param params;
-    WidgetMsg_UpdateVisualProperties::Read(msg, &params);
-    VisualProperties visual_properties = std::get<0>(params);
+    blink::VisualProperties visual_properties =
+        widget_host_->visual_properties().at(0);
     // Auto resize parameters that we set above.
     EXPECT_EQ(gfx::Size(50, 50), visual_properties.min_size_for_auto_resize);
     EXPECT_EQ(gfx::Size(100, 100), visual_properties.max_size_for_auto_resize);
@@ -2653,20 +2687,17 @@ TEST_F(RenderWidgetHostViewAuraTest, AutoResizeWithScale) {
   }
 
   // Changing the device scale factor updates the renderer.
-  sink_->ClearMessages();
+  widget_host_->ClearVisualProperties();
   aura_test_helper_->GetTestScreen()->SetDeviceScaleFactor(2.0f);
 
   // Update to the renderer.
   // TODO(samans): There should be only one message in the sink, but some
   // testers are seeing two (crrev.com/c/839580). Investigate why.
-  ASSERT_LE(1u, sink_->message_count());
+  base::RunLoop().RunUntilIdle();
+  ASSERT_EQ(1u, widget_host_->visual_properties().size());
   {
-    const IPC::Message* msg =
-        sink_->GetFirstMessageMatching(WidgetMsg_UpdateVisualProperties::ID);
-    ASSERT_TRUE(msg);
-    WidgetMsg_UpdateVisualProperties::Param params;
-    WidgetMsg_UpdateVisualProperties::Read(msg, &params);
-    VisualProperties visual_properties = std::get<0>(params);
+    blink::VisualProperties visual_properties =
+        widget_host_->visual_properties().at(0);
     // Auto resize parameters did not change as they DIP values.
     EXPECT_EQ(gfx::Size(50, 50), visual_properties.min_size_for_auto_resize);
     EXPECT_EQ(gfx::Size(100, 100), visual_properties.max_size_for_auto_resize);
@@ -2682,7 +2713,8 @@ TEST_F(RenderWidgetHostViewAuraTest, AutoResizeWithScale) {
 }
 
 // This test verifies that in AutoResize mode a new
-// WidgetMsg_UpdateVisualProperties message is sent when size changes.
+// blink::mojom::Widget::UpdateVisualProperties message is sent when size
+// changes.
 TEST_F(RenderWidgetHostViewAuraTest, AutoResizeWithBrowserInitiatedResize) {
   view_->InitAsChild(nullptr);
   aura::client::ParentWindowWithContext(
@@ -2692,17 +2724,15 @@ TEST_F(RenderWidgetHostViewAuraTest, AutoResizeWithBrowserInitiatedResize) {
       view_->GetLocalSurfaceIdAllocation());
   EXPECT_TRUE(host_local_surface_id_allocation.IsValid());
 
-  sink_->ClearMessages();
+  widget_host_->ClearVisualProperties();
   view_->EnableAutoResize(gfx::Size(50, 50), gfx::Size(100, 100));
 
-  // WidgetMsg_UpdateVisualProperties is sent to the renderer.
-  ASSERT_EQ(1u, sink_->message_count());
+  // blink::mojom::Widget::UpdateVisualProperties is sent to the renderer.
+  base::RunLoop().RunUntilIdle();
+  ASSERT_EQ(1u, widget_host_->visual_properties().size());
   {
-    const IPC::Message* msg = sink_->GetMessageAt(0);
-    ASSERT_EQ(WidgetMsg_UpdateVisualProperties::ID, msg->type());
-    WidgetMsg_UpdateVisualProperties::Param params;
-    WidgetMsg_UpdateVisualProperties::Read(msg, &params);
-    VisualProperties visual_properties = std::get<0>(params);
+    blink::VisualProperties visual_properties =
+        widget_host_->visual_properties().at(0);
     // Auto-resizve limits sent to the renderer.
     EXPECT_EQ(gfx::Size(50, 50), visual_properties.min_size_for_auto_resize);
     EXPECT_EQ(gfx::Size(100, 100), visual_properties.max_size_for_auto_resize);
@@ -2732,17 +2762,15 @@ TEST_F(RenderWidgetHostViewAuraTest, AutoResizeWithBrowserInitiatedResize) {
 
   // Do a resize in the browser. It does not apply, but VisualProperties are
   // sent. (Why?)
-  sink_->ClearMessages();
+  widget_host_->ClearVisualProperties();
   view_->SetSize(gfx::Size(120, 120));
 
-  // WidgetMsg_UpdateVisualProperties is sent to the renderer.
-  ASSERT_EQ(1u, sink_->message_count());
+  // blink::mojom::Widget::UpdateVisualProperties is sent to the renderer.
+  base::RunLoop().RunUntilIdle();
+  ASSERT_EQ(1u, widget_host_->visual_properties().size());
   {
-    const IPC::Message* msg = sink_->GetMessageAt(0);
-    ASSERT_EQ(WidgetMsg_UpdateVisualProperties::ID, msg->type());
-    WidgetMsg_UpdateVisualProperties::Param params;
-    WidgetMsg_UpdateVisualProperties::Read(msg, &params);
-    VisualProperties visual_properties = std::get<0>(params);
+    blink::VisualProperties visual_properties =
+        widget_host_->visual_properties().at(0);
     // Auto-resizve limits sent to the renderer.
     EXPECT_EQ(gfx::Size(50, 50), visual_properties.min_size_for_auto_resize);
     EXPECT_EQ(gfx::Size(100, 100), visual_properties.max_size_for_auto_resize);
@@ -2792,14 +2820,14 @@ TEST_F(RenderWidgetHostViewAuraTest, ChildAllocationAcceptedInParent) {
 
 // This test verifies that if the parent is hidden when the child sends a
 // child-allocated viz::LocalSurfaceId, the parent will store it and it will
-// not send a WidgetMsg_UpdateVisualProperties back to the child.
+// not send a blink::mojom::Widget::UpdateVisualProperties back to the child.
 TEST_F(RenderWidgetHostViewAuraTest,
        ChildAllocationAcceptedInParentWhileHidden) {
   view_->InitAsChild(nullptr);
   aura::client::ParentWindowWithContext(
       view_->GetNativeView(), parent_view_->GetNativeView()->GetRootWindow(),
       gfx::Rect());
-  sink_->ClearMessages();
+  widget_host_->ClearVisualProperties();
   viz::LocalSurfaceIdAllocation local_surface_id_allocation1(
       view_->GetLocalSurfaceIdAllocation());
   EXPECT_TRUE(local_surface_id_allocation1.IsValid());
@@ -2827,8 +2855,8 @@ TEST_F(RenderWidgetHostViewAuraTest,
   EXPECT_NE(local_surface_id_allocation1, local_surface_id_allocation3);
   EXPECT_EQ(local_surface_id_allocation2, local_surface_id_allocation3);
 
-  EXPECT_FALSE(
-      sink_->GetUniqueMessageMatching(WidgetMsg_UpdateVisualProperties::ID));
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(0u, widget_host_->visual_properties().size());
 }
 
 // This test verifies that when the child and parent both allocate their own
@@ -3021,13 +3049,11 @@ TEST_F(RenderWidgetHostViewAuraTest, ZeroSizeStillGetsLocalSurfaceId) {
   EXPECT_EQ(gfx::Rect(), parent_layer->bounds());
 
   // Update to the renderer.
-  ASSERT_EQ(2u, sink_->message_count());
+  base::RunLoop().RunUntilIdle();
+  ASSERT_EQ(1u, widget_host_->visual_properties().size());
   {
-    const IPC::Message* msg = sink_->GetMessageAt(1);
-    ASSERT_EQ(WidgetMsg_UpdateVisualProperties::ID, msg->type());
-    WidgetMsg_UpdateVisualProperties::Param params;
-    WidgetMsg_UpdateVisualProperties::Read(msg, &params);
-    VisualProperties visual_properties = std::get<0>(params);
+    blink::VisualProperties visual_properties =
+        widget_host_->visual_properties().at(0);
     // Empty size is sent.
     EXPECT_EQ(gfx::Size(), visual_properties.new_size);
     // A LocalSurfaceIdAllocation is sent too.
@@ -3102,21 +3128,15 @@ TEST_F(RenderWidgetHostViewAuraTest, Resize) {
         ->OnLocalSurfaceIdChanged(metadata);
     EXPECT_FALSE(widget_host_->visual_properties_ack_pending_for_testing());
   }
-  sink_->ClearMessages();
+  widget_host_->ClearVisualProperties();
 
   // Resize the renderer. This should produce an UpdateVisualProperties IPC.
   view_->SetSize(size2);
   EXPECT_EQ(size2.ToString(), view_->GetRequestedRendererSize().ToString());
   EXPECT_TRUE(widget_host_->visual_properties_ack_pending_for_testing());
-  ASSERT_EQ(1u, sink_->message_count());
-  {
-    const IPC::Message* msg = sink_->GetMessageAt(0);
-    EXPECT_EQ(static_cast<uint32_t>(WidgetMsg_UpdateVisualProperties::ID),
-              msg->type());
-    WidgetMsg_UpdateVisualProperties::Param params;
-    WidgetMsg_UpdateVisualProperties::Read(msg, &params);
-    EXPECT_EQ(size2, std::get<0>(params).new_size);
-  }
+  base::RunLoop().RunUntilIdle();
+  ASSERT_EQ(1u, widget_host_->visual_properties().size());
+  EXPECT_EQ(size2, widget_host_->visual_properties().at(0).new_size);
   // Render should send back RenderFrameMetadata with new size.
   {
     cc::RenderFrameMetadata metadata;
@@ -3125,12 +3145,13 @@ TEST_F(RenderWidgetHostViewAuraTest, Resize) {
         ->OnLocalSurfaceIdChanged(metadata);
     EXPECT_FALSE(widget_host_->visual_properties_ack_pending_for_testing());
   }
-  sink_->ClearMessages();
+  widget_host_->ClearVisualProperties();
 
   // Calling SetSize() with the current size should be a no-op.
   view_->SetSize(size2);
   EXPECT_FALSE(widget_host_->visual_properties_ack_pending_for_testing());
-  ASSERT_EQ(0u, sink_->message_count());
+  base::RunLoop().RunUntilIdle();
+  ASSERT_EQ(0u, widget_host_->visual_properties().size());
 }
 
 // This test verifies that the primary SurfaceId is populated on resize.
@@ -3198,6 +3219,7 @@ TEST_F(RenderWidgetHostViewAuraTest, DiscardDelegatedFrames) {
     hosts[i] = MockRenderWidgetHostImpl::Create(delegates_.back().get(),
                                                 process_host_, routing_id);
     delegates_.back()->set_widget_host(hosts[i]);
+    delegates_.back()->set_frame_tree(GetFrameTree());
     hosts[i]->Init();
     views[i] = new FakeRenderWidgetHostViewAura(hosts[i]);
     // Prevent frames from being skipped due to resize, this test does not
@@ -3312,6 +3334,7 @@ TEST_F(RenderWidgetHostViewAuraTest, DiscardDelegatedFramesWithMemoryPressure) {
     hosts[i] = MockRenderWidgetHostImpl::Create(delegates_.back().get(),
                                                 process_host_, routing_id);
     delegates_.back()->set_widget_host(hosts[i]);
+    delegates_.back()->set_frame_tree(GetFrameTree());
     hosts[i]->Init();
     views[i] = new FakeRenderWidgetHostViewAura(hosts[i]);
     views[i]->InitAsChild(nullptr);
@@ -3383,7 +3406,7 @@ TEST_F(RenderWidgetHostViewAuraTest, VisibleViewportTest) {
       parent_view_->GetNativeView()->GetRootWindow(),
       gfx::Rect());
 
-  sink_->ClearMessages();
+  widget_host_->ClearVisualProperties();
   view_->SetSize(view_rect.size());
   view_->Show();
 
@@ -3391,13 +3414,11 @@ TEST_F(RenderWidgetHostViewAuraTest, VisibleViewportTest) {
   EXPECT_EQ(100, view_->GetVisibleViewportSize().height());
 
   // Update to the renderer.
-  ASSERT_EQ(1u, sink_->message_count());
+  base::RunLoop().RunUntilIdle();
+  ASSERT_EQ(1u, widget_host_->visual_properties().size());
   {
-    const IPC::Message* msg = sink_->GetMessageAt(0);
-    ASSERT_EQ(WidgetMsg_UpdateVisualProperties::ID, msg->type());
-    WidgetMsg_UpdateVisualProperties::Param params;
-    WidgetMsg_UpdateVisualProperties::Read(msg, &params);
-    VisualProperties visual_properties = std::get<0>(params);
+    blink::VisualProperties visual_properties =
+        widget_host_->visual_properties().at(0);
     EXPECT_EQ(gfx::Size(100, 100), visual_properties.new_size);
     EXPECT_EQ(gfx::Size(100, 100), visual_properties.visible_viewport_size);
   }
@@ -3409,19 +3430,17 @@ TEST_F(RenderWidgetHostViewAuraTest, VisibleViewportTest) {
     static_cast<RenderFrameMetadataProvider::Observer*>(widget_host_)
         ->OnLocalSurfaceIdChanged(metadata);
   }
-  sink_->ClearMessages();
+  widget_host_->ClearVisualProperties();
 
   view_->SetInsets(gfx::Insets(0, 0, 40, 0));
   EXPECT_EQ(60, view_->GetVisibleViewportSize().height());
 
   // Update to the renderer has the inset size.
-  ASSERT_EQ(1u, sink_->message_count());
+  base::RunLoop().RunUntilIdle();
+  ASSERT_EQ(1u, widget_host_->visual_properties().size());
   {
-    const IPC::Message* msg = sink_->GetMessageAt(0);
-    ASSERT_EQ(WidgetMsg_UpdateVisualProperties::ID, msg->type());
-    WidgetMsg_UpdateVisualProperties::Param params;
-    WidgetMsg_UpdateVisualProperties::Read(msg, &params);
-    VisualProperties visual_properties = std::get<0>(params);
+    blink::VisualProperties visual_properties =
+        widget_host_->visual_properties().at(0);
     EXPECT_EQ(gfx::Size(100, 100), visual_properties.new_size);
     EXPECT_EQ(gfx::Size(100, 60), visual_properties.visible_viewport_size);
   }
@@ -3842,7 +3861,8 @@ TEST_F(RenderWidgetHostViewAuraOverscrollTest,
 // Tests that a fling in the opposite direction of the overscroll cancels the
 // overscroll instead of completing it.
 // Flaky on Fuchsia:  http://crbug.com/810690.
-#if defined(OS_FUCHSIA) || defined(OS_LINUX)
+#if defined(OS_FUCHSIA) || defined(OS_LINUX) || defined(OS_CHROMEOS) || \
+    defined(OS_WIN)
 #define MAYBE_ReverseFlingCancelsOverscroll \
   DISABLED_ReverseFlingCancelsOverscroll
 #else
@@ -4227,12 +4247,14 @@ TEST_F(RenderWidgetHostViewAuraOverscrollTest,
 // gesture deals with them correctly.
 TEST_F(RenderWidgetHostViewAuraOverscrollTest, OverscrollWithTouchEvents) {
   SetUpOverscrollEnvironmentWithDebounce(10);
-  widget_host_->SetHasTouchEventHandlers(true);
+  auto touch_event_consumers = blink::mojom::TouchEventConsumers::New(
+      HasTouchEventHandlers(true), HasHitTestableScrollbar(false));
+  widget_host_->SetHasTouchEventConsumers(std::move(touch_event_consumers));
 
   // The test sends an intermingled sequence of touch and gesture events.
   PressTouchPoint(0, 1);
   SendTouchEvent();
-  widget_host_->input_router()->OnSetTouchAction(cc::TouchAction::kAuto);
+  widget_host_->SetTouchActionFromMain(cc::TouchAction::kAuto);
   MockWidgetInputHandler::MessageVector events =
       GetAndResetDispatchedMessages();
   EXPECT_EQ("TouchStart", GetMessageNames(events));
@@ -4353,7 +4375,9 @@ TEST_F(RenderWidgetHostViewAuraOverscrollTest, OverscrollWithTouchEvents) {
 TEST_F(RenderWidgetHostViewAuraOverscrollTest,
        DISABLED_TouchGestureEndDispatchedAfterOverscrollComplete) {
   SetUpOverscrollEnvironmentWithDebounce(10);
-  widget_host_->SetHasTouchEventHandlers(true);
+  auto touch_event_consumers = blink::mojom::TouchEventConsumers::New(
+      HasTouchEventHandlers(true), HasHitTestableScrollbar(false));
+  widget_host_->SetHasTouchEventConsumers(std::move(touch_event_consumers));
 
   PressAndSetTouchActionAuto();
   // Start scrolling. Receive ACK as it being processed.
@@ -4939,7 +4963,9 @@ TEST_F(RenderWidgetHostViewAuraTest,
   view_->InitAsChild(nullptr);
   view_->Show();
 
-  widget_host_->SetHasTouchEventHandlers(true);
+  auto touch_event_consumers = blink::mojom::TouchEventConsumers::New(
+      HasTouchEventHandlers(true), HasHitTestableScrollbar(false));
+  widget_host_->SetHasTouchEventConsumers(std::move(touch_event_consumers));
 
   ui::TouchEvent press(ui::ET_TOUCH_PRESSED, gfx::Point(30, 30),
                        ui::EventTimeForNow(),
@@ -5394,7 +5420,7 @@ TEST_F(RenderWidgetHostViewAuraTest, GestureTapFromStylusHasPointerType) {
   // Simulate touch press and release to generate a GestureTap.
   generator.EnterPenPointerMode();
   generator.PressTouch();
-  widget_host_->input_router()->OnSetTouchAction(cc::TouchAction::kAuto);
+  widget_host_->SetTouchActionFromMain(cc::TouchAction::kAuto);
   generator.ReleaseTouch();
   base::RunLoop().RunUntilIdle();
   MockWidgetInputHandler::MessageVector events =
@@ -5852,7 +5878,7 @@ TEST_F(InputMethodResultAuraTest, SetCompositionText) {
 
 // This test is for ui::TextInputClient::ConfirmCompositionText.
 TEST_F(InputMethodResultAuraTest, ConfirmCompositionText) {
-  base::RepeatingClosure ime_call = base::BindRepeating(
+  base::RepeatingCallback<uint32_t()> ime_call = base::BindRepeating(
       &ui::TextInputClient::ConfirmCompositionText,
       base::Unretained(text_input_client()), /** keep_selection */ true);
   for (auto index : active_view_sequence_) {
@@ -6179,7 +6205,8 @@ TEST_F(InputMethodStateAuraTest, SelectedTextCopiedToClipboard) {
 
     // Retrieve the selected text from clipboard and verify it is as expected.
     base::string16 result_text;
-    clipboard->ReadText(ui::ClipboardBuffer::kSelection, &result_text);
+    clipboard->ReadText(ui::ClipboardBuffer::kSelection,
+                        /* data_dst = */ nullptr, &result_text);
     EXPECT_EQ(expected_text, result_text);
   }
 }
@@ -6514,5 +6541,280 @@ TEST_F(RenderWidgetHostViewAuraKeyboardTest,
 }
 
 #endif  // defined(OS_WIN)
+
+// Mock the DelegatedInkPointRenderer to grab the delegated ink points as they
+// are shipped off to viz from the browser process.
+class MockDelegatedInkPointRenderer
+    : public viz::mojom::DelegatedInkPointRenderer {
+ public:
+  explicit MockDelegatedInkPointRenderer(
+      mojo::PendingReceiver<viz::mojom::DelegatedInkPointRenderer> receiver)
+      : receiver_(this, std::move(receiver)) {}
+
+  void StoreDelegatedInkPoint(const viz::DelegatedInkPoint& point) override {
+    delegated_ink_point_ = point;
+  }
+
+  bool HasDelegatedInkPoint() { return delegated_ink_point_.has_value(); }
+
+  viz::DelegatedInkPoint GetDelegatedInkPoint() {
+    viz::DelegatedInkPoint point = delegated_ink_point_.value();
+    delegated_ink_point_.reset();
+    return point;
+  }
+
+  void FlushForTesting() { receiver_.FlushForTesting(); }
+
+  void ResetReceiver() { receiver_.reset(); }
+  bool ReceiverIsBound() { return receiver_.is_bound(); }
+
+ private:
+  mojo::Receiver<viz::mojom::DelegatedInkPointRenderer> receiver_;
+  base::Optional<viz::DelegatedInkPoint> delegated_ink_point_;
+};
+
+// MockCompositor class binds the mojo interfaces so that the ink points are
+// shipped to the browser process. Uses values from the real compositor to be
+// created, but a fake FrameSinkId must be used so that it hasn't already been
+// registered.
+class MockCompositor : public ui::Compositor {
+ public:
+  explicit MockCompositor(ui::Compositor* compositor)
+      : ui::Compositor(viz::FrameSinkId(5, 5),
+                       compositor->context_factory(),
+                       compositor->task_runner(),
+                       compositor->is_pixel_canvas()) {}
+
+  void SetDelegatedInkPointRenderer(
+      mojo::PendingReceiver<viz::mojom::DelegatedInkPointRenderer> receiver)
+      override {
+    delegated_ink_point_renderer_ =
+        std::make_unique<MockDelegatedInkPointRenderer>(std::move(receiver));
+  }
+
+  MockDelegatedInkPointRenderer* delegated_ink_point_renderer() {
+    return delegated_ink_point_renderer_.get();
+  }
+
+ private:
+  std::unique_ptr<MockDelegatedInkPointRenderer> delegated_ink_point_renderer_;
+};
+
+enum TestEvent { kMouseEvent, kTouchEvent };
+
+class DelegatedInkPointTest : public RenderWidgetHostViewAuraTest,
+                              public testing::WithParamInterface<TestEvent> {
+ public:
+  DelegatedInkPointTest() = default;
+};
+
+INSTANTIATE_TEST_SUITE_P(DelegatedInkTrails,
+                         DelegatedInkPointTest,
+                         testing::Values(TestEvent::kMouseEvent,
+                                         TestEvent::kTouchEvent));
+
+// Tests to confirm that input events are correctly forwarded to the UI
+// Compositor when DelegatedInkTrails should be drawn, and stops forwarding when
+// they no longer should be drawn.
+TEST_P(DelegatedInkPointTest, EventForwardedToCompositor) {
+  view_->InitAsChild(nullptr);
+  aura_test_helper_->GetTestScreen()->SetDeviceScaleFactor(1.0f);
+
+  ui::Compositor* old_compositor =
+      view_->GetNativeView()->layer()->GetCompositor();
+  MockCompositor compositor(aura_test_helper_->GetHost()->compositor());
+  view_->GetNativeView()->layer()->SetCompositorForTesting(&compositor);
+
+  // First confirm that the flag is false by default and the point is not sent.
+  if (GetParam() == TestEvent::kTouchEvent) {
+    // Touch needs a pressed event first to properly handle future move events.
+    ui::TouchEvent press(ui::ET_TOUCH_PRESSED, gfx::PointF(15, 15),
+                         gfx::PointF(15, 15), ui::EventTimeForNow(),
+                         ui::PointerDetails(ui::EventPointerType::kTouch, 0));
+    view_->OnTouchEvent(&press);
+
+    ui::TouchEvent touch_event(
+        ui::ET_TOUCH_MOVED, gfx::PointF(20, 20), gfx::PointF(20, 20),
+        ui::EventTimeForNow(),
+        ui::PointerDetails(ui::EventPointerType::kTouch, 0));
+    view_->OnTouchEvent(&touch_event);
+  } else {
+    ui::MouseEvent mouse_event(ui::ET_MOUSE_MOVED, gfx::PointF(20, 20),
+                               gfx::PointF(20, 20), ui::EventTimeForNow(), 0,
+                               0);
+    view_->OnMouseEvent(&mouse_event);
+  }
+  MockDelegatedInkPointRenderer* delegated_ink_point_renderer =
+      compositor.delegated_ink_point_renderer();
+
+  EXPECT_FALSE(delegated_ink_point_renderer);
+
+  // Then set it to true and confirm that the DelegatedInkPointRenderer is
+  // initialized and the connection is made.
+  view_->SetIsDrawingDelegatedInkTrailsForTest(true);
+  viz::DelegatedInkPoint expected_point(gfx::PointF(10, 10),
+                                        base::TimeTicks::Now());
+
+  if (GetParam() == TestEvent::kTouchEvent) {
+    ui::TouchEvent touch_event(
+        ui::ET_TOUCH_MOVED, expected_point.point(), expected_point.point(),
+        expected_point.timestamp(),
+        ui::PointerDetails(ui::EventPointerType::kTouch, 0));
+    view_->OnTouchEvent(&touch_event);
+  } else {
+    ui::MouseEvent mouse_event(ui::ET_MOUSE_MOVED, expected_point.point(),
+                               expected_point.point(),
+                               expected_point.timestamp(), 0, 0);
+    view_->OnMouseEvent(&mouse_event);
+  }
+  delegated_ink_point_renderer = compositor.delegated_ink_point_renderer();
+
+  EXPECT_TRUE(delegated_ink_point_renderer);
+  EXPECT_FALSE(delegated_ink_point_renderer->HasDelegatedInkPoint());
+
+  // Now send a point and confirm it gets all the way to the
+  // DelegatedInkPointRenderer.
+  expected_point =
+      viz::DelegatedInkPoint(gfx::PointF(30, 30), base::TimeTicks::Now());
+  if (GetParam() == TestEvent::kTouchEvent) {
+    ui::TouchEvent touch_event(
+        ui::ET_TOUCH_MOVED, expected_point.point(), expected_point.point(),
+        expected_point.timestamp(),
+        ui::PointerDetails(ui::EventPointerType::kTouch, 0));
+    view_->OnTouchEvent(&touch_event);
+  } else {
+    ui::MouseEvent mouse_event(ui::ET_MOUSE_MOVED, expected_point.point(),
+                               expected_point.point(),
+                               expected_point.timestamp(), 0, 0);
+    view_->OnMouseEvent(&mouse_event);
+  }
+  delegated_ink_point_renderer->FlushForTesting();
+
+  EXPECT_TRUE(delegated_ink_point_renderer->HasDelegatedInkPoint());
+  viz::DelegatedInkPoint actual_point =
+      delegated_ink_point_renderer->GetDelegatedInkPoint();
+  EXPECT_EQ(expected_point.point(), actual_point.point());
+  EXPECT_EQ(expected_point.timestamp(), actual_point.timestamp());
+
+  // Then try changing the scale factor to confirm it affects the point
+  // correctly.
+  const float scale = 2.6f;
+  aura_test_helper_->GetTestScreen()->SetDeviceScaleFactor(scale);
+  gfx::PointF unscaled_point(15, 15);
+  base::TimeTicks unscaled_time = base::TimeTicks::Now();
+
+  if (GetParam() == TestEvent::kTouchEvent) {
+    ui::TouchEvent touch_event(
+        ui::ET_TOUCH_MOVED, unscaled_point, unscaled_point, unscaled_time,
+        ui::PointerDetails(ui::EventPointerType::kTouch, 0));
+    view_->OnTouchEvent(&touch_event);
+  } else {
+    ui::MouseEvent mouse_event(ui::ET_MOUSE_MOVED, unscaled_point,
+                               unscaled_point, unscaled_time, 0, 0);
+    view_->OnMouseEvent(&mouse_event);
+  }
+  delegated_ink_point_renderer->FlushForTesting();
+
+  unscaled_point.Scale(scale);
+  expected_point = viz::DelegatedInkPoint(unscaled_point, unscaled_time);
+
+  EXPECT_TRUE(delegated_ink_point_renderer->HasDelegatedInkPoint());
+  actual_point = delegated_ink_point_renderer->GetDelegatedInkPoint();
+  EXPECT_EQ(expected_point.point(), actual_point.point());
+  EXPECT_EQ(expected_point.timestamp(), actual_point.timestamp());
+
+  // Finally, confirm that points aren't sent whenever the flag is changed back
+  // to false.
+  view_->SetIsDrawingDelegatedInkTrailsForTest(false);
+
+  if (GetParam() == TestEvent::kTouchEvent) {
+    ui::TouchEvent touch_event(
+        ui::ET_TOUCH_MOVED, gfx::PointF(25, 25), gfx::PointF(25, 25),
+        ui::EventTimeForNow(),
+        ui::PointerDetails(ui::EventPointerType::kTouch, 0));
+    view_->OnTouchEvent(&touch_event);
+  } else {
+    ui::MouseEvent mouse_event(ui::ET_MOUSE_MOVED, gfx::PointF(25, 25),
+                               gfx::PointF(25, 25), ui::EventTimeForNow(), 0,
+                               0);
+    view_->OnMouseEvent(&mouse_event);
+  }
+  delegated_ink_point_renderer->FlushForTesting();
+
+  EXPECT_FALSE(delegated_ink_point_renderer->HasDelegatedInkPoint());
+
+  // Restore the view's compositor to the old value so it no longer references
+  // the MockCompositor that is about to go out of scope. This also ensures
+  // that the view can be properly destroyed by TearDownEnvironment().
+  view_->GetNativeView()->layer()->SetCompositorForTesting(old_compositor);
+}
+
+// Confirm that the interface is rebound if the receiver disconnects.
+TEST_P(DelegatedInkPointTest, MojoInterfaceReboundOnDisconnect) {
+  view_->InitAsChild(nullptr);
+  aura_test_helper_->GetTestScreen()->SetDeviceScaleFactor(1.0f);
+
+  ui::Compositor* old_compositor =
+      view_->GetNativeView()->layer()->GetCompositor();
+  MockCompositor compositor(aura_test_helper_->GetHost()->compositor());
+  view_->GetNativeView()->layer()->SetCompositorForTesting(&compositor);
+
+  // First make sure the connection exists.
+  view_->SetIsDrawingDelegatedInkTrailsForTest(true);
+  if (GetParam() == TestEvent::kTouchEvent) {
+    // Touch needs a pressed event first to properly handle future move events.
+    ui::TouchEvent press(ui::ET_TOUCH_PRESSED, gfx::PointF(15, 15),
+                         gfx::PointF(15, 15), ui::EventTimeForNow(),
+                         ui::PointerDetails(ui::EventPointerType::kTouch, 0));
+    view_->OnTouchEvent(&press);
+
+    ui::TouchEvent touch_event(
+        ui::ET_TOUCH_MOVED, gfx::PointF(20, 20), gfx::PointF(20, 20),
+        base::TimeTicks::Now(),
+        ui::PointerDetails(ui::EventPointerType::kTouch, 0));
+    view_->OnTouchEvent(&touch_event);
+  } else {
+    ui::MouseEvent mouse_event(ui::ET_MOUSE_MOVED, gfx::PointF(20, 20),
+                               gfx::PointF(20, 20), base::TimeTicks::Now(), 0,
+                               0);
+    view_->OnMouseEvent(&mouse_event);
+  }
+
+  MockDelegatedInkPointRenderer* delegated_ink_point_renderer =
+      compositor.delegated_ink_point_renderer();
+
+  EXPECT_TRUE(delegated_ink_point_renderer);
+  EXPECT_TRUE(delegated_ink_point_renderer->ReceiverIsBound());
+
+  // Reset the receiver and flush the remote to confirm it is no longer bound.
+  delegated_ink_point_renderer->ResetReceiver();
+  view_->FlushForTest();
+
+  EXPECT_FALSE(delegated_ink_point_renderer->ReceiverIsBound());
+
+  // Confirm that it now gets reconnected correctly.
+  if (GetParam() == TestEvent::kTouchEvent) {
+    ui::TouchEvent touch_event(
+        ui::ET_TOUCH_MOVED, gfx::PointF(25, 25), gfx::PointF(25, 25),
+        base::TimeTicks::Now(),
+        ui::PointerDetails(ui::EventPointerType::kTouch, 0));
+    view_->OnTouchEvent(&touch_event);
+  } else {
+    ui::MouseEvent mouse_event(ui::ET_MOUSE_MOVED, gfx::PointF(25, 25),
+                               gfx::PointF(25, 25), base::TimeTicks::Now(), 0,
+                               0);
+    view_->OnMouseEvent(&mouse_event);
+  }
+
+  delegated_ink_point_renderer = compositor.delegated_ink_point_renderer();
+
+  EXPECT_TRUE(delegated_ink_point_renderer);
+  EXPECT_TRUE(delegated_ink_point_renderer->ReceiverIsBound());
+
+  // Restore the view's compositor to the old value so it no longer references
+  // the MockCompositor that is about to go out of scope. This also ensures
+  // that the view can be properly destroyed by TearDownEnvironment().
+  view_->GetNativeView()->layer()->SetCompositorForTesting(old_compositor);
+}
 
 }  // namespace content

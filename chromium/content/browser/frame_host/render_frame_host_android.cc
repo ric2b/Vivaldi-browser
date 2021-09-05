@@ -67,6 +67,10 @@ RenderFrameHostAndroid::RenderFrameHostAndroid(
       interface_provider_remote_(std::move(interface_provider_remote)) {}
 
 RenderFrameHostAndroid::~RenderFrameHostAndroid() {
+  // Avoid unnecessarily creating the java object from the destructor.
+  if (obj_.is_uninitialized())
+    return;
+
   ScopedJavaLocalRef<jobject> jobj = GetJavaObject();
   if (!jobj.is_null()) {
     Java_RenderFrameHostImpl_clearNativePtr(AttachCurrentThread(), jobj);
@@ -113,11 +117,12 @@ void RenderFrameHostAndroid::GetCanonicalUrlForSharing(
       base::android::ScopedJavaGlobalRef<jobject>(env, jcallback)));
 }
 
-bool RenderFrameHostAndroid::IsPaymentFeaturePolicyEnabled(
+bool RenderFrameHostAndroid::IsFeatureEnabled(
     JNIEnv* env,
-    const base::android::JavaParamRef<jobject>&) const {
+    const base::android::JavaParamRef<jobject>&,
+    jint feature) const {
   return render_frame_host_->IsFeatureEnabled(
-      blink::mojom::FeaturePolicyFeature::kPayment);
+      static_cast<blink::mojom::FeaturePolicyFeature>(feature));
 }
 
 ScopedJavaLocalRef<jobject>

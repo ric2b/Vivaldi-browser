@@ -190,12 +190,11 @@ void ScrollbarThemeMac::RegisterScrollbar(Scrollbar& scrollbar) {
   GetScrollbarSet().insert(&scrollbar);
 
   bool is_horizontal = scrollbar.Orientation() == kHorizontalScrollbar;
-  base::scoped_nsobject<ScrollbarPainter> scrollbar_painter(
-      [[NSClassFromString(@"NSScrollerImp")
-          scrollerImpWithStyle:RecommendedScrollerStyle()
-                   controlSize:(NSControlSize)scrollbar.GetControlSize()
-                    horizontal:is_horizontal
-          replacingScrollerImp:nil] retain]);
+  base::scoped_nsobject<ScrollbarPainter> scrollbar_painter([[NSClassFromString(
+      @"NSScrollerImp") scrollerImpWithStyle:RecommendedScrollerStyle()
+                                 controlSize:NSRegularControlSize
+                                  horizontal:is_horizontal
+                        replacingScrollerImp:nil] retain]);
   base::scoped_nsobject<BlinkScrollbarObserver> observer(
       [[BlinkScrollbarObserver alloc] initWithScrollbar:&scrollbar
                                                 painter:scrollbar_painter]);
@@ -311,7 +310,7 @@ void ScrollbarThemeMac::PaintScrollCorner(GraphicsContext& context,
                                                   DisplayItem::kScrollCorner)) {
     return;
   }
-  DrawingRecorder recorder(context, item, DisplayItem::kScrollCorner);
+  DrawingRecorder recorder(context, item, DisplayItem::kScrollCorner, rect);
 
   GraphicsContextStateSaver state_saver(context);
   context.Translate(rect.X(), rect.Y());
@@ -332,7 +331,8 @@ void ScrollbarThemeMac::PaintThumbInternal(GraphicsContext& context,
           context, scrollbar, DisplayItem::kScrollbarThumb)) {
     return;
   }
-  DrawingRecorder recorder(context, scrollbar, DisplayItem::kScrollbarThumb);
+  DrawingRecorder recorder(context, scrollbar, DisplayItem::kScrollbarThumb,
+                           rect);
 
   GraphicsContextStateSaver state_saver(context);
   context.Translate(rect.X(), rect.Y());
@@ -374,7 +374,7 @@ void ScrollbarThemeMac::PaintThumbInternal(GraphicsContext& context,
         setBoundsSize:NSSizeFromCGSize(CGSize(scrollbar.FrameRect().Size()))];
     [observer setSuppressSetScrollbarsHidden:NO];
 
-    thumb_size = [scrollbar_painter trackBoxWidth];
+    thumb_size = [scrollbar_painter trackBoxWidth] * scrollbar.ScaleFromDIP();
   }
 
   if (!scrollbar.Enabled())
@@ -414,11 +414,10 @@ void ScrollbarThemeMac::PaintThumbInternal(GraphicsContext& context,
     context.EndLayer();
 }
 
-int ScrollbarThemeMac::ScrollbarThickness(ScrollbarControlSize control_size) {
-  NSControlSize ns_control_size = static_cast<NSControlSize>(control_size);
+int ScrollbarThemeMac::ScrollbarThickness(float scale_from_dip) {
   ScrollbarPainter scrollbar_painter = [NSClassFromString(@"NSScrollerImp")
       scrollerImpWithStyle:RecommendedScrollerStyle()
-               controlSize:ns_control_size
+               controlSize:NSRegularControlSize
                 horizontal:NO
       replacingScrollerImp:nil];
   BOOL was_expanded = NO;
@@ -429,7 +428,7 @@ int ScrollbarThemeMac::ScrollbarThickness(ScrollbarControlSize control_size) {
   int thickness = [scrollbar_painter trackBoxWidth];
   if (SupportsExpandedScrollbars())
     [scrollbar_painter setExpanded:was_expanded];
-  return thickness;
+  return thickness * scale_from_dip;
 }
 
 bool ScrollbarThemeMac::UsesOverlayScrollbars() const {

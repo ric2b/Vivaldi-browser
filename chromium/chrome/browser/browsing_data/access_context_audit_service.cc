@@ -4,10 +4,11 @@
 
 #include "chrome/browser/browsing_data/access_context_audit_service.h"
 #include "base/memory/ref_counted.h"
-#include "base/sequenced_task_runner.h"
 #include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
+#include "base/time/default_clock.h"
 #include "base/time/time.h"
+#include "base/updateable_sequenced_task_runner.h"
 #include "chrome/browser/browsing_data/access_context_audit_database.h"
 #include "chrome/browser/content_settings/cookie_settings_factory.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
@@ -16,47 +17,59 @@
 #include "content/public/browser/storage_partition.h"
 
 AccessContextAuditService::AccessContextAuditService(Profile* profile)
-    : profile_(profile) {}
+    : clock_(base::DefaultClock::GetInstance()), profile_(profile) {}
 AccessContextAuditService::~AccessContextAuditService() = default;
 
 bool AccessContextAuditService::Init(
     const base::FilePath& database_dir,
-    network::mojom::CookieManager* cookie_manager) {
+    network::mojom::CookieManager* cookie_manager,
+    history::HistoryService* history_service,
+    content::StoragePartition* storage_partition) {
   database_ = base::MakeRefCounted<AccessContextAuditDatabase>(database_dir);
 
   // Tests may have provided a task runner already.
   if (!database_task_runner_) {
-    database_task_runner_ = base::ThreadPool::CreateSequencedTaskRunner(
-        {base::MayBlock(), base::WithBaseSyncPrimitives(),
-         base::TaskPriority::USER_VISIBLE,
-         base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN});
+    // Task runner is set to block shutdown as content settings are checked on
+    // service shutdown and records which should not be persisted are removed.
+    database_task_runner_ =
+        base::ThreadPool::CreateUpdateableSequencedTaskRunner(
+            {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
+             base::ThreadPolicy::PREFER_BACKGROUND,
+             base::TaskShutdownBehavior::BLOCK_SHUTDOWN});
   }
 
   if (!database_task_runner_->PostTask(
           FROM_HERE,
-          base::BindOnce(&AccessContextAuditDatabase::Init, database_)))
+          base::BindOnce(&AccessContextAuditDatabase::Init, database_,
+                         profile_->ShouldRestoreOldSessionCookies()))) {
     return false;
+  }
 
   cookie_manager->AddGlobalChangeListener(
       cookie_listener_receiver_.BindNewPipeAndPassRemote());
-
+  history_observer_.Add(history_service);
+  storage_partition_observer_.Add(storage_partition);
   return true;
 }
 
 void AccessContextAuditService::RecordCookieAccess(
     const net::CookieList& accessed_cookies,
-    const GURL& top_frame_origin) {
-  auto now = base::Time::Now();
+    const url::Origin& top_frame_origin) {
+  // Opaque top frame origins are not supported.
+  if (top_frame_origin.opaque())
+    return;
+
+  auto now = clock_->Now();
   std::vector<AccessContextAuditDatabase::AccessRecord> access_records;
   for (const auto& cookie : accessed_cookies) {
-    // Do not record access for already expired or non-persistent cookies. This
-    // is more than an optimisation, deletion events will not be fired for them.
-    if (cookie.ExpiryDate() < now || !cookie.IsPersistent())
+    // Do not record accesses to already expired cookies. This service is
+    // informed of deletion via OnCookieChange.
+    if (cookie.ExpiryDate() < now && cookie.IsPersistent())
       continue;
 
     access_records.emplace_back(top_frame_origin, cookie.Name(),
                                 cookie.Domain(), cookie.Path(),
-                                cookie.LastAccessDate());
+                                cookie.LastAccessDate(), cookie.IsPersistent());
   }
   database_task_runner_->PostTask(
       FROM_HERE, base::BindOnce(&AccessContextAuditDatabase::AddRecords,
@@ -64,12 +77,17 @@ void AccessContextAuditService::RecordCookieAccess(
 }
 
 void AccessContextAuditService::RecordStorageAPIAccess(
-    const GURL& storage_origin,
+    const url::Origin& storage_origin,
     AccessContextAuditDatabase::StorageAPIType type,
-    const GURL& top_frame_origin) {
+    const url::Origin& top_frame_origin) {
+  // Opaque top frame origins are not supported.
+  if (top_frame_origin.opaque())
+    return;
+  DCHECK(!storage_origin.opaque());
+
   std::vector<AccessContextAuditDatabase::AccessRecord> access_record = {
-      AccessContextAuditDatabase::AccessRecord(
-          top_frame_origin, type, storage_origin, base::Time::Now())};
+      AccessContextAuditDatabase::AccessRecord(top_frame_origin, type,
+                                               storage_origin, clock_->Now())};
   database_task_runner_->PostTask(
       FROM_HERE, base::BindOnce(&AccessContextAuditDatabase::AddRecords,
                                 database_, std::move(access_record)));
@@ -77,14 +95,95 @@ void AccessContextAuditService::RecordStorageAPIAccess(
 
 void AccessContextAuditService::GetAllAccessRecords(
     AccessContextRecordsCallback callback) {
+  if (!user_visible_tasks_in_progress++)
+    database_task_runner_->UpdatePriority(base::TaskPriority::USER_VISIBLE);
+
   database_task_runner_->PostTaskAndReplyWithResult(
       FROM_HERE,
       base::BindOnce(&AccessContextAuditDatabase::GetAllRecords, database_),
-      std::move(callback));
+      base::BindOnce(
+          &AccessContextAuditService::CompleteGetAllAccessRecordsInternal,
+          weak_factory_.GetWeakPtr(), std::move(callback)));
+}
+
+void AccessContextAuditService::CompleteGetAllAccessRecordsInternal(
+    AccessContextRecordsCallback callback,
+    std::vector<AccessContextAuditDatabase::AccessRecord> records) {
+  DCHECK_GT(user_visible_tasks_in_progress, 0);
+  if (!--user_visible_tasks_in_progress)
+    database_task_runner_->UpdatePriority(base::TaskPriority::BEST_EFFORT);
+
+  std::move(callback).Run(std::move(records));
+}
+
+void AccessContextAuditService::RemoveAllRecordsForOriginKeyedStorage(
+    const url::Origin& origin,
+    AccessContextAuditDatabase::StorageAPIType type) {
+  DCHECK_NE(type, AccessContextAuditDatabase::StorageAPIType::kCookie)
+      << "Cookies are not an origin keyed storage type.";
+  database_task_runner_->PostTask(
+      FROM_HERE,
+      base::BindOnce(
+          &AccessContextAuditDatabase::RemoveAllRecordsForOriginKeyedStorage,
+          database_, std::move(origin), type));
 }
 
 void AccessContextAuditService::Shutdown() {
   ClearSessionOnlyRecords();
+}
+
+void AccessContextAuditService::OnOriginDataCleared(
+    uint32_t remove_mask,
+    base::RepeatingCallback<bool(const url::Origin&)> origin_matcher,
+    const base::Time begin,
+    const base::Time end) {
+  std::set<AccessContextAuditDatabase::StorageAPIType> types;
+
+  if (remove_mask & content::StoragePartition::REMOVE_DATA_MASK_APPCACHE)
+    types.insert(AccessContextAuditDatabase::StorageAPIType::kAppCache);
+  if (remove_mask & content::StoragePartition::REMOVE_DATA_MASK_FILE_SYSTEMS)
+    types.insert(AccessContextAuditDatabase::StorageAPIType::kFileSystem);
+  if (remove_mask & content::StoragePartition::REMOVE_DATA_MASK_INDEXEDDB)
+    types.insert(AccessContextAuditDatabase::StorageAPIType::kIndexedDB);
+  if (remove_mask & content::StoragePartition::REMOVE_DATA_MASK_LOCAL_STORAGE)
+    types.insert(AccessContextAuditDatabase::StorageAPIType::kLocalStorage);
+  if (remove_mask & content::StoragePartition::REMOVE_DATA_MASK_WEBSQL)
+    types.insert(AccessContextAuditDatabase::StorageAPIType::kWebDatabase);
+  if (remove_mask & content::StoragePartition::REMOVE_DATA_MASK_SERVICE_WORKERS)
+    types.insert(AccessContextAuditDatabase::StorageAPIType::kServiceWorker);
+  if (remove_mask & content::StoragePartition::REMOVE_DATA_MASK_CACHE_STORAGE)
+    types.insert(AccessContextAuditDatabase::StorageAPIType::kCacheStorage);
+
+  if (types.empty())
+    return;
+
+  DCHECK_EQ(AccessContextAuditDatabase::StorageAPIType::kMaxValue,
+            AccessContextAuditDatabase::StorageAPIType::kAppCache)
+      << "Unexpected number of storage types. Ensure that all storage types "
+         "are accounted for when checking |remove_mask|.";
+  bool all_origin_storage_types = types.size() == 7;
+
+  if (begin == base::Time() && end == base::Time::Max() && !origin_matcher &&
+      all_origin_storage_types) {
+    database_task_runner_->PostTask(
+        FROM_HERE, base::BindOnce(&AccessContextAuditDatabase::RemoveAllRecords,
+                                  database_));
+    return;
+  }
+
+  if (!origin_matcher && all_origin_storage_types) {
+    database_task_runner_->PostTask(
+        FROM_HERE,
+        base::BindOnce(
+            &AccessContextAuditDatabase::RemoveAllRecordsForTimeRange,
+            database_, begin, end));
+    return;
+  }
+
+  database_task_runner_->PostTask(
+      FROM_HERE,
+      base::BindOnce(&AccessContextAuditDatabase::RemoveStorageApiRecords,
+                     database_, types, std::move(origin_matcher), begin, end));
 }
 
 void AccessContextAuditService::OnCookieChange(
@@ -109,8 +208,55 @@ void AccessContextAuditService::OnCookieChange(
   }
 }
 
+void AccessContextAuditService::OnURLsDeleted(
+    history::HistoryService* history_service,
+    const history::DeletionInfo& deletion_info) {
+  if (deletion_info.IsAllHistory()) {
+    database_task_runner_->PostTask(
+        FROM_HERE, base::BindOnce(&AccessContextAuditDatabase::RemoveAllRecords,
+                                  database_));
+    return;
+  }
+
+  if (deletion_info.time_range().IsValid()) {
+    // If a time range is specified, a time based deletion is performed as a
+    // first pass before origins without history entries are removed. A second
+    // pass based on origins is required as access record timestamps are not
+    // directly comparable to history timestamps. Only deleting based on
+    // timestamp may persist origins on disk for which no other trace exists.
+    database_task_runner_->PostTask(
+        FROM_HERE,
+        base::BindOnce(
+            &AccessContextAuditDatabase::RemoveAllRecordsForTimeRange,
+            database_, deletion_info.time_range().begin(),
+            deletion_info.time_range().end()));
+  }
+
+  std::vector<url::Origin> deleted_origins;
+  // Map is of type {Origin -> {Count, LastVisitTime}}.
+  for (const auto& origin_urls_remaining :
+       deletion_info.deleted_urls_origin_map()) {
+    if (origin_urls_remaining.second.first > 0)
+      continue;
+    deleted_origins.emplace_back(
+        url::Origin::Create(origin_urls_remaining.first));
+  }
+
+  if (deleted_origins.size() > 0) {
+    database_task_runner_->PostTask(
+        FROM_HERE,
+        base::BindOnce(
+            &AccessContextAuditDatabase::RemoveAllRecordsForTopFrameOrigins,
+            database_, std::move(deleted_origins)));
+  }
+}
+
+void AccessContextAuditService::SetClockForTesting(base::Clock* clock) {
+  clock_ = clock;
+}
+
 void AccessContextAuditService::SetTaskRunnerForTesting(
-    scoped_refptr<base::SequencedTaskRunner> task_runner) {
+    scoped_refptr<base::UpdateableSequencedTaskRunner> task_runner) {
   DCHECK(!database_task_runner_);
   database_task_runner_ = std::move(task_runner);
 }
@@ -123,6 +269,5 @@ void AccessContextAuditService::ClearSessionOnlyRecords() {
   database_task_runner_->PostTask(
       FROM_HERE,
       base::BindOnce(&AccessContextAuditDatabase::RemoveSessionOnlyRecords,
-                     database_, CookieSettingsFactory::GetForProfile(profile_),
-                     std::move(settings)));
+                     database_, std::move(settings)));
 }

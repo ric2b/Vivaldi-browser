@@ -15,6 +15,8 @@ VivaldiBrowserMainExtraPartsAndroid::~VivaldiBrowserMainExtraPartsAndroid() =
     default;
 
 void VivaldiBrowserMainExtraPartsAndroid::PostProfileInit() {
+  VivaldiBrowserMainExtraParts::PostProfileInit();
+
   if (first_run::IsChromeFirstRun()) {
     Profile* profile = ProfileManager::GetLastUsedProfile();
     DCHECK(profile);
@@ -23,6 +25,7 @@ void VivaldiBrowserMainExtraPartsAndroid::PostProfileInit() {
   }
 }
 
-VivaldiBrowserMainExtraParts* VivaldiBrowserMainExtraParts::Create() {
-  return new VivaldiBrowserMainExtraPartsAndroid();
+std::unique_ptr<VivaldiBrowserMainExtraParts>
+VivaldiBrowserMainExtraParts::Create() {
+  return std::make_unique<VivaldiBrowserMainExtraPartsAndroid>();
 }

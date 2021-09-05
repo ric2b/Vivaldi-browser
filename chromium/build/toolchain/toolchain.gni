@@ -39,7 +39,7 @@ if (generate_linker_map) {
 
 declare_args() {
   # Clang compiler version. Clang files are placed at version-dependent paths.
-  clang_version = "11.0.0"
+  clang_version = "12.0.0"
 }
 
 # Check target_os here instead of is_ios as this file is loaded for secondary
@@ -49,7 +49,7 @@ assert(!use_xcode_clang || target_os == "ios",
        "Using Xcode's clang is only supported in iOS builds")
 
 # Extension for shared library files (including leading dot).
-if (is_mac || is_ios) {
+if (is_apple) {
   shlib_extension = ".dylib"
 } else if (is_android && is_component_build) {
   # By appending .cr, we prevent name collisions with libraries already

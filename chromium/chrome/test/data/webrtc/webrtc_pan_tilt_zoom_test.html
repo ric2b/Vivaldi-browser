@@ -5,6 +5,9 @@
   <script type="text/javascript" src="test_functions.js"></script>
   <script>
   'use strict';
+  let stream;
+  let waitForImageCapture;
+
   let microphonePermissionStatus;
   let cameraPermissionStatus;
   let panTiltZoomPermissionStatus;
@@ -24,7 +27,8 @@
   async function runGetUserMedia(constraints) {
     try {
       await queryPermissions;
-      await navigator.mediaDevices.getUserMedia(constraints);
+      stream = await navigator.mediaDevices.getUserMedia(constraints);
+      waitForImageCapture = new Promise(resolve => setTimeout(resolve, 100));
       returnToTest("runGetUserMedia-success");
     } catch (error) {
       returnToTest("runGetUserMedia-failure");
@@ -41,6 +45,40 @@
     }
   }
 
+  function getTrackSetting(settingName) {
+    const videoTrack = stream.getVideoTracks()[0];
+    const settings = videoTrack.getSettings();
+    returnToTest(settings[settingName]);
+  }
+
+  function checkConstraints(expectedConstraints) {
+    const videoTrack = stream.getVideoTracks()[0];
+    const constraints = videoTrack.getConstraints();
+
+    const s = (o) => Object.entries(o).sort().map(i => {
+      if(i[1] instanceof Object) i[1] = s(i[1]);
+      return i
+    })
+    const constraintsString = JSON.stringify(s(constraints));
+    const expectedConstraintsString = JSON.stringify(s(expectedConstraints));
+    if  (constraintsString !== expectedConstraintsString) {
+      debug(`Expected ${expectedConstraintsString} - got ${constraintsString}`)
+      returnToTest("checkConstraints-failure");
+    }
+
+    returnToTest("checkConstraints-success");
+  }
+
+  async function applyConstraints(constraints) {
+    try {
+      const videoTrack = stream.getVideoTracks()[0];
+      await videoTrack.applyConstraints(constraints);
+      returnToTest("applyConstraints-success");
+    } catch (error) {
+      returnToTest(`applyConstraints-failure-${error.name}`);
+    }
+  }
+
   function getMicrophonePermission() {
     returnToTest(microphonePermissionStatus.state);
   }
@@ -52,6 +90,10 @@
   function getPanTiltZoomPermission() {
     returnToTest(panTiltZoomPermissionStatus.state);
   }
+
+  document.addEventListener('visibilitychange', () => {
+    document.title = document.visibilityState;
+  });
   </script>
 </head>
 <body>

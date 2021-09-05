@@ -31,7 +31,7 @@
 #if defined(V8_USE_EXTERNAL_STARTUP_DATA)
 #if defined(OS_ANDROID)
 #include "base/android/apk_assets.h"
-#elif defined(OS_MACOSX)
+#elif defined(OS_MAC)
 #include "base/mac/foundation_util.h"
 #endif
 #endif  // V8_USE_EXTERNAL_STARTUP_DATA
@@ -97,7 +97,7 @@ void GetV8FilePath(const char* file_name, base::FilePath* path_out) {
   // This is the path within the .apk.
   *path_out =
       base::FilePath(FILE_PATH_LITERAL("assets")).AppendASCII(file_name);
-#elif defined(OS_MACOSX)
+#elif defined(OS_MAC)
   base::ScopedCFTypeRef<CFStringRef> bundle_resource(
       base::SysUTF8ToCFStringRef(file_name));
   *path_out = base::mac::PathForFrameworkBundleResource(bundle_resource);
@@ -238,6 +238,29 @@ void V8Initializer::Initialize(IsolateHolder::ScriptMode mode) {
         "--stress-per-context-marking-worklist";
     v8::V8::SetFlagsFromString(stress_per_context_marking_worklist,
                                sizeof(stress_per_context_marking_worklist) - 1);
+  }
+
+  if (base::FeatureList::IsEnabled(features::kV8FlushEmbeddedBlobICache)) {
+    static const char experimental_flush_embedded_blob_icache[] =
+        "--experimental-flush-embedded-blob-icache";
+    v8::V8::SetFlagsFromString(
+        experimental_flush_embedded_blob_icache,
+        sizeof(experimental_flush_embedded_blob_icache) - 1);
+  }
+
+  if (base::FeatureList::IsEnabled(features::kV8ReduceConcurrentMarkingTasks)) {
+    static const char gc_experiment_reduce_concurrent_marking_tasks[] =
+        "--gc-experiment-reduce-concurrent-marking-tasks";
+    v8::V8::SetFlagsFromString(
+        gc_experiment_reduce_concurrent_marking_tasks,
+        sizeof(gc_experiment_reduce_concurrent_marking_tasks) - 1);
+  }
+
+  if (base::FeatureList::IsEnabled(features::kV8NoReclaimUnmodifiedWrappers)) {
+    static constexpr char no_reclaim_unmodified_wrappers[] =
+        "--no-reclaim-unmodified-wrappers";
+    v8::V8::SetFlagsFromString(no_reclaim_unmodified_wrappers,
+                               sizeof(no_reclaim_unmodified_wrappers) - 1);
   }
 
   if (IsolateHolder::kStrictMode == mode) {

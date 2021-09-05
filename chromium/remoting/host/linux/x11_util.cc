@@ -6,14 +6,14 @@
 
 #include "base/bind.h"
 #include "ui/gfx/x/x11.h"
+#include "ui/gfx/x/xtest.h"
 
 namespace remoting {
 
 static ScopedXErrorHandler* g_handler = nullptr;
 
-ScopedXErrorHandler::ScopedXErrorHandler(const Handler& handler):
-    handler_(handler),
-    ok_(true) {
+ScopedXErrorHandler::ScopedXErrorHandler(const Handler& handler)
+    : handler_(handler), ok_(true) {
   // This is a non-exhaustive check for incorrect usage. It doesn't handle the
   // case where a mix of ScopedXErrorHandler and raw XSetErrorHandler calls are
   // used, and it disallows nested ScopedXErrorHandlers on the same thread,
@@ -28,25 +28,15 @@ ScopedXErrorHandler::~ScopedXErrorHandler() {
   XSetErrorHandler(previous_handler_);
 }
 
-namespace {
-void IgnoreXErrors(Display* display, XErrorEvent* error) {}
-}  // namespace
-
-// Static
-ScopedXErrorHandler::Handler ScopedXErrorHandler::Ignore() {
-  return base::Bind(IgnoreXErrors);
-}
-
 int ScopedXErrorHandler::HandleXErrors(Display* display, XErrorEvent* error) {
   DCHECK(g_handler != nullptr);
   g_handler->ok_ = false;
-  g_handler->handler_.Run(display, error);
+  if (g_handler->handler_)
+    g_handler->handler_.Run(display, error);
   return 0;
 }
 
-
-ScopedXGrabServer::ScopedXGrabServer(Display* display)
-    : display_(display) {
+ScopedXGrabServer::ScopedXGrabServer(Display* display) : display_(display) {
   XGrabServer(display_);
 }
 
@@ -55,18 +45,14 @@ ScopedXGrabServer::~ScopedXGrabServer() {
   XFlush(display_);
 }
 
-
-bool IgnoreXServerGrabs(Display* display, bool ignore) {
-  int test_event_base = 0;
-  int test_error_base = 0;
-  int major = 0;
-  int minor = 0;
-  if (!XTestQueryExtension(display, &test_event_base, &test_error_base,
-                           &major, &minor)) {
+bool IgnoreXServerGrabs(x11::Connection* connection, bool ignore) {
+  if (!connection->xtest()
+           .GetVersion({x11::Test::major_version, x11::Test::minor_version})
+           .Sync()) {
     return false;
   }
 
-  XTestGrabControl(display, ignore);
+  connection->xtest().GrabControl({ignore});
   return true;
 }
 

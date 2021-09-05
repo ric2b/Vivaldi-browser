@@ -15,6 +15,7 @@
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/test/bind_test_util.h"
+#include "base/test/scoped_feature_list.h"
 #include "chrome/browser/web_applications/components/web_app_constants.h"
 #include "chrome/browser/web_applications/components/web_app_helpers.h"
 #include "chrome/browser/web_applications/test/test_web_app_database_factory.h"
@@ -23,6 +24,7 @@
 #include "chrome/browser/web_applications/web_app.h"
 #include "chrome/browser/web_applications/web_app_registry_update.h"
 #include "chrome/browser/web_applications/web_app_sync_bridge.h"
+#include "content/public/common/content_features.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
@@ -40,6 +42,7 @@ Registry CreateRegistryForTesting(const std::string& base_url, int num_apps) {
     auto web_app = std::make_unique<WebApp>(app_id);
     web_app->AddSource(Source::kSync);
     web_app->SetLaunchUrl(GURL(url));
+    web_app->SetName("Name" + base::NumberToString(i));
     web_app->SetDisplayMode(DisplayMode::kBrowser);
     web_app->SetUserDisplayMode(DisplayMode::kBrowser);
 
@@ -159,6 +162,17 @@ class WebAppRegistrarTest : public WebAppTest {
   std::unique_ptr<TestWebAppRegistryController> test_registry_controller_;
 };
 
+class WebAppRegistrarTest_DisplayOverride : public WebAppRegistrarTest {
+ public:
+  WebAppRegistrarTest_DisplayOverride() {
+    scoped_feature_list_.InitAndEnableFeature(
+        features::kWebAppManifestDisplayOverride);
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
 TEST_F(WebAppRegistrarTest, CreateRegisterUnregister) {
   controller().Init();
 
@@ -191,6 +205,7 @@ TEST_F(WebAppRegistrarTest, CreateRegisterUnregister) {
   web_app2->SetDisplayMode(DisplayMode::kBrowser);
   web_app2->SetUserDisplayMode(DisplayMode::kBrowser);
   web_app2->SetLaunchUrl(launch_url2);
+  web_app2->SetName(name);
 
   EXPECT_EQ(nullptr, registrar().GetAppById(app_id));
   EXPECT_EQ(nullptr, registrar().GetAppById(app_id2));
@@ -318,12 +333,16 @@ TEST_F(WebAppRegistrarTest, GetAppDataFields) {
   const base::Optional<SkColor> theme_color = 0xAABBCCDD;
   const auto display_mode = DisplayMode::kMinimalUi;
   const auto user_display_mode = DisplayMode::kStandalone;
+  std::vector<DisplayMode> display_mode_override;
 
   EXPECT_EQ(std::string(), registrar().GetAppShortName(app_id));
   EXPECT_EQ(GURL(), registrar().GetAppLaunchURL(app_id));
 
   auto web_app = std::make_unique<WebApp>(app_id);
   WebApp* web_app_ptr = web_app.get();
+
+  display_mode_override.push_back(DisplayMode::kMinimalUi);
+  display_mode_override.push_back(DisplayMode::kStandalone);
 
   web_app->AddSource(Source::kSync);
   web_app->SetName(name);
@@ -332,6 +351,7 @@ TEST_F(WebAppRegistrarTest, GetAppDataFields) {
   web_app->SetLaunchUrl(launch_url);
   web_app->SetDisplayMode(display_mode);
   web_app->SetUserDisplayMode(user_display_mode);
+  web_app->SetDisplayModeOverride(display_mode_override);
   web_app->SetIsLocallyInstalled(/*is_locally_installed*/ false);
 
   RegisterApp(std::move(web_app));
@@ -342,6 +362,14 @@ TEST_F(WebAppRegistrarTest, GetAppDataFields) {
   EXPECT_EQ(launch_url, registrar().GetAppLaunchURL(app_id));
   EXPECT_EQ(DisplayMode::kStandalone,
             registrar().GetAppUserDisplayMode(app_id));
+
+  {
+    std::vector<DisplayMode> app_display_mode_override =
+        registrar().GetAppDisplayModeOverride(app_id);
+    ASSERT_EQ(2u, app_display_mode_override.size());
+    EXPECT_EQ(DisplayMode::kMinimalUi, app_display_mode_override[0]);
+    EXPECT_EQ(DisplayMode::kStandalone, app_display_mode_override[1]);
+  }
 
   {
     EXPECT_FALSE(registrar().IsLocallyInstalled(app_id));
@@ -361,6 +389,11 @@ TEST_F(WebAppRegistrarTest, GetAppDataFields) {
     sync_bridge().SetAppUserDisplayMode(app_id, DisplayMode::kStandalone);
     EXPECT_EQ(DisplayMode::kStandalone, web_app_ptr->user_display_mode());
     EXPECT_EQ(DisplayMode::kMinimalUi, web_app_ptr->display_mode());
+
+    ASSERT_EQ(2u, web_app_ptr->display_mode_override().size());
+    EXPECT_EQ(DisplayMode::kMinimalUi, web_app_ptr->display_mode_override()[0]);
+    EXPECT_EQ(DisplayMode::kStandalone,
+              web_app_ptr->display_mode_override()[1]);
   }
 }
 
@@ -753,6 +786,74 @@ TEST_F(WebAppRegistrarTest, NotLocallyInstalledAppGetsDisplayModeBrowser) {
 
   EXPECT_EQ(DisplayMode::kStandalone,
             registrar().GetAppEffectiveDisplayMode(app_id));
+}
+
+TEST_F(WebAppRegistrarTest_DisplayOverride,
+       NotLocallyInstalledAppGetsDisplayModeOverride) {
+  controller().Init();
+
+  auto web_app = CreateWebApp("https://example.com/path");
+  const AppId app_id = web_app->app_id();
+  std::vector<DisplayMode> display_mode_overrides;
+  display_mode_overrides.push_back(DisplayMode::kFullscreen);
+  display_mode_overrides.push_back(DisplayMode::kMinimalUi);
+
+  web_app->SetDisplayMode(DisplayMode::kStandalone);
+  web_app->SetUserDisplayMode(DisplayMode::kStandalone);
+  web_app->SetDisplayModeOverride(display_mode_overrides);
+  web_app->SetIsLocallyInstalled(false);
+  RegisterApp(std::move(web_app));
+
+  EXPECT_EQ(DisplayMode::kBrowser,
+            registrar().GetAppEffectiveDisplayMode(app_id));
+
+  sync_bridge().SetAppIsLocallyInstalled(app_id, true);
+
+  EXPECT_EQ(DisplayMode::kMinimalUi,
+            registrar().GetAppEffectiveDisplayMode(app_id));
+}
+
+TEST_F(WebAppRegistrarTest_DisplayOverride,
+       CheckDisplayOverrideFromGetEffectiveDisplayModeFromManifest) {
+  controller().Init();
+
+  auto web_app = CreateWebApp("https://example.com/path");
+  const AppId app_id = web_app->app_id();
+  std::vector<DisplayMode> display_mode_overrides;
+  display_mode_overrides.push_back(DisplayMode::kFullscreen);
+  display_mode_overrides.push_back(DisplayMode::kMinimalUi);
+
+  web_app->SetDisplayMode(DisplayMode::kStandalone);
+  web_app->SetUserDisplayMode(DisplayMode::kStandalone);
+  web_app->SetDisplayModeOverride(display_mode_overrides);
+  web_app->SetIsLocallyInstalled(false);
+  RegisterApp(std::move(web_app));
+
+  EXPECT_EQ(DisplayMode::kFullscreen,
+            registrar().GetEffectiveDisplayModeFromManifest(app_id));
+
+  sync_bridge().SetAppIsLocallyInstalled(app_id, true);
+  EXPECT_EQ(DisplayMode::kFullscreen,
+            registrar().GetEffectiveDisplayModeFromManifest(app_id));
+}
+
+TEST_F(WebAppRegistrarTest, RunOnOsLoginModes) {
+  controller().Init();
+
+  auto web_app = CreateWebApp("https://example.com/path");
+  const AppId app_id = web_app->app_id();
+  RegisterApp(std::move(web_app));
+
+  EXPECT_EQ(RunOnOsLoginMode::kUndefined,
+            registrar().GetAppRunOnOsLoginMode(app_id));
+
+  sync_bridge().SetAppRunOnOsLoginMode(app_id, RunOnOsLoginMode::kWindowed);
+  EXPECT_EQ(RunOnOsLoginMode::kWindowed,
+            registrar().GetAppRunOnOsLoginMode(app_id));
+
+  sync_bridge().SetAppRunOnOsLoginMode(app_id, RunOnOsLoginMode::kMinimized);
+  EXPECT_EQ(RunOnOsLoginMode::kMinimized,
+            registrar().GetAppRunOnOsLoginMode(app_id));
 }
 
 }  // namespace web_app

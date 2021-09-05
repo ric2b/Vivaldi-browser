@@ -156,7 +156,7 @@ PaintPropertyChangeType VisualViewport::UpdatePaintPropertyNodesIfNeeded(
   }
 
   {
-    DCHECK(!transform_parent->IsInSubtreeOfPageScale());
+    DCHECK(!transform_parent->Unalias().IsInSubtreeOfPageScale());
 
     TransformPaintPropertyNode::State state;
     state.flags.in_subtree_of_page_scale = false;
@@ -323,7 +323,7 @@ PaintPropertyChangeType VisualViewport::UpdatePaintPropertyNodesIfNeeded(
   }
 
   parent_property_tree_state_ =
-      PropertyTreeState(*transform_parent, *clip_parent, *effect_parent);
+      PropertyTreeStateOrAlias(*transform_parent, *clip_parent, *effect_parent);
 
   if (change == PaintPropertyChangeType::kNodeAddedOrRemoved)
     MainFrame()->View()->SetVisualViewportNeedsRepaint();
@@ -618,11 +618,8 @@ void VisualViewport::InitializeScrollbars() {
 }
 
 int VisualViewport::ScrollbarThickness() const {
-  auto& theme = ScrollbarThemeOverlayMobile::GetInstance();
-  int thickness = theme.ScrollbarThickness(kRegularScrollbar);
-  return clampTo<int>(
-      std::floor(GetPage().GetChromeClient().WindowToViewportScalar(
-          MainFrame(), thickness)));
+  return ScrollbarThemeOverlayMobile::GetInstance().ScrollbarThickness(
+      ScaleFromDIP());
 }
 
 void VisualViewport::UpdateScrollbarLayer(ScrollbarOrientation orientation) {
@@ -631,12 +628,9 @@ void VisualViewport::UpdateScrollbarLayer(ScrollbarOrientation orientation) {
       is_horizontal ? scrollbar_layer_horizontal_ : scrollbar_layer_vertical_;
   if (!scrollbar_layer) {
     auto& theme = ScrollbarThemeOverlayMobile::GetInstance();
-    int thumb_thickness = clampTo<int>(
-        std::floor(GetPage().GetChromeClient().WindowToViewportScalar(
-            MainFrame(), theme.ThumbThickness())));
-    int scrollbar_margin = clampTo<int>(
-        std::floor(GetPage().GetChromeClient().WindowToViewportScalar(
-            MainFrame(), theme.ScrollbarMargin())));
+    float scale = ScaleFromDIP();
+    int thumb_thickness = theme.ThumbThickness(scale);
+    int scrollbar_margin = theme.ScrollbarMargin(scale);
     cc::ScrollbarOrientation cc_orientation =
         orientation == kHorizontalScrollbar ? cc::HORIZONTAL : cc::VERTICAL;
     scrollbar_layer = cc::SolidColorScrollbarLayer::Create(
@@ -1081,35 +1075,35 @@ void VisualViewport::Paint(GraphicsContext& context) const {
   // TODO(crbug.com/1015625): Avoid scroll_layer_.
   // For now disable scroll_layer_ for CAP to avoid updating unit tests.
   if (scroll_layer_ && !RuntimeEnabledFeatures::CompositeAfterPaintEnabled()) {
-    PropertyTreeState state = parent_property_tree_state_;
+    auto state = parent_property_tree_state_;
     state.SetTransform(*scroll_translation_node_);
     DEFINE_STATIC_LOCAL(LiteralDebugNameClient, debug_name_client,
                         ("Inner Viewport Scroll Layer"));
     RecordForeignLayer(context, debug_name_client,
                        DisplayItem::kForeignLayerViewportScroll, scroll_layer_,
-                       FloatPoint(), &state);
+                       IntPoint(), &state);
   }
 
   if (scrollbar_layer_horizontal_) {
-    PropertyTreeState state = parent_property_tree_state_;
+    auto state = parent_property_tree_state_;
     state.SetEffect(*horizontal_scrollbar_effect_node_);
     DEFINE_STATIC_LOCAL(LiteralDebugNameClient, debug_name_client,
                         ("Inner Viewport Horizontal Scrollbar"));
     RecordForeignLayer(
         context, debug_name_client, DisplayItem::kForeignLayerViewportScrollbar,
         scrollbar_layer_horizontal_,
-        FloatPoint(0, size_.Height() - ScrollbarThickness()), &state);
+        IntPoint(0, size_.Height() - ScrollbarThickness()), &state);
   }
 
   if (scrollbar_layer_vertical_) {
-    PropertyTreeState state = parent_property_tree_state_;
+    auto state = parent_property_tree_state_;
     state.SetEffect(*vertical_scrollbar_effect_node_);
     DEFINE_STATIC_LOCAL(LiteralDebugNameClient, debug_name_client,
                         ("Inner Viewport Vertical Scrollbar"));
     RecordForeignLayer(
         context, debug_name_client, DisplayItem::kForeignLayerViewportScrollbar,
         scrollbar_layer_vertical_,
-        FloatPoint(size_.Width() - ScrollbarThickness(), 0), &state);
+        IntPoint(size_.Width() - ScrollbarThickness(), 0), &state);
   }
 }
 

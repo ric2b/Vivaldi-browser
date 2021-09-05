@@ -21,9 +21,12 @@ content::WebUIDataSource* CreateHelpAppUntrustedDataSource(
     HelpAppUIDelegate* delegate) {
   content::WebUIDataSource* source =
       content::WebUIDataSource::Create(kChromeUIHelpAppUntrustedURL);
-  source->AddResourcePath("app.html", IDR_HELP_APP_APP_HTML);
+  // app.html is the default resource because it has routing logic to handle all
+  // the other paths.
+  source->SetDefaultResource(IDR_HELP_APP_APP_HTML);
   source->AddResourcePath("app_bin.js", IDR_HELP_APP_APP_BIN_JS);
   source->AddResourcePath("load_time_data.js", IDR_WEBUI_JS_LOAD_TIME_DATA);
+  source->DisableTrustedTypesCSP();
 
   // Add all resources from chromeos_media_app_bundle.pak.
   for (size_t i = 0; i < kChromeosHelpAppBundleResourcesSize; i++) {

@@ -10,8 +10,8 @@
 #include "base/callback.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop_current.h"
 #include "base/run_loop.h"
+#include "base/task/current_thread.h"
 #include "build/build_config.h"
 #include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/simple_message_box_internal.h"
@@ -33,7 +33,7 @@
 #include "ui/views/win/hwnd_util.h"
 #endif
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include "chrome/browser/ui/cocoa/simple_message_box_cocoa.h"
 #endif
 
@@ -108,7 +108,7 @@ chrome::MessageBoxResult MessageBoxDialog::Show(
 // ResourceBundle is not initialized yet.
 // Fallback to logging with a default response or a Windows MessageBox.
 #if defined(OS_WIN)
-  if (!base::MessageLoopCurrentForUI::IsSet() ||
+  if (!base::CurrentUIThread::IsSet() ||
       !base::RunLoop::IsRunningOnCurrentThread() ||
       !ui::ResourceBundle::HasSharedInstance()) {
     LOG_IF(ERROR, !checkbox_text.empty()) << "Dialog checkbox won't be shown";
@@ -119,8 +119,8 @@ chrome::MessageBoxResult MessageBoxDialog::Show(
                                 : chrome::MESSAGE_BOX_RESULT_NO);
     return chrome::MESSAGE_BOX_RESULT_DEFERRED;
   }
-#elif defined(OS_MACOSX)
-  if (!base::MessageLoopCurrentForUI::IsSet() ||
+#elif defined(OS_MAC)
+  if (!base::CurrentUIThread::IsSet() ||
       !base::RunLoop::IsRunningOnCurrentThread() ||
       !ui::ResourceBundle::HasSharedInstance()) {
     // Even though this function could return a value synchronously here in
@@ -131,7 +131,7 @@ chrome::MessageBoxResult MessageBoxDialog::Show(
     return chrome::MESSAGE_BOX_RESULT_DEFERRED;
   }
 #else
-  if (!base::MessageLoopCurrentForUI::IsSet() ||
+  if (!base::CurrentUIThread::IsSet() ||
       !ui::ResourceBundle::HasSharedInstance() ||
       !display::Screen::GetScreen()) {
     LOG(ERROR) << "Unable to show a dialog outside the UI thread message loop: "
@@ -143,7 +143,7 @@ chrome::MessageBoxResult MessageBoxDialog::Show(
 
   bool is_system_modal = !parent;
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   // Mac does not support system modals, so never ask MessageBoxDialog to
   // be system modal.
   is_system_modal = false;
@@ -154,7 +154,7 @@ chrome::MessageBoxResult MessageBoxDialog::Show(
   views::Widget* widget =
       constrained_window::CreateBrowserModalDialogViews(dialog, parent);
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   // Mac does not support system modal dialogs. If there is no parent window to
   // attach to, move the dialog's widget on top so other windows do not obscure
   // it.

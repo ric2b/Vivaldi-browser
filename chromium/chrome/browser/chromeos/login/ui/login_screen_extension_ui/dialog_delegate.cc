@@ -52,7 +52,7 @@ void DialogDelegate::GetDialogSize(gfx::Size* size) const {
                     kRelativeScreenHeight * screen_size.height());
 }
 
-bool DialogDelegate::CanCloseDialog() const {
+bool DialogDelegate::OnDialogCloseRequested() {
   return can_close_;
 }
 
@@ -87,6 +87,10 @@ bool DialogDelegate::ShouldShowDialogTitle() const {
 
 bool DialogDelegate::ShouldCenterDialogTitleText() const {
   return true;
+}
+
+bool DialogDelegate::ShouldShowCloseButton() const {
+  return can_close_;
 }
 
 }  // namespace login_screen_extension_ui

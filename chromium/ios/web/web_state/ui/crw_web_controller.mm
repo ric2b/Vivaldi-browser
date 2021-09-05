@@ -6,6 +6,7 @@
 
 #import <WebKit/WebKit.h>
 
+#include "base/bind.h"
 #import "base/ios/block_types.h"
 #include "base/ios/ios_util.h"
 #include "base/json/string_escape.h"
@@ -84,6 +85,9 @@ NSString* const kIsMainFrame = @"isMainFrame";
 
 // URL scheme for messages sent from javascript for asynchronous processing.
 NSString* const kScriptMessageName = @"crwebinvoke";
+
+// URL scheme for session restore.
+NSString* const kSessionRestoreScriptMessageName = @"session_restore";
 
 }  // namespace
 
@@ -440,6 +444,15 @@ typedef void (^ViewportStateCompletion)(const web::PageViewportState*);
           [weakSelf didReceiveScriptMessage:message];
         }
                            name:kScriptMessageName
+                        webView:_webView];
+
+    // TODO(crbug.com/1127521) Consider consolidating session restore script
+    // logic into a different place.
+    [messageRouter
+        setScriptMessageHandler:^(WKScriptMessage* message) {
+          [weakSelf didReceiveSessionRestoreScriptMessage:message];
+        }
+                           name:kSessionRestoreScriptMessageName
                         webView:_webView];
 
     _webView.allowsBackForwardNavigationGestures =
@@ -849,14 +862,28 @@ typedef void (^ViewportStateCompletion)(const web::PageViewportState*);
                     // |-removeWebView| are ignored to prevent crashing.
                     if (error || !weakSelf.webView) {
                       if (error) {
-                        DLOG(ERROR) << "WKWebView snapshot error: "
-                                    << error.description;
+                        DLOG(ERROR)
+                            << "WKWebView snapshot error: "
+                            << base::SysNSStringToUTF8(error.description);
                       }
                       completion(nil);
                     } else {
                       completion(snapshot);
                     }
                   }];
+}
+
+- (void)createFullPagePDFWithCompletion:(void (^)(NSData*))completionBlock {
+  // Invoke the |completionBlock| with nil rather than a blank PDF for certain
+  // URLs.
+  const GURL& URL = self.webState->GetLastCommittedURL();
+  if (!URL.is_valid() || web::GetWebClient()->IsAppSpecificURL(URL)) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+      completionBlock(nil);
+    });
+    return;
+  }
+  web::CreateFullPagePdf(self.webView, base::BindOnce(completionBlock));
 }
 
 #pragma mark - CRWTouchTrackingDelegate (Public)
@@ -1087,6 +1114,22 @@ typedef void (^ViewportStateCompletion)(const web::PageViewportState*);
   // Broken out into separate method to catch errors.
   if (![self respondToWKScriptMessage:message]) {
     DLOG(WARNING) << "Message from JS not handled due to invalid format";
+  }
+}
+
+// TODO(crbug.com/1127521) Consider consolidating session restore script
+// logic into a different place.
+- (void)didReceiveSessionRestoreScriptMessage:(WKScriptMessage*)message {
+  if ([message.name isEqualToString:kSessionRestoreScriptMessageName] &&
+      [message.body[@"offset"] isKindOfClass:[NSNumber class]]) {
+    NSString* method =
+        [NSString stringWithFormat:@"_crFinishSessionRestoration('%@')",
+                                   message.body[@"offset"]];
+    // Don't use |_jsInjector| -executeJavaScript here, as it relies on
+    // |windowID| being injected before window.onload starts.
+    web::ExecuteJavaScript(self.webView, method, nil);
+  } else {
+    DLOG(WARNING) << "Invalid session restore JS message name.";
   }
 }
 

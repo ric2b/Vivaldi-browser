@@ -127,20 +127,29 @@ void TrustTokenRequestHelperFactory::ConstructHelperUsingStore(
     }
 
     case mojom::TrustTokenOperationType::kSigning: {
-      base::Optional<SuitableTrustTokenOrigin> maybe_issuer;
-      if (params->issuer) {
-        maybe_issuer =
-            SuitableTrustTokenOrigin::Create(std::move(*params->issuer));
-      }
-
-      if (!maybe_issuer) {
-        LogOutcome(net_log, "Missing/unsuitable 'issuer' parameter");
+      if (params->issuers.empty()) {
+        LogOutcome(net_log, "Empty 'issuers' parameter");
         std::move(done).Run(mojom::TrustTokenOperationStatus::kInvalidArgument);
         return;
       }
 
+      std::vector<SuitableTrustTokenOrigin> issuers;
+      for (url::Origin& potentially_unsuitable_issuer : params->issuers) {
+        base::Optional<SuitableTrustTokenOrigin> maybe_issuer =
+            SuitableTrustTokenOrigin::Create(
+                std::move(potentially_unsuitable_issuer));
+        if (!maybe_issuer) {
+          LogOutcome(net_log, "Unsuitable issuer in 'issuers' parameter");
+          std::move(done).Run(
+              mojom::TrustTokenOperationStatus::kInvalidArgument);
+          return;
+        }
+
+        issuers.emplace_back(std::move(*maybe_issuer));
+      }
+
       TrustTokenRequestSigningHelper::Params signing_params(
-          std::move(*maybe_issuer), top_frame_origin,
+          std::move(issuers), top_frame_origin,
           std::move(params->additional_signed_headers),
           params->include_timestamp_header, params->sign_request_data,
           params->possibly_unsafe_additional_signing_data);

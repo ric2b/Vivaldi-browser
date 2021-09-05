@@ -35,11 +35,13 @@
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/view_ids.h"
 #include "chrome/browser/ui/views/chrome_view_class_properties.h"
-#include "chrome/browser/ui/views/feature_promos/feature_promo_bubble_view.h"
-#include "chrome/browser/ui/views/feature_promos/feature_promo_colors.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/immersive_mode_controller.h"
 #include "chrome/browser/ui/views/frame/top_container_view.h"
+#include "chrome/browser/ui/views/in_product_help/feature_promo_bubble_params.h"
+#include "chrome/browser/ui/views/in_product_help/feature_promo_bubble_view.h"
+#include "chrome/browser/ui/views/in_product_help/feature_promo_colors.h"
+#include "chrome/browser/ui/views/in_product_help/feature_promo_controller_views.h"
 #include "chrome/browser/ui/views/tabs/tab_group_editor_bubble_view.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_button.h"
 #include "chrome/browser/ui/views/toolbar/webui_tab_counter_button.h"
@@ -75,7 +77,29 @@
 #include "ui/views/view_tracker.h"
 #include "ui/views/widget/widget.h"
 
+// Represents a drag or fling that either goes up or down. Defined here so we
+// can use it in module local methods.
+enum class WebUITabStripDragDirection { kUp, kDown };
+
 namespace {
+
+// Converts a y-delta to a drag direction.
+WebUITabStripDragDirection DragDirectionFromDelta(float delta) {
+  DCHECK(delta != 0.0f);
+  return delta > 0.0f ? WebUITabStripDragDirection::kDown
+                      : WebUITabStripDragDirection::kUp;
+}
+
+// Converts a swipe gesture to a drag direction, or none if the swipe is neither
+// up nor down.
+base::Optional<WebUITabStripDragDirection> DragDirectionFromSwipe(
+    const ui::GestureEvent* event) {
+  if (event->details().swipe_down())
+    return WebUITabStripDragDirection::kDown;
+  if (event->details().swipe_up())
+    return WebUITabStripDragDirection::kUp;
+  return base::nullopt;
+}
 
 bool EventTypeCanCloseTabStrip(const ui::EventType& type) {
   switch (type) {
@@ -106,7 +130,7 @@ class WebUITabStripWebView : public views::WebView {
           data.custom_data.at(base::ASCIIToUTF16(kWebUITabIdDataType)),
           &tab_id);
       return found_tab_id && extensions::ExtensionTabUtil::GetTabById(
-                                 tab_id, browser_context(), false, nullptr);
+                                 tab_id, GetBrowserContext(), false, nullptr);
     }
 
     if (data.custom_data.find(base::ASCIIToUTF16(kWebUITabGroupIdDataType)) !=
@@ -114,7 +138,7 @@ class WebUITabStripWebView : public views::WebView {
       std::string group_id = base::UTF16ToUTF8(
           data.custom_data.at(base::ASCIIToUTF16(kWebUITabGroupIdDataType)));
       Browser* found_browser = tab_strip_ui::GetBrowserWithGroupId(
-          Profile::FromBrowserContext(browser_context()), group_id);
+          Profile::FromBrowserContext(GetBrowserContext()), group_id);
       return found_browser != nullptr;
     }
 
@@ -266,19 +290,20 @@ class WebUITabStripContainerView::DragToOpenHandler : public ui::EventHandler {
 
   void OnGestureEvent(ui::GestureEvent* event) override {
     switch (event->type()) {
-      case ui::ET_GESTURE_SCROLL_BEGIN:
+      case ui::ET_GESTURE_SCROLL_BEGIN: {
         // Only treat this scroll as drag-to-open if the y component is
         // larger. Otherwise, leave the event unhandled. Horizontal
         // scrolls are used in the toolbar, e.g. for text scrolling in
         // the Omnibox.
-        if (event->details().scroll_y_hint() >
-            event->details().scroll_x_hint()) {
+        float y_delta = event->details().scroll_y_hint();
+        if (std::fabs(y_delta) > std::fabs(event->details().scroll_x_hint()) &&
+            container_->CanStartDragToOpen(DragDirectionFromDelta(y_delta))) {
           drag_in_progress_ = true;
-          container_->UpdateHeightForDragToOpen(
-              event->details().scroll_y_hint());
+          container_->UpdateHeightForDragToOpen(y_delta);
           event->SetHandled();
         }
         break;
+      }
       case ui::ET_GESTURE_SCROLL_UPDATE:
         if (drag_in_progress_) {
           container_->UpdateHeightForDragToOpen(event->details().scroll_y());
@@ -292,30 +317,31 @@ class WebUITabStripContainerView::DragToOpenHandler : public ui::EventHandler {
           drag_in_progress_ = false;
         }
         break;
-      case ui::ET_GESTURE_SWIPE:
+      case ui::ET_GESTURE_SWIPE: {
         // If a touch is released at high velocity, the scroll gesture
         // is "converted" to a swipe gesture. ET_GESTURE_END is still
         // sent after. From logging, it seems like ET_GESTURE_SCROLL_END
         // is sometimes also sent after this. It will be ignored here
         // since |drag_in_progress_| is set to false.
+        const auto direction = DragDirectionFromSwipe(event);
+
+        // If a swipe happens quickly enough, scroll events might not have
+        // been sent, so we may have to start one.
         if (!drag_in_progress_) {
-          // If a swipe happens quickly enough, scroll events might not
-          // have been sent. Tell the container a drag began.
+          if (!direction.has_value() ||
+              !container_->CanStartDragToOpen(direction.value())) {
+            break;
+          }
           container_->UpdateHeightForDragToOpen(0.0f);
         }
 
-        if (event->details().swipe_down() || event->details().swipe_up()) {
-          container_->EndDragToOpen(event->details().swipe_down()
-                                        ? FlingDirection::kDown
-                                        : FlingDirection::kUp);
-        } else {
-          // Treat a sideways swipe as a normal drag end.
-          container_->EndDragToOpen();
-        }
+        // If there is a direction, then end the drag with a fling, otherwise
+        // (in the case of a sideways fling) use the default release logic.
+        container_->EndDragToOpen(direction);
 
         event->SetHandled();
         drag_in_progress_ = false;
-        break;
+      } break;
       case ui::ET_GESTURE_END:
         if (drag_in_progress_) {
           // If an unsupported gesture is sent, ensure that we still
@@ -338,12 +364,12 @@ class WebUITabStripContainerView::DragToOpenHandler : public ui::EventHandler {
   bool drag_in_progress_ = false;
 };
 
-class WebUITabStripContainerView::IPHController : public TabStripModelObserver,
-                                                  public views::WidgetObserver {
+class WebUITabStripContainerView::IPHController : public TabStripModelObserver {
  public:
-  explicit IPHController(Browser* browser)
+  explicit IPHController(Browser* browser,
+                         FeaturePromoControllerViews* promo_controller)
       : browser_(browser),
-        widget_observer_(this),
+        promo_controller_(promo_controller),
         iph_tracker_(feature_engagement::TrackerFactory::GetForBrowserContext(
             browser_->profile())) {
     browser_->tab_strip_model()->AddObserver(this);
@@ -366,21 +392,13 @@ class WebUITabStripContainerView::IPHController : public TabStripModelObserver,
     iph_tracker_->NotifyEvent(feature_engagement::events::kWebUITabStripClosed);
   }
 
-  void UpdatePromoBounds() {
-    if (!promo_)
-      return;
-    promo_->OnAnchorBoundsChanged();
-  }
-
   // Ends the promo if it's showing.
   void AbortPromo() {
-    if (!promo_)
+    if (!promo_controller_->BubbleIsShowing(
+            feature_engagement::kIPHWebUITabStripFeature))
       return;
-
-    widget_observer_.Remove(promo_->GetWidget());
-    promo_->GetWidget()->CloseWithReason(
-        views::Widget::ClosedReason::kUnspecified);
-    PromoBubbleDismissed();
+    promo_controller_->CloseBubble(
+        feature_engagement::kIPHWebUITabStripFeature);
   }
 
   // TabStripModelObserver:
@@ -393,11 +411,6 @@ class WebUITabStripContainerView::IPHController : public TabStripModelObserver,
     if (change.type() != TabStripModelChange::kInserted)
       return;
 
-    // Abort if we shouldn't show IPH right now.
-    if (!iph_tracker_->ShouldTriggerHelpUI(
-            feature_engagement::kIPHWebUITabStripFeature))
-      return;
-
     views::View* const anchor_view = anchor_.view();
 
     // In the off chance this is called while the browser is being destroyed,
@@ -405,38 +418,19 @@ class WebUITabStripContainerView::IPHController : public TabStripModelObserver,
     if (!anchor_view)
       return;
 
-    anchor_view->SetProperty(kHasInProductHelpPromoKey, true);
-    promo_ = FeaturePromoBubbleView::CreateOwned(
-        anchor_view, views::BubbleBorder::TOP_RIGHT,
-        FeaturePromoBubbleView::ActivationAction::DO_NOT_ACTIVATE,
-        /*title_string_specifier=*/base::nullopt, IDS_WEBUI_TAB_STRIP_PROMO);
-    promo_->set_close_on_deactivate(false);
-    widget_observer_.Add(promo_->GetWidget());
-  }
-
-  // views::WidgetObserver:
-  void OnWidgetDestroying(views::Widget* widget) override {
-    // This call should only happen at the end of IPH.
-    DCHECK_EQ(widget, promo_->GetWidget());
-    widget_observer_.Remove(widget);
-    PromoBubbleDismissed();
+    FeaturePromoBubbleParams bubble_params;
+    bubble_params.body_string_specifier = IDS_WEBUI_TAB_STRIP_PROMO;
+    bubble_params.anchor_view = anchor_view;
+    bubble_params.arrow = views::BubbleBorder::TOP_RIGHT;
+    promo_controller_->MaybeShowPromo(
+        feature_engagement::kIPHWebUITabStripFeature, std::move(bubble_params));
   }
 
  private:
-  void PromoBubbleDismissed() {
-    promo_ = nullptr;
-    iph_tracker_->Dismissed(feature_engagement::kIPHWebUITabStripFeature);
-    views::View* const anchor_view = anchor_.view();
-    if (anchor_view)
-      anchor_view->SetProperty(kHasInProductHelpPromoKey, false);
-  }
-
   Browser* const browser_;
-  ScopedObserver<views::Widget, views::WidgetObserver> widget_observer_;
+  FeaturePromoControllerViews* const promo_controller_;
   feature_engagement::Tracker* const iph_tracker_;
   views::ViewTracker anchor_;
-
-  FeaturePromoBubbleView* promo_ = nullptr;
 };
 
 WebUITabStripContainerView::WebUITabStripContainerView(
@@ -456,7 +450,9 @@ WebUITabStripContainerView::WebUITabStripContainerView(
           omnibox)),
       drag_to_open_handler_(
           std::make_unique<DragToOpenHandler>(this, drag_handle)),
-      iph_controller_(std::make_unique<IPHController>(browser_)) {
+      iph_controller_(std::make_unique<IPHController>(
+          browser_,
+          browser_view->feature_promo_controller())) {
   TRACE_EVENT0("ui", "WebUITabStripContainerView.Init");
   DCHECK(UseTouchableTabStrip(browser_));
   animation_.SetTweenType(gfx::Tween::Type::FAST_OUT_SLOW_IN);
@@ -502,6 +498,13 @@ WebUITabStripContainerView::~WebUITabStripContainerView() {
   // The TabCounter button uses |this| as a listener. We need to make
   // sure we outlive it.
   delete tab_counter_;
+}
+
+// static
+bool WebUITabStripContainerView::SupportsTouchableTabStrip(
+    const Browser* browser) {
+  return browser->is_type_normal() &&
+         base::FeatureList::IsEnabled(features::kWebUITabStrip);
 }
 
 // static
@@ -565,10 +568,6 @@ std::unique_ptr<views::View> WebUITabStripContainerView::CreateTabCounter() {
   return tab_counter;
 }
 
-void WebUITabStripContainerView::UpdatePromoBubbleBounds() {
-  iph_controller_->UpdatePromoBounds();
-}
-
 void WebUITabStripContainerView::SetVisibleForTesting(bool visible) {
   SetContainerTargetVisibility(visible);
   FinishAnimationForTesting();
@@ -593,15 +592,23 @@ void WebUITabStripContainerView::CloseContainer() {
   iph_controller_->NotifyClosed();
 }
 
+bool WebUITabStripContainerView::CanStartDragToOpen(
+    WebUITabStripDragDirection direction) const {
+  // If we're already in a drag, then we can always continue dragging.
+  if (current_drag_height_)
+    return true;
+  return direction == (GetVisible() ? WebUITabStripDragDirection::kUp
+                                    : WebUITabStripDragDirection::kDown);
+}
+
 void WebUITabStripContainerView::UpdateHeightForDragToOpen(float height_delta) {
   if (!current_drag_height_) {
-    // If we are visible and aren't already dragging, ignore; either we are
-    // animating open, or the touch would've triggered autoclose.
-    if (GetVisible())
-      return;
+    const bool was_open = GetVisible();
+    DCHECK(!was_open || height_delta <= 0.0f);
+    DCHECK(was_open || height_delta >= 0.0f);
 
     SetVisible(true);
-    current_drag_height_ = 0;
+    current_drag_height_ = was_open ? height() : 0.0f;
     animation_.Reset();
   }
 
@@ -612,7 +619,7 @@ void WebUITabStripContainerView::UpdateHeightForDragToOpen(float height_delta) {
 }
 
 void WebUITabStripContainerView::EndDragToOpen(
-    base::Optional<FlingDirection> fling_direction) {
+    base::Optional<WebUITabStripDragDirection> fling_direction) {
   if (!current_drag_height_)
     return;
 
@@ -627,7 +634,7 @@ void WebUITabStripContainerView::EndDragToOpen(
   if (fling_direction) {
     // If this was a fling, ignore the final height and use the fling
     // direction.
-    opening = fling_direction == FlingDirection::kDown;
+    opening = (fling_direction == WebUITabStripDragDirection::kDown);
   }
 
   if (opening) {

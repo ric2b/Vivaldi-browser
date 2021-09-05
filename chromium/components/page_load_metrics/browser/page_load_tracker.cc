@@ -926,7 +926,7 @@ PageLoadTracker::GetExperimentalLargestContentfulPaintHandler() const {
   return experimental_largest_contentful_paint_handler_;
 }
 
-ukm::SourceId PageLoadTracker::GetSourceId() const {
+ukm::SourceId PageLoadTracker::GetPageUkmSourceId() const {
   return source_id_;
 }
 
@@ -959,8 +959,8 @@ void PageLoadTracker::OnRestoreFromBackForwardCache(
     PageShown();
 
   for (const auto& observer : observers_) {
-    observer->OnRestoreFromBackForwardCache(
-        metrics_update_dispatcher_.timing());
+    observer->OnRestoreFromBackForwardCache(metrics_update_dispatcher_.timing(),
+                                            navigation_handle);
   }
 }
 

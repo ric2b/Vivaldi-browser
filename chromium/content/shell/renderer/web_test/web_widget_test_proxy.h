@@ -72,12 +72,10 @@ class WebWidgetTestProxy : public RenderWidget {
       bool request_unadjusted_movement) override;
   void RequestPointerUnlock() override;
   bool IsPointerLocked() override;
-  void StartDragging(network::mojom::ReferrerPolicy policy,
-                     const blink::WebDragData& data,
+  void StartDragging(const blink::WebDragData& data,
                      blink::WebDragOperationsMask mask,
                      const SkBitmap& drag_image,
                      const gfx::Point& image_offset) override;
-  blink::WebScreenInfo GetScreenInfo() override;
 
   // In the test runner code, it can be expected that the RenderViewImpl will
   // actually be a WebViewTestProxy as the creation of RenderView/Frame/Widget

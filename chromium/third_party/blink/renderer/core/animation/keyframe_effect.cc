@@ -34,6 +34,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_object_builder.h"
 #include "third_party/blink/renderer/core/animation/animation_input_helpers.h"
 #include "third_party/blink/renderer/core/animation/animation_utils.h"
+#include "third_party/blink/renderer/core/animation/compositor_animations.h"
 #include "third_party/blink/renderer/core/animation/css/compositor_keyframe_transform.h"
 #include "third_party/blink/renderer/core/animation/effect_input.h"
 #include "third_party/blink/renderer/core/animation/element_animations.h"
@@ -172,6 +173,8 @@ KeyframeEffect::KeyframeEffect(Element* target,
     DCHECK(!target_element_->IsPseudoElement());
     target_pseudo_ = target->tagName();
   }
+
+  CountAnimatedProperties();
 }
 
 KeyframeEffect::~KeyframeEffect() = default;
@@ -292,6 +295,7 @@ void KeyframeEffect::SetKeyframes(StringKeyframeVector keyframes) {
   // potentially affect the effect owner.
   ClearEffects();
   InvalidateAndNotifyOwner();
+  CountAnimatedProperties();
 }
 
 bool KeyframeEffect::Affects(const PropertyHandle& property) const {
@@ -309,7 +313,8 @@ void KeyframeEffect::NotifySampledEffectRemovedFromEffectStack() {
 CompositorAnimations::FailureReasons
 KeyframeEffect::CheckCanStartAnimationOnCompositor(
     const PaintArtifactCompositor* paint_artifact_compositor,
-    double animation_playback_rate) const {
+    double animation_playback_rate,
+    PropertyHandleSet* unsupported_properties) const {
   CompositorAnimations::FailureReasons reasons =
       CompositorAnimations::kNoFailure;
 
@@ -334,7 +339,8 @@ KeyframeEffect::CheckCanStartAnimationOnCompositor(
 
     reasons |= CompositorAnimations::CheckCanStartAnimationOnCompositor(
         SpecifiedTiming(), *effect_target_, GetAnimation(), *Model(),
-        paint_artifact_compositor, animation_playback_rate);
+        paint_artifact_compositor, animation_playback_rate,
+        unsupported_properties);
   }
 
   return reasons;
@@ -527,7 +533,8 @@ void KeyframeEffect::ClearEffects() {
   sampled_effect_ = nullptr;
   if (GetAnimation())
     GetAnimation()->RestartAnimationOnCompositor();
-  effect_target_->SetNeedsAnimationStyleRecalc();
+  if (!effect_target_->GetDocument().Lifecycle().InDetach())
+    effect_target_->SetNeedsAnimationStyleRecalc();
   auto* svg_element = DynamicTo<SVGElement>(effect_target_.Get());
   if (RuntimeEnabledFeatures::WebAnimationsSVGEnabled() && svg_element)
     svg_element->ClearWebAnimatedAttributes();
@@ -680,6 +687,18 @@ ActiveInterpolationsMap KeyframeEffect::InterpolationsForCommitStyles() {
     ClearEffects();
 
   return results;
+}
+
+void KeyframeEffect::CountAnimatedProperties() const {
+  if (target_element_) {
+    Document& document = target_element_->GetDocument();
+    for (const auto& property : model_->Properties()) {
+      if (property.IsCSSProperty()) {
+        DCHECK(isValidCSSPropertyID(property.GetCSSProperty().PropertyID()));
+        document.CountAnimatedProperty(property.GetCSSProperty().PropertyID());
+      }
+    }
+  }
 }
 
 }  // namespace blink

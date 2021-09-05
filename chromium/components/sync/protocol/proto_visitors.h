@@ -10,6 +10,7 @@
 #include "components/sync/protocol/app_setting_specifics.pb.h"
 #include "components/sync/protocol/app_specifics.pb.h"
 #include "components/sync/protocol/arc_package_specifics.pb.h"
+#include "components/sync/protocol/autofill_offer_specifics.pb.h"
 #include "components/sync/protocol/autofill_specifics.pb.h"
 #include "components/sync/protocol/bookmark_specifics.pb.h"
 #include "components/sync/protocol/dictionary_specifics.pb.h"
@@ -138,17 +139,59 @@ VISIT_PROTO_FIELDS(const sync_pb::AutofillCullingFlags& proto) {
   VISIT(enabled);
 }
 
+VISIT_PROTO_FIELDS(const sync_pb::AutofillOfferSpecifics& proto) {
+  VISIT(id);
+  VISIT(offer_details_deep_link_clank);
+  VISIT(merchant_domain);
+  VISIT(merchant_app_package);
+  VISIT(offer_expiry_date);
+  VISIT(card_linked_offer_data);
+  VISIT(percentage_reward);
+  VISIT(fixed_amount_reward);
+}
+
+VISIT_PROTO_FIELDS(
+    const sync_pb::AutofillOfferSpecifics::CardLinkedOfferData& proto) {
+  VISIT_REP(instrument_id);
+  VISIT_REP(legacy_instrument_id);
+}
+
+VISIT_PROTO_FIELDS(
+    const sync_pb::AutofillOfferSpecifics::PercentageReward& proto) {
+  VISIT(percentage);
+}
+
+VISIT_PROTO_FIELDS(
+    const sync_pb::AutofillOfferSpecifics::FixedAmountReward& proto) {
+  VISIT(amount);
+}
+
 VISIT_PROTO_FIELDS(const sync_pb::AutofillProfileSpecifics& proto) {
   VISIT(guid);
   VISIT(origin);
   VISIT(use_count);
   VISIT(use_date);
+  VISIT_REP(name_honorific);
   VISIT_REP(name_first);
   VISIT_REP(name_middle);
+  VISIT_REP(name_last_first);
+  VISIT_REP(name_last_conjunction);
+  VISIT_REP(name_last_second);
   VISIT_REP(name_last);
   VISIT_REP(name_full);
+
+  VISIT_REP(name_honorific_status);
+  VISIT_REP(name_first_status);
+  VISIT_REP(name_middle_status);
+  VISIT_REP(name_last_first_status);
+  VISIT_REP(name_last_conjunction_status);
+  VISIT_REP(name_last_second_status);
+  VISIT_REP(name_last_status);
+  VISIT_REP(name_full_status);
+
   VISIT_REP(email_address);
   VISIT(company_name);
+
   VISIT(address_home_line1);
   VISIT(address_home_line2);
   VISIT(address_home_city);
@@ -158,6 +201,25 @@ VISIT_PROTO_FIELDS(const sync_pb::AutofillProfileSpecifics& proto) {
   VISIT(address_home_street_address);
   VISIT(address_home_sorting_code);
   VISIT(address_home_dependent_locality);
+  VISIT(address_home_thoroughfare_name);
+  VISIT(address_home_thoroughfare_number);
+  VISIT(address_home_dependent_thoroughfare_name);
+  VISIT(address_home_premise_name);
+  VISIT(address_home_subpremise_name);
+
+  VISIT_ENUM(address_home_city_status);
+  VISIT_ENUM(address_home_state_status);
+  VISIT_ENUM(address_home_zip_status);
+  VISIT_ENUM(address_home_country_status);
+  VISIT_ENUM(address_home_street_address_status);
+  VISIT_ENUM(address_home_sorting_code_status);
+  VISIT_ENUM(address_home_dependent_locality_status);
+  VISIT_ENUM(address_home_thoroughfare_name_status);
+  VISIT_ENUM(address_home_thoroughfare_number_status);
+  VISIT_ENUM(address_home_dependent_thoroughfare_name_status);
+  VISIT_ENUM(address_home_premise_name_status);
+  VISIT_ENUM(address_home_subpremise_name_status);
+
   VISIT(address_home_language_code);
   VISIT_REP(phone_home_whole_number);
   VISIT(validity_state_bitfield);
@@ -384,6 +446,7 @@ VISIT_PROTO_FIELDS(const sync_pb::EntitySpecifics& proto) {
   VISIT(app_setting);
   VISIT(arc_package);
   VISIT(autofill);
+  VISIT(autofill_offer);
   VISIT(autofill_profile);
   VISIT(autofill_wallet);
   VISIT(bookmark);
@@ -980,6 +1043,7 @@ VISIT_PROTO_FIELDS(const sync_pb::UserConsentSpecifics& proto) {
   VISIT(arc_backup_and_restore_consent);
   VISIT(arc_location_service_consent);
   VISIT(arc_play_terms_of_service_consent);
+  VISIT(account_passwords_consent);
 }
 
 VISIT_PROTO_FIELDS(
@@ -1009,6 +1073,13 @@ VISIT_PROTO_FIELDS(const sync_pb::UserConsentTypes::SyncConsent& proto) {
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::UserConsentTypes::UnifiedConsent& proto) {
+  VISIT_REP(description_grd_ids);
+  VISIT(confirmation_grd_id);
+  VISIT_ENUM(status);
+}
+
+VISIT_PROTO_FIELDS(
+    const sync_pb::UserConsentTypes::AccountPasswordsConsent& proto) {
   VISIT_REP(description_grd_ids);
   VISIT(confirmation_grd_id);
   VISIT_ENUM(status);

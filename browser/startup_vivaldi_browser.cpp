@@ -20,7 +20,7 @@
 #include "extensions/common/extension.h"
 #endif
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include "browser/init_sparkle.h"
 #endif
 
@@ -80,7 +80,7 @@ bool LaunchVivaldi(const base::CommandLine& command_line,
   // specially here, otherwise it will be handled below.
   if (extension) {
     RecordCmdLineAppHistogram(extensions::Manifest::TYPE_PLATFORM_APP);
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
     InitializeSparkle(command_line, base::Bind(&IsAutoupdateEnabled, profile));
 #endif
   }

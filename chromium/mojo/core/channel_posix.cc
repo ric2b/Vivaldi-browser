@@ -14,12 +14,15 @@
 #include "base/bind.h"
 #include "base/containers/queue.h"
 #include "base/location.h"
+#include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/message_loop/message_loop_current.h"
 #include "base/message_loop/message_pump_for_io.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/synchronization/lock.h"
+#include "base/task/current_thread.h"
 #include "base/task_runner.h"
+#include "base/time/time.h"
 #include "build/build_config.h"
 #include "mojo/core/core.h"
 #include "mojo/public/cpp/platform/socket_utils_posix.h"
@@ -51,7 +54,12 @@ class MessageView {
 
   MessageView& operator=(MessageView&& other) = default;
 
-  ~MessageView() = default;
+  ~MessageView() {
+    if (message_) {
+      UMA_HISTOGRAM_TIMES("Mojo.Channel.WriteMessageLatency",
+                          base::TimeTicks::Now() - start_time_);
+    }
+  }
 
   const void* data() const {
     return static_cast<const char*>(message_->data()) + offset_;
@@ -70,7 +78,6 @@ class MessageView {
   std::vector<PlatformHandleInTransit> TakeHandles() {
     return std::move(handles_);
   }
-  Channel::MessagePtr TakeMessage() { return std::move(message_); }
 
   void SetHandles(std::vector<PlatformHandleInTransit> handles) {
     handles_ = std::move(handles);
@@ -88,11 +95,13 @@ class MessageView {
   std::vector<PlatformHandleInTransit> handles_;
   size_t num_handles_sent_ = 0;
 
+  base::TimeTicks start_time_ = base::TimeTicks::Now();
+
   DISALLOW_COPY_AND_ASSIGN(MessageView);
 };
 
 class ChannelPosix : public Channel,
-                     public base::MessageLoopCurrent::DestructionObserver,
+                     public base::CurrentThread::DestructionObserver,
                      public base::MessagePumpForIO::FdWatcher {
  public:
   ChannelPosix(Delegate* delegate,
@@ -126,7 +135,13 @@ class ChannelPosix : public Channel,
   }
 
   void Write(MessagePtr message) override {
+    UMA_HISTOGRAM_COUNTS_100000("Mojo.Channel.WriteMessageSize",
+                                message->data_num_bytes());
+    UMA_HISTOGRAM_COUNTS_100("Mojo.Channel.WriteMessageHandles",
+                             message->NumHandlesForTransit());
+
     bool write_error = false;
+    bool queued = false;
     {
       base::AutoLock lock(write_lock_);
       if (reject_writes_)
@@ -137,6 +152,7 @@ class ChannelPosix : public Channel,
       } else {
         outgoing_messages_.emplace_back(std::move(message), 0);
       }
+      queued = !outgoing_messages_.empty();
     }
     if (write_error) {
       // Invoke OnWriteError() asynchronously on the IO thread, in case Write()
@@ -145,6 +161,7 @@ class ChannelPosix : public Channel,
           FROM_HERE, base::BindOnce(&ChannelPosix::OnWriteError, this,
                                     Error::kDisconnected));
     }
+    UMA_HISTOGRAM_BOOLEAN("Mojo.Channel.WriteQueued", queued);
   }
 
   void LeakHandle() override {
@@ -184,15 +201,15 @@ class ChannelPosix : public Channel,
     DCHECK(!write_watcher_);
     read_watcher_.reset(
         new base::MessagePumpForIO::FdWatchController(FROM_HERE));
-    base::MessageLoopCurrent::Get()->AddDestructionObserver(this);
+    base::CurrentThread::Get()->AddDestructionObserver(this);
     if (server_.is_valid()) {
-      base::MessageLoopCurrentForIO::Get()->WatchFileDescriptor(
+      base::CurrentIOThread::Get()->WatchFileDescriptor(
           server_.platform_handle().GetFD().get(), false /* persistent */,
           base::MessagePumpForIO::WATCH_READ, read_watcher_.get(), this);
     } else {
       write_watcher_.reset(
           new base::MessagePumpForIO::FdWatchController(FROM_HERE));
-      base::MessageLoopCurrentForIO::Get()->WatchFileDescriptor(
+      base::CurrentIOThread::Get()->WatchFileDescriptor(
           socket_.get(), true /* persistent */,
           base::MessagePumpForIO::WATCH_READ, read_watcher_.get(), this);
       base::AutoLock lock(write_lock_);
@@ -212,7 +229,7 @@ class ChannelPosix : public Channel,
       return;
     if (io_task_runner_->RunsTasksInCurrentSequence()) {
       pending_write_ = true;
-      base::MessageLoopCurrentForIO::Get()->WatchFileDescriptor(
+      base::CurrentIOThread::Get()->WatchFileDescriptor(
           socket_.get(), false /* persistent */,
           base::MessagePumpForIO::WATCH_WRITE, write_watcher_.get(), this);
     } else {
@@ -223,7 +240,7 @@ class ChannelPosix : public Channel,
   }
 
   void ShutDownOnIOThread() {
-    base::MessageLoopCurrent::Get()->RemoveDestructionObserver(this);
+    base::CurrentThread::Get()->RemoveDestructionObserver(this);
 
     read_watcher_.reset();
     write_watcher_.reset();
@@ -242,7 +259,7 @@ class ChannelPosix : public Channel,
     self_ = nullptr;
   }
 
-  // base::MessageLoopCurrent::DestructionObserver:
+  // base::CurrentThread::DestructionObserver:
   void WillDestroyCurrentMessageLoop() override {
     DCHECK(io_task_runner_->RunsTasksInCurrentSequence());
     if (self_)
@@ -255,7 +272,7 @@ class ChannelPosix : public Channel,
       CHECK_EQ(fd, server_.platform_handle().GetFD().get());
 #if !defined(OS_NACL)
       read_watcher_.reset();
-      base::MessageLoopCurrent::Get()->RemoveDestructionObserver(this);
+      base::CurrentThread::Get()->RemoveDestructionObserver(this);
 
       AcceptSocketConnection(server_.platform_handle().GetFD().get(), &socket_);
       ignore_result(server_.TakePlatformHandle());
@@ -432,6 +449,11 @@ class ChannelPosix : public Channel,
   bool FlushOutgoingMessagesNoLock() {
     base::circular_deque<MessageView> messages;
     std::swap(outgoing_messages_, messages);
+
+    if (!messages.empty()) {
+      UMA_HISTOGRAM_COUNTS_1000("Mojo.Channel.WriteQueuePendingMessages",
+                                messages.size());
+    }
 
     while (!messages.empty()) {
       if (!WriteNoLock(std::move(messages.front())))

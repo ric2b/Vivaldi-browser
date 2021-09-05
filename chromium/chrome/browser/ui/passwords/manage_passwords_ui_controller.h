@@ -78,7 +78,7 @@ class ManagePasswordsUIController
   bool OnChooseCredentials(
       std::vector<std::unique_ptr<autofill::PasswordForm>> local_credentials,
       const url::Origin& origin,
-      const ManagePasswordsState::CredentialsCallback& callback) override;
+      ManagePasswordsState::CredentialsCallback callback) override;
   void OnAutoSignin(
       std::vector<std::unique_ptr<autofill::PasswordForm>> local_forms,
       const url::Origin& origin) override;
@@ -98,7 +98,7 @@ class ManagePasswordsUIController
       override;
 
   virtual void NotifyUnsyncedCredentialsWillBeDeleted(
-      const std::vector<autofill::PasswordForm>& unsynced_credentials);
+      std::vector<autofill::PasswordForm> unsynced_credentials);
 
   // PasswordStore::Observer:
   void OnLoginsChanged(
@@ -133,6 +133,7 @@ class ManagePasswordsUIController
       const override;
   const password_manager::InteractionsStats* GetCurrentInteractionStats()
       const override;
+  size_t GetTotalNumberCompromisedPasswords() const override;
   bool DidAuthForAccountStoreOptInFail() const override;
   bool BubbleIsManualFallbackForSaving() const override;
   void OnBubbleShown() override;
@@ -143,7 +144,8 @@ class ManagePasswordsUIController
   void OnPasswordsRevealed() override;
   void SavePassword(const base::string16& username,
                     const base::string16& password) override;
-  void SaveUnsyncedCredentialsInProfileStore() override;
+  void SaveUnsyncedCredentialsInProfileStore(
+      const std::vector<autofill::PasswordForm>& selected_credentials) override;
   void DiscardUnsyncedCredentials() override;
   void MovePasswordToAccountStore() override;
   void BlockMovingPasswordToAccountStore() override;
@@ -215,7 +217,8 @@ class ManagePasswordsUIController
   friend class content::WebContentsUserData<ManagePasswordsUIController>;
 
   // PasswordsLeakDialogDelegate:
-  void NavigateToPasswordCheckup() override;
+  void NavigateToPasswordCheckup(
+      password_manager::PasswordCheckReferrer referrer) override;
   void OnLeakDialogHidden() override;
 
   enum class BubbleStatus {

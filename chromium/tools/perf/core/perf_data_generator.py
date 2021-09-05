@@ -94,10 +94,11 @@ class TEST_TYPES(object):
 # The perf data will be handled on a separated 'processor' VM.
 # This list will be removed or replace by an opt-out list.
 LIGHTWEIGHT_TESTERS = [
-    'android-pixel2-perf', 'android-pixel2_webview-perf', 'linux-perf',
-    'mac-10_12_laptop_low_end-perf', 'mac-10_13_laptop_high_end-perf',
-    'win-10-perf', 'win-10_laptop_low_end-perf', 'android-pixel2-perf-fyi',
-    'linux-perf-fyi', 'win-10_laptop_low_end-perf_HP-Candidate'
+    'android-go-perf', 'android-pixel2-perf', 'android-pixel2_webview-perf',
+    'linux-perf', 'mac-10_12_laptop_low_end-perf',
+    'mac-10_13_laptop_high_end-perf', 'win-10-perf',
+    'win-10_laptop_low_end-perf', 'android-pixel2-perf-fyi', 'linux-perf-fyi',
+    'win-10_laptop_low_end-perf_HP-Candidate'
 ]
 
 FYI_BUILDERS = {
@@ -122,10 +123,17 @@ FYI_BUILDERS = {
     },
     'android-pixel2-perf-fyi': {
         'tests': [{
-            'isolate': 'performance_test_suite',
+            'isolate':
+            'performance_test_suite',
+            'extra_args': [
+                '--output-format=histograms',
+                '--experimental-tbmv3-metrics',
+            ],
         }],
-        'platform': 'android-chrome',
-        'browser': 'bin/monochrome_64_32_bundle',
+        'platform':
+        'android-chrome',
+        'browser':
+        'bin/monochrome_64_32_bundle',
         'dimension': {
             'pool': 'chrome.tests.perf-fyi',
             'os': 'Android',
@@ -172,11 +180,18 @@ FYI_BUILDERS = {
     'win-10_laptop_low_end-perf_HP-Candidate': {
         'tests': [
             {
-                'isolate': 'performance_test_suite',
+                'isolate':
+                'performance_test_suite',
+                'extra_args': [
+                    '--output-format=histograms',
+                    '--experimental-tbmv3-metrics',
+                ],
             },
         ],
-        'platform': 'win',
-        'target_bits': 64,
+        'platform':
+        'win',
+        'target_bits':
+        64,
         'dimension': {
             'pool': 'chrome.tests.perf-fyi',
             'id': 'build370-a7',
@@ -202,7 +217,7 @@ FYI_BUILDERS = {
         'target_bits':
         32,
         'dimension': {
-            'pool': 'luci.chrome.cros-dut',
+            'pool': 'chrome.tests',
             # TODO(crbug.com/971204): Explicitly set the gpu to None to make
             # chromium_swarming recipe_module ignore this dimension.
             'gpu': None,
@@ -241,8 +256,10 @@ FYI_BUILDERS = {
 # issues, please contact johnchen@chromium.org.
 BUILDERS = {
     'android-builder-perf': {
-        'additional_compile_targets':
-        ['microdump_stackwalk', 'angle_perftests', 'chrome_apk'],
+        'additional_compile_targets': [
+            'microdump_stackwalk', 'angle_perftests', 'chrome_apk',
+            'system_webview_google_apk'
+        ],
         'tests': [
             {
                 'name': 'resource_sizes_monochrome_minimal_apks',
@@ -281,6 +298,7 @@ BUILDERS = {
             },
         ],
         'dimension': {
+            'cpu': 'x86',
             'os': 'Ubuntu-16.04',
             'pool': 'chrome.tests',
         },
@@ -288,8 +306,10 @@ BUILDERS = {
         False,
     },
     'android_arm64-builder-perf': {
-        'additional_compile_targets':
-        ['microdump_stackwalk', 'angle_perftests', 'chrome_apk'],
+        'additional_compile_targets': [
+            'microdump_stackwalk', 'angle_perftests', 'chrome_apk',
+            'system_webview_google_apk'
+        ],
         'tests': [
             {
                 'name': 'resource_sizes_monochrome_minimal_apks',
@@ -333,6 +353,7 @@ BUILDERS = {
             },
         ],
         'dimension': {
+            'cpu': 'x86',
             'os': 'Ubuntu-16.04',
             'pool': 'chrome.tests',
         },
@@ -445,7 +466,7 @@ BUILDERS = {
         'tests': [{
             'isolate': 'performance_test_suite',
         }],
-        'platform': 'android-chrome',
+        'platform': 'android-chrome-64-bundle',
         'dimension': {
             'pool': 'chrome.tests.perf',
             'os': 'Android',
@@ -602,6 +623,10 @@ BUILDERS = {
         },
     },
     'linux-processor-perf': {
+        'platform': 'linux',
+        'perf_processor': True,
+    },
+    'android-go-processor-perf': {
         'platform': 'linux',
         'perf_processor': True,
     },

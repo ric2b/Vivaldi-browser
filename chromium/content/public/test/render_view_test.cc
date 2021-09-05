@@ -19,13 +19,11 @@
 #include "content/common/input_messages.h"
 #include "content/common/renderer.mojom.h"
 #include "content/common/view_messages.h"
-#include "content/common/visual_properties.h"
 #include "content/common/widget_messages.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/native_web_keyboard_event.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_switches.h"
-#include "content/public/common/previews_state.h"
 #include "content/public/common/use_zoom_for_dsf_policy.h"
 #include "content/public/renderer/content_renderer_client.h"
 #include "content/public/renderer/render_view_visitor.h"
@@ -48,6 +46,8 @@
 #include "third_party/blink/public/common/input/web_gesture_event.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/common/input/web_mouse_event.h"
+#include "third_party/blink/public/common/loader/previews_state.h"
+#include "third_party/blink/public/common/widget/visual_properties.h"
 #include "third_party/blink/public/mojom/leak_detector/leak_detector.mojom.h"
 #include "third_party/blink/public/mojom/renderer_preferences.mojom.h"
 #include "third_party/blink/public/platform/platform.h"
@@ -69,7 +69,7 @@
 #include "ui/native_theme/native_theme_features.h"
 #include "v8/include/v8.h"
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include "base/mac/scoped_nsautorelease_pool.h"
 #endif
 
@@ -264,7 +264,8 @@ void RenderViewTest::RendererBlinkPlatformImplTestOverride::Shutdown() {
   blink_platform_impl_->Shutdown();
 }
 
-RenderViewTest::RenderViewTest(bool hook_render_frame_creation) {
+RenderViewTest::RenderViewTest(bool hook_render_frame_creation)
+    : task_environment_(base::test::TaskEnvironment::TimeSource::MOCK_TIME) {
   // Overrides creation of RenderFrameImpl. Subclasses may wish to do this
   // themselves and it can only be done once.
   if (hook_render_frame_creation)
@@ -405,7 +406,7 @@ void RenderViewTest::SetUp() {
   SetDWriteFontProxySenderForTesting(CreateFakeCollectionSender());
 #endif
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   autorelease_pool_ = std::make_unique<base::mac::ScopedNSAutoreleasePool>();
 #endif
   command_line_ =
@@ -519,7 +520,7 @@ void RenderViewTest::TearDown() {
   ClearDWriteFontProxySenderForTesting();
 #endif
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   autorelease_pool_.reset();
 #endif
 
@@ -708,11 +709,12 @@ void RenderViewTest::Reload(const GURL& url) {
   auto common_params = mojom::CommonNavigationParams::New(
       url, base::nullopt, blink::mojom::Referrer::New(),
       ui::PAGE_TRANSITION_LINK, mojom::NavigationType::RELOAD,
-      NavigationDownloadPolicy(), false, GURL(), GURL(), PREVIEWS_UNSPECIFIED,
-      base::TimeTicks::Now(), "GET", nullptr,
-      network::mojom::SourceLocation::New(),
+      NavigationDownloadPolicy(), false, GURL(), GURL(),
+      blink::PreviewsTypes::PREVIEWS_UNSPECIFIED, base::TimeTicks::Now(), "GET",
+      nullptr, network::mojom::SourceLocation::New(),
       false /* started_from_context_menu */, false /* has_user_gesture */,
-      CreateInitiatorCSPInfo(), std::vector<int>(), std::string(),
+      false /* has_text_fragment_token */, CreateInitiatorCSPInfo(),
+      std::vector<int>(), std::string(),
       false /* is_history_navigation_in_new_child_frame */, base::TimeTicks());
   RenderViewImpl* view = static_cast<RenderViewImpl*>(view_);
   TestRenderFrame* frame =
@@ -730,16 +732,14 @@ void RenderViewTest::Resize(gfx::Size new_size,
   RenderWidget* render_widget =
       view->GetMainRenderFrame()->GetLocalRootRenderWidget();
 
-  VisualProperties visual_properties;
-  visual_properties.screen_info = ScreenInfo();
+  blink::VisualProperties visual_properties;
+  visual_properties.screen_info = blink::ScreenInfo();
   visual_properties.new_size = new_size;
   visual_properties.compositor_viewport_pixel_rect = gfx::Rect(new_size);
   visual_properties.is_fullscreen_granted = is_fullscreen_granted;
   visual_properties.display_mode = blink::mojom::DisplayMode::kBrowser;
 
-  WidgetMsg_UpdateVisualProperties resize_msg(render_widget->routing_id(),
-                                              visual_properties);
-  render_widget->OnMessageReceived(resize_msg);
+  render_widget->GetWebWidget()->ApplyVisualProperties(visual_properties);
 }
 
 void RenderViewTest::SimulateUserTypingASCIICharacter(char ascii_character,
@@ -836,8 +836,8 @@ std::unique_ptr<FakeRenderWidgetHost> RenderViewTest::CreateRenderWidgetHost() {
   return std::make_unique<FakeRenderWidgetHost>();
 }
 
-VisualProperties RenderViewTest::InitialVisualProperties() {
-  VisualProperties initial_visual_properties;
+blink::VisualProperties RenderViewTest::InitialVisualProperties() {
+  blink::VisualProperties initial_visual_properties;
   // Ensure the view has some size so tests involving scrolling bounds work.
   initial_visual_properties.new_size = gfx::Size(400, 300);
   initial_visual_properties.visible_viewport_size = gfx::Size(400, 300);
@@ -846,7 +846,9 @@ VisualProperties RenderViewTest::InitialVisualProperties() {
 
 std::unique_ptr<CompositorDependencies>
 RenderViewTest::CreateCompositorDependencies() {
-  return std::make_unique<FakeCompositorDependencies>();
+  auto deps = std::make_unique<FakeCompositorDependencies>();
+  deps->set_use_zoom_for_dsf_enabled(render_thread_->IsUseZoomForDSF());
+  return deps;
 }
 
 void RenderViewTest::GoToOffset(int offset,
@@ -862,11 +864,12 @@ void RenderViewTest::GoToOffset(int offset,
       url, base::nullopt, blink::mojom::Referrer::New(),
       ui::PAGE_TRANSITION_FORWARD_BACK,
       mojom::NavigationType::HISTORY_DIFFERENT_DOCUMENT,
-      NavigationDownloadPolicy(), false, GURL(), GURL(), PREVIEWS_UNSPECIFIED,
-      base::TimeTicks::Now(), "GET", nullptr,
-      network::mojom::SourceLocation::New(),
+      NavigationDownloadPolicy(), false, GURL(), GURL(),
+      blink::PreviewsTypes::PREVIEWS_UNSPECIFIED, base::TimeTicks::Now(), "GET",
+      nullptr, network::mojom::SourceLocation::New(),
       false /* started_from_context_menu */, false /* has_user_gesture */,
-      CreateInitiatorCSPInfo(), std::vector<int>(), std::string(),
+      false /* has_text_fragment_token */, CreateInitiatorCSPInfo(),
+      std::vector<int>(), std::string(),
       false /* is_history_navigation_in_new_child_frame */, base::TimeTicks());
   auto commit_params = CreateCommitNavigationParams();
   commit_params->page_state = state;

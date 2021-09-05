@@ -13,15 +13,8 @@ update_target("//chrome/browser:browser") {
     "//vivaldi/components/request_filter",
     "//vivaldi/components/request_filter/adblock_filter",
   ]
-  if (!is_android) {
-    public_deps += [
-      "//vivaldi/components/datasource",
-    ]
-    allow_circular_includes_from += [
-      "//vivaldi/components/datasource",
-    ]
-  }
   deps += [
+    "//vivaldi/components/datasource:dataurl",
     "//vivaldi/components/request_filter/adblock_filter",
     "//vivaldi_mojom/components/request_filter/adblock_filter/mojom"
   ]
@@ -31,4 +24,13 @@ update_target("//chrome/renderer:renderer") {
   deps += [
     "//vivaldi/components/request_filter/adblock_filter/renderer",
   ]
+}
+
+if (vivaldi_build_tests) {
+  update_target("//components:components_unittests") {
+      deps += [
+        "//vivaldi/components/request_filter/adblock_filter:unit_tests",
+        "//vivaldi/components/datasource:dataurl_unit_tests",
+      ]
+  }
 }

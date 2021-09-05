@@ -37,9 +37,11 @@
 <translation id="1842960171412779397">pasirinkti</translation>
 <translation id="1859234291848436338">Rašymo nurodymas</translation>
 <translation id="1860796786778352021">Uždaryti pranešimus</translation>
+<translation id="186476001994626254">„Web Smart Paste“ turinys</translation>
 <translation id="1871244248791675517">Ins</translation>
 <translation id="1884435127456172652"><ph name="NUMBER" /> %</translation>
 <translation id="1901303067676059328">Pasirinkti &amp;viską</translation>
+<translation id="19085484004813472">Tai nauja funkcija</translation>
 <translation id="2006524834898217237">Įsitikinkite, kad šis įrenginys prijungtas prie interneto.</translation>
 <translation id="208586643495776849">Bandykite dar kartą</translation>
 <translation id="2090963878406559571">Jei norite iš <ph name="ORIGIN" /> į „Android“ telefoną išsiųsti numerį, <ph name="TROUBLESHOOT_LINK" /> nustatymuose abiejuose įrenginiuose.</translation>
@@ -67,6 +69,7 @@
 <translation id="2570734079541893434">Tvarkyti nustatymus</translation>
 <translation id="2573731672208488250">{HOURS,plural, =1{po 1 val.}one{po # val.}few{po # val.}many{po # val.}other{po # val.}}</translation>
 <translation id="2583543531130364912">Jutiklinio ekrano kalibravimas</translation>
+<translation id="2586657967955657006">Iškarpinė</translation>
 <translation id="2666092431469916601">Į viršų</translation>
 <translation id="2701330563083355633">Bendrinta iš „<ph name="DEVICE_NAME" />“</translation>
 <translation id="271033894570825754">Naujiena</translation>
@@ -74,6 +77,7 @@
 <translation id="2749082172777216925"><ph name="APP_NAME_INFO" />, <ph name="PRICE" /></translation>
 <translation id="2803313416453193357">Atidaryti aplanką</translation>
 <translation id="2824719307700604149">{YEARS,plural, =1{Prieš 1 metus}one{Prieš # metus}few{Prieš # metus}many{Prieš # metų}other{Prieš # metų}}</translation>
+<translation id="2878511608894704031">Ištrinti viską</translation>
 <translation id="2907671656515444832">{DAYS,plural, =1{po 1 d.}one{po # d.}few{po # d.}many{po # d.}other{po # d.}}</translation>
 <translation id="2931838996092594335">spustelėti</translation>
 <translation id="2981684127883932071">Pateikiami pasiūlymai</translation>
@@ -114,6 +118,7 @@
 <translation id="4289300219472526559">Pradėti kalbėti</translation>
 <translation id="430191667033048642">„<ph name="MOVED_APP_NAME" />“ perkelta į aplanką „<ph name="FOLDER_NAME" />“.</translation>
 <translation id="4316910396681052118">VISOS PROGRAMOS</translation>
+<translation id="4491109536499578614">Vaizdas</translation>
 <translation id="4588090240171750605">Slinkti į dešinę</translation>
 <translation id="4631891353005174729"><ph name="APP_NAME_TYPE" />, įvertinimas žvaigždutėmis <ph name="RATING_SCORE" /></translation>
 <translation id="4648249871170053485">„<ph name="APP_NAME" />“, programos rekomendacija</translation>
@@ -147,6 +152,7 @@
 <translation id="5768079895599174203">{DAYS,plural, =1{1 diena ir }one{# diena ir }few{# dienos ir }many{# dienos ir }other{# dienų ir }}</translation>
 <translation id="5789643057113097023">.</translation>
 <translation id="5866104238061687188">{YEARS,plural, =1{po 1 m.}one{po # m.}few{po # m.}many{po # m.}other{po # m.}}</translation>
+<translation id="588258955323874662">Visas ekranas</translation>
 <translation id="5906667377645263094">{SECONDS,plural, =1{Liko 1 sekundė}one{Liko # sekundė}few{Liko # sekundės}many{Liko # sekundės}other{Liko # sekundžių}}</translation>
 <translation id="5941711191222866238">Sumažinti</translation>
 <translation id="5943826764092288734">{HOURS,plural, =1{1 valanda}one{# valanda}few{# valandos}many{# valandos}other{# valandų}}</translation>
@@ -170,6 +176,7 @@
 <translation id="6417265370957905582">„Google“ padėjėjas</translation>
 <translation id="6430678249303439055">Blokuoti visus šios programos pranešimus</translation>
 <translation id="6483402905448010557">{SECONDS,plural, =1{Prieš 1 sekundę}one{Prieš # sekundę}few{Prieš # sekundes}many{Prieš # sekundės}other{Prieš # sekundžių}}</translation>
+<translation id="6503257047630241175">RTF turinys</translation>
 <translation id="6539092367496845964">Įvyko klaida. Vėliau bandykite dar kartą.</translation>
 <translation id="654149438358937226">Blokuoti visus pranešimus</translation>
 <translation id="6567071839949112727">spustelėti aukštesnio lygmens elementą</translation>
@@ -178,7 +185,7 @@
 <translation id="6620110761915583480">Išsaugoti failą</translation>
 <translation id="6656912866303152668">Įsitikinkite, kad įrenginio „<ph name="TARGET_DEVICE_NAME" />“ naršyklėje „Chrome“ įjungtas sinchronizavimas, tada bandykite siųsti dar kartą.</translation>
 <translation id="6699343763173986273">Kitas medijos takelis</translation>
-<translation id="6710213216561001401">Ankstesnis</translation>
+<translation id="6710213216561001401">Ankstesnė</translation>
 <translation id="6779314412797872738">Jei norite iš čia į „Android“ telefoną išsiųsti numerį, nustatymuose<ph name="TROUBLESHOOT_LINK" /> abiejuose įrenginiuose.</translation>
 <translation id="6786750046913594791">Uždaryti aplanką</translation>
 <translation id="6808150112686056157">Sustabdyti mediją</translation>

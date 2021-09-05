@@ -120,24 +120,6 @@ base::string16 GetEmailDomains() {
   return email_domains_reg.empty() ? email_domains_reg_new : email_domains_reg;
 }
 
-// Get a pretty-printed string of the list of email domains that we can display
-// to the end-user.
-base::string16 GetEmailDomainsPrintableString() {
-  base::string16 email_domains_reg = GetEmailDomains();
-  if (email_domains_reg.empty())
-    return email_domains_reg;
-
-  std::vector<base::string16> domains =
-      base::SplitString(base::ToLowerASCII(email_domains_reg),
-                        base::ASCIIToUTF16(kEmailDomainsSeparator),
-                        base::WhitespaceHandling::TRIM_WHITESPACE,
-                        base::SplitResult::SPLIT_WANT_NONEMPTY);
-  base::string16 email_domains_str =
-      base::JoinString(domains, base::string16(L", "));
-
-  return email_domains_str;
-}
-
 // Use WinHttpUrlFetcher to communicate with the admin sdk and fetch the active
 // directory samAccountName if available and list of local account name mapping
 // configured as custom attributes.
@@ -553,16 +535,28 @@ HRESULT MakeUsernameForAccount(const base::Value& result,
     std::string username_utf8 =
         gaia::SanitizeEmail(base::UTF16ToUTF8(os_username));
 
-    size_t tld_length =
-        net::registry_controlled_domains::GetCanonicalHostRegistryLength(
-            gaia::ExtractDomainName(username_utf8),
-            net::registry_controlled_domains::EXCLUDE_UNKNOWN_REGISTRIES,
-            net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES);
+    if (GetGlobalFlagOrDefault(kRegUseShorterAccountName, 0)) {
+      size_t separator_pos = username_utf8.find('@');
 
-    // If an TLD is found strip it off, plus 1 to remove the separating dot too.
-    if (tld_length > 0) {
-      username_utf8.resize(username_utf8.length() - tld_length - 1);
-      os_username = base::UTF8ToUTF16(username_utf8);
+      // os_username carries the email. Fall through if not find "@" in the
+      // email.
+      if (separator_pos != username_utf8.npos) {
+        username_utf8 = username_utf8.substr(0, separator_pos);
+        os_username = base::UTF8ToUTF16(username_utf8);
+      }
+    } else {
+      size_t tld_length =
+          net::registry_controlled_domains::GetCanonicalHostRegistryLength(
+              gaia::ExtractDomainName(username_utf8),
+              net::registry_controlled_domains::EXCLUDE_UNKNOWN_REGISTRIES,
+              net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES);
+
+      // If an TLD is found strip it off, plus 1 to remove the separating dot
+      // too.
+      if (tld_length > 0) {
+        username_utf8.resize(username_utf8.length() - tld_length - 1);
+        os_username = base::UTF8ToUTF16(username_utf8);
+      }
     }
   }
 
@@ -655,7 +649,7 @@ HRESULT ValidateResult(const base::Value& result, BSTR* status_text) {
         break;
       case kUiecInvalidEmailDomain:
         *status_text = CGaiaCredentialBase::AllocErrorString(
-            IDS_INVALID_EMAIL_DOMAIN_BASE, {GetEmailDomainsPrintableString()});
+            IDS_INVALID_EMAIL_DOMAIN_BASE);
         break;
       case kUiecMissingSigninData:
         *status_text =

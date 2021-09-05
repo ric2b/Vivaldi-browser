@@ -99,11 +99,6 @@ public interface Tab extends TabLifecycle {
     int getId();
 
     /**
-     * @return The id of the tab that caused this tab to be opened.
-     */
-    int getParentId();
-
-    /**
      * @return The URL that is loaded in the current tab. This may not be the same as
      *         the last committed URL if a new navigation is in progress.
      *
@@ -111,6 +106,11 @@ public interface Tab extends TabLifecycle {
      */
     @Deprecated
     String getUrlString();
+
+    /**
+     * @return Parameters that should be used for a lazily loaded Tab.  May be null.
+     */
+    LoadUrlParams getPendingLoadParams();
 
     /**
      * @return The URL that is loaded in the current tab. This may not be the same as
@@ -160,20 +160,6 @@ public interface Tab extends TabLifecycle {
      */
     @TabLaunchType
     int getLaunchType();
-
-    /**
-     * @return The reason the Tab was launched. This remains unchanged, while {@link
-     *         #getLaunchType()} can change over time.
-     */
-    @Nullable
-    @TabLaunchType
-    Integer getLaunchTypeAtInitialTabCreation();
-
-    /**
-     * @return the last time this tab was shown or the time of its initialization if it wasn't yet
-     *         shown.
-     */
-    long getTimestampMillis();
 
     /**
      * @return {@code true} if the Tab is in incognito mode.
@@ -271,4 +257,12 @@ public interface Tab extends TabLifecycle {
      * Goes to the navigation entry after the current one.
      */
     void goForward();
+
+    /**
+     * Set whether the TabState representing this Tab has been updated.
+     * This method will ultimately be deprecated when the migration
+     * to CriticalPersistedTabData is complete.
+     * @param isDirty Whether the Tab's state has changed.
+     */
+    void setIsTabStateDirty(boolean isTabStateDirty);
 }

@@ -66,18 +66,6 @@ WebViewImpl* InspectorEmulationAgent::GetWebViewImpl() {
   return web_local_frame_ ? web_local_frame_->ViewImpl() : nullptr;
 }
 
-namespace {
-std::unique_ptr<protocol::DOM::RGBA> ParseRGBA(
-    const std::vector<uint8_t>& cbor) {
-  auto parsed = protocol::Value::parseBinary(cbor.data(), cbor.size());
-  if (!parsed)
-    return nullptr;
-  blink::protocol::ErrorSupport errors;
-  auto rgba = protocol::DOM::RGBA::fromValue(parsed.get(), &errors);
-  return errors.Errors().empty() ? std::move(rgba) : nullptr;
-}
-}  // namespace
-
 void InspectorEmulationAgent::Restore() {
   // Since serialized_ua_metadata_override_ can't directly be converted back
   // to appropriate protocol message, we initially pass null and decode it
@@ -118,9 +106,10 @@ void InspectorEmulationAgent::Restore() {
   setEmulatedMedia(emulated_media_.Get(), std::move(features));
   if (!emulated_vision_deficiency_.Get().IsNull())
     setEmulatedVisionDeficiency(emulated_vision_deficiency_.Get());
-  auto rgba = ParseRGBA(default_background_color_override_rgba_.Get());
-  if (rgba)
-    setDefaultBackgroundColorOverride(std::move(rgba));
+  auto status_or_rgba = protocol::DOM::RGBA::ReadFrom(
+      default_background_color_override_rgba_.Get());
+  if (status_or_rgba.ok())
+    setDefaultBackgroundColorOverride(std::move(status_or_rgba).value());
   setFocusEmulationEnabled(emulate_focus_.Get());
 
   if (!timezone_id_override_.Get().IsNull())
@@ -527,17 +516,18 @@ Response InspectorEmulationAgent::setDeviceMetricsOverride(
     Maybe<int> position_y,
     Maybe<bool> dont_set_visible_size,
     Maybe<protocol::Emulation::ScreenOrientation>,
-    Maybe<protocol::Page::Viewport>) {
+    Maybe<protocol::Page::Viewport>,
+    Maybe<protocol::Emulation::DisplayFeature>) {
   // We don't have to do anything other than reply to the client, as the
   // emulation parameters should have already been updated by the handling of
-  // WidgetMsg_EnableDeviceEmulation.
+  // blink::mojom::FrameWidget::EnableDeviceEmulation.
   return AssertPage();
 }
 
 Response InspectorEmulationAgent::clearDeviceMetricsOverride() {
   // We don't have to do anything other than reply to the client, as the
   // emulation parameters should have already been cleared by the handling of
-  // WidgetMsg_DisableDeviceEmulation.
+  // blink::mojom::FrameWidget::DisableDeviceEmulation.
   return AssertPage();
 }
 

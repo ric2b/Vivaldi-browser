@@ -322,8 +322,9 @@ COMPONENT_EXPORT(DEVICE_FIDO)
 extern const char kCredentialManagementPreviewMapKey[];
 COMPONENT_EXPORT(DEVICE_FIDO) extern const char kBioEnrollmentMapKey[];
 COMPONENT_EXPORT(DEVICE_FIDO) extern const char kBioEnrollmentPreviewMapKey[];
-COMPONENT_EXPORT(DEVICE_FIDO) extern const char kUvTokenMapKey[];
+COMPONENT_EXPORT(DEVICE_FIDO) extern const char kPinUvTokenMapKey[];
 extern const char kDefaultCredProtectKey[];
+extern const char kEnterpriseAttestationKey[];
 
 // HID transport specific constants.
 constexpr uint32_t kHidBroadcastChannel = 0xffffffff;
@@ -354,6 +355,20 @@ constexpr uint8_t kP1CheckOnly = 0x07;
 // return with this registration.
 constexpr uint8_t kP1IndividualAttestation = 0x80;
 constexpr size_t kMaxKeyHandleLength = 255;
+
+// kCableOverAOAVersion is a magic value that is sent as the "version" in an
+// Android AOA[1] configuration to identity a security-key request.
+//
+// [1] https://source.android.com/devices/accessories/aoa
+constexpr char kCableOverAOAVersion[] = "12eba9f901039b36";
+
+// kCableWebSocketProtocol is the name of the WebSocket subprotocol used by
+// caBLEv2. See https://tools.ietf.org/html/rfc6455#section-1.9.
+constexpr char kCableWebSocketProtocol[] = "fido.cable";
+
+// kCableShardIdHeader is the name of an HTTP header that is sent in the reply
+// from the tunnel server and which specifies the server's chosen shard number.
+constexpr char kCableShardIdHeader[] = "X-caBLE-Shard";
 
 // Maximum wait time before client error outs on device.
 COMPONENT_EXPORT(DEVICE_FIDO) extern const base::TimeDelta kDeviceTimeout;

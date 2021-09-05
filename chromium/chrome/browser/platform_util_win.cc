@@ -46,7 +46,7 @@ void ShowItemInFolderOnWorkerThread(const base::FilePath& full_path) {
     return;
 
   Microsoft::WRL::ComPtr<IShellFolder> desktop;
-  HRESULT hr = SHGetDesktopFolder(desktop.GetAddressOf());
+  HRESULT hr = SHGetDesktopFolder(&desktop);
   if (FAILED(hr))
     return;
 
@@ -65,6 +65,11 @@ void ShowItemInFolderOnWorkerThread(const base::FilePath& full_path) {
     return;
 
   const ITEMIDLIST* highlight[] = {file_item};
+
+  // Skip opening the folder during browser tests, to avoid leaving an open
+  // file explorer window behind.
+  if (!platform_util::internal::AreShellOperationsAllowed())
+    return;
 
   hr =
       SHOpenFolderAndSelectItems(dir_item, base::size(highlight), highlight, 0);

@@ -39,11 +39,15 @@ extern const base::Feature kCrossOriginOpenerPolicy;
 COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::Feature kCrossOriginOpenerPolicyReporting;
 COMPONENT_EXPORT(NETWORK_CPP)
+extern const base::Feature kCrossOriginOpenerPolicyReportingOriginTrial;
+COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::Feature kCrossOriginOpenerPolicyAccessReporting;
 COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::Feature kCrossOriginEmbedderPolicy;
 COMPONENT_EXPORT(NETWORK_CPP)
-extern const base::Feature kBlockNonSecureExternalRequests;
+extern const base::Feature kCrossOriginIsolated;
+COMPONENT_EXPORT(NETWORK_CPP)
+extern const base::Feature kBlockInsecurePrivateNetworkRequests;
 COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::Feature kSplitAuthCacheByNetworkIsolationKey;
 COMPONENT_EXPORT(NETWORK_CPP)
@@ -97,6 +101,11 @@ bool ShouldEnableOutOfBlinkCorsForTesting();
 
 COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::Feature kWebSocketReassembleShortMessages;
+
+COMPONENT_EXPORT(NETWORK_CPP)
+extern const base::Feature kSCTAuditing;
+COMPONENT_EXPORT(NETWORK_CPP)
+extern const base::FeatureParam<double> kSCTAuditingSamplingRate;
 
 }  // namespace features
 }  // namespace network

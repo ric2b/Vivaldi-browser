@@ -101,8 +101,9 @@ class ServiceWorkerMetrics {
     BACKGROUND_FETCH_SUCCESS = 32,
     PERIODIC_SYNC = 33,
     CONTENT_DELETE = 34,
+    PUSH_SUBSCRIPTION_CHANGE = 35,
     // Add new events to record here.
-    kMaxValue = CONTENT_DELETE,
+    kMaxValue = PUSH_SUBSCRIPTION_CHANGE,
   };
 
   // Used for UMA. Append only.
@@ -256,14 +257,6 @@ class ServiceWorkerMetrics {
   static void RecordLookupRegistrationTime(
       blink::ServiceWorkerStatusCode status,
       base::TimeDelta duration);
-
-  // Records the result of byte-for-byte update checking.
-  // |has_found_update| should be true when the update checking finds update of
-  // the script. It's recorded only when |status| is kOk.
-  // This is used only when ServiceWorkerImportedScriptUpdateCheck is enabled.
-  static void RecordByteForByteUpdateCheckStatus(
-      blink::ServiceWorkerStatusCode status,
-      bool has_found_update);
 
   static void RecordGetAllOriginsInfoTime(base::TimeDelta time);
 

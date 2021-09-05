@@ -98,7 +98,11 @@ update_target("//content/common:common") {
       "//vivaldi/platform_media/gpu/decoders/mac/avf_media_reader_warmup.mm",
     ]
 
-    libs += [
+    if (!defined(frameworks)) {
+      frameworks = []
+    }
+
+    frameworks += [
       "AudioToolbox.framework",
     ]
   }
@@ -149,7 +153,11 @@ update_target("//media:media") {
 
     defines = [ "GPU_IMPLEMENTATION" ]
 
-    libs += [
+    if (!defined(frameworks)) {
+      frameworks = []
+    }
+
+    frameworks += [
       "AudioToolbox.framework",
       "AVFoundation.framework",
       "CoreMedia.framework",
@@ -336,7 +344,7 @@ if (is_mac) {
     ]
   }
 
-  update_target("//services/service_manager/sandbox/mac:package_sb_files") {
+  update_target("//sandbox/policy/mac:package_sb_files") {
     sources -= ["renderer.sb"]
     sources += [get_label_info("//vivaldi/platform_media/mac:generate_sb_files", "target_gen_dir")+"/renderer.sb"]
     deps = ["//vivaldi/platform_media/mac:generate_sb_files"]

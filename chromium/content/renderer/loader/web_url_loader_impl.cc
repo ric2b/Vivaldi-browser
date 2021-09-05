@@ -36,8 +36,6 @@
 #include "content/public/common/content_features.h"
 #include "content/public/common/navigation_policy.h"
 #include "content/public/common/origin_util.h"
-#include "content/public/common/previews_state.h"
-#include "content/public/common/referrer.h"
 #include "content/public/renderer/request_peer.h"
 #include "content/renderer/loader/request_extra_data.h"
 #include "content/renderer/loader/resource_dispatcher.h"
@@ -67,6 +65,8 @@
 #include "services/network/public/mojom/url_response_head.mojom.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/loader/mime_sniffing_throttle.h"
+#include "third_party/blink/public/common/loader/previews_state.h"
+#include "third_party/blink/public/common/loader/referrer_utils.h"
 #include "third_party/blink/public/common/loader/resource_type_util.h"
 #include "third_party/blink/public/common/mime_util/mime_util.h"
 #include "third_party/blink/public/common/security/security_style.h"
@@ -82,8 +82,10 @@
 #include "third_party/blink/public/platform/web_url_loader_client.h"
 #include "third_party/blink/public/platform/web_url_request.h"
 #include "third_party/blink/public/platform/web_url_response.h"
+#include "third_party/blink/public/web/web_local_frame.h"
 #include "third_party/blink/public/web/web_security_policy.h"
 #include "third_party/boringssl/src/include/openssl/ssl.h"
+#include "url/origin.h"
 
 using base::Time;
 using base::TimeTicks;
@@ -412,6 +414,10 @@ class WebURLLoaderImpl::Context : public base::RefCounted<Context> {
   static net::NetworkTrafficAnnotationTag GetTrafficAnnotationTag(
       blink::mojom::ResourceType resource_type);
 
+  // Appends variations throttles to |throttles| if needed.
+  void AppendVariationsThrottles(
+      std::vector<std::unique_ptr<blink::URLLoaderThrottle>>* throttles);
+
   WebURLLoaderImpl* loader_;
 
   WebURL url_;
@@ -611,13 +617,6 @@ void WebURLLoaderImpl::Context::Start(
   url_ = request->url;
   report_raw_headers_ = request->report_raw_headers;
 
-  std::unique_ptr<NavigationResponseOverrideParameters> response_override;
-  if (passed_extra_data) {
-    RequestExtraData* extra_data =
-        static_cast<RequestExtraData*>(passed_extra_data.get());
-    response_override = extra_data->TakeNavigationResponseOverrideOwnership();
-  }
-
   // TODO(horo): Check credentials flag is unset when credentials mode is omit.
   //             Check credentials flag is set when credentials mode is include.
 
@@ -639,13 +638,6 @@ void WebURLLoaderImpl::Context::Start(
     request->load_flags |= net::LOAD_DO_NOT_USE_EMBEDDED_IDENTITY;
   }
 
-  // The network request has already been made by the browser. The renderer
-  // should bind the URLLoaderClientEndpoints stored in |response_override| to
-  // an implementation of a URLLoaderClient to get the response body.
-  if (response_override) {
-    DCHECK(!sync_load_response);
-  }
-
   scoped_refptr<RequestExtraData> empty_extra_data;
   RequestExtraData* extra_data;
   if (passed_extra_data) {
@@ -657,7 +649,9 @@ void WebURLLoaderImpl::Context::Start(
   extra_data->CopyToResourceRequest(request.get());
 
   std::unique_ptr<RequestPeer> peer;
-  if (download_to_network_cache_only) {
+  if (download_to_network_cache_only &&
+      !base::FeatureList::IsEnabled(
+          features::kNoStatePrefetchUsingPrefetchLoader)) {
     peer = std::make_unique<SinkPeer>(this);
   } else {
     peer = std::make_unique<WebURLLoaderImpl::RequestPeerImpl>(this);
@@ -681,7 +675,7 @@ void WebURLLoaderImpl::Context::Start(
       throttles.push_back(std::move(throttle));
   }
 
-  VariationsRenderThreadObserver::AppendThrottleIfNeeded(&throttles);
+  AppendVariationsThrottles(&throttles);
 
   uint32_t loader_options = network::mojom::kURLLoadOptionNone;
   if (!no_mime_sniffing) {
@@ -715,7 +709,7 @@ void WebURLLoaderImpl::Context::Start(
   request_id_ = resource_dispatcher_->StartAsync(
       std::move(request), requestor_id, task_runner_,
       GetTrafficAnnotationTag(resource_type), loader_options, std::move(peer),
-      url_loader_factory_, std::move(throttles), std::move(response_override));
+      url_loader_factory_, std::move(throttles));
 
   if (defers_loading_ != NOT_DEFERRING)
     resource_dispatcher_->SetDefersLoading(request_id_, true);
@@ -745,7 +739,7 @@ bool WebURLLoaderImpl::Context::OnReceivedRedirect(
   return client_->WillFollowRedirect(
       url_, redirect_info.new_site_for_cookies,
       WebString::FromUTF8(redirect_info.new_referrer),
-      Referrer::NetReferrerPolicyToBlinkReferrerPolicy(
+      blink::ReferrerUtils::NetToMojoReferrerPolicy(
           redirect_info.new_referrer_policy),
       WebString::FromUTF8(redirect_info.new_method), response,
       report_raw_headers_, removed_headers);
@@ -1229,8 +1223,8 @@ WebURLLoaderImpl::Context::GetTrafficAnnotationTag(
             "These requests cannot be disabled in settings, but they are "
             "sent only if user installs extensions."
           chrome_policy {
-            ExtensionInstallBlacklist {
-              ExtensionInstallBlacklist: {
+            ExtensionInstallBlocklist {
+              ExtensionInstallBlocklist: {
                 entries: '*'
               }
             }
@@ -1258,6 +1252,17 @@ WebURLLoaderImpl::Context::GetTrafficAnnotationTag(
   }
 
   return net::NetworkTrafficAnnotationTag::NotReached();
+}
+
+void WebURLLoaderImpl::Context::AppendVariationsThrottles(
+    std::vector<std::unique_ptr<blink::URLLoaderThrottle>>* throttles) {
+  // No frame is present if the context is associated with a Document that
+  // is not currently being displayed in a Frame.
+  blink::WebLocalFrame* frame = blink::WebLocalFrame::FrameForCurrentContext();
+  url::Origin origin;
+  if (frame)
+    origin = frame->Top()->GetSecurityOrigin();
+  VariationsRenderThreadObserver::AppendThrottleIfNeeded(origin, throttles);
 }
 
 }  // namespace content

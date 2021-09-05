@@ -47,6 +47,7 @@ RenderProcessHostFactory* GetMockProcessFactory() {
 TestWebContents::TestWebContents(BrowserContext* browser_context)
     : WebContentsImpl(browser_context),
       delegate_view_override_(nullptr),
+      web_preferences_changed_counter_(nullptr),
       expect_set_history_offset_and_length_(false),
       expect_set_history_offset_and_length_history_length_(0),
       pause_subresource_loading_called_(false),
@@ -204,6 +205,12 @@ bool TestWebContents::HasPendingDownloadImage(const GURL& url) {
   return !pending_image_downloads_[url].empty();
 }
 
+void TestWebContents::OnWebPreferencesChanged() {
+  WebContentsImpl::OnWebPreferencesChanged();
+  if (web_preferences_changed_counter_)
+    ++*web_preferences_changed_counter_;
+}
+
 bool TestWebContents::TestDidDownloadImage(
     const GURL& url,
     int http_status_code,
@@ -243,15 +250,16 @@ void TestWebContents::SetIsCurrentlyAudible(bool audible) {
   OnAudioStateChanged();
 }
 
-void TestWebContents::TestDidReceiveInputEvent(
-    blink::WebInputEvent::Type type) {
+void TestWebContents::TestDidReceiveMouseDownEvent() {
+  blink::WebMouseEvent event;
+  event.SetType(blink::WebInputEvent::Type::kMouseDown);
   // Use the first RenderWidgetHost from the frame tree to make sure that the
   // interaction doesn't get ignored.
   DCHECK(frame_tree_.Nodes().begin() != frame_tree_.Nodes().end());
   RenderWidgetHostImpl* render_widget_host = (*frame_tree_.Nodes().begin())
                                                  ->current_frame_host()
                                                  ->GetRenderWidgetHost();
-  DidReceiveInputEvent(render_widget_host, type);
+  DidReceiveInputEvent(render_widget_host, event);
 }
 
 void TestWebContents::TestDidFinishLoad(const GURL& url) {
@@ -401,21 +409,18 @@ void TestWebContents::CreateNewFullscreenWidget(
     mojo::PendingAssociatedReceiver<blink::mojom::WidgetHost> blink_widget_host,
     mojo::PendingAssociatedRemote<blink::mojom::Widget> blink_widget) {}
 
-void TestWebContents::ShowCreatedWindow(int process_id,
+void TestWebContents::ShowCreatedWindow(RenderFrameHost* opener,
                                         int route_id,
                                         WindowOpenDisposition disposition,
                                         const gfx::Rect& initial_rect,
-                                        bool user_gesture) {
-}
+                                        bool user_gesture) {}
 
 void TestWebContents::ShowCreatedWidget(int process_id,
                                         int route_id,
-                                        const gfx::Rect& initial_rect) {
-}
+                                        const gfx::Rect& initial_rect) {}
 
 void TestWebContents::ShowCreatedFullscreenWidget(int process_id,
-                                                  int route_id) {
-}
+                                                  int route_id) {}
 
 void TestWebContents::SaveFrameWithHeaders(
     const GURL& url,
@@ -450,18 +455,18 @@ base::UnguessableToken TestWebContents::GetAudioGroupId() {
   return audio_group_id_;
 }
 
-const base::UnguessableToken& TestWebContents::CreatePortal(
+const blink::PortalToken& TestWebContents::CreatePortal(
     std::unique_ptr<WebContents> web_contents) {
   auto portal =
       std::make_unique<Portal>(GetMainFrame(), std::move(web_contents));
-  const base::UnguessableToken& token = portal->portal_token();
+  const blink::PortalToken& token = portal->portal_token();
   portal->CreateProxyAndAttachPortal();
   GetMainFrame()->OnPortalCreatedForTesting(std::move(portal));
   return token;
 }
 
 WebContents* TestWebContents::GetPortalContents(
-    const base::UnguessableToken& portal_token) {
+    const blink::PortalToken& portal_token) {
   Portal* portal = GetMainFrame()->FindPortalByToken(portal_token);
   if (!portal)
     return nullptr;

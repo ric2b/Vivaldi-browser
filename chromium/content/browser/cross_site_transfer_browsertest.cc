@@ -35,8 +35,6 @@
 #include "net/base/escape.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
-#include "net/url_request/url_request.h"
-#include "net/url_request/url_request_status.h"
 #include "testing/gmock/include/gmock/gmock-matchers.h"
 #include "url/gurl.h"
 
@@ -438,7 +436,7 @@ IN_PROC_BROWSER_TEST_F(CrossSiteTransferTest, NoDeliveryToDetachedFrame) {
                             ->GetFrameTree()
                             ->root();
 
-  RenderFrameHost* child_frame = root->child_at(0)->current_frame_host();
+  RenderFrameHostImpl* child_frame = root->child_at(0)->current_frame_host();
 
   // Attacker initiates a navigation to a cross-site document. Under --site-per-
   // process, these bytes must not be sent to the attacker process.
@@ -455,11 +453,10 @@ IN_PROC_BROWSER_TEST_F(CrossSiteTransferTest, NoDeliveryToDetachedFrame) {
   EXPECT_TRUE(target_navigation.WaitForRequestStart());
   target_navigation.ResumeNavigation();
 
-  // Inject a frame detach message. An attacker-controlled renderer could do
-  // this without also cancelling the pending navigation (as blink would, if you
-  // removed the iframe from the document via js).
-  child_frame->OnMessageReceived(
-      FrameHostMsg_Detach(child_frame->GetRoutingID()));
+  // Call a frame detach. An attacker-controlled renderer could do this without
+  // also cancelling the pending navigation (as blink would, if you removed the
+  // iframe from the document via js).
+  child_frame->DetachForTesting();
 
   // This should cancel the navigation.
   EXPECT_FALSE(target_navigation.WaitForResponse())

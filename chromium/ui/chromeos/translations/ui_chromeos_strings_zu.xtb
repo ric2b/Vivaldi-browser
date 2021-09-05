@@ -21,6 +21,7 @@
 <translation id="1150565364351027703">Izibuko zelanga</translation>
 <translation id="115443833402798225">I-Hangul Ahnmatae</translation>
 <translation id="1155759005174418845">Isi-Catalan</translation>
+<translation id="1172970565351728681">Cishe okungu-<ph name="REMAINING_TIME" /> okusele</translation>
 <translation id="1173894706177603556">Qamba kabusha</translation>
 <translation id="117624967391683467">Ikopisha i-<ph name="FILE_NAME" />...</translation>
 <translation id="1178581264944972037">Misa isikhashana</translation>
@@ -106,7 +107,6 @@
 <translation id="2085470240340828803">Ifayela elinegama le-"<ph name="FILENAME" />" selivele likhona. Yini ofuna ukuyenza?</translation>
 <translation id="2121825465123208577">Shintsha usayizi</translation>
 <translation id="2136953289241069843">Ukuguqula amagama (namaste → नमस्कार)</translation>
-<translation id="2138867954865495510">Ayikwazi ukuvula i-"<ph name="PATH" />": <ph name="ERROR_MESSAGE" /></translation>
 <translation id="2163152940313951844">Inhlamvu engavumelekile: <ph name="CHARACTER_NAME" /></translation>
 <translation id="2164862903024139959">Ikhibhodi ye-Vietnamese (TCVN)</translation>
 <translation id="2168214441502403371">Ikhibhodi ye-Persian</translation>
@@ -198,6 +198,7 @@
 <translation id="3236289833370040187">Ubunikazi buzodluliselwa ku-<ph name="DESTINATION_DOMAIN" />.</translation>
 <translation id="3241720467332021590">Isi-Irish</translation>
 <translation id="3245321423178950146">Umculi ongaziwa</translation>
+<translation id="3248185426436836442">Ilindile</translation>
 <translation id="3252266817569339921">Isi-French</translation>
 <translation id="3254434849914415189">Khetha uhlelo lokusebenza oluzenzakalelayo lwamafayela we-<ph name="FILE_TYPE" />:</translation>
 <translation id="3264582393905923483">Okuqukethwe</translation>
@@ -208,6 +209,7 @@
 <translation id="3335337277364016868">Unyaka okurekhodwe ngawo</translation>
 <translation id="3338239663705455570">Ikhibhodi ye-Slovenian</translation>
 <translation id="3353984535370177728">Khetha ifolda okumele uyilayishe</translation>
+<translation id="3356580349448036450">Qedile</translation>
 <translation id="3399597614303179694">Ikhobhodi ye-Macedonian</translation>
 <translation id="3414856743105198592">Ukufometha imidiya engasuswa kuzosula yonke idatha. Ingabe ufisa ukuqhubeka?</translation>
 <translation id="3437801641691368414">Isikhathi okudalwe ngaso</translation>
@@ -243,6 +245,7 @@
 <translation id="3780536599611287598">Awunayo imvume yokuhambisa amafayela ku-'<ph name="FOLDER_NAME" />'.</translation>
 <translation id="3786301125658655746">Awuxhunyiwe ku-inthanethi</translation>
 <translation id="3789841737615482174">Faka</translation>
+<translation id="3793469551756281394">Cishe kusele okungu-<ph name="REMAINING_TIME_HOUR" /> <ph name="REMAINING_TIME_MINUTE" /></translation>
 <translation id="3798449238516105146">Inguqulo</translation>
 <translation id="3801082500826908679">I-Faroese</translation>
 <translation id="3809272675881623365">Unogwaja</translation>
@@ -299,6 +302,7 @@
 <translation id="4481711095103932593">Le folda yabelenwe ne-Windows</translation>
 <translation id="4487088045714738411">Ikhibhodi ye-Belgian</translation>
 <translation id="4522570452068850558">Imininingwane</translation>
+<translation id="4542387084127299777">Ayikwazi ukuvula i-"<ph name="PATH" />"</translation>
 <translation id="4552678318981539154">Thenga isitoreji esiningi</translation>
 <translation id="4559767610552730302">I-Bokeh</translation>
 <translation id="4572815280350369984"><ph name="FILE_TYPE" /> ifayela</translation>
@@ -510,6 +514,7 @@
 <translation id="6629841649550503054">Konke kwenziwe isipele ku-<ph name="BEGIN_LINK" />Google Drayivu!<ph name="END_LINK" /></translation>
 <translation id="6643016212128521049">Sula</translation>
 <translation id="6650726141019353908">Uvemvane ophinki</translation>
+<translation id="6657585470893396449">Igama lokungena</translation>
 <translation id="6710213216561001401">Okwedlule</translation>
 <translation id="6718273304615422081">Iyazipha...</translation>
 <translation id="6751256176799620176">1 ifolda ekhethiwe</translation>
@@ -550,7 +555,6 @@
 <translation id="7012943028104619157"><ph name="ROOT_TITLE" /> (<ph name="ROOT_SUMMARY" />)</translation>
 <translation id="7014174261166285193">Ukufakwa kuhlulekile.</translation>
 <translation id="7040138676081995583">Vula nge...</translation>
-<translation id="7059566040011178088">Ngaphansi kuka-<ph name="REMAINING_TIME" /></translation>
 <translation id="7100897339030255923"><ph name="COUNT" /> izinto ezikhethiwe</translation>
 <translation id="7106346894903675391">Thenga isitoreji esiningi...</translation>
 <translation id="7126604456862387217">'&lt;b&gt;<ph name="SEARCH_STRING" />&lt;/b&gt;' - &lt;em&gt;iDrayivu yokusesha&lt;/em&gt;</translation>
@@ -661,7 +665,6 @@
 <translation id="8193175696669055101">Imodeli yedivayisi</translation>
 <translation id="8208580316430297579">Umsebenzi wobuciko</translation>
 <translation id="8223479393428528563">Ukuze ulondoloze lawo mafayela ngokungaxhunyiwe ku-inthanethi, buyela ku-inthanethi, chofoza ngakwesokudla amafayela, bese ukhethe inketho <ph name="OFFLINE_CHECKBOX_NAME" />.</translation>
-<translation id="8231972167769262174">Mayelana ne-<ph name="REMAINING_TIME" /></translation>
 <translation id="8249296373107784235">Khansela</translation>
 <translation id="8261506727792406068">Susa</translation>
 <translation id="8269755669432358899">Goqa amaphaneli empendulo yamafayela</translation>
@@ -724,6 +727,7 @@
 <translation id="9065203028668620118">Hlela</translation>
 <translation id="9099674669267916096">Ukubalwa kwekhasi</translation>
 <translation id="9110990317705400362">Sibheka izindlela zokwenza ukuphequlula kwakho kuphephe. Ngaphambilini, noma iyiphi iwebhusayithi ingakukhomba ukuthi ungeze isandiso kusiphequluli sakho. Kuzinguqulo zakamuva ze-Google Chrome, kufanele utshele ngokusobala i-Chrome ukuthi ufuna ukufaka lezi zelulo ngokuzingeza ngekhasi lezandiso. <ph name="BEGIN_LINK" />Funda kabanzi<ph name="END_LINK" /></translation>
+<translation id="9111102763498581341">Vula</translation>
 <translation id="912419004897138677">I-Codec</translation>
 <translation id="9129931661813833980">Phina ifolda</translation>
 <translation id="9130775360844693113">Amalungu e-'<ph name="DESTINATION_NAME" />' azothola ukufinyelela kulezi zinto.</translation>

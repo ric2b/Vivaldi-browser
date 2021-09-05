@@ -28,7 +28,6 @@
 #include "content/public/test/browser_test.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
-#include "net/url_request/url_request_context_getter.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/re2/src/re2/re2.h"
 
@@ -206,7 +205,9 @@ class ServiceWorkerPaymentAppFinderBrowserTest : public InProcessBrowserTest {
 
   // Returns the installed apps that have been found in
   // GetAllPaymentAppsForMethods().
-  const content::PaymentAppProvider::PaymentApps& apps() const { return apps_; }
+  const content::InstalledPaymentAppsFinder::PaymentApps& apps() const {
+    return apps_;
+  }
 
   // Returns the installable apps that have been found in
   // GetAllPaymentAppsForMethods().
@@ -266,7 +267,7 @@ class ServiceWorkerPaymentAppFinderBrowserTest : public InProcessBrowserTest {
   // Called by the factory upon completed app lookup. These |apps| have only
   // valid payment methods.
   void OnGotAllPaymentApps(
-      content::PaymentAppProvider::PaymentApps apps,
+      content::InstalledPaymentAppsFinder::PaymentApps apps,
       ServiceWorkerPaymentAppFinder::InstallablePaymentApps installable_apps,
       const std::string& error_message) {
     apps_ = std::move(apps);
@@ -346,7 +347,7 @@ class ServiceWorkerPaymentAppFinderBrowserTest : public InProcessBrowserTest {
 
   // The installed apps that have been found by the factory in
   // GetAllPaymentAppsForMethods() method.
-  content::PaymentAppProvider::PaymentApps apps_;
+  content::InstalledPaymentAppsFinder::PaymentApps apps_;
 
   // The installable apps that have been found by the factory in
   // GetAllPaymentAppsForMethods() method.

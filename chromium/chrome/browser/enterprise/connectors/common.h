@@ -13,6 +13,9 @@
 
 namespace enterprise_connectors {
 
+// Alias to reduce verbosity when using TriggeredRule::Actions.
+using TriggeredRule = ContentAnalysisResponse::Result::TriggeredRule;
+
 // Keys used to read a connector's policy values.
 constexpr char kKeyServiceProvider[] = "service_provider";
 constexpr char kKeyEnable[] = "enable";
@@ -23,6 +26,7 @@ constexpr char kKeyBlockUntilVerdict[] = "block_until_verdict";
 constexpr char kKeyBlockPasswordProtected[] = "block_password_protected";
 constexpr char kKeyBlockLargeFiles[] = "block_large_files";
 constexpr char kKeyBlockUnsupportedFileTypes[] = "block_unsupported_file_types";
+constexpr char kKeyMinimumDataSize[] = "minimum_data_size";
 
 enum class ReportingConnector {
   SECURITY_EVENT,
@@ -50,6 +54,9 @@ struct AnalysisSettings {
   bool block_password_protected_files = false;
   bool block_large_files = false;
   bool block_unsupported_file_types = false;
+
+  // Minimum text size for BulkDataEntry scans. 0 means no minimum.
+  size_t minimum_data_size = 100;
 };
 
 struct ReportingSettings {
@@ -65,6 +72,13 @@ struct ReportingSettings {
 // Returns the pref path corresponding to a connector.
 const char* ConnectorPref(AnalysisConnector connector);
 const char* ConnectorPref(ReportingConnector connector);
+
+// Returns the highest precedence action in the given parameters.
+TriggeredRule::Action GetHighestPrecedenceAction(
+    const ContentAnalysisResponse& response);
+TriggeredRule::Action GetHighestPrecedenceAction(
+    const TriggeredRule::Action& action_1,
+    const TriggeredRule::Action& action_2);
 
 }  // namespace enterprise_connectors
 

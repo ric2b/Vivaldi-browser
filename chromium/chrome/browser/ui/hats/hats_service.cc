@@ -30,9 +30,13 @@
 #include "content/public/browser/web_contents.h"
 #include "net/base/network_change_notifier.h"
 
+constexpr char kHatsSurveyTriggerTesting[] = "testing";
 constexpr char kHatsSurveyTriggerSatisfaction[] = "satisfaction";
 constexpr char kHatsSurveyTriggerSettings[] = "settings";
 constexpr char kHatsSurveyTriggerSettingsPrivacy[] = "settings-privacy";
+
+constexpr char kHatsNextSurveyTriggerIDTesting[] =
+    "zishSVViB0kPN8UwQ150VGjBKuBP";
 
 namespace {
 
@@ -102,7 +106,8 @@ enum class ShouldShowSurveyReasons {
   kNoThirdPartyCookiesBlocked = 11,  // Unused.
   kNoSurveyUnreachable = 12,
   kNoSurveyOverCapacity = 13,
-  kMaxValue = kNoSurveyOverCapacity,
+  kNoSurveyAlreadyInProgress = 14,
+  kMaxValue = kNoSurveyAlreadyInProgress,
 };
 
 }  // namespace
@@ -150,14 +155,14 @@ HatsService::HatsService(Profile* profile) : profile_(profile) {
                                             kHatsSurveyEnSiteIDDefault)
                 .Get()));
   }
-  // Ensure a default survey exists (for demo purpose).
-  if (survey_configs_by_triggers_.find(kHatsSurveyTriggerSatisfaction) ==
-      survey_configs_by_triggers_.end()) {
-    survey_configs_by_triggers_.emplace(
-        kHatsSurveyTriggerSatisfaction,
-        SurveyConfig(kHatsSurveyProbabilityDefault,
-                     kHatsSurveyEnSiteIDDefault));
-  }
+  // Ensure a default survey exists (for testing and demo purpose).
+  auto* default_survey_id =
+      base::FeatureList::IsEnabled(
+          features::kHappinessTrackingSurveysForDesktopMigration)
+          ? kHatsNextSurveyTriggerIDTesting
+          : kHatsSurveyEnSiteIDDefault;
+  survey_configs_by_triggers_.emplace(kHatsSurveyTriggerTesting,
+                                      SurveyConfig(1.0f, default_survey_id));
 }
 
 HatsService::~HatsService() = default;
@@ -203,6 +208,37 @@ bool HatsService::LaunchDelayedSurveyForWebContents(
     pending_tasks_.erase(result.first);
   }
   return success;
+}
+
+void HatsService::RecordSurveyAsShown(std::string survey_id) {
+  // Record the trigger associated with the survey_id. This is recorded instead
+  // of the survey ID itself, as the ID is specific to individual survey
+  // versions. There should be a cooldown before a user is prompted to take a
+  // survey from the same trigger, regardless of whether the survey was updated.
+  // TODO(crbug.com/1110888): When HaTS V1 is deprecated, improve nomenclature
+  // to remove confusion between trigger, trigger ID, survey ID and site ID.
+  auto trigger_survey_config = std::find_if(
+      survey_configs_by_triggers_.begin(), survey_configs_by_triggers_.end(),
+      [&](const std::pair<std::string, SurveyConfig>& pair) {
+        return pair.second.en_site_id_ == survey_id;
+      });
+
+  DCHECK(trigger_survey_config != survey_configs_by_triggers_.end());
+  std::string trigger = trigger_survey_config->first;
+
+  UMA_HISTOGRAM_ENUMERATION(kHatsShouldShowSurveyReasonHistogram,
+                            ShouldShowSurveyReasons::kYes);
+
+  DictionaryPrefUpdate update(profile_->GetPrefs(), prefs::kHatsSurveyMetadata);
+  base::DictionaryValue* pref_data = update.Get();
+  pref_data->SetIntPath(GetMajorVersionPath(trigger),
+                        version_info::GetVersion().components()[0]);
+  pref_data->SetPath(GetLastSurveyStartedTime(trigger),
+                     util::TimeToValue(base::Time::Now()));
+}
+
+void HatsService::HatsNextDialogClosed() {
+  hats_next_dialog_exists_ = false;
 }
 
 void HatsService::SetSurveyMetadataForTesting(
@@ -318,6 +354,14 @@ void HatsService::LaunchSurveyForBrowser(const std::string& trigger,
 }
 
 bool HatsService::ShouldShowSurvey(const std::string& trigger) const {
+  // Do not show if a survey dialog already exists.
+  if (hats_next_dialog_exists_) {
+    UMA_HISTOGRAM_ENUMERATION(
+        kHatsShouldShowSurveyReasonHistogram,
+        ShouldShowSurveyReasons::kNoSurveyAlreadyInProgress);
+    return false;
+  }
+
   // Survey should not be loaded if the corresponding survey config is
   // unavailable.
   if (survey_configs_by_triggers_.find(trigger) ==
@@ -421,29 +465,31 @@ void HatsService::CheckSurveyStatusAndMaybeShow(Browser* browser,
   DCHECK(survey_configs_by_triggers_.find(trigger) !=
          survey_configs_by_triggers_.end());
 
-  if (!checker_)
-    checker_ = std::make_unique<HatsSurveyStatusChecker>(profile_);
-  checker_->CheckSurveyStatus(
-      survey_configs_by_triggers_[trigger].en_site_id_,
-      base::BindOnce(&HatsService::ShowSurvey, weak_ptr_factory_.GetWeakPtr(),
-                     browser, trigger),
-      base::BindOnce(&HatsService::OnSurveyStatusError,
-                     weak_ptr_factory_.GetWeakPtr(), trigger));
+  if (base::FeatureList::IsEnabled(
+          features::kHappinessTrackingSurveysForDesktopMigration)) {
+    // Bypass the checker for showing HaTS Next surveys as the survey website
+    // itself will determine eligibility. This is communicated via updates to
+    // HatsNextWebDialog::OnSurveyStateUpdateReceived.
+    DCHECK(!hats_next_dialog_exists_);
+    browser->window()->ShowHatsBubble(
+        survey_configs_by_triggers_[trigger].en_site_id_);
+    hats_next_dialog_exists_ = true;
+  } else {
+    if (!checker_)
+      checker_ = std::make_unique<HatsSurveyStatusChecker>(profile_);
+    checker_->CheckSurveyStatus(
+        survey_configs_by_triggers_[trigger].en_site_id_,
+        base::BindOnce(&HatsService::ShowSurvey, weak_ptr_factory_.GetWeakPtr(),
+                       browser, trigger),
+        base::BindOnce(&HatsService::OnSurveyStatusError,
+                       weak_ptr_factory_.GetWeakPtr(), trigger));
+  }
 }
 
 void HatsService::ShowSurvey(Browser* browser, const std::string& trigger) {
-  UMA_HISTOGRAM_ENUMERATION(kHatsShouldShowSurveyReasonHistogram,
-                            ShouldShowSurveyReasons::kYes);
-
-  browser->window()->ShowHatsBubble(
-      survey_configs_by_triggers_[trigger].en_site_id_);
-
-  DictionaryPrefUpdate update(profile_->GetPrefs(), prefs::kHatsSurveyMetadata);
-  base::DictionaryValue* pref_data = update.Get();
-  pref_data->SetIntPath(GetMajorVersionPath(trigger),
-                        version_info::GetVersion().components()[0]);
-  pref_data->SetPath(GetLastSurveyStartedTime(trigger),
-                     util::TimeToValue(base::Time::Now()));
+  auto survey_id = survey_configs_by_triggers_[trigger].en_site_id_;
+  RecordSurveyAsShown(survey_id);
+  browser->window()->ShowHatsBubble(survey_id);
   checker_.reset();
 }
 

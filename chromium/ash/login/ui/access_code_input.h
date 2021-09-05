@@ -5,6 +5,8 @@
 #ifndef ASH_LOGIN_UI_ACCESS_CODE_INPUT_H_
 #define ASH_LOGIN_UI_ACCESS_CODE_INPUT_H_
 
+#include "base/optional.h"
+#include "base/strings/string16.h"
 #include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/controls/textfield/textfield_controller.h"
 
@@ -38,6 +40,10 @@ class AccessCodeInput : public views::View, public views::TextfieldController {
 
   virtual void SetInputEnabled(bool input_enabled) = 0;
 
+  // Makes the internal fields read only. In contrast to 'SetInputEnabled',
+  // the focus remain on the element.
+  virtual void SetReadOnly(bool read_only) = 0;
+
   // Clears the input field(s).
   virtual void ClearInput() = 0;
 };
@@ -63,6 +69,8 @@ class FlexCodeInput : public AccessCodeInput {
   FlexCodeInput& operator=(const FlexCodeInput&) = delete;
   ~FlexCodeInput() override;
 
+  void SetAccessibleName(const base::string16& name);
+
   // Appends |value| to the code
   void InsertDigit(int value) override;
 
@@ -76,6 +84,8 @@ class FlexCodeInput : public AccessCodeInput {
   void SetInputColor(SkColor color) override;
 
   void SetInputEnabled(bool input_enabled) override;
+
+  void SetReadOnly(bool read_only) override;
 
   // Clears text in input text field.
   void ClearInput() override;
@@ -200,23 +210,40 @@ class FixedLengthCodeInput : public AccessCodeInput {
   bool HandleGestureEvent(views::Textfield* sender,
                           const ui::GestureEvent& gesture_event) override;
 
-  // Enables/disables entering a PIN. Currently, there is no use-case the uses
+  // Enables/disables entering a PIN. Currently, there is no use-case that uses
   // this with fixed length PINs.
   void SetInputEnabled(bool input_enabled) override;
 
-  // Clears the PIN fields. Currently, there is no use-case the uses this with
-  // fixed length PINs.
+  void SetReadOnly(bool read_only) override;
+
+  // Clears the PIN fields.
   void ClearInput() override;
 
+  // Whether all fields are empty.
+  bool IsEmpty() const;
+
+ protected:
+  // Allow subclasses to control whether the fields can be navigated with
+  // arrows.
+  void SetAllowArrowNavigation(bool allowed);
+
+  int active_input_index() { return active_input_index_; }
+
  private:
+  // Moves focus to the current input field.
+  void FocusActiveField();
+
   // Moves focus to the previous input field if it exists.
   void FocusPreviousField();
 
   // Moves focus to the next input field if it exists.
   void FocusNextField();
 
-  // Returns whether last input field is currently active.
+  // Returns whether first/last input field is currently active.
+  bool IsFirstFieldActive() const;
   bool IsLastFieldActive() const;
+
+  bool HasEmptyFieldToTheLeft() const;
 
   // Returns pointer to the active input field.
   AccessibleInputField* ActiveField() const;
@@ -243,7 +270,15 @@ class FixedLengthCodeInput : public AccessCodeInput {
   // Value of current input, associate with AX event. The value will be the
   // concat string of input fields. i.e. [1][2][3][|][][], text_value_for_a11y_
   // = "123   ".
-  std::string text_value_for_a11y_;
+  base::string16 text_value_for_a11y_;
+
+  // Whether the user can navigate the input fields with the arrow keys.
+  bool arrow_navigation_allowed_ = true;
+
+  // Whether the digits should be rendered as '*' (bullets) instead of digits.
+  // This also affects the ChromeVox behaviour, preventing the digits from
+  // being read out loud.
+  bool is_obscure_pin_ = true;
 
   base::WeakPtrFactory<FixedLengthCodeInput> weak_ptr_factory_{this};
 };

@@ -11,8 +11,10 @@
 
 #include "base/containers/queue.h"
 #include "base/containers/span.h"
+#include "base/gtest_prod_util.h"
 #include "base/optional.h"
 #include "base/time/time.h"
+#include "base/values.h"
 #include "chrome/browser/nearby_sharing/certificates/nearby_share_encrypted_metadata_key.h"
 #include "chrome/browser/nearby_sharing/certificates/nearby_share_visibility.h"
 #include "chrome/browser/nearby_sharing/proto/encrypted_metadata.pb.h"
@@ -31,6 +33,11 @@ class SymmetricKey;
 // metadata encryption key, which can then be advertised.
 class NearbySharePrivateCertificate {
  public:
+  // Inverse operation of ToDictionary(). Returns base::nullopt if the
+  // conversion is not successful
+  static base::Optional<NearbySharePrivateCertificate> FromDictionary(
+      const base::Value& dict);
+
   // Generates a random EC key pair, secret key, and metadata encryption
   // key. Derives the certificate ID from the secret key. Derives the
   // not-after time from |not_before| and the certificate validity period fixed
@@ -51,7 +58,12 @@ class NearbySharePrivateCertificate {
       nearbyshare::proto::EncryptedMetadata unencrypted_metadata,
       std::set<std::vector<uint8_t>> consumed_salts);
 
-  NearbySharePrivateCertificate(NearbySharePrivateCertificate&&);
+  NearbySharePrivateCertificate(const NearbySharePrivateCertificate& other);
+  NearbySharePrivateCertificate& operator=(
+      const NearbySharePrivateCertificate& other);
+  NearbySharePrivateCertificate(NearbySharePrivateCertificate&& other);
+  NearbySharePrivateCertificate& operator=(
+      NearbySharePrivateCertificate&& other);
 
   virtual ~NearbySharePrivateCertificate();
 
@@ -75,10 +87,20 @@ class NearbySharePrivateCertificate {
   base::Optional<std::vector<uint8_t>> Sign(
       base::span<const uint8_t> payload) const;
 
+  // Creates a hash of the |authentication_token|, using |secret_key_|. The use
+  // of HKDF and the output vector size is part of the Nearby Share protocol and
+  // conforms with the GmsCore implementation.
+  std::vector<uint8_t> HashAuthenticationToken(
+      base::span<const uint8_t> authentication_token) const;
+
   // Converts this private certificate to a public certificate proto that can be
   // shared with select contacts. Returns base::nullopt if the conversion was
   // unsuccessful.
   base::Optional<nearbyshare::proto::PublicCertificate> ToPublicCertificate();
+
+  // Converts this private certificate to a dictionary value for storage
+  // in Prefs.
+  base::Value ToDictionary() const;
 
   // For testing only.
   base::queue<std::vector<uint8_t>>& next_salts_for_testing() {
@@ -116,8 +138,9 @@ class NearbySharePrivateCertificate {
   std::unique_ptr<crypto::ECPrivateKey> key_pair_;
 
   // A 32-byte AES key used, along with a salt, to encrypt the
-  // |metadata_encryption_key_|, after which it can be safely advertised.
-  // Included in the public certificate.
+  // |metadata_encryption_key_|, after which it can be safely advertised.  Also,
+  // used to generate an authentication token hash. Included in the public
+  // certificate.
   std::unique_ptr<crypto::SymmetricKey> secret_key_;
 
   // A 14-byte symmetric key used to encrypt |unencrypted_metadata_|. Not
@@ -137,6 +160,8 @@ class NearbySharePrivateCertificate {
   // For testing only.
   base::queue<std::vector<uint8_t>> next_salts_for_testing_;
   base::Optional<base::TimeDelta> offset_for_testing_;
+
+  FRIEND_TEST_ALL_PREFIXES(NearbySharePrivateCertificateTest, ToFromDictionary);
 };
 
 #endif  // CHROME_BROWSER_NEARBY_SHARING_CERTIFICATES_NEARBY_SHARE_PRIVATE_CERTIFICATE_H_

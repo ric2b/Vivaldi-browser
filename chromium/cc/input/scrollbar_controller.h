@@ -5,6 +5,8 @@
 #ifndef CC_INPUT_SCROLLBAR_CONTROLLER_H_
 #define CC_INPUT_SCROLLBAR_CONTROLLER_H_
 
+#include <memory>
+
 #include "cc/cc_export.h"
 #include "cc/input/input_handler.h"
 #include "cc/input/scrollbar.h"
@@ -141,7 +143,8 @@ class CC_EXPORT ScrollbarController {
     return cancelable_autoscroll_task_ != nullptr;
   }
   bool ScrollbarScrollIsActive() const { return scrollbar_scroll_is_active_; }
-  void DidUnregisterScrollbar(ElementId element_id);
+  void DidUnregisterScrollbar(ElementId element_id,
+                              ScrollbarOrientation orientation);
   ScrollbarLayerImplBase* ScrollbarLayer() const;
   void WillBeginImplFrame();
   void ResetState();
@@ -170,7 +173,8 @@ class CC_EXPORT ScrollbarController {
   };
 
   struct CC_EXPORT DragState {
-    // This marks the point at which the drag initiated (relative to the widget)
+    // This marks the point at which the drag initiated (relative to the
+    // scrollbar layer).
     gfx::PointF drag_origin;
 
     // This is needed for thumb snapping when the pointer moves too far away
@@ -215,6 +219,12 @@ class CC_EXPORT ScrollbarController {
       const ScrollbarPart scrollbar_part,
       const bool jump_key_modifier) const;
 
+  // Clamps |scroll_delta| based on the available scrollable amount of
+  // |target_node|. The returned delta includes the page scale factor and is
+  // appropriate for use directly as a delta for GSU.
+  gfx::Vector2dF ComputeClampedDelta(const ScrollNode& target_node,
+                                     const gfx::Vector2dF& scroll_delta) const;
+
   // Returns the rect for the ScrollbarPart.
   gfx::Rect GetRectForScrollbarPart(const ScrollbarPart scrollbar_part) const;
 
@@ -255,6 +265,10 @@ class CC_EXPORT ScrollbarController {
 
   // Returns the pixel delta for a percent-based scroll of the scrollbar
   int GetScrollDeltaForPercentBasedScroll() const;
+
+  // Returns the page scale factor (i.e. pinch zoom factor). This is relevant
+  // for root viewport scrollbar scrolling.
+  float GetPageScaleFactorForScroll() const;
 
   LayerTreeHostImpl* layer_tree_host_impl_;
 

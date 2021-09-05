@@ -13,11 +13,15 @@
 #include "base/mac/foundation_util.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/strings/sys_string_conversions.h"
 #include "components/favicon/ios/web_favicon_driver.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
+#include "ios/chrome/browser/drag_and_drop/drag_and_drop_flag.h"
+#import "ios/chrome/browser/drag_and_drop/drag_item_util.h"
 #import "ios/chrome/browser/drag_and_drop/drop_and_navigate_delegate.h"
 #import "ios/chrome/browser/drag_and_drop/drop_and_navigate_interaction.h"
+#import "ios/chrome/browser/drag_and_drop/url_drag_drop_handler.h"
 #include "ios/chrome/browser/main/browser.h"
 #import "ios/chrome/browser/snapshots/snapshot_tab_helper.h"
 #include "ios/chrome/browser/system_flags.h"
@@ -31,6 +35,7 @@
 #include "ios/chrome/browser/ui/fullscreen/fullscreen_controller.h"
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_features.h"
 #include "ios/chrome/browser/ui/fullscreen/scoped_fullscreen_disabler.h"
+#import "ios/chrome/browser/ui/gestures/view_revealing_vertical_pan_handler.h"
 #import "ios/chrome/browser/ui/ntp/ntp_util.h"
 #import "ios/chrome/browser/ui/popup_menu/public/popup_menu_long_press_delegate.h"
 #import "ios/chrome/browser/ui/tabs/requirements/tab_strip_constants.h"
@@ -44,10 +49,13 @@
 #include "ios/chrome/browser/ui/util/rtl_geometry.h"
 #include "ios/chrome/browser/ui/util/ui_util.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
+#import "ios/chrome/browser/url_loading/url_loading_browser_agent.h"
+#import "ios/chrome/browser/url_loading/url_loading_params.h"
 #import "ios/chrome/browser/web_state_list/all_web_state_observation_forwarder.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/web_state_list/web_state_list_favicon_driver_observer.h"
 #import "ios/chrome/browser/web_state_list/web_state_list_observer_bridge.h"
+#include "ios/chrome/browser/web_state_list/web_state_opener.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/web/public/navigation/navigation_manager.h"
@@ -113,6 +121,11 @@ const CGFloat kNewTabButtonBottomImageInset = -2.0;
 
 // Returns the background color.
 UIColor* BackgroundColor() {
+  if (base::FeatureList::IsEnabled(kExpandedTabStrip)) {
+    // The background needs to be clear to allow the thumb strip to be seen
+    // from behind the tab strip during the enter/exit thumb strip animation.
+    return UIColor.clearColor;
+  }
   return UIColor.blackColor;
 }
 
@@ -165,7 +178,8 @@ UIColor* BackgroundColor() {
                                   WebStateListObserving,
                                   WebStateFaviconDriverObserver,
                                   UIGestureRecognizerDelegate,
-                                  UIScrollViewDelegate> {
+                                  UIScrollViewDelegate,
+                                  URLDropDelegate> {
   Browser* _browser;
   WebStateList* _webStateList;
   UIView* _view;
@@ -255,7 +269,7 @@ UIColor* BackgroundColor() {
   std::unique_ptr<AllWebStateObservationForwarder>
       _allWebStateObservationForwarder;
 
-  API_AVAILABLE(ios(11.0)) DropAndNavigateInteraction* _buttonNewTabInteraction;
+  DropAndNavigateInteraction* _buttonNewTabInteraction;
 }
 
 @property(nonatomic, readonly, retain) TabStripView* tabStripView;
@@ -270,6 +284,12 @@ UIColor* BackgroundColor() {
 // normal scroll view would.  Changing this property causes the tabstrip to
 // redraw and relayout.  Defaults to |YES|.
 @property(nonatomic, assign) BOOL useTabStacking;
+
+// Handler for URL drop interactions.
+@property(nonatomic, strong) URLDragDropHandler* dragDropHandler;
+
+// Pan gesture recognizer for the view revealing pan gesture handler.
+@property(nonatomic, weak) UIPanGestureRecognizer* panGestureRecognizer;
 
 // Initializes the tab array based on the the entries in the |_webStateList|'s.
 // Creates one TabView per Tab and adds it to the tabstrip.  A later call to
@@ -412,6 +432,7 @@ UIColor* BackgroundColor() {
 @synthesize longPressDelegate = _longPressDelegate;
 @synthesize presentationProvider = _presentationProvider;
 @synthesize animationWaitDuration = _animationWaitDuration;
+@synthesize panGestureHandler = _panGestureHandler;
 
 - (instancetype)initWithBrowser:(Browser*)browser style:(TabStripStyle)style {
   if ((self = [super init])) {
@@ -486,10 +507,6 @@ UIColor* BackgroundColor() {
                       action:@selector(recordUserMetrics:)
             forControlEvents:UIControlEventTouchUpInside];
 
-    _buttonNewTabInteraction =
-        [[DropAndNavigateInteraction alloc] initWithDelegate:self];
-    [_buttonNewTab addInteraction:_buttonNewTabInteraction];
-
 #if defined(__IPHONE_13_4)
     if (@available(iOS 13.4, *)) {
       if (base::FeatureList::IsEnabled(kPointerSupport)) {
@@ -521,6 +538,19 @@ UIColor* BackgroundColor() {
                  name:UIAccessibilityVoiceOverStatusDidChangeNotification
                object:nil];
     }
+
+    if (DragAndDropIsEnabled()) {
+      self.dragDropHandler = [[URLDragDropHandler alloc] init];
+      self.dragDropHandler.dropDelegate = self;
+      [_view addInteraction:[[UIDropInteraction alloc]
+                                initWithDelegate:self.dragDropHandler]];
+    } else {
+      // TODO(crbug.com/1101363): Remove old codepath once new DragAndDrop is
+      // fully launched.
+      _buttonNewTabInteraction =
+          [[DropAndNavigateInteraction alloc] initWithDelegate:self];
+      [_buttonNewTab addInteraction:_buttonNewTabInteraction];
+    }
   }
   return self;
 }
@@ -542,6 +572,25 @@ UIColor* BackgroundColor() {
 - (void)hideTabStrip:(BOOL)hidden {
   self.view.hidden = hidden;
   [self updateTabSwitcherGuide];
+}
+
+- (void)tabStripSizeDidChange {
+  [self updateContentSizeAndRepositionViews];
+  [self layoutTabStripSubviews];
+}
+
+- (void)setPanGestureHandler:
+    (ViewRevealingVerticalPanHandler*)panGestureHandler {
+  _panGestureHandler = panGestureHandler;
+  [self.view removeGestureRecognizer:self.panGestureRecognizer];
+
+  UIPanGestureRecognizer* panGestureRecognizer = [[UIPanGestureRecognizer alloc]
+      initWithTarget:panGestureHandler
+              action:@selector(handlePanGesture:)];
+  panGestureRecognizer.maximumNumberOfTouches = 1;
+  [self.view addGestureRecognizer:panGestureRecognizer];
+
+  self.panGestureRecognizer = panGestureRecognizer;
 }
 
 #pragma mark - Private
@@ -785,6 +834,12 @@ UIColor* BackgroundColor() {
                             ApplicationCommands);
 }
 
+- (void)insertNewItemAtIndex:(NSUInteger)index withURL:(const GURL&)newTabURL {
+  UrlLoadParams params =
+      UrlLoadParams::InNewTab(newTabURL, base::checked_cast<int>(index));
+  UrlLoadingBrowserAgent::FromBrowser(_browser)->Load(params);
+}
+
 #pragma mark -
 #pragma mark Tab Drag and Drop methods
 
@@ -909,6 +964,32 @@ UIColor* BackgroundColor() {
 
   // If a drag is already in progress, do not allow another to start.
   return ![self isReorderingTabs];
+}
+
+#pragma mark - URLDropDelegate
+
+- (BOOL)canHandleURLDropInView:(UIView*)view {
+  return !_isReordering;
+}
+
+- (void)view:(UIView*)view didDropURL:(const GURL&)URL atPoint:(CGPoint)point {
+  CGPoint contentPoint = CGPointMake(point.x + _tabStripView.contentOffset.x,
+                                     point.y + _tabStripView.contentOffset.y);
+  for (TabView* tabView in _tabArray) {
+    if (CGRectContainsPoint(tabView.frame, contentPoint)) {
+      int index = [self webStateListIndexForTabView:tabView];
+      DCHECK_NE(WebStateList::kInvalidIndex, index);
+      if (index == WebStateList::kInvalidIndex)
+        return;
+      NSUInteger insertionIndex = base::checked_cast<NSUInteger>(index);
+      if (contentPoint.x > CGRectGetMidX(tabView.frame)) {
+        insertionIndex++;
+      }
+      [self insertNewItemAtIndex:insertionIndex withURL:URL];
+      return;
+    }
+  }
+  [self insertNewItemAtIndex:_webStateList->count() withURL:URL];
 }
 
 #pragma mark -
@@ -1809,7 +1890,7 @@ UIColor* BackgroundColor() {
 }
 
 // Called when the TabView's close button was tapped.
-- (void)tabViewcloseButtonPressed:(TabView*)tabView {
+- (void)tabViewCloseButtonPressed:(TabView*)tabView {
   // Ignore taps while in reordering mode.
   // TODO(crbug.com/754287): We should just hide the close buttons instead.
   if ([self isReorderingTabs])

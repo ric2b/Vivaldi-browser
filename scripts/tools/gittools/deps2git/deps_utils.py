@@ -50,6 +50,7 @@ def GetDepsContent(deps_path, text=None, return_dict=False, git_url=None):
     custom_scope['chromium_git'] = git_url
   var = VarImpl(local_scope, custom_scope)
   global_scope = {
+      'Str':str,
       'Var': var.Lookup,
       'deps': {},
       'deps_os': {},

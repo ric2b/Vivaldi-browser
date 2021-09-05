@@ -23,9 +23,9 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
-#include "mojo/public/cpp/bindings/strong_binding.h"
 #include "mojo/public/cpp/system/wait.h"
 #include "services/tracing/perfetto/perfetto_service.h"
+#include "services/tracing/public/cpp/perfetto/perfetto_session.h"
 #include "services/tracing/public/cpp/trace_event_args_allowlist.h"
 #include "third_party/perfetto/include/perfetto/ext/trace_processor/export_json.h"
 #include "third_party/perfetto/include/perfetto/ext/tracing/core/observable_events.h"
@@ -217,27 +217,35 @@ ConsumerHost::TracingSession::~TracingSession() {
 
 void ConsumerHost::TracingSession::OnPerfettoEvents(
     const perfetto::ObservableEvents& events) {
-  if (!pending_enable_tracing_ack_pids_) {
+  if (!pending_enable_tracing_ack_pids_ ||
+      !events.instance_state_changes_size()) {
     return;
   }
 
   for (const auto& state_change : events.instance_state_changes()) {
-    if (state_change.state() !=
-        perfetto::ObservableEvents::DATA_SOURCE_INSTANCE_STATE_STARTED) {
-      continue;
-    }
+    DataSourceHandle handle(state_change.producer_name(),
+                            state_change.data_source_name());
+    data_source_states_[handle] =
+        state_change.state() ==
+        perfetto::ObservableEvents::DATA_SOURCE_INSTANCE_STATE_STARTED;
+  }
 
-    if (state_change.data_source_name() != mojom::kTraceEventDataSourceName) {
-      continue;
-    }
+  // Data sources are first reported as being stopped before starting, so once
+  // all the data sources we know about have started we can declare tracing
+  // begun.
+  bool all_data_sources_started = std::all_of(
+      data_source_states_.cbegin(), data_source_states_.cend(),
+      [](std::pair<DataSourceHandle, bool> state) { return state.second; });
+  if (!all_data_sources_started)
+    return;
 
+  for (const auto& it : data_source_states_) {
     // Attempt to parse the PID out of the producer name.
     base::ProcessId pid;
-    if (!PerfettoService::ParsePidFromProducerName(state_change.producer_name(),
+    if (!PerfettoService::ParsePidFromProducerName(it.first.producer_name(),
                                                    &pid)) {
       continue;
     }
-
     pending_enable_tracing_ack_pids_->erase(pid);
   }
   MaybeSendEnableTracingAck();
@@ -396,7 +404,11 @@ void ConsumerHost::TracingSession::DisableTracingAndEmitJson(
       perfetto::trace_processor::TraceProcessorStorage::CreateInstance(
           processor_config);
 
-  DisableTracing();
+  if (tracing_enabled_) {
+    DisableTracing();
+  } else {
+    host_->consumer_endpoint()->ReadBuffers();
+  }
 }
 
 void ConsumerHost::TracingSession::ExportJson() {
@@ -543,19 +555,8 @@ void ConsumerHost::TracingSession::OnTraceStats(
     std::move(request_buffer_usage_callback_).Run(false, 0.0f, false);
     return;
   }
-
-  const perfetto::TraceStats::BufferStats& buf_stats = stats.buffer_stats()[0];
-  size_t bytes_in_buffer = buf_stats.bytes_written() - buf_stats.bytes_read() -
-                           buf_stats.bytes_overwritten() +
-                           buf_stats.padding_bytes_written() -
-                           buf_stats.padding_bytes_cleared();
-  double percent_full =
-      bytes_in_buffer / static_cast<double>(buf_stats.buffer_size());
-  percent_full = base::ClampToRange(percent_full, 0.0, 1.0);
-  bool data_loss = buf_stats.chunks_overwritten() > 0 ||
-                   buf_stats.chunks_discarded() > 0 ||
-                   buf_stats.abi_violations() > 0 ||
-                   buf_stats.trace_writer_packet_loss() > 0;
+  double percent_full = GetTraceBufferUsage(stats);
+  bool data_loss = HasLostData(stats);
   std::move(request_buffer_usage_callback_).Run(true, percent_full, data_loss);
 }
 

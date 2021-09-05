@@ -182,10 +182,10 @@ void VivaldiNativeAppWindowViewsMac::OnBeforeWidgetInit(
       new VivaldiWindowNativeWidgetMac(widget(), is_frameless());
 }
 
-views::NonClientFrameView*
+std::unique_ptr<views::NonClientFrameView>
 VivaldiNativeAppWindowViewsMac::CreateNonClientFrameView(
     views::Widget* widget) {
-  return new VivaldiNativeAppWindowFrameViewMac(this);
+  return std::make_unique<VivaldiNativeAppWindowFrameViewMac>(this);
 }
 
 bool VivaldiNativeAppWindowViewsMac::IsMaximized() const {

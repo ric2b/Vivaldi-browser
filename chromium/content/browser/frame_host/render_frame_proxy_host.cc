@@ -175,9 +175,7 @@ void RenderFrameProxyHost::SetChildRWHView(
 }
 
 RenderViewHostImpl* RenderFrameProxyHost::GetRenderViewHost() {
-  return frame_tree_node_->frame_tree()
-      ->GetRenderViewHost(site_instance_.get())
-      .get();
+  return render_view_host_.get();
 }
 
 RenderWidgetHostView* RenderFrameProxyHost::GetRenderWidgetHostView() {
@@ -200,14 +198,7 @@ bool RenderFrameProxyHost::OnMessageReceived(const IPC::Message& msg) {
       cross_process_frame_connector_->OnMessageReceived(msg))
     return true;
 
-  bool handled = true;
-  IPC_BEGIN_MESSAGE_MAP(RenderFrameProxyHost, msg)
-    IPC_MESSAGE_HANDLER(FrameHostMsg_Detach, OnDetach)
-    IPC_MESSAGE_HANDLER(FrameHostMsg_PrintCrossProcessSubframe,
-                        OnPrintCrossProcessSubframe)
-    IPC_MESSAGE_UNHANDLED(handled = false)
-  IPC_END_MESSAGE_MAP()
-  return handled;
+  return false;
 }
 
 bool RenderFrameProxyHost::InitRenderFrameProxy() {
@@ -263,9 +254,7 @@ bool RenderFrameProxyHost::InitRenderFrameProxy() {
             site_instance_.get());
   }
 
-  int view_routing_id = frame_tree_node_->frame_tree()
-                            ->GetRenderViewHost(site_instance_.get())
-                            ->GetRoutingID();
+  int view_routing_id = GetRenderViewHost()->GetRoutingID();
   GetProcess()->GetRendererInterface()->CreateFrameProxy(
       routing_id_, view_routing_id, opener_frame_token, parent_routing_id,
       frame_tree_node_->current_replication_state(), frame_token_,
@@ -352,6 +341,13 @@ RenderFrameProxyHost::GetAssociatedRemoteFrame() {
   return remote_frame_;
 }
 
+const mojo::AssociatedRemote<blink::mojom::RemoteMainFrame>&
+RenderFrameProxyHost::GetAssociatedRemoteMainFrame() {
+  if (!remote_main_frame_)
+    GetRemoteAssociatedInterfaces()->GetInterface(&remote_main_frame_);
+  return remote_main_frame_;
+}
+
 const mojo::AssociatedRemote<content::mojom::RenderFrameProxy>&
 RenderFrameProxyHost::GetAssociatedRenderFrameProxy() {
   if (!render_frame_proxy_)
@@ -429,7 +425,7 @@ void RenderFrameProxyHost::ScrollRectToVisible(
                                                   std::move(params));
 }
 
-void RenderFrameProxyHost::OnDetach() {
+void RenderFrameProxyHost::Detach() {
   // NOTE(andre@vivaldi.com) : We cannot remove outer delegate frame here if
   // Vivaldi since we show tabs inside a WebViewGuest. If an extension injects
   // an iframe inside the webview and this iframe closes the tab would end up
@@ -601,24 +597,6 @@ void RenderFrameProxyHost::RouteMessageEvent(
       // to the target page.
       target_rfh->delegate()->EnsureOpenerProxiesExist(source_rfh);
 
-      // Transfer user activation state in the frame tree in the browser and
-      // the non-source and non-target renderer processes when
-      // |transfer_user_activation| is true. We are making an expriment with
-      // dynamic delegation of "autoplay" capability using this post message
-      // approach to transfer user activation.
-      // TODO(lanwei): we should transfer user activation state only when
-      // |source_rfh| and |target_rfh| are in the same frame tree.
-      bool should_transfer_user_activation =
-          base::FeatureList::IsEnabled(
-              features::kUserActivationPostMessageTransfer) &&
-          message.transfer_user_activation;
-      should_transfer_user_activation =
-          should_transfer_user_activation || message.allow_autoplay;
-      if (should_transfer_user_activation &&
-          source_rfh->frame_tree_node()->HasTransientUserActivation()) {
-        target_rfh->frame_tree_node()->TransferUserActivationFrom(source_rfh);
-      }
-
       // If the message source is a cross-process subframe, its proxy will only
       // be created in --site-per-process mode, which is the case when we set an
       // actual non-empty value for |translated_source_token|. Otherwise (if the
@@ -639,8 +617,26 @@ void RenderFrameProxyHost::RouteMessageEvent(
                                target_origin, std::move(message));
 }
 
+void RenderFrameProxyHost::PrintCrossProcessSubframe(const gfx::Rect& rect,
+                                                     int32_t document_cookie) {
+  RenderFrameHostImpl* rfh = frame_tree_node_->current_frame_host();
+  rfh->delegate()->PrintCrossProcessSubframe(rect, document_cookie, rfh);
+}
+
 void RenderFrameProxyHost::FocusPage() {
   frame_tree_node_->current_frame_host()->FocusPage();
+}
+
+void RenderFrameProxyHost::RouteCloseEvent() {
+  // Tell the active RenderViewHost to run unload handlers and close, as long
+  // as the request came from a RenderViewHost in the same BrowsingInstance.
+  // In most cases, we receive this from a swapped out RenderViewHost.
+  // It is possible to receive it from one that has just been swapped in,
+  // in which case we might as well deliver the message anyway.
+  RenderViewHostImpl* rvh = static_cast<RenderViewHostImpl*>(
+      frame_tree_node_->current_frame_host()->GetRenderViewHost());
+  if (GetSiteInstance()->IsRelatedSiteInstance(rvh->GetSiteInstance()))
+    rvh->ClosePage();
 }
 
 void RenderFrameProxyHost::OpenURL(mojom::OpenURLParamsPtr params) {
@@ -741,12 +737,6 @@ void RenderFrameProxyHost::AdvanceFocus(
 
 bool RenderFrameProxyHost::IsInertForTesting() {
   return cross_process_frame_connector_->IsInert();
-}
-
-void RenderFrameProxyHost::OnPrintCrossProcessSubframe(const gfx::Rect& rect,
-                                                       int document_cookie) {
-  RenderFrameHostImpl* rfh = frame_tree_node_->current_frame_host();
-  rfh->delegate()->PrintCrossProcessSubframe(rect, document_cookie, rfh);
 }
 
 blink::AssociatedInterfaceProvider*

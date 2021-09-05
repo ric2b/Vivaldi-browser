@@ -897,7 +897,7 @@ IFACEMETHODIMP BrowserAccessibilityComWin::get_nodeInfo(
 
   if (owner()->IsDocument()) {
     *node_type = NODETYPE_DOCUMENT;
-  } else if (owner()->IsTextOnlyObject()) {
+  } else if (owner()->IsText()) {
     *node_type = NODETYPE_TEXT;
   } else {
     *node_type = NODETYPE_ELEMENT;
@@ -1447,7 +1447,6 @@ void BrowserAccessibilityComWin::UpdateStep2ComputeHypertext() {
 }
 
 void BrowserAccessibilityComWin::UpdateStep3FireEvents() {
-  int32_t state = MSAAState();
   const bool ignored = owner()->IsIgnored();
 
   // Suppress all of these events when the node is ignored, or when the ignored
@@ -1461,14 +1460,6 @@ void BrowserAccessibilityComWin::UpdateStep3FireEvents() {
     // Fire an event if the description, help, or value changes.
     if (description() != old_win_attributes_->description)
       FireNativeEvent(EVENT_OBJECT_DESCRIPTIONCHANGE);
-
-    // Do not fire EVENT_OBJECT_STATECHANGE if the change was due to a focus
-    // change.
-    if ((state & ~STATE_SYSTEM_FOCUSED) !=
-            (old_win_attributes_->ia_state & ~STATE_SYSTEM_FOCUSED) ||
-        ComputeIA2State() != old_win_attributes_->ia2_state) {
-      FireNativeEvent(EVENT_OBJECT_STATECHANGE);
-    }
 
     // Fire an event if this container object has scrolled.
     int sx = 0;

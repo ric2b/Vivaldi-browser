@@ -111,6 +111,14 @@ GREYElementInteraction* GetInteractionForPasswordsExportConfirmAlert(
       inRoot:grey_accessibilityID(kPasswordsExportConfirmViewId)];
 }
 
+// Matcher for "Saved Passwords" header in the password list.
+id<GREYMatcher> SavedPasswordsHeaderMatcher() {
+  return grey_allOf(
+      grey_accessibilityLabel(
+          l10n_util::GetNSString(IDS_IOS_SETTINGS_PASSWORDS_SAVED_HEADING)),
+      grey_accessibilityTrait(UIAccessibilityTraitHeader), nullptr);
+}
+
 // Matcher for a UITextField inside a SettingsSearchCell.
 id<GREYMatcher> SearchTextField() {
   return grey_accessibilityID(kPasswordsSearchBarId);
@@ -579,15 +587,12 @@ void TapEdit() {
       performAction:grey_tap()];
 
   // Wait until the alert and the detail view are dismissed.
-  [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
+  [ChromeEarlGreyUI waitForAppToIdle];
 
   // Check that the current view is now the list view, by locating the header
   // of the list of passwords.
-  [[EarlGrey selectElementWithMatcher:
-                 grey_allOf(grey_accessibilityLabel(l10n_util::GetNSString(
-                                IDS_IOS_SETTINGS_PASSWORDS_SAVED_HEADING)),
-                            grey_accessibilityTrait(UIAccessibilityTraitHeader),
-                            nullptr)] assertWithMatcher:grey_notNil()];
+  [[EarlGrey selectElementWithMatcher:SavedPasswordsHeaderMatcher()]
+      assertWithMatcher:grey_notNil()];
 
   // Verify that the deletion was propagated to the PasswordStore.
   GREYAssertEqual(0, [PasswordSettingsAppInterface passwordStoreResultsCount],
@@ -637,15 +642,12 @@ void TapEdit() {
       performAction:grey_tap()];
 
   // Wait until the alert and the detail view are dismissed.
-  [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
+  [ChromeEarlGreyUI waitForAppToIdle];
 
   // Check that the current view is now the list view, by locating the header
   // of the list of passwords.
-  [[EarlGrey selectElementWithMatcher:
-                 grey_allOf(grey_accessibilityLabel(l10n_util::GetNSString(
-                                IDS_IOS_SETTINGS_PASSWORDS_SAVED_HEADING)),
-                            grey_accessibilityTrait(UIAccessibilityTraitHeader),
-                            nullptr)] assertWithMatcher:grey_notNil()];
+  [[EarlGrey selectElementWithMatcher:SavedPasswordsHeaderMatcher()]
+      assertWithMatcher:grey_notNil()];
 
   // Verify that the deletion was propagated to the PasswordStore.
   GREYAssertEqual(0, [PasswordSettingsAppInterface passwordStoreResultsCount],
@@ -687,7 +689,7 @@ void TapEdit() {
       performAction:grey_tap()];
 
   // Wait until the alert and the detail view are dismissed.
-  [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
+  [ChromeEarlGreyUI waitForAppToIdle];
 
   // Check that the current view is now the list view, by locating the header
   // of the list of passwords.
@@ -871,6 +873,11 @@ void TapEdit() {
 // Checks that attempts to copy the password via the context menu item provide
 // an appropriate feedback.
 - (void)testCopyPasswordMenuItem {
+  if (![ChromeEarlGrey isIPadIdiom]) {
+    // TODO(crbug.com/1109644): Enable the test on iPhone once the bug is fixed.
+    EARL_GREY_TEST_DISABLED(@"Disabled for iPhone.");
+  }
+
   // Saving a form is needed for using the "password details" view.
   SaveExamplePasswordForm();
 
@@ -914,6 +921,11 @@ void TapEdit() {
 // Checks that attempts to show and hide the password via the context menu item
 // provide an appropriate feedback.
 - (void)testShowHidePasswordMenuItem {
+  if (![ChromeEarlGrey isIPadIdiom]) {
+    // TODO(crbug.com/1109644): Enable the test on iPhone once the bug is fixed.
+    EARL_GREY_TEST_DISABLED(@"Disabled for iPhone.");
+  }
+
   // Saving a form is needed for using the "password details" view.
   SaveExamplePasswordForm();
 
@@ -1343,6 +1355,11 @@ void TapEdit() {
 
   OpenPasswordSettings();
 
+  // Wait for the loading indicator to disappear, and the sections to be on
+  // screen, before scrolling.
+  [[EarlGrey selectElementWithMatcher:SavedPasswordsHeaderMatcher()]
+      assertWithMatcher:grey_notNil()];
+
   // Aim at an entry almost at the end of the list.
   constexpr int kRemoteIndex = kPasswordsCount - 2;
   // The scrolling in GetInteractionForPasswordEntry has too fine steps to
@@ -1420,7 +1437,7 @@ void TapEdit() {
           IDS_IOS_EXPORT_PASSWORDS)) performAction:grey_tap()];
 
   // Wait until the alerts are dismissed.
-  [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
+  [ChromeEarlGreyUI waitForAppToIdle];
 
   // On iOS 13+ phone when building with the iOS 12 SDK, the share sheet is
   // presented fullscreen, so the export button is removed from the view
@@ -1461,7 +1478,7 @@ void TapEdit() {
   }
 
   // Wait until the activity view is dismissed.
-  [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
+  [ChromeEarlGreyUI waitForAppToIdle];
 
   // Check that export button is re-enabled.
   [[EarlGrey
@@ -1514,6 +1531,11 @@ void TapEdit() {
 
 // Test search and delete all passwords and blocked items.
 - (void)testSearchAndDeleteAllPasswords {
+  // TODO(crbug.com/1129441): This is failing regularly downstream on iOS14.
+  if (@available(iOS 14, *)) {
+    EARL_GREY_TEST_DISABLED(@"Test disabled on iOS14.");
+  }
+
   SaveExamplePasswordForms();
   SaveExampleBlockedForms();
 

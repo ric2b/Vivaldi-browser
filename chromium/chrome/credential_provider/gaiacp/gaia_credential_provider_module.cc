@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "chrome/credential_provider/gaiacp/dllmain.h"
+#include "chrome/credential_provider/gaiacp/gaia_credential_provider_module.h"
 
 #include "base/command_line.h"
 #include "base/files/file_path.h"
@@ -60,10 +60,10 @@ CGaiaCredentialProviderModule::UpdateRegistryAppId(BOOL do_register) throw() {
       eventlog_path.Append(FILE_PATH_LITERAL("gcp_eventlog_provider.dll"));
 
   auto provider_guid_string =
-      base::win::String16FromGUID(CLSID_GaiaCredentialProvider);
+      base::win::WStringFromGUID(CLSID_GaiaCredentialProvider);
 
   auto filter_guid_string =
-      base::win::String16FromGUID(CLSID_CGaiaCredentialProviderFilter);
+      base::win::WStringFromGUID(CLSID_CGaiaCredentialProviderFilter);
 
   ATL::_ATL_REGMAP_ENTRY regmap[] = {
       {L"CP_CLASS_GUID", base::as_wcstr(provider_guid_string.c_str())},
@@ -127,15 +127,6 @@ BOOL CGaiaCredentialProviderModule::DllMain(HINSTANCE /*hinstance*/,
       logging::SetEventSource("GCPW", GCPW_CATEGORY, MSG_LOG_MESSAGE);
       if (GetGlobalFlagOrDefault(kRegEnableVerboseLogging, 0))
         logging::SetMinLogLevel(logging::LOG_VERBOSE);
-
-      wchar_t process_name[MAX_PATH] = {0};
-      GetModuleFileName(nullptr, process_name, MAX_PATH);
-
-      LOGFN(INFO) << "GCPW Initialized in " << process_name
-                  << " GCPW Version: " << (CHROME_VERSION_STRING)
-                  << " Windows Build: "
-                  << base::win::OSInfo::GetInstance()->Kernel32BaseVersion()
-                  << " Version:" << GetWindowsVersion();
       break;
     }
     case DLL_PROCESS_DETACH:

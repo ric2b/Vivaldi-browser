@@ -52,15 +52,14 @@ InternalFormatType BufferFormatToInternalFormatType(gfx::BufferFormat format,
       return {GL_BGRA_EXT, GL_UNSIGNED_BYTE};
     case gfx::BufferFormat::RGBA_F16:
       return {GL_RGBA, GL_HALF_FLOAT};
-    case gfx::BufferFormat::YUV_420_BIPLANAR:
     case gfx::BufferFormat::BGRA_1010102:
-      NOTIMPLEMENTED();
-      return {GL_NONE, GL_NONE};
+      return {GL_RGB10_A2, GL_UNSIGNED_INT_2_10_10_10_REV};
     case gfx::BufferFormat::BGR_565:
     case gfx::BufferFormat::RGBA_4444:
     case gfx::BufferFormat::RGBX_8888:
     case gfx::BufferFormat::RGBA_1010102:
     case gfx::BufferFormat::YVU_420:
+    case gfx::BufferFormat::YUV_420_BIPLANAR:
     case gfx::BufferFormat::P010:
       NOTREACHED();
       return {GL_NONE, GL_NONE};
@@ -251,8 +250,11 @@ bool GLImageIOSurfaceEGL::CopyTexImage(unsigned target) {
     return false;
   }
 
-  if (format_ != gfx::BufferFormat::YUV_420_BIPLANAR)
+  // TODO(crbug.com/1115621): We should support gfx::BufferFormat::P010 here,
+  // but EGL doesn't seem to be able to sample from the P010 Y and UV textures.
+  if (format_ != gfx::BufferFormat::YUV_420_BIPLANAR) {
     return false;
+  }
 
   GLContext* gl_context = GLContext::GetCurrent();
   DCHECK(gl_context);
@@ -362,7 +364,8 @@ bool GLImageIOSurfaceEGL::CopyTexImage(unsigned target) {
     return false;
   }
 
-  yuv_to_rgb_converter->CopyYUV420ToRGB(target, size_, rgb_texture);
+  yuv_to_rgb_converter->CopyYUV420ToRGB(target, size_, rgb_texture,
+                                        GL_UNSIGNED_BYTE);
   if (glGetError() != GL_NO_ERROR) {
     LOG(ERROR) << "Failed converting from YUV to RGB";
     return false;

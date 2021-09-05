@@ -229,7 +229,7 @@ IN_PROC_BROWSER_TEST_F(CompositorEventAckBrowserTest, MouseWheel) {
 }
 
 // Disabled on MacOS because it doesn't support touch input.
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #define MAYBE_TouchStart DISABLED_TouchStart
 #else
 #define MAYBE_TouchStart TouchStart
@@ -240,7 +240,7 @@ IN_PROC_BROWSER_TEST_F(CompositorEventAckBrowserTest, MAYBE_TouchStart) {
 }
 
 // Disabled on MacOS because it doesn't support touch input.
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #define MAYBE_TouchStartDuringFling DISABLED_TouchStartDuringFling
 #else
 #define MAYBE_TouchStartDuringFling TouchStartDuringFling
@@ -260,7 +260,6 @@ IN_PROC_BROWSER_TEST_F(CompositorEventAckBrowserTest,
   touch_event.SetTimeStamp(ui::EventTimeForNow());
   input_event_router->RouteTouchEvent(root_view, &touch_event,
                                       ui::LatencyInfo());
-  GetWidgetHost()->input_router()->OnSetTouchAction(cc::TouchAction::kAuto);
 
   // Send GSB to start scrolling sequence.
   blink::WebGestureEvent gesture_scroll_begin(
@@ -313,7 +312,7 @@ IN_PROC_BROWSER_TEST_F(CompositorEventAckBrowserTest,
 }
 
 // Disabled on MacOS because it doesn't support touch input.
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #define MAYBE_PassiveTouchStartBlockingTouchEnd \
   DISABLED_PassiveTouchStartBlockingTouchEnd
 #else

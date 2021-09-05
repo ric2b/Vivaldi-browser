@@ -88,14 +88,12 @@ const int kResponseCodeUninitialized = -1;
 ContextualSearchDelegate::ContextualSearchDelegate(
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
     TemplateURLService* template_url_service,
-    const ContextualSearchDelegate::SearchTermResolutionCallback&
-        search_term_callback,
-    const ContextualSearchDelegate::SurroundingTextCallback&
-        surrounding_text_callback)
+    ContextualSearchDelegate::SearchTermResolutionCallback search_term_callback,
+    ContextualSearchDelegate::SurroundingTextCallback surrounding_text_callback)
     : url_loader_factory_(std::move(url_loader_factory)),
       template_url_service_(template_url_service),
-      search_term_callback_(search_term_callback),
-      surrounding_text_callback_(surrounding_text_callback) {
+      search_term_callback_(std::move(search_term_callback)),
+      surrounding_text_callback_(std::move(surrounding_text_callback)) {
   field_trial_.reset(new ContextualSearchFieldTrial());
 }
 
@@ -298,10 +296,8 @@ std::string ContextualSearchDelegate::BuildRequestUrl(
   }
 
   int mainFunctionVersion = kContextualSearchRequestVersion;
-  if (base::FeatureList::IsEnabled(chrome::android::kRelatedSearches) &&
-      context_->GetStartOffset() == context_->GetEndOffset()) {
+  if (context_->GetRelatedSearches())
     mainFunctionVersion = kRelatedSearchesVersion;
-  }
 
   TemplateURLRef::SearchTermsArgs::ContextualSearchParams params(
       mainFunctionVersion, contextual_cards_version, context->GetHomeCountry(),
@@ -406,12 +402,6 @@ bool ContextualSearchDelegate::CanSendPageURL(
   // page URL.
   if (field_trial_->IsSendBasePageURLDisabled())
     return false;
-
-  // TODO(donnd): privacy review needed before launch.
-  // See https://crbug.com/1064141.
-  if (base::FeatureList::IsEnabled(chrome::android::kRelatedSearches)) {
-    return true;
-  }
 
   // Ensure that the default search provider is Google.
   const TemplateURL* default_search_provider =

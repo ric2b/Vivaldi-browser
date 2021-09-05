@@ -27,7 +27,7 @@ struct PrintManager::FrameDispatchHelper {
     manager->OnScriptedPrint(render_frame_host, scripted_params, reply_msg);
   }
 
-  void OnDidPrintDocument(const PrintHostMsg_DidPrintDocument_Params& params,
+  void OnDidPrintDocument(const mojom::DidPrintDocumentParams& params,
                           IPC::Message* reply_msg) {
     // If DidPrintDocument message was received then need to transition from
     // a variable allocated on stack (which has efficient memory management
@@ -74,7 +74,8 @@ void PrintManager::DelayedFrameDispatchHelper::RenderFrameDeleted(
 }
 
 PrintManager::PrintManager(content::WebContents* contents)
-    : content::WebContentsObserver(contents) {}
+    : content::WebContentsObserver(contents),
+      print_manager_host_receivers_(contents, this) {}
 
 PrintManager::~PrintManager() = default;
 
@@ -84,10 +85,6 @@ bool PrintManager::OnMessageReceived(
   FrameDispatchHelper helper = {this, render_frame_host};
   bool handled = true;
   IPC_BEGIN_MESSAGE_MAP(PrintManager, message)
-    IPC_MESSAGE_HANDLER(PrintHostMsg_DidGetPrintedPagesCount,
-                        OnDidGetPrintedPagesCount)
-    IPC_MESSAGE_HANDLER(PrintHostMsg_DidGetDocumentCookie,
-                        OnDidGetDocumentCookie)
     IPC_MESSAGE_FORWARD_DELAY_REPLY(
         PrintHostMsg_GetDefaultPrintSettings, &helper,
         FrameDispatchHelper::OnGetDefaultPrintSettings)
@@ -107,14 +104,14 @@ void PrintManager::RenderFrameDeleted(
   print_render_frames_.erase(render_frame_host);
 }
 
-void PrintManager::OnDidGetPrintedPagesCount(int cookie,
-                                             int number_pages) {
+void PrintManager::DidGetPrintedPagesCount(int32_t cookie,
+                                           int32_t number_pages) {
   DCHECK_GT(cookie, 0);
   DCHECK_GT(number_pages, 0);
   number_pages_ = number_pages;
 }
 
-void PrintManager::OnDidGetDocumentCookie(int cookie) {
+void PrintManager::DidGetDocumentCookie(int32_t cookie) {
   cookie_ = cookie;
 }
 

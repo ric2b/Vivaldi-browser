@@ -83,6 +83,7 @@ enum CookieEffectiveSameSite {
   kLaxMode = 1,
   kStrictMode = 2,
   kLaxModeAllowUnsafe = 3,
+  kUndefined = 4,
 };
 
 enum ContextType {
@@ -141,19 +142,15 @@ struct CookieInclusionStatus {
   uint32 warning_reasons;
 };
 
-struct CookieWithStatus {
-  CanonicalCookie cookie;
-  CookieInclusionStatus status;
-};
-
-struct CookieAndLineWithStatus {
+struct CookieAndLineWithAccessResult {
   CanonicalCookie? cookie;
   string cookie_string;
-  CookieInclusionStatus status;
+  CookieAccessResult access_result;
 };
 
 struct CookieAccessResult {
   CookieEffectiveSameSite effective_same_site;
+  CookieAccessSemantics access_semantics;
   CookieInclusionStatus status;
 };
 
@@ -184,8 +181,8 @@ enum CookieChangeCause {
 struct CookieChangeInfo {
   // The cookie that changed, in its post-change state.
   CanonicalCookie cookie;
-  // Access semantics of the cookie at the time of the change.
-  CookieAccessSemantics access_semantics;
+  // Access results at the time of the change.
+  CookieAccessResult access_result;
   CookieChangeCause cause;
 };
 
@@ -305,7 +302,7 @@ interface CookieManager {
   // |status| will be set to INCLUDE.
   SetCanonicalCookie(CanonicalCookie cookie, url.mojom.Url source_url,
                      CookieOptions cookie_options)
-      => (CookieInclusionStatus status);
+      => (CookieAccessResult access_result);
 
   // Delete a cookie. Returns true if a cookie was deleted.
   DeleteCanonicalCookie(CanonicalCookie cookie) => (bool success);

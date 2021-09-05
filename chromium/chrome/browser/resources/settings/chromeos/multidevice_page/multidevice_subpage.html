@@ -8,9 +8,11 @@
 <link rel="import" href="chrome://resources/html/i18n_behavior.html">
 <link rel="import" href="../../i18n_setup.html">
 <link rel="import" href="../os_route.html">
+<link rel="import" href="../os_settings_routes.html">
 <link rel="import" href="../../settings_shared_css.html">
 <link rel="import" href="../../settings_vars_css.html">
 <link rel="import" href="multidevice_constants.html">
+<link rel="import" href="multidevice_browser_proxy.html">
 <link rel="import" href="multidevice_feature_behavior.html">
 <link rel="import" href="multidevice_feature_item.html">
 <link rel="import" href="multidevice_feature_toggle.html">
@@ -95,6 +97,42 @@
                 $i18n{multideviceSetupButton}
               </cr-button>
             </template>
+          </settings-multidevice-feature-item>
+        </template>
+        <template is="dom-if"
+            if="[[isFeatureSupported(
+                MultiDeviceFeature.PHONE_HUB, pageContentData)]]"
+            restamp>
+          <settings-multidevice-feature-item id="phoneHubItem"
+              feature="[[MultiDeviceFeature.PHONE_HUB]]"
+              page-content-data="[[pageContentData]]">
+          </settings-multidevice-feature-item>
+        </template>
+        <template is="dom-if"
+            if="[[isFeatureSupported(
+                MultiDeviceFeature.PHONE_HUB_NOTIFICATIONS, pageContentData)]]"
+            restamp>
+          <settings-multidevice-feature-item id="phoneHubNotificationsItem"
+              feature="[[MultiDeviceFeature.PHONE_HUB_NOTIFICATIONS]]"
+              page-content-data="[[pageContentData]]">
+          </settings-multidevice-feature-item>
+        </template>
+        <template is="dom-if"
+            if="[[isFeatureSupported(
+                MultiDeviceFeature.PHONE_HUB_NOTIFICATION_BADGE, pageContentData)]]"
+            restamp>
+          <settings-multidevice-feature-item id="phoneHubNotificationBadgeItem"
+              feature="[[MultiDeviceFeature.PHONE_HUB_NOTIFICATION_BADGE]]"
+              page-content-data="[[pageContentData]]">
+          </settings-multidevice-feature-item>
+        </template>
+        <template is="dom-if"
+            if="[[isFeatureSupported(
+                MultiDeviceFeature.PHONE_HUB_TASK_CONTINUATION, pageContentData)]]"
+            restamp>
+          <settings-multidevice-feature-item id="phoneHubTaskContinuationItem"
+              feature="[[MultiDeviceFeature.PHONE_HUB_TASK_CONTINUATION]]"
+              page-content-data="[[pageContentData]]">
           </settings-multidevice-feature-item>
         </template>
       </div>

@@ -21,6 +21,7 @@
 <translation id="1150565364351027703">Saulesbrilles</translation>
 <translation id="115443833402798225">Hangils (Ahnmatae)</translation>
 <translation id="1155759005174418845">Kataloniešu valoda</translation>
+<translation id="1172970565351728681">Aptuvens atlikušais laiks: <ph name="REMAINING_TIME" /></translation>
 <translation id="1173894706177603556">Pārdēvēt</translation>
 <translation id="117624967391683467">Notiek faila “<ph name="FILE_NAME" />” kopēšana...</translation>
 <translation id="1178581264944972037">Pauzēt</translation>
@@ -106,7 +107,6 @@
 <translation id="2085470240340828803">Fails ar nosaukumu “<ph name="FILENAME" />” jau pastāv. Kā vēlaties rīkoties?</translation>
 <translation id="2121825465123208577">Mainīt lielumu</translation>
 <translation id="2136953289241069843">Transliterācija (namaste → नमस्कार)</translation>
-<translation id="2138867954865495510">Nevar atvērt “<ph name="PATH" />”: <ph name="ERROR_MESSAGE" /></translation>
 <translation id="2163152940313951844">Nederīga rakstzīme: <ph name="CHARACTER_NAME" /></translation>
 <translation id="2164862903024139959">Vjetnamiešu valodas tastatūra (TCVN)</translation>
 <translation id="2168214441502403371">Persiešu valodas tastatūra</translation>
@@ -198,6 +198,7 @@
 <translation id="3236289833370040187">Īpašumtiesības tiks nodotas domēnam <ph name="DESTINATION_DOMAIN" />.</translation>
 <translation id="3241720467332021590">Īru valoda</translation>
 <translation id="3245321423178950146">Nezināms izpildītājs</translation>
+<translation id="3248185426436836442">Gaida</translation>
 <translation id="3252266817569339921">Franču valoda</translation>
 <translation id="3254434849914415189">Izvēlieties noklusējuma lietotni <ph name="FILE_TYPE" /> failu atvēršanai:</translation>
 <translation id="3264582393905923483">Konteksts</translation>
@@ -208,6 +209,7 @@
 <translation id="3335337277364016868">Ieraksta izveides gads</translation>
 <translation id="3338239663705455570">Slovēņu valodas tastatūra</translation>
 <translation id="3353984535370177728">Atlasīt augšupielādējamo mapi</translation>
+<translation id="3356580349448036450">Pabeigts</translation>
 <translation id="3399597614303179694">Maķedoniešu tastatūra</translation>
 <translation id="3414856743105198592">Formatējot noņemamu datu nesēju, tiks dzēsti visi dati. Vai vēlaties turpināt?</translation>
 <translation id="3437801641691368414">Izveides laiks</translation>
@@ -243,6 +245,7 @@
 <translation id="3780536599611287598">Jums nav atļaujas pārvietot failus uz mapi “<ph name="FOLDER_NAME" />”.</translation>
 <translation id="3786301125658655746">Esat bezsaistē</translation>
 <translation id="3789841737615482174">Instalēt</translation>
+<translation id="3793469551756281394">Aptuvens atlikušais laiks: <ph name="REMAINING_TIME_HOUR" /> <ph name="REMAINING_TIME_MINUTE" /></translation>
 <translation id="3798449238516105146">Versija</translation>
 <translation id="3801082500826908679">Fēru valoda</translation>
 <translation id="3809272675881623365">Trusis</translation>
@@ -299,6 +302,7 @@
 <translation id="4481711095103932593">Šī mape ir kopīgota ar Windows</translation>
 <translation id="4487088045714738411">Beļģu tastatūra</translation>
 <translation id="4522570452068850558">Informācija</translation>
+<translation id="4542387084127299777">Nevar atvērt ceļu <ph name="PATH" /></translation>
 <translation id="4552678318981539154">Iegādāties papildu vietu krātuvē</translation>
 <translation id="4559767610552730302">Izplūduma efekts</translation>
 <translation id="4572815280350369984"><ph name="FILE_TYPE" /> fails</translation>
@@ -511,6 +515,7 @@
 <translation id="6629841649550503054">Visi faili ir dublēti <ph name="BEGIN_LINK" />Google diskā<ph name="END_LINK" />.</translation>
 <translation id="6643016212128521049">Notīrīt</translation>
 <translation id="6650726141019353908">Rozā tauriņš</translation>
+<translation id="6657585470893396449">Parole</translation>
 <translation id="6710213216561001401">Iepriekšējais</translation>
 <translation id="6718273304615422081">Notiek tilpsaspiešana...</translation>
 <translation id="6751256176799620176">Atlasīta 1 mape</translation>
@@ -551,7 +556,6 @@
 <translation id="7012943028104619157"><ph name="ROOT_TITLE" /> (<ph name="ROOT_SUMMARY" />)</translation>
 <translation id="7014174261166285193">Instalēšana neizdevās.</translation>
 <translation id="7040138676081995583">Atvērt ar...</translation>
-<translation id="7059566040011178088">Mazāk nekā <ph name="REMAINING_TIME" /></translation>
 <translation id="7100897339030255923">Atlasīti <ph name="COUNT" /> vienumi</translation>
 <translation id="7106346894903675391">Iegādāties papildu vietu krātuvē...</translation>
 <translation id="7126604456862387217">'&lt;b&gt;<ph name="SEARCH_STRING" />&lt;/b&gt;' — &lt;em&gt;meklēt Diskā&lt;/em&gt;</translation>
@@ -662,7 +666,6 @@
 <translation id="8193175696669055101">Ierīces modelis</translation>
 <translation id="8208580316430297579">Mākslas darbs</translation>
 <translation id="8223479393428528563">Lai saglabātu šos failus izmantošanai bezsaistē, aktivizējiet tiešsaistes režīmu, ar peles labo pogu noklikšķiniet uz failiem un atlasiet opciju <ph name="OFFLINE_CHECKBOX_NAME" />.</translation>
-<translation id="8231972167769262174">Apmēram <ph name="REMAINING_TIME" /></translation>
 <translation id="8249296373107784235">Priekšlaikus pārtraukt</translation>
 <translation id="8261506727792406068">Dzēst</translation>
 <translation id="8269755669432358899">Notiek failu atsauksmju paneļu sakļaušana</translation>
@@ -725,6 +728,7 @@
 <translation id="9065203028668620118">Labot</translation>
 <translation id="9099674669267916096">Lappušu skaits</translation>
 <translation id="9110990317705400362">Mēs arvien meklējam veidus, kā papildus aizsargāt pārlūkošanu. Iepriekš jebkura vietne varēja aicināt pievienot paplašinājumu pārlūkā. Jaunākajās Google Chrome versijās lapā “Paplašinājumi” ir precīzi jānorāda, ka vēlaties instalēt šos paplašinājumus. <ph name="BEGIN_LINK" />Uzziniet vairāk<ph name="END_LINK" />.</translation>
+<translation id="9111102763498581341">Atbloķēt</translation>
 <translation id="912419004897138677">Kodeks</translation>
 <translation id="9129931661813833980">Piespraust mapi</translation>
 <translation id="9130775360844693113">“<ph name="DESTINATION_NAME" />” dalībnieki iegūs piekļuvi šiem vienumiem.</translation>

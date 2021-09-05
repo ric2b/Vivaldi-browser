@@ -30,8 +30,7 @@ using ContextType = ExtensionApiTest::ContextType;
 class BookmarksApiTest : public ExtensionApiTest,
                          public testing::WithParamInterface<ContextType> {
  public:
-  void SetUp() override {
-    ExtensionApiTest::SetUp();
+  BookmarksApiTest() {
     // Service Workers are currently only available on certain channels, so set
     // the channel for those tests.
     if (GetParam() == ContextType::kServiceWorker)
@@ -45,9 +44,12 @@ class BookmarksApiTest : public ExtensionApiTest,
 INSTANTIATE_TEST_SUITE_P(EventPage,
                          BookmarksApiTest,
                          ::testing::Values(ContextType::kEventPage));
+// Flaky on all platforms but Mac.  https://crbug.com/1112903
+#if defined(OS_MAC)
 INSTANTIATE_TEST_SUITE_P(ServiceWorker,
                          BookmarksApiTest,
                          ::testing::Values(ContextType::kServiceWorker));
+#endif
 
 IN_PROC_BROWSER_TEST_P(BookmarksApiTest, Bookmarks) {
   // Add test managed bookmarks to verify that the bookmarks API can read them

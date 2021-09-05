@@ -125,8 +125,10 @@ CSSValue* ConsumeBaselineKeyword(CSSParserTokenRange& range) {
   if (!baseline)
     return nullptr;
   if (preference && preference->GetValueID() == CSSValueID::kLast) {
-    return MakeGarbageCollected<CSSValuePair>(
-        preference, baseline, CSSValuePair::kDropIdenticalValues);
+    // We still don't have support for 'last baseline' in layout
+    // https://crbug.com/885175
+    // https://crbug.com/886585
+    return nullptr;
   }
   return baseline;
 }
@@ -2259,7 +2261,7 @@ void AddProperty(CSSPropertyID resolved_property,
   }
 
   properties.push_back(CSSPropertyValue(
-      CSSProperty::Get(resolved_property), value, important, set_from_shorthand,
+      CSSPropertyName(resolved_property), value, important, set_from_shorthand,
       shorthand_index, implicit == IsImplicitProperty::kImplicit));
 }
 

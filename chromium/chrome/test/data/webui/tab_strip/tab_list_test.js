@@ -275,16 +275,6 @@ suite('TabList', () => {
   function testPlaceElementAnimationParams(
       element, horizontalScale, verticalScale) {
     const animations = element.getAnimations();
-
-    // TODO(crbug.com/1090645): Remove logging once the test no longer flakes.
-    if (animations.length > 1) {
-      console.log('--- Multiple animations found. ---');
-      animations.forEach(animation => {
-        console.log('playState:', animation.playState);
-        console.log('duration:', animation.effect.getTiming().duration);
-      });
-    }
-
     assertEquals(1, animations.length);
     assertEquals('running', animations[0].playState);
     assertEquals(120, animations[0].effect.getTiming().duration);
@@ -628,16 +618,6 @@ suite('TabList', () => {
     assertEquals(tabGroup.children.length, 2);
     assertEquals(tabGroup.children[0].tab.id, precedingTabInGroup.id);
     assertEquals(tabGroup.children[1].tab.id, originalTabInGroup.id);
-  });
-
-  test('HandleReplacedGroupId', () => {
-    webUIListenerCallback(
-        'tab-group-state-changed', tabs[1].id, tabs[1].index, 'oldGroupId');
-    const group = getTabGroups()[0];
-    assertEquals('oldGroupId', group.dataset.groupId);
-
-    webUIListenerCallback('tab-group-id-replaced', 'oldGroupId', 'newGroupId');
-    assertEquals('newGroupId', group.dataset.groupId);
   });
 
   test('removes a tab when tab is removed from current window', async () => {

@@ -27,7 +27,7 @@ import org.chromium.chrome.browser.compositor.overlays.SceneOverlay;
 import org.chromium.chrome.browser.compositor.overlays.strip.StripLayoutHelperManager;
 import org.chromium.chrome.browser.contextualsearch.ContextualSearchManagementDelegate;
 import org.chromium.chrome.browser.device.DeviceClassManager;
-import org.chromium.chrome.browser.fullscreen.ChromeFullscreenManager;
+import org.chromium.chrome.browser.fullscreen.FullscreenManager;
 import org.chromium.chrome.browser.ntp.NewTabPage;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabLaunchType;
@@ -77,12 +77,13 @@ public class LayoutManagerChrome
     /**
      * Creates the {@link LayoutManagerChrome} instance.
      * @param host         A {@link LayoutManagerHost} instance.
+     * @param contentContainer A {@link ViewGroup} for Android views to be bound to.
      * @param startSurface An interface to talk to the Grid Tab Switcher. If it's NULL, VTS
      *                     should be used, otherwise GTS should be used.
      */
-    public LayoutManagerChrome(LayoutManagerHost host, boolean createOverviewLayout,
-            @Nullable StartSurface startSurface) {
-        super(host);
+    public LayoutManagerChrome(LayoutManagerHost host, ViewGroup contentContainer,
+            boolean createOverviewLayout, @Nullable StartSurface startSurface) {
+        super(host, contentContainer);
         Context context = host.getContext();
         LayoutRenderHost renderHost = host.getLayoutRenderHost();
 
@@ -109,7 +110,7 @@ public class LayoutManagerChrome
                     }
                 });
                 final ObservableSupplier<? extends BrowserControlsStateProvider>
-                        browserControlsSupplier = mHost.getFullscreenManagerSupplier();
+                        browserControlsSupplier = mHost.getBrowserControlsManagerSupplier();
                 mOverviewLayout = tabManagementDelegate.createStartSurfaceLayout(context, this,
                         renderHost, startSurface,
                         (ObservableSupplier<BrowserControlsStateProvider>) browserControlsSupplier);
@@ -144,13 +145,13 @@ public class LayoutManagerChrome
 
     @Override
     public void init(TabModelSelector selector, TabCreatorManager creator,
-            TabContentManager content, ViewGroup androidContentContainer,
-            ControlContainer controlContainer,
+            TabContentManager content, ControlContainer controlContainer,
             ContextualSearchManagementDelegate contextualSearchDelegate,
             DynamicResourceLoader dynamicResourceLoader) {
         Context context = mHost.getContext();
         LayoutRenderHost renderHost = mHost.getLayoutRenderHost();
-        BrowserControlsStateProvider browserControlsStateProvider = mHost.getFullscreenManager();
+        BrowserControlsStateProvider browserControlsStateProvider =
+                mHost.getBrowserControlsManager();
 
         // Build Layouts
         mOverviewListLayout =
@@ -159,13 +160,13 @@ public class LayoutManagerChrome
 
         if (mCreateOverviewLayout) {
             final ObservableSupplier<? extends BrowserControlsStateProvider>
-                    browserControlsSupplier = mHost.getFullscreenManagerSupplier();
+                    browserControlsSupplier = mHost.getBrowserControlsManagerSupplier();
             mOverviewLayout = new StackLayout(context, this, renderHost,
                     (ObservableSupplier<BrowserControlsStateProvider>) browserControlsSupplier);
         }
 
-        super.init(selector, creator, content, androidContentContainer, controlContainer,
-                contextualSearchDelegate, dynamicResourceLoader);
+        super.init(selector, creator, content, controlContainer, contextualSearchDelegate,
+                dynamicResourceLoader);
 
         // TODO: TitleCache should be a part of the ResourceManager.
         mTitleCache = mHost.getTitleCache();
@@ -537,7 +538,7 @@ public class LayoutManagerChrome
 
         @Override
         public boolean isSwipeEnabled(@ScrollDirection int direction) {
-            ChromeFullscreenManager manager = mHost.getFullscreenManager();
+            FullscreenManager manager = mHost.getFullscreenManager();
             if (getActiveLayout() != mStaticLayout
                     || !DeviceClassManager.enableToolbarSwipe()
                     || (manager != null && manager.getPersistentFullscreenMode())) {
@@ -575,16 +576,9 @@ public class LayoutManagerChrome
         Tab lastTab = getTabById(lastTabId);
         if (NewTabPage.isNTPUrl(lastTab.getUrl()) && !lastTab.canGoBack()
                 && !lastTab.canGoForward()) {
-            getTabModelSelector().getCurrentModel().closeTab(lastTab, tab, false, false, false);
+            getTabModelSelector()
+                    .getModel(lastTab.isIncognito())
+                    .closeTab(lastTab, tab, false, false, false);
         }
-    }
-
-    // Vivaldi: Removes the {@link SceneOverlay}.
-    @Override
-    protected void removeGlobalSceneOverlay(SceneOverlay helper) {
-        super.removeGlobalSceneOverlay(helper);
-        mOverviewListLayout.removeSceneOverlay(helper);
-        mToolbarSwipeLayout.removeSceneOverlay(helper);
-        if (mOverviewLayout != null) mOverviewLayout.removeSceneOverlay(helper);
     }
 }

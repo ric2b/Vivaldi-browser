@@ -12,7 +12,6 @@ import androidx.test.filters.SmallTest;
 import org.junit.Assert;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.TestRule;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.Feature;
@@ -32,7 +31,6 @@ import org.chromium.components.browser_ui.settings.TextMessagePreference;
 import org.chromium.components.browser_ui.widget.RadioButtonWithDescription;
 import org.chromium.components.browser_ui.widget.RadioButtonWithEditText;
 import org.chromium.components.embedder_support.util.UrlConstants;
-import org.chromium.content_public.browser.test.util.Criteria;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.content_public.browser.test.util.TouchCommon;
@@ -94,9 +92,6 @@ public class HomepageSettingsFragmentTest {
 
     @Rule
     public HomepageTestRule mHomepageTestRule = new HomepageTestRule();
-
-    @Rule
-    public TestRule mFeatureProcessor = new Features.InstrumentationProcessor();
 
     private ChromeSwitchPreference mSwitch;
     private RadioButtonGroupHomepagePreference mRadioGroupPreference;
@@ -572,12 +567,9 @@ public class HomepageSettingsFragmentTest {
             mCustomUriRadioButton.getEditTextForTests().requestFocus();
             mCustomUriRadioButton.setPrimaryText(TEST_URL_FOO);
         });
-        CriteriaHelper.pollUiThread(new Criteria("EditText never got the focus.") {
-            @Override
-            public boolean isSatisfied() {
-                return mCustomUriRadioButton.getEditTextForTests().isFocused();
-            }
-        });
+        CriteriaHelper.pollUiThread(() -> {
+            return mCustomUriRadioButton.getEditTextForTests().isFocused();
+        }, "EditText never got the focus.");
 
         // Radio Button should switched to customized homepage.
         Assert.assertFalse(

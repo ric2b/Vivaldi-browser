@@ -124,6 +124,7 @@ class TestNetworkContext : public mojom::NetworkContext {
   void GetExpectCTState(const std::string& domain,
                         const net::NetworkIsolationKey& network_isolation_key,
                         GetExpectCTStateCallback callback) override {}
+  void SetSCTAuditingEnabled(bool enabled) override {}
 #endif  // BUILDFLAG(IS_CT_SUPPORTED)
   void CreateUDPSocket(
       mojo::PendingReceiver<mojom::UDPSocket> receiver,
@@ -160,6 +161,7 @@ class TestNetworkContext : public mojom::NetworkContext {
       int32_t render_frame_id,
       const url::Origin& origin,
       uint32_t options,
+      const net::MutableNetworkTrafficAnnotationTag& traffic_annotation,
       mojo::PendingRemote<mojom::WebSocketHandshakeClient> handshake_client,
       mojo::PendingRemote<mojom::AuthenticationHandler> auth_handler,
       mojo::PendingRemote<mojom::TrustedHeaderClient> header_client) override {}
@@ -204,9 +206,6 @@ class TestNetworkContext : public mojom::NetworkContext {
       std::vector<mojom::CorsOriginPatternPtr> allow_patterns,
       std::vector<mojom::CorsOriginPatternPtr> block_patterns,
       base::OnceClosure closure) override {}
-  void SetCorsExtraSafelistedRequestHeaderNames(
-      const std::vector<std::string>&
-          cors_extra_safelisted_request_header_names) override {}
   void AddHSTS(const std::string& host,
                base::Time expiry,
                bool include_subdomains,
@@ -264,6 +263,13 @@ class TestNetworkContext : public mojom::NetworkContext {
       const GURL& url,
       const net::NetworkIsolationKey& network_isolation_key,
       LookupServerBasicAuthCredentialsCallback callback) override {}
+#if defined(OS_CHROMEOS)
+  void LookupProxyAuthCredentials(
+      const net::ProxyServer& proxy_server,
+      const std::string& auth_scheme,
+      const std::string& realm,
+      LookupProxyAuthCredentialsCallback callback) override {}
+#endif
   void GetOriginPolicyManager(
       mojo::PendingReceiver<mojom::OriginPolicyManager> receiver) override {}
 };

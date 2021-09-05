@@ -18,6 +18,7 @@ Polymer({
   behaviors: [
     NetworkListenerBehavior,
     CrPolicyNetworkBehaviorMojo,
+    DeepLinkingBehavior,
     settings.RouteObserverBehavior,
     I18nBehavior,
     WebUIListenerBehavior,
@@ -201,6 +202,37 @@ Polymer({
 
     /** @private */
     proxyExpanded_: Boolean,
+
+    /**
+     * Used by DeepLinkingBehavior to focus this page's deep links.
+     * @type {!Set<!chromeos.settings.mojom.Setting>}
+     */
+    supportedSettingIds: {
+      type: Object,
+      value: () => new Set([
+        chromeos.settings.mojom.Setting.kConfigureEthernet,
+        chromeos.settings.mojom.Setting.kEthernetAutoConfigureIp,
+        chromeos.settings.mojom.Setting.kEthernetDns,
+        chromeos.settings.mojom.Setting.kEthernetProxy,
+        chromeos.settings.mojom.Setting.kDisconnectWifiNetwork,
+        chromeos.settings.mojom.Setting.kPreferWifiNetwork,
+        chromeos.settings.mojom.Setting.kForgetWifiNetwork,
+        chromeos.settings.mojom.Setting.kWifiAutoConfigureIp,
+        chromeos.settings.mojom.Setting.kWifiDns,
+        chromeos.settings.mojom.Setting.kWifiProxy,
+        chromeos.settings.mojom.Setting.kWifiAutoConnectToNetwork,
+        chromeos.settings.mojom.Setting.kCellularRoaming,
+        chromeos.settings.mojom.Setting.kCellularApn,
+        chromeos.settings.mojom.Setting.kDisconnectCellularNetwork,
+        chromeos.settings.mojom.Setting.kCellularAutoConfigureIp,
+        chromeos.settings.mojom.Setting.kCellularDns,
+        chromeos.settings.mojom.Setting.kCellularProxy,
+        chromeos.settings.mojom.Setting.kCellularAutoConnectToNetwork,
+        chromeos.settings.mojom.Setting.kDisconnectTetherNetwork,
+        chromeos.settings.mojom.Setting.kWifiMetered,
+        chromeos.settings.mojom.Setting.kCellularMetered,
+      ]),
+    },
   },
 
   observers: [
@@ -275,6 +307,94 @@ Polymer({
   },
 
   /**
+   * Helper function for manually showing deep links on this page.
+   * @param {!chromeos.settings.mojom.Setting} settingId
+   * @param {!function():?Element} elementCallback
+   * @private
+   */
+  afterRenderShowDeepLink(settingId, elementCallback) {
+    // Wait for element to load.
+    Polymer.RenderStatus.afterNextRender(this, () => {
+      const deepLinkElement = elementCallback();
+      if (!deepLinkElement || deepLinkElement.hidden) {
+        console.warn(`Element with deep link id ${settingId} not focusable.`);
+        return;
+      }
+      this.showDeepLinkElement(deepLinkElement);
+    });
+  },
+
+  /**
+   * Overridden from DeepLinkingBehavior.
+   * @param {!chromeos.settings.mojom.Setting} settingId
+   * @return {boolean}
+   */
+  beforeDeepLinkAttempt(settingId) {
+    // Manually show the deep links for settings in shared elements.
+    if (settingId === chromeos.settings.mojom.Setting.kCellularApn) {
+      this.networkExpanded_ = true;
+      this.afterRenderShowDeepLink(
+          settingId, () => this.$$('network-apnlist').getApnSelect());
+      // Stop deep link attempt since we completed it manually.
+      return false;
+    }
+
+    if (settingId ===
+            chromeos.settings.mojom.Setting.kEthernetAutoConfigureIp ||
+        settingId === chromeos.settings.mojom.Setting.kWifiAutoConfigureIp ||
+        settingId ===
+            chromeos.settings.mojom.Setting.kCellularAutoConfigureIp) {
+      this.networkExpanded_ = true;
+      this.afterRenderShowDeepLink(
+          settingId,
+          () => this.$$('network-ip-config').getAutoConfigIpToggle());
+      return false;
+    }
+
+    if (settingId === chromeos.settings.mojom.Setting.kEthernetDns ||
+        settingId === chromeos.settings.mojom.Setting.kWifiDns ||
+        settingId === chromeos.settings.mojom.Setting.kCellularDns) {
+      this.networkExpanded_ = true;
+      this.afterRenderShowDeepLink(
+          settingId,
+          () => this.$$('network-nameservers').getNameserverRadioButtons());
+      return false;
+    }
+
+    if (settingId === chromeos.settings.mojom.Setting.kEthernetProxy ||
+        settingId === chromeos.settings.mojom.Setting.kWifiProxy ||
+        settingId === chromeos.settings.mojom.Setting.kCellularProxy) {
+      this.proxyExpanded_ = true;
+      this.afterRenderShowDeepLink(
+          settingId,
+          () => this.$$('network-proxy-section').getAllowSharedToggle());
+      return false;
+    }
+
+    if (settingId === chromeos.settings.mojom.Setting.kWifiMetered ||
+        settingId === chromeos.settings.mojom.Setting.kCellularMetered) {
+      this.advancedExpanded_ = true;
+      // Continue with automatically showing these deep links.
+      return true;
+    }
+
+    if (settingId === chromeos.settings.mojom.Setting.kForgetWifiNetwork) {
+      this.afterRenderShowDeepLink(settingId, () => {
+        const forgetButton = this.$$('#forgetButton');
+        if (forgetButton && !forgetButton.hidden) {
+          return forgetButton;
+        }
+        // If forget button is hidden, show disconnect button instead.
+        return this.$$('#connectDisconnect');
+      });
+      return false;
+    }
+
+    // Otherwise, should continue with deep link attempt.
+    return true;
+  },
+
+  /**
    * settings.RouteObserverBehavior
    * @param {!settings.Route} route
    * @param {!settings.Route} oldRoute
@@ -297,6 +417,8 @@ Polymer({
     const type = queryParams.get('type') || 'WiFi';
     const name = queryParams.get('name') || type;
     this.init(guid, type, name);
+
+    this.attemptDeepLink();
   },
 
   /**
@@ -396,7 +518,6 @@ Polymer({
       return;
     }
     this.getDeviceState_();
-    this.getNetworkDetails_();
   },
 
   /** @private */
@@ -429,9 +550,10 @@ Polymer({
     Polymer.dom.flush();
 
     if (!this.didSetFocus_ &&
-        !settings.Router.getInstance().getQueryParameters().has('search')) {
-      // Unless the page was navigated to via search, focus a button once the
-      // initial state is set.
+        !settings.Router.getInstance().getQueryParameters().has('search') &&
+        !this.getDeepLinkSettingId()) {
+      // Unless the page was navigated to via search or has a deep linked
+      // setting, focus a button once the initial state is set.
       this.didSetFocus_ = true;
       const button = this.$$('#titleDiv .action-button:not([hidden])');
       if (button) {
@@ -449,6 +571,23 @@ Polymer({
     }
   },
 
+  /**
+   * Returns true if all significant DeviceState fields match. Ignores
+   * |scanning| which can be noisy and is handled separately.
+   * @param {!OncMojo.DeviceStateProperties} a
+   * @param {!OncMojo.DeviceStateProperties} b
+   * @return {boolean}
+   * @private
+   */
+  deviceStatesMatch_(a, b) {
+    return a.type === b.type && a.macAddress === b.macAddress &&
+        a.simAbsent === b.simAbsent && a.deviceState === b.deviceState &&
+        a.managedNetworkAvailable === b.managedNetworkAvailable &&
+        OncMojo.ipAddressMatch(a.ipv4Address, b.ipv4Address) &&
+        OncMojo.ipAddressMatch(a.ipv6Address, b.ipv6Address) &&
+        OncMojo.simLockStatusMatch(a.simLockStatus, b.simLockStatus);
+  },
+
   /** @private */
   getDeviceState_() {
     if (!this.managedProperties_) {
@@ -457,7 +596,36 @@ Polymer({
     const type = this.managedProperties_.type;
     this.networkConfig_.getDeviceStateList().then(response => {
       const devices = response.result;
-      this.deviceState_ = devices.find(device => device.type == type) || null;
+      const newDeviceState =
+          devices.find(device => device.type == type) || null;
+      let shouldGetNetworkDetails = false;
+      if (!this.deviceState_ || !newDeviceState) {
+        this.deviceState_ = newDeviceState;
+        shouldGetNetworkDetails = !!this.deviceState_;
+      } else if (!this.deviceStatesMatch_(this.deviceState_, newDeviceState)) {
+        // Only request a network state update if the deviceState changed.
+        shouldGetNetworkDetails =
+            this.deviceState_.deviceState != newDeviceState.deviceState;
+        this.deviceState_ = newDeviceState;
+      } else if (this.deviceState_.scanning != newDeviceState.scanning) {
+        // Update just the scanning state to avoid interrupting other parts of
+        // the UI (e.g. custom IP addresses or nameservers).
+        this.deviceState_.scanning = newDeviceState.scanning;
+        // Cellular properties are not updated while scanning (since they
+        // may be invalid), so request them on scan completion.
+        if (type === mojom.NetworkType.kCellular) {
+          shouldGetNetworkDetails = true;
+        }
+      } else if (type === mojom.NetworkType.kCellular) {
+        // If there are no device state property changes but type is
+        // cellular, then always fetch network details. This is because
+        // for cellular networks, some shill device level properties are
+        // represented at network level in ONC.
+        shouldGetNetworkDetails = true;
+      }
+      if (shouldGetNetworkDetails) {
+        this.getNetworkDetails_();
+      }
     });
   },
 
@@ -633,6 +801,14 @@ Polymer({
    */
   updateManagedProperties_(properties) {
     this.applyingChanges_ = true;
+    if (this.managedProperties_ &&
+        this.managedProperties_.type === mojom.NetworkType.kCellular &&
+        this.deviceState_ && this.deviceState_.scanning) {
+      // Cellular properties may be invalid while scanning, so keep the existing
+      // properties instead.
+      properties.typeProperties.cellular =
+          this.managedProperties_.typeProperties.cellular;
+    }
     this.managedProperties_ = properties;
     Polymer.RenderStatus.afterNextRender(
         this, () => this.applyingChanges_ = false);
@@ -1545,12 +1721,12 @@ Polymer({
   },
 
   /**
-   * @param {!mojom.ManagedProperties} managedProperties
    * @return {boolean}
    * @private
    */
-  showMetered_(managedProperties) {
-    return !!this.showMeteredToggle_ && !!managedProperties &&
+  showMetered_() {
+    const managedProperties = this.managedProperties_;
+    return this.showMeteredToggle_ && !!managedProperties &&
         this.isRemembered_(managedProperties) &&
         (managedProperties.type == mojom.NetworkType.kCellular ||
          managedProperties.type == mojom.NetworkType.kWiFi);
@@ -1774,17 +1950,18 @@ Polymer({
   },
 
   /**
-   * @param {!mojom.ManagedProperties} managedProperties
-   * @param {boolean} propertiesReceived
    * @return {boolean}
    * @private
    */
-  showAdvanced_(managedProperties, propertiesReceived) {
-    if (!managedProperties || !propertiesReceived) {
+  hasAdvancedSection_() {
+    if (!this.managedProperties_ || !this.propertiesReceived_) {
       return false;
     }
-    if (managedProperties.type == mojom.NetworkType.kTether) {
-      // These settings apply to the underlying WiFi network, not the Tether
+    if (this.showMetered_()) {
+      return true;
+    }
+    if (this.managedProperties_.type == mojom.NetworkType.kTether) {
+      // These properties apply to the underlying WiFi network, not the Tether
       // network.
       return false;
     }
@@ -1805,14 +1982,6 @@ Polymer({
    */
   hasDeviceFields_() {
     return this.hasVisibleFields_(this.getDeviceFields_());
-  },
-
-  /**
-   * @return {boolean}
-   * @private
-   */
-  hasAdvancedOrDeviceFields_() {
-    return this.hasAdvancedFields_() || this.hasDeviceFields_();
   },
 
   /**

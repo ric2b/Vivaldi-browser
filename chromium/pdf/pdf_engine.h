@@ -7,10 +7,10 @@
 
 #include <stdint.h>
 
-#include <memory>
 #include <string>
 #include <vector>
 
+#include "base/callback.h"
 #include "base/containers/span.h"
 #include "base/optional.h"
 #include "base/strings/string16.h"
@@ -22,7 +22,6 @@
 #include "ppapi/c/dev/ppp_printing_dev.h"
 #include "ppapi/c/ppb_input_event.h"
 #include "ppapi/cpp/completion_callback.h"
-#include "ppapi/cpp/image_data.h"
 #include "ppapi/cpp/private/pdf.h"
 #include "ppapi/cpp/rect.h"
 #include "ppapi/cpp/size.h"
@@ -43,16 +42,19 @@ typedef void (*PDFEnsureTypefaceCharactersAccessible)(const LOGFONT* font,
 
 struct PP_PdfAccessibilityActionData;
 struct PP_PdfPrintSettings_Dev;
+class SkBitmap;
 
 namespace gfx {
+class Point;
 class Rect;
 class Size;
-}
+class Vector2d;
+}  // namespace gfx
 
 namespace pp {
 class InputEvent;
 class VarDictionary;
-}
+}  // namespace pp
 
 namespace chrome_pdf {
 
@@ -133,7 +135,7 @@ class PDFEngine {
     virtual void Invalidate(const pp::Rect& rect) {}
 
     // Informs the client to scroll the plugin area by the given offset.
-    virtual void DidScroll(const pp::Point& point) {}
+    virtual void DidScroll(const gfx::Vector2d& offset) {}
 
     // Scroll the horizontal/vertical scrollbars to a given position.
     // Values are in screen coordinates, where 0 is the top/left of the document
@@ -145,7 +147,7 @@ class PDFEngine {
                            bool compensate_for_toolbar) {}
 
     // Scroll by a given delta relative to the current position.
-    virtual void ScrollBy(const pp::Point& point) {}
+    virtual void ScrollBy(const gfx::Vector2d& scroll_delta) {}
 
     // Scroll to zero-based |page|.
     virtual void ScrollToPage(int page) {}
@@ -182,7 +184,7 @@ class PDFEngine {
     // Prompts the user for a password to open this document. The callback is
     // called when the password is retrieved.
     virtual void GetDocumentPassword(
-        pp::CompletionCallbackWithOutput<pp::Var> callback) {}
+        base::OnceCallback<void(const std::string&)> callback) {}
 
     // Play a "beeping" sound.
     virtual void Beep() {}
@@ -273,6 +275,10 @@ class PDFEngine {
   };
 
   struct AccessibilityLinkInfo {
+    AccessibilityLinkInfo();
+    AccessibilityLinkInfo(const AccessibilityLinkInfo& that);
+    ~AccessibilityLinkInfo();
+
     std::string url;
     int start_char_index;
     int char_count;
@@ -280,11 +286,19 @@ class PDFEngine {
   };
 
   struct AccessibilityImageInfo {
+    AccessibilityImageInfo();
+    AccessibilityImageInfo(const AccessibilityImageInfo& that);
+    ~AccessibilityImageInfo();
+
     std::string alt_text;
     pp::FloatRect bounds;
   };
 
   struct AccessibilityHighlightInfo {
+    AccessibilityHighlightInfo();
+    AccessibilityHighlightInfo(const AccessibilityHighlightInfo& that);
+    ~AccessibilityHighlightInfo();
+
     int start_char_index = -1;
     int char_count;
     pp::FloatRect bounds;
@@ -305,26 +319,22 @@ class PDFEngine {
     pp::FloatRect bounds;
   };
 
-  // Factory method to create an instance of the PDF Engine.
-  static std::unique_ptr<PDFEngine> Create(Client* client,
-                                           bool enable_javascript);
-
   virtual ~PDFEngine() {}
 
   // Most of these functions are similar to the Pepper functions of the same
   // name, so not repeating the description here unless it's different.
   virtual bool New(const char* url, const char* headers) = 0;
-  virtual void PageOffsetUpdated(const pp::Point& page_offset) = 0;
-  virtual void PluginSizeUpdated(const pp::Size& size) = 0;
+  virtual void PageOffsetUpdated(const gfx::Vector2d& page_offset) = 0;
+  virtual void PluginSizeUpdated(const gfx::Size& size) = 0;
   virtual void ScrolledToXPosition(int position) = 0;
   virtual void ScrolledToYPosition(int position) = 0;
   // Paint is called a series of times. Before these n calls are made, PrePaint
   // is called once. After Paint is called n times, PostPaint is called once.
   virtual void PrePaint() = 0;
   virtual void Paint(const pp::Rect& rect,
-                     pp::ImageData* image_data,
-                     std::vector<pp::Rect>* ready,
-                     std::vector<pp::Rect>* pending) = 0;
+                     SkBitmap& image_data,
+                     std::vector<pp::Rect>& ready,
+                     std::vector<pp::Rect>& pending) = 0;
   virtual void PostPaint() = 0;
   virtual bool HandleDocumentLoad(const pp::URLLoader& loader) = 0;
   virtual bool HandleEvent(const pp::InputEvent& event) = 0;
@@ -348,7 +358,7 @@ class PDFEngine {
   // Applies the document layout options proposed by a call to
   // PDFEngine::Client::ProposeDocumentLayout(), returning the overall size of
   // the new effective layout.
-  virtual pp::Size ApplyDocumentLayout(
+  virtual gfx::Size ApplyDocumentLayout(
       const DocumentLayout::Options& options) = 0;
 
   virtual std::string GetSelectedText() = 0;
@@ -369,17 +379,25 @@ class PDFEngine {
   // Handles actions invoked by Accessibility clients.
   virtual void HandleAccessibilityAction(
       const PP_PdfAccessibilityActionData& action_data) = 0;
-  virtual std::string GetLinkAtPosition(const pp::Point& point) = 0;
+  virtual std::string GetLinkAtPosition(const gfx::Point& point) = 0;
   // Checks the permissions associated with this document.
   virtual bool HasPermission(DocumentPermission permission) const = 0;
   virtual void SelectAll() = 0;
   // Gets the list of DocumentAttachmentInfo from the document.
   virtual const std::vector<DocumentAttachmentInfo>&
   GetDocumentAttachmentInfoList() const = 0;
+  // Gets the content of an attachment by the attachment's |index|. |index|
+  // must be in the range of [0, attachment_count-1), where |attachment_count|
+  // is the number of attachments embedded in the document.
+  // The caller of this method is responsible for checking whether the
+  // attachment is readable, attachment size is not 0 byte, and the return
+  // value's size matches the corresponding DocumentAttachmentInfo's
+  // |size_bytes|.
+  virtual std::vector<uint8_t> GetAttachmentData(size_t index) = 0;
   // Gets metadata about the document.
   virtual const DocumentMetadata& GetDocumentMetadata() const = 0;
   // Gets the number of pages in the document.
-  virtual int GetNumberOfPages() = 0;
+  virtual int GetNumberOfPages() const = 0;
   // Gets the named destination by name.
   virtual base::Optional<PDFEngine::NamedDestination> GetNamedDestination(
       const std::string& destination) = 0;
@@ -432,7 +450,7 @@ class PDFEngine {
   // Returns the duplex setting.
   virtual int GetDuplexType() = 0;
   // Returns true if all the pages are the same size.
-  virtual bool GetPageSizeAndUniformity(pp::Size* size) = 0;
+  virtual bool GetPageSizeAndUniformity(gfx::Size* size) = 0;
 
   // Returns a VarArray of Bookmarks, each a VarDictionary containing the
   // following key/values:
@@ -451,10 +469,10 @@ class PDFEngine {
 
   virtual std::vector<uint8_t> GetSaveData() = 0;
 
-  virtual void SetCaretPosition(const pp::Point& position) = 0;
-  virtual void MoveRangeSelectionExtent(const pp::Point& extent) = 0;
-  virtual void SetSelectionBounds(const pp::Point& base,
-                                  const pp::Point& extent) = 0;
+  virtual void SetCaretPosition(const gfx::Point& position) = 0;
+  virtual void MoveRangeSelectionExtent(const gfx::Point& extent) = 0;
+  virtual void SetSelectionBounds(const gfx::Point& base,
+                                  const gfx::Point& extent) = 0;
   virtual void GetSelection(uint32_t* selection_start_page_index,
                             uint32_t* selection_start_char_index,
                             uint32_t* selection_end_page_index,
@@ -465,6 +483,9 @@ class PDFEngine {
 
   // Notify whether the PDF currently has the focus or not.
   virtual void UpdateFocus(bool has_focus) = 0;
+
+  // Returns the focus info of current focus item.
+  virtual PP_PrivateAccessibilityFocusInfo GetFocusInfo() = 0;
 
   virtual uint32_t GetLoadedByteSize() = 0;
   virtual bool ReadLoadedBytes(uint32_t length, void* buffer) = 0;

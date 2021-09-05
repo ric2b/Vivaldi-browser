@@ -126,7 +126,6 @@ void RemoveApps(apps::mojom::AppType app_type,
                 FakeAppListModelUpdater* model_updater) {
   apps::AppServiceProxy* proxy =
       apps::AppServiceProxyFactory::GetForProfile(profile);
-  DCHECK(proxy);
   proxy->FlushMojoCallsForTesting();
   proxy->AppRegistryCache().ForEachApp(
       [&model_updater, &app_type](const apps::AppUpdate& update) {
@@ -542,7 +541,7 @@ class CrostiniAppTest : public AppServiceAppModelBuilderTest {
     }
     for (const std::string& id : existing_item_ids) {
       if (id == crostini::kCrostiniFolderId ||
-          id == crostini::GetTerminalId()) {
+          id == crostini::kCrostiniTerminalSystemAppId) {
         continue;
       }
       sync_service_->RemoveItem(id);
@@ -598,9 +597,10 @@ TEST_P(CrostiniAppTest, EnableAndDisableCrostini) {
   EXPECT_EQ(0u, GetModelItemCount());
 
   CrostiniTestHelper::EnableCrostini(testing_profile());
-  EXPECT_THAT(GetAllApps(), testing::UnorderedElementsAre(IsChromeApp(
-                                crostini::GetTerminalId(), TerminalAppName(),
-                                crostini::kCrostiniFolderId)));
+  EXPECT_THAT(GetAllApps(),
+              testing::UnorderedElementsAre(
+                  IsChromeApp(crostini::kCrostiniTerminalSystemAppId,
+                              TerminalAppName(), crostini::kCrostiniFolderId)));
 
   CrostiniTestHelper::DisableCrostini(testing_profile());
   EXPECT_THAT(GetAllApps(), testing::IsEmpty());
@@ -614,8 +614,8 @@ TEST_P(CrostiniAppTest, AppInstallation) {
 
   EXPECT_THAT(GetAllApps(),
               testing::UnorderedElementsAre(
-                  IsChromeApp(crostini::GetTerminalId(), TerminalAppName(),
-                              crostini::kCrostiniFolderId),
+                  IsChromeApp(crostini::kCrostiniTerminalSystemAppId,
+                              TerminalAppName(), crostini::kCrostiniFolderId),
                   IsChromeApp(_, kDummyApp1Name, crostini::kCrostiniFolderId),
                   IsChromeApp(_, kDummyApp2Name, crostini::kCrostiniFolderId)));
 
@@ -623,8 +623,8 @@ TEST_P(CrostiniAppTest, AppInstallation) {
       CrostiniTestHelper::BasicApp(kBananaAppId, kBananaAppName));
   EXPECT_THAT(GetAllApps(),
               testing::UnorderedElementsAre(
-                  IsChromeApp(crostini::GetTerminalId(), TerminalAppName(),
-                              crostini::kCrostiniFolderId),
+                  IsChromeApp(crostini::kCrostiniTerminalSystemAppId,
+                              TerminalAppName(), crostini::kCrostiniFolderId),
                   IsChromeApp(_, kDummyApp1Name, crostini::kCrostiniFolderId),
                   IsChromeApp(_, kDummyApp2Name, crostini::kCrostiniFolderId),
                   IsChromeApp(_, kBananaAppName, crostini::kCrostiniFolderId)));
@@ -642,7 +642,7 @@ TEST_P(CrostiniAppTest, UpdateApps) {
   test_helper_->AddApp(dummy1);
   EXPECT_THAT(GetAllApps(),
               testing::UnorderedElementsAre(
-                  IsChromeApp(crostini::GetTerminalId(), _, _),
+                  IsChromeApp(crostini::kCrostiniTerminalSystemAppId, _, _),
                   IsChromeApp(CrostiniTestHelper::GenerateAppId(kDummyApp2Name),
                               _, _)));
 
@@ -652,7 +652,7 @@ TEST_P(CrostiniAppTest, UpdateApps) {
   EXPECT_THAT(
       GetAllApps(),
       testing::UnorderedElementsAre(
-          IsChromeApp(crostini::GetTerminalId(), _, _),
+          IsChromeApp(crostini::kCrostiniTerminalSystemAppId, _, _),
           IsChromeApp(CrostiniTestHelper::GenerateAppId(kDummyApp1Name), _, _),
           IsChromeApp(CrostiniTestHelper::GenerateAppId(kDummyApp2Name), _,
                       _)));
@@ -663,7 +663,7 @@ TEST_P(CrostiniAppTest, UpdateApps) {
   test_helper_->AddApp(dummy2);
   EXPECT_THAT(GetAllApps(),
               testing::UnorderedElementsAre(
-                  IsChromeApp(crostini::GetTerminalId(), _, _),
+                  IsChromeApp(crostini::kCrostiniTerminalSystemAppId, _, _),
                   IsChromeApp(CrostiniTestHelper::GenerateAppId(kDummyApp1Name),
                               kDummyApp1Name, _),
                   IsChromeApp(CrostiniTestHelper::GenerateAppId(kDummyApp2Name),
@@ -687,20 +687,22 @@ TEST_P(CrostiniAppTest, RemoveApps) {
 
 // Tests that the crostini folder is (re)created with the correct parameters.
 TEST_P(CrostiniAppTest, CreatesFolder) {
-  EXPECT_THAT(GetAllApps(), testing::UnorderedElementsAre(IsChromeApp(
-                                crostini::GetTerminalId(), TerminalAppName(),
-                                crostini::kCrostiniFolderId)));
+  EXPECT_THAT(GetAllApps(),
+              testing::UnorderedElementsAre(
+                  IsChromeApp(crostini::kCrostiniTerminalSystemAppId,
+                              TerminalAppName(), crostini::kCrostiniFolderId)));
 
   // We simulate ash creating the crostini folder and calling back into chrome
   // (rather than use a full browser test).
   auto metadata = std::make_unique<ash::AppListItemMetadata>();
   metadata->id = crostini::kCrostiniFolderId;
-  GetModelUpdater()->OnFolderCreated(std::move(metadata));
+  metadata->is_folder = true;
+  GetModelUpdater()->OnItemAdded(std::move(metadata));
 
   EXPECT_THAT(GetAllApps(),
               testing::UnorderedElementsAre(
-                  IsChromeApp(crostini::GetTerminalId(), TerminalAppName(),
-                              crostini::kCrostiniFolderId),
+                  IsChromeApp(crostini::kCrostiniTerminalSystemAppId,
+                              TerminalAppName(), crostini::kCrostiniFolderId),
                   testing::AllOf(IsChromeApp(crostini::kCrostiniFolderId,
                                              kRootFolderName, ""),
                                  IsPersistentApp())));
@@ -739,6 +741,10 @@ class PluginVmAppTest : public ::testing::TestWithParam<ProviderType> {
     testing_profile_ = std::make_unique<TestingProfile>();
     web_app::TestWebAppProvider::Get(testing_profile_.get())->Start();
     test_helper_ = std::make_unique<PluginVmTestHelper>(testing_profile_.get());
+    // We need to call this before creating the builder, otherwise
+    // |PluginVmApps| is disabled forever.
+    test_helper_->SetUserRequirementsToAllowPluginVm();
+
     CreateBuilder();
   }
 
@@ -775,6 +781,14 @@ class PluginVmAppTest : public ::testing::TestWithParam<ProviderType> {
                model_updater_.get());
   }
 
+  void AllowPluginVm() {
+    // We cannot call test_helper_.AllowPluginVm() because we have called
+    // SetUserRequirementsToAllowPluginVm()
+    test_helper_->EnablePluginVmFeature();
+    test_helper_->EnterpriseEnrollDevice();
+    test_helper_->SetPolicyRequirementsToAllowPluginVm();
+  }
+
   base::test::ScopedFeatureList scoped_feature_list_;
   content::BrowserTaskEnvironment task_environment_;
   std::unique_ptr<TestingProfile> testing_profile_;
@@ -795,7 +809,7 @@ TEST_P(PluginVmAppTest, EnableAndDisablePluginVm) {
   app_service_test_.FlushMojoCalls();
   EXPECT_THAT(GetModelContent(model_updater_.get()), testing::IsEmpty());
 
-  test_helper_->AllowPluginVm();
+  AllowPluginVm();
 
   app_service_test_.FlushMojoCalls();
   EXPECT_EQ(std::vector<std::string>{l10n_util::GetStringUTF8(
@@ -810,7 +824,7 @@ TEST_P(PluginVmAppTest, EnableAndDisablePluginVm) {
 }
 
 TEST_P(PluginVmAppTest, PluginVmEnabled) {
-  test_helper_->AllowPluginVm();
+  AllowPluginVm();
 
   // Reset the AppModelBuilder, so that it is created in a state where
   // Plugin VM was enabled.

@@ -9,6 +9,8 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "net/cert/mock_cert_verifier.h"
 #include "net/dns/mock_host_resolver.h"
+#include "net/log/test_net_log.h"
+#include "net/log/test_net_log_util.h"
 #include "net/proxy_resolution/configured_proxy_resolution_service.h"
 #include "net/quic/crypto/proof_source_chromium.h"
 #include "net/test/test_data_directory.h"
@@ -105,6 +107,7 @@ class QuicTransportEndToEndTest : public TestWithTaskEnvironment {
         HostPortPair("test.example.com", 0));
     builder.set_quic_context(std::move(quic_context));
 
+    builder.set_net_log(&net_log_);
     context_ = builder.Build();
 
     // By default, quit on error instead of waiting for RunLoop() to time out.
@@ -148,9 +151,10 @@ class QuicTransportEndToEndTest : public TestWithTaskEnvironment {
   std::unique_ptr<URLRequestContext> context_;
   std::unique_ptr<QuicTransportClient> client_;
   TestConnectionHelper* helper_;  // Owned by |context_|.
-  MockVisitor visitor_;
+  ::testing::NiceMock<MockVisitor> visitor_;
   std::unique_ptr<QuicTransportSimpleServer> server_;
   std::unique_ptr<base::RunLoop> run_loop_;
+  RecordingTestNetLog net_log_;
 
   int port_ = 0;
   url::Origin origin_;
@@ -280,25 +284,16 @@ TEST_F(QuicTransportEndToEndTest, OldVersion) {
   Run();
   ASSERT_TRUE(client_->session() != nullptr);
   EXPECT_TRUE(client_->session()->IsSessionReady());
+
+  std::vector<NetLogEntry> events = net_log_.GetEntriesWithType(
+      NetLogEventType::QUIC_SESSION_VERSION_NEGOTIATED);
+  ASSERT_GE(events.size(), 1u);
+  EXPECT_EQ(
+      GetStringValueFromParams(events[0], "version"),
+      quic::ParsedQuicVersionToString(
+          QuicTransportClient::QuicVersionsForWebTransportOriginTrial()[1]));
 }
 
-TEST_F(QuicTransportEndToEndTest, NoCommonVersion) {
-  // Disable all WebTransport versions.
-  for (const quic::ParsedQuicVersion& version :
-       QuicTransportClient::QuicVersionsForWebTransportOriginTrial()) {
-    quic::QuicDisableVersion(version);
-  }
-
-  StartServer();
-  client_ = std::make_unique<QuicTransportClient>(
-      GetURL("/discard"), origin_, &visitor_, isolation_key_, context_.get(),
-      QuicTransportClient::Parameters());
-  client_->Connect();
-  EXPECT_CALL(visitor_, OnConnectionFailed()).WillOnce(StopRunning());
-  Run();
-  EXPECT_TRUE(client_->session() == nullptr);
-  EXPECT_EQ(client_->error().quic_error, quic::QUIC_INVALID_VERSION);
-}
 }  // namespace
 }  // namespace test
 }  // namespace net

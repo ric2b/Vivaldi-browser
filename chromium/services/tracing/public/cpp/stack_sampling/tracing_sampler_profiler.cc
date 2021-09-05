@@ -35,10 +35,6 @@
 #include "base/android/reached_code_profiler.h"
 #endif
 
-#if defined(OS_MACOSX)
-#include "base/mac/mac_util.h"
-#endif
-
 #if defined(OS_ANDROID) && BUILDFLAG(CAN_UNWIND_WITH_CFI_TABLE) && \
     defined(OFFICIAL_BUILD)
 #include <dlfcn.h>
@@ -57,6 +53,9 @@ using StreamingProfilePacketHandle =
 namespace tracing {
 
 namespace {
+
+// Pointer to the main thread instance, if any.
+TracingSamplerProfiler* g_main_thread_instance = nullptr;
 
 class TracingSamplerProfilerDataSource
     : public PerfettoTracedProcess::DataSourceBase {
@@ -525,7 +524,7 @@ void TracingSamplerProfiler::TracingProfileBuilder::SampleLoaderLock() {
 
 // static
 void TracingSamplerProfiler::MangleModuleIDIfNeeded(std::string* module_id) {
-#if defined(OS_ANDROID) || defined(OS_LINUX)
+#if defined(OS_ANDROID) || defined(OS_LINUX) || defined(OS_CHROMEOS)
   // Linux ELF module IDs are 160bit integers, which we need to mangle
   // down to 128bit integers to match the id that Breakpad outputs.
   // Example on version '66.0.3359.170' x64:
@@ -553,6 +552,11 @@ TracingSamplerProfiler::CreateOnMainThread() {
   InitializeLoaderLockSampling();
   profiler->EnableLoaderLockSampling();
 #endif
+  // If running in single process mode, there may be multiple "main thread"
+  // profilers created. In this case, we assume the first created one is the
+  // browser one.
+  if (!g_main_thread_instance)
+    g_main_thread_instance = profiler.get();
   return profiler;
 }
 
@@ -575,6 +579,12 @@ void TracingSamplerProfiler::DeleteOnChildThreadForTesting() {
 void TracingSamplerProfiler::RegisterDataSource() {
   PerfettoTracedProcess::Get()->AddDataSource(
       TracingSamplerProfilerDataSource::Get());
+}
+
+void TracingSamplerProfiler::SetAuxUnwinderFactoryOnMainThread(
+    const base::RepeatingCallback<std::unique_ptr<base::Unwinder>()>& factory) {
+  DCHECK(g_main_thread_instance);
+  g_main_thread_instance->SetAuxUnwinderFactory(factory);
 }
 
 // static
@@ -615,6 +625,16 @@ TracingSamplerProfiler::TracingSamplerProfiler(
 
 TracingSamplerProfiler::~TracingSamplerProfiler() {
   TracingSamplerProfilerDataSource::Get()->UnregisterProfiler(this);
+  if (g_main_thread_instance == this)
+    g_main_thread_instance = nullptr;
+}
+
+void TracingSamplerProfiler::SetAuxUnwinderFactory(
+    const base::RepeatingCallback<std::unique_ptr<base::Unwinder>()>& factory) {
+  base::AutoLock lock(lock_);
+  aux_unwinder_factory_ = factory;
+  if (profiler_)
+    profiler_->AddAuxUnwinder(aux_unwinder_factory_.Run());
 }
 
 void TracingSamplerProfiler::SetSampleCallbackForTesting(
@@ -641,13 +661,8 @@ void TracingSamplerProfiler::StartTracing(
     return;
 #endif
 
-#if defined(OS_MACOSX)
-  // TODO(https://crbug.com/1098119): Fix unwinding on OS X 10.16. The OS has
-  // moved all system libraries into the dyld shared cache and this seems to
-  // break the sampling profiler.
-  if (base::mac::IsOSLaterThan10_15_DontCallThis())
+  if (!base::StackSamplingProfiler::IsSupported())
     return;
-#endif
 
   base::StackSamplingProfiler::SamplingParams params;
   params.samples_per_profile = std::numeric_limits<int>::max();
@@ -675,6 +690,8 @@ void TracingSamplerProfiler::StartTracing(
 #else   // defined(OS_ANDROID)
   profiler_ = std::make_unique<base::StackSamplingProfiler>(
       sampled_thread_token_, params, std::move(profile_builder));
+  if (aux_unwinder_factory_)
+    profiler_->AddAuxUnwinder(aux_unwinder_factory_.Run());
   profiler_->Start();
 #endif  // defined(OS_ANDROID)
 }

@@ -47,8 +47,6 @@ component("gamepad") {
     "gamepad_platform_data_fetcher_linux.h",
     "gamepad_platform_data_fetcher_mac.h",
     "gamepad_platform_data_fetcher_mac.mm",
-    "gamepad_platform_data_fetcher_win.cc",
-    "gamepad_platform_data_fetcher_win.h",
     "gamepad_provider.cc",
     "gamepad_provider.h",
     "gamepad_service.cc",
@@ -81,12 +79,16 @@ component("gamepad") {
     "raw_input_gamepad_device_win.h",
     "udev_gamepad_linux.cc",
     "udev_gamepad_linux.h",
+    "wgi_data_fetcher_win.cc",
+    "wgi_data_fetcher_win.h",
     "xbox_controller_mac.h",
     "xbox_controller_mac.mm",
     "xbox_data_fetcher_mac.cc",
     "xbox_data_fetcher_mac.h",
     "xbox_hid_controller.cc",
     "xbox_hid_controller.h",
+    "xinput_data_fetcher_win.cc",
+    "xinput_data_fetcher_win.h",
     "xinput_haptic_gamepad_win.cc",
     "xinput_haptic_gamepad_win.h",
   ]
@@ -111,7 +113,7 @@ component("gamepad") {
         [ "/wd4267" ]  # conversion from 'size_t' (64 bit) to 'type'(32 bit).
   }
 
-  if (is_linux) {
+  if (is_linux || is_chromeos) {
     if (use_udev) {
       deps += [ "//device/udev_linux" ]
     } else {
@@ -137,7 +139,7 @@ component("gamepad") {
   }
 
   if (is_mac) {
-    libs = [
+    frameworks = [
       "CoreFoundation.framework",
       "Foundation.framework",
       "ForceFeedback.framework",

@@ -38,7 +38,7 @@ class PrefService;
 namespace autofill {
 struct FormData;
 struct PasswordForm;
-}
+}  // namespace autofill
 
 namespace syncer {
 class ModelTypeControllerDelegate;
@@ -89,6 +89,14 @@ class PasswordStore : protected PasswordStoreSync,
     // the UI thread.
     virtual void OnLoginsChanged(const PasswordStoreChangeList& changes) = 0;
 
+    // Like OnLoginsChanged(), but also receives the originating PasswordStore
+    // as a parameter. This is useful for observers that observe changes in both
+    // the profile-scoped and the account-scoped store. The default
+    // implementation simply calls OnLoginsChanged(), so observers that don't
+    // care about the store can just ignore this.
+    virtual void OnLoginsChangedIn(PasswordStore* store,
+                                   const PasswordStoreChangeList& changes);
+
    protected:
     virtual ~Observer() = default;
   };
@@ -111,7 +119,7 @@ class PasswordStore : protected PasswordStoreSync,
   class UnsyncedCredentialsDeletionNotifier {
    public:
     // Should be called from the UI thread.
-    virtual void Notify(const std::vector<autofill::PasswordForm>&) = 0;
+    virtual void Notify(std::vector<autofill::PasswordForm>) = 0;
     virtual ~UnsyncedCredentialsDeletionNotifier() = default;
     virtual base::WeakPtr<UnsyncedCredentialsDeletionNotifier> GetWeakPtr() = 0;
   };
@@ -323,6 +331,12 @@ class PasswordStore : protected PasswordStoreSync,
                              base::Time remove_end,
                              base::OnceClosure completion);
 
+  // Deletes and re-creates the whole PasswordStore, unless it is already empty
+  // anyway. If |completion| is not null, it will be posted to the
+  // |main_task_runner_| once the process is complete. The bool parameter
+  // indicates whether any data was actually cleared.
+  void ClearStore(base::OnceCallback<void(bool)> completion);
+
   // Adds an observer to be notified when the password store data changes.
   void AddObserver(Observer* observer);
 
@@ -352,6 +366,8 @@ class PasswordStore : protected PasswordStoreSync,
   // Sets |deletion_notifier_|. Must not pass a nullptr.
   void SetUnsyncedCredentialsDeletionNotifier(
       std::unique_ptr<UnsyncedCredentialsDeletionNotifier> deletion_notifier);
+
+  void SetSyncTaskTimeoutForTest(base::TimeDelta timeout);
 
 #if defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
   // Immediately called after |Init()| to retrieve password hash data for
@@ -530,6 +546,18 @@ class PasswordStore : protected PasswordStoreSync,
   virtual std::vector<std::unique_ptr<autofill::PasswordForm>>
   FillMatchingLoginsByPassword(const base::string16& plain_text_password) = 0;
 
+  // Overwrites |forms| with all stored non-blacklisted credentials. Returns
+  // true on success.
+  virtual bool FillAutofillableLogins(
+      std::vector<std::unique_ptr<autofill::PasswordForm>>* forms)
+      WARN_UNUSED_RESULT = 0;
+
+  // Overwrites |forms| with all stored blacklisted credentials. Returns true on
+  // success.
+  virtual bool FillBlacklistLogins(
+      std::vector<std::unique_ptr<autofill::PasswordForm>>* forms)
+      WARN_UNUSED_RESULT = 0;
+
   // Synchronous implementation for manipulating with statistics.
   virtual void AddSiteStatsImpl(const InteractionsStats& stats) = 0;
   virtual void RemoveSiteStatsImpl(const GURL& origin_domain) = 0;
@@ -566,6 +594,10 @@ class PasswordStore : protected PasswordStoreSync,
   virtual void RemoveFieldInfoByTimeImpl(base::Time remove_begin,
                                          base::Time remove_end) = 0;
 
+  // Synchronous implementation provided by subclasses to check whether the
+  // store is empty.
+  virtual bool IsEmpty() = 0;
+
   // PasswordStoreSync:
   PasswordStoreChangeList AddLoginSync(const autofill::PasswordForm& form,
                                        AddLoginError* error) override;
@@ -582,7 +614,7 @@ class PasswordStore : protected PasswordStoreSync,
   void NotifyDeletionsHaveSynced(bool success) override;
 
   void NotifyUnsyncedCredentialsWillBeDeleted(
-      const std::vector<autofill::PasswordForm>& unsynced_credentials) override;
+      std::vector<autofill::PasswordForm> unsynced_credentials) override;
 
   // Invokes callback and notifies observers if there was a change to the list
   // of compromised passwords.
@@ -655,9 +687,8 @@ class PasswordStore : protected PasswordStoreSync,
   using StatsResult = std::vector<InteractionsStats>;
   using StatsTask = base::OnceCallback<StatsResult()>;
 
-  using CompromisedCredentialsResult = std::vector<CompromisedCredentials>;
   using CompromisedCredentialsTask =
-      base::OnceCallback<CompromisedCredentialsResult()>;
+      base::OnceCallback<std::vector<CompromisedCredentials>()>;
 
   // Called on the main thread after initialization is completed.
   // |success| is true if initialization was successful. Sets the
@@ -732,6 +763,8 @@ class PasswordStore : protected PasswordStoreSync,
   void RemoveFieldInfoByTimeInternal(base::Time remove_begin,
                                      base::Time remove_end,
                                      base::OnceClosure completion);
+
+  void ClearStoreInternal(base::OnceCallback<void(bool)> completion);
 
   // Finds all PasswordForms with a signon_realm that is equal to, or is a
   // PSL-match to that of |form|, and takes care of notifying the consumer with
@@ -879,6 +912,9 @@ class PasswordStore : protected PasswordStoreSync,
   bool shutdown_called_ = false;
 
   InitStatus init_status_ = InitStatus::kUnknown;
+
+  // This is usually constant, only changed in tests.
+  base::TimeDelta sync_task_timeout_ = base::TimeDelta::FromSeconds(30);
 
   DISALLOW_COPY_AND_ASSIGN(PasswordStore);
 };

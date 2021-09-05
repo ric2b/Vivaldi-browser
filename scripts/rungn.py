@@ -6,6 +6,7 @@ import argparse
 import platform
 import shutil
 import datetime
+import json
 
 sourcedir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -49,6 +50,7 @@ parser.add_argument("--ide-unique-name", action="store_true");
 parser.add_argument("--official", action="store_true");
 parser.add_argument("--static", action="store_true");
 parser.add_argument("--goma", action="store_true");
+parser.add_argument("--no-hermetic", action="store_true");
 parser.add_argument("--args-gn")
 parser.add_argument("args", nargs=argparse.REMAINDER);
 
@@ -83,12 +85,17 @@ if args.refresh or args.bootstrap or not os.access(gn_path, os.F_OK):
     pass
   bootstrap_env = dict(os.environ)
 
-  for x in ["GN_DEFINES"]:
+  for x in ["GN_DEFINES", "DEPOT_TOOLS_WIN_TOOLCHAIN"]:
     if x in bootstrap_env:
       del bootstrap_env[x]
   if is_windows:
-    bootstrap_env["DEPOT_TOOLS_WIN_TOOLCHAIN"]="0"
     def setup_toolchain():
+      toolchain_args = []
+      if os.access("build/toolchain.json", os.F_OK) and not args.no_hermetic:
+        toolchain_args += ["--toolchain-json", os.path.join(sourcedir, "build/toolchain.json")]
+      else:
+        bootstrap_env["DEPOT_TOOLS_WIN_TOOLCHAIN"]="0"
+
       # Copied from Chromium
       def CallPythonScopeScript(command, **kwargs):
         response = subprocess.check_output(command, **kwargs)
@@ -101,8 +108,8 @@ if args.refresh or args.bootstrap or not os.access(gn_path, os.F_OK):
 
       toolchain_paths = CallPythonScopeScript(
           [sys.executable,
-            os.path.join(sourcedir, "chromium", "build", "vs_toolchain.py"),
-          "get_toolchain_dir"],
+            os.path.join(sourcedir, "chromium", "build", "vs_toolchain.py"),] +
+            toolchain_args + ["get_toolchain_dir"],
           cwd=sourcedir,
           env=bootstrap_env)
       try:
@@ -112,7 +119,8 @@ if args.refresh or args.bootstrap or not os.access(gn_path, os.F_OK):
       windows_x64_toolchain =  CallPythonScopeScript(
           [sys.executable,
            os.path.join(sourcedir, "chromium", "build", "toolchain",
-                        "win", "setup_toolchain.py"),
+                        "win", "setup_toolchain.py"),] +
+           toolchain_args + [
            toolchain_paths["vs_path"],
            toolchain_paths["sdk_path"],
            toolchain_paths["runtime_dirs"],
@@ -189,6 +197,9 @@ if args.official:
 
 if args.static:
   gn_defines += " is_component_build=false"
+
+if args.no_hermetic:
+  gn_defines += " use_hermetic_toolchain=false"
 
 if  args.goma or use_gn_goma:
   _paths = os.environ["PATH"].split(os.pathsep)

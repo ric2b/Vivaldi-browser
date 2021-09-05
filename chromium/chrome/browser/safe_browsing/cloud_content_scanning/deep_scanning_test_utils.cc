@@ -139,7 +139,8 @@ void EventReportValidator::ExpectUnscannedFileEvent(
     const std::string& expected_trigger,
     const std::string& expected_reason,
     const std::set<std::string>* expected_mimetypes,
-    int expected_content_size) {
+    int expected_content_size,
+    const std::string& expected_result) {
   event_key_ = SafeBrowsingPrivateEventRouter::kKeyUnscannedFileEvent;
   url_ = expected_url;
   filename_ = expected_filename;
@@ -148,6 +149,7 @@ void EventReportValidator::ExpectUnscannedFileEvent(
   trigger_ = expected_trigger;
   unscanned_reason_ = expected_reason;
   content_size_ = expected_content_size;
+  result_ = expected_result;
   EXPECT_CALL(*client_, UploadRealtimeReport_(_, _))
       .WillOnce([this](base::Value& report,
                        base::OnceCallback<void(bool)>& callback) {
@@ -164,7 +166,8 @@ void EventReportValidator::ExpectDangerousDeepScanningResult(
     const std::string& expected_threat_type,
     const std::string& expected_trigger,
     const std::set<std::string>* expected_mimetypes,
-    int expected_content_size) {
+    int expected_content_size,
+    const std::string& expected_result) {
   event_key_ = SafeBrowsingPrivateEventRouter::kKeyDangerousDownloadEvent;
   url_ = expected_url;
   filename_ = expected_filename;
@@ -173,6 +176,7 @@ void EventReportValidator::ExpectDangerousDeepScanningResult(
   mimetypes_ = expected_mimetypes;
   trigger_ = expected_trigger;
   content_size_ = expected_content_size;
+  result_ = expected_result;
   EXPECT_CALL(*client_, UploadRealtimeReport_(_, _))
       .WillOnce([this](base::Value& report,
                        base::OnceCallback<void(bool)>& callback) {
@@ -189,7 +193,8 @@ void EventReportValidator::ExpectSensitiveDataEvent(
     const std::string& expected_trigger,
     const ContentAnalysisScanResult& expected_dlp_verdict,
     const std::set<std::string>* expected_mimetypes,
-    int expected_content_size) {
+    int expected_content_size,
+    const std::string& expected_result) {
   event_key_ = SafeBrowsingPrivateEventRouter::kKeySensitiveDataEvent;
   url_ = expected_url;
   dlp_verdict_ = expected_dlp_verdict;
@@ -197,8 +202,8 @@ void EventReportValidator::ExpectSensitiveDataEvent(
   sha256_ = expected_sha256;
   mimetypes_ = expected_mimetypes;
   trigger_ = expected_trigger;
-  clicked_through_ = false;
   content_size_ = expected_content_size;
+  result_ = expected_result;
   EXPECT_CALL(*client_, UploadRealtimeReport_(_, _))
       .WillOnce([this](base::Value& report,
                        base::OnceCallback<void(bool)>& callback) {
@@ -217,7 +222,8 @@ void EventReportValidator::
         const std::string& expected_trigger,
         const ContentAnalysisScanResult& expected_dlp_verdict,
         const std::set<std::string>* expected_mimetypes,
-        int expected_content_size) {
+        int expected_content_size,
+        const std::string& expected_result) {
   event_key_ = SafeBrowsingPrivateEventRouter::kKeyDangerousDownloadEvent;
   url_ = expected_url;
   filename_ = expected_filename;
@@ -226,6 +232,7 @@ void EventReportValidator::
   trigger_ = expected_trigger;
   mimetypes_ = expected_mimetypes;
   content_size_ = expected_content_size;
+  result_ = expected_result;
   EXPECT_CALL(*client_, UploadRealtimeReport_(_, _))
       .WillOnce([this](base::Value& report,
                        base::OnceCallback<void(bool)>& callback) {
@@ -236,12 +243,38 @@ void EventReportValidator::
               base::Value& report, base::OnceCallback<void(bool)>& callback) {
             event_key_ = SafeBrowsingPrivateEventRouter::kKeySensitiveDataEvent;
             threat_type_ = base::nullopt;
-            clicked_through_ = false;
             dlp_verdict_ = expected_dlp_verdict;
             ValidateReport(&report);
             if (!done_closure_.is_null())
               done_closure_.Run();
           });
+}
+
+void EventReportValidator::ExpectDangerousDownloadEvent(
+    const std::string& expected_url,
+    const std::string& expected_filename,
+    const std::string& expected_sha256,
+    const std::string& expected_threat_type,
+    const std::string& expected_trigger,
+    const std::set<std::string>* expected_mimetypes,
+    int expected_content_size,
+    const std::string& expected_result) {
+  event_key_ = SafeBrowsingPrivateEventRouter::kKeyDangerousDownloadEvent;
+  url_ = expected_url;
+  filename_ = expected_filename;
+  sha256_ = expected_sha256;
+  threat_type_ = expected_threat_type;
+  mimetypes_ = expected_mimetypes;
+  trigger_ = expected_trigger;
+  content_size_ = expected_content_size;
+  result_ = expected_result;
+  EXPECT_CALL(*client_, UploadRealtimeReport_(_, _))
+      .WillOnce([this](base::Value& report,
+                       base::OnceCallback<void(bool)>& callback) {
+        ValidateReport(&report);
+        if (!done_closure_.is_null())
+          done_closure_.Run();
+      });
 }
 
 void EventReportValidator::ValidateReport(base::Value* report) {
@@ -270,6 +303,8 @@ void EventReportValidator::ValidateReport(base::Value* report) {
   ValidateField(event, SafeBrowsingPrivateEventRouter::kKeyTrigger, trigger_);
   ValidateField(event, SafeBrowsingPrivateEventRouter::kKeyContentSize,
                 content_size_);
+  ValidateField(event, SafeBrowsingPrivateEventRouter::kKeyEventResult,
+                result_);
   ValidateField(event, SafeBrowsingPrivateEventRouter::kKeyThreatType,
                 threat_type_);
   ValidateField(event, SafeBrowsingPrivateEventRouter::kKeyUnscannedReason,
@@ -291,8 +326,6 @@ void EventReportValidator::ValidateDlpVerdict(base::Value* value) {
   if (!dlp_verdict_.has_value())
     return;
 
-  ValidateField(value, SafeBrowsingPrivateEventRouter::kKeyClickedThrough,
-                clicked_through_);
   base::Value* triggered_rules =
       value->FindListKey(SafeBrowsingPrivateEventRouter::kKeyTriggeredRuleInfo);
   ASSERT_NE(nullptr, triggered_rules);
@@ -310,38 +343,37 @@ void EventReportValidator::ValidateDlpVerdict(base::Value* value) {
 void EventReportValidator::ValidateDlpRule(
     base::Value* value,
     const ContentAnalysisTrigger& expected_rule) {
-  ValidateField(value, SafeBrowsingPrivateEventRouter::kKeyTriggeredRuleAction,
-                base::Optional<int>(expected_rule.action));
   ValidateField(value, SafeBrowsingPrivateEventRouter::kKeyTriggeredRuleName,
                 expected_rule.name);
-  int64_t rule_id;
-  ASSERT_TRUE(base::StringToInt64(expected_rule.id, &rule_id));
-  ValidateField(value, SafeBrowsingPrivateEventRouter::kKeyTriggeredRuleId,
-                base::Optional<int>(rule_id));
 }
 
 void EventReportValidator::ValidateField(
     base::Value* value,
     const std::string& field_key,
     const base::Optional<std::string>& expected_value) {
-  if (expected_value.has_value())
-    ASSERT_EQ(*value->FindStringKey(field_key), expected_value.value());
-  else
-    ASSERT_EQ(nullptr, value->FindStringKey(field_key));
+  if (expected_value.has_value()) {
+    ASSERT_EQ(*value->FindStringKey(field_key), expected_value.value())
+        << "Mismatch in field " << field_key;
+  } else {
+    ASSERT_EQ(nullptr, value->FindStringKey(field_key))
+        << "Field " << field_key << "should not be populated";
+  }
 }
 
 void EventReportValidator::ValidateField(
     base::Value* value,
     const std::string& field_key,
     const base::Optional<int>& expected_value) {
-  ASSERT_EQ(value->FindIntKey(field_key), expected_value);
+  ASSERT_EQ(value->FindIntKey(field_key), expected_value)
+      << "Mismatch in field " << field_key;
 }
 
 void EventReportValidator::ValidateField(
     base::Value* value,
     const std::string& field_key,
     const base::Optional<bool>& expected_value) {
-  ASSERT_EQ(value->FindBoolKey(field_key), expected_value);
+  ASSERT_EQ(value->FindBoolKey(field_key), expected_value)
+      << "Mismatch in field " << field_key;
 }
 
 void EventReportValidator::SetDoneClosure(base::RepeatingClosure closure) {

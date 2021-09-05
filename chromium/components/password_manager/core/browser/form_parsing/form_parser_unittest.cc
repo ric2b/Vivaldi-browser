@@ -90,6 +90,7 @@ struct FormParsingTestCase {
   // null means no checking
   const autofill::ValueElementVector* all_possible_passwords = nullptr;
   const autofill::ValueElementVector* all_possible_usernames = nullptr;
+  bool server_side_classification_successful = true;
   bool username_may_use_prefilled_placeholder = false;
   base::Optional<FormDataParser::ReadonlyPasswordFields> readonly_status;
   base::Optional<FormDataParser::ReadonlyPasswordFields>
@@ -356,13 +357,10 @@ void CheckTestData(const std::vector<FormParsingTestCase>& test_cases) {
       } else {
         ASSERT_TRUE(parsed_form) << "Expected successful parsing";
         EXPECT_EQ(PasswordForm::Scheme::kHtml, parsed_form->scheme);
-        EXPECT_FALSE(parsed_form->blacklisted_by_user);
+        EXPECT_FALSE(parsed_form->blocked_by_user);
         EXPECT_EQ(PasswordForm::Type::kManual, parsed_form->type);
-#if defined(OS_IOS)
-        EXPECT_FALSE(parsed_form->has_renderer_ids);
-#else
-        EXPECT_TRUE(parsed_form->has_renderer_ids);
-#endif
+        EXPECT_EQ(test_case.server_side_classification_successful,
+                  parsed_form->server_side_classification_successful);
         EXPECT_EQ(test_case.username_may_use_prefilled_placeholder,
                   parsed_form->username_may_use_prefilled_placeholder);
         EXPECT_EQ(test_case.submission_event, parsed_form->submission_event);
@@ -1226,33 +1224,6 @@ TEST(FormParserTest, ServerPredictionsForClearTextPasswordFields) {
   });
 }
 
-TEST(FormParserTest, ServerHintsForDisabledPrefilledPlaceholderFeature) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndDisableFeature(
-      password_manager::features::kEnableOverwritingPlaceholderUsernames);
-  CheckTestData({
-      {
-          .description_for_logging = "Simple predictions work",
-          .fields =
-              {
-                  {.role = ElementRole::USERNAME,
-                   .form_control_type = "text",
-                   .prediction = {.type = autofill::USERNAME_AND_EMAIL_ADDRESS,
-                                  .may_use_prefilled_placeholder = true}},
-                  {.form_control_type = "text"},
-                  {.role_saving = ElementRole::CURRENT_PASSWORD,
-                   .form_control_type = "password"},
-                  {.role_filling = ElementRole::CURRENT_PASSWORD,
-                   .role_saving = ElementRole::NEW_PASSWORD,
-                   .form_control_type = "password",
-                   .prediction = {.type = autofill::PASSWORD,
-                                  .may_use_prefilled_placeholder = true}},
-              },
-          .username_may_use_prefilled_placeholder = false,
-      },
-  });
-}
-
 TEST(FormParserTest, ServerHints) {
   CheckTestData({
       {
@@ -1295,6 +1266,7 @@ TEST(FormParserTest, ServerHints) {
                    .prediction = {.type = autofill::PASSWORD,
                                   .may_use_prefilled_placeholder = true}},
               },
+          .server_side_classification_successful = true,
           .username_may_use_prefilled_placeholder = true,
       },
       {
@@ -1331,6 +1303,22 @@ TEST(FormParserTest, ServerHints) {
                   {.role = ElementRole::CURRENT_PASSWORD,
                    .form_control_type = "password"},
               },
+      },
+      {
+          .description_for_logging = "Username not a placeholder",
+          .fields =
+              {
+                  {.role = ElementRole::USERNAME,
+                   .form_control_type = "text",
+                   .prediction = {.type = autofill::USERNAME_AND_EMAIL_ADDRESS,
+                                  .may_use_prefilled_placeholder = false}},
+                  {.role = ElementRole::CURRENT_PASSWORD,
+                   .form_control_type = "password",
+                   .prediction = {.type = autofill::PASSWORD,
+                                  .may_use_prefilled_placeholder = false}},
+              },
+          .server_side_classification_successful = true,
+          .username_may_use_prefilled_placeholder = false,
       },
   });
 }
@@ -2525,6 +2513,53 @@ TEST(FormParserTest, InvalidURL) {
   FormDataParser parser;
   EXPECT_FALSE(parser.Parse(form_data, FormDataParser::Mode::kFilling));
   EXPECT_FALSE(parser.Parse(form_data, FormDataParser::Mode::kSaving));
+}
+
+TEST(FormParserTest, FindUsernameInPredictions_SkipPrediction) {
+  // Searching username field should skip prediction that is less
+  // likely to be user interaction. For example, if a field has no
+  // user input while others have, the field cannot be an username
+  // field.
+
+  // Create a form containing username, email, id, password, submit.
+  const FormParsingTestCase form_desc = {
+      .fields = {
+          {.name = "username", .form_control_type = "text"},
+          {.name = "email", .form_control_type = "text"},
+          {.name = "id", .form_control_type = "text"},
+          {.name = "password", .form_control_type = "password"},
+          {.name = "submit", .form_control_type = "submit"},
+      }};
+
+  FormPredictions no_predictions;
+  ParseResultIds dummy;
+  const FormData form_data =
+      GetFormDataAndExpectation(form_desc, &no_predictions, &dummy, &dummy);
+
+  // Add all form fields in ProcessedField. A user typed only into
+  // "id" and "password" fields. So, the prediction for "email" field
+  // should be ignored despite it is more reliable than prediction for
+  // "id" field.
+  std::vector<ProcessedField> processed_fields;
+  for (const auto& form_field_data : form_data.fields)
+    processed_fields.push_back(ProcessedField{.field = &form_field_data});
+
+  processed_fields[2].interactability = Interactability::kCertain;  // id
+  processed_fields[3].interactability = Interactability::kCertain;  // password
+
+  // Add predictions for "email" and "id" fields. The "email" is in
+  // front of "id", indicating "email" is more reliable.
+  const std::vector<autofill::FieldRendererId> predictions = {
+      form_data.fields[1].unique_renderer_id,  // email
+      form_data.fields[2].unique_renderer_id,  // id
+  };
+
+  // Now search the username field. The username field is supposed to
+  // be "id", not "email".
+  const autofill::FormFieldData* field_data = FindUsernameInPredictions(
+      predictions, processed_fields, Interactability::kCertain);
+  ASSERT_TRUE(field_data);
+  EXPECT_EQ(base::UTF8ToUTF16("id"), field_data->name);
 }
 
 }  // namespace

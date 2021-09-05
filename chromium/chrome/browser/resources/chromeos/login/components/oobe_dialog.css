@@ -59,6 +59,14 @@
   margin: 0;
 }
 
+#footerContainer ::slotted(*) {
+  line-height: var(--subtitle-line-height);
+}
+
+:host(:not([has-buttons])) #footerContainer {
+  margin-bottom: 40px;
+}
+
 #oobe-progress ::slotted(paper-progress) {
   --paper-progress-active-color: var(--google-blue-500);
   --paper-progress-container-color: var(--google-blue-100);
@@ -73,7 +81,7 @@
   padding-inline-start: var(--oobe-dialog-content-padding);
 
   /* TODO(https://crbug.com/1017173) Make it adaptive. */
-  padding-top: 20px;
+  padding-top: var(--oobe-dialog-content-padding-top);
 }
 
 #footerContainer[noFooterPadding] {

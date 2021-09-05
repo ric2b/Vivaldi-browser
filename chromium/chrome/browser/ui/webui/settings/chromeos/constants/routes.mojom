@@ -68,13 +68,16 @@ enum Subpage {
   kDisplay = 403,
   kStorage = 404,
   kExternalStorage = 405,
-  kDlc = 406,
+  // Note: Value 406 was for deprecated DLC Subpage - see
+  // https://crbug.com/1108093. Do not reuse.
   kPower = 407,
 
   // Personalization section.
   kChangePicture = 500,
   kAmbientMode = 501,
-  kAmbientModePhotos= 502,
+  // Note: Value 502 was for deprecated kAmbientModePhotos. Do not reuse.
+  kAmbientModeGooglePhotosAlbum = 503,
+  kAmbientModeArtGalleryAlbum = 504,
 
   // Search and Assistant section.
   kAssistant = 600,
@@ -105,6 +108,8 @@ enum Subpage {
   kManageInputMethods = 1201,
   kSmartInputs = 1202,
   kInputMethodOptions = 1203,
+  kLanguages = 1204,
+  kInput = 1205,
 
   // Files section.
   kNetworkFileShares = 1300,
@@ -165,14 +170,16 @@ const string kStylusSubpagePath = "stylus";
 const string kDisplaySubpagePath = "display";
 const string kStorageSubpagePath = "storage";
 const string kExternalStorageSubpagePath = "storage/externalStoragePreferences";
-const string kDlcSubpagePath = "storage/downloadedContent";
 const string kPowerSubpagePath = "power";
 
 // Personalization section.
 const string kPersonalizationSectionPath = "personalization";
 const string kChangePictureSubpagePath = "changePicture";
 const string kAmbientModeSubpagePath = "ambientMode";
-const string kAmbientModePhotosSubpagePath = "ambientMode/photos";
+const string kAmbientModeGooglePhotosAlbumSubpagePath =
+    "ambientMode/photos?topicSource=0";
+const string kAmbientModeArtGalleryAlbumSubpagePath =
+    "ambientMode/photos?topicSource=1";
 
 // Search and Assistant section.
 const string kSearchAndAssistantSectionPath = "osSearch";
@@ -208,6 +215,8 @@ const string kLanguagesAndInputDetailsSubpagePath = "osLanguages/details";
 const string kManageInputMethodsSubpagePath = "osLanguages/inputMethods";
 const string kSmartInputsSubpagePath = "osLanguages/smartInputs";
 const string kInputMethodOptionsSubpagePath = "osLanguages/inputMethodOptions";
+const string kLanguagesSubpagePath = "osLanguages/languages";
+const string kInputSubpagePath = "osLanguages/input";
 
 // Files section.
 const string kFilesSectionPath = "files";

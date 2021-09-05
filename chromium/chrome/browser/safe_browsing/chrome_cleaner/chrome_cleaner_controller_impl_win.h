@@ -49,6 +49,9 @@ class ChromeCleanerControllerDelegate {
 
   // Starts the reboot prompt flow if a cleanup requires a machine restart.
   virtual void StartRebootPromptFlow(ChromeCleanerController* controller);
+
+  // Checks if the cleaner is allowed to run by enterprise policy.
+  virtual bool IsAllowedByPolicy();
 };
 
 class ChromeCleanerControllerImpl : public ChromeCleanerController {
@@ -84,6 +87,7 @@ class ChromeCleanerControllerImpl : public ChromeCleanerController {
   // Force the current controller's state for tests that check the effect of
   // starting and completing reporter runs.
   void SetStateForTesting(State state);
+  void SetIdleForTesting(IdleReason idle_reason);
 
  private:
   ChromeCleanerControllerImpl();
@@ -141,7 +145,7 @@ class ChromeCleanerControllerImpl : public ChromeCleanerController {
   base::Time time_scanning_started_;
   base::Time time_cleanup_started_;
 
-  base::ObserverList<Observer>::Unchecked observer_list_;
+  base::ObserverList<Observer> observer_list_;
 
   // Mutex that guards |pending_invocation_type_|,
   // |on_demand_sw_reporter_fetcher_| and |cached_reporter_invocations_|.

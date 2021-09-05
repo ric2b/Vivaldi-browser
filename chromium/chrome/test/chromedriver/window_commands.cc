@@ -28,6 +28,7 @@
 #include "chrome/test/chromedriver/chrome/geoposition.h"
 #include "chrome/test/chromedriver/chrome/javascript_dialog_manager.h"
 #include "chrome/test/chromedriver/chrome/js.h"
+#include "chrome/test/chromedriver/chrome/mobile_emulation_override_manager.h"
 #include "chrome/test/chromedriver/chrome/network_conditions.h"
 #include "chrome/test/chromedriver/chrome/status.h"
 #include "chrome/test/chromedriver/chrome/ui_events.h"
@@ -113,6 +114,8 @@ MouseEventType StringToMouseEventType(std::string action_type) {
     return kReleasedMouseEventType;
   else if (action_type == "pointerMove")
     return kMovedMouseEventType;
+  else if (action_type == "scroll")
+    return kWheelMouseEventType;
   else if (action_type == "pause")
     return kPauseMouseEventType;
   else
@@ -1210,10 +1213,11 @@ Status ProcessInputActionSequence(
   const base::DictionaryValue* parameters;
   std::string pointer_type;
   if (!action_sequence->GetString("type", &type) ||
-      ((type != "key") && (type != "pointer") && (type != "none"))) {
-    return Status(
-        kInvalidArgument,
-        "'type' must be one of the strings 'key', 'pointer' or 'none'");
+      ((type != "key") && (type != "pointer") && (type != "wheel") &&
+       (type != "none"))) {
+    return Status(kInvalidArgument,
+                  "'type' must be one of the strings 'key', 'pointer', 'wheel' "
+                  "or 'none'");
   }
 
   if (!action_sequence->GetString("id", &id))
@@ -1355,18 +1359,29 @@ Status ProcessInputActionSequence(
                         "'value' must be a single Unicode code point");
         action->SetString("value", key);
       }
-    } else if (type == "pointer") {
-      action->SetString("pointerType", pointer_type);
+    } else if (type == "pointer" || type == "wheel") {
       std::string subtype;
-      if (!action_item->GetString("type", &subtype) ||
-          (subtype != "pointerUp" && subtype != "pointerDown" &&
-           subtype != "pointerMove" && subtype != "pointerCancel" &&
-           subtype != "pause"))
-        return Status(kInvalidArgument,
-                      "type of action must be the string 'pointerUp', "
-                      "'pointerDown', 'pointerMove' or 'pause'");
+      if (type == "pointer") {
+        if (!action_item->GetString("type", &subtype) ||
+            (subtype != "pointerUp" && subtype != "pointerDown" &&
+             subtype != "pointerMove" && subtype != "pointerCancel" &&
+             subtype != "pause")) {
+          return Status(kInvalidArgument,
+                        "type of pointer action must be the string "
+                        "'pointerUp', 'pointerDown', 'pointerMove' or "
+                        "'pause'");
+        }
+      } else {
+        if (!action_item->GetString("type", &subtype) ||
+            (subtype != "scroll" && subtype != "pause")) {
+          return Status(
+              kInvalidArgument,
+              "type of action must be the string 'scroll' or 'pause'");
+        }
+      }
 
       action->SetString("subtype", subtype);
+      action->SetString("pointerType", pointer_type);
 
       if (subtype == "pointerDown" || subtype == "pointerUp") {
         if (pointer_type == "mouse" || pointer_type == "pen") {
@@ -1383,7 +1398,7 @@ Status ProcessInputActionSequence(
             return status;
           action->SetString("button", button_str);
         }
-      } else if (subtype == "pointerMove") {
+      } else if (subtype == "pointerMove" || subtype == "scroll") {
         int x;
         if (!action_item->GetInteger("x", &x))
           return Status(kInvalidArgument, "'x' must be an int");
@@ -1421,6 +1436,17 @@ Status ProcessInputActionSequence(
         Status status = ProcessPauseAction(action_item, action.get());
         if (status.IsError())
           return status;
+
+        if (subtype == "scroll") {
+          int delta_x;
+          if (!action_item->GetInteger("deltaX", &delta_x))
+            return Status(kInvalidArgument, "'delta x' must be an int");
+          int delta_y;
+          if (!action_item->GetInteger("deltaY", &delta_y))
+            return Status(kInvalidArgument, "'delta y' must be an int");
+          action->SetInteger("deltaX", delta_x);
+          action->SetInteger("deltaY", delta_y);
+        }
       } else if (subtype == "pause") {
         Status status = ProcessPauseAction(action_item, action.get());
         if (status.IsError())
@@ -1466,6 +1492,7 @@ Status ExecutePerformActions(Session* session,
   std::map<std::string, bool> has_touch_start;
   std::map<std::string, int> buttons;
   std::map<std::string, std::string> button_type;
+  std::map<std::string, int> click_counts;
   int viewport_width = 0, viewport_height = 0;
   int init_x = 0, init_y = 0;
 
@@ -1522,7 +1549,7 @@ Status ExecutePerformActions(Session* session,
           pointer_id_set.insert(id);
           action_input_states.push_back(input_state);
 
-          if (type == "pointer") {
+          if (type == "pointer" || type == "wheel") {
             Status status = WindowViewportSize(
                 session, web_view, &viewport_width, &viewport_height);
             if (status.IsError())
@@ -1535,10 +1562,12 @@ Status ExecutePerformActions(Session* session,
 
             std::string pointer_type;
             action->GetString("pointerType", &pointer_type);
-            if (pointer_type == "mouse" || pointer_type == "pen")
+            if (pointer_type == "mouse" || pointer_type == "pen") {
               buttons[id] = input_state->FindKey("pressed")->GetInt();
-            else if (pointer_type == "touch")
+              click_counts[id] = 0;
+            } else if (pointer_type == "touch") {
               has_touch_start[id] = false;
+            }
           }
         }
 
@@ -1582,13 +1611,11 @@ Status ExecutePerformActions(Session* session,
                   return status;
               }
             }
-          } else if (type == "pointer") {
-            std::string pointer_type;
-            action->GetString("pointerType", &pointer_type);
+          } else if (type == "pointer" || type == "wheel") {
             double x = 0, y = 0;
             OriginType origin = kViewPort;
             std::string element_id;
-            if (action_type == "pointerMove") {
+            if (action_type == "pointerMove" || action_type == "scroll") {
               action->GetDouble("x", &x);
               action->GetDouble("y", &y);
               const base::DictionaryValue* origin_dict;
@@ -1623,8 +1650,34 @@ Status ExecutePerformActions(Session* session,
               duration = 0;
               GetOptionalInt(action, "duration", &duration);
               tick_duration = std::max(tick_duration, duration);
+
+              if (action_type == "scroll") {
+                int delta_x = 0, delta_y = 0;
+                action->GetInteger("deltaX", &delta_x);
+                action->GetInteger("deltaY", &delta_y);
+                std::vector<MouseEvent> dispatch_wheel_events;
+                MouseEvent event(StringToMouseEventType(action_type),
+                                 StringToMouseButton(button_type[id]),
+                                 action_locations[id].x(),
+                                 action_locations[id].y(), 0, buttons[id], 0);
+                event.modifiers = session->sticky_modifiers;
+                event.delta_x = delta_x;
+                event.delta_y = delta_y;
+                buttons[id] |= StringToModifierMouseButton(button_type[id]);
+                session->mouse_position = WebPoint(event.x, event.y);
+                session->input_cancel_list.emplace_back(
+                    action_input_states[j], &event, nullptr, nullptr);
+                dispatch_wheel_events.push_back(event);
+                Status status = web_view->DispatchMouseEvents(
+                    dispatch_wheel_events, session->GetCurrentFrameId(),
+                    async_dispatch_event);
+                if (status.IsError())
+                  return status;
+              }
             }
 
+            std::string pointer_type;
+            action->GetString("pointerType", &pointer_type);
             if (pointer_type == "mouse" || pointer_type == "pen") {
               if (action_type != "pause") {
                 std::vector<MouseEvent> dispatch_mouse_events;
@@ -1638,6 +1691,7 @@ Status ExecutePerformActions(Session* session,
                 } else if (buttons[id] == 0) {
                   button_type[id].clear();
                 }
+
                 MouseEvent event(StringToMouseEventType(action_type),
                                  StringToMouseButton(button_type[id]),
                                  action_locations[id].x(),
@@ -1651,7 +1705,8 @@ Status ExecutePerformActions(Session* session,
                       event.x, event.y, session->mouse_position.x,
                       session->mouse_position.y, session->click_count,
                       timestamp, session->mouse_click_timestamp);
-                  event.click_count = is_repeated_click ? 2 : 1;
+                  click_counts[id] = is_repeated_click ? ++click_counts[id] : 1;
+                  event.click_count = click_counts[id];
                   buttons[id] |= StringToModifierMouseButton(button_type[id]);
                   session->mouse_position = WebPoint(event.x, event.y);
                   session->click_count = event.click_count;
@@ -1962,6 +2017,90 @@ Status ExecuteScreenshot(Session* session,
 
   value->reset(new base::Value(screenshot));
   return Status(kOk);
+}
+
+Status ExecuteFullPageScreenshot(Session* session,
+                                 WebView* web_view,
+                                 const base::DictionaryValue& params,
+                                 std::unique_ptr<base::Value>* value,
+                                 Timeout* timeout) {
+  Status status = session->chrome->ActivateWebView(web_view->GetId());
+  if (status.IsError())
+    return status;
+
+  std::unique_ptr<base::Value> layoutMetrics;
+  status = web_view->SendCommandAndGetResult(
+      "Page.getLayoutMetrics", base::DictionaryValue(), &layoutMetrics);
+  if (status.IsError())
+    return status;
+
+  const auto width = layoutMetrics->FindDoublePath("contentSize.width");
+  if (!width.has_value())
+    return Status(kUnknownError, "invalid width type");
+  int w = ceil(width.value());
+  if (w == 0)
+    return Status(kUnknownError, "invalid width 0");
+
+  const auto height = layoutMetrics->FindDoublePath("contentSize.height");
+  if (!height.has_value())
+    return Status(kUnknownError, "invalid height type");
+  int h = ceil(height.value());
+  if (h == 0)
+    return Status(kUnknownError, "invalid height 0");
+
+  auto* meom = web_view->GetMobileEmulationOverrideManager();
+  bool hasOverrideMetrics = meom->HasOverrideMetrics();
+
+  base::DictionaryValue deviceMetrics;
+  deviceMetrics.SetInteger("width", w);
+  deviceMetrics.SetInteger("height", h);
+  if (hasOverrideMetrics) {
+    const auto* dm = meom->GetDeviceMetrics();
+    deviceMetrics.SetInteger("deviceScaleFactor", dm->device_scale_factor);
+    deviceMetrics.SetBoolean("mobile", dm->mobile);
+  } else {
+    deviceMetrics.SetInteger("deviceScaleFactor", 1);
+    deviceMetrics.SetBoolean("mobile", false);
+  }
+  std::unique_ptr<base::Value> ignore;
+  status = web_view->SendCommandAndGetResult(
+      "Emulation.setDeviceMetricsOverride", deviceMetrics, &ignore);
+  if (status.IsError())
+    return status;
+
+  std::string screenshot;
+  // No need to supply clip as it would be default to the device metrics
+  // parameters
+  status = web_view->CaptureScreenshot(&screenshot, base::DictionaryValue());
+  if (status.IsError()) {
+    if (status.code() == kUnexpectedAlertOpen) {
+      LOG(WARNING) << status.message() << ", cancelling screenshot";
+      // we can't take screenshot in this state
+      // but we must return kUnexpectedAlertOpen_Keep instead
+      // see https://crbug.com/chromedriver/2117
+      return Status(kUnexpectedAlertOpen_Keep);
+    }
+    LOG(WARNING) << "screenshot failed, retrying " << status.message();
+    status = web_view->CaptureScreenshot(&screenshot, base::DictionaryValue());
+  }
+  if (status.IsError())
+    return status;
+
+  *value = std::make_unique<base::Value>(screenshot);
+
+  // Check if there is already deviceMetricsOverride in use,
+  // if so, restore to that instead
+  if (hasOverrideMetrics) {
+    status = meom->RestoreOverrideMetrics();
+  } else {
+    // The scroll bar disappear after setting device metrics to fullpage
+    // width and height, this is to clear device metrics and restore
+    // scroll bars
+    status = web_view->SendCommandAndGetResult(
+        "Emulation.clearDeviceMetricsOverride", base::DictionaryValue(),
+        &ignore);
+  }
+  return status;
 }
 
 Status ExecutePrint(Session* session,

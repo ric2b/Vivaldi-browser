@@ -13,7 +13,7 @@
 #include "net/base/ip_endpoint.h"
 #include "net/base/isolation_info.h"
 #include "testing/gmock/include/gmock/gmock.h"
-#include "third_party/blink/public/mojom/referrer.mojom.h"
+#include "third_party/blink/public/mojom/loader/referrer.mojom.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -28,6 +28,7 @@ class MockNavigationHandle : public NavigationHandle {
   // NavigationHandle implementation:
   int64_t GetNavigationId() override { return navigation_id_; }
   const GURL& GetURL() override { return url_; }
+  const GURL& GetPreviousURL() override { return previous_url_; }
   SiteInstance* GetStartingSiteInstance() override {
     return starting_site_instance_;
   }
@@ -38,7 +39,8 @@ class MockNavigationHandle : public NavigationHandle {
     return render_frame_host_ ? !render_frame_host_->GetParent() : true;
   }
   MOCK_METHOD0(IsParentMainFrame, bool());
-  bool IsRendererInitiated() override { return true; }
+  // By default, MockNavigationHandles are renderer-initiated navigations.
+  bool IsRendererInitiated() override { return is_renderer_initiated_; }
   MOCK_METHOD0(GetFrameTreeNodeId, int());
   MOCK_METHOD0(GetPreviousRenderFrameHostId, GlobalFrameRoutingId());
   bool IsServedFromBackForwardCache() override { return false; }
@@ -74,7 +76,6 @@ class MockNavigationHandle : public NavigationHandle {
   MOCK_METHOD0(HasSubframeNavigationEntryCommitted, bool());
   MOCK_METHOD0(DidReplaceEntry, bool());
   MOCK_METHOD0(ShouldUpdateHistory, bool());
-  MOCK_METHOD0(GetPreviousURL, const GURL&());
   MOCK_METHOD0(GetSocketAddress, net::IPEndPoint());
   const net::HttpRequestHeaders& GetRequestHeaders() override {
     return request_headers_;
@@ -123,7 +124,7 @@ class MockNavigationHandle : public NavigationHandle {
                void(std::unique_ptr<NavigationThrottle>));
   MOCK_METHOD0(IsDeferredForTesting, bool());
   MOCK_METHOD1(RegisterSubresourceOverride,
-               void(mojom::TransferrableURLLoaderPtr));
+               void(blink::mojom::TransferrableURLLoaderPtr));
   MOCK_METHOD0(FromDownloadCrossOriginRedirect, bool());
   MOCK_METHOD0(IsSameProcess, bool());
   MOCK_METHOD0(GetNavigationEntryOffset, int());
@@ -133,6 +134,9 @@ class MockNavigationHandle : public NavigationHandle {
   MOCK_METHOD0(GetIsOverridingUserAgent, bool());
 
   void set_url(const GURL& url) { url_ = url; }
+  void set_previous_url(const GURL& previous_url) {
+    previous_url_ = previous_url;
+  }
   void set_starting_site_instance(SiteInstance* site_instance) {
     starting_site_instance_ = site_instance;
   }
@@ -147,6 +151,9 @@ class MockNavigationHandle : public NavigationHandle {
   }
   void set_is_same_document(bool is_same_document) {
     is_same_document_ = is_same_document;
+  }
+  void set_is_renderer_initiated(bool is_renderer_initiated) {
+    is_renderer_initiated_ = is_renderer_initiated;
   }
   void set_redirect_chain(const std::vector<GURL>& redirect_chain) {
     redirect_chain_ = redirect_chain;
@@ -188,6 +195,7 @@ class MockNavigationHandle : public NavigationHandle {
  private:
   int64_t navigation_id_;
   GURL url_;
+  GURL previous_url_;
   SiteInstance* starting_site_instance_ = nullptr;
   WebContents* web_contents_ = nullptr;
   GURL base_url_for_data_url_;
@@ -196,6 +204,7 @@ class MockNavigationHandle : public NavigationHandle {
   net::Error net_error_code_ = net::OK;
   RenderFrameHost* render_frame_host_ = nullptr;
   bool is_same_document_ = false;
+  bool is_renderer_initiated_ = true;
   std::vector<GURL> redirect_chain_;
   bool has_committed_ = false;
   bool is_error_page_ = false;

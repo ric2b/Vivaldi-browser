@@ -21,6 +21,7 @@
 <translation id="1150565364351027703">វ៉ែនតា​ការពារពន្លឺព្រះអាទិត្យ</translation>
 <translation id="115443833402798225">អាន់ម៉ាទាហានគុល</translation>
 <translation id="1155759005174418845">កាតាឡាន</translation>
+<translation id="1172970565351728681">នៅសល់​ប្រហែល <ph name="REMAINING_TIME" /> ទៀត</translation>
 <translation id="1173894706177603556">ប្តូរឈ្មោះ</translation>
 <translation id="117624967391683467">កំពុងចម្លង <ph name="FILE_NAME" />...</translation>
 <translation id="1178581264944972037">ផ្អាក</translation>
@@ -106,7 +107,6 @@
 <translation id="2085470240340828803">ឯកសារដែលមានឈ្មោះ "<ph name="FILENAME" />" មានរួចទៅហើយ។ តើអ្នកចង់ធ្វើដូចម្តេច?</translation>
 <translation id="2121825465123208577">ប្ដូរទំហំ</translation>
 <translation id="2136953289241069843">ការសរសេរតាមសូរស័ព្ទ (namaste → नमस्कार)</translation>
-<translation id="2138867954865495510">មិនអាចបើក "<ph name="PATH" />"៖ <ph name="ERROR_MESSAGE" /></translation>
 <translation id="2163152940313951844">តួអក្សរ​មិនត្រឹមត្រូវ៖ <ph name="CHARACTER_NAME" /></translation>
 <translation id="2164862903024139959">ក្តារចុចវៀតណាម (TCVN)</translation>
 <translation id="2168214441502403371">ក្តារចុចពែក</translation>
@@ -198,6 +198,7 @@
 <translation id="3236289833370040187">កម្មសិទ្ធិនឹងត្រូវបានផ្ទេរទៅ <ph name="DESTINATION_DOMAIN" /> ។</translation>
 <translation id="3241720467332021590">អៀឡង់</translation>
 <translation id="3245321423178950146">សិល្បករដែលមិនស្គាល់</translation>
+<translation id="3248185426436836442">កំពុងរង់ចាំ</translation>
 <translation id="3252266817569339921">ភាសាបារាំង</translation>
 <translation id="3254434849914415189">ជ្រើសរើសកម្មវិធីលំនាំដើមសម្រាប់ឯកសារ <ph name="FILE_TYPE" />៖</translation>
 <translation id="3264582393905923483">បរិបទ</translation>
@@ -208,6 +209,7 @@
 <translation id="3335337277364016868">ឆ្នាំដែល​បានថត</translation>
 <translation id="3338239663705455570">ក្តារចុចស្លូវ៉ានី</translation>
 <translation id="3353984535370177728">ជ្រើសរើសថតឯកសារដើម្បីទាញឡើង</translation>
+<translation id="3356580349448036450">រួចរាល់</translation>
 <translation id="3399597614303179694">ក្តារចុចម៉ាសេដូនី</translation>
 <translation id="3414856743105198592">ការសម្អាតឯកសារកំសាន្តដែលអាចយកចេញបាននឹងលុបទិន្នន័យទាំងអស់។ តើអ្នកចង់បន្តទេ?</translation>
 <translation id="3437801641691368414">ម៉ោងបង្កើត</translation>
@@ -243,6 +245,7 @@
 <translation id="3780536599611287598">អ្នក​មិនត្រូវបាន​អនុញ្ញាតឱ្យ​ផ្លាស់ទី​ឯកសារ​ទៅ '<ph name="FOLDER_NAME" />' ទេ។</translation>
 <translation id="3786301125658655746">អ្នកនៅក្រៅបណ្តាញ។</translation>
 <translation id="3789841737615482174">តំឡើង</translation>
+<translation id="3793469551756281394">នៅសល់ប្រហែល <ph name="REMAINING_TIME_HOUR" /> <ph name="REMAINING_TIME_MINUTE" /> ទៀត</translation>
 <translation id="3798449238516105146">កំណែ</translation>
 <translation id="3801082500826908679">ហ្វារូស</translation>
 <translation id="3809272675881623365">ទន្សាយ</translation>
@@ -299,6 +302,7 @@
 <translation id="4481711095103932593">ថតនេះ​ត្រូវបានចែករំលែក​ជាមួយ Windows</translation>
 <translation id="4487088045714738411">ក្តារចុចបែលហ្សិុក</translation>
 <translation id="4522570452068850558">ព័ត៌មានលំអិត</translation>
+<translation id="4542387084127299777">មិនអាច​បើក "<ph name="PATH" />" បានទេ</translation>
 <translation id="4552678318981539154">ទិន្នន័យចន្លោះផ្ទុ</translation>
 <translation id="4559767610552730302">Bokeh</translation>
 <translation id="4572815280350369984">ឯកសារ <ph name="FILE_TYPE" /></translation>
@@ -510,6 +514,7 @@
 <translation id="6629841649550503054">បានបម្រុងទុកទៅក្នុង <ph name="BEGIN_LINK" />Google Drive!<ph name="END_LINK" />អស់ហើយ</translation>
 <translation id="6643016212128521049">ជម្រះ</translation>
 <translation id="6650726141019353908">មេអំបៅ​ពណ៌​ផ្កាឈូក</translation>
+<translation id="6657585470893396449">ពាក្យសម្ងាត់</translation>
 <translation id="6710213216561001401">មុន</translation>
 <translation id="6718273304615422081">កំពុងបង្រួម...</translation>
 <translation id="6751256176799620176">បានជ្រើសថតឯកសារ 1</translation>
@@ -550,7 +555,6 @@
 <translation id="7012943028104619157"><ph name="ROOT_TITLE" /> (<ph name="ROOT_SUMMARY" />)</translation>
 <translation id="7014174261166285193">ការដំឡើងបានបរាជ័យ។</translation>
 <translation id="7040138676081995583">បើកជាមួយ...</translation>
-<translation id="7059566040011178088">តិច​ជាង <ph name="REMAINING_TIME" /></translation>
 <translation id="7100897339030255923"><ph name="COUNT" /> ធាតុត្រូវបានជ្រើសរើស</translation>
 <translation id="7106346894903675391">ទិញឧបករណ៍ផ្ទុកទិន្នន័យបន្ថែម...</translation>
 <translation id="7126604456862387217">'&lt;b&gt;<ph name="SEARCH_STRING" />&lt;/b&gt;' - &lt;em&gt;ស្វែងរក Drive&lt;/em&gt;</translation>
@@ -661,7 +665,6 @@
 <translation id="8193175696669055101">គំរូឧបករណ៍</translation>
 <translation id="8208580316430297579">រូប​ផូស្ទ័រ</translation>
 <translation id="8223479393428528563">ដើម្បីរក្សាទុកឯកសារទាំងនេះសម្រាប់ការប្រើនៅក្រៅបណ្តាញ ភ្ជាប់ទៅអ៊ីនធឺណិត ហើយចុចកណ្តុរខាងស្តាំលើឯកសារ ហើយជ្រើសរើសជម្រើស <ph name="OFFLINE_CHECKBOX_NAME" />។</translation>
-<translation id="8231972167769262174">អំពី <ph name="REMAINING_TIME" /></translation>
 <translation id="8249296373107784235">បោះបង់</translation>
 <translation id="8261506727792406068">លុប</translation>
 <translation id="8269755669432358899">បង្រួមផ្ទាំង​មតិកែលម្អ​ឯកសារ</translation>
@@ -724,6 +727,7 @@
 <translation id="9065203028668620118">កែប្រែ</translation>
 <translation id="9099674669267916096">ចំនួន​ទំព័រ</translation>
 <translation id="9110990317705400362">យើងតែងតែស្វែងរកមធ្យោបាយដើម្បីធ្វើឲ្យការរុករករបស់អ្នកមានសុវត្ថិភាពជាងមុនជានិច្ច។ កាលពីមុន គេហទំព័រទាំងឡាយអាចជម្រុញអ្នកឲ្យបន្ថែមកម្មវិធីបន្ថែមទៅក្នុងកម្មវិធីរុករករបស់អ្នក។ នៅក្នុងកំណែចុងក្រោយនៃ Google Chrome អ្នកត្រូវប្រាប់ Chrome ឲ្យច្បាស់ថាអ្នកចង់តំឡើងកម្មវិធីទាំងនេះ ដោយការបន្ថែមពួកវាតាមរយៈទំព័រកម្មវិធីបន្ថែម។ <ph name="BEGIN_LINK" />ស្វែងយល់បន្ថែម<ph name="END_LINK" /></translation>
+<translation id="9111102763498581341">ដោះសោរ</translation>
 <translation id="912419004897138677">កូឌិក</translation>
 <translation id="9129931661813833980">ខ្ទាស់ថត</translation>
 <translation id="9130775360844693113">សមាជិក​របស់ '<ph name="DESTINATION_NAME" />' នឹងទទួល​បានសិទិ្ធ​ចូលប្រើ​ធាតុទាំង​នេះ។</translation>

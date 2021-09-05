@@ -10,6 +10,7 @@ if (is_android) {
 
 source_set("feed_core_v2") {
   sources = [
+    "algorithm.h",
     "config.cc",
     "config.h",
     "enums.cc",
@@ -22,8 +23,12 @@ source_set("feed_core_v2") {
     "feed_store.h",
     "feed_stream.cc",
     "feed_stream.h",
+    "image_fetcher.cc",
+    "image_fetcher.h",
     "metrics_reporter.cc",
     "metrics_reporter.h",
+    "offline_page_spy.cc",
+    "offline_page_spy.h",
     "prefs.cc",
     "prefs.h",
     "proto_util.cc",
@@ -50,6 +55,8 @@ source_set("feed_core_v2") {
     "surface_updater.h",
     "tasks/clear_all_task.cc",
     "tasks/clear_all_task.h",
+    "tasks/get_prefetch_suggestions_task.cc",
+    "tasks/get_prefetch_suggestions_task.h",
     "tasks/load_more_task.cc",
     "tasks/load_more_task.h",
     "tasks/load_stream_from_store_task.cc",
@@ -67,6 +74,8 @@ source_set("feed_core_v2") {
     "//components/feed/core:feed_core",
     "//components/feed/core/common:feed_core_common",
     "//components/history/core/browser",
+    "//components/offline_pages/core:core",
+    "//components/offline_pages/core/prefetch",
     "//components/offline_pages/task:task",
     "//components/prefs",
     "//components/signin/public/identity_manager",
@@ -91,9 +100,11 @@ source_set("feed_core_v2") {
 source_set("core_unit_tests") {
   testonly = true
   sources = [
+    "algorithm_unittest.cc",
     "feed_network_impl_unittest.cc",
     "feed_store_unittest.cc",
     "feed_stream_unittest.cc",
+    "image_fetcher_unittest.cc",
     "metrics_reporter_unittest.cc",
     "proto_util_unittest.cc",
     "protocol_translator_unittest.cc",
@@ -119,6 +130,10 @@ source_set("core_unit_tests") {
     "//components/feed/core/common:feed_core_common",
     "//components/history/core/browser",
     "//components/leveldb_proto:test_support",
+    "//components/offline_pages/core:core",
+    "//components/offline_pages/core:test_support",
+    "//components/offline_pages/core/prefetch",
+    "//components/offline_pages/core/prefetch:test_support",
     "//components/prefs:test_support",
     "//components/signin/public/identity_manager",
     "//components/signin/public/identity_manager:test_support",

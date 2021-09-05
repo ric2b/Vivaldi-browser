@@ -52,7 +52,7 @@ class BrowserNonClientFrameViewAsh
 
   // BrowserNonClientFrameView:
   gfx::Rect GetBoundsForTabStripRegion(
-      const views::View* tabstrip) const override;
+      const gfx::Size& tabstrip_minimum_size) const override;
   int GetTopInset(bool restored) const override;
   int GetThemeBackgroundXInset() const override;
   void UpdateFrameColor() override;
@@ -70,7 +70,6 @@ class BrowserNonClientFrameViewAsh
   void UpdateWindowIcon() override;
   void UpdateWindowTitle() override;
   void SizeConstraintsChanged() override;
-  void PaintAsActiveChanged(bool active) override;
 
   // views::View:
   void OnPaint(gfx::Canvas* canvas) override;
@@ -114,6 +113,7 @@ class BrowserNonClientFrameViewAsh
 
  protected:
   // BrowserNonClientFrameView:
+  void PaintAsActiveChanged() override;
   void OnProfileAvatarChanged(const base::FilePath& profile_path) override;
 
  private:

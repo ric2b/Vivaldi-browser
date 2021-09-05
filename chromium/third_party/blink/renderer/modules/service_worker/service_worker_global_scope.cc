@@ -192,7 +192,9 @@ ServiceWorkerGlobalScope* ServiceWorkerGlobalScope::Create(
     std::unique_ptr<ServiceWorkerInstalledScriptsManager>
         installed_scripts_manager,
     mojo::PendingRemote<mojom::blink::CacheStorage> cache_storage_remote,
-    base::TimeTicks time_origin) {
+    base::TimeTicks time_origin,
+    const ServiceWorkerToken& service_worker_token,
+    ukm::SourceId ukm_source_id) {
 #if DCHECK_IS_ON()
   // If the script is being loaded via script streaming, the script is not yet
   // loaded.
@@ -209,7 +211,8 @@ ServiceWorkerGlobalScope* ServiceWorkerGlobalScope::Create(
 
   return MakeGarbageCollected<ServiceWorkerGlobalScope>(
       std::move(creation_params), thread, std::move(installed_scripts_manager),
-      std::move(cache_storage_remote), time_origin);
+      std::move(cache_storage_remote), time_origin, service_worker_token,
+      ukm_source_id);
 }
 
 ServiceWorkerGlobalScope::ServiceWorkerGlobalScope(
@@ -218,10 +221,16 @@ ServiceWorkerGlobalScope::ServiceWorkerGlobalScope(
     std::unique_ptr<ServiceWorkerInstalledScriptsManager>
         installed_scripts_manager,
     mojo::PendingRemote<mojom::blink::CacheStorage> cache_storage_remote,
-    base::TimeTicks time_origin)
-    : WorkerGlobalScope(std::move(creation_params), thread, time_origin),
+    base::TimeTicks time_origin,
+    const ServiceWorkerToken& service_worker_token,
+    ukm::SourceId ukm_source_id)
+    : WorkerGlobalScope(std::move(creation_params),
+                        thread,
+                        time_origin,
+                        ukm_source_id),
       installed_scripts_manager_(std::move(installed_scripts_manager)),
-      cache_storage_remote_(std::move(cache_storage_remote)) {
+      cache_storage_remote_(std::move(cache_storage_remote)),
+      token_(service_worker_token) {
   // Create the event queue. At this point its timer is not started. It will be
   // started by DidEvaluateScript().
   //
@@ -249,6 +258,8 @@ bool ServiceWorkerGlobalScope::ShouldInstallV8Extensions() const {
 // https://w3c.github.io/ServiceWorker/#update
 void ServiceWorkerGlobalScope::FetchAndRunClassicScript(
     const KURL& script_url,
+    std::unique_ptr<WorkerMainScriptLoadParameters>
+        worker_main_script_load_params,
     const FetchClientSettingsObjectSnapshot& outside_settings_object,
     WorkerResourceTimingNotifier& outside_resource_timing_notifier,
     const v8_inspector::V8StackTraceId& stack_id) {
@@ -291,8 +302,9 @@ void ServiceWorkerGlobalScope::FetchAndRunClassicScript(
       *this,
       CreateOutsideSettingsFetcher(outside_settings_object,
                                    outside_resource_timing_notifier),
-      script_url, context_type, destination,
-      network::mojom::RequestMode::kSameOrigin,
+      script_url, std::move(worker_main_script_load_params),
+      mojo::NullRemote() /* resource_load_info_notifier */, context_type,
+      destination, network::mojom::RequestMode::kSameOrigin,
       network::mojom::CredentialsMode::kSameOrigin,
       WTF::Bind(&ServiceWorkerGlobalScope::DidReceiveResponseForClassicScript,
                 WrapWeakPersistent(this),
@@ -304,6 +316,8 @@ void ServiceWorkerGlobalScope::FetchAndRunClassicScript(
 
 void ServiceWorkerGlobalScope::FetchAndRunModuleScript(
     const KURL& module_url_record,
+    std::unique_ptr<WorkerMainScriptLoadParameters>
+        worker_main_script_load_params,
     const FetchClientSettingsObjectSnapshot& outside_settings_object,
     WorkerResourceTimingNotifier& outside_resource_timing_notifier,
     network::mojom::CredentialsMode credentials_mode,
@@ -478,7 +492,7 @@ void ServiceWorkerGlobalScope::Initialize(
   SetReferrerPolicy(response_referrer_policy);
 
   // https://wicg.github.io/cors-rfc1918/#integration-html
-  GetSecurityContext().SetAddressSpace(response_address_space);
+  SetAddressSpace(response_address_space);
 
   // This is quoted from the "Content Security Policy" algorithm in the service
   // workers spec:
@@ -1508,6 +1522,8 @@ void ServiceWorkerGlobalScope::StartFetchEvent(
       mojo::PendingRemote<mojom::blink::WorkerTimingContainer>(
           std::move(params->worker_timing_remote)),
       navigation_preload_sent);
+  respond_with_observer->SetEvent(fetch_event);
+
   if (navigation_preload_sent) {
     // Keep |fetchEvent| until OnNavigationPreloadComplete() or
     // onNavigationPreloadError() will be called.
@@ -2056,8 +2072,14 @@ void ServiceWorkerGlobalScope::StartPushSubscriptionChangeEvent(
   auto* observer = MakeGarbageCollected<WaitUntilObserver>(
       this, WaitUntilObserver::kPushSubscriptionChange, event_id);
   Event* event = PushSubscriptionChangeEvent::Create(
-      event_type_names::kPushsubscriptionchange, nullptr /* new_subscription */,
-      nullptr /* old_subscription */, observer);
+      event_type_names::kPushsubscriptionchange,
+      (new_subscription)
+          ? PushSubscription::Create(std::move(new_subscription), registration_)
+          : nullptr /* new_subscription*/,
+      (old_subscription)
+          ? PushSubscription::Create(std::move(old_subscription), registration_)
+          : nullptr /* old_subscription*/,
+      observer);
   DispatchExtendableEvent(event, observer);
 }
 
@@ -2325,8 +2347,7 @@ void ServiceWorkerGlobalScope::StartCookieChangeEvent(
 
   HeapVector<Member<CookieListItem>> changed;
   HeapVector<Member<CookieListItem>> deleted;
-  CookieChangeEvent::ToEventInfo(change->cookie, change->cause, changed,
-                                 deleted);
+  CookieChangeEvent::ToEventInfo(change, changed, deleted);
   Event* event = ExtendableCookieChangeEvent::Create(
       event_type_names::kCookiechange, std::move(changed), std::move(deleted),
       observer);

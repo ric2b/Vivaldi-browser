@@ -50,37 +50,27 @@ std::string X11WorkspaceHandler::GetCurrentWorkspace() {
   return workspace_;
 }
 
-bool X11WorkspaceHandler::DispatchXEvent(x11::Event* x11_event) {
-  XEvent* event = &x11_event->xlib_event();
-  if (event->type != PropertyNotify ||
-      event->xproperty.window != static_cast<uint32_t>(x_root_window_)) {
-    return false;
+bool X11WorkspaceHandler::DispatchXEvent(x11::Event* xev) {
+  auto* prop = xev->As<x11::PropertyNotifyEvent>();
+  if (prop && prop->window == x_root_window_ &&
+      prop->atom == gfx::GetAtom("_NET_CURRENT_DESKTOP")) {
+    GetWorkspace().OnResponse(base::BindOnce(
+        &X11WorkspaceHandler::OnWorkspaceResponse, weak_factory_.GetWeakPtr()));
+    return true;
   }
-  switch (event->type) {
-    case x11::PropertyNotifyEvent::opcode: {
-      if (event->xproperty.atom ==
-          static_cast<uint32_t>(gfx::GetAtom("_NET_CURRENT_DESKTOP"))) {
-        GetWorkspace().OnResponse(
-            base::BindOnce(&X11WorkspaceHandler::OnWorkspaceResponse,
-                           weak_factory_.GetWeakPtr()));
-      }
-      break;
-    }
-    default:
-      NOTREACHED();
-  }
+
   return false;
 }
 
 void X11WorkspaceHandler::OnWorkspaceResponse(
     x11::GetPropertyResponse response) {
-  if (!response || response->format != 32 || response->value.size() < 4)
+  if (!response || response->format != 32 || response->value->size() < 4)
     return;
   DCHECK_EQ(response->bytes_after, 0U);
   DCHECK_EQ(response->type, static_cast<x11::Atom>(gfx::GetAtom("CARDINAL")));
 
   uint32_t workspace;
-  memcpy(&workspace, response->value.data(), 4);
+  memcpy(&workspace, response->value->data(), 4);
   workspace_ = base::NumberToString(workspace);
   delegate_->OnCurrentWorkspaceChanged(workspace_);
 }

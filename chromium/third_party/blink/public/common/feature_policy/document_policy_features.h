@@ -14,12 +14,14 @@ namespace blink {
 
 struct DocumentPolicyFeatureInfo {
   std::string feature_name;
-  std::string feature_param_name;
   PolicyValue default_value;
 };
 
 using DocumentPolicyFeatureInfoMap =
     base::flat_map<mojom::DocumentPolicyFeature, DocumentPolicyFeatureInfo>;
+
+using DocumentPolicyFeatureState =
+    base::flat_map<mojom::DocumentPolicyFeature, PolicyValue>;
 
 using DocumentPolicyNameFeatureMap =
     base::flat_map<std::string, mojom::DocumentPolicyFeature>;

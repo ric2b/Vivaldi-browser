@@ -160,6 +160,7 @@ enum class ComponentState {
   kUpToDate,
   kUpdateError,
   kUninstalled,
+  kRegistration,
   kRun,
   kLastStatus
 };
@@ -323,7 +324,7 @@ using Callback = base::OnceCallback<void(Error error)>;
 // instance of this class is created, the reference to it must be released
 // only after the thread pools of the browser process have been destroyed and
 // the browser process has gone single-threaded.
-class UpdateClient : public base::RefCounted<UpdateClient> {
+class UpdateClient : public base::RefCountedThreadSafe<UpdateClient> {
  public:
   using CrxDataCallback =
       base::OnceCallback<std::vector<base::Optional<CrxComponent>>(
@@ -436,6 +437,14 @@ class UpdateClient : public base::RefCounted<UpdateClient> {
                                  int reason,
                                  Callback callback) = 0;
 
+  // Sends a registration ping for the CRX identified by |id| and |version|.
+  // The current implementation of this function only sends a best-effort,
+  // fire-and-forget ping. It has no other side effects regarding installs or
+  // updates done through an instance of this class.
+  virtual void SendRegistrationPing(const std::string& id,
+                                    const base::Version& version,
+                                    Callback callback) = 0;
+
   // Returns status details about a CRX update. The function returns true in
   // case of success and false in case of errors, such as |id| was
   // invalid or not known.
@@ -452,7 +461,7 @@ class UpdateClient : public base::RefCounted<UpdateClient> {
   virtual void Stop() = 0;
 
  protected:
-  friend class base::RefCounted<UpdateClient>;
+  friend class base::RefCountedThreadSafe<UpdateClient>;
 
   virtual ~UpdateClient() = default;
 };

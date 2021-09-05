@@ -21,8 +21,11 @@ struct CodecParamToProfile {
   const char* codec;
   const VideoCodecProfile profile;
 } kCodecParamToProfile[] = {
-    {"h264baseline", H264PROFILE_BASELINE}, {"h264", H264PROFILE_MAIN},
-    {"h264main", H264PROFILE_MAIN},         {"vp8", VP8PROFILE_ANY},
+    {"h264baseline", H264PROFILE_BASELINE},
+    {"h264", H264PROFILE_MAIN},
+    {"h264main", H264PROFILE_MAIN},
+    {"h264high", H264PROFILE_HIGH},
+    {"vp8", VP8PROFILE_ANY},
     {"vp9", VP9PROFILE_PROFILE0},
 };
 
@@ -43,6 +46,38 @@ const std::vector<base::Feature> kDisabledFeaturesForVideoEncoderTest = {
     // decode any vp8 stream in BitstreamValidator.
     kFFmpegDecodeOpaqueVP8,
 };
+
+uint32_t GetDefaultTargetBitrate(const gfx::Size& resolution,
+                                 const uint32_t framerate) {
+  constexpr uint32_t Mbps = 1000 * 1000;
+  // Following bitrates are based on the video bitrates recommended by YouTube
+  // for 16:9 SDR 30fps video.
+  // (https://support.google.com/youtube/answer/1722171).
+  // The bitrates don't scale linearly so we use the following lookup table as a
+  // base for computing a reasonable bitrate for the specified resolution and
+  // framerate.
+  constexpr struct {
+    gfx::Size resolution;
+    uint32_t bitrate;
+  } kDefaultTargetBitrates[] = {
+      {gfx::Size(640, 360), 1 * Mbps},    {gfx::Size(854, 480), 2.5 * Mbps},
+      {gfx::Size(1280, 720), 5 * Mbps},   {gfx::Size(1920, 1080), 8 * Mbps},
+      {gfx::Size(3840, 2160), 18 * Mbps},
+  };
+
+  const auto* it = std::find_if(
+      std::cbegin(kDefaultTargetBitrates), std::cend(kDefaultTargetBitrates),
+      [resolution](const auto& target_bitrate) {
+        return resolution.GetArea() <= target_bitrate.resolution.GetArea();
+      });
+  LOG_ASSERT(it != std::cend(kDefaultTargetBitrates))
+      << "Target bitrate for the resolution is not found, resolution="
+      << resolution.ToString();
+  const double resolution_ratio =
+      (resolution.GetArea() / static_cast<double>(it->resolution.GetArea()));
+  const double framerate_ratio = framerate > 30 ? 1.5 : 1.0;
+  return it->bitrate * resolution_ratio * framerate_ratio;
+}
 }  // namespace
 
 // static
@@ -52,14 +87,15 @@ VideoEncoderTestEnvironment* VideoEncoderTestEnvironment::Create(
     bool enable_bitstream_validator,
     const base::FilePath& output_folder,
     const std::string& codec,
-    bool output_bitstream) {
+    bool save_output_bitstream,
+    const FrameOutputConfig& frame_output_config) {
   if (video_path.empty()) {
     LOG(ERROR) << "No video specified";
     return nullptr;
   }
   auto video =
       std::make_unique<media::test::Video>(video_path, video_metadata_path);
-  if (!video->Load()) {
+  if (!video->Load(kMaxReadFrames)) {
     LOG(ERROR) << "Failed to load " << video_path;
     return nullptr;
   }
@@ -82,14 +118,6 @@ VideoEncoderTestEnvironment* VideoEncoderTestEnvironment::Create(
     return nullptr;
   }
 
-  base::Optional<base::FilePath> bitstream_filename;
-  if (output_bitstream) {
-    base::FilePath::StringPieceType extension =
-        codec.find("h264") != std::string::npos ? FILE_PATH_LITERAL("h264")
-                                                : FILE_PATH_LITERAL("ivf");
-    bitstream_filename = video_path.BaseName().ReplaceExtension(extension);
-  }
-
   const auto* it = std::find_if(
       std::begin(kCodecParamToProfile), std::end(kCodecParamToProfile),
       [codec](const auto& cp) { return cp.codec == codec; });
@@ -98,10 +126,12 @@ VideoEncoderTestEnvironment* VideoEncoderTestEnvironment::Create(
     return nullptr;
   }
 
+  const uint32_t bitrate =
+      GetDefaultTargetBitrate(video->Resolution(), video->FrameRate());
   VideoCodecProfile profile = it->profile;
   return new VideoEncoderTestEnvironment(
       std::move(video), enable_bitstream_validator, output_folder, profile,
-      bitstream_filename);
+      bitrate, save_output_bitstream, frame_output_config);
 }
 
 VideoEncoderTestEnvironment::VideoEncoderTestEnvironment(
@@ -109,14 +139,18 @@ VideoEncoderTestEnvironment::VideoEncoderTestEnvironment(
     bool enable_bitstream_validator,
     const base::FilePath& output_folder,
     VideoCodecProfile profile,
-    const base::Optional<base::FilePath>& bitstream_filename)
+    uint32_t bitrate,
+    bool save_output_bitstream,
+    const FrameOutputConfig& frame_output_config)
     : VideoTestEnvironment(kEnabledFeaturesForVideoEncoderTest,
                            kDisabledFeaturesForVideoEncoderTest),
       video_(std::move(video)),
       enable_bitstream_validator_(enable_bitstream_validator),
       output_folder_(output_folder),
       profile_(profile),
-      bitstream_filename_(bitstream_filename),
+      bitrate_(bitrate),
+      save_output_bitstream_(save_output_bitstream),
+      frame_output_config_(frame_output_config),
       gpu_memory_buffer_factory_(
           gpu::GpuMemoryBufferFactory::CreateNativeType(nullptr)) {}
 
@@ -138,13 +172,17 @@ VideoCodecProfile VideoEncoderTestEnvironment::Profile() const {
   return profile_;
 }
 
-base::Optional<base::FilePath>
-VideoEncoderTestEnvironment::OutputBitstreamFilePath() const {
-  if (!bitstream_filename_)
-    return base::nullopt;
+uint32_t VideoEncoderTestEnvironment::Bitrate() const {
+  return bitrate_;
+}
 
-  return output_folder_.Append(GetTestOutputFilePath())
-      .Append(*bitstream_filename_);
+bool VideoEncoderTestEnvironment::SaveOutputBitstream() const {
+  return save_output_bitstream_;
+}
+
+const FrameOutputConfig& VideoEncoderTestEnvironment::ImageOutputConfig()
+    const {
+  return frame_output_config_;
 }
 
 gpu::GpuMemoryBufferFactory*

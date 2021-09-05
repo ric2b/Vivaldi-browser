@@ -82,3 +82,11 @@ if (is_linux && !is_component_build) {
     ]
   }
 }
+
+if (is_mac) {
+  update_template_instance("//chrome:entitlements") {
+    entitlements_templates += [
+      "//vivaldi/installer/mac/app-entitlements-vivaldi.plist",
+    ]
+  }
+}

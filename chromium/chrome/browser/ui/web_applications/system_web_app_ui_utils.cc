@@ -15,8 +15,10 @@
 #include "base/optional.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/apps/app_service/app_launch_params.h"
+#include "chrome/browser/apps/app_service/app_service_metrics.h"
 #include "chrome/browser/apps/app_service/launch_utils.h"
 #include "chrome/browser/chromeos/printing/print_management/print_management_uma.h"
+#include "chrome/browser/installable/installable_params.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_navigator.h"
@@ -42,10 +44,10 @@ namespace {
 
 void LogPrintManagementEntryPoints(apps::mojom::AppLaunchSource source) {
   if (source == apps::mojom::AppLaunchSource::kSourceAppLauncher) {
-    base::UmaHistogramEnumeration("Printing.Cups.PrintManagementAppEntryPoint",
+    base::UmaHistogramEnumeration("Printing.CUPS.PrintManagementAppEntryPoint",
                                   PrintManagementAppEntryPoint::kLauncher);
   } else if (source == apps::mojom::AppLaunchSource::kSourceIntentUrl) {
-    base::UmaHistogramEnumeration("Printing.Cups.PrintManagementAppEntryPoint",
+    base::UmaHistogramEnumeration("Printing.CUPS.PrintManagementAppEntryPoint",
                                   PrintManagementAppEntryPoint::kBrowser);
   }
 }
@@ -83,12 +85,13 @@ base::Optional<apps::AppLaunchParams> CreateSystemWebAppLaunchParams(
   DisplayMode display_mode =
       provider->registrar().GetAppEffectiveDisplayMode(app_id.value());
 
-  // TODO(calamity): Plumb through better launch sources from callsites.
+  // TODO(crbug/1113502): Plumb through better launch sources from callsites.
   apps::AppLaunchParams params = apps::CreateAppIdLaunchParamsWithEventFlags(
       app_id.value(), /*event_flags=*/0,
       apps::mojom::AppLaunchSource::kSourceChromeInternal, display_id,
       /*fallback_container=*/
       ConvertDisplayModeToAppLaunchContainer(display_mode));
+  params.launch_source = apps::mojom::LaunchSource::kFromChromeInternal;
 
   return params;
 }
@@ -120,6 +123,7 @@ Browser* LaunchSystemWebApp(Profile* profile,
                             base::Optional<apps::AppLaunchParams> params,
                             bool* did_create) {
   auto* provider = WebAppProvider::Get(profile);
+
   if (!provider)
     return nullptr;
 
@@ -133,6 +137,13 @@ Browser* LaunchSystemWebApp(Profile* profile,
 
   DCHECK_EQ(params->app_id, *GetAppIdForSystemWebApp(profile, app_type));
 
+  // TODO(crbug/1117655): The file manager records metrics directly when opening
+  // a file registered to an app, but can't tell if an SWA will ultimately be
+  // used to open it. Remove this when the file manager code is moved into
+  // the app service.
+  if (params->launch_source != apps::mojom::LaunchSource::kFromFileManager) {
+    apps::RecordAppLaunch(params->app_id, params->launch_source);
+  }
   // Log enumerated entry point for Print Management App. Only log here if the
   // app was launched from the browser (omnibox) or from the system launcher.
   if (app_type == SystemAppType::PRINT_MANAGEMENT) {
@@ -163,8 +174,11 @@ Browser* LaunchSystemWebApp(Profile* profile,
                                            params->disposition);
 
     // Navigate application window to application's |url| if necessary.
+    // Help app always navigates because its url might not match the url inside
+    // the iframe, and the iframe's url is the one that matters.
     web_contents = browser->tab_strip_model()->GetWebContentsAt(0);
-    if (!web_contents || web_contents->GetURL() != url) {
+    if (!web_contents || web_contents->GetURL() != url ||
+        app_type == SystemAppType::HELP) {
       web_contents = NavigateWebApplicationWindow(
           browser, params->app_id, url, WindowOpenDisposition::CURRENT_TAB);
     }
@@ -173,8 +187,11 @@ Browser* LaunchSystemWebApp(Profile* profile,
       browser = CreateApplicationWindow(profile, *params, url);
 
     // Navigate application window to application's |url| if necessary.
+    // Help app always navigates because its url might not match the url inside
+    // the iframe, and the iframe's url is the one that matters.
     web_contents = browser->tab_strip_model()->GetWebContentsAt(0);
-    if (!web_contents || web_contents->GetURL() != url) {
+    if (!web_contents || web_contents->GetURL() != url ||
+        app_type == SystemAppType::HELP) {
       web_contents = NavigateApplicationWindow(
           browser, *params, url, WindowOpenDisposition::CURRENT_TAB);
     }
@@ -194,6 +211,8 @@ Browser* LaunchSystemWebApp(Profile* profile,
     }
   }
 
+  // TODO(crbug.com/1114939): Need to make sure the browser is shown on the
+  // correct desktop, when used in multi-profile mode.
   browser->window()->Show();
   return browser;
 }
@@ -228,6 +247,22 @@ bool IsSystemWebApp(Browser* browser) {
   DCHECK(browser);
   return browser->app_controller() &&
          browser->app_controller()->is_for_system_web_app();
+}
+
+bool IsBrowserForSystemWebApp(Browser* browser, SystemAppType type) {
+  DCHECK(browser);
+  return browser->app_controller() &&
+         browser->app_controller()->system_app_type() == type;
+}
+
+base::Optional<SystemAppType> GetCapturingSystemAppForURL(Profile* profile,
+                                                          const GURL& url) {
+  auto* provider = WebAppProvider::Get(profile);
+
+  if (!provider)
+    return base::nullopt;
+
+  return provider->system_web_app_manager().GetCapturingSystemAppForURL(url);
 }
 
 gfx::Size GetSystemWebAppMinimumWindowSize(Browser* browser) {

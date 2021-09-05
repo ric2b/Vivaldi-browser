@@ -13,7 +13,7 @@ import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.supplier.DestroyableObservableSupplier;
 import org.chromium.base.supplier.Supplier;
-import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.bookmarks.BookmarkPage;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsMarginSupplier;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
@@ -29,9 +29,11 @@ import org.chromium.chrome.browser.ntp.RecentTabsPage;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabLaunchType;
+import org.chromium.chrome.browser.tab.state.CriticalPersistedTabData;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.ui.native_page.NativePage;
 import org.chromium.chrome.browser.ui.native_page.NativePageHost;
+import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.content_public.browser.LoadUrlParams;
 
@@ -49,17 +51,20 @@ import org.vivaldi.browser.speeddial.SpeedDialPage;
  */
 public class NativePageFactory {
     private final ChromeActivity mActivity;
+    private final BottomSheetController mBottomSheetController;
     private NewTabPageUma mNewTabPageUma;
 
     private NativePageBuilder mNativePageBuilder;
 
-    public NativePageFactory(ChromeActivity activity) {
+    public NativePageFactory(ChromeActivity activity, BottomSheetController sheetController) {
         mActivity = activity;
+        mBottomSheetController = sheetController;
     }
 
     private NativePageBuilder getBuilder() {
         if (mNativePageBuilder == null) {
-            mNativePageBuilder = new NativePageBuilder(mActivity, this::getNewTabPageUma);
+            mNativePageBuilder = new NativePageBuilder(
+                    mActivity, this::getNewTabPageUma, mBottomSheetController);
         }
         return mNativePageBuilder;
     }
@@ -77,11 +82,14 @@ public class NativePageFactory {
     @VisibleForTesting
     static class NativePageBuilder {
         private final ChromeActivity mActivity;
+        private final BottomSheetController mBottomSheetController;
         private final Supplier<NewTabPageUma> mUma;
 
-        public NativePageBuilder(ChromeActivity activity, Supplier<NewTabPageUma> uma) {
+        public NativePageBuilder(ChromeActivity activity, Supplier<NewTabPageUma> uma,
+                BottomSheetController sheetController) {
             mActivity = activity;
             mUma = uma;
+            mBottomSheetController = sheetController;
         }
 
         protected NativePage buildNewTabPage(Tab tab) {
@@ -92,12 +100,12 @@ public class NativePageFactory {
             NativePageHost nativePageHost = new TabShim(tab, mActivity);
             if (tab.isIncognito()) return new IncognitoNewTabPage(mActivity, nativePageHost);
 
-            return new NewTabPage(mActivity, mActivity.getFullscreenManager(),
-                    mActivity.getActivityTabProvider(), mActivity.getOverviewModeBehavior(),
-                    mActivity.getSnackbarManager(), mActivity.getLifecycleDispatcher(),
-                    mActivity.getTabModelSelector(), mActivity.isTablet(), mUma.get(),
+            return new NewTabPage(mActivity, mActivity.getBrowserControlsManager(),
+                    mActivity.getActivityTabProvider(), mActivity.getSnackbarManager(),
+                    mActivity.getLifecycleDispatcher(), mActivity.getTabModelSelector(),
+                    mActivity.isTablet(), mUma.get(),
                     mActivity.getNightModeStateProvider().isInNightMode(), nativePageHost, tab,
-                    mActivity.getBottomSheetController());
+                    mBottomSheetController);
         }
 
         protected NativePage buildBookmarksPage(Tab tab) {
@@ -268,7 +276,7 @@ public class NativePageFactory {
 
         public TabShim(Tab tab, ChromeActivity activity) {
             mTab = tab;
-            mBrowserControlsStateProvider = activity.getFullscreenManager();
+            mBrowserControlsStateProvider = activity.getBrowserControlsManager();
             mTabModelSelector = activity.getTabModelSelector();
         }
 
@@ -290,7 +298,7 @@ public class NativePageFactory {
 
         @Override
         public int getParentId() {
-            return mTab.getParentId();
+            return CriticalPersistedTabData.from(mTab).getParentId();
         }
 
         @Override

@@ -201,13 +201,12 @@ public class DefaultBrowserPromoManager implements PauseResumeWithNativeObserver
     }
 
     @VisibleForTesting
-    public DefaultBrowserPromoDialog getDialogForTesting() {
+    DefaultBrowserPromoDialog getDialogForTesting() {
         return mDialog;
     }
 
     @VisibleForTesting
-    public void promoForTesting(
-            @DefaultBrowserPromoUtils.DefaultBrowserState int state, int sdkInt) {
+    void promoForTesting(@DefaultBrowserPromoUtils.DefaultBrowserState int state, int sdkInt) {
         promoInternal(state, sdkInt);
     }
 }

@@ -7,10 +7,12 @@
 
 #include <memory>
 
+#include "base/memory/weak_ptr.h"
 #include "chrome/browser/media/kaleidoscope/mojom/kaleidoscope.mojom.h"
 #include "google_apis/gaia/google_service_auth_error.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/receiver.h"
+#include "url/origin.h"
 
 namespace media_history {
 class MediaHistoryKeyedService;
@@ -36,10 +38,26 @@ class KaleidoscopeDataProviderImpl
   ~KaleidoscopeDataProviderImpl() override;
 
   // media::mojom::KaleidoscopeDataProvider implementation.
-  void GetTopMediaFeeds(GetTopMediaFeedsCallback callback) override;
+  void GetTopMediaFeeds(media::mojom::KaleidoscopeTab tab,
+                        GetTopMediaFeedsCallback callback) override;
   void GetMediaFeedContents(int64_t feed_id,
+                            media::mojom::KaleidoscopeTab tab,
                             GetMediaFeedContentsCallback callback) override;
+  void GetContinueWatchingMediaFeedItems(
+      media::mojom::KaleidoscopeTab tab,
+      GetContinueWatchingMediaFeedItemsCallback callback) override;
   void GetCredentials(GetCredentialsCallback cb) override;
+  void GetShouldShowFirstRunExperience(
+      GetShouldShowFirstRunExperienceCallback cb) override;
+  void SetFirstRunExperienceCompleted() override;
+  void GetAllMediaFeeds(GetAllMediaFeedsCallback cb) override;
+  void SetMediaFeedsConsent(
+      bool accepted_media_feeds,
+      bool accepted_auto_select_media_feeds,
+      const std::vector<int64_t>& enabled_feed_ids,
+      const std::vector<int64_t>& disabled_feed_ids) override;
+  void GetHighWatchTimeOrigins(GetHighWatchTimeOriginsCallback cb) override;
+  void SendFeedback() override;
 
  private:
   media_history::MediaHistoryKeyedService* GetMediaHistoryService();
@@ -47,6 +65,14 @@ class KaleidoscopeDataProviderImpl
   // Called when an access token request completes (successfully or not).
   void OnAccessTokenAvailable(GoogleServiceAuthError error,
                               signin::AccessTokenInfo access_token_info);
+
+  void OnGotMediaFeedContents(
+      GetMediaFeedContentsCallback callback,
+      const int64_t feed_id,
+      std::vector<media_feeds::mojom::MediaFeedItemPtr> items);
+  void OnGotContinueWatchingMediaFeedItems(
+      GetContinueWatchingMediaFeedItemsCallback callback,
+      std::vector<media_feeds::mojom::MediaFeedItemPtr> items);
 
   // Helper for fetching OAuth2 access tokens. This is non-null iff an access
   // token request is currently in progress.
@@ -63,6 +89,8 @@ class KaleidoscopeDataProviderImpl
   Profile* const profile_;
 
   mojo::Receiver<media::mojom::KaleidoscopeDataProvider> receiver_;
+
+  base::WeakPtrFactory<KaleidoscopeDataProviderImpl> weak_ptr_factory{this};
 };
 
 #endif  // CHROME_BROWSER_MEDIA_KALEIDOSCOPE_KALEIDOSCOPE_DATA_PROVIDER_IMPL_H_

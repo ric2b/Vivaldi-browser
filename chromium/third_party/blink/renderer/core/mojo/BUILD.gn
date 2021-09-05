@@ -2,7 +2,6 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//build/config/jumbo.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
 import("//third_party/blink/renderer/core/core.gni")
 
@@ -26,7 +25,7 @@ blink_core_sources("mojo") {
   ]
 }
 
-jumbo_source_set("unit_tests") {
+source_set("unit_tests") {
   testonly = true
   sources = [ "tests/js_to_cpp_test.cc" ]
 

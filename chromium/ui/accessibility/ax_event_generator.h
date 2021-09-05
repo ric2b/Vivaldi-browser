@@ -67,6 +67,7 @@ class AX_EXPORT AXEventGenerator : public AXTreeObserver {
     MULTILINE_STATE_CHANGED,
     MULTISELECTABLE_STATE_CHANGED,
     NAME_CHANGED,
+    OBJECT_ATTRIBUTE_CHANGED,
     OTHER_ATTRIBUTE_CHANGED,
     PLACEHOLDER_CHANGED,
     PORTAL_ACTIVATED,
@@ -84,16 +85,23 @@ class AX_EXPORT AXEventGenerator : public AXTreeObserver {
     SORT_CHANGED,
     STATE_CHANGED,
     SUBTREE_CREATED,
+    TEXT_ATTRIBUTE_CHANGED,
     VALUE_CHANGED,
     VALUE_MAX_CHANGED,
     VALUE_MIN_CHANGED,
     VALUE_STEP_CHANGED,
+
+    // This event is for the exact set of attributes that affect
+    // the MSAA/IAccessible state on Windows. Not needed on other platforms,
+    // but very natural to compute here.
+    WIN_IACCESSIBLE_STATE_CHANGED,
   };
 
-  struct EventParams {
+  struct AX_EXPORT EventParams {
     EventParams(Event event,
                 ax::mojom::EventFrom event_from,
                 const std::vector<AXEventIntent>& event_intents);
+    EventParams(const EventParams& other);
     ~EventParams();
     Event event;
     ax::mojom::EventFrom event_from;
@@ -228,6 +236,18 @@ class AX_EXPORT AXEventGenerator : public AXTreeObserver {
   void FireActiveDescendantEvents();
   void FireRelationSourceEvents(AXTree* tree, AXNode* target_node);
   bool ShouldFireLoadEvents(AXNode* node);
+  // Remove excessive events for a tree update containing node.
+  // We remove certain events on a node when it changes to IGNORED state and one
+  // of the node's ancestor has also changed to IGNORED in the same tree update.
+  // |ancestor_has_ignored_map| contains if a node's ancestor has changed to
+  // IGNORED state.
+  // Map's key is: an ax node.
+  // Map's value is:
+  // - True if an ancestor of node changed to IGNORED state.
+  // - False if no ancestor of node changed to IGNORED state.
+  void TrimEventsDueToAncestorIgnoredChanged(
+      AXNode* node,
+      std::map<AXNode*, bool>& ancestor_has_ignored_map);
   void PostprocessEvents();
   static void GetRestrictionStates(ax::mojom::Restriction restriction,
                                    bool* is_enabled,

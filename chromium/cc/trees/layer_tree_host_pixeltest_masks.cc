@@ -29,15 +29,16 @@ namespace {
 // TODO(penghuang): Fix vulkan with one copy or zero copy
 // https://crbug.com/979703
 std::vector<PixelResourceTestCase> const kTestCases = {
-    {LayerTreeTest::RENDERER_SOFTWARE, SOFTWARE},
-    {LayerTreeTest::RENDERER_GL, GPU},
-    {LayerTreeTest::RENDERER_GL, ONE_COPY},
-    {LayerTreeTest::RENDERER_GL, ZERO_COPY},
-    {LayerTreeTest::RENDERER_SKIA_GL, GPU},
-    {LayerTreeTest::RENDERER_SKIA_GL, ONE_COPY},
-    {LayerTreeTest::RENDERER_SKIA_GL, ZERO_COPY},
+    {TestRendererType::kSoftware, TestRasterType::kBitmap},
+    {TestRendererType::kGL, TestRasterType::kGpu},
+    {TestRendererType::kGL, TestRasterType::kOneCopy},
+    {TestRendererType::kGL, TestRasterType::kZeroCopy},
+    {TestRendererType::kSkiaGL, TestRasterType::kGpu},
+    {TestRendererType::kSkiaGL, TestRasterType::kOneCopy},
+    {TestRendererType::kSkiaGL, TestRasterType::kZeroCopy},
 #if defined(ENABLE_CC_VULKAN_TESTS)
-    {LayerTreeTest::RENDERER_SKIA_VK, GPU},
+    {TestRendererType::kSkiaVk, TestRasterType::kOop},
+    {TestRendererType::kSkiaVk, TestRasterType::kZeroCopy},
 #endif  // defined(ENABLE_CC_VULKAN_TESTS)
 };
 
@@ -277,11 +278,14 @@ TEST_P(LayerTreeHostMaskPixelTest_MaskWithEffectNoContentToMask, Test) {
 class LayerTreeHostMaskPixelTest_ScaledMaskWithEffect
     : public LayerTreeHostMaskPixelTestWithLayerList {
  protected:
-  // Scale the mask with a non-integral transform. This will trigger the
-  // AA path in the renderer.
+  // Scale the mask with a non-integral transform. This will trigger raster
+  // translation and may or may not trigger the AA path in the renderer.
   void SetupTree() override {
     LayerTreeHostMaskPixelTestWithLayerList::SetupTree();
 
+    // Use this offset to ensure the same rounding direction in different code
+    // paths for non-AA drawing (25.1 * 1.5 = 37.65).
+    mask_layer_->SetOffsetToTransformParent(gfx::Vector2dF(25.1, 25.1));
     auto& transform = CreateTransformNode(mask_layer_.get());
     transform.local.Scale(1.5, 1.5);
   }
@@ -575,14 +579,14 @@ INSTANTIATE_TEST_SUITE_P(
 
 TEST_P(LayerTreeHostMasksForBackdropFiltersPixelTestWithLayerList, Test) {
   base::FilePath image_name =
-      (raster_type() == GPU)
+      (raster_type() == TestRasterType::kGpu)
           ? base::FilePath(FILE_PATH_LITERAL("mask_of_backdrop_filter_gpu.png"))
           : base::FilePath(FILE_PATH_LITERAL("mask_of_backdrop_filter.png"));
 
-  if (use_skia_vulkan() && raster_type() == GPU) {
-    // Vulkan with GPU raster has 4 pixels errors (the circle mask shape is
-    // slight different).
-    float percentage_pixels_large_error = 0.04f;  // 4px / (100*100)
+  if (use_skia_vulkan() && raster_type() == TestRasterType::kOop) {
+    // Vulkan with OOP raster has 3 pixels errors (the circle mask shape is
+    // slightly different).
+    float percentage_pixels_large_error = 0.031f;  // 3px / (100*100)
     float percentage_pixels_small_error = 0.0f;
     float average_error_allowed_in_bad_pixels = 182.f;
     int large_error_allowed = 182;
@@ -634,14 +638,14 @@ TEST_P(LayerTreeHostMasksForBackdropFiltersPixelTestWithLayerTree, Test) {
   blur->SetMaskLayer(mask);
 
   base::FilePath image_name =
-      (raster_type() == GPU)
+      (raster_type() == TestRasterType::kGpu)
           ? base::FilePath(FILE_PATH_LITERAL("mask_of_backdrop_filter_gpu.png"))
           : base::FilePath(FILE_PATH_LITERAL("mask_of_backdrop_filter.png"));
 
-  if (use_skia_vulkan() && raster_type() == GPU) {
-    // Vulkan with GPU raster has 4 pixels errors (the circle mask shape is
-    // slight different).
-    float percentage_pixels_large_error = 0.04f;  // 4px / (100*100)
+  if (use_skia_vulkan() && raster_type() == TestRasterType::kOop) {
+    // Vulkan with OOP raster has 3 pixels errors (the circle mask shape is
+    // slightly different).
+    float percentage_pixels_large_error = 0.031f;  // 3px / (100*100)
     float percentage_pixels_small_error = 0.0f;
     float average_error_allowed_in_bad_pixels = 182.f;
     int large_error_allowed = 182;
@@ -867,18 +871,20 @@ class LayerTreeHostMaskAsBlendingPixelTest
 };
 
 MaskTestConfig const kTestConfigs[] = {
-    MaskTestConfig{{LayerTreeTest::RENDERER_SOFTWARE, SOFTWARE}, 0},
-    MaskTestConfig{{LayerTreeTest::RENDERER_GL, ZERO_COPY}, 0},
-    MaskTestConfig{{LayerTreeTest::RENDERER_GL, ZERO_COPY}, kUseAntialiasing},
-    MaskTestConfig{{LayerTreeTest::RENDERER_GL, ZERO_COPY}, kForceShaders},
-    MaskTestConfig{{LayerTreeTest::RENDERER_GL, ZERO_COPY},
+    MaskTestConfig{{TestRendererType::kSoftware, TestRasterType::kBitmap}, 0},
+    MaskTestConfig{{TestRendererType::kGL, TestRasterType::kZeroCopy}, 0},
+    MaskTestConfig{{TestRendererType::kGL, TestRasterType::kZeroCopy},
+                   kUseAntialiasing},
+    MaskTestConfig{{TestRendererType::kGL, TestRasterType::kZeroCopy},
+                   kForceShaders},
+    MaskTestConfig{{TestRendererType::kGL, TestRasterType::kZeroCopy},
                    kUseAntialiasing | kForceShaders},
-    MaskTestConfig{{LayerTreeTest::RENDERER_SKIA_GL, ZERO_COPY}, 0},
-    MaskTestConfig{{LayerTreeTest::RENDERER_SKIA_GL, ZERO_COPY},
+    MaskTestConfig{{TestRendererType::kSkiaGL, TestRasterType::kZeroCopy}, 0},
+    MaskTestConfig{{TestRendererType::kSkiaGL, TestRasterType::kZeroCopy},
                    kUseAntialiasing},
 #if defined(ENABLE_CC_VULKAN_TESTS)
-    MaskTestConfig{{LayerTreeTest::RENDERER_SKIA_VK, ZERO_COPY}, 0},
-    MaskTestConfig{{LayerTreeTest::RENDERER_SKIA_VK, ZERO_COPY},
+    MaskTestConfig{{TestRendererType::kSkiaVk, TestRasterType::kZeroCopy}, 0},
+    MaskTestConfig{{TestRendererType::kSkiaVk, TestRasterType::kZeroCopy},
                    kUseAntialiasing},
 #endif  // defined(ENABLE_CC_VULKAN_TESTS)
 };
@@ -1021,7 +1027,7 @@ TEST_P(LayerTreeHostMaskAsBlendingPixelTest, RotatedClippedCircle) {
   mask_isolation->AddChild(mask_layer);
 
   base::FilePath image_name =
-      (raster_type() == SOFTWARE)
+      (raster_type() == TestRasterType::kBitmap)
           ? base::FilePath(
                 FILE_PATH_LITERAL("mask_as_blending_rotated_circle.png"))
           : base::FilePath(
@@ -1067,7 +1073,7 @@ TEST_P(LayerTreeHostMaskAsBlendingPixelTest, RotatedClippedCircleUnderflow) {
   mask_isolation->AddChild(mask_layer);
 
   base::FilePath image_name =
-      (raster_type() == SOFTWARE)
+      (raster_type() == TestRasterType::kBitmap)
           ? base::FilePath(FILE_PATH_LITERAL(
                 "mask_as_blending_rotated_circle_underflow.png"))
           : base::FilePath(FILE_PATH_LITERAL(
@@ -1135,7 +1141,7 @@ INSTANTIATE_TEST_SUITE_P(PixelResourceTest,
 TEST_P(LayerTreeHostMasksForBackdropFiltersAndBlendPixelTest, Test) {
   base::FilePath result_path(
       FILE_PATH_LITERAL("mask_of_backdrop_filter_and_blend_.png"));
-  if (raster_type() != GPU) {
+  if (!use_accelerated_raster()) {
     result_path = result_path.InsertBeforeExtensionASCII("sw");
   } else {
     result_path = result_path.InsertBeforeExtensionASCII(GetRendererSuffix());

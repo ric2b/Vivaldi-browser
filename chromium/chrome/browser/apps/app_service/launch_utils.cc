@@ -194,12 +194,14 @@ apps::mojom::AppLaunchSource GetAppLaunchSource(
     case apps::mojom::LaunchSource::kFromOmnibox:
     case apps::mojom::LaunchSource::kFromOtherApp:
     case apps::mojom::LaunchSource::kFromMenu:
+    case apps::mojom::LaunchSource::kFromSharesheet:
       return apps::mojom::AppLaunchSource::kSourceAppLauncher;
     case apps::mojom::LaunchSource::kFromKeyboard:
       return apps::mojom::AppLaunchSource::kSourceKeyboard;
     case apps::mojom::LaunchSource::kFromFileManager:
       return apps::mojom::AppLaunchSource::kSourceFileHandler;
     case apps::mojom::LaunchSource::kFromChromeInternal:
+    case apps::mojom::LaunchSource::kFromReleaseNotesNotification:
       return apps::mojom::AppLaunchSource::kSourceChromeInternal;
     case apps::mojom::LaunchSource::kFromInstalledNotification:
       return apps::mojom::AppLaunchSource::kSourceInstalledNotification;

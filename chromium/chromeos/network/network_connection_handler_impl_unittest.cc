@@ -98,38 +98,34 @@ class FakeTetherDelegate : public NetworkConnectionHandler::TetherDelegate {
     return last_delegate_function_type_;
   }
 
-  void ConnectToNetwork(
-      const std::string& service_path,
-      base::OnceClosure success_callback,
-      const network_handler::StringResultCallback& error_callback) override {
+  void ConnectToNetwork(const std::string& service_path,
+                        base::OnceClosure success_callback,
+                        StringErrorCallback error_callback) override {
     last_delegate_function_type_ = DelegateFunctionType::CONNECT;
     last_service_path_ = service_path;
     last_success_callback_ = std::move(success_callback);
-    last_error_callback_ = error_callback;
+    last_error_callback_ = std::move(error_callback);
   }
 
-  void DisconnectFromNetwork(
-      const std::string& service_path,
-      base::OnceClosure success_callback,
-      const network_handler::StringResultCallback& error_callback) override {
+  void DisconnectFromNetwork(const std::string& service_path,
+                             base::OnceClosure success_callback,
+                             StringErrorCallback error_callback) override {
     last_delegate_function_type_ = DelegateFunctionType::DISCONNECT;
     last_service_path_ = service_path;
     last_success_callback_ = std::move(success_callback);
-    last_error_callback_ = error_callback;
+    last_error_callback_ = std::move(error_callback);
   }
 
   std::string& last_service_path() { return last_service_path_; }
 
   base::OnceClosure& last_success_callback() { return last_success_callback_; }
 
-  network_handler::StringResultCallback& last_error_callback() {
-    return last_error_callback_;
-  }
+  StringErrorCallback& last_error_callback() { return last_error_callback_; }
 
  private:
   std::string last_service_path_;
   base::OnceClosure last_success_callback_;
-  network_handler::StringResultCallback last_error_callback_;
+  StringErrorCallback last_error_callback_;
   DelegateFunctionType last_delegate_function_type_;
 };
 
@@ -209,8 +205,8 @@ class NetworkConnectionHandlerImplTest : public testing::Test {
         service_path,
         base::BindOnce(&NetworkConnectionHandlerImplTest::SuccessCallback,
                        base::Unretained(this)),
-        base::Bind(&NetworkConnectionHandlerImplTest::ErrorCallback,
-                   base::Unretained(this)),
+        base::BindOnce(&NetworkConnectionHandlerImplTest::ErrorCallback,
+                       base::Unretained(this)),
         true /* check_error_state */, ConnectCallbackMode::ON_COMPLETED);
     task_environment_.RunUntilIdle();
   }
@@ -220,8 +216,8 @@ class NetworkConnectionHandlerImplTest : public testing::Test {
         service_path,
         base::BindOnce(&NetworkConnectionHandlerImplTest::SuccessCallback,
                        base::Unretained(this)),
-        base::Bind(&NetworkConnectionHandlerImplTest::ErrorCallback,
-                   base::Unretained(this)));
+        base::BindOnce(&NetworkConnectionHandlerImplTest::ErrorCallback,
+                       base::Unretained(this)));
     task_environment_.RunUntilIdle();
   }
 
@@ -394,16 +390,16 @@ TEST_F(NetworkConnectionHandlerImplTest,
 }
 
 TEST_F(NetworkConnectionHandlerImplTest,
-       NetworkConnectionHandlerConnectBlockedByBlacklist) {
+       NetworkConnectionHandlerConnectBlockedBySSID) {
   std::string wifi0_service_path = ConfigureService(kConfigWifi0Connectable);
   ASSERT_FALSE(wifi0_service_path.empty());
 
   // Set a device policy which blocks wifi0.
-  base::Value::ListStorage blacklist;
-  blacklist.push_back(base::Value("7769666930"));  // hex(wifi0) = 7769666930
+  base::Value::ListStorage blocked;
+  blocked.push_back(base::Value("7769666930"));  // hex(wifi0) = 7769666930
   base::DictionaryValue global_config;
-  global_config.SetKey(::onc::global_network_config::kBlacklistedHexSSIDs,
-                       base::Value(blacklist));
+  global_config.SetKey(::onc::global_network_config::kBlockedHexSSIDs,
+                       base::Value(blocked));
   SetupPolicy("[]", global_config, false /* load as device policy */);
   SetupPolicy("[]", base::DictionaryValue(), true /* load as user policy */);
 
@@ -413,7 +409,7 @@ TEST_F(NetworkConnectionHandlerImplTest,
   EXPECT_EQ(NetworkConnectionHandler::kErrorBlockedByPolicy,
             GetResultAndReset());
 
-  // Set a user policy, which configures wifi0 (==whitelisted).
+  // Set a user policy, which configures wifi0 (==allowed).
   SetupPolicy(kPolicyWifi0, base::DictionaryValue(),
               true /* load as user policy */);
   Connect(wifi0_service_path);
@@ -587,8 +583,8 @@ TEST_F(NetworkConnectionHandlerImplTest, ConnectToTetherNetwork_Failure) {
   EXPECT_EQ(FakeTetherDelegate::DelegateFunctionType::CONNECT,
             fake_tether_delegate()->last_delegate_function_type());
   EXPECT_EQ(kTetherGuid, fake_tether_delegate()->last_service_path());
-  fake_tether_delegate()->last_error_callback().Run(
-      NetworkConnectionHandler::kErrorConnectFailed);
+  std::move(fake_tether_delegate()->last_error_callback())
+      .Run(NetworkConnectionHandler::kErrorConnectFailed);
   EXPECT_EQ(NetworkConnectionHandler::kErrorConnectFailed, GetResultAndReset());
   EXPECT_TRUE(network_connection_observer()->GetRequested(kTetherGuid));
   EXPECT_EQ(NetworkConnectionHandler::kErrorConnectFailed,
@@ -683,8 +679,8 @@ TEST_F(NetworkConnectionHandlerImplTest, DisconnectFromTetherNetwork_Failure) {
   EXPECT_EQ(FakeTetherDelegate::DelegateFunctionType::DISCONNECT,
             fake_tether_delegate()->last_delegate_function_type());
   EXPECT_EQ(kTetherGuid, fake_tether_delegate()->last_service_path());
-  fake_tether_delegate()->last_error_callback().Run(
-      NetworkConnectionHandler::kErrorConnectFailed);
+  std::move(fake_tether_delegate()->last_error_callback())
+      .Run(NetworkConnectionHandler::kErrorConnectFailed);
   EXPECT_EQ(NetworkConnectionHandler::kErrorConnectFailed, GetResultAndReset());
   EXPECT_TRUE(network_connection_observer()->GetRequested(kTetherGuid));
   EXPECT_EQ(NetworkConnectionHandler::kErrorConnectFailed,

@@ -30,7 +30,7 @@ void FilterAndSortPasswords(
   password_list->erase(
       std::remove_if(
           password_list->begin(), password_list->end(),
-          [](const auto& form) { return form->blacklisted_by_user; }),
+                     [](const auto& form) { return form->blocked_by_user; }),
       password_list->end());
 
   password_manager::DuplicatesMap ignored_duplicates;

@@ -22,6 +22,8 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
+#include "components/dom_distiller/content/browser/distillable_page_utils.h"
+#include "components/dom_distiller/core/url_utils.h"
 #include "components/omnibox/browser/omnibox_prefs.h"
 #import "components/remote_cocoa/app_shim/native_widget_mac_nswindow.h"
 #import "components/remote_cocoa/app_shim/native_widget_ns_window_bridge.h"
@@ -187,6 +189,22 @@ void BrowserFrameMac::ValidateUserInterfaceItem(
           !media_router::MediaRouterEnabled(browser->profile());
       break;
     }
+    case IDC_DISTILL_PAGE: {
+      // Enable the reader mode option if the page is a distilled page
+      // or if the page is distillable.
+      content::WebContents* web_contents =
+          browser->tab_strip_model()->GetActiveWebContents();
+      base::Optional<dom_distiller::DistillabilityResult> distillability =
+          dom_distiller::GetLatestResult(web_contents);
+      bool distillable =
+          distillability && distillability.value().is_distillable;
+      bool is_distilled = dom_distiller::url_utils::IsDistilledPage(
+          web_contents->GetLastCommittedURL());
+      result->new_title.emplace(l10n_util::GetStringUTF16(
+          is_distilled ? IDS_EXIT_DISTILLED_PAGE : IDS_DISTILL_PAGE));
+      result->enable = distillable || is_distilled;
+      break;
+    }
     default:
       break;
   }
@@ -217,6 +235,10 @@ void BrowserFrameMac::ValidateUserInterfaceItem(
       PrefService* prefs = browser->profile()->GetPrefs();
       result->new_toggle_state =
           prefs->GetBoolean(omnibox::kPreventUrlElisionsInOmnibox);
+      // Disable this menu option if the show full URLs pref is managed.
+      result->enable =
+          !prefs->FindPreference(omnibox::kPreventUrlElisionsInOmnibox)
+               ->IsManaged();
       break;
     }
     case IDC_TOGGLE_JAVASCRIPT_APPLE_EVENTS: {

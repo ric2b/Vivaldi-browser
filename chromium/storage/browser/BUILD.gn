@@ -1,11 +1,10 @@
 # Copyright 2014 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
-import("//build/config/jumbo.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
 import("//testing/test.gni")
 
-jumbo_component("browser") {
+component("browser") {
   output_name = "storage_browser"
   sources = [
     "blob/blob_builder_from_stream.cc",
@@ -42,6 +41,8 @@ jumbo_component("browser") {
     "blob/blob_url_loader.h",
     "blob/blob_url_loader_factory.cc",
     "blob/blob_url_loader_factory.h",
+    "blob/blob_url_registry.cc",
+    "blob/blob_url_registry.h",
     "blob/blob_url_store_impl.cc",
     "blob/blob_url_store_impl.h",
     "blob/blob_url_utils.cc",
@@ -264,6 +265,7 @@ source_set("unittests") {
     "blob/blob_storage_context_unittest.cc",
     "blob/blob_storage_registry_unittest.cc",
     "blob/blob_transport_strategy_unittest.cc",
+    "blob/blob_url_registry_unittest.cc",
     "blob/blob_url_store_impl_unittest.cc",
     "database/database_quota_client_unittest.cc",
     "database/database_tracker_unittest.cc",
@@ -327,7 +329,7 @@ source_set("unittests") {
   ]
 }
 
-jumbo_static_library("test_support") {
+static_library("test_support") {
   testonly = true
 
   sources = [

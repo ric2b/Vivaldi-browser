@@ -261,6 +261,15 @@ class AutofillManager : public AutofillHandler,
   // Returns the last form the autofill manager considered in this frame.
   virtual const FormData& last_query_form() const;
 
+  // Exposed to ContentAutofillDriver to help with recording WebOTP metrics.
+  bool has_parsed_forms() const { return has_parsed_forms_; }
+  bool has_observed_phone_number_field() const {
+    return has_observed_phone_number_field_;
+  }
+  bool has_observed_one_time_code_field() const {
+    return has_observed_one_time_code_field_;
+  }
+
 #if defined(UNIT_TEST)
   // A public wrapper that calls |DeterminePossibleFieldTypesForUpload| for
   // testing purposes only.
@@ -367,7 +376,7 @@ class AutofillManager : public AutofillHandler,
                                     const gfx::RectF& bounding_box) override;
   bool ShouldParseForms(const std::vector<FormData>& forms,
                         const base::TimeTicks timestamp) override;
-  void OnFormsParsed(const std::vector<FormStructure*>& form_structures,
+  void OnFormsParsed(const std::vector<const FormData*>& forms,
                      const base::TimeTicks timestamp) override;
 
   AutofillMetrics::FormInteractionsUkmLogger* form_interactions_ukm_logger() {
@@ -419,6 +428,10 @@ class AutofillManager : public AutofillHandler,
     // Address suggestions are not shown because the field is annotated with
     // autocomplete=off and the directive is being observed by the browser.
     kAutocompleteOff,
+    // Suggestions are not shown because this form is on a secure site, but
+    // submits insecurely. This is only used when the user has started typing,
+    // otherwise a warning is shown.
+    kInsecureForm,
   };
 
   // The context for the list of suggestions available for a given field to be
@@ -651,6 +664,13 @@ class AutofillManager : public AutofillHandler,
   bool user_did_autofill_ = false;
   // Has the user edited a field that was previously autofilled?
   bool user_did_edit_autofilled_field_ = false;
+
+  // Does |this| have any parsed forms?
+  bool has_parsed_forms_ = false;
+  // Is there a field with autocomplete="one-time-code" observed?
+  bool has_observed_one_time_code_field_ = false;
+  // Is there a field with phone number collection observed?
+  bool has_observed_phone_number_field_ = false;
 
   // When the user first interacted with a potentially fillable form on this
   // page.

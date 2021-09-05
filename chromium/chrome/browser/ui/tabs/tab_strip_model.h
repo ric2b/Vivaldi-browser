@@ -463,6 +463,7 @@ class TabStripModel : public TabGroupController {
 
   // TabGroupController:
   void CreateTabGroup(const tab_groups::TabGroupId& group) override;
+  void OpenTabGroupEditor(const tab_groups::TabGroupId& group) override;
   void ChangeTabGroupContents(const tab_groups::TabGroupId& group) override;
   void ChangeTabGroupVisuals(const tab_groups::TabGroupId& group) override;
   void MoveTabGroup(const tab_groups::TabGroupId& group) override;
@@ -495,10 +496,6 @@ class TabStripModel : public TabGroupController {
     CommandMoveTabsToNewWindow,
     CommandLast
   };
-
-  // Range of command IDs reserved for the "Move to another window" submenu.
-  static const int kMinExistingWindowCommandId = 1001;
-  static const int kMaxExistingWindowCommandId = 1200;
 
   // Returns true if the specified command is enabled. If |context_index| is
   // selected the response applies to all selected tabs.

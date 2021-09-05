@@ -6,6 +6,7 @@
 <translation id="1012173283529841972">სიის ელემენტი</translation>
 <translation id="1013742170491673792">srched</translation>
 <translation id="1014370462248694370">ორი თითით გადაფურცვლა მარჯვნივ</translation>
+<translation id="1016393160682012902">ფუნქციების გასაცნობად დააჭირეთ qwerty კლავიშს, განახლებადი ბრაილის კლავიშს ან შეხების ჟესტს. გასასვლელად ერთდროულად დააჭირეთ control-სა და w-ს ან escape-ს.</translation>
 <translation id="1022586497894531524">ChromeVox-ის გახმოვანებულ უკუკავშირს პირველად იყენებთ? მოცემული სწრაფი სახელმძღვანელო ChromeVox-თან მუშაობის საფუძვლებს გაგაცნობთ.</translation>
 <translation id="1025074108959230262">ფიქსაციის რეჟიმი გამორთულია</translation>
 <translation id="1031961866430398710">შემდეგ</translation>
@@ -504,7 +505,6 @@
 <translation id="489907760999452556">შიდა ბმული</translation>
 <translation id="4909019435900810068">ერთი სიტყვით უკან გადასვლა</translation>
 <translation id="4911349081560453449">წინა მოსანიშნი ველი არ არის</translation>
-<translation id="4915087353619183190">მიმდინარეობს სწავლის რეჟიმის გაშვება. ფუნქციების გასაცნობად დააჭირეთ qwerty კლავიშს, განახლებადი ბრაილის კლავიშს ან შეხების ჟესტს. გასასვლელად ერთდროულად დააჭირეთ control-სა და w-ს ან escape-ს.</translation>
 <translation id="492295894462528572">წინასიტყვაობა</translation>
 <translation id="495046168593986294">ზემოთ გადაადგილება</translation>
 <translation id="495170559598752135">ქმედებები</translation>
@@ -647,6 +647,7 @@
 <translation id="6017514345406065928">მწვანე</translation>
 <translation id="602001110135236999">გადაადგილება მარცხნივ</translation>
 <translation id="6034000775414344507">ღია ნაცრისფერი</translation>
+<translation id="6036135911048686884">შეხებით დათვალიერება</translation>
 <translation id="6037602951055904232">წინ გადაწევა</translation>
 <translation id="6044160928851315051">ეკრანის დაბნელება</translation>
 <translation id="6082768461603900813">ძირითადი ნავიგაცია</translation>
@@ -922,6 +923,7 @@
 <translation id="8345569862449483843">{COUNT,plural, =1{ფუნტი}other{# ფუნტის ნიშანი}}</translation>
 <translation id="8378855320830505539">რეგიონი</translation>
 <translation id="8382679411218029383">ავტომატური შევსების თანმიმდევრობა და სია</translation>
+<translation id="8394908167088220973">მედიის დაკვრა/პაუზა</translation>
 <translation id="8428213095426709021">პარამეტრები</translation>
 <translation id="8428603554127842284">დონე <ph name="DEPTH" /></translation>
 <translation id="8430049249787218991">mnubr</translation>
@@ -966,6 +968,7 @@
 <translation id="8770473310765924354">სტრუქტურირებული შიგთავსიდან გამოსვლა, როგორიცაა ცხრილები</translation>
 <translation id="8779057862865475116">წინა ბმული არ არის</translation>
 <translation id="8796411681063377102">შემდეგი მე-3 დონის სათაური</translation>
+<translation id="8823311177246872527"><ph name="CURRENTPAGE" /> გვერდი <ph name="TOTALPAGES" />-დან</translation>
 <translation id="8825828890761629845">ბანერი</translation>
 <translation id="8851136666856101339">ძირითადი</translation>
 <translation id="8882002077197914455">სტრიქონის სათაური</translation>

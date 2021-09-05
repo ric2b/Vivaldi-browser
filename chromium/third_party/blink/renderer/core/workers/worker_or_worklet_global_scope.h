@@ -10,12 +10,15 @@
 #include "base/unguessable_token.h"
 #include "services/network/public/mojom/fetch_api.mojom-blink-forward.h"
 #include "services/network/public/mojom/web_sandbox_flags.mojom-blink-forward.h"
+#include "third_party/blink/public/mojom/loader/resource_load_info_notifier.mojom-shared.h"
+#include "third_party/blink/public/platform/cross_variant_mojo_util.h"
 #include "third_party/blink/public/platform/web_url_request.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_cache_options.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/dom/events/event_target.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/frame/csp/content_security_policy.h"
+#include "third_party/blink/renderer/core/frame/deprecation.h"
 #include "third_party/blink/renderer/core/frame/web_feature_forward.h"
 #include "third_party/blink/renderer/core/script/modulator.h"
 #include "third_party/blink/renderer/core/workers/global_scope_creation_params.h"
@@ -74,11 +77,6 @@ class CORE_EXPORT WorkerOrWorkletGlobalScope : public EventTargetWithInlineData,
   void DisableEval(const String& error_message) final;
   bool CanExecuteScripts(ReasonForCallingCanExecuteScripts) final;
 
-  SecurityContext& GetSecurityContext() final { return security_context_; }
-  const SecurityContext& GetSecurityContext() const final {
-    return security_context_;
-  }
-
   // Returns true when the WorkerOrWorkletGlobalScope is closing (e.g. via
   // WorkerGlobalScope#close() method). If this returns true, the worker is
   // going to be shutdown after the current task execution. Globals that
@@ -97,7 +95,6 @@ class CORE_EXPORT WorkerOrWorkletGlobalScope : public EventTargetWithInlineData,
 
   // UseCounter
   void CountUse(WebFeature feature) final { CountFeature(feature); }
-  void CountDeprecation(WebFeature) final;
 
   // May return nullptr if this global scope is not threaded (i.e.,
   // WorkletGlobalScope for the main thread) or after Dispose() is called.
@@ -162,6 +159,11 @@ class CORE_EXPORT WorkerOrWorkletGlobalScope : public EventTargetWithInlineData,
 
   virtual int GetOutstandingThrottledLimit() const;
 
+  Deprecation& GetDeprecation() { return deprecation_; }
+
+  CrossVariantMojoRemote<mojom::ResourceLoadInfoNotifierInterfaceBase>
+  CloneResourceLoadInfoNotifier();
+
  protected:
   // Sets outside's CSP used for off-main-thread top-level worker script
   // fetch.
@@ -208,8 +210,6 @@ class CORE_EXPORT WorkerOrWorkletGlobalScope : public EventTargetWithInlineData,
 
   bool web_fetch_context_initialized_ = false;
 
-  SecurityContext security_context_;
-
   const String name_;
   const base::UnguessableToken parent_devtools_token_;
 
@@ -249,6 +249,9 @@ class CORE_EXPORT WorkerOrWorkletGlobalScope : public EventTargetWithInlineData,
   // This is the set of features that this worker has used.
   std::bitset<static_cast<size_t>(WebFeature::kNumberOfFeatures)>
       used_features_;
+
+  // This tracks deprecation features that have been used.
+  Deprecation deprecation_;
 
   // LocalDOMWindow::modulator_ workaround equivalent.
   // TODO(kouhei): Remove this.

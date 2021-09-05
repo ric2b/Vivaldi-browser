@@ -9,6 +9,7 @@
 #include "chrome/browser/sessions/session_common_utils.h"
 #include "chrome/common/url_constants.h"
 #include "components/sessions/content/content_live_tab.h"
+#include "components/tab_groups/tab_group_id.h"
 #include "extensions/buildflags/buildflags.h"
 
 #if BUILDFLAG(ENABLE_SESSION_SERVICE)
@@ -69,6 +70,16 @@ ChromeTabRestoreServiceClient::FindLiveTabContextWithID(SessionID desired_id) {
 #endif
 }
 
+sessions::LiveTabContext*
+ChromeTabRestoreServiceClient::FindLiveTabContextWithGroup(
+    tab_groups::TabGroupId group) {
+#if defined(OS_ANDROID)
+  return nullptr;
+#else
+  return BrowserLiveTabContext::FindContextWithGroup(group, profile_);
+#endif
+}
+
 bool ChromeTabRestoreServiceClient::ShouldTrackURLForRestore(const GURL& url) {
   return ::ShouldTrackURLForRestore(url);
 }
@@ -111,12 +122,11 @@ bool ChromeTabRestoreServiceClient::HasLastSession() {
 }
 
 void ChromeTabRestoreServiceClient::GetLastSession(
-    sessions::GetLastSessionCallback callback,
-    base::CancelableTaskTracker* tracker) {
+    sessions::GetLastSessionCallback callback) {
   DCHECK(HasLastSession());
 #if BUILDFLAG(ENABLE_SESSION_SERVICE)
   SessionServiceFactory::GetForProfile(profile_)->GetLastSession(
-      std::move(callback), tracker);
+      std::move(callback));
 #endif
 }
 

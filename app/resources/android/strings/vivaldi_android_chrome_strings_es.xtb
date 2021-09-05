@@ -8,11 +8,14 @@
 <translation id="1829244130665387512">Buscar en la página</translation>
 <translation id="2038563949887743358">Activar la petición de modo escritorio</translation>
 <translation id="2433507940547922241">Apariencia</translation>
+<translation id="2501278716633472235">Regresar</translation>
 <translation id="2633278372998075009">Pestañas privadas</translation>
 <translation id="3076631378407175873">© <ph name="YEAR" /> Vivaldi Technologies AS. Todos los derechos reservados.</translation>
 <translation id="3234355010754616171">Pestaña privada nueva</translation>
 <translation id="3518985090088779359">Aceptar y continuar</translation>
 <translation id="3700829948786686853">Bienvenido a Vivaldi</translation>
+<translation id="3719826155360621982">Página principal</translation>
+<translation id="385051799172605136">Regresar</translation>
 <translation id="4121750346708795461">Al usar esta aplicación, aceptas las <ph name="BEGIN_LINK1" />Condiciones del servicio<ph name="END_LINK1" /> y la <ph name="BEGIN_LINK2" />Política de privacidad<ph name="END_LINK2" /> de Vivaldi.</translation>
 <translation id="4243710787042215766">Abrir en una pestaña privada</translation>
 <translation id="4526803704855831732">Pestañas privadas</translation>
@@ -25,18 +28,19 @@
 <translation id="5495228542153126976">Has entrado al modo privado</translation>
 <translation id="5553467336321715093">Activa los permisos para Vivaldi en <ph name="BEGIN_LINK" />Ajustes de Android<ph name="END_LINK" />.</translation>
 <translation id="572328651809341494">Pestañas recientes</translation>
-<translation id="5840488417521835756">Obtén información sobre los temas que se mencionan en los sitios web sin salir de la página. La función Tocar para buscar solo está disponible cuando Google ha sido definido como el buscador por defecto de Vivaldi. Esta envía una palabra y su contexto al buscador de Google para retornarte definiciones, imágenes, resultados de búsqueda y más información.
+<translation id="5840488417521835756">Obtén información sobre los temas tratados en los sitios web sin salir de la página. La función Tocar para buscar solo está disponible cuando Google ha sido establecido como buscador por defecto en Vivaldi. Esta envía una palabra y su contexto al buscador de Google para mostrarte definiciones, imágenes, resultados de búsqueda y otros detalles.
 
-Para ajustar el término de búsqueda, selecciona el texto manteniéndolo presionado. Para restringir la búsqueda, desliza el panel hasta arriba y toca el cuadro de búsqueda.</translation>
+Para modificar el término de búsqueda, mantén presionado cualquier texto para seleccionarlo. Para afinar la búsqueda, desliza el panel hacia arriba y luego toca el cuadro de búsqueda.</translation>
 <translation id="6336451774241870485">Pestaña privada nueva</translation>
 <translation id="6593061639179217415">Versión escritorio</translation>
 <translation id="6610147964972079463">Cerrar pestañas privadas</translation>
 <translation id="706339621163631076">Política de privacidad del navegador</translation>
 <translation id="7427132068601343474">Acerca de Vivaldi</translation>
 <translation id="7465104139234185284">Cerrar todas las pestañas privadas</translation>
-<translation id="7519434535192513364">La función Tocar para buscar solo está disponible cuando Google ha sido definido como el buscador por defecto de Vivaldi. Esta envía la palabra seleccionada y la página actual como contexto al buscador de Google. Puedes desactivarla en <ph name="BEGIN_LINK" />Ajustes<ph name="END_LINK" />.</translation>
+<translation id="7519434535192513364">La función Tocar para buscar solo está disponible cuando Google ha sido establecido como buscador por defecto en Vivaldi. Esta envía la palabra seleccionada y la página actual como contexto al buscador de Google. Puedes desactivarla en <ph name="BEGIN_LINK" />Ajustes<ph name="END_LINK" />.</translation>
 <translation id="7649070708921625228">Ayuda</translation>
 <translation id="804786196054284061">Condiciones del servicio</translation>
+<translation id="85991616550051997">Ir a la página principal</translation>
 <translation id="8820817407110198400">Marcadores</translation>
 <translation id="9063523880881406963">Desactivar la petición de modo escritorio</translation>
 <translation id="9080642952018487277">Entrar al modo privado</translation>

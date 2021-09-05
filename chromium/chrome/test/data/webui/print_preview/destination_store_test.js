@@ -2,16 +2,20 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {CloudPrintInterfaceEventType, Destination, DestinationConnectionStatus, DestinationErrorType, DestinationOrigin, DestinationStore, DestinationType, makeRecentDestination, NativeLayer, NativeLayerImpl, PluginProxy, PrinterType} from 'chrome://print/print_preview.js';
+import {CloudPrintInterfaceEventType, Destination, DestinationConnectionStatus, DestinationErrorType, DestinationOrigin, DestinationStore, DestinationType, LocalDestinationInfo, makeRecentDestination, NativeInitialSettings, NativeLayer, NativeLayerImpl, PluginProxy, PrinterType} from 'chrome://print/print_preview.js';
 import {assert} from 'chrome://resources/js/assert.m.js';
 import {isChromeOS} from 'chrome://resources/js/cr.m.js';
-import {CloudPrintInterfaceStub} from 'chrome://test/print_preview/cloud_print_interface_stub.js';
-import {NativeLayerStub} from 'chrome://test/print_preview/native_layer_stub.js';
-import {PDFPluginStub} from 'chrome://test/print_preview/plugin_stub.js';
-import {createDestinationStore, createDestinationWithCertificateStatus, getCddTemplate, getDefaultInitialSettings, getDestinations, getGoogleDriveDestination, getSaveAsPdfDestination, setupTestListenerElement} from 'chrome://test/print_preview/print_preview_test_utils.js';
-import {eventToPromise} from 'chrome://test/test_util.m.js';
+import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
+
+import {assertEquals, assertFalse, assertTrue} from '../chai_assert.js';
+import {eventToPromise} from '../test_util.m.js';
+
+import {CloudPrintInterfaceStub} from './cloud_print_interface_stub.js';
+import {NativeLayerStub} from './native_layer_stub.js';
+import {createDestinationStore, createDestinationWithCertificateStatus, getCddTemplate, getDefaultInitialSettings, getDestinations, getGoogleDriveDestination, getSaveAsPdfDestination, setupTestListenerElement} from './print_preview_test_utils.js';
 
 window.destination_store_test = {};
+const destination_store_test = window.destination_store_test;
 destination_store_test.suiteName = 'DestinationStoreTest';
 /** @enum {string} */
 destination_store_test.TestNames = {
@@ -27,20 +31,21 @@ destination_store_test.TestNames = {
   RecentSaveAsPdf: 'recent save as pdf',
   MultipleRecentDestinationsAccounts: 'multiple recent destinations accounts',
   LoadAndSelectDestination: 'select loaded destination',
+  LoadSaveToDriveCros: 'load Save to Drive Cros',
 };
 
 suite(destination_store_test.suiteName, function() {
-  /** @type {?DestinationStore} */
-  let destinationStore = null;
+  /** @type {!DestinationStore} */
+  let destinationStore;
 
-  /** @type {?NativeLayerStub} */
-  let nativeLayer = null;
+  /** @type {!NativeLayerStub} */
+  let nativeLayer;
 
-  /** @type {?cloudprint.CloudPrintInterface} */
-  let cloudPrintInterface = null;
+  /** @type {!CloudPrintInterfaceStub} */
+  let cloudPrintInterface;
 
-  /** @type {?NativeInitialSettngs} */
-  let initialSettings = null;
+  /** @type {!NativeInitialSettings} */
+  let initialSettings;
 
   /** @type {!Array<!LocalDestinationInfo>} */
   let localDestinations = [];
@@ -129,9 +134,9 @@ suite(destination_store_test.suiteName, function() {
           recentDestinations: [recentDestination],
         });
 
-        return setInitialSettings().then(function(args) {
+        return setInitialSettings(false).then(function(args) {
           assertEquals('ID1', args.destinationId);
-          assertEquals(PrinterType.LOCAL, args.type);
+          assertEquals(PrinterType.LOCAL_PRINTER, args.printerType);
           assertEquals('ID1', destinationStore.selectedDestination.id);
         });
       });
@@ -152,11 +157,11 @@ suite(destination_store_test.suiteName, function() {
           recentDestinations: recentDestinations,
         });
 
-        return setInitialSettings().then(function(args) {
+        return setInitialSettings(false).then(function(args) {
           // Should have loaded ID1 as the selected printer, since it was most
           // recent.
           assertEquals('ID1', args.destinationId);
-          assertEquals(PrinterType.LOCAL, args.type);
+          assertEquals(PrinterType.LOCAL_PRINTER, args.printerType);
           assertEquals('ID1', destinationStore.selectedDestination.id);
           // Verify that all the recent printers have been added to the store.
           const reportedPrinters = destinationStore.destinations();
@@ -186,11 +191,11 @@ suite(destination_store_test.suiteName, function() {
           recentDestinations: recentDestinations,
         });
 
-        return setInitialSettings().then(function(args) {
+        return setInitialSettings(false).then(function(args) {
           // Should have loaded ID1 as the selected printer, since it was most
           // recent.
           assertEquals('ID1', args.destinationId);
-          assertEquals(PrinterType.LOCAL, args.type);
+          assertEquals(PrinterType.LOCAL_PRINTER, args.printerType);
           assertEquals('ID1', destinationStore.selectedDestination.id);
 
           // The other recent destinations should be prefetched, but only one
@@ -215,11 +220,11 @@ suite(destination_store_test.suiteName, function() {
         initialSettings.serializedDefaultDestinationSelectionRulesStr =
             JSON.stringify({namePattern: '.*Four.*'});
         initialSettings.serializedAppStateStr = '';
-        return setInitialSettings().then(function(args) {
+        return setInitialSettings(false).then(function(args) {
           // Should have loaded ID4 as the selected printer, since it matches
           // the rules.
           assertEquals('ID4', args.destinationId);
-          assertEquals(PrinterType.LOCAL, args.type);
+          assertEquals(PrinterType.LOCAL_PRINTER, args.printerType);
           assertEquals('ID4', destinationStore.selectedDestination.id);
         });
       });
@@ -248,7 +253,7 @@ suite(destination_store_test.suiteName, function() {
 
         return Promise
             .all([
-              setInitialSettings(),
+              setInitialSettings(false),
               eventToPromise(
                   DestinationStore.EventType
                       .SELECTED_DESTINATION_CAPABILITIES_READY,
@@ -276,10 +281,10 @@ suite(destination_store_test.suiteName, function() {
         initialSettings.pdfPrinterDisabled = true;
         initialSettings.printerName = '';
 
-        return setInitialSettings().then(function(args) {
+        return setInitialSettings(false).then(function(args) {
           // Should have loaded the first destination as the selected printer.
           assertEquals(destinations[0].id, args.destinationId);
-          assertEquals(PrinterType.LOCAL, args.type);
+          assertEquals(PrinterType.LOCAL_PRINTER, args.printerType);
           assertEquals(
               destinations[0].id, destinationStore.selectedDestination.id);
         });
@@ -331,9 +336,9 @@ suite(destination_store_test.suiteName, function() {
         });
         initialSettings.userAccounts = ['foo@chromium.org'];
 
-        return setInitialSettings().then(function(args) {
+        return setInitialSettings(false).then(function(args) {
           assertEquals('FooDevice', args.destinationId);
-          assertEquals(PrinterType.LOCAL, args.type);
+          assertEquals(PrinterType.LOCAL_PRINTER, args.printerType);
           assertEquals('FooDevice', destinationStore.selectedDestination.id);
         });
       });
@@ -351,8 +356,8 @@ suite(destination_store_test.suiteName, function() {
       recentDestinations: [recentDestination],
     });
 
-    DestinationStore.AUTO_SELECT_TIMEOUT_ = 0;
-    return setInitialSettings()
+    DestinationStore.AUTO_SELECT_TIMEOUT = 0;
+    return setInitialSettings(false)
         .then(function() {
           assertEquals(
               Destination.GooglePromotedId.SAVE_AS_PDF,
@@ -405,7 +410,7 @@ suite(destination_store_test.suiteName, function() {
         // Wait for all three cloud printers to load.
         return Promise
             .all([
-              setInitialSettings(),
+              setInitialSettings(false),
               waitForPrinterDone(),
             ])
             .then(() => waitForPrinterDone())
@@ -454,11 +459,11 @@ suite(destination_store_test.suiteName, function() {
         const name1 = 'One';
         let destination = null;
 
-        return setInitialSettings()
+        return setInitialSettings(false)
             .then(function(args) {
               assertEquals(
                   Destination.GooglePromotedId.SAVE_AS_PDF, args.destinationId);
-              assertEquals(PrinterType.LOCAL, args.type);
+              assertEquals(PrinterType.LOCAL_PRINTER, args.printerType);
               assertEquals(
                   Destination.GooglePromotedId.SAVE_AS_PDF,
                   destinationStore.selectedDestination.id);
@@ -471,11 +476,18 @@ suite(destination_store_test.suiteName, function() {
                 localDestinationInfo.policies = {
                   allowedColorModes: 0x1,  // ColorModeRestriction.MONOCHROME
                   defaultColorMode: 0x1,   // ColorModeRestriction.MONOCHROME
+                  allowedPinMode: null,
+                  defaultPinMode: null,
+                  allowedDuplexModes: null,
+                  defaultDuplexMode: null,
                 };
               }
+              // Typecast localDestinationInfo to work around the fact that
+              // policy types are only defined on Chrome OS.
               nativeLayer.setLocalDestinationCapabilities({
-                printer: localDestinationInfo,
-                capabilities: getCddTemplate(id1, name1),
+                printer:
+                    /** @type {!LocalDestinationInfo} */ (localDestinationInfo),
+                capabilities: getCddTemplate(id1, name1).capabilities,
               });
               destinationStore.startLoadAllDestinations();
               return nativeLayer.whenCalled('getPrinters');
@@ -500,5 +512,15 @@ suite(destination_store_test.suiteName, function() {
                 assertTrue(!!destination.policies);
               }
             });
+      });
+
+  /** Tests that the SAVE_TO_DRIVE_CROS destination is loaded on Chrome OS. */
+  test(
+      assert(destination_store_test.TestNames.LoadSaveToDriveCros), function() {
+        return setInitialSettings(false).then(function(args) {
+          assertTrue(!!destinationStore.destinations().find(
+              destination => destination.id ===
+                  Destination.GooglePromotedId.SAVE_TO_DRIVE_CROS));
+        });
       });
 });

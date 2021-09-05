@@ -1237,7 +1237,7 @@ TEST_F(DownloadItemTest, InitDownloadFileFails) {
 
   item->Start(
       std::move(file),
-      base::Bind(&DownloadItemTest::CancelRequest, base::Unretained(this)),
+      base::BindOnce(&DownloadItemTest::CancelRequest, base::Unretained(this)),
       *create_info(), URLLoaderFactoryProvider::GetNullPtr());
   task_environment_.RunUntilIdle();
 
@@ -2085,7 +2085,7 @@ TEST_F(DownloadItemTest, StealDangerousDownloadAndDiscard) {
   item->OnAllDataSaved(0, std::unique_ptr<crypto::SecureHash>());
   item->StealDangerousDownload(
       true,  // delete_file_after_feedback
-      base::Bind(&DownloadItemTest::OnDownloadFileAcquired,
+      base::BindOnce(&DownloadItemTest::OnDownloadFileAcquired,
                  weak_ptr_factory.GetWeakPtr(),
                  base::Unretained(&returned_path)));
   task_environment_.RunUntilIdle();
@@ -2104,7 +2104,7 @@ TEST_F(DownloadItemTest, StealDangerousDownloadAndKeep) {
   item->OnAllDataSaved(0, std::unique_ptr<crypto::SecureHash>());
   item->StealDangerousDownload(
       false,  // delete_file_after_feedback
-      base::Bind(&DownloadItemTest::OnDownloadFileAcquired,
+      base::BindOnce(&DownloadItemTest::OnDownloadFileAcquired,
                  weak_ptr_factory.GetWeakPtr(),
                  base::Unretained(&returned_path)));
   task_environment_.RunUntilIdle();
@@ -2130,7 +2130,7 @@ TEST_F(DownloadItemTest, StealInterruptedContinuableDangerousDownload) {
   base::WeakPtrFactory<DownloadItemTest> weak_ptr_factory(this);
   item->OnAllDataSaved(0, std::unique_ptr<crypto::SecureHash>());
   item->StealDangerousDownload(
-      true, base::Bind(&DownloadItemTest::OnDownloadFileAcquired,
+      true, base::BindOnce(&DownloadItemTest::OnDownloadFileAcquired,
                        weak_ptr_factory.GetWeakPtr(),
                        base::Unretained(&returned_path)));
   task_environment_.RunUntilIdle();
@@ -2152,7 +2152,7 @@ TEST_F(DownloadItemTest, StealInterruptedNonContinuableDangerousDownload) {
   base::WeakPtrFactory<DownloadItemTest> weak_ptr_factory(this);
   item->OnAllDataSaved(0, std::unique_ptr<crypto::SecureHash>());
   item->StealDangerousDownload(
-      true, base::Bind(&DownloadItemTest::OnDownloadFileAcquired,
+      true, base::BindOnce(&DownloadItemTest::OnDownloadFileAcquired,
                        weak_ptr_factory.GetWeakPtr(),
                        base::Unretained(&returned_path)));
   task_environment_.RunUntilIdle();
@@ -2259,7 +2259,7 @@ TEST_F(DownloadItemTest, AnnotationWithEmptyURLInIncognito) {
 // various permutations of observer calls that will then be applied to a
 // DownloadItem in a state as yet undetermined.
 using CurriedObservation =
-    base::Callback<void(base::WeakPtr<DownloadDestinationObserver>)>;
+    base::RepeatingCallback<void(base::WeakPtr<DownloadDestinationObserver>)>;
 
 // A list of observations that are to be made during some event in the
 // DownloadItemImpl control flow. Ordering of the observations is significant.
@@ -2369,17 +2369,17 @@ std::vector<EventList> DistributeObservationsIntoEvents(
 
 std::vector<EventList> GenerateSuccessfulEventLists() {
   std::vector<CurriedObservation> all_observations;
-  all_observations.push_back(base::Bind(&DestinationUpdateInvoker, 100, 100));
-  all_observations.push_back(base::Bind(&DestinationUpdateInvoker, 200, 100));
-  all_observations.push_back(base::Bind(&DestinationCompletedInvoker, 200));
+  all_observations.push_back(base::BindRepeating(&DestinationUpdateInvoker, 100, 100));
+  all_observations.push_back(base::BindRepeating(&DestinationUpdateInvoker, 200, 100));
+  all_observations.push_back(base::BindRepeating(&DestinationCompletedInvoker, 200));
   return DistributeObservationsIntoEvents(all_observations.begin(),
                                           all_observations.end(), kEventCount);
 }
 
 std::vector<EventList> GenerateFailingEventLists() {
   std::vector<CurriedObservation> all_observations;
-  all_observations.push_back(base::Bind(&DestinationUpdateInvoker, 100, 100));
-  all_observations.push_back(base::Bind(
+  all_observations.push_back(base::BindRepeating(&DestinationUpdateInvoker, 100, 100));
+  all_observations.push_back(base::BindRepeating(
       &DestinationErrorInvoker, DOWNLOAD_INTERRUPT_REASON_NETWORK_FAILED, 100));
   return DistributeObservationsIntoEvents(all_observations.begin(),
                                           all_observations.end(), kEventCount);
@@ -2422,9 +2422,6 @@ class DownloadItemDestinationUpdateRaceTest
 
   DownloadItemImpl* item_;
   std::unique_ptr<MockDownloadFile> file_;
-
-  base::queue<base::Closure> successful_update_events_;
-  base::queue<base::Closure> failing_update_events_;
 };
 
 INSTANTIATE_TEST_SUITE_P(Success,
@@ -2447,7 +2444,7 @@ TEST_P(DownloadItemDestinationUpdateRaceTest, DownloadCancelledByUser) {
       .WillOnce(SaveArg<0>(&initialize_callback));
   item_->Start(
       std::move(file_),
-      base::Bind(&DownloadItemTest::CancelRequest, base::Unretained(this)),
+      base::BindOnce(&DownloadItemTest::CancelRequest, base::Unretained(this)),
       *create_info(), URLLoaderFactoryProvider::GetNullPtr());
   task_environment_.RunUntilIdle();
 
@@ -2500,7 +2497,7 @@ TEST_P(DownloadItemDestinationUpdateRaceTest, IntermediateRenameFails) {
 
   item_->Start(
       std::move(file_),
-      base::Bind(&DownloadItemTest::CancelRequest, base::Unretained(this)),
+      base::BindOnce(&DownloadItemTest::CancelRequest, base::Unretained(this)),
       *create_info(), URLLoaderFactoryProvider::GetNullPtr());
   task_environment_.RunUntilIdle();
 

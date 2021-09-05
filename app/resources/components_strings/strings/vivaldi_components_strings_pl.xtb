@@ -4,7 +4,6 @@
 <translation id="1038842779957582377">nieznana nazwa</translation>
 <translation id="1089439967362294234">Zmień hasło</translation>
 <translation id="1110994991967754504">Wybierz uprawnienia dla <ph name="PERMISSION_NAME" /></translation>
-<translation id="1152921474424827756">Przejdź do <ph name="BEGIN_LINK" />kopii<ph name="END_LINK" /> <ph name="URL" /> w pamięci podręcznej</translation>
 <translation id="1158211211994409885">Serwer <ph name="HOST_NAME" /> nieoczekiwanie zakończył połączenie.</translation>
 <translation id="1161325031994447685">Ponownie połącz się z siecią Wi-Fi</translation>
 <translation id="1175364870820465910">&amp;Drukuj...</translation>
@@ -22,9 +21,7 @@
 <translation id="1834321415901700177">Ta strona zawiera szkodliwe programy</translation>
 <translation id="1916770123977586577">Załaduj stronę ponownie aby zastosować zaktualizowane ustawienia</translation>
 <translation id="1919345977826869612">Reklamy</translation>
-<translation id="194030505837763158">Przejdź na <ph name="LINK" /></translation>
 <translation id="1974060860693918893">Zaawansowane</translation>
-<translation id="2030481566774242610">Czy chodziło ci o <ph name="LINK" />?</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Sprawdź serwer proxy i zaporę sieciową<ph name="END_LINK" /></translation>
 <translation id="2091887806945687916">Dźwięk</translation>
 <translation id="2119505898009119320">Wystawiony dla: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
@@ -128,7 +125,6 @@
 <translation id="5287240709317226393">Pokaż ciasteczka</translation>
 <translation id="5355557959165512791">Nie możesz teraz otworzyć strony <ph name="SITE" />, bo jej certyfikat został unieważniony. Błędy sieci i ataki są zazwyczaj przejściowe, więc prawdopodobnie strona będzie wkrótce działać.</translation>
 <translation id="5386426401304769735">Łańcuch certyfikatów tej witryny zawiera certyfikat podpisany za pomocą SHA-1.</translation>
-<translation id="5431657950005405462">Nie znaleziono pliku</translation>
 <translation id="5452270690849572955">Nie można znaleźć tej strony na <ph name="HOST_NAME" /></translation>
 <translation id="5457113250005438886">Nieważny</translation>
 <translation id="5492298309214877701">Ta witryna w intranecie firmy, organizacji czy szkoły ma ten sam adres URL co zewnętrzna strona internetowa.
@@ -174,7 +170,6 @@
 <translation id="6897140037006041989">User agent (id przeglądarki)</translation>
 <translation id="7053983685419859001">Blokuj</translation>
 <translation id="7079718277001814089">Ta strona zawiera złośliwe oprogramowanie</translation>
-<translation id="7090678807593890770">Wyszukaj w Google: <ph name="LINK" /></translation>
 <translation id="7108819624672055576">Dozwolone przez rozszerzenie</translation>
 <translation id="7111012039238467737">(Ważny)</translation>
 <translation id="7113310725918019676">Zezwalaj na <ph name="BLOCKED_TYPE" /> z <ph name="DOMAIN" /></translation>
@@ -198,7 +193,6 @@
 <translation id="7716424297397655342">Tej strony nie można załadować z pamięci podręcznej</translation>
 <translation id="7758069387465995638">Połączenie mogło zostać zablokowane przez zaporę sieciową lub program antywirusowy.</translation>
 <translation id="7800304661137206267">Przesyłane dane są szyfrowane za pomocą algorytmu <ph name="CIPHER" />. Metoda uwierzytelniania komunikatów to <ph name="MAC" /> a mechanizm wymiany kluczy to <ph name="KX" />.</translation>
-<translation id="7802523362929240268">Strona spełnia wymagania prawne</translation>
 <translation id="7834399512844817676"><ph name="SITE" /> zazwyczaj używa szyfrowania do ochrony Twoich informacji. Gdy tym razem przeglądarka Vivaldi próbowała połączyć się ze stroną <ph name="SITE" />, odesłała ona nietypowe i nieprawidłowe dane logowania. Może się tak zdarzyć, gdy pod stronę <ph name="SITE" /> podszywa się osoba atakująca albo gdy ekran logowania do sieci Wi-Fi przerwie połączenie. Twoje informacje są nadal bezpieczne, bo połączenie w Vivaldi zakończyło się przed wymianą jakichkolwiek danych.</translation>
 <translation id="7878562273885520351">Ktoś mógł poznać twoje hasło</translation>
 <translation id="7951415247503192394">(32-bit)</translation>

@@ -549,8 +549,8 @@ bool TemplateURLRef::ExtractSearchTermsFromURL(
     // not a match.
     if (source.size() < (search_term_value_prefix_.size() +
                          search_term_value_suffix_.size()) ||
-        !source.starts_with(search_term_value_prefix_) ||
-        !source.ends_with(search_term_value_suffix_))
+        !base::StartsWith(source, search_term_value_prefix_) ||
+        !base::EndsWith(source, search_term_value_suffix_))
       return false;
     position =
         url::MakeRange(search_term_value_prefix_.size(),
@@ -578,8 +578,8 @@ bool TemplateURLRef::ExtractSearchTermsFromURL(
               base::StringPiece(source).substr(value.begin, value.len);
           if (search_term.size() < (search_term_value_prefix_.size() +
                                     search_term_value_suffix_.size()) ||
-              !search_term.starts_with(search_term_value_prefix_) ||
-              !search_term.ends_with(search_term_value_suffix_))
+              !base::StartsWith(search_term, search_term_value_prefix_) ||
+              !base::EndsWith(search_term, search_term_value_suffix_))
             continue;
 
           key_found = true;
@@ -863,7 +863,8 @@ bool TemplateURLRef::PathIsEqual(const GURL& url) const {
   if (!path_wildcard_present_)
     return path == path_prefix_;
   return ((path.length() >= path_prefix_.length() + path_suffix_.length()) &&
-          path.starts_with(path_prefix_) && path.ends_with(path_suffix_));
+          base::StartsWith(path, path_prefix_) &&
+          base::EndsWith(path, path_suffix_));
 }
 
 void TemplateURLRef::ParseHostAndSearchTermKey(
@@ -1073,11 +1074,10 @@ std::string TemplateURLRef::HandleReplacements(
 
       case GOOGLE_OMNIBOX_FOCUS_TYPE:
         DCHECK(!i->is_post_param);
-        if (search_terms_args.omnibox_focus_type !=
-            SearchTermsArgs::OmniboxFocusType::DEFAULT) {
+        if (search_terms_args.focus_type != OmniboxFocusType::DEFAULT) {
           HandleReplacement("oft",
-                            base::NumberToString(static_cast<int>(
-                                search_terms_args.omnibox_focus_type)),
+                            base::NumberToString(
+                                static_cast<int>(search_terms_args.focus_type)),
                             *i, &url);
         }
         break;
@@ -1317,13 +1317,9 @@ base::string16 TemplateURL::GenerateKeyword(const GURL& url) {
   // properly.  See http://code.google.com/p/chromium/issues/detail?id=6984 .
   // |url|'s hostname may be IDN-encoded. Before generating |keyword| from it,
   // convert to Unicode, so it won't look like a confusing punycode string.
-  base::string16 keyword = url_formatter::StripWWW(
-      url_formatter::IDNToUnicode(url.host()));
-  // Special case: if the host was exactly "www." (not sure this can happen but
-  // perhaps with some weird intranet and custom DNS server?), ensure we at
-  // least don't return the empty string.
-  return keyword.empty() ? base::ASCIIToUTF16("www")
-                         : base::i18n::ToLower(keyword);
+  base::string16 keyword =
+      url_formatter::IDNToUnicode(url_formatter::StripWWW(url.host()));
+  return base::i18n::ToLower(keyword);
 }
 
 // static

@@ -13,9 +13,12 @@ module chromeos.cros_healthd.mojom;
 import "chromeos/services/cros_healthd/public/mojom/cros_healthd_diagnostics.mojom";
 import "chromeos/services/cros_healthd/public/mojom/cros_healthd_events.mojom";
 import "chromeos/services/cros_healthd/public/mojom/cros_healthd_probe.mojom";
+import "chromeos/services/network_health/public/mojom/network_diagnostics.mojom";
+import "chromeos/services/network_health/public/mojom/network_health.mojom";
 
 // Factory interface which allows remote ends to request implementations of the
-// probe or diagnostics services.
+// probe, diagnostics, or event services. Additionally, the browser can send
+// network-related implementations to the cros_healthd daemon.
 interface CrosHealthdServiceFactory {
   // Returns a bound interface to the diagnostics service.
   GetDiagnosticsService(CrosHealthdDiagnosticsService& service);
@@ -23,6 +26,16 @@ interface CrosHealthdServiceFactory {
   GetEventService(CrosHealthdEventService& service);
   // Returns a bound interface to the probe service.
   GetProbeService(CrosHealthdProbeService& service);
+  // Sends a bound interface to the Network Health service in Chrome.
+  SendNetworkHealthService(
+      pending_remote<
+          chromeos.network_health.mojom.NetworkHealthService> remote);
+  // Sends a NetworkDiagnosticsRoutines pending remote to the cros_healthd
+  // daemon.
+  SendNetworkDiagnosticsRoutines(
+      pending_remote<
+          chromeos.network_diagnostics.mojom.NetworkDiagnosticsRoutines>
+              network_diagnostics_routines);
 };
 
 // Diagnostics interface exposed by the cros_healthd daemon. Consumed in Chrome
@@ -295,6 +308,15 @@ interface CrosHealthdEventService {
 
 // Probe interface exposed by the cros_healthd daemon.
 interface CrosHealthdProbeService {
+  // Returns information about a specific process running on the device.
+  //
+  // The request:
+  // * |process_id| - PID of the process whose information is requested.
+  //
+  // The response:
+  // * |process_info| - Information about the requested process.
+  ProbeProcessInfo(uint32 process_id) => (ProcessResult process_info);
+
   // Returns telemetry information for the desired categories.
   //
   // The request:

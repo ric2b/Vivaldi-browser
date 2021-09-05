@@ -194,8 +194,8 @@ class AppMenuHandlerImpl
             Drawable itemDivider = a.getDrawable(1);
             int itemDividerHeight = itemDivider != null ? itemDivider.getIntrinsicHeight() : 0;
             a.recycle();
-            mAppMenu = new AppMenu(
-                    mMenu, itemRowHeight, itemDividerHeight, this, context.getResources());
+            mAppMenu = new AppMenu(mMenu, itemRowHeight, itemDividerHeight, this,
+                    context.getResources(), mDelegate.shouldShowIconBeforeItem());
             mAppMenuDragHelper = new AppMenuDragHelper(context, mAppMenu, itemRowHeight);
         }
 
@@ -222,8 +222,8 @@ class AppMenuHandlerImpl
             headerResourceId = mDelegate.getHeaderResourceId();
         }
         mAppMenu.show(wrapper, anchorView, isByPermanentButton, rotation, appRect, pt.y,
-                footerResourceId, headerResourceId, mHighlightMenuId, mCircleHighlight,
-                showFromBottom, mDelegate.getCustomViewBinders());
+                footerResourceId, headerResourceId, mDelegate.getGroupDividerId(), mHighlightMenuId,
+                mCircleHighlight, showFromBottom, mDelegate.getCustomViewBinders());
         mAppMenuDragHelper.onShow(startDragging);
         clearMenuHighlight();
         RecordUserAction.record("MobileMenuShow");

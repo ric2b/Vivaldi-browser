@@ -15,6 +15,7 @@
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
+#include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
@@ -37,6 +38,7 @@
 #include "chrome/common/url_constants.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/google/core/common/google_util.h"
+#include "components/omnibox/common/omnibox_features.h"
 #include "components/password_manager/core/browser/compromised_credentials_table.h"
 #include "components/password_manager/core/browser/form_parsing/form_parser.h"
 #include "components/password_manager/core/browser/leak_detection_dialog_utils.h"
@@ -49,6 +51,7 @@
 #include "components/safe_browsing/content/password_protection/password_protection_request.h"
 #include "components/safe_browsing/content/web_ui/safe_browsing_ui.h"
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
+#include "components/safe_browsing/core/common/safebrowsing_constants.h"
 #include "components/safe_browsing/core/common/utils.h"
 #include "components/safe_browsing/core/db/database_manager.h"
 #include "components/safe_browsing/core/features.h"
@@ -64,6 +67,8 @@
 #include "components/sync/driver/sync_service.h"
 #include "components/sync/protocol/user_event_specifics.pb.h"
 #include "components/sync_user_events/user_event_service.h"
+#include "components/unified_consent/pref_names.h"
+#include "components/variations/service/variations_service.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/navigation_handle.h"
@@ -222,7 +227,7 @@ ChromePasswordProtectionService::ChromePasswordProtectionService(
     SafeBrowsingService* sb_service,
     Profile* profile)
     : PasswordProtectionService(sb_service->database_manager(),
-                                sb_service->GetURLLoaderFactory(),
+                                sb_service->GetURLLoaderFactory(profile),
                                 HistoryServiceFactory::GetForProfile(
                                     profile,
                                     ServiceAccessType::EXPLICIT_ACCESS)),
@@ -349,6 +354,24 @@ bool ChromePasswordProtectionService::ShouldShowPasswordReusePageInfoBubble(
              : false;
 }
 
+safe_browsing::LoginReputationClientRequest::UrlDisplayExperiment
+ChromePasswordProtectionService::GetUrlDisplayExperiment() const {
+  safe_browsing::LoginReputationClientRequest::UrlDisplayExperiment experiment;
+  // Delayed warnings parameters:
+  experiment.set_delayed_warnings_enabled(
+      base::FeatureList::IsEnabled(safe_browsing::kDelayedWarnings));
+  experiment.set_delayed_warnings_mouse_clicks_enabled(
+      safe_browsing::kDelayedWarningsEnableMouseClicks.Get());
+  // Actual URL display experiments:
+  experiment.set_reveal_on_hover(base::FeatureList::IsEnabled(
+      omnibox::kRevealSteadyStateUrlPathQueryAndRefOnHover));
+  experiment.set_hide_on_interaction(base::FeatureList::IsEnabled(
+      omnibox::kHideSteadyStateUrlPathQueryAndRefOnInteraction));
+  experiment.set_elide_to_registrable_domain(
+      base::FeatureList::IsEnabled(omnibox::kMaybeElideToRegistrableDomain));
+  return experiment;
+}
+
 void ChromePasswordProtectionService::ShowModalWarning(
     content::WebContents* web_contents,
     RequestOutcome outcome,
@@ -369,7 +392,7 @@ void ChromePasswordProtectionService::ShowModalWarning(
     return;
 
   // Exit fullscreen if this |web_contents| is showing in fullscreen mode.
-  if (web_contents->IsFullscreenForCurrentTab())
+  if (web_contents->IsFullscreen())
     web_contents->ExitFullscreen(true);
 
 #if defined(OS_ANDROID)
@@ -464,7 +487,7 @@ void ChromePasswordProtectionService::ShowInterstitial(
              ReusedPasswordAccountType::NON_GAIA_ENTERPRISE ||
          password_type.account_type() == ReusedPasswordAccountType::GSUITE);
   // Exit fullscreen if this |web_contents| is showing in fullscreen mode.
-  if (web_contents->IsFullscreenForCurrentTab())
+  if (web_contents->IsFullscreen())
     web_contents->ExitFullscreen(/*will_cause_resize=*/true);
 
   content::OpenURLParams params(
@@ -786,6 +809,7 @@ void ChromePasswordProtectionService::MaybeLogPasswordReuseLookupEvent(
     case RequestOutcome::DISABLED_DUE_TO_USER_POPULATION:
     case RequestOutcome::SAFE_BROWSING_DISABLED:
     case RequestOutcome::USER_NOT_SIGNED_IN:
+    case RequestOutcome::EXCLUDED_COUNTRY:
       MaybeLogPasswordReuseLookupResult(web_contents,
                                         PasswordReuseLookup::REQUEST_FAILURE);
       break;
@@ -1107,8 +1131,8 @@ ChromePasswordProtectionService::GetPlaceholdersForSavedPasswordWarningText()
                        // 2. if "," + the current priority is a suffix of the
                        // matching domain The second case covers eTLD+1.
                        return (domain == *priority_domain_iter) ||
-                              domainStringPiece.ends_with(
-                                  "." + *priority_domain_iter);
+                              base::EndsWith(domainStringPiece,
+                                             "." + *priority_domain_iter);
                      }) != matching_domains.end()) {
       placeholders.push_back(base::UTF8ToUTF16(matching_domain));
     }
@@ -1139,9 +1163,7 @@ ChromePasswordProtectionService::GetWarningDetailTextForSavedPasswords(
       GetPlaceholdersForSavedPasswordWarningText();
   // If showing the saved passwords domain experiment is not on or if there is
   // are no saved domains, default to original saved passwords reuse warning.
-  if (!base::FeatureList::IsEnabled(
-          safe_browsing::kPasswordProtectionShowDomainsForSavedPasswords) ||
-      placeholders.size() == 0) {
+  if (placeholders.size() == 0) {
     return l10n_util::GetStringUTF16(
         IDS_PAGE_INFO_CHANGE_PASSWORD_DETAILS_SAVED);
   }
@@ -1433,6 +1455,11 @@ bool ChromePasswordProtectionService::IsIncognito() {
   return profile_->IsOffTheRecord();
 }
 
+bool ChromePasswordProtectionService::IsUserMBBOptedIn() {
+  return GetPrefs()->GetBoolean(
+      unified_consent::prefs::kUrlKeyedAnonymizedDataCollectionEnabled);
+}
+
 bool ChromePasswordProtectionService::IsInPasswordAlertMode(
     ReusedPasswordAccountType password_type) {
   return GetPasswordProtectionWarningTriggerPref(password_type) ==
@@ -1449,9 +1476,7 @@ bool ChromePasswordProtectionService::IsPingingEnabled(
   if (trigger_type == LoginReputationClientRequest::PASSWORD_REUSE_EVENT) {
     if (password_type.account_type() ==
         ReusedPasswordAccountType::SAVED_PASSWORD) {
-      return extended_reporting_enabled ||
-             base::FeatureList::IsEnabled(
-                 safe_browsing::kPasswordProtectionForSavedPasswords);
+      return true;
     }
 
     // Only override policy if password protection is off for Gmail users.
@@ -1482,6 +1507,9 @@ RequestOutcome ChromePasswordProtectionService::GetPingNotSentReason(
     const GURL& url,
     ReusedPasswordAccountType password_type) {
   DCHECK(!CanSendPing(trigger_type, url, password_type));
+  if (IsInExcludedCountry()) {
+    return RequestOutcome::EXCLUDED_COUNTRY;
+  }
   if (!IsSafeBrowsingEnabled()) {
     return RequestOutcome::SAFE_BROWSING_DISABLED;
   }
@@ -1564,6 +1592,15 @@ AccountInfo ChromePasswordProtectionService::GetSignedInNonSyncAccount(
   return identity_manager
       ->FindExtendedAccountInfoForAccountWithRefreshToken(*account_iterator)
       .value_or(AccountInfo());
+}
+
+bool ChromePasswordProtectionService::IsInExcludedCountry() {
+  variations::VariationsService* variations_service =
+      g_browser_process->variations_service();
+  if (!variations_service)
+    return false;
+  return base::Contains(GetExcludedCountries(),
+                        variations_service->GetStoredPermanentCountry());
 }
 
 PasswordReuseEvent::SyncAccountType

@@ -18,6 +18,7 @@ import org.chromium.ui.base.LocalizationUtils;
 import org.chromium.ui.resources.ResourceManager;
 
 import org.chromium.ui.util.ColorUtils;
+import org.vivaldi.browser.common.VivaldiUtils;
 
 /**
  * The Java component of what is basically a CC Layer that manages drawing the Tab Strip (which is
@@ -27,13 +28,20 @@ import org.chromium.ui.util.ColorUtils;
 @JNINamespace("android")
 public class TabStripSceneLayer extends SceneOverlayLayer {
     private long mNativePtr;
-    private final float mDpToPx;
+    private float mDpToPx;
     private SceneLayer mChildSceneLayer;
     private int mOrientation;
     private int mNumReaddBackground;
 
+    // Vivaldi
+    private float mDpToPxOffset;
+    private boolean mShouldHideOverlay;
+
     public TabStripSceneLayer(Context context) {
         mDpToPx = context.getResources().getDisplayMetrics().density;
+        // Vivaldi
+        mDpToPxOffset = mDpToPx;
+        mShouldHideOverlay = false;
     }
 
     @Override
@@ -96,6 +104,9 @@ public class TabStripSceneLayer extends SceneOverlayLayer {
 
     private void pushButtonsAndBackground(StripLayoutHelperManager layoutHelper,
             ResourceManager resourceManager, float yOffset) {
+        // Note(david@vivaldi.com): We send the scene layer off screen when tab strip is off.
+        mDpToPx = mDpToPxOffset;
+        if (!VivaldiUtils.isTabStripOn() || mShouldHideOverlay) mDpToPx = -1;
         final float width = layoutHelper.getWidth() * mDpToPx;
         final float height = layoutHelper.getHeight() * mDpToPx;
         TabStripSceneLayerJni.get().updateTabStripLayer(mNativePtr, TabStripSceneLayer.this, width,
@@ -162,6 +173,11 @@ public class TabStripSceneLayer extends SceneOverlayLayer {
                 ColorUtils.shouldUseLightForegroundOnBackground(tabStripBackgroundColor);
         TabStripSceneLayerJni.get().setTabStripBackgroundColor(
                 mNativePtr, this, tabStripBackgroundColor, useLightForegroundOnBackground);
+    }
+
+    /** Vivaldi **/
+    public void shouldHideOverlay(boolean value) {
+        mShouldHideOverlay = value;
     }
 
     @NativeMethods

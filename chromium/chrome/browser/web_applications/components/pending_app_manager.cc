@@ -24,8 +24,9 @@ PendingAppManager::SynchronizeRequest::SynchronizeRequest(
 
 PendingAppManager::SynchronizeRequest::~SynchronizeRequest() = default;
 
-PendingAppManager::SynchronizeRequest& PendingAppManager::SynchronizeRequest::
-operator=(PendingAppManager::SynchronizeRequest&&) = default;
+PendingAppManager::SynchronizeRequest&
+PendingAppManager::SynchronizeRequest::operator=(
+    PendingAppManager::SynchronizeRequest&&) = default;
 
 PendingAppManager::SynchronizeRequest::SynchronizeRequest(
     SynchronizeRequest&& other) = default;
@@ -36,15 +37,14 @@ PendingAppManager::~PendingAppManager() {
   DCHECK(!registration_callback_);
 }
 
-void PendingAppManager::SetSubsystems(AppRegistrar* registrar,
-                                      AppShortcutManager* shortcut_manager,
-                                      FileHandlerManager* file_handler_manager,
-                                      WebAppUiManager* ui_manager,
-                                      InstallFinalizer* finalizer,
-                                      InstallManager* install_manager) {
+void PendingAppManager::SetSubsystems(
+    AppRegistrar* registrar,
+    OsIntegrationManager* os_integration_manager,
+    WebAppUiManager* ui_manager,
+    InstallFinalizer* finalizer,
+    InstallManager* install_manager) {
   registrar_ = registrar;
-  shortcut_manager_ = shortcut_manager;
-  file_handler_manager_ = file_handler_manager;
+  os_integration_manager_ = os_integration_manager;
   ui_manager_ = ui_manager;
   finalizer_ = finalizer;
   install_manager_ = install_manager;
@@ -163,6 +163,10 @@ void PendingAppManager::OnAppSynchronized(ExternalInstallSource source,
                                   std::move(request.uninstall_results)));
     synchronize_requests_.erase(source);
   }
+}
+void PendingAppManager::ClearSynchronizeRequestsForTesting() {
+  synchronize_requests_.erase(synchronize_requests_.begin(),
+                              synchronize_requests_.end());
 }
 
 }  // namespace web_app

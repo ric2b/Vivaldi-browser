@@ -10,7 +10,6 @@
 #include <vector>
 
 #include "base/containers/span.h"
-#include "base/macros.h"
 #include "build/build_config.h"
 #include "printing/mojom/print.mojom-forward.h"
 #include "printing/native_drawing_context.h"
@@ -18,7 +17,7 @@
 
 #if defined(OS_WIN)
 #include <windows.h>
-#elif defined(OS_MACOSX)
+#elif defined(OS_MAC)
 #include <ApplicationServices/ApplicationServices.h>
 #include <CoreFoundation/CoreFoundation.h>
 #include "base/mac/scoped_cftyperef.h"
@@ -39,6 +38,8 @@ namespace printing {
 class PRINTING_EXPORT MetafilePlayer {
  public:
   MetafilePlayer();
+  MetafilePlayer(const MetafilePlayer&) = delete;
+  MetafilePlayer& operator=(const MetafilePlayer&) = delete;
   virtual ~MetafilePlayer();
 
 #if defined(OS_WIN)
@@ -48,7 +49,7 @@ class PRINTING_EXPORT MetafilePlayer {
   // details.
   virtual bool SafePlayback(printing::NativeDrawingContext hdc) const = 0;
 
-#elif defined(OS_MACOSX)
+#elif defined(OS_MAC)
   // Renders the given page into |rect| in the given context.
   // Pages use a 1-based index. |autorotate| determines whether the source PDF
   // should be autorotated to fit on the destination page. |fit_to_page|
@@ -76,9 +77,6 @@ class PRINTING_EXPORT MetafilePlayer {
   // called after the metafile is closed. Returns true if writing succeeded.
   virtual bool SaveTo(base::File* file) const = 0;
 #endif  // defined(OS_ANDROID)
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(MetafilePlayer);
 };
 
 // This class creates a graphics context that renders into a data stream
@@ -86,6 +84,8 @@ class PRINTING_EXPORT MetafilePlayer {
 class PRINTING_EXPORT Metafile : public MetafilePlayer {
  public:
   Metafile();
+  Metafile(const Metafile&) = delete;
+  Metafile& operator=(const Metafile&) = delete;
   ~Metafile() override;
 
   // Initializes a fresh new metafile for rendering. Returns false on failure.
@@ -146,9 +146,6 @@ class PRINTING_EXPORT Metafile : public MetafilePlayer {
 #if !defined(OS_ANDROID)
   bool SaveTo(base::File* file) const override;
 #endif  // !defined(OS_ANDROID)
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(Metafile);
 };
 
 }  // namespace printing

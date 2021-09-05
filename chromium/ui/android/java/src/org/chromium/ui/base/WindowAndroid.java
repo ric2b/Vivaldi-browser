@@ -10,6 +10,7 @@ import android.annotation.SuppressLint;
 import android.annotation.TargetApi;
 import android.app.Activity;
 import android.app.PendingIntent;
+import android.app.UiModeManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
@@ -189,6 +190,8 @@ public class WindowAndroid implements AndroidPermissionDelegate, DisplayAndroidO
     private ObserverList<SelectionHandlesObserver> mSelectionHandlesObservers =
             new ObserverList<>();
 
+    private final boolean mAllowChangeRefreshRate;
+
     /**
      * Gets the view for readback.
      */
@@ -220,6 +223,12 @@ public class WindowAndroid implements AndroidPermissionDelegate, DisplayAndroidO
         mDisplayAndroid = display;
         mDisplayAndroid.addObserver(this);
 
+        // Using this setting is gated to Q due to bugs on Razer phones which can freeze the device
+        // if the API is used. See crbug.com/990646.
+        // Disable refresh rate change on TV platforms, as it may cause black screen flicker due to
+        // display mode changes.
+        mAllowChangeRefreshRate = BuildInfo.isAtLeastQ() && !isTv(context);
+
         // Multiple refresh rate support is only available on M+.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) recomputeSupportedRefreshRates();
 
@@ -241,6 +250,13 @@ public class WindowAndroid implements AndroidPermissionDelegate, DisplayAndroidO
         }
     }
 
+    private static boolean isTv(Context context) {
+        UiModeManager uiModeManager =
+                (UiModeManager) context.getSystemService(Context.UI_MODE_SERVICE);
+        return uiModeManager != null
+                && uiModeManager.getCurrentModeType() == Configuration.UI_MODE_TYPE_TELEVISION;
+    }
+
     @CalledByNative
     private static long createForTesting() {
         WindowAndroid windowAndroid = new WindowAndroid(ContextUtils.getApplicationContext());
@@ -258,7 +274,6 @@ public class WindowAndroid implements AndroidPermissionDelegate, DisplayAndroidO
     /**
      * Set the delegate that will handle android permissions requests.
      */
-    @VisibleForTesting
     public void setAndroidPermissionDelegate(AndroidPermissionDelegate delegate) {
         mPermissionDelegate = delegate;
     }
@@ -731,7 +746,6 @@ public class WindowAndroid implements AndroidPermissionDelegate, DisplayAndroidO
         return mApplicationBottomInsetProvider;
     }
 
-    @VisibleForTesting
     public void setKeyboardDelegate(KeyboardVisibilityDelegate keyboardDelegate) {
         mKeyboardVisibilityDelegate = keyboardDelegate;
         // TODO(fhorschig): Remove - every caller should use the window to get the delegate.
@@ -940,7 +954,7 @@ public class WindowAndroid implements AndroidPermissionDelegate, DisplayAndroidO
     @TargetApi(Build.VERSION_CODES.M)
     @CalledByNative
     private float[] getSupportedRefreshRates() {
-        if (mSupportedRefreshRateModes == null) return null;
+        if (mSupportedRefreshRateModes == null || !mAllowChangeRefreshRate) return null;
 
         float[] supportedRefreshRates = new float[mSupportedRefreshRateModes.size()];
         for (int i = 0; i < mSupportedRefreshRateModes.size(); ++i) {
@@ -952,9 +966,7 @@ public class WindowAndroid implements AndroidPermissionDelegate, DisplayAndroidO
     @SuppressLint("NewApi")
     @CalledByNative
     private void setPreferredRefreshRate(float preferredRefreshRate) {
-        // Using this setting is gated to Q due to bugs on Razer phones which can freeze the device
-        // if the API is used. See crbug.com/990646.
-        if (mSupportedRefreshRateModes == null || !BuildInfo.isAtLeastQ()) return;
+        if (mSupportedRefreshRateModes == null || !mAllowChangeRefreshRate) return;
 
         int preferredModeId = getPreferredModeId(preferredRefreshRate);
         Window window = getWindow();

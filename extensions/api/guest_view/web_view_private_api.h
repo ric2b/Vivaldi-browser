@@ -11,6 +11,7 @@
 
 #include "extensions/browser/extension_function.h"
 #include "extensions/schema/web_view_private.h"
+#include "ui/vivaldi_skia_utils.h"
 
 namespace extensions {
 namespace vivaldi {
@@ -42,16 +43,18 @@ class WebViewPrivateGetThumbnailFunction
   ResponseAction RunImpl(const web_view_private::ThumbnailParams& params);
   void CopyFromBackingStoreComplete(const SkBitmap& bitmap);
   void ScaleAndEncodeOnWorkerThread(SkBitmap bitmap);
-  void SendResult(bool success, const std::string& base64_result);
+  void SendResult();
 
   // Quality setting to use when encoding jpegs.  Set in RunImpl().
   int image_quality_;
   double scale_;
-  int height_;
-  int width_;
+  int height_ = 0;
+  int width_ = 0;
+  std::string base64_result_;
 
   // The format (JPEG vs PNG) of the resulting image.  Set in RunImpl().
-  api::extension_types::ImageFormat image_format_;
+  ::vivaldi::skia_utils::ImageFormat image_format_ =
+      ::vivaldi::skia_utils::ImageFormat::kJPEG;
 
   DISALLOW_COPY_AND_ASSIGN(WebViewPrivateGetThumbnailFunction);
 };

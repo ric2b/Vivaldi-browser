@@ -14,8 +14,10 @@ import android.view.View;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
+import org.chromium.base.Callback;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
+import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.chrome.browser.ThemeColorProvider;
 import org.chromium.chrome.browser.compositor.layouts.EmptyOverviewModeObserver;
 import org.chromium.chrome.browser.compositor.layouts.OverviewModeBehavior;
@@ -105,8 +107,6 @@ public class TabGroupUiMediator implements SnackbarManager.SnackbarController {
     private final ResetHandler mResetHandler;
     private final TabModelSelector mTabModelSelector;
     private final TabCreatorManager mTabCreatorManager;
-    private final OverviewModeBehavior mOverviewModeBehavior;
-    private final OverviewModeBehavior.OverviewModeObserver mOverviewModeObserver;
     private final BottomControlsCoordinator
             .BottomControlsVisibilityController mVisibilityController;
     private final ThemeColorProvider mThemeColorProvider;
@@ -117,6 +117,12 @@ public class TabGroupUiMediator implements SnackbarManager.SnackbarController {
     private final ActivityLifecycleDispatcher mActivityLifecycleDispatcher;
     private final SnackbarManager.SnackbarManageable mSnackbarManageable;
     private final Snackbar mUndoClosureSnackBar;
+
+    private ObservableSupplier<OverviewModeBehavior> mOverviewModeBehaviorSupplier;
+    private final Callback<OverviewModeBehavior> mOverviewModeBehaviorSupplierObserver;
+    private final OverviewModeBehavior.OverviewModeObserver mOverviewModeObserver;
+    private OverviewModeBehavior mOverviewModeBehavior;
+
     private TabGroupModelFilter.Observer mTabGroupModelFilterObserver;
     private PauseResumeWithNativeObserver mPauseResumeWithNativeObserver;
     private TabModelSelectorTabObserver mTabModelSelectorTabObserver;
@@ -127,7 +133,8 @@ public class TabGroupUiMediator implements SnackbarManager.SnackbarController {
     TabGroupUiMediator(Context context,
             BottomControlsCoordinator.BottomControlsVisibilityController visibilityController,
             ResetHandler resetHandler, PropertyModel model, TabModelSelector tabModelSelector,
-            TabCreatorManager tabCreatorManager, OverviewModeBehavior overviewModeBehavior,
+            TabCreatorManager tabCreatorManager,
+            ObservableSupplier<OverviewModeBehavior> overviewModeBehaviorSupplier,
             ThemeColorProvider themeColorProvider,
             @Nullable TabGridDialogMediator.DialogController dialogController,
             ActivityLifecycleDispatcher activityLifecycleDispatcher,
@@ -137,7 +144,7 @@ public class TabGroupUiMediator implements SnackbarManager.SnackbarController {
         mModel = model;
         mTabModelSelector = tabModelSelector;
         mTabCreatorManager = tabCreatorManager;
-        mOverviewModeBehavior = overviewModeBehavior;
+        mOverviewModeBehaviorSupplier = overviewModeBehaviorSupplier;
         mVisibilityController = visibilityController;
         mThemeColorProvider = themeColorProvider;
         mTabGridDialogController = dialogController;
@@ -226,7 +233,11 @@ public class TabGroupUiMediator implements SnackbarManager.SnackbarController {
                 Tab currentTab = mTabModelSelector.getCurrentTab();
                 // Do not try to show tab strip when there is no current tab or we are not in tab
                 // page when restore completed.
-                if (currentTab == null || overviewModeBehavior.overviewVisible()) return;
+                if (currentTab == null
+                        || (mOverviewModeBehavior != null
+                                && mOverviewModeBehavior.overviewVisible())) {
+                    return;
+                }
                 resetTabStripWithRelatedTabsForId(currentTab.getId());
                 RecordUserAction.record("TabStrip.SessionVisibility."
                         + (mIsTabGroupUiVisible ? "Visible" : "Hidden"));
@@ -335,7 +346,21 @@ public class TabGroupUiMediator implements SnackbarManager.SnackbarController {
 
         mTabModelSelector.getTabModelFilterProvider().addTabModelFilterObserver(mTabModelObserver);
         mTabModelSelector.addObserver(mTabModelSelectorObserver);
-        mOverviewModeBehavior.addOverviewModeObserver(mOverviewModeObserver);
+
+        mOverviewModeBehaviorSupplierObserver = new Callback<OverviewModeBehavior>() {
+            @Override
+            public void onResult(OverviewModeBehavior overviewModeBehavior) {
+                assert overviewModeBehavior != null;
+                mOverviewModeBehavior = overviewModeBehavior;
+                mOverviewModeBehavior.addOverviewModeObserver(mOverviewModeObserver);
+
+                // TODO(crbug.com/1084528): Replace with OneShotSupplier when it is available.
+                mOverviewModeBehaviorSupplier.removeObserver(this);
+                mOverviewModeBehaviorSupplier = null;
+            }
+        };
+        mOverviewModeBehaviorSupplier.addObserver(mOverviewModeBehaviorSupplierObserver);
+
         mThemeColorProvider.addThemeColorObserver(mThemeColorObserver);
         mThemeColorProvider.addTintObserver(mTintObserver);
 
@@ -519,7 +544,12 @@ public class TabGroupUiMediator implements SnackbarManager.SnackbarController {
         if (mTabModelSelectorTabObserver != null) {
             mTabModelSelectorTabObserver.destroy();
         }
-        mOverviewModeBehavior.removeOverviewModeObserver(mOverviewModeObserver);
+        if (mOverviewModeBehavior != null) {
+            mOverviewModeBehavior.removeOverviewModeObserver(mOverviewModeObserver);
+        }
+        if (mOverviewModeBehaviorSupplier != null) {
+            mOverviewModeBehaviorSupplier.removeObserver(mOverviewModeBehaviorSupplierObserver);
+        }
         mThemeColorProvider.removeThemeColorObserver(mThemeColorObserver);
         mThemeColorProvider.removeTintObserver(mTintObserver);
     }

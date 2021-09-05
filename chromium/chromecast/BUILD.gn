@@ -33,7 +33,7 @@ group("all") {
   if (!is_android) {
     data_deps += [ ":cast_shell" ]
   }
-  if (is_linux) {
+  if (is_linux || is_chromeos) {
     deps += [
       "//chromecast/browser/webview/client:wayland_webview_client",
       "//chromecast/tracing",
@@ -87,7 +87,6 @@ cast_test_group("cast_tests") {
     "//net:net_unittests",
     "//sql:sql_unittests",
     "//storage:storage_unittests",
-    "//third_party/cacheinvalidation:cacheinvalidation_unittests",
     "//ui/base:ui_base_unittests",
   ]
 
@@ -107,7 +106,7 @@ cast_test_group("cast_tests") {
     tests += [ "//media/gpu:video_decode_accelerator_tests" ]
   }
 
-  if (is_linux) {
+  if (is_linux || is_chromeos) {
     tests += [
       "//chromecast/crash:cast_crash_unittests",
       "//components/exo:exo_unittests",
@@ -123,7 +122,7 @@ cast_test_group("cast_tests") {
     filters += [ sandbox_linux_unittests_filter ]
   }
 
-  if (is_linux || is_fuchsia) {
+  if (is_linux || is_chromeos || is_fuchsia) {
     tests += [ "//chromecast/media/cma/backend:cast_audio_backend_unittests" ]
     cast_audio_backend_unittests_filter = {
       test_name = "cast_audio_backend_unittests"
@@ -598,6 +597,7 @@ buildflag_header("chromecast_buildflags") {
     "ENABLE_PLAYREADY=$enable_playready",
     "ENABLE_VIDEO_CAPTURE_SERVICE=$enable_video_capture_service",
     "ENABLE_VOLUME_TABLES_ACCESS=$enable_volume_tables_access",
+    "IS_ANDROID_APPLIANCE=$is_android_appliance",
     "IS_ANDROID_THINGS=$is_android_things",
     "IS_ANDROID_THINGS_NON_PUBLIC=$is_android_things_non_public",
     "IS_CAST_AUDIO_ONLY=$is_cast_audio_only",
@@ -645,6 +645,10 @@ if (is_android) {
   }
 
   android_apk("cast_shell_apk") {
+    enable_lint = true
+    lint_baseline_file = "android/lint-baseline.xml"
+    lint_suppressions_file = "android/lint-suppressions.xml"
+
     apk_name = "CastShell"
     android_manifest = "$root_gen_dir/cast_shell_manifest/AndroidManifest.xml"
     android_manifest_dep = "//chromecast/browser/android:cast_shell_manifest"

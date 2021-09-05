@@ -22,10 +22,11 @@ android_library("java") {
     "//third_party/android_deps:androidx_core_core_java",
     "//ui/android:ui_java",
   ]
+  resources_package = "org.chromium.components.browser_ui.share"
 }
 
 android_resources("java_resources") {
-  custom_package = "org.chromium.components.browser_ui.share"
+  create_srcjar = false
   sources = [ "java/res/layout/share_dialog_item.xml" ]
   deps = [
     "//components/browser_ui/strings/android:browser_ui_strings_grd",
@@ -45,6 +46,7 @@ android_library("javatests") {
     "//content/public/test/android:content_java_test_support",
     "//third_party/android_deps:androidx_appcompat_appcompat_java",
     "//third_party/android_deps:androidx_core_core_java",
+    "//third_party/android_deps:androidx_test_runner_java",
     "//third_party/hamcrest:hamcrest_java",
     "//third_party/junit",
     "//ui/android:ui_java",

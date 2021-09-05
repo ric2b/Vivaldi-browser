@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "base/memory/weak_ptr.h"
 #include "build/build_config.h"
 
 #if !defined(OS_ANDROID)
@@ -22,6 +23,8 @@ class WebContents;
 }
 
 namespace payments {
+
+class ContentPaymentRequestDelegate;
 
 struct AppDescription {
   std::string label;
@@ -37,7 +40,7 @@ class PaymentRequestTestObserver {
   virtual void OnCanMakePaymentReturned() {}
   virtual void OnHasEnrolledInstrumentCalled() {}
   virtual void OnHasEnrolledInstrumentReturned() {}
-  virtual void OnShowAppsReady() {}
+  virtual void OnAppListReady() {}
   virtual void OnNotSupportedError() {}
   virtual void OnConnectionTerminated() {}
   virtual void OnAbortCalled() {}
@@ -65,6 +68,10 @@ class PaymentRequestTestController {
   void SetOffTheRecord(bool is_off_the_record);
   void SetValidSsl(bool valid_ssl);
   void SetCanMakePaymentEnabledPref(bool can_make_payment_enabled);
+  void SetTwaPackageName(const std::string& twa_package_name);
+  void SetHasAuthenticator(bool has_authenticator);
+  void SetTwaPaymentApp(const std::string& method_name,
+                        const std::string& response);
 
   // Get the WebContents of the Payment Handler for testing purpose, or null if
   // nonexistent. To guarantee a non-null return, this function should be called
@@ -77,6 +84,11 @@ class PaymentRequestTestController {
   // testing purpose. return whether it's succeeded.
   bool ClickPaymentHandlerSecurityIcon();
 #endif
+
+  // Confirms payment in a browser payment sheet, be it either PAYMENT_REQUEST
+  // or SECURE_PAYMENT_CONFIRMATION type. Returns true if the dialog was
+  // available.
+  bool ConfirmPayment();
 
   // Confirms payment in minimal UI. Returns true on success or if the minimal
   // UI is not implemented on the current platform.
@@ -106,7 +118,7 @@ class PaymentRequestTestController {
   void OnCanMakePaymentReturned();
   void OnHasEnrolledInstrumentCalled();
   void OnHasEnrolledInstrumentReturned();
-  void OnShowAppsReady();
+  void OnAppListReady();
   void OnNotSupportedError();
   void OnConnectionTerminated();
   void OnAbortCalled();
@@ -118,6 +130,10 @@ class PaymentRequestTestController {
   bool is_off_the_record_ = false;
   bool valid_ssl_ = true;
   bool can_make_payment_pref_ = true;
+  std::string twa_package_name_;
+  bool has_authenticator_ = false;
+  std::string twa_payment_app_method_name_;
+  std::string twa_payment_app_response_;
   std::vector<AppDescription> app_descriptions_;
 
 #if !defined(OS_ANDROID)
@@ -127,6 +143,8 @@ class PaymentRequestTestController {
 
   class ObserverConverter;
   std::unique_ptr<ObserverConverter> observer_converter_;
+
+  base::WeakPtr<ContentPaymentRequestDelegate> delegate_;
 #endif
 };
 

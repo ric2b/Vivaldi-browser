@@ -5,10 +5,15 @@
 package org.chromium.weblayer_private.test;
 
 import android.os.IBinder;
+import android.view.View;
+import android.widget.LinearLayout;
+import android.widget.TextView;
 
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
 import org.chromium.base.annotations.UsedByReflection;
+import org.chromium.components.infobars.InfoBarAnimationListener;
+import org.chromium.components.infobars.InfoBarUiItem;
 import org.chromium.components.location.LocationUtils;
 import org.chromium.components.permissions.PermissionDialogController;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
@@ -17,7 +22,6 @@ import org.chromium.device.geolocation.MockLocationProvider;
 import org.chromium.net.NetworkChangeNotifier;
 import org.chromium.ui.modaldialog.ModalDialogProperties;
 import org.chromium.weblayer_private.InfoBarContainer;
-import org.chromium.weblayer_private.InfoBarUiItem;
 import org.chromium.weblayer_private.TabImpl;
 import org.chromium.weblayer_private.WebLayerAccessibilityUtil;
 import org.chromium.weblayer_private.interfaces.IObjectWrapper;
@@ -116,7 +120,7 @@ public final class TestWebLayerImpl extends ITestWebLayer.Stub {
         TabImpl tabImpl = (TabImpl) tab;
 
         InfoBarContainer infoBarContainer = tabImpl.getInfoBarContainerForTesting();
-        infoBarContainer.addAnimationListener(new InfoBarContainer.InfoBarAnimationListener() {
+        infoBarContainer.addAnimationListener(new InfoBarAnimationListener() {
             @Override
             public void notifyAnimationFinished(int animationType) {}
             @Override
@@ -161,5 +165,30 @@ public final class TestWebLayerImpl extends ITestWebLayer.Stub {
     @Override
     public boolean canInfoBarContainerScroll(ITab tab) {
         return ((TabImpl) tab).canInfoBarContainerScrollForTesting();
+    }
+
+    @Override
+    public String getDisplayedUrl(IObjectWrapper /* View */ view) {
+        View urlBarView = ObjectWrapper.unwrap(view, View.class);
+        assert (urlBarView instanceof LinearLayout);
+        LinearLayout urlBarLayout = (LinearLayout) urlBarView;
+        assert (urlBarLayout.getChildCount() == 2);
+
+        View textView = urlBarLayout.getChildAt(1);
+        assert (textView instanceof TextView);
+        TextView urlBarTextView = (TextView) textView;
+        return urlBarTextView.getText().toString();
+    }
+
+    @Override
+    public String getTranslateInfoBarTargetLanguage(ITab tab) {
+        TabImpl tabImpl = (TabImpl) tab;
+        return tabImpl.getTranslateInfoBarTargetLanguageForTesting();
+    }
+
+    @Override
+    public boolean didShowFullscreenToast(ITab tab) {
+        TabImpl tabImpl = (TabImpl) tab;
+        return tabImpl.didShowFullscreenToast();
     }
 }

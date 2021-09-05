@@ -18,12 +18,11 @@ DesktopWallpaperDataClassHandlerWin::DesktopWallpaperDataClassHandlerWin() {
 }
 
 DesktopWallpaperDataClassHandlerWin::~DesktopWallpaperDataClassHandlerWin() {
-  // See comments in VivaldiDataSource::~VivaldiDataSource why there is no race
-  // with GetData method.
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 }
 
 void DesktopWallpaperDataClassHandlerWin::GetData(
+    Profile* profile,
     const std::string& data_id,
     content::URLDataSource::GotDataCallback callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);

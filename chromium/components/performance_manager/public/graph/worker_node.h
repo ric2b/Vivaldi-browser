@@ -9,13 +9,11 @@
 
 #include "base/containers/flat_set.h"
 #include "base/macros.h"
+#include "base/util/type_safety/token_type.h"
 #include "components/performance_manager/public/graph/node.h"
+#include "third_party/blink/public/common/tokens/tokens.h"
 
 class GURL;
-
-namespace base {
-class UnguessableToken;
-}
 
 namespace performance_manager {
 
@@ -70,8 +68,8 @@ class WorkerNode : public Node {
   // over the lifetime of the frame.
   virtual const ProcessNode* GetProcessNode() const = 0;
 
-  // Returns the dev tools token for this worker.
-  virtual const base::UnguessableToken& GetDevToolsToken() const = 0;
+  // Returns the unique token identifying this worker.
+  virtual const blink::WorkerToken& GetWorkerToken() const = 0;
 
   // Returns the URL of the worker script. This is the final response URL which
   // takes into account redirections.

@@ -16,7 +16,6 @@
 #include "content/public/browser/serial_delegate.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_client.h"
-#include "mojo/public/cpp/bindings/interface_request.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "third_party/blink/public/mojom/feature_policy/feature_policy.mojom.h"
 
@@ -201,5 +200,7 @@ void SerialService::DecrementActiveFrameCount() {
       WebContents::FromRenderFrameHost(render_frame_host_));
   web_contents_impl->DecrementSerialActiveFrameCount();
 }
+
+RENDER_DOCUMENT_HOST_USER_DATA_KEY_IMPL(SerialService)
 
 }  // namespace content

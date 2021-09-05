@@ -7,11 +7,11 @@
         flex: 1
       }
 
-      .discarded-settings-row .display-name {
+      .settings-row.discarded .display-name {
         text-decoration: line-through;
       }
 
-      .discarded-settings-row .discarded-label {
+      .settings-row.discarded .discarded-label {
         margin-inline-start: 8px;
       }
 
@@ -21,7 +21,7 @@
       }
     </style>
     <div class="list-item" focus-row-container>
-      <div class$="settings-row [[getClassForSiteListEntry_(model)]]"
+      <div class$="settings-row [[getClassForSiteListEntry_(model.isDiscarded)]]"
           actionable$="[[allowNavigateToSiteDetail_]]" on-click="onOriginTap_">
         <site-favicon url="[[model.origin]]"></site-favicon>
         <div class="middle no-min-width">

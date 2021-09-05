@@ -69,7 +69,7 @@ TEST(GeneratePolicySource, ChromeSchemaData) {
   ASSERT_TRUE(subschema.valid());
   EXPECT_EQ(base::Value::Type::BOOLEAN, subschema.type());
 
-  subschema = schema.GetProperty(key::kURLBlacklist);
+  subschema = schema.GetProperty(key::kURLBlocklist);
   ASSERT_TRUE(subschema.valid());
   EXPECT_EQ(base::Value::Type::LIST, subschema.type());
   ASSERT_TRUE(subschema.GetItems().valid());
@@ -221,7 +221,7 @@ TEST(GeneratePolicySource, SetEnterpriseDefaults) {
   // If policy already configured, it's not changed to enterprise defaults.
   policy_map.Set(key::kChromeOsMultiProfileUserBehavior, POLICY_LEVEL_MANDATORY,
                  POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-                 std::make_unique<base::Value>("test_value"), nullptr);
+                 base::Value("test_value"), nullptr);
   SetEnterpriseUsersDefaults(&policy_map);
   multiprof_behavior =
       policy_map.GetValue(key::kChromeOsMultiProfileUserBehavior);

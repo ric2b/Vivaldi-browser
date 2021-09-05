@@ -12,7 +12,6 @@ goog.provide('Background');
 goog.require('AutomationPredicate');
 goog.require('AutomationUtil');
 goog.require('BackgroundKeyboardHandler');
-goog.require('BackgroundMouseHandler');
 goog.require('BrailleCommandData');
 goog.require('BrailleCommandHandler');
 goog.require('BrailleKeyCommand');
@@ -108,13 +107,6 @@ Background = class extends ChromeVoxState {
     /** @type {!BackgroundKeyboardHandler} @private */
     this.keyboardHandler_ = new BackgroundKeyboardHandler();
 
-    /** @type {!BackgroundMouseHandler} @private */
-    this.mouseHandler_ = new BackgroundMouseHandler();
-
-    if (localStorage['speakTextUnderMouse'] == String(true)) {
-      chrome.accessibilityPrivate.enableChromeVoxMouseEvents(true);
-    }
-
     /** @type {!LiveRegions} @private */
     this.liveRegions_ = new LiveRegions(this);
 
@@ -169,28 +161,46 @@ Background = class extends ChromeVoxState {
     // ChromeVox starts.
     sessionStorage.setItem('darkScreen', 'false');
 
-      // A self-contained class to start and stop progress sounds before any
-      // speech has been generated on startup. This is important in cases where
-      // speech is severely delayed.
-      /** @implements {TtsCapturingEventListener} */
-      const ProgressPlayer = class {
-        constructor() {
-          ChromeVox.tts.addCapturingEventListener(this);
-          ChromeVox.earcons.playEarcon(Earcon.CHROMEVOX_LOADING);
-        }
+    // A self-contained class to start and stop progress sounds before any
+    // speech has been generated on startup. This is important in cases where
+    // speech is severely delayed.
+    /** @implements {TtsCapturingEventListener} */
+    const ProgressPlayer = class {
+      constructor() {
+        ChromeVox.tts.addCapturingEventListener(this);
+        ChromeVox.earcons.playEarcon(Earcon.CHROMEVOX_LOADING);
+      }
 
-        /** @override */
-        onTtsStart() {
-          ChromeVox.earcons.playEarcon(Earcon.CHROMEVOX_LOADED);
-          ChromeVox.tts.removeCapturingEventListener(this);
-        }
+      /** @override */
+      onTtsStart() {
+        ChromeVox.earcons.playEarcon(Earcon.CHROMEVOX_LOADED);
+        ChromeVox.tts.removeCapturingEventListener(this);
+      }
 
-        /** @override */
-        onTtsEnd() {}
-        /** @override */
-        onTtsInterrupted() {}
-      };
-      new ProgressPlayer();
+      /** @override */
+      onTtsEnd() {}
+      /** @override */
+      onTtsInterrupted() {}
+    };
+    new ProgressPlayer();
+
+    chrome.commandLinePrivate.hasSwitch(
+        'enable-experimental-accessibility-chromevox-tutorial', (enabled) => {
+          if (!enabled) {
+            return;
+          }
+
+          chrome.loginState.getSessionState((sessionState) => {
+            // If starting ChromeVox from OOBE, start the ChromeVox tutorial.
+            // Use a timeout to allow ChromeVox to initialize first.
+            if (sessionState ===
+                chrome.loginState.SessionState.IN_OOBE_SCREEN) {
+              setTimeout(() => {
+                (new PanelCommand(PanelCommandType.TUTORIAL)).send();
+              }, 1000);
+            }
+          });
+        });
   }
 
   /**
@@ -262,10 +272,9 @@ Background = class extends ChromeVoxState {
   /**
    * @override
    */
-  navigateToRange(range, opt_focus, opt_speechProps, opt_skipSettingSelection) {
+  navigateToRange(range, opt_focus, opt_speechProps, opt_shouldSetSelection) {
     opt_focus = opt_focus === undefined ? true : opt_focus;
     opt_speechProps = opt_speechProps || {};
-    opt_skipSettingSelection = opt_skipSettingSelection || false;
     const prevRange = this.currentRange_;
 
     // Specialization for math output.
@@ -285,8 +294,7 @@ Background = class extends ChromeVoxState {
     let selectedRange;
     let msg;
 
-    if (this.pageSel_ && this.pageSel_.isValid() && range.isValid() &&
-        !opt_skipSettingSelection) {
+    if (this.pageSel_ && this.pageSel_.isValid() && range.isValid()) {
       // Suppress hints.
       o.withoutHints();
 
@@ -329,7 +337,7 @@ Background = class extends ChromeVoxState {
           this.pageSel_.select();
         }
       }
-    } else if (!opt_skipSettingSelection) {
+    } else if (opt_shouldSetSelection) {
       // Ensure we don't select the editable when we first encounter it.
       let lca = null;
       if (range.start.node && prevRange.start.node) {

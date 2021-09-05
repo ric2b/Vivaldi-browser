@@ -19,10 +19,10 @@
 #include "components/sync/driver/sync_service.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/site_instance.h"
+#include "extensions/browser/guest_view/web_view/web_view_guest.h"
 #include "extensions/browser/guest_view/web_view/web_view_renderer_state.h"
 
 #if defined(OS_CHROMEOS)
-#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/constants/chromeos_pref_names.h"
 #endif
 
@@ -59,10 +59,6 @@ void HeaderModificationDelegateImpl::ProcessRequest(
 
 #if defined(OS_CHROMEOS)
   bool is_secondary_account_addition_allowed = true;
-  if (profile_->IsChild() &&
-      !base::FeatureList::IsEnabled(chromeos::features::kEduCoexistence)) {
-    is_secondary_account_addition_allowed = false;
-  }
   if (!prefs->GetBoolean(
           chromeos::prefs::kSecondaryGoogleAccountSigninAllowed)) {
     is_secondary_account_addition_allowed = false;
@@ -103,10 +99,16 @@ bool HeaderModificationDelegateImpl::ShouldIgnoreGuestWebViewRequest(
 
   if (extensions::WebViewRendererState::GetInstance()->IsGuest(
           contents->GetMainFrame()->GetProcess()->GetID())) {
-    GURL identity_api_site = extensions::WebAuthFlow::GetWebViewSiteURL(
-        extensions::WebAuthFlow::GET_AUTH_TOKEN);
+    GURL identity_api_site =
+        extensions::WebViewGuest::GetSiteForGuestPartitionConfig(
+            extensions::WebAuthFlow::GetWebViewPartitionConfig(
+                extensions::WebAuthFlow::GET_AUTH_TOKEN));
     if (contents->GetSiteInstance()->GetSiteURL() != identity_api_site)
       return true;
+
+    // If the site URL matches, but |contents| is not using a guest
+    // SiteInstance, then there is likely a serious bug.
+    CHECK(contents->GetSiteInstance()->IsGuest());
   }
   return false;
 }

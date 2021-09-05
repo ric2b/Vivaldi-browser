@@ -14,6 +14,7 @@
 #include "ash/app_list/views/app_list_main_view.h"
 #include "ash/app_list/views/app_list_view.h"
 #include "ash/app_list/views/apps_container_view.h"
+#include "ash/app_list/views/apps_grid_view.h"
 #include "ash/app_list/views/contents_view.h"
 #include "ash/app_list/views/search_box_view.h"
 #include "ash/assistant/assistant_controller_impl.h"
@@ -440,6 +441,27 @@ void AppListControllerImpl::ResolveOemFolderPosition(
   std::move(callback).Run(std::move(metadata));
 }
 
+void AppListControllerImpl::NotifyProcessSyncChangesFinished() {
+  // When there are incompatible apps on different devices under the same
+  // user account, it is possible that moving or adding an app on an empty
+  // spot on a page of a different type of device (e.g. Device 1) may cause app
+  // overflow on another device (e.g. Device 2) since it may have more apps on
+  // the same page. See details in http://crbug.com/1098174.
+  // When the change is synced to the Device 2, paged view structure may load
+  // meta data and detect a full page of apps without a page break item
+  // at the end of the overflowed page. Therefore, after the sync service has
+  // finished processing sync change, SaveToMetaData should be called to insert
+  // page break items if there are any missing at the end of full pages.
+  AppListView* const app_list_view = presenter_.GetView();
+  if (app_list_view) {
+    app_list_view->app_list_main_view()
+        ->contents_view()
+        ->apps_container_view()
+        ->apps_grid_view()
+        ->UpdatePagedViewStructure();
+  }
+}
+
 void AppListControllerImpl::DismissAppList() {
   if (tracked_app_window_) {
     tracked_app_window_->RemoveObserver(this);
@@ -476,10 +498,7 @@ bool AppListControllerImpl::IsVisible(
 // AppListModelObserver:
 
 void AppListControllerImpl::OnAppListItemAdded(AppListItem* item) {
-  if (item->is_folder())
-    client_->OnFolderCreated(profile_id_, item->CloneMetadata());
-  else if (item->is_page_break())
-    client_->OnPageBreakItemAdded(profile_id_, item->id(), item->position());
+  client_->OnItemAdded(profile_id_, item->CloneMetadata());
 }
 
 void AppListControllerImpl::OnActiveUserPrefServiceChanged(
@@ -1113,10 +1132,12 @@ void AppListControllerImpl::OpenSearchResult(const std::string& result_id,
     // Special-case chip results, because the display type of app results
     // doesn't account for whether it's being displayed in the suggestion chips
     // or app tiles.
+    AppListNotifier::Result notifier_result(result->id(),
+                                            result->metrics_type());
     if (launched_from == AppListLaunchedFrom::kLaunchedFromSuggestionChip) {
-      notifier->NotifyLaunched(SearchResultDisplayType::kChip, result->id());
+      notifier->NotifyLaunched(SearchResultDisplayType::kChip, notifier_result);
     } else {
-      notifier->NotifyLaunched(result->display_type(), result->id());
+      notifier->NotifyLaunched(result->display_type(), notifier_result);
     }
   }
 

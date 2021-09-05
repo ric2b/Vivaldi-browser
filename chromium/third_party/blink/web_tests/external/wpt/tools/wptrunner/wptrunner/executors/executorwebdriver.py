@@ -31,7 +31,7 @@ from ..testrunner import Stop
 import webdriver as client
 from webdriver import error
 
-here = os.path.join(os.path.split(__file__)[0])
+here = os.path.dirname(__file__)
 
 
 class WebDriverCallbackHandler(CallbackHandler):
@@ -112,7 +112,7 @@ class WebDriverTestharnessProtocolPart(TestharnessProtocolPart):
         for handle in handles:
             try:
                 self.webdriver.window_handle = handle
-                self.webdriver.close()
+                self.webdriver.window.close()
             except client.NoSuchWindowException:
                 pass
         self.webdriver.window_handle = self.runner_handle
@@ -518,7 +518,7 @@ class WebDriverRefTestExecutor(RefTestExecutor):
 
         return self.convert_result(test, result)
 
-    def screenshot(self, test, viewport_size, dpi):
+    def screenshot(self, test, viewport_size, dpi, page_ranges):
         # https://github.com/web-platform-tests/wpt/issues/7135
         assert viewport_size is None
         assert dpi is None

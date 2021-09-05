@@ -20,8 +20,8 @@
 #include "chrome/browser/complex_tasks/task_tab_helper.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/content_settings/mixed_content_settings_tab_helper.h"
+#include "chrome/browser/content_settings/page_specific_content_settings_delegate.h"
 #include "chrome/browser/content_settings/sound_content_setting_observer.h"
-#include "chrome/browser/content_settings/tab_specific_content_settings_delegate.h"
 #include "chrome/browser/data_reduction_proxy/data_reduction_proxy_tab_helper.h"
 #include "chrome/browser/engagement/site_engagement_helper.h"
 #include "chrome/browser/engagement/site_engagement_service.h"
@@ -41,6 +41,7 @@
 #include "chrome/browser/native_file_system/native_file_system_tab_helper.h"
 #include "chrome/browser/navigation_predictor/navigation_predictor_preconnect_client.h"
 #include "chrome/browser/net/net_error_tab_helper.h"
+#include "chrome/browser/optimization_guide/blink/blink_optimization_guide_web_contents_observer.h"
 #include "chrome/browser/optimization_guide/optimization_guide_web_contents_observer.h"
 #include "chrome/browser/page_load_metrics/page_load_metrics_initialize.h"
 #include "chrome/browser/password_manager/chrome_password_manager_client.h"
@@ -73,7 +74,6 @@
 #include "chrome/browser/ui/autofill/chrome_autofill_client.h"
 #include "chrome/browser/ui/find_bar/find_bar_state.h"
 #include "chrome/browser/ui/focus_tab_after_navigation_helper.h"
-#include "chrome/browser/ui/navigation_correction_tab_observer.h"
 #include "chrome/browser/ui/passwords/manage_passwords_ui_controller.h"
 #include "chrome/browser/ui/pdf/chrome_pdf_web_contents_helper_client.h"
 #include "chrome/browser/ui/prefs/prefs_tab_helper.h"
@@ -88,13 +88,13 @@
 #include "chrome/common/buildflags.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
+#include "chrome/services/machine_learning/machine_learning_tflite_buildflags.h"
 #include "components/autofill/content/browser/content_autofill_driver_factory.h"
 #include "components/autofill/core/browser/autofill_manager.h"
 #include "components/blocked_content/popup_blocker_tab_helper.h"
 #include "components/blocked_content/popup_opener_tab_helper.h"
 #include "components/captive_portal/core/buildflags.h"
-#include "components/client_hints/browser/client_hints.h"
-#include "components/content_settings/browser/tab_specific_content_settings.h"
+#include "components/content_settings/browser/page_specific_content_settings.h"
 #include "components/dom_distiller/core/dom_distiller_features.h"
 #include "components/download/content/factory/navigation_monitor_factory.h"
 #include "components/download/content/public/download_navigation_observer.h"
@@ -102,6 +102,7 @@
 #include "components/history/core/browser/top_sites.h"
 #include "components/javascript_dialogs/tab_modal_dialog_manager.h"
 #include "components/offline_pages/buildflags/buildflags.h"
+#include "components/optimization_guide/optimization_guide_features.h"
 #include "components/password_manager/core/browser/password_manager.h"
 #include "components/performance_manager/public/decorators/tab_properties_decorator.h"
 #include "components/performance_manager/public/performance_manager.h"
@@ -141,10 +142,12 @@
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/child_accounts/time_limits/web_time_navigation_observer.h"
+#include "chrome/browser/chromeos/policy/dlp/dlp_content_tab_helper.h"
 #include "chrome/browser/ui/app_list/search/cros_action_history/cros_action_recorder_tab_tracker.h"
 #endif
 
-#if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX)
+#if defined(OS_WIN) || defined(OS_MAC) || defined(OS_LINUX) || \
+    defined(OS_CHROMEOS)
 #include "chrome/browser/ui/blocked_content/framebust_block_tab_helper.h"
 #include "chrome/browser/ui/hats/hats_helper.h"
 #endif
@@ -185,6 +188,10 @@
 
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
 #include "chrome/browser/supervised_user/supervised_user_navigation_observer.h"
+#endif
+
+#if BUILDFLAG(BUILD_WITH_TFLITE_LIB)
+#include "chrome/browser/tflite_experiment/tflite_experiment_observer.h"
 #endif
 
 #include "app/vivaldi_apptools.h"
@@ -254,11 +261,6 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
   if (!vivaldi::IsVivaldiRunning()) {
   ChromeTranslateClient::CreateForWebContents(web_contents);
   }
-  PrefService* local_state = g_browser_process->local_state();
-  client_hints::ClientHints::CreateForWebContents(
-      web_contents, g_browser_process->network_quality_tracker(),
-      HostContentSettingsMapFactory::GetForProfile(profile),
-      GetUserAgentMetadata(), local_state);
   ConnectionHelpTabHelper::CreateForWebContents(web_contents);
   CoreTabHelper::CreateForWebContents(web_contents);
   DataReductionProxyTabHelper::CreateForWebContents(web_contents);
@@ -275,6 +277,11 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
   InstallableManager::CreateForWebContents(web_contents);
   IsolatedPrerenderTabHelper::CreateForWebContents(web_contents);
   LiteVideoObserver::MaybeCreateForWebContents(web_contents);
+
+#if BUILDFLAG(BUILD_WITH_TFLITE_LIB)
+  TFLiteExperimentObserver::CreateForWebContents(web_contents);
+#endif
+
   if (MediaEngagementService::IsEnabled())
     MediaEngagementService::CreateWebContentsObserver(web_contents);
   if (base::FeatureList::IsEnabled(media::kUseMediaHistoryStore))
@@ -284,10 +291,13 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
   MixedContentSettingsTabHelper::CreateForWebContents(web_contents);
   NativeFileSystemPermissionRequestManager::CreateForWebContents(web_contents);
   NativeFileSystemTabHelper::CreateForWebContents(web_contents);
-  NavigationCorrectionTabObserver::CreateForWebContents(web_contents);
   NavigationMetricsRecorder::CreateForWebContents(web_contents);
   NavigationPredictorPreconnectClient::CreateForWebContents(web_contents);
-  OptimizationGuideWebContentsObserver::CreateForWebContents(web_contents);
+  if (optimization_guide::features::IsOptimizationHintsEnabled()) {
+    optimization_guide::BlinkOptimizationGuideWebContentsObserver::
+        CreateForWebContents(web_contents);
+    OptimizationGuideWebContentsObserver::CreateForWebContents(web_contents);
+  }
   OutOfMemoryReporter::CreateForWebContents(web_contents);
   if (!vivaldi::IsVivaldiRunning()) {
     // NOTE(pettern@vivald.com): Disable due to VB-11435, consider enabling
@@ -333,9 +343,9 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
       web_contents,
       sync_sessions::SyncSessionsWebContentsRouterFactory::GetForProfile(
           profile));
-  content_settings::TabSpecificContentSettings::CreateForWebContents(
+  content_settings::PageSpecificContentSettings::CreateForWebContents(
       web_contents,
-      std::make_unique<chrome::TabSpecificContentSettingsDelegate>(
+      std::make_unique<chrome::PageSpecificContentSettingsDelegate>(
           web_contents));
   TabUIHelper::CreateForWebContents(web_contents);
   tasks::TaskTabHelper::CreateForWebContents(web_contents);
@@ -363,8 +373,9 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
   if (OomInterventionTabHelper::IsEnabled()) {
     OomInterventionTabHelper::CreateForWebContents(web_contents);
   }
-  if (IsPerformanceHintsObserverEnabled()) {
-    PerformanceHintsObserver::CreateForWebContents(web_contents);
+  if (performance_hints::features::IsPerformanceHintsObserverEnabled()) {
+    performance_hints::PerformanceHintsObserver::CreateForWebContents(
+        web_contents);
   }
   SearchGeolocationDisclosureTabHelper::CreateForWebContents(web_contents);
 #else
@@ -403,14 +414,16 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
   app_list::CrOSActionRecorderTabTracker::CreateForWebContents(web_contents);
   chromeos::app_time::WebTimeNavigationObserver::MaybeCreateForWebContents(
       web_contents);
+  policy::DlpContentTabHelper::CreateForWebContents(web_contents);
 #endif
 
-#if defined(OS_WIN) || defined(OS_MACOSX) || \
+#if defined(OS_WIN) || defined(OS_MAC) || \
     (defined(OS_LINUX) && !defined(OS_CHROMEOS))
   metrics::DesktopSessionDurationObserver::CreateForWebContents(web_contents);
 #endif
 
-#if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX)
+#if defined(OS_WIN) || defined(OS_MAC) || defined(OS_LINUX) || \
+    defined(OS_CHROMEOS)
   if (base::FeatureList::IsEnabled(
           features::kHappinessTrackingSurveysForDesktop) ||
       base::FeatureList::IsEnabled(
@@ -425,8 +438,9 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
 #if BUILDFLAG(ENABLE_CAPTIVE_PORTAL_DETECTION)
   captive_portal::CaptivePortalTabHelper::CreateForWebContents(
       web_contents, CaptivePortalServiceFactory::GetForProfile(profile),
-      base::Bind(&ChromeSecurityBlockingPageFactory::OpenLoginTabForWebContents,
-                 web_contents, false));
+      base::BindRepeating(
+          &ChromeSecurityBlockingPageFactory::OpenLoginTabForWebContents,
+          web_contents, false));
 #endif
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)

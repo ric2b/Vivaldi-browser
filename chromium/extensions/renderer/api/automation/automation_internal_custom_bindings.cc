@@ -305,7 +305,8 @@ typedef void (*NodeIDPlusRangeFunction)(v8::Isolate* isolate,
                                         AutomationAXTreeWrapper* tree_wrapper,
                                         ui::AXNode* node,
                                         int start,
-                                        int end);
+                                        int end,
+                                        bool clipped);
 
 class NodeIDPlusRangeWrapper
     : public base::RefCountedThreadSafe<NodeIDPlusRangeWrapper> {
@@ -316,8 +317,8 @@ class NodeIDPlusRangeWrapper
 
   void Run(const v8::FunctionCallbackInfo<v8::Value>& args) {
     v8::Isolate* isolate = automation_bindings_->GetIsolate();
-    if (args.Length() < 4 || !args[0]->IsString() || !args[1]->IsNumber() ||
-        !args[2]->IsNumber() || !args[3]->IsNumber()) {
+    if (args.Length() < 5 || !args[0]->IsString() || !args[1]->IsNumber() ||
+        !args[2]->IsNumber() || !args[3]->IsNumber() || !args[4]->IsBoolean()) {
       ThrowInvalidArgumentsException(automation_bindings_);
     }
 
@@ -328,6 +329,7 @@ class NodeIDPlusRangeWrapper
     int node_id = args[1]->Int32Value(context).FromMaybe(0);
     int start = args[2]->Int32Value(context).FromMaybe(0);
     int end = args[3]->Int32Value(context).FromMaybe(0);
+    bool clipped = args[4]->BooleanValue(isolate);
 
     AutomationAXTreeWrapper* tree_wrapper =
         automation_bindings_->GetAutomationAXTreeWrapperFromTreeID(tree_id);
@@ -338,7 +340,8 @@ class NodeIDPlusRangeWrapper
     if (!node)
       return;
 
-    function_(isolate, args.GetReturnValue(), tree_wrapper, node, start, end);
+    function_(isolate, args.GetReturnValue(), tree_wrapper, node, start, end,
+              clipped);
   }
 
  private:
@@ -929,7 +932,7 @@ void AutomationInternalCustomBindings::AddRoutes() {
       "GetBoundsForRange",
       [](v8::Isolate* isolate, v8::ReturnValue<v8::Value> result,
          AutomationAXTreeWrapper* tree_wrapper, ui::AXNode* node, int start,
-         int end) {
+         int end, bool clipped) {
         if (node->data().role != ax::mojom::Role::kInlineTextBox)
           return;
 
@@ -948,21 +951,21 @@ void AutomationInternalCustomBindings::AddRoutes() {
           int end_offset = end > 0 ? character_offsets[end - 1] : 0;
 
           switch (node->data().GetTextDirection()) {
-            case ax::mojom::TextDirection::kLtr:
+            case ax::mojom::WritingDirection::kLtr:
             default:
               local_bounds.set_x(local_bounds.x() + start_offset);
               local_bounds.set_width(end_offset - start_offset);
               break;
-            case ax::mojom::TextDirection::kRtl:
+            case ax::mojom::WritingDirection::kRtl:
               local_bounds.set_x(local_bounds.x() + local_bounds.width() -
                                  end_offset);
               local_bounds.set_width(end_offset - start_offset);
               break;
-            case ax::mojom::TextDirection::kTtb:
+            case ax::mojom::WritingDirection::kTtb:
               local_bounds.set_y(local_bounds.y() + start_offset);
               local_bounds.set_height(end_offset - start_offset);
               break;
-            case ax::mojom::TextDirection::kBtt:
+            case ax::mojom::WritingDirection::kBtt:
               local_bounds.set_y(local_bounds.y() + local_bounds.height() -
                                  end_offset);
               local_bounds.set_height(end_offset - start_offset);
@@ -973,8 +976,9 @@ void AutomationInternalCustomBindings::AddRoutes() {
         // Convert from local to global coordinates second, after subsetting,
         // because the local to global conversion might involve matrix
         // transformations.
-        gfx::Rect global_bounds = ComputeGlobalNodeBounds(
-            tree_wrapper, node, local_bounds, nullptr, true /* clip_bounds */);
+        gfx::Rect global_bounds =
+            ComputeGlobalNodeBounds(tree_wrapper, node, local_bounds, nullptr,
+                                    clipped /* clip_bounds */);
         result.Set(RectToV8Object(isolate, global_bounds));
       });
 

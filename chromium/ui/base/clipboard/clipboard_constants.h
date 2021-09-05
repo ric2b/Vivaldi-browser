@@ -10,13 +10,13 @@
 #include "base/component_export.h"
 #include "build/build_config.h"
 
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
 #ifdef __OBJC__
 @class NSString;
 #else
 class NSString;
 #endif
-#endif  // defined(OS_MACOSX)
+#endif  // defined(OS_APPLE)
 
 namespace ui {
 
@@ -24,6 +24,9 @@ namespace ui {
 COMPONENT_EXPORT(UI_BASE_CLIPBOARD_TYPES) extern const char kMimeTypeText[];
 COMPONENT_EXPORT(UI_BASE_CLIPBOARD_TYPES) extern const char kMimeTypeTextUtf8[];
 COMPONENT_EXPORT(UI_BASE_CLIPBOARD_TYPES) extern const char kMimeTypeURIList[];
+// Unstandardized format for downloading files  after drop events. Now only
+// works in Windows, but used to also work in Linux and MacOS.
+// See https://crbug.com/860557 and https://crbug.com/425170.
 COMPONENT_EXPORT(UI_BASE_CLIPBOARD_TYPES)
 extern const char kMimeTypeDownloadURL[];
 COMPONENT_EXPORT(UI_BASE_CLIPBOARD_TYPES)
@@ -31,7 +34,19 @@ extern const char kMimeTypeMozillaURL[];
 COMPONENT_EXPORT(UI_BASE_CLIPBOARD_TYPES) extern const char kMimeTypeHTML[];
 COMPONENT_EXPORT(UI_BASE_CLIPBOARD_TYPES) extern const char kMimeTypeRTF[];
 COMPONENT_EXPORT(UI_BASE_CLIPBOARD_TYPES) extern const char kMimeTypePNG[];
-#if !defined(OS_MACOSX)
+
+// Linux-specific MIME type constants (also used in Fuchsia).
+#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_FUCHSIA)
+COMPONENT_EXPORT(UI_BASE_CLIPBOARD_TYPES)
+extern const char kMimeTypeLinuxUtf8String[];
+COMPONENT_EXPORT(UI_BASE_CLIPBOARD_TYPES)
+extern const char kMimeTypeLinuxString[];
+COMPONENT_EXPORT(UI_BASE_CLIPBOARD_TYPES)
+extern const char kMimeTypeLinuxText[];
+#endif  // defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_FUCHSIA)
+
+#if !defined(OS_APPLE)
+// TODO(dcheng): This name is temporary. See crbug.com/106449.
 COMPONENT_EXPORT(UI_BASE_CLIPBOARD_TYPES)
 extern const char kMimeTypeWebCustomData[];
 COMPONENT_EXPORT(UI_BASE_CLIPBOARD_TYPES)
@@ -58,10 +73,11 @@ extern NSString* const kPepperCustomDataPboardType;
 COMPONENT_EXPORT(UI_BASE_CLIPBOARD_TYPES)
 extern NSString* const kUTTypeConfidentialData;
 
-#endif  // defined(OS_MACOSX)
+#endif  // defined(OS_APPLE)
 
 #if defined(OS_ANDROID)
-COMPONENT_EXPORT(UI_BASE_CLIPBOARD_TYPES) extern const char kMimeTypeImageURI[];
+COMPONENT_EXPORT(UI_BASE_CLIPBOARD_TYPES)
+extern const char kMimeTypeImageURI[];
 #endif  // defined(OS_ANDROID)
 
 }  // namespace ui

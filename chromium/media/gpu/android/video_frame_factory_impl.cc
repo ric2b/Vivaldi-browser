@@ -6,7 +6,6 @@
 
 #include <memory>
 
-#include "base/android/android_image_reader_compat.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/callback.h"
@@ -19,6 +18,8 @@
 #include "gpu/command_buffer/service/abstract_texture.h"
 #include "gpu/command_buffer/service/shared_context_state.h"
 #include "gpu/command_buffer/service/texture_owner.h"
+#include "gpu/config/gpu_finch_features.h"
+#include "media/base/android/media_codec_util.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/base/media_switches.h"
 #include "media/base/video_frame.h"
@@ -33,22 +34,45 @@
 namespace media {
 namespace {
 
+// The frames must be copied when threaded texture mailboxes are in use
+// (http://crbug.com/582170). This texture copy can be avoided if
+// AImageReader/AHardwareBuffer is supported and AImageReader
+// max size is not limited to 1 (crbug.com/1091945).
+base::Optional<VideoFrameMetadata::CopyMode> GetVideoFrameCopyMode(
+    bool enable_threaded_texture_mailboxes) {
+  if (!enable_threaded_texture_mailboxes)
+    return base::nullopt;
+
+  if (features::IsAImageReaderEnabled() &&
+      base::FeatureList::IsEnabled(media::kWebViewZeroCopyVideo) &&
+      !media::MediaCodecUtil::LimitAImageReaderMaxSizeToOne()) {
+    return VideoFrameMetadata::CopyMode::kCopyMailboxesOnly;
+  } else {
+    return VideoFrameMetadata::CopyMode::kCopyToNewTexture;
+  }
+}
+
 gpu::TextureOwner::Mode GetTextureOwnerMode(
-    VideoFrameFactory::OverlayMode overlay_mode) {
-  const bool a_image_reader_supported =
-      base::android::AndroidImageReader::GetInstance().IsSupported();
+    VideoFrameFactory::OverlayMode overlay_mode,
+    const base::Optional<VideoFrameMetadata::CopyMode>& copy_mode) {
+  if (copy_mode == VideoFrameMetadata::kCopyMailboxesOnly) {
+    DCHECK(features::IsAImageReaderEnabled() &&
+           base::FeatureList::IsEnabled(media::kWebViewZeroCopyVideo) &&
+           !media::MediaCodecUtil::LimitAImageReaderMaxSizeToOne());
+    return gpu::TextureOwner::Mode::kAImageReaderInsecureMultithreaded;
+  }
 
   switch (overlay_mode) {
     case VideoFrameFactory::OverlayMode::kDontRequestPromotionHints:
     case VideoFrameFactory::OverlayMode::kRequestPromotionHints:
-      return a_image_reader_supported
+      return features::IsAImageReaderEnabled()
                  ? gpu::TextureOwner::Mode::kAImageReaderInsecure
                  : gpu::TextureOwner::Mode::kSurfaceTextureInsecure;
     case VideoFrameFactory::OverlayMode::kSurfaceControlSecure:
-      DCHECK(a_image_reader_supported);
+      DCHECK(features::IsAImageReaderEnabled());
       return gpu::TextureOwner::Mode::kAImageReaderSecureSurfaceControl;
     case VideoFrameFactory::OverlayMode::kSurfaceControlInsecure:
-      DCHECK(a_image_reader_supported);
+      DCHECK(features::IsAImageReaderEnabled());
       return gpu::TextureOwner::Mode::kAImageReaderInsecureSurfaceControl;
   }
 
@@ -61,6 +85,7 @@ gpu::TextureOwner::Mode GetTextureOwnerMode(
 static void AllocateTextureOwnerOnGpuThread(
     VideoFrameFactory::InitCB init_cb,
     VideoFrameFactory::OverlayMode overlay_mode,
+    const base::Optional<VideoFrameMetadata::CopyMode>& copy_mode,
     scoped_refptr<gpu::SharedContextState> shared_context_state) {
   if (!shared_context_state) {
     std::move(init_cb).Run(nullptr);
@@ -69,7 +94,7 @@ static void AllocateTextureOwnerOnGpuThread(
 
   std::move(init_cb).Run(gpu::TextureOwner::Create(
       gpu::TextureOwner::CreateTexture(shared_context_state),
-      GetTextureOwnerMode(overlay_mode)));
+      GetTextureOwnerMode(overlay_mode, copy_mode)));
 }
 
 }  // namespace
@@ -84,8 +109,8 @@ VideoFrameFactoryImpl::VideoFrameFactoryImpl(
     std::unique_ptr<FrameInfoHelper> frame_info_helper)
     : image_provider_(std::move(image_provider)),
       gpu_task_runner_(std::move(gpu_task_runner)),
-      enable_threaded_texture_mailboxes_(
-          gpu_preferences.enable_threaded_texture_mailboxes),
+      copy_mode_(GetVideoFrameCopyMode(
+          gpu_preferences.enable_threaded_texture_mailboxes)),
       mre_manager_(std::move(mre_manager)),
       frame_info_helper_(std::move(frame_info_helper)) {}
 
@@ -97,11 +122,12 @@ void VideoFrameFactoryImpl::Initialize(OverlayMode overlay_mode,
                                        InitCB init_cb) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   overlay_mode_ = overlay_mode;
+
   // On init success, create the TextureOwner and hop it back to this thread to
   // call |init_cb|.
-  auto gpu_init_cb =
-      base::BindOnce(&AllocateTextureOwnerOnGpuThread,
-                     BindToCurrentLoop(std::move(init_cb)), overlay_mode);
+  auto gpu_init_cb = base::BindOnce(&AllocateTextureOwnerOnGpuThread,
+                                    BindToCurrentLoop(std::move(init_cb)),
+                                    overlay_mode, copy_mode_);
   image_provider_->Initialize(std::move(gpu_init_cb));
 }
 
@@ -168,12 +194,11 @@ void VideoFrameFactoryImpl::CreateVideoFrame(
     return;
   }
 
-  auto image_ready_cb =
-      base::BindOnce(&VideoFrameFactoryImpl::CreateVideoFrame_OnImageReady,
-                     weak_factory_.GetWeakPtr(), std::move(output_cb),
-                     timestamp, natural_size, !!codec_buffer_wait_coordinator_,
-                     std::move(promotion_hint_cb), pixel_format, overlay_mode_,
-                     enable_threaded_texture_mailboxes_, gpu_task_runner_);
+  auto image_ready_cb = base::BindOnce(
+      &VideoFrameFactoryImpl::CreateVideoFrame_OnImageReady,
+      weak_factory_.GetWeakPtr(), std::move(output_cb), timestamp, natural_size,
+      !!codec_buffer_wait_coordinator_, std::move(promotion_hint_cb),
+      pixel_format, overlay_mode_, copy_mode_, gpu_task_runner_);
 
   RequestImage(std::move(output_buffer_renderer), std::move(image_ready_cb));
 }
@@ -200,8 +225,21 @@ void VideoFrameFactoryImpl::CreateVideoFrame_OnFrameInfoReady(
   // nothing. But in this case call comes from RunAfterPendingVideoFrames and we
   // just want to ask for the same image spec as before to order callback after
   // all RequestImage, so skip updating image_spec_ in this case.
-  if (output_buffer_renderer)
+  if (output_buffer_renderer) {
     image_spec_.coded_size = frame_info.coded_size;
+  } else {
+    // It is possible that we come here from RunAfterPendingVideoFrames before
+    // CreateVideoFrame was called. In this case we don't have coded_size, but
+    // it also means that there was no `image_provider_->RequestImage` calls so
+    // we can just run callback instantly.
+    if (image_spec_.coded_size.IsEmpty()) {
+      std::move(image_ready_cb)
+          .Run(nullptr, FrameInfoHelper::FrameInfo(),
+               SharedImageVideoProvider::ImageRecord());
+      return;
+    }
+  }
+  DCHECK(!image_spec_.coded_size.IsEmpty());
 
   auto cb = base::BindOnce(std::move(image_ready_cb),
                            std::move(output_buffer_renderer), frame_info);
@@ -222,7 +260,7 @@ void VideoFrameFactoryImpl::CreateVideoFrame_OnImageReady(
     PromotionHintAggregator::NotifyPromotionHintCB promotion_hint_cb,
     VideoPixelFormat pixel_format,
     OverlayMode overlay_mode,
-    bool enable_threaded_texture_mailboxes,
+    const base::Optional<VideoFrameMetadata::CopyMode>& copy_mode,
     scoped_refptr<base::SequencedTaskRunner> gpu_task_runner,
     std::unique_ptr<CodecOutputBufferRenderer> output_buffer_renderer,
     FrameInfoHelper::FrameInfo frame_info,
@@ -269,12 +307,7 @@ void VideoFrameFactoryImpl::CreateVideoFrame_OnImageReady(
     std::move(output_cb).Run(nullptr);
     return;
   }
-
-  // The frames must be copied when threaded texture mailboxes are in use
-  // (http://crbug.com/582170).
-  if (enable_threaded_texture_mailboxes)
-    frame->metadata()->copy_required = true;
-
+  frame->metadata()->copy_mode = copy_mode;
   const bool is_surface_control =
       overlay_mode == OverlayMode::kSurfaceControlSecure ||
       overlay_mode == OverlayMode::kSurfaceControlInsecure;

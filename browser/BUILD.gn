@@ -1,5 +1,4 @@
 import("//vivaldi/gn/config/version.gni")
-import("//build/config/jumbo.gni")
 import("//build/util/version.gni")
 import("//extensions/buildflags/buildflags.gni")
 
@@ -14,7 +13,6 @@ static_library("browser") {
   ]
   if (!is_android) {
     public_deps += [
-      "//vivaldi/components/datasource",
       "//vivaldi/extensions",
       "//vivaldi/extensions/api:apis",
       "//vivaldi/extensions/schema",
@@ -22,7 +20,6 @@ static_library("browser") {
     ]
   }
   deps = [
-    ":vivaldi_version_info",
     "//vivaldi/prefs:browser_prefs",
 
     #"//vivaldi/base",
@@ -95,8 +92,6 @@ static_library("browser") {
     "stats_reporter.h",
     "../components/adverse_adblocking/adverse_ad_filter_list_factory.cc",
     "../components/adverse_adblocking/adverse_ad_filter_list_factory.h",
-    "thumbnails/capture_page.cc",
-    "thumbnails/capture_page.h",
     "vivaldi_default_bookmarks.cc",
     "vivaldi_default_bookmarks.h",
   ]
@@ -121,8 +116,6 @@ static_library("browser") {
       "vivaldi_browser_finder.h",
       "vivaldi_webcontents_util.cc",
       "vivaldi_webcontents_util.h",
-      "thumbnails/thumbnail_capture_contents.cc",
-      "thumbnails/thumbnail_capture_contents.h",
     ]
   }
   if (is_mac) {
@@ -142,28 +135,6 @@ static_library("clipboard") {
   ]
 
   deps= [ "//third_party/blink/public:blink_headers" ]
-}
-
-action("vivaldi_version_info") {
-  script = vivaldi_version_py_path
-  inputs = [
-    vivaldi_version_path,
-  ]
-  outputs = [
-    "$root_build_dir/vivaldi_version.txt",
-  ]
-  args = [
-           "-f",
-           rebase_path(vivaldi_version_path, root_build_dir),
-           "-f",
-           rebase_path(chrome_version_path, root_build_dir),
-           "-f",
-           rebase_path(lastchange_path, root_build_dir),
-           "-e",
-           "VIVALDI_BUILD=$GLOBAL_BUILDNUM",
-           "--vivaldi",
-           "-o",
-         ] + rebase_path(outputs, root_build_dir)
 }
 
 source_set("init_sparkle") {

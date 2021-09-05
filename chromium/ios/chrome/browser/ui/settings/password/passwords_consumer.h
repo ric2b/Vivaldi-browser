@@ -19,6 +19,8 @@ typedef NS_ENUM(NSInteger, PasswordCheckUIState) {
   PasswordCheckStateRunning,
   // When user has no passwords and check can't be performed.
   PasswordCheckStateDisabled,
+  // When password check failed due to network issues, quota limit or others.
+  PasswordCheckStateError,
 };
 
 // Consumer for the Passwords Screen.
@@ -26,6 +28,10 @@ typedef NS_ENUM(NSInteger, PasswordCheckUIState) {
 
 // Displays current password check UI state on screen.
 - (void)setPasswordCheckUIState:(PasswordCheckUIState)state;
+
+// Displays password and blocked forms.
+- (void)setPasswordsForms:
+    (std::vector<std::unique_ptr<autofill::PasswordForm>>)forms;
 
 @end
 

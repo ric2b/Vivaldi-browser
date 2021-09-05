@@ -125,11 +125,20 @@ enum FeaturePolicyFeature {
   // Client Hint for UA platform version.
   kClientHintUAPlatformVersion = 74,
 
+  // cross-origin isolated permission
+  kCrossOriginIsolated = 75,
+
   // Controls use of Clipboard API Read.
   kClipboardRead = 76,
 
   // Controls use of Clipboard API Write.
   kClipboardWrite = 77,
+
+  // Controls use of Web Share API.
+  kWebShare = 78,
+
+  // Controls access to gamepads interface
+  kGamepad = 79,
 
   // Don't change assigned numbers of any item, and don't reuse removed slots.
   // Add new features at the end of the enum.

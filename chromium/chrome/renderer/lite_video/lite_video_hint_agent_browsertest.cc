@@ -188,10 +188,8 @@ TEST_F(LiteVideoHintAgentTest, MediaResponseThrottled) {
       CreateThrottleAndSendResponse(net::HTTP_OK, "video/mp4", 440000);
   histogram_tester().ExpectTotalCount("LiteVideo.URLLoader.ThrottleLatency", 1);
   EXPECT_TRUE(throttle_info->is_throttled());
-  // This is to wait until the throttle resumes, cannot fast-forward in
-  // RenderViewTest.
-  while (throttle_info->is_throttled())
-    base::RunLoop().RunUntilIdle();
+  task_environment_.FastForwardBy(base::TimeDelta::FromSeconds(10));
+  base::RunLoop().RunUntilIdle();
   EXPECT_FALSE(throttle_info->is_throttled());
 
   // Verify a response that wasn't yet resumed, gets cleared from hint agent

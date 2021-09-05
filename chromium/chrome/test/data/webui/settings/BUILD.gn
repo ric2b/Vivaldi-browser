@@ -97,13 +97,16 @@ js_type_check("closure_compile") {
     #":edit_dictionary_page_test",
     #":ensure_lazy_loaded",
     #":extension_controlled_indicator_tests",
-    #":fake_input_method_private",
-    #":fake_language_settings_private",
-    #":fake_settings_private",
+    ":fake_input_method_private.m",
+    ":fake_language_settings_private.m",
+    ":fake_settings_private.m",
+
     #":help_page_v3_test",
     #":idle_load_tests",
     #":import_data_dialog_test",
     #":incompatible_applications_page_test",
+    ":languages_page_metrics_test_cros",
+
     #":languages_page_tests",
     #":languages_tests",
     #":metrics_reporting_tests",
@@ -133,7 +136,6 @@ js_type_check("closure_compile") {
     #":reset_profile_banner_test",
     #":route_tests",
     ":safety_check_chrome_cleaner_test",
-    ":safety_check_page_branded_windows_test",
     ":safety_check_page_test",
 
     #":search_engines_page_test",
@@ -154,7 +156,9 @@ js_type_check("closure_compile") {
     #":settings_subpage_test",
     #":settings_textarea_tests",
     #":settings_toggle_button_tests",
-    #":settings_ui_tests",
+
+    ":settings_ui_tests",
+
     #":site_data_details_subpage_tests",
     #":site_data_test",
     #":site_details_permission_tests",
@@ -177,8 +181,8 @@ js_type_check("closure_compile") {
     #":test_clear_browsing_data_browser_proxy",
     #":test_extension_control_browser_proxy",
     ":test_hats_browser_proxy",
-
-    #":test_languages_browser_proxy",
+    ":test_languages_browser_proxy.m",
+    ":test_languages_metrics_proxy",
     ":test_lifetime_browser_proxy.m",
     ":test_local_data_browser_proxy",
     ":test_metrics_browser_proxy",
@@ -188,13 +192,11 @@ js_type_check("closure_compile") {
 
     #":test_profile_info_browser_proxy",
     #":test_reset_browser_proxy",
-    ":test_safe_browsing_browser_proxy",
     ":test_search_engines_browser_proxy.m",
     ":test_site_settings_prefs_browser_proxy",
     ":test_sync_browser_proxy.m",
     ":test_util",
 
-    #":test_wallpaper_browser_proxy",
     #":zoom_levels_tests",
   ]
 }
@@ -233,12 +235,54 @@ js_library("cookies_page_test") {
   externs_list = [ "$externs_path/mocha-2.5.js" ]
 }
 
+js_library("fake_language_settings_private.m") {
+  sources = [ "$root_gen_dir/chrome/test/data/webui/settings/fake_language_settings_private.m.js" ]
+  deps = [
+    "..:chai_assert",
+    "..:fake_chrome_event.m",
+    "..:test_browser_proxy.m",
+    "//ui/webui/resources/js:cr.m",
+  ]
+  extra_deps = [ ":modulize_local" ]
+}
+
+js_library("fake_input_method_private.m") {
+  sources = [ "$root_gen_dir/chrome/test/data/webui/settings/fake_input_method_private.m.js" ]
+  extra_deps = [ ":modulize_local" ]
+}
+
+js_library("fake_settings_private.m") {
+  sources = [
+    "$root_gen_dir/chrome/test/data/webui/settings/fake_settings_private.m.js",
+  ]
+  deps = [
+    "..:chai_assert",
+    "..:fake_chrome_event.m",
+  ]
+  extra_deps = [ ":modulize_local" ]
+}
+
+js_library("languages_page_metrics_test_cros") {
+  deps = [
+    ":fake_language_settings_private.m",
+    ":fake_settings_private.m",
+    ":test_languages_browser_proxy.m",
+    ":test_languages_metrics_proxy",
+    "..:chai_assert",
+    "..:test_util.m",
+    "//chrome/browser/resources/settings:lazy_load",
+    "//chrome/browser/resources/settings:settings",
+  ]
+  externs_list = [ "$externs_path/mocha-2.5.js" ]
+}
+
 js_library("passwords_and_autofill_fake_data") {
   deps = [
     "..:chai_assert",
     "//chrome/browser/resources/settings:lazy_load",
     "//chrome/browser/resources/settings:settings",
     "//third_party/polymer/v3_0/components-chromium/polymer:polymer_bundled",
+    "//ui/webui/resources/js:assert.m",
   ]
   externs_list = [
     "$externs_path/autofill_private.js",
@@ -250,16 +294,9 @@ js_library("safety_check_chrome_cleaner_test") {
   deps = [
     ":test_metrics_browser_proxy",
     "..:chai_assert",
+    "..:test_browser_proxy.m",
+    "//chrome/browser/resources/settings:lazy_load",
     "//chrome/browser/resources/settings:settings",
-  ]
-  externs_list = [ "$externs_path/mocha-2.5.js" ]
-}
-
-js_library("safety_check_page_branded_windows_test") {
-  deps = [
-    "..:chai_assert",
-    "//chrome/browser/resources/settings:settings",
-    "//ui/webui/resources/js:load_time_data.m",
   ]
   externs_list = [ "$externs_path/mocha-2.5.js" ]
 }
@@ -310,13 +347,6 @@ js_library("test_privacy_page_browser_proxy") {
   ]
 }
 
-js_library("test_safe_browsing_browser_proxy") {
-  deps = [
-    "..:test_browser_proxy.m",
-    "//chrome/browser/resources/settings:lazy_load",
-  ]
-}
-
 js_library("search_page_test") {
   deps = [
     ":test_search_engines_browser_proxy.m",
@@ -330,7 +360,6 @@ js_library("security_page_test") {
   deps = [
     ":test_metrics_browser_proxy",
     ":test_privacy_page_browser_proxy",
-    ":test_safe_browsing_browser_proxy",
     ":test_sync_browser_proxy.m",
     "..:chai_assert",
     "..:test_util.m",
@@ -343,6 +372,16 @@ js_library("security_page_test") {
 
 js_library("settings_page_test_util") {
   deps = [ "..:chai_assert" ]
+}
+
+js_library("settings_ui_tests") {
+  deps = [
+    "..:chai_assert",
+    "..:test_util.m",
+    "//chrome/browser/resources/settings:settings",
+    "//third_party/polymer/v3_0/components-chromium/polymer:polymer_bundled",
+  ]
+  externs_list = [ "$externs_path/mocha-2.5.js" ]
 }
 
 js_library("site_list_tests") {
@@ -383,6 +422,25 @@ js_library("test_hats_browser_proxy") {
   deps = [
     "..:test_browser_proxy.m",
     "//chrome/browser/resources/settings:settings",
+  ]
+}
+
+js_library("test_languages_browser_proxy.m") {
+  sources = [ "$root_gen_dir/chrome/test/data/webui/settings/test_languages_browser_proxy.m.js" ]
+  deps = [
+    ":fake_input_method_private.m",
+    ":fake_language_settings_private.m",
+    "..:test_browser_proxy.m",
+    "//chrome/browser/resources/settings:lazy_load",
+    "//ui/webui/resources/js:cr.m",
+  ]
+  extra_deps = [ ":modulize_local" ]
+}
+
+js_library("test_languages_metrics_proxy") {
+  deps = [
+    "..:test_browser_proxy.m",
+    "//chrome/browser/resources/settings:lazy_load",
   ]
 }
 

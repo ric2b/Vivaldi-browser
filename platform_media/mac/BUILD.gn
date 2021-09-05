@@ -3,7 +3,7 @@ assert(is_mac)
 
 action("generate_sb_files") {
   script = "//vivaldi/scripts/cat_files.py"
-  chromium_sb_file = "//services/service_manager/sandbox/mac/renderer.sb"
+  chromium_sb_file = "//sandbox/policy/mac/renderer.sb"
   vivaldi_sb_files = "//vivaldi/platform_media/mac/vivaldi_renderer.sb"
 
   files_sb_target = "$target_gen_dir/renderer.sb"

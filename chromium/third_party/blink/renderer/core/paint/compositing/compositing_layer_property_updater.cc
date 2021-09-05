@@ -36,11 +36,12 @@ void CompositingLayerPropertyUpdater::Update(const LayoutObject& object) {
 
   const FragmentData& fragment_data = object.FirstFragment();
   DCHECK(fragment_data.HasLocalBorderBoxProperties());
-  // SPv1 compositing forces single fragment for composited elements.
+  // SPv1 compositing forces single fragment for directly composited elements.
   DCHECK(!fragment_data.NextFragment() ||
          // We create multiple fragments for composited repeating fixed-position
          // during printing.
-         object.GetDocument().Printing());
+         object.GetDocument().Printing() ||
+         !object.CanBeCompositedForDirectReasons());
 
   PhysicalOffset layout_snapped_paint_offset =
       fragment_data.PaintOffset() - paint_layer->SubpixelAccumulation();
@@ -62,7 +63,7 @@ void CompositingLayerPropertyUpdater::Update(const LayoutObject& object) {
   }
 #endif
 
-  base::Optional<PropertyTreeState> container_layer_state;
+  base::Optional<PropertyTreeStateOrAlias> container_layer_state;
   auto SetContainerLayerState =
       [&fragment_data, &snapped_paint_offset,
        &container_layer_state](GraphicsLayer* graphics_layer) {
@@ -86,7 +87,7 @@ void CompositingLayerPropertyUpdater::Update(const LayoutObject& object) {
                                ScrollbarOrCorner scrollbar_or_corner) {
         if (!graphics_layer)
           return;
-        PropertyTreeState scrollbar_layer_state =
+        PropertyTreeStateOrAlias scrollbar_layer_state =
             container_layer_state.value_or(
                 fragment_data.LocalBorderBoxProperties());
         // OverflowControlsClip should be applied within the scrollbar layers.
@@ -186,9 +187,10 @@ void CompositingLayerPropertyUpdater::Update(const LayoutObject& object) {
     auto state = fragment_data.LocalBorderBoxProperties();
     const auto* properties = fragment_data.PaintProperties();
     DCHECK(properties);
-    DCHECK(properties->Mask());
+    DCHECK(properties->Mask() || properties->ClipPathMask());
     DCHECK(properties->MaskClip());
-    state.SetEffect(*properties->Mask());
+    state.SetEffect(properties->Mask() ? *properties->Mask()
+                                       : *properties->ClipPathMask());
     state.SetClip(*properties->MaskClip());
 
     mask_layer->SetLayerState(

@@ -18,12 +18,14 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/policy/configuration_policy_handler_list_factory.h"
 #include "chrome/browser/policy/device_management_service_configuration.h"
+#include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_paths.h"
 #include "components/policy/core/common/async_policy_provider.h"
 #include "components/policy/core/common/cloud/cloud_external_data_manager.h"
 #include "components/policy/core/common/cloud/cloud_policy_client_registration_helper.h"
 #include "components/policy/core/common/cloud/device_management_service.h"
 #include "components/policy/core/common/cloud/user_cloud_policy_manager.h"
+#include "components/policy/core/common/command_line_policy_provider.h"
 #include "components/policy/core/common/configuration_policy_provider.h"
 #include "components/policy/core/common/policy_map.h"
 #include "components/policy/core/common/policy_namespace.h"
@@ -36,7 +38,7 @@
 #if defined(OS_WIN)
 #include "base/win/registry.h"
 #include "components/policy/core/common/policy_loader_win.h"
-#elif defined(OS_MACOSX)
+#elif defined(OS_MAC)
 #include <CoreFoundation/CoreFoundation.h>
 #include "base/mac/foundation_util.h"
 #include "base/strings/sys_string_conversions.h"
@@ -49,7 +51,8 @@
 #endif
 
 #if !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
-#include "chrome/browser/policy/chrome_browser_cloud_management_controller.h"
+#include "chrome/browser/policy/chrome_browser_cloud_management_controller_desktop.h"
+#include "components/enterprise/browser/controller/chrome_browser_cloud_management_controller.h"
 #include "components/policy/core/common/cloud/machine_level_user_cloud_policy_manager.h"
 #endif
 
@@ -63,7 +66,8 @@ ChromeBrowserPolicyConnector::ChromeBrowserPolicyConnector()
     : BrowserPolicyConnector(base::Bind(&BuildHandlerList)) {
 #if !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
   chrome_browser_cloud_management_controller_ =
-      std::make_unique<ChromeBrowserCloudManagementController>();
+      std::make_unique<ChromeBrowserCloudManagementController>(
+          std::make_unique<ChromeBrowserCloudManagementControllerDesktop>());
 #endif
 }
 
@@ -100,6 +104,8 @@ bool ChromeBrowserPolicyConnector::HasMachineLevelPolicies() {
   if (ProviderHasPolicies(machine_level_user_cloud_policy_manager_))
     return true;
 #endif  // !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
+  if (ProviderHasPolicies(command_line_provider_))
+    return true;
   return false;
 }
 
@@ -134,7 +140,7 @@ ChromeBrowserPolicyConnector::CreatePolicyProviders() {
 #if !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
   std::unique_ptr<MachineLevelUserCloudPolicyManager>
       machine_level_user_cloud_policy_manager =
-          ChromeBrowserCloudManagementController::CreatePolicyManager(
+          chrome_browser_cloud_management_controller_->CreatePolicyManager(
               platform_provider_);
   if (machine_level_user_cloud_policy_manager) {
     machine_level_user_cloud_policy_manager_ =
@@ -142,6 +148,14 @@ ChromeBrowserPolicyConnector::CreatePolicyProviders() {
     providers.push_back(std::move(machine_level_user_cloud_policy_manager));
   }
 #endif
+
+  std::unique_ptr<CommandLinePolicyProvider> command_line_provider =
+      CommandLinePolicyProvider::CreateIfAllowed(
+          *base::CommandLine::ForCurrentProcess(), chrome::GetChannel());
+  if (command_line_provider) {
+    command_line_provider_ = command_line_provider.get();
+    providers.push_back(std::move(command_line_provider));
+  }
 
   return providers;
 }
@@ -155,7 +169,7 @@ ChromeBrowserPolicyConnector::CreatePlatformProvider() {
       kRegistryChromePolicyKey));
   return std::make_unique<AsyncPolicyProvider>(GetSchemaRegistry(),
                                                std::move(loader));
-#elif defined(OS_MACOSX)
+#elif defined(OS_MAC)
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
   // Explicitly watch the "com.google.Chrome" bundle ID, no matter what this
   // app's bundle ID actually is. All channels of Chrome should obey the same

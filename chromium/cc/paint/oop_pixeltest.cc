@@ -9,6 +9,7 @@
 #include "base/command_line.h"
 #include "base/strings/stringprintf.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "build/build_config.h"
 #include "cc/base/completion_event.h"
 #include "cc/base/region.h"
 #include "cc/layers/recording_source.h"
@@ -132,6 +133,8 @@ class OopPixelTest : public testing::Test,
     SkColor background_color = SK_ColorBLACK;
     int msaa_sample_count = 0;
     bool use_lcd_text = false;
+    PlaybackImageProvider::RasterMode image_provider_raster_mode =
+        PlaybackImageProvider::RasterMode::kSoftware;
     gfx::Size resource_size;
     gfx::Size content_size;
     gfx::Rect full_raster_rect;
@@ -159,9 +162,11 @@ class OopPixelTest : public testing::Test,
     viz::TestInProcessContextProvider::ScopedRasterContextLock lock(
         raster_context_provider_.get(), url.possibly_invalid_spec().c_str());
 
-    PlaybackImageProvider image_provider(oop_image_cache_.get(),
-                                         options.color_space,
-                                         PlaybackImageProvider::Settings());
+    base::Optional<PlaybackImageProvider::Settings> settings;
+    settings.emplace(PlaybackImageProvider::Settings());
+    settings->raster_mode = options.image_provider_raster_mode;
+    PlaybackImageProvider image_provider(
+        oop_image_cache_.get(), options.color_space, std::move(settings));
 
     int width = options.resource_size.width();
     int height = options.resource_size.height();
@@ -173,7 +178,8 @@ class OopPixelTest : public testing::Test,
                      gpu::SHARED_IMAGE_USAGE_OOP_RASTERIZATION;
     gpu::Mailbox mailbox = sii->CreateSharedImage(
         viz::ResourceFormat::RGBA_8888, gfx::Size(width, height),
-        options.color_space, flags);
+        options.color_space, kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType,
+        flags, gpu::kNullSurfaceHandle);
     EXPECT_TRUE(mailbox.Verify());
     raster_implementation->WaitSyncTokenCHROMIUM(
         sii->GenUnverifiedSyncToken().GetConstData());
@@ -264,11 +270,27 @@ class OopPixelTest : public testing::Test,
     uint32_t flags = gpu::SHARED_IMAGE_USAGE_RASTER |
                      gpu::SHARED_IMAGE_USAGE_OOP_RASTERIZATION;
     gpu::Mailbox mailbox = sii->CreateSharedImage(
-        image_format, options.resource_size, options.color_space, flags);
+        image_format, options.resource_size, options.color_space,
+        kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType, flags,
+        gpu::kNullSurfaceHandle);
     EXPECT_TRUE(mailbox.Verify());
     ri->WaitSyncTokenCHROMIUM(sii->GenUnverifiedSyncToken().GetConstData());
 
     return mailbox;
+  }
+
+  void UploadPixels(gpu::gles2::GLES2Interface* gl,
+                    const gpu::Mailbox& mailbox,
+                    const gfx::Size& size,
+                    GLenum format,
+                    GLenum type,
+                    const void* data) {
+    GLuint texture = gl->CreateAndTexStorage2DSharedImageCHROMIUM(mailbox.name);
+    gl->BindTexture(GL_TEXTURE_2D, texture);
+    gl->TexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, size.width(), size.height(),
+                      format, type, data);
+    gl->BindTexture(GL_TEXTURE_2D, 0);
+    gl->DeleteTextures(1, &texture);
   }
 
   SkBitmap RasterExpectedBitmap(
@@ -864,6 +886,75 @@ TEST_P(OopImagePixelTest, DrawImageWithSetMatrix) {
   EXPECT_EQ(actual.getColor(0, 0), SK_ColorMAGENTA);
 }
 
+namespace {
+class TestMailboxBacking : public TextureBacking {
+ public:
+  explicit TestMailboxBacking(gpu::Mailbox mailbox, SkImageInfo info)
+      : mailbox_(mailbox), info_(info) {}
+
+  const SkImageInfo& GetSkImageInfo() override { return info_; }
+  gpu::Mailbox GetMailbox() const override { return mailbox_; }
+  sk_sp<SkImage> GetAcceleratedSkImage() override { return nullptr; }
+  sk_sp<SkImage> GetSkImageViaReadback() override { return nullptr; }
+  bool readPixels(const SkImageInfo& dstInfo,
+                  void* dstPixels,
+                  size_t dstRowBytes,
+                  int srcX,
+                  int srcY) override {
+    return false;
+  }
+
+ private:
+  gpu::Mailbox mailbox_;
+  SkImageInfo info_;
+};
+}  // namespace
+
+TEST_F(OopPixelTest, DrawMailboxBackedImage) {
+  RasterOptions options(gfx::Size(16, 16));
+  options.image_provider_raster_mode = PlaybackImageProvider::RasterMode::kOop;
+  SkImageInfo backing_info = SkImageInfo::MakeN32Premul(
+      options.resource_size.width(), options.resource_size.height());
+
+  SkBitmap expected_bitmap;
+  expected_bitmap.allocPixels(backing_info);
+
+  SkCanvas canvas(expected_bitmap);
+  canvas.drawColor(SK_ColorMAGENTA);
+  SkPaint green;
+  green.setColor(SK_ColorGREEN);
+  canvas.drawRect(SkRect::MakeXYWH(1, 2, 3, 4), green);
+
+  auto* ri = raster_context_provider_->RasterInterface();
+  auto* sii = raster_context_provider_->SharedImageInterface();
+  gpu::Mailbox src_mailbox = CreateMailboxSharedImage(
+      ri, sii, options, viz::ResourceFormat::RGBA_8888);
+  ri->OrderingBarrierCHROMIUM();
+
+  auto* gl = gles2_context_provider_->ContextGL();
+  UploadPixels(gl, src_mailbox, options.resource_size, GL_RGBA,
+               GL_UNSIGNED_BYTE, expected_bitmap.getPixels());
+  gl->OrderingBarrierCHROMIUM();
+
+  auto src_paint_image =
+      PaintImageBuilder::WithDefault()
+          .set_id(PaintImage::GetNextId())
+          .set_texture_backing(sk_sp<TestMailboxBacking>(new TestMailboxBacking(
+                                   src_mailbox, backing_info)),
+                               PaintImage::GetNextContentId())
+          .TakePaintImage();
+
+  auto display_item_list = base::MakeRefCounted<DisplayItemList>();
+  display_item_list->StartPaint();
+  PaintFlags flags;
+  display_item_list->push<DrawImageOp>(src_paint_image, 0.f, 0.f, &flags);
+  display_item_list->EndPaintOfUnpaired(gfx::Rect(options.resource_size));
+  display_item_list->Finalize();
+
+  auto actual_bitmap = Raster(display_item_list, options);
+  ExpectEquals(actual_bitmap, expected_bitmap);
+}
+
 TEST_F(OopPixelTest, Preclear) {
   gfx::Rect rect(10, 10);
   auto display_item_list = base::MakeRefCounted<DisplayItemList>();
@@ -1025,28 +1116,29 @@ TEST_F(OopPixelTest, ClearingOpaqueCornerPartialRaster) {
   ExpectEquals(gpu_result, bitmap, "gpu");
 }
 
-TEST_P(OopClearPixelTest, ClearingOpaqueRightEdge) {
-  // Verify that a tile that intersects the right edge of content
-  // but not the bottom only clears the right pixels.
+TEST_P(OopClearPixelTest, ClearingOpaqueLeftEdge) {
+  // Verify that a tile that intersects the left edge of content
+  // but not other edges only clears the left pixels.
   RasterOptions options;
-  gfx::Point arbitrary_offset(30, 40);
   options.resource_size = gfx::Size(10, 10);
-  options.full_raster_rect = gfx::Rect(arbitrary_offset, gfx::Size(3, 10));
-  options.content_size = gfx::Size(options.full_raster_rect.right(),
+  int arbitrary_y = 10;
+  options.full_raster_rect = gfx::Rect(0, arbitrary_y, 3, 10);
+  options.content_size = gfx::Size(options.full_raster_rect.right() + 1000,
                                    options.full_raster_rect.bottom() + 1000);
   if (IsPartialRaster()) {
-    // Ignore the left column of pixels here to force partial raster.
-    // Additionally ignore the bottom row of pixels to make sure
+    // Ignore the right column of pixels here to force partial raster.
+    // Additionally ignore the top and bottom rows of pixels to make sure
     // that things are not cleared outside the rect.
-    options.playback_rect = gfx::Rect(options.full_raster_rect.x() + 1,
-                                      options.full_raster_rect.y(),
+    options.playback_rect = gfx::Rect(options.full_raster_rect.x(),
+                                      options.full_raster_rect.y() + 1,
                                       options.full_raster_rect.width() - 1,
-                                      options.full_raster_rect.height() - 1);
+                                      options.full_raster_rect.height() - 2);
   } else {
     options.playback_rect = options.full_raster_rect;
   }
 
   options.background_color = SK_ColorGREEN;
+  options.post_translate = gfx::Vector2dF(0.3f, 0.7f);
   options.requires_clear = false;
   options.preclear = true;
   options.preclear_color = SK_ColorRED;
@@ -1068,8 +1160,66 @@ TEST_P(OopClearPixelTest, ClearingOpaqueRightEdge) {
   SkPaint green;
   green.setColor(options.background_color);
   if (IsPartialRaster()) {
-    // Expect a two pixel column border from texels 2-4, ignoring the last row.
-    canvas.drawRect(SkRect::MakeXYWH(2, 0, 2, 9), green);
+    // Expect a one pixel column border on the first column, ignoring the first
+    // and the last rows.
+    canvas.drawRect(SkRect::MakeXYWH(0, 1, 1, 8), green);
+  } else {
+    // Expect a one pixel column border on the first column.
+    canvas.drawRect(SkRect::MakeXYWH(0, 0, 1, 10), green);
+  }
+
+  ExpectEquals(oop_result, bitmap, "oop");
+  ExpectEquals(gpu_result, bitmap, "gpu");
+}
+
+TEST_P(OopClearPixelTest, ClearingOpaqueRightEdge) {
+  // Verify that a tile that intersects the right edge of content
+  // but not other edges only clears the right pixels.
+  RasterOptions options;
+  gfx::Point arbitrary_offset(30, 40);
+  options.resource_size = gfx::Size(10, 10);
+  options.full_raster_rect = gfx::Rect(arbitrary_offset, gfx::Size(3, 10));
+  options.content_size = gfx::Size(options.full_raster_rect.right(),
+                                   options.full_raster_rect.bottom() + 1000);
+  if (IsPartialRaster()) {
+    // Ignore the left column of pixels here to force partial raster.
+    // Additionally ignore the top and bottom rows of pixels to make sure
+    // that things are not cleared outside the rect.
+    options.playback_rect = gfx::Rect(options.full_raster_rect.x() + 1,
+                                      options.full_raster_rect.y() + 1,
+                                      options.full_raster_rect.width() - 1,
+                                      options.full_raster_rect.height() - 2);
+  } else {
+    options.playback_rect = options.full_raster_rect;
+  }
+
+  options.background_color = SK_ColorGREEN;
+  float arbitrary_scale = 0.25f;
+  options.post_scale = arbitrary_scale;
+  options.requires_clear = false;
+  options.preclear = true;
+  options.preclear_color = SK_ColorRED;
+
+  // Make a non-empty but noop display list to avoid early outs.
+  auto display_item_list = MakeNoopDisplayItemList();
+
+  auto oop_result = Raster(display_item_list, options);
+  auto gpu_result = RasterExpectedBitmap(display_item_list, options);
+
+  SkBitmap bitmap;
+  bitmap.allocPixelsFlags(
+      SkImageInfo::MakeN32Premul(options.resource_size.width(),
+                                 options.resource_size.height()),
+      SkBitmap::kZeroPixels_AllocFlag);
+
+  SkCanvas canvas(bitmap);
+  canvas.drawColor(options.preclear_color);
+  SkPaint green;
+  green.setColor(options.background_color);
+  if (IsPartialRaster()) {
+    // Expect a two pixel column border from texels 2-4, ignoring the first and
+    // the last rows.
+    canvas.drawRect(SkRect::MakeXYWH(2, 1, 2, 8), green);
   } else {
     // Expect a two pixel column border from texels 2-4.
     canvas.drawRect(SkRect::MakeXYWH(2, 0, 2, 10), green);
@@ -1079,9 +1229,66 @@ TEST_P(OopClearPixelTest, ClearingOpaqueRightEdge) {
   ExpectEquals(gpu_result, bitmap, "gpu");
 }
 
+TEST_P(OopClearPixelTest, ClearingOpaqueTopEdge) {
+  // Verify that a tile that intersects only the top edge of content
+  // but not other edges only clears the top pixels.
+
+  RasterOptions options;
+  options.resource_size = gfx::Size(10, 10);
+  int arbitrary_x = 10;
+  options.full_raster_rect = gfx::Rect(arbitrary_x, 0, 10, 5);
+  options.content_size = gfx::Size(options.full_raster_rect.right() + 1000,
+                                   options.full_raster_rect.bottom() + 1000);
+  if (IsPartialRaster()) {
+    // Ignore the bottom row of pixels here to force partial raster.
+    // Additionally ignore the left and right columns of pixels to make sure
+    // that things are not cleared outside the rect.
+    options.playback_rect = gfx::Rect(options.full_raster_rect.x() + 1,
+                                      options.full_raster_rect.y(),
+                                      options.full_raster_rect.width() - 2,
+                                      options.full_raster_rect.height() - 1);
+  } else {
+    options.playback_rect = options.full_raster_rect;
+  }
+  options.background_color = SK_ColorGREEN;
+  options.post_translate = gfx::Vector2dF(0.3f, 0.7f);
+  options.requires_clear = false;
+  options.preclear = true;
+  options.preclear_color = SK_ColorRED;
+
+  // Make a non-empty but noop display list to avoid early outs.
+  auto display_item_list = MakeNoopDisplayItemList();
+
+  auto oop_result = Raster(display_item_list, options);
+  auto gpu_result = RasterExpectedBitmap(display_item_list, options);
+
+  SkBitmap bitmap;
+  bitmap.allocPixelsFlags(
+      SkImageInfo::MakeN32Premul(options.resource_size.width(),
+                                 options.resource_size.height()),
+      SkBitmap::kZeroPixels_AllocFlag);
+
+  SkCanvas canvas(bitmap);
+  canvas.drawColor(options.preclear_color);
+  SkPaint green;
+  green.setColor(options.background_color);
+
+  if (IsPartialRaster()) {
+    // Expect a one pixel border on the top row, ignoring the first and the last
+    // columns.
+    canvas.drawRect(SkRect::MakeXYWH(1, 0, 8, 1), green);
+  } else {
+    // Expect a one pixel border on the top row.
+    canvas.drawRect(SkRect::MakeXYWH(0, 0, 10, 1), green);
+  }
+
+  ExpectEquals(oop_result, bitmap, "oop");
+  ExpectEquals(gpu_result, bitmap, "gpu");
+}
+
 TEST_P(OopClearPixelTest, ClearingOpaqueBottomEdge) {
   // Verify that a tile that intersects the bottom edge of content
-  // but not the right only clears the bottom pixels.
+  // but not other edges only clears the bottom pixels.
 
   RasterOptions options;
   gfx::Point arbitrary_offset(10, 20);
@@ -1091,11 +1298,11 @@ TEST_P(OopClearPixelTest, ClearingOpaqueBottomEdge) {
                                    options.full_raster_rect.bottom());
   if (IsPartialRaster()) {
     // Ignore the top row of pixels here to force partial raster.
-    // Additionally ignore the right column of pixels to make sure
+    // Additionally ignore the left and right columns of pixels to make sure
     // that things are not cleared outside the rect.
-    options.playback_rect = gfx::Rect(options.full_raster_rect.x(),
+    options.playback_rect = gfx::Rect(options.full_raster_rect.x() + 1,
                                       options.full_raster_rect.y() + 1,
-                                      options.full_raster_rect.width() - 1,
+                                      options.full_raster_rect.width() - 2,
                                       options.full_raster_rect.height() - 1);
   } else {
     options.playback_rect = options.full_raster_rect;
@@ -1125,9 +1332,9 @@ TEST_P(OopClearPixelTest, ClearingOpaqueBottomEdge) {
   green.setColor(options.background_color);
 
   if (IsPartialRaster()) {
-    // Expect a two pixel border from texels 4-6 on the row, ignoring the last
-    // column.
-    canvas.drawRect(SkRect::MakeXYWH(0, 4, 9, 2), green);
+    // Expect a two pixel border from texels 4-6 on the row, ignoring the first
+    // and the last columns.
+    canvas.drawRect(SkRect::MakeXYWH(1, 4, 8, 2), green);
   } else {
     // Expect a two pixel border from texels 4-6 on the row
     canvas.drawRect(SkRect::MakeXYWH(0, 4, 10, 2), green);
@@ -1148,6 +1355,7 @@ TEST_F(OopPixelTest, ClearingOpaqueInternal) {
   options.content_size = gfx::Size(1000, 1000);
   options.playback_rect = options.full_raster_rect;
   options.background_color = SK_ColorGREEN;
+  options.post_translate = gfx::Vector2dF(0.3f, 0.7f);
   float arbitrary_scale = 1.2345f;
   options.post_scale = arbitrary_scale;
   options.requires_clear = false;
@@ -1694,20 +1902,6 @@ TEST_F(OopPixelTest, WritePixels) {
 }
 
 namespace {
-void UploadPixels(gpu::gles2::GLES2Interface* gl,
-                  const gpu::Mailbox& mailbox,
-                  const gfx::Size& size,
-                  GLenum format,
-                  GLenum type,
-                  const void* data) {
-  GLuint texture = gl->CreateAndTexStorage2DSharedImageCHROMIUM(mailbox.name);
-  gl->BindTexture(GL_TEXTURE_2D, texture);
-  gl->TexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, size.width(), size.height(), format,
-                    type, data);
-  gl->BindTexture(GL_TEXTURE_2D, 0);
-  gl->DeleteTextures(1, &texture);
-}
-
 GrBackendTexture MakeBackendTexture(gpu::gles2::GLES2Interface* gl,
                                     const gpu::Mailbox& mailbox,
                                     gfx::Size size,
@@ -1802,10 +1996,51 @@ TEST_F(OopPixelTest, ConvertYUVToRGB) {
   sii->DestroySharedImage(sync_token, v_mailbox);
 }
 
+TEST_F(OopPixelTest, ReadbackImagePixels) {
+  RasterOptions options(gfx::Size(16, 16));
+  SkImageInfo dest_info = SkImageInfo::MakeN32Premul(
+      options.resource_size.width(), options.resource_size.height(),
+      gfx::ColorSpace::CreateSRGB().ToSkColorSpace());
+
+  SkBitmap expected_bitmap;
+  expected_bitmap.allocPixels(dest_info);
+
+  SkCanvas canvas(expected_bitmap);
+  canvas.drawColor(SK_ColorMAGENTA);
+  SkPaint green;
+  green.setColor(SK_ColorGREEN);
+  canvas.drawRect(SkRect::MakeXYWH(1, 2, 3, 4), green);
+
+  auto* ri = raster_context_provider_->RasterInterface();
+  auto* sii = raster_context_provider_->SharedImageInterface();
+  gpu::Mailbox mailbox = CreateMailboxSharedImage(
+      ri, sii, options, viz::ResourceFormat::RGBA_8888);
+  ri->OrderingBarrierCHROMIUM();
+
+  gpu::gles2::GLES2Interface* gl = gles2_context_provider_->ContextGL();
+  UploadPixels(gl, mailbox, options.resource_size, GL_RGBA, GL_UNSIGNED_BYTE,
+               expected_bitmap.getPixels());
+  gl->OrderingBarrierCHROMIUM();
+
+  SkBitmap actual_bitmap;
+  actual_bitmap.allocPixels(dest_info);
+
+  ri->ReadbackImagePixels(mailbox, dest_info, dest_info.minRowBytes(), 0, 0,
+                          actual_bitmap.getPixels());
+  EXPECT_EQ(ri->GetError(), static_cast<unsigned>(GL_NO_ERROR));
+  ri->OrderingBarrierCHROMIUM();
+
+  ExpectEquals(actual_bitmap, expected_bitmap);
+
+  gpu::SyncToken sync_token;
+  gl->GenUnverifiedSyncTokenCHROMIUM(sync_token.GetData());
+  sii->DestroySharedImage(sync_token, mailbox);
+}
+
 // A workaround on Android that forces the use of GLES 2.0 instead of 3.0
 // prevents the use of the GL_RG textures required for NV12 format. This
 // test will be reactiviated on Android once the workaround is removed.
-#ifndef OS_ANDROID
+#if !defined(OS_ANDROID)
 TEST_F(OopPixelTest, ConvertNV12ToRGB) {
   RasterOptions options(gfx::Size(16, 16));
   RasterOptions uv_options(gfx::Size(options.resource_size.width() / 2,
@@ -1880,7 +2115,7 @@ TEST_F(OopPixelTest, ConvertNV12ToRGB) {
   sii->DestroySharedImage(sync_token, y_mailbox);
   sii->DestroySharedImage(sync_token, uv_mailbox);
 }
-#endif  // OS_ANDROID
+#endif  // !defined(OS_ANDROID)
 
 class OopPathPixelTest : public OopPixelTest,
                          public ::testing::WithParamInterface<bool> {

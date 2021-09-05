@@ -5,6 +5,7 @@
 // Custom binding for the fileManagerPrivate API.
 
 // Natives
+var blobNatives = requireNative('blob_natives');
 var fileManagerPrivateNatives = requireNative('file_manager_private');
 
 // Internals
@@ -115,6 +116,64 @@ apiBridge.registerCustomHook(function(bindingsAPI) {
   apiFunctions.setHandleRequest('getMimeType', function(entry, callback) {
     var url = getEntryURL(entry);
     fileManagerPrivateInternal.getMimeType(url, callback);
+  });
+
+  apiFunctions.setHandleRequest('getContentMimeType',
+      function(fileEntry, callback) {
+    fileEntry.file(blob => {
+      var blobUUID = blobNatives.GetBlobUuid(blob);
+
+      if (!blob || !blob.size) {
+        callback(undefined);
+        return;
+      }
+
+      var onGetContentMimeType = function(blob, mimeType) {
+        callback(mimeType ? mimeType : undefined);
+      }.bind(this, blob);  // Bind a blob reference: crbug.com/415792#c12
+
+      fileManagerPrivateInternal.getContentMimeType(
+          blobUUID, onGetContentMimeType);
+    }, (error) => {
+      var errorUUID = '';
+
+      var onGetContentMimeType = function() {
+        chrome.runtime.lastError.DOMError = /** @type {!DOMError} */ (error);
+        callback(undefined);
+      }.bind(this);
+
+      fileManagerPrivateInternal.getContentMimeType(
+          errorUUID, onGetContentMimeType);
+    });
+  });
+
+  apiFunctions.setHandleRequest('getContentMetadata',
+      function(fileEntry, mimeType, type, callback) {
+    fileEntry.file(blob => {
+      var blobUUID = blobNatives.GetBlobUuid(blob);
+
+      if (!blob || !blob.size) {
+        callback(undefined);
+        return;
+      }
+
+      var onGetContentMetadata = function(blob, metadata) {
+        callback(metadata ? metadata : undefined);
+      }.bind(this, blob);  // Bind a blob reference: crbug.com/415792#c12
+
+      fileManagerPrivateInternal.getContentMetadata(
+          blobUUID, mimeType, type, onGetContentMetadata);
+    }, (error) => {
+      var errorUUID = '';
+
+      var onGetContentMetadata = function() {
+        chrome.runtime.lastError.DOMError = /** @type {!DOMError} */ (error);
+        callback(undefined);
+      }.bind(this);
+
+      fileManagerPrivateInternal.getContentMetadata(
+          errorUUID, mimeType, type, onGetContentMetadata);
+    });
   });
 
   apiFunctions.setHandleRequest('pinDriveFile', function(entry, pin, callback) {
@@ -259,6 +318,22 @@ apiBridge.registerCustomHook(function(bindingsAPI) {
     const url = getEntryURL(entry);
     fileManagerPrivateInternal.importCrostiniImage(url);
   });
+
+  apiFunctions.setHandleRequest(
+      'sharesheetHasTargets', function(entries, callback) {
+        var urls = entries.map(function(entry) {
+          return getEntryURL(entry);
+        });
+        fileManagerPrivateInternal.sharesheetHasTargets(urls, callback);
+      });
+
+  apiFunctions.setHandleRequest(
+      'invokeSharesheet', function(entries, callback) {
+        var urls = entries.map(function(entry) {
+          return getEntryURL(entry);
+        });
+        fileManagerPrivateInternal.invokeSharesheet(urls, callback);
+      });
 });
 
 bindingUtil.registerEventArgumentMassager(

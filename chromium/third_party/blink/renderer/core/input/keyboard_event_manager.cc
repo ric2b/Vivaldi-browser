@@ -11,6 +11,7 @@
 #include "third_party/blink/public/mojom/input/focus_type.mojom-blink.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/renderer/core/dom/element.h"
+#include "third_party/blink/renderer/core/dom/focus_params.h"
 #include "third_party/blink/renderer/core/editing/editing_utilities.h"
 #include "third_party/blink/renderer/core/editing/editor.h"
 #include "third_party/blink/renderer/core/events/keyboard_event.h"
@@ -36,7 +37,7 @@
 
 #if defined(OS_WIN)
 #include <windows.h>
-#elif defined(OS_MACOSX)
+#elif defined(OS_MAC)
 #import <Carbon/Carbon.h>
 #endif
 
@@ -236,7 +237,7 @@ WebInputEventResult KeyboardEventManager::KeyEvent(
       (initial_key_event.GetType() == WebInputEvent::Type::kKeyDown ||
        initial_key_event.GetType() == WebInputEvent::Type::kRawKeyDown)) {
     LocalFrame::NotifyUserActivation(
-        frame_,
+        frame_, mojom::blink::UserActivationNotificationType::kInteraction,
         RuntimeEnabledFeatures::BrowserVerifiedUserActivationKeyboardEnabled());
   }
 
@@ -349,7 +350,7 @@ WebInputEventResult KeyboardEventManager::KeyEvent(
   if (!node)
     return WebInputEventResult::kNotHandled;
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   // According to NSEvents.h, OpenStep reserves the range 0xF700-0xF8FF for
   // function keys. However, some actual private use characters happen to be
   // in this range, e.g. the Apple logo (Option+Shift+K). 0xF7FF is an
@@ -506,7 +507,7 @@ void KeyboardEventManager::DefaultTabEventHandler(KeyboardEvent* event) {
     return;
   }
 
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
   // Option-Tab is a shortcut based on a system-wide preference on Mac but
   // should be ignored on all other platforms.
   if (event->altKey()) {
@@ -613,7 +614,7 @@ void KeyboardEventManager::SetCurrentCapsLockState(
 bool KeyboardEventManager::CurrentCapsLockState() {
   switch (g_override_caps_lock_state) {
     case OverrideCapsLockState::kDefault:
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
       return GetCurrentKeyModifiers() & alphaLock;
 #else
       // Caps lock state use is limited to Mac password input
@@ -629,7 +630,7 @@ bool KeyboardEventManager::CurrentCapsLockState() {
 }
 
 WebInputEvent::Modifiers KeyboardEventManager::GetCurrentModifierState() {
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   unsigned modifiers = 0;
   UInt32 current_modifiers = GetCurrentKeyModifiers();
   if (current_modifiers & ::shiftKey)

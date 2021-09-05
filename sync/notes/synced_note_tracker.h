@@ -5,7 +5,6 @@
 #ifndef SYNC_NOTES_SYNCED_NOTE_TRACKER_H_
 #define SYNC_NOTES_SYNCED_NOTE_TRACKER_H_
 
-#include <map>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -31,6 +30,7 @@ struct EntityData;
 namespace sync_bookmarks {
 // Exposed for testing.
 extern const base::Feature kInvalidateBookmarkSyncMetadataIfMismatchingGuid;
+extern const base::Feature kInvalidateBookmarkSyncMetadataIfClientTagMissing;
 }  // namespace sync_bookmarks
 
 namespace sync_notes {
@@ -211,6 +211,11 @@ class SyncedNoteTracker {
     model_type_state_ = std::move(model_type_state);
   }
 
+  // Treats the current time as last sync time.
+  // TODO(crbug.com/1032052): Remove this code once all local sync metadata is
+  // required to populate the client tag (and be considered invalid otherwise).
+  void UpdateLastSyncTime() { last_sync_time_ = base::Time::Now(); }
+
   std::vector<const Entity*> GetAllEntities() const;
 
   std::vector<const Entity*> GetEntitiesWithLocalChanges(
@@ -267,9 +272,19 @@ class SyncedNoteTracker {
   // tracked.
   void CheckAllNodesTracked(const vivaldi::NotesModel* notes_model) const;
 
+  // This method is used to mark all entities except permanent nodes as
+  // unsynced. This will cause reuploading of all notes. The reupload will be
+  // initiated only when the |notes_full_title_reuploaded| field in
+  // NotesMetadata is false. This field is used to prevent reuploading after
+  // each browser restart. Returns true if the reupload was initiated.
+  // TODO(crbug.com/1066962): remove this code when most of notes are
+  // reuploaded.
+  bool ReuploadNotesOnLoadIfNeeded();
+
  private:
   explicit SyncedNoteTracker(sync_pb::ModelTypeState model_type_state,
-                             bool notes_full_title_reuploaded);
+                             bool notes_full_title_reuploaded,
+                             base::Time last_sync_time);
 
   // Add entities to |this| tracker based on the content of |*model| and
   // |model_metadata|. Validates the integrity of |*model| and |model_metadata|
@@ -288,16 +303,6 @@ class SyncedNoteTracker {
   std::vector<const Entity*> ReorderUnsyncedEntitiesExceptDeletions(
       const std::vector<const Entity*>& entities) const;
 
-  // This method is used to mark all entities except permanent nodes as
-  // unsynced. This will cause reuploading of all notes. This reupload
-  // should be initiated only when the |notes_full_title_reuploaded| field
-  // in NotesMetadata is false. This field is used to prevent reuploading
-  // after each browser restart. It is set to true in
-  // BuildNotesModelMetadata.
-  // TODO(crbug.com/1066962): remove this code when most of notes are
-  // reuploaded.
-  void ReuploadNotesOnLoadIfNeeded();
-
   // Recursive method that starting from |node| appends all corresponding
   // entities with updates in top-down order to |ordered_entities|.
   void TraverseAndAppend(
@@ -306,7 +311,8 @@ class SyncedNoteTracker {
 
   // A map of sync server ids to sync entities. This should contain entries and
   // metadata for almost everything.
-  std::map<std::string, std::unique_ptr<Entity>> sync_id_to_entities_map_;
+  std::unordered_map<std::string, std::unique_ptr<Entity>>
+      sync_id_to_entities_map_;
 
   // A map of note nodes to sync entities. It's keyed by the note node
   // pointers which get assigned when loading the note model. This map is
@@ -328,6 +334,12 @@ class SyncedNoteTracker {
   // TODO(crbug.com/1066962): remove this code when most of notes are
   // reuploaded.
   bool notes_full_title_reuploaded_ = false;
+
+  // The local timestamp corresponding to the last time remote updates were
+  // received.
+  // TODO(crbug.com/1032052): Remove this code once all local sync metadata is
+  // required to populate the client tag (and be considered invalid otherwise).
+  base::Time last_sync_time_;
 
   DISALLOW_COPY_AND_ASSIGN(SyncedNoteTracker);
 };

@@ -26,12 +26,14 @@ namespace file_manager {
 namespace file_tasks {
 
 // Guest OS apps all use the same action ID.
-constexpr char kGuestOsAppActionID[] = "open-with";
+extern const char kGuestOsAppActionID[];
 
 // Finds the Guest OS |app_ids| and |app_names| that can handle |entries|.
 // VisibleForTesting.  Called by |FindGuestOsTasks|.
 void FindGuestOsApps(
     Profile* profile,
+    bool crostini_enabled,
+    bool plugin_vm_enabled,
     const std::vector<extensions::EntryInfo>& entries,
     const std::vector<GURL>& file_urls,
     std::vector<std::string>* app_ids,

@@ -20,6 +20,14 @@ import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
 import org.chromium.base.metrics.RecordHistogram;
+import org.chromium.chrome.browser.infobar.ActionType;
+import org.chromium.components.infobars.InfoBar;
+import org.chromium.components.infobars.InfoBarCompactLayout;
+import org.chromium.components.translate.TranslateMenu;
+import org.chromium.components.translate.TranslateMenuHelper;
+import org.chromium.components.translate.TranslateOption;
+import org.chromium.components.translate.TranslateOptions;
+import org.chromium.components.translate.TranslateTabLayout;
 import org.chromium.ui.widget.Toast;
 
 /**
@@ -463,6 +471,13 @@ public class TranslateCompactInfoBar extends InfoBar
         return this.isTabSelectedForTesting(TARGET_TAB_INDEX);
     }
 
+    /**
+     * Returns the name of the target language. This is only used for automation testing.
+     */
+    public String getTargetLanguageForTesting() {
+        return mOptions.targetLanguageName();
+    }
+
     private void createAndShowSnackbar(int actionId) {
         // NOTE: WebLayer doesn't have snackbars, so the relevant action is just taken directly.
         // TODO(blundell): If WebLayer ends up staying with this implementation long-term, update
@@ -541,9 +556,8 @@ public class TranslateCompactInfoBar extends InfoBar
         return mParent != null ? mParent.getWidth() : 0;
     }
 
-    @CalledByNative
     // Selects the tab corresponding to |actionType| to simulate the user pressing on this tab.
-    private void selectTabForTesting(int actionType) {
+    void selectTabForTesting(int actionType) {
         if (actionType == ActionType.TRANSLATE) {
             mTabLayout.getTabAt(TARGET_TAB_INDEX).select();
         } else if (actionType == ActionType.TRANSLATE_SHOW_ORIGINAL) {
@@ -551,18 +565,6 @@ public class TranslateCompactInfoBar extends InfoBar
         } else {
             assert false;
         }
-    }
-
-    @CalledByNative
-    // Simulates a click of the overflow menu item for "never translate this language."
-    private void clickNeverTranslateLanguageMenuItemForTesting() {
-        onOverflowMenuItemClicked(TranslateMenu.ID_OVERFLOW_NEVER_LANGUAGE);
-    }
-
-    @CalledByNative
-    // Simulates a click of the overflow menu item for "never translate this site."
-    private void clickNeverTranslateSiteMenuItemForTesting() {
-        onOverflowMenuItemClicked(TranslateMenu.ID_OVERFLOW_NEVER_SITE);
     }
 
     @NativeMethods

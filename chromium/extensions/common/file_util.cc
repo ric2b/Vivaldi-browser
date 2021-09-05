@@ -189,7 +189,7 @@ void UninstallExtension(const base::FilePath& extensions_dir,
   // We don't care about the return value. If this fails (and it can, due to
   // plugins that aren't unloaded yet), it will get cleaned up by
   // ExtensionGarbageCollector::GarbageCollectExtensions.
-  base::DeleteFileRecursively(extensions_dir.AppendASCII(id));
+  base::DeletePathRecursively(extensions_dir.AppendASCII(id));
 }
 
 scoped_refptr<Extension> LoadExtension(const base::FilePath& extension_path,
@@ -440,10 +440,6 @@ base::FilePath GetInstallTempDir(const base::FilePath& extensions_dir) {
     return base::FilePath();
   }
   return temp_path;
-}
-
-void DeleteFile(const base::FilePath& path, bool recursive) {
-  base::DeleteFile(path, recursive);
 }
 
 base::FilePath ExtensionURLToRelativeFilePath(const GURL& url) {

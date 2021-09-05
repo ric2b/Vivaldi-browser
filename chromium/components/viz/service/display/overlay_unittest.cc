@@ -187,7 +187,6 @@ class OverlayOutputSurface : public OutputSurface {
   void EnsureBackbuffer() override {}
   void DiscardBackbuffer() override {}
   void BindFramebuffer() override { bind_framebuffer_count_ += 1; }
-  void SetDrawRectangle(const gfx::Rect& rect) override {}
   void Reshape(const gfx::Size& size,
                float device_scale_factor,
                const gfx::ColorSpace& color_space,
@@ -230,7 +229,7 @@ class OverlayOutputSurface : public OutputSurface {
 };
 
 std::unique_ptr<RenderPass> CreateRenderPass() {
-  int render_pass_id = 1;
+  RenderPassId render_pass_id{1};
   gfx::Rect output_rect(0, 0, 256, 256);
 
   std::unique_ptr<RenderPass> pass = RenderPass::Create();
@@ -243,7 +242,7 @@ std::unique_ptr<RenderPass> CreateRenderPass() {
 
 std::unique_ptr<RenderPass> CreateRenderPassWithTransform(
     const gfx::Transform& transform) {
-  int render_pass_id = 1;
+  RenderPassId render_pass_id{1};
   gfx::Rect output_rect(0, 0, 256, 256);
 
   std::unique_ptr<RenderPass> pass = RenderPass::Create();
@@ -542,7 +541,7 @@ TEST(OverlayTest, OverlaysProcessorHasStrategy) {
   EXPECT_GE(2U, overlay_processor->GetStrategyCount());
 }
 
-#if !defined(OS_MACOSX) && !defined(OS_WIN)
+#if !defined(OS_APPLE) && !defined(OS_WIN)
 TEST_F(FullscreenOverlayTest, SuccessfulOverlay) {
   std::unique_ptr<RenderPass> pass = CreateRenderPass();
   gfx::Rect output_rect = pass->output_rect;
@@ -1305,7 +1304,7 @@ TEST_F(UnderlayTest, DisallowsTransparentCandidates) {
 TEST_F(UnderlayTest, DisallowFilteredQuadOnTop) {
   std::unique_ptr<RenderPass> pass = CreateRenderPass();
 
-  int render_pass_id = 3;
+  RenderPassId render_pass_id{3};
   RenderPassDrawQuad* quad =
       pass->CreateAndAppendDrawQuad<RenderPassDrawQuad>();
   quad->SetNew(pass->shared_quad_state_list.back(), kOverlayRect, kOverlayRect,
@@ -2217,10 +2216,12 @@ TEST_F(UnderlayCastTest, PrimaryPlaneOverlayIsAlwaysTransparent) {
 class OverlayInfoRendererGL : public GLRenderer {
  public:
   OverlayInfoRendererGL(const RendererSettings* settings,
+                        const DebugRendererSettings* debug_settings,
                         OutputSurface* output_surface,
                         DisplayResourceProvider* resource_provider,
                         SingleOverlayProcessor* overlay_processor)
       : GLRenderer(settings,
+                   debug_settings,
                    output_surface,
                    resource_provider,
                    overlay_processor,
@@ -2301,8 +2302,8 @@ class GLRendererWithOverlaysTest : public testing::Test {
     if (use_overlay_processor)
       owned_overlay_processor_ = std::make_unique<SingleOverlayProcessor>();
     renderer_ = std::make_unique<OverlayInfoRendererGL>(
-        &settings_, output_surface_.get(), resource_provider_.get(),
-        owned_overlay_processor_.get());
+        &settings_, &debug_settings_, output_surface_.get(),
+        resource_provider_.get(), owned_overlay_processor_.get());
     renderer_->Initialize();
     renderer_->SetVisible(true);
   }
@@ -2353,6 +2354,7 @@ class GLRendererWithOverlaysTest : public testing::Test {
   }
 
   RendererSettings settings_;
+  DebugRendererSettings debug_settings_;
   cc::FakeOutputSurfaceClient output_surface_client_;
   std::unique_ptr<OverlayOutputSurface> output_surface_;
   std::unique_ptr<DisplayResourceProvider> resource_provider_;
@@ -2850,7 +2852,7 @@ TEST_F(GLRendererWithOverlaysTest, ResourcesExportedAndReturnedAfterGpuQuery) {
 }
 #endif
 
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
 class CALayerOverlayRPDQTest : public CALayerOverlayTest {
  protected:
   void SetUp() override {

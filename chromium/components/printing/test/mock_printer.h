@@ -11,17 +11,15 @@
 #include <string>
 #include <vector>
 
-#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/strings/string16.h"
+#include "components/printing/common/print.mojom-forward.h"
 #include "printing/image.h"
 #include "printing/mojom/print.mojom.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 
-struct PrintMsg_Print_Params;
 struct PrintMsg_PrintPages_Params;
-struct PrintHostMsg_DidPrintDocument_Params;
 
 // A class which represents an output page used in the MockPrinter class.
 // The MockPrinter class stores output pages in a vector, so, this class
@@ -32,6 +30,8 @@ class MockPrinterPage : public base::RefCounted<MockPrinterPage> {
   MockPrinterPage(const void* source_data,
                   uint32_t source_size,
                   const printing::Image& image);
+  MockPrinterPage(const MockPrinterPage&) = delete;
+  MockPrinterPage& operator=(const MockPrinterPage&) = delete;
 
   int width() const { return image_.size().width(); }
   int height() const { return image_.size().height(); }
@@ -46,8 +46,6 @@ class MockPrinterPage : public base::RefCounted<MockPrinterPage> {
   uint32_t source_size_;
   std::unique_ptr<uint8_t[]> source_data_;
   printing::Image image_;
-
-  DISALLOW_COPY_AND_ASSIGN(MockPrinterPage);
 };
 
 // A class which implements a pseudo-printer object used by the RenderViewTest
@@ -67,17 +65,19 @@ class MockPrinter {
   };
 
   MockPrinter();
+  MockPrinter(const MockPrinter&) = delete;
+  MockPrinter& operator=(const MockPrinter&) = delete;
   ~MockPrinter();
 
   // Functions that changes settings of a pseudo printer.
   void ResetPrinter();
-  void SetDefaultPrintSettings(const PrintMsg_Print_Params& params);
+  void SetDefaultPrintSettings(const printing::mojom::PrintParams& params);
   void UseInvalidSettings();
   void UseInvalidPageSize();
   void UseInvalidContentSize();
 
   // Functions that handles IPC events.
-  void GetDefaultPrintSettings(PrintMsg_Print_Params* params);
+  void GetDefaultPrintSettings(printing::mojom::PrintParams* params);
   void ScriptedPrint(int cookie,
                      int expected_pages_count,
                      bool has_selection,
@@ -89,7 +89,7 @@ class MockPrinter {
                       const gfx::Size& page_size,
                       int scale_factor);
   void SetPrintedPagesCount(int cookie, int number_pages);
-  void PrintPage(const PrintHostMsg_DidPrintDocument_Params& params);
+  void PrintPage(const printing::mojom::DidPrintDocumentParams& params);
 
   // Functions that retrieve the output pages.
   Status GetPrinterStatus() const { return printer_status_; }
@@ -112,7 +112,7 @@ class MockPrinter {
 
  private:
   // Helper function to fill the fields in |params|.
-  void SetPrintParams(PrintMsg_Print_Params* params);
+  void SetPrintParams(printing::mojom::PrintParams* params);
 
   // In pixels according to dpi_x and dpi_y.
   gfx::Size page_size_;
@@ -159,8 +159,6 @@ class MockPrinter {
   bool use_invalid_settings_;
 
   std::vector<scoped_refptr<MockPrinterPage>> pages_;
-
-  DISALLOW_COPY_AND_ASSIGN(MockPrinter);
 };
 
 #endif  // COMPONENTS_PRINTING_TEST_MOCK_PRINTER_H_

@@ -42,7 +42,7 @@ class VideoCaptureDeviceWin : public VideoCaptureDevice,
   // avoid memory leaks.
   class ScopedMediaType {
    public:
-    ScopedMediaType() : media_type_(NULL) {}
+    ScopedMediaType() : media_type_(nullptr) {}
     ~ScopedMediaType() { Free(); }
 
     AM_MEDIA_TYPE* operator->() { return media_type_; }
@@ -57,25 +57,27 @@ class VideoCaptureDeviceWin : public VideoCaptureDevice,
     AM_MEDIA_TYPE* media_type_;
   };
 
-  static void GetDeviceCapabilityList(const std::string& device_id,
-                                      bool query_detailed_frame_rates,
-                                      CapabilityList* out_capability_list);
+  static void GetDeviceCapabilityList(
+      Microsoft::WRL::ComPtr<IBaseFilter> capture_filter,
+      bool query_detailed_frame_rates,
+      CapabilityList* out_capability_list);
   static void GetPinCapabilityList(
       Microsoft::WRL::ComPtr<IBaseFilter> capture_filter,
       Microsoft::WRL::ComPtr<IPin> output_capture_pin,
       bool query_detailed_frame_rates,
       CapabilityList* out_capability_list);
-  static HRESULT GetDeviceFilter(const std::string& device_id,
-                                 IBaseFilter** filter);
-  static Microsoft::WRL::ComPtr<IPin> GetPin(IBaseFilter* filter,
-                                             PIN_DIRECTION pin_dir,
-                                             REFGUID category,
-                                             REFGUID major_type);
+  static Microsoft::WRL::ComPtr<IPin> GetPin(
+      Microsoft::WRL::ComPtr<IBaseFilter> capture_filter,
+      PIN_DIRECTION pin_dir,
+      REFGUID category,
+      REFGUID major_type);
+  static bool IsPanTiltZoomSupported(
+      Microsoft::WRL::ComPtr<IBaseFilter> capture_filter);
   static VideoPixelFormat TranslateMediaSubtypeToPixelFormat(
       const GUID& sub_type);
 
-  explicit VideoCaptureDeviceWin(
-      const VideoCaptureDeviceDescriptor& device_descriptor);
+  VideoCaptureDeviceWin(const VideoCaptureDeviceDescriptor& device_descriptor,
+                        Microsoft::WRL::ComPtr<IBaseFilter> capture_filter);
   ~VideoCaptureDeviceWin() override;
   // Opens the device driver for this device.
   bool Init();
@@ -98,7 +100,10 @@ class VideoCaptureDeviceWin : public VideoCaptureDevice,
                  // User needs to recover by destroying the object.
   };
 
-  bool InitializeVideoAndCameraControls();
+  static bool GetCameraAndVideoControls(
+      Microsoft::WRL::ComPtr<IBaseFilter> capture_filter,
+      ICameraControl** camera_control,
+      IVideoProcAmp** video_control);
 
   // Implements SinkFilterObserver.
   void FrameReceived(const uint8_t* buffer,

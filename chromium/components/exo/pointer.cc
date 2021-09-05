@@ -24,6 +24,7 @@
 #include "ui/aura/client/cursor_client.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window.h"
+#include "ui/base/cursor/cursor_factory.h"
 #include "ui/base/cursor/cursor_size.h"
 #include "ui/base/cursor/cursor_util.h"
 #include "ui/base/cursor/mojom/cursor_type.mojom-shared.h"
@@ -39,10 +40,6 @@
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/wm/window_util.h"
 #include "chromeos/constants/chromeos_features.h"
-#endif
-
-#if defined(USE_OZONE)
-#include "ui/base/cursor/cursor_factory.h"
 #endif
 
 namespace exo {
@@ -128,6 +125,7 @@ Pointer::~Pointer() {
   if (pointer_constraint_delegate_) {
     pointer_constraint_delegate_->GetConstrainedSurface()
         ->RemoveSurfaceObserver(this);
+    VLOG(1) << "Pointer constraint broken by pointer destruction";
     pointer_constraint_delegate_->OnConstraintBroken();
   }
   WMHelper* helper = WMHelper::GetInstance();
@@ -255,8 +253,10 @@ void Pointer::UnconstrainPointer() {
 }
 
 bool Pointer::EnablePointerCapture(Surface* capture_surface) {
-  if (!base::FeatureList::IsEnabled(kPointerCapture))
+  if (!base::FeatureList::IsEnabled(kPointerCapture)) {
+    LOG(WARNING) << "Unable to capture the pointer, feature is disabled.";
     return false;
+  }
 
   if (capture_surface->window() !=
       WMHelper::GetInstance()->GetFocusedWindow()) {
@@ -320,6 +320,7 @@ void Pointer::OnSurfaceDestroying(Surface* surface) {
   if (surface && pointer_constraint_delegate_ &&
       surface == pointer_constraint_delegate_->GetConstrainedSurface()) {
     surface->RemoveSurfaceObserver(this);
+    VLOG(1) << "Pointer constraint broken by surface destruction";
     pointer_constraint_delegate_->OnConstraintBroken();
     UnconstrainPointer();
   }
@@ -340,6 +341,11 @@ void Pointer::OnSurfaceDestroying(Surface* surface) {
 // ui::EventHandler overrides:
 
 void Pointer::OnMouseEvent(ui::MouseEvent* event) {
+  // Nothing to report to a client nor have to update the pointer when capture
+  // changes.
+  if (event->type() == ui::ET_MOUSE_CAPTURE_CHANGED)
+    return;
+
   seat_->SetLastLocation(event->root_location());
 
   Surface* target = GetEffectiveTargetForEvent(event);
@@ -361,7 +367,7 @@ void Pointer::OnMouseEvent(ui::MouseEvent* event) {
 
   TRACE_EXO_INPUT_EVENT(event);
 
-  if (event->IsMouseEvent() && event->type() != ui::ET_MOUSE_CAPTURE_CHANGED) {
+  if (event->IsMouseEvent()) {
     // Generate motion event if location changed. We need to check location
     // here as mouse movement can generate both "moved" and "entered" events
     // but OnPointerMotion should only be called if location changed since
@@ -447,7 +453,6 @@ void Pointer::OnMouseEvent(ui::MouseEvent* event) {
     case ui::ET_MOUSE_DRAGGED:
     case ui::ET_MOUSE_ENTERED:
     case ui::ET_MOUSE_EXITED:
-    case ui::ET_MOUSE_CAPTURE_CHANGED:
       break;
     default:
       NOTREACHED();
@@ -543,6 +548,7 @@ void Pointer::OnWindowFocused(aura::Window* gained_focus,
                               aura::Window* lost_focus) {
   if (capture_window_ && capture_window_ != gained_focus) {
     if (pointer_constraint_delegate_) {
+      VLOG(1) << "Pointer constraint broken by focus change";
       pointer_constraint_delegate_->OnConstraintBroken();
       UnconstrainPointer();
     } else {
@@ -685,24 +691,15 @@ void Pointer::UpdateCursor() {
                                               &bitmap, &hotspot);
 
     ui::PlatformCursor platform_cursor;
-#if defined(USE_OZONE)
     // TODO(reveman): Add interface for creating cursors from GpuMemoryBuffers
     // and use that here instead of the current bitmap API.
     // https://crbug.com/686600
     platform_cursor =
         ui::CursorFactory::GetInstance()->CreateImageCursor(bitmap, hotspot);
-#elif defined(USE_X11)
-    XcursorImage* image = ui::SkBitmapToXcursorImage(&bitmap, hotspot);
-    platform_cursor = ui::CreateReffedCustomXCursor(image);
-#endif
     cursor_.SetPlatformCursor(platform_cursor);
     cursor_.set_custom_bitmap(bitmap);
     cursor_.set_custom_hotspot(hotspot);
-#if defined(USE_OZONE)
     ui::CursorFactory::GetInstance()->UnrefImageCursor(platform_cursor);
-#elif defined(USE_X11)
-    ui::UnrefCustomXCursor(platform_cursor);
-#endif
   }
 
   // If there is a focused surface, update its widget as the views framework

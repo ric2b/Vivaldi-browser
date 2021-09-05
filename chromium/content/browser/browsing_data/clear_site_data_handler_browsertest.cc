@@ -38,13 +38,11 @@
 #include "net/base/escape.h"
 #include "net/base/net_errors.h"
 #include "net/base/url_util.h"
-#include "net/cookies/cookie_inclusion_status.h"
+#include "net/cookies/cookie_access_result.h"
 #include "net/cookies/cookie_store.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
-#include "net/url_request/url_request_context.h"
-#include "net/url_request/url_request_context_getter.h"
 #include "storage/browser/quota/quota_settings.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "third_party/blink/public/common/features.h"
@@ -97,7 +95,7 @@ class TestBrowsingDataRemoverDelegate : public MockBrowsingDataRemoverDelegate {
           BrowsingDataRemover::DATA_TYPE_AVOID_CLOSING_CONNECTIONS;
 
       BrowsingDataFilterBuilderImpl filter_builder(
-          BrowsingDataFilterBuilder::WHITELIST);
+          BrowsingDataFilterBuilder::Mode::kDelete);
       filter_builder.AddRegisterableDomain(origin.host());
       ExpectCall(base::Time(), base::Time::Max(), data_type_mask,
                  kOriginTypeMask, &filter_builder);
@@ -108,7 +106,7 @@ class TestBrowsingDataRemoverDelegate : public MockBrowsingDataRemoverDelegate {
           (cache ? BrowsingDataRemover::DATA_TYPE_CACHE : 0);
 
       BrowsingDataFilterBuilderImpl filter_builder(
-          BrowsingDataFilterBuilder::WHITELIST);
+          BrowsingDataFilterBuilder::Mode::kDelete);
       filter_builder.AddOrigin(origin);
       ExpectCall(base::Time(), base::Time::Max(), data_type_mask,
                  kOriginTypeMask, &filter_builder);
@@ -204,7 +202,6 @@ class ClearSiteDataHandlerBrowserTest : public ContentBrowserTest {
 
   bool TestCacheEntry(const GURL& url) {
     return LoadBasicRequest(storage_partition()->GetNetworkContext(), url,
-                            0 /* process_id */, 0 /* render_frame_id */,
                             net::LOAD_ONLY_FROM_CACHE) == net::OK;
   }
 
@@ -306,9 +303,9 @@ class ClearSiteDataHandlerBrowserTest : public ContentBrowserTest {
 
   // Callback handler for AddCookie().
   static void AddCookieCallback(base::OnceClosure callback,
-                                net::CookieInclusionStatus status) {
+                                net::CookieAccessResult result) {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
-    ASSERT_TRUE(status.IsInclude());
+    ASSERT_TRUE(result.status.IsInclude());
     std::move(callback).Run();
   }
 

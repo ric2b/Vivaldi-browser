@@ -15,8 +15,7 @@ namespace ui {
 
 DrmNativeDisplayDelegate::DrmNativeDisplayDelegate(
     DrmDisplayHostManager* display_manager)
-    : display_manager_(display_manager) {
-}
+    : display_manager_(display_manager) {}
 
 DrmNativeDisplayDelegate::~DrmNativeDisplayDelegate() {
   display_manager_->RemoveDelegate(this);
@@ -51,12 +50,10 @@ void DrmNativeDisplayDelegate::GetDisplays(
   display_manager_->UpdateDisplays(std::move(callback));
 }
 
-void DrmNativeDisplayDelegate::Configure(const display::DisplaySnapshot& output,
-                                         const display::DisplayMode* mode,
-                                         const gfx::Point& origin,
-                                         display::ConfigureCallback callback) {
-  DrmDisplayHost* display = display_manager_->GetDisplay(output.display_id());
-  display->Configure(mode, origin, std::move(callback));
+void DrmNativeDisplayDelegate::Configure(
+    const std::vector<display::DisplayConfigurationParams>& config_requests,
+    display::ConfigureCallback callback) {
+  display_manager_->ConfigureDisplays(config_requests, std::move(callback));
 }
 
 void DrmNativeDisplayDelegate::GetHDCPState(

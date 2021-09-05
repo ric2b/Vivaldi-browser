@@ -294,7 +294,7 @@ class BrowserSideFlingBrowserTest : public ContentBrowserTest {
 // On Mac we don't have any touchscreen/touchpad fling events (GFS/GFC).
 // Instead, the OS keeps sending wheel events when the user lifts their fingers
 // from touchpad.
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
 IN_PROC_BROWSER_TEST_F(BrowserSideFlingBrowserTest, TouchscreenFling) {
   LoadURL(kBrowserFlingDataURL);
   SimulateTouchscreenFling(GetWidgetHost());
@@ -343,6 +343,11 @@ IN_PROC_BROWSER_TEST_F(BrowserSideFlingBrowserTest,
   GURL first_url(embedded_test_server()->GetURL(
       "b.a.com", "/scrollable_page_with_iframe.html"));
   EXPECT_TRUE(NavigateToURL(shell(), first_url));
+  // The test below only makes sense for same-site same-RFH navigations, so we
+  // need to ensure that we won't trigger a same-site cross-RFH navigation.
+  DisableProactiveBrowsingInstanceSwapFor(
+      shell()->web_contents()->GetMainFrame());
+
   SynchronizeThreads();
   SimulateTouchscreenFling(GetWidgetHost());
   WaitForScroll();
@@ -525,7 +530,7 @@ IN_PROC_BROWSER_TEST_F(BrowserSideFlingBrowserTest,
   EXPECT_EQ(
       0, EvalJs(root->current_frame_host(), "window.scrollY").ExtractDouble());
 }
-#endif  // !defined(OS_MACOSX)
+#endif  // !defined(OS_MAC)
 
 class PhysicsBasedFlingCurveBrowserTest : public BrowserSideFlingBrowserTest {
  public:

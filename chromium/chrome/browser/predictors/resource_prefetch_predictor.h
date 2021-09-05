@@ -31,6 +31,7 @@
 #include "components/optimization_guide/optimization_guide_decider.h"
 #include "components/sqlite_proto/key_value_data.h"
 #include "net/base/network_isolation_key.h"
+#include "services/network/public/mojom/fetch_api.mojom-forward.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -79,7 +80,8 @@ struct PreconnectRequest {
 
 struct PrefetchRequest {
   PrefetchRequest(const GURL& url,
-                  const net::NetworkIsolationKey& network_isolation_key);
+                  const net::NetworkIsolationKey& network_isolation_key,
+                  network::mojom::RequestDestination destination);
 
   PrefetchRequest(const PrefetchRequest&) = default;
   PrefetchRequest(PrefetchRequest&&) = default;
@@ -88,12 +90,12 @@ struct PrefetchRequest {
 
   GURL url;
   net::NetworkIsolationKey network_isolation_key;
-
-  // TODO(falken): Add resource type.
+  network::mojom::RequestDestination destination;
 };
 
-// Stores a result of preconnect prediction. The |requests| vector is the main
-// result of prediction and other fields are used for histograms reporting.
+// Stores a result of pre* prediction. The |requests| vector is the main
+// result for preconnects, while the |prefetch_requests| vector is the main
+// result for prefetches. Other fields are used for metrics reporting.
 struct PreconnectPrediction {
   PreconnectPrediction();
   PreconnectPrediction(const PreconnectPrediction& other);
@@ -106,9 +108,6 @@ struct PreconnectPrediction {
   bool is_redirected = false;
   std::string host;
   std::vector<PreconnectRequest> requests;
-
-  // For LoadingPredictorPrefetch. When |prefetch_requests| is non-empty, it is
-  // used instead of |requests|.
   std::vector<PrefetchRequest> prefetch_requests;
 };
 
@@ -121,6 +120,7 @@ struct OptimizationGuidePrediction {
   optimization_guide::OptimizationGuideDecision decision;
   PreconnectPrediction preconnect_prediction;
   std::vector<GURL> predicted_subresources;
+  base::Optional<base::TimeTicks> optimization_guide_prediction_arrived;
 };
 
 // Contains logic for learning what can be prefetched and for kicking off

@@ -6,6 +6,7 @@
 <translation id="1012173283529841972">Item senarai</translation>
 <translation id="1013742170491673792">srched</translation>
 <translation id="1014370462248694370">Leret dua jari ke kanan</translation>
+<translation id="1016393160682012902">Tekan kunci qwert, kunci braille yang boleh dimuat semula atau gerak isyarat sentuh untuk mempelajari fungsinya. Tekan Ctrl dengan w atau Esc untuk keluar.</translation>
 <translation id="1022586497894531524">Adakah ini kali pertama anda menggunakan maklum balas yang dituturkan ChromeVox? Tutorial pantas ini menerangkan perkara asas untuk bermula dengan ChromeVox.</translation>
 <translation id="1025074108959230262">Mod lekit dilumpuhkan</translation>
 <translation id="1031961866430398710">kemudian</translation>
@@ -504,7 +505,6 @@
 <translation id="489907760999452556">Pautan dalaman</translation>
 <translation id="4909019435900810068">Undur satu perkataan ke belakang</translation>
 <translation id="4911349081560453449">Tiada kotak pilihan sebelumnya</translation>
-<translation id="4915087353619183190">Memulakan Mod Belajar. Tekan kekunci qwerty, kekunci braille boleh dimuat semula atau sentuh gerak isyarat untuk mengetahui fungsinya. Tekan kawalan dengan kekunci w atau escape untuk keluar.</translation>
 <translation id="492295894462528572">Kata pengantar</translation>
 <translation id="495046168593986294">Tatal ke atas</translation>
 <translation id="495170559598752135">Tindakan</translation>
@@ -647,6 +647,7 @@
 <translation id="6017514345406065928">Hijau</translation>
 <translation id="602001110135236999">Tatal ke kiri</translation>
 <translation id="6034000775414344507">Kelabu Cerah</translation>
+<translation id="6036135911048686884">Sentuh Teroka</translation>
 <translation id="6037602951055904232">Sorot ke hadapan</translation>
 <translation id="6044160928851315051">Gelapkan skrin</translation>
 <translation id="6082768461603900813">Navigasi Asas</translation>
@@ -923,6 +924,7 @@
 <translation id="8345569862449483843">{COUNT,plural, =1{paun}other{# tanda paun}}</translation>
 <translation id="8378855320830505539">Wilayah</translation>
 <translation id="8382679411218029383">Autolengkap sebaris dan senarai</translation>
+<translation id="8394908167088220973">Main/Jeda Media</translation>
 <translation id="8428213095426709021">Tetapan</translation>
 <translation id="8428603554127842284">tahap <ph name="DEPTH" /></translation>
 <translation id="8430049249787218991">mnubr</translation>
@@ -967,6 +969,7 @@
 <translation id="8770473310765924354">keluar dari kandungan berstruktur, seperti jadual</translation>
 <translation id="8779057862865475116">Tiada pautan sebelumnya</translation>
 <translation id="8796411681063377102">Tajuk tahap 3 seterusnya</translation>
+<translation id="8823311177246872527">Halaman <ph name="CURRENTPAGE" /> daripada <ph name="TOTALPAGES" /></translation>
 <translation id="8825828890761629845">bnr</translation>
 <translation id="8851136666856101339">utama</translation>
 <translation id="8882002077197914455">Pengepala baris</translation>

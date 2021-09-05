@@ -36,7 +36,7 @@
 
 #if defined(OS_WIN)
 #include "chrome/browser/password_manager/password_manager_util_win.h"
-#elif defined(OS_MACOSX)
+#elif defined(OS_MAC)
 #include "chrome/browser/password_manager/password_manager_util_mac.h"
 #elif defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/login/quick_unlock/auth_token.h"
@@ -202,14 +202,15 @@ void PasswordsPrivateDelegateImpl::GetPasswordExceptionsList(
     get_password_exception_list_callbacks_.push_back(std::move(callback));
 }
 
-void PasswordsPrivateDelegateImpl::ChangeSavedPassword(
-    int id,
-    base::string16 new_username,
-    base::Optional<base::string16> new_password) {
-  const std::string* sort_key = password_id_generator_.TryGetKey(id);
-  DCHECK(sort_key);
-  password_manager_presenter_->ChangeSavedPassword(
-      *sort_key, std::move(new_username), std::move(new_password));
+bool PasswordsPrivateDelegateImpl::ChangeSavedPassword(
+    const std::vector<int>& ids,
+    base::string16 new_password) {
+  const std::vector<std::string> sort_keys =
+      GetSortKeys(password_id_generator_, ids);
+
+  return !ids.empty() && sort_keys.size() == ids.size() &&
+         password_manager_presenter_->ChangeSavedPassword(
+             sort_keys, std::move(new_password));
 }
 
 void PasswordsPrivateDelegateImpl::RemoveSavedPasswords(
@@ -303,7 +304,7 @@ bool PasswordsPrivateDelegateImpl::OsReauthCall(
   DCHECK(web_contents_);
   return password_manager_util_win::AuthenticateUser(
       web_contents_->GetTopLevelNativeWindow(), purpose);
-#elif defined(OS_MACOSX)
+#elif defined(OS_MAC)
   return password_manager_util_mac::AuthenticateUser(purpose);
 #elif defined(OS_CHROMEOS)
   const bool user_cannot_manually_enter_password =
@@ -408,10 +409,7 @@ void PasswordsPrivateDelegateImpl::MovePasswordToAccount(
     int id,
     content::WebContents* web_contents) {
   auto* client = ChromePasswordManagerClient::FromWebContents(web_contents);
-  // TODO(victorvianna): Use a DCHECK instead.
-  if (!client)
-    return;
-
+  DCHECK(client);
   if (const std::string* sort_key = password_id_generator_.TryGetKey(id))
     password_manager_presenter_->MovePasswordToAccountStore(*sort_key, client);
 }
@@ -460,8 +458,7 @@ void PasswordsPrivateDelegateImpl::SetAccountStorageOptIn(
     bool opt_in,
     content::WebContents* web_contents) {
   auto* client = ChromePasswordManagerClient::FromWebContents(web_contents);
-  if (!client)
-    return;
+  DCHECK(client);
   if (opt_in ==
       client->GetPasswordFeatureManager()->IsOptedInForAccountStorage()) {
     return;

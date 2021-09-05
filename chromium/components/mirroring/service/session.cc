@@ -45,6 +45,9 @@
 #include "mojo/public/cpp/system/platform_handle.h"
 #include "net/base/ip_endpoint.h"
 #include "services/viz/public/cpp/gpu/gpu.h"
+#include "third_party/openscreen/src/cast/streaming/answer_messages.h"
+#include "third_party/openscreen/src/cast/streaming/capture_recommendations.h"
+#include "third_party/openscreen/src/cast/streaming/offer_messages.h"
 
 using media::cast::CastTransportStatus;
 using media::cast::Codec;
@@ -86,13 +89,6 @@ constexpr int kAudioSsrcMin = 1;
 constexpr int kAudioSsrcMax = 5e5;
 constexpr int kVideoSsrcMin = 5e5 + 1;
 constexpr int kVideoSsrcMax = 10e5;
-
-// Maximum number of bytes of file data allowed in a single Crash report. As of
-// this writing, the total report upload size is capped at 20 MB.
-//
-// 2 KB of "overhead bytes" are subtracted to account for all of the non-file
-// data in a report upload, including HTTP headers/requests and form data.
-constexpr int kMaxCrashReportBytes = (20 * 1024 - 2) * 1024;
 
 class TransportClient final : public media::cast::CastTransport::Client {
  public:
@@ -156,14 +152,14 @@ bool IsHardwareH264EncodingSupported(
 // TODO(crbug.com/1015482): Look into why H.264 hardware encoder on MacOS is
 // broken.
 // TODO(crbug.com/1015482): Look into HW encoder initialization issues on Win.
-#if !defined(OS_MACOSX) && !defined(OS_WIN)
+#if !defined(OS_APPLE) && !defined(OS_WIN)
   for (const auto& vea_profile : profiles) {
     if (vea_profile.profile >= media::H264PROFILE_MIN &&
         vea_profile.profile <= media::H264PROFILE_MAX) {
       return true;
     }
   }
-#endif  // !defined(OS_MACOSX) && !defined(OS_WIN)
+#endif  // !defined(OS_APPLE) && !defined(OS_WIN)
   return false;
 }
 
@@ -416,21 +412,8 @@ Session::Session(
   network_context_->CreateURLLoaderFactory(
       url_loader_factory.InitWithNewPipeAndPassReceiver(), std::move(params));
 
-  // Generate session level tags.
-  base::Value session_tags(base::Value::Type::DICTIONARY);
-  session_tags.SetKey("mirrorSettings", mirror_settings_.ToDictionaryValue());
-  session_tags.SetKey(
-      "shouldCaptureAudio",
-      base::Value(session_params_.type != SessionType::VIDEO_ONLY));
-  session_tags.SetKey(
-      "shouldCaptureVideo",
-      base::Value(session_params_.type != SessionType::AUDIO_ONLY));
-  session_tags.SetKey("receiverProductName",
-                      base::Value(session_params_.receiver_model_name));
-
-  session_monitor_.emplace(
-      kMaxCrashReportBytes, session_params_.receiver_address,
-      std::move(session_tags), std::move(url_loader_factory));
+  setup_querier_ = std::make_unique<ReceiverSetupQuerier>(
+      session_params_.receiver_address, std::move(url_loader_factory));
 
   if (gpu_) {
     gpu_channel_host_ = gpu_->EstablishGpuChannelSync();
@@ -459,8 +442,6 @@ Session::~Session() {
 
 void Session::ReportError(SessionError error) {
   UMA_HISTOGRAM_ENUMERATION("MediaRouter.MirroringService.SessionError", error);
-  if (session_monitor_.has_value())
-    session_monitor_->OnStreamingError(error);
   if (state_ == REMOTING) {
     media_remoter_->OnRemotingFailed();  // Try to fallback on mirroring.
     return;
@@ -477,7 +458,6 @@ void Session::StopStreaming() {
   if (!cast_environment_)
     return;
 
-  session_monitor_->StopStreamingSession();
   if (audio_input_device_) {
     audio_input_device_->Stop();
     audio_input_device_ = nullptr;
@@ -497,7 +477,7 @@ void Session::StopSession() {
   state_ = STOPPED;
   StopStreaming();
 
-  session_monitor_.reset();
+  setup_querier_.reset();
   weak_factory_.InvalidateWeakPtrs();
   audio_encode_thread_ = nullptr;
   video_encode_thread_ = nullptr;
@@ -600,32 +580,73 @@ void Session::OnLoggingEventsReceived(
                                                      std::move(packet_events));
 }
 
+void Session::SetConstraints(const openscreen::cast::Answer& answer,
+                             FrameSenderConfig* audio_config,
+                             FrameSenderConfig* video_config) {
+  const auto recommendations =
+      openscreen::cast::capture_recommendations::GetRecommendations(answer);
+  const auto& audio = recommendations.audio;
+  const auto& video = recommendations.video;
+
+  if (video_config) {
+    // We use pixels instead of comparing width and height to allow for
+    // differences in aspect ratio.
+    const int current_pixels =
+        mirror_settings_.max_width() * mirror_settings_.max_height();
+    const int recommended_pixels = video.maximum.width * video.maximum.height;
+    // Prioritize the stricter of the sender's and receiver's constraints.
+    if (recommended_pixels < current_pixels) {
+      // The resolution constraints here are used to generate the
+      // media::VideoCaptureParams below.
+      mirror_settings_.SetResolutionConstraints(video.maximum.width,
+                                                video.maximum.height);
+    }
+    video_config->min_bitrate =
+        std::max(video_config->min_bitrate, video.bit_rate_limits.minimum);
+    video_config->start_bitrate = video_config->min_bitrate;
+    video_config->max_bitrate =
+        std::min(video_config->max_bitrate, video.bit_rate_limits.maximum);
+    video_config->max_playout_delay =
+        std::min(video_config->max_playout_delay,
+                 base::TimeDelta::FromMilliseconds(video.max_delay.count()));
+    video_config->max_frame_rate =
+        std::min(video_config->max_frame_rate, video.maximum.frame_rate);
+
+    // We only do sender-side letterboxing if the receiver doesn't support it.
+    mirror_settings_.SetSenderSideLetterboxingEnabled(!video.supports_scaling);
+  }
+
+  if (audio_config) {
+    audio_config->min_bitrate =
+        std::max(audio_config->min_bitrate, audio.bit_rate_limits.minimum);
+    audio_config->start_bitrate = audio_config->min_bitrate;
+    audio_config->max_bitrate =
+        std::min(audio_config->max_bitrate, audio.bit_rate_limits.maximum);
+    audio_config->max_playout_delay =
+        std::min(audio_config->max_playout_delay,
+                 base::TimeDelta::FromMilliseconds(audio.max_delay.count()));
+    // Currently, Chrome only supports stereo, so audio.max_channels is ignored.
+  }
+}
+
 void Session::OnAnswer(const std::vector<FrameSenderConfig>& audio_configs,
                        const std::vector<FrameSenderConfig>& video_configs,
                        const ReceiverResponse& response) {
   if (state_ == STOPPED)
     return;
 
-  if (!response.answer || response.type == ResponseType::UNKNOWN) {
+  if (response.type() == ResponseType::UNKNOWN) {
     ReportError(SessionError::ANSWER_TIME_OUT);
     return;
   }
 
-  DCHECK_EQ(ResponseType::ANSWER, response.type);
-
-  if (response.result != "ok") {
+  DCHECK_EQ(ResponseType::ANSWER, response.type());
+  if (!response.valid()) {
     ReportError(SessionError::ANSWER_NOT_OK);
     return;
   }
 
-  const Answer& answer = *response.answer;
-  const std::string cast_mode =
-      (state_ == MIRRORING ? "mirroring" : "remoting");
-  if (answer.cast_mode != cast_mode) {
-    ReportError(SessionError::ANSWER_MISMATCHED_CAST_MODE);
-    return;
-  }
-
+  const openscreen::cast::Answer& answer = response.answer();
   if (answer.send_indexes.size() != answer.ssrcs.size()) {
     ReportError(SessionError::ANSWER_MISMATCHED_SSRC_LENGTH);
     return;
@@ -670,6 +691,10 @@ void Session::OnAnswer(const std::vector<FrameSenderConfig>& audio_configs,
     ReportError(SessionError::ANSWER_NO_AUDIO_OR_VIDEO);
     return;
   }
+
+  // Set constraints from ANSWER message.
+  SetConstraints(answer, has_audio ? &audio_config : nullptr,
+                 has_video ? &video_config : nullptr);
 
   // Start streaming.
   const bool initially_starting_session =
@@ -766,13 +791,8 @@ void Session::OnAnswer(const std::vector<FrameSenderConfig>& audio_configs,
       media_remoter_->OnMirroringResumed();
   }
 
-  DCHECK(session_monitor_.has_value());
-  const SessionMonitor::SessionType session_type =
-      (has_audio && has_video)
-          ? SessionMonitor::AUDIO_AND_VIDEO
-          : has_audio ? SessionMonitor::AUDIO_ONLY : SessionMonitor::VIDEO_ONLY;
   std::unique_ptr<WifiStatusMonitor> wifi_status_monitor;
-  if (answer.supports_get_status) {
+  if (answer.supports_wifi_status_reporting) {
     wifi_status_monitor =
         std::make_unique<WifiStatusMonitor>(&message_dispatcher_);
     // Nest Hub devices do not support remoting despite having a relatively new
@@ -786,9 +806,6 @@ void Session::OnAnswer(const std::vector<FrameSenderConfig>& audio_configs,
       QueryCapabilitiesForRemoting();
     }
   }
-  session_monitor_->StartStreamingSession(cast_environment_,
-                                          std::move(wifi_status_monitor),
-                                          session_type, state_ == REMOTING);
 
   if (initially_starting_session && observer_)
     observer_->DidStart();
@@ -813,6 +830,8 @@ void Session::SetTargetPlayoutDelay(base::TimeDelta playout_delay) {
     video_stream_->SetTargetPlayoutDelay(playout_delay);
 }
 
+// TODO(issuetracker.google.com/159352836): Refactor to use libcast's
+// OFFER message format.
 void Session::CreateAndSendOffer() {
   DCHECK(state_ != STOPPED);
 
@@ -954,29 +973,27 @@ void Session::QueryCapabilitiesForRemoting() {
 }
 
 void Session::OnCapabilitiesResponse(const ReceiverResponse& response) {
-  if (!response.capabilities || response.type == ResponseType::UNKNOWN) {
-    VLOG(1) << "Receiver doens't support GET_CAPABILITIES. Remoting disabled.";
-    return;
-  }
-  if (response.result != "ok") {
+  if (!response.valid()) {
     VLOG(1) << "Bad CAPABILITIES_RESPONSE. Remoting disabled.";
-    if (response.error) {
-      VLOG(1) << "error code=" << response.error->code
-              << " description=" << response.error->description
-              << " details=" << response.error->details;
+    if (response.error()) {
+      VLOG(1) << " error code=" << response.error()->code
+              << " description=" << response.error()->description
+              << " details=" << response.error()->details;
     }
     return;
   }
-  const std::vector<std::string>& caps = response.capabilities->media_caps;
-  const std::string receiver_build_version =
-      session_monitor_.has_value() ? session_monitor_->GetReceiverBuildVersion()
-                                   : "";
-  const std::string receiver_name =
-      session_monitor_.has_value() ? session_monitor_->receiver_name() : "";
+  const std::vector<std::string>& caps = response.capabilities().media_caps;
+
+  std::string build_version;
+  std::string friendly_name;
+  if (setup_querier_) {
+    build_version = setup_querier_->build_version();
+    friendly_name = setup_querier_->friendly_name();
+  }
   media_remoter_ = std::make_unique<MediaRemoter>(
       this,
-      ToRemotingSinkMetadata(caps, receiver_name, session_params_,
-                             receiver_build_version),
+      ToRemotingSinkMetadata(caps, friendly_name, session_params_,
+                             build_version),
       &message_dispatcher_);
 }
 

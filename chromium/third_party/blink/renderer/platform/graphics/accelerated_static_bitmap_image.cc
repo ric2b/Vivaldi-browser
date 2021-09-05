@@ -12,6 +12,7 @@
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "gpu/command_buffer/client/raster_interface.h"
 #include "gpu/command_buffer/client/shared_image_interface.h"
+#include "gpu/command_buffer/common/capabilities.h"
 #include "gpu/command_buffer/common/sync_token.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/web_graphics_context_3d_provider.h"
@@ -23,6 +24,7 @@
 #include "third_party/blink/renderer/platform/scheduler/public/post_cross_thread_task.h"
 #include "third_party/blink/renderer/platform/wtf/cross_thread_functional.h"
 #include "third_party/skia/include/core/SkImage.h"
+#include "third_party/skia/include/gpu/GrDirectContext.h"
 
 namespace blink {
 namespace {
@@ -149,8 +151,7 @@ scoped_refptr<StaticBitmapImage>
 AcceleratedStaticBitmapImage::MakeUnaccelerated() {
   CreateImageFromMailboxIfNeeded();
   return UnacceleratedStaticBitmapImage::Create(
-      texture_backing_->GetAcceleratedSkImage()->makeNonTextureImage(),
-      orientation_);
+      PaintImageForCurrentFrame().GetSwSkImage(), orientation_);
 }
 
 bool AcceleratedStaticBitmapImage::CopyToTexture(
@@ -237,11 +238,8 @@ void AcceleratedStaticBitmapImage::Draw(
 }
 
 bool AcceleratedStaticBitmapImage::IsValid() const {
-  if (texture_backing_ && (!skia_context_provider_wrapper_ ||
-                           !texture_backing_->GetAcceleratedSkImage()->isValid(
-                               ContextProvider()->GetGrContext()))) {
+  if (texture_backing_ && !skia_context_provider_wrapper_)
     return false;
-  }
 
   if (mailbox_ref_->is_cross_thread()) {
     // If context is is from another thread, validity cannot be verified. Just
@@ -281,6 +279,20 @@ void AcceleratedStaticBitmapImage::InitializeTextureBacking(
 
   gpu::raster::RasterInterface* shared_ri =
       context_provider_wrapper->ContextProvider()->RasterInterface();
+
+  if (context_provider_wrapper->ContextProvider()
+          ->GetCapabilities()
+          .supports_oop_raster) {
+    DCHECK_EQ(shared_image_texture_id, 0u);
+    shared_ri->WaitSyncTokenCHROMIUM(
+        mailbox_ref_->GetOrCreateSyncToken(context_provider_wrapper)
+            .GetConstData());
+    skia_context_provider_wrapper_ = context_provider_wrapper;
+    texture_backing_ = sk_make_sp<MailboxTextureBacking>(
+        mailbox_, sk_image_info_, std::move(context_provider_wrapper));
+    return;
+  }
+
   GrContext* shared_gr_context =
       context_provider_wrapper->ContextProvider()->GetGrContext();
   DCHECK(shared_ri &&
@@ -327,8 +339,8 @@ void AcceleratedStaticBitmapImage::InitializeTextureBacking(
 
   if (sk_image) {
     skia_context_provider_wrapper_ = std::move(context_provider_wrapper);
-    texture_backing_ = sk_sp<MailboxTextureBacking>(
-        new MailboxTextureBacking(std::move(sk_image)));
+    texture_backing_ =
+        sk_make_sp<MailboxTextureBacking>(std::move(sk_image), sk_image_info_);
   }
 }
 

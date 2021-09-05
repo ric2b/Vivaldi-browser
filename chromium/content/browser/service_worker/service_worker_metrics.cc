@@ -19,7 +19,6 @@
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/common/content_client.h"
-#include "net/url_request/url_request.h"
 #include "third_party/blink/public/common/service_worker/service_worker_utils.h"
 
 namespace content {
@@ -123,6 +122,8 @@ const char* EventTypeToSuffix(ServiceWorkerMetrics::EventType event_type) {
       return "_PERIODIC_SYNC";
     case ServiceWorkerMetrics::EventType::CONTENT_DELETE:
       return "_CONTENT_DELETE";
+    case ServiceWorkerMetrics::EventType::PUSH_SUBSCRIPTION_CHANGE:
+      return "_PUSH_SUBSCRIPTION_CHANGE";
   }
   return "_UNKNOWN";
 }
@@ -181,6 +182,8 @@ const char* ServiceWorkerMetrics::EventTypeToString(EventType event_type) {
       return "Periodic Sync";
     case EventType::CONTENT_DELETE:
       return "Content Delete";
+    case EventType::PUSH_SUBSCRIPTION_CHANGE:
+      return "Push Subscription Change";
   }
   NOTREACHED() << "Got unexpected event type: " << static_cast<int>(event_type);
   return "error";
@@ -417,7 +420,10 @@ void ServiceWorkerMetrics::RecordEventDuration(EventType event,
     case EventType::CONTENT_DELETE:
       UMA_HISTOGRAM_MEDIUM_TIMES("ServiceWorker.ContentDeleteEvent.Time", time);
       break;
-
+    case EventType::PUSH_SUBSCRIPTION_CHANGE:
+      UMA_HISTOGRAM_MEDIUM_TIMES(
+          "ServiceWorker.PushSubscriptionChangeEvent.Time", time);
+      break;
     case EventType::NAVIGATION_HINT:
     // The navigation hint should not be sent as an event.
     case EventType::UNKNOWN:
@@ -576,17 +582,6 @@ void ServiceWorkerMetrics::RecordLookupRegistrationTime(
   } else {
     UMA_HISTOGRAM_TIMES(
         "ServiceWorker.LookupRegistration.MainResource.Time.Error", duration);
-  }
-}
-
-void ServiceWorkerMetrics::RecordByteForByteUpdateCheckStatus(
-    blink::ServiceWorkerStatusCode status,
-    bool has_found_update) {
-  DCHECK(blink::ServiceWorkerUtils::IsImportedScriptUpdateCheckEnabled());
-  UMA_HISTOGRAM_ENUMERATION("ServiceWorker.UpdateCheck.Result", status);
-  if (status == blink::ServiceWorkerStatusCode::kOk) {
-    UMA_HISTOGRAM_BOOLEAN("ServiceWorker.UpdateCheck.UpdateFound",
-                          has_found_update);
   }
 }
 

@@ -26,7 +26,6 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_LAYOUT_STATE_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_LAYOUT_STATE_H_
 
-#include "base/macros.h"
 #include "third_party/blink/renderer/platform/geometry/layout_rect.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/hash_map.h"
@@ -72,6 +71,8 @@ class LayoutState {
   explicit LayoutState(LayoutObject& root);
 
   LayoutState(LayoutBox&, bool containing_block_logical_width_changed = false);
+  LayoutState(const LayoutState&) = delete;
+  LayoutState& operator=(const LayoutState&) = delete;
 
   ~LayoutState();
 
@@ -109,7 +110,7 @@ class LayoutState {
 
   LayoutFlowThread* FlowThread() const { return flow_thread_; }
 
-  LayoutObject& GetLayoutObject() const { return layout_object_; }
+  LayoutObject& GetLayoutObject() const { return *layout_object_; }
 
  private:
   // Do not add anything apart from bitfields until after m_flowThread. See
@@ -137,8 +138,7 @@ class LayoutState {
 
   AtomicString input_page_name_;
 
-  LayoutObject& layout_object_;
-  DISALLOW_COPY_AND_ASSIGN(LayoutState);
+  LayoutObject* const layout_object_;
 };
 
 }  // namespace blink

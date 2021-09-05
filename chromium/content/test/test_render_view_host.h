@@ -80,11 +80,12 @@ class TestRenderWidgetHostView : public RenderWidgetHostViewBase,
   void WasUnOccluded() override;
   void WasOccluded() override;
   gfx::Rect GetViewBounds() override;
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   void SetActive(bool active) override;
   void ShowDefinitionForSelection() override {}
   void SpeakSelection() override;
-#endif  // defined(OS_MACOSX)
+  void SetWindowFrameInScreen(const gfx::Rect& rect) override;
+#endif  // defined(OS_MAC)
 
   // Advances the fallback surface to the first surface after navigation. This
   // ensures that stale surfaces are not presented to the user for an indefinite
@@ -199,12 +200,6 @@ class TestRenderViewHost
     delete_counter_ = delete_counter;
   }
 
-  // If set, *webkit_preferences_changed_counter is incremented when
-  // OnWebkitPreferencesChanged() is called.
-  void set_webkit_preferences_changed_counter(int* counter) {
-    webkit_preferences_changed_counter_ = counter;
-  }
-
   // The opener frame route id passed to CreateRenderView().
   const base::Optional<base::UnguessableToken>& opener_frame_token() const {
     return opener_frame_token_;
@@ -223,8 +218,6 @@ class TestRenderViewHost
       const base::Optional<base::UnguessableToken>& opener_frame_token,
       int proxy_route_id,
       bool window_was_created_with_opener) override;
-
-  void OnWebkitPreferencesChanged() override;
 
   // RenderViewHostImpl:
   bool IsTestRenderViewHost() const override;
@@ -250,9 +243,6 @@ class TestRenderViewHost
 
   // See set_delete_counter() above. May be NULL.
   int* delete_counter_;
-
-  // See set_webkit_preferences_changed_counter() above. May be NULL.
-  int* webkit_preferences_changed_counter_;
 
   // See opener_frame_route_id() above.
   base::Optional<base::UnguessableToken> opener_frame_token_;

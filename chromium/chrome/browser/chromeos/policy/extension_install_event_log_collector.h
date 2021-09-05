@@ -97,6 +97,12 @@ class ExtensionInstallEventLogCollector
   void OnExtensionInstallationFailed(
       const extensions::ExtensionId& extension_id,
       extensions::InstallStageTracker::FailureReason reason) override;
+  void OnExtensionInstallationStageChanged(
+      const extensions::ExtensionId& id,
+      extensions::InstallStageTracker::Stage stage) override;
+  void OnExtensionDownloadingStageChanged(
+      const extensions::ExtensionId& id,
+      extensions::ExtensionDownloaderDelegate::Stage stage) override;
 
   // Reports success events for the extensions which are requested from policy
   // and are already loaded.
@@ -104,7 +110,7 @@ class ExtensionInstallEventLogCollector
 
   // Adds success events and notifies delegate that extension is loaded
   // successfully.
-  void AddSuccessEvent(const extensions::ExtensionId& id);
+  void AddSuccessEvent(const extensions::Extension* extension);
 
  private:
   extensions::ExtensionRegistry* registry_;
@@ -119,7 +125,7 @@ class ExtensionInstallEventLogCollector
       registry_observer_{this};
   ScopedObserver<extensions::InstallStageTracker,
                  extensions::InstallStageTracker::Observer>
-      collector_observer_{this};
+      stage_tracker_observer_{this};
 };
 
 }  // namespace policy

@@ -61,11 +61,12 @@ void ReportDangerousDownloadWarning(download::DownloadItem* download) {
   if (profile) {
     std::string raw_digest_sha256 = download->GetHash();
     extensions::SafeBrowsingPrivateEventRouterFactory::GetForProfile(profile)
-        ->OnDangerousDownloadWarning(
+        ->OnDangerousDownloadEvent(
             download->GetURL(), download->GetTargetFilePath().AsUTF8Unsafe(),
             base::HexEncode(raw_digest_sha256.data(), raw_digest_sha256.size()),
             DangerTypeToThreatType(download->GetDangerType()),
-            download->GetMimeType(), download->GetTotalBytes());
+            download->GetMimeType(), download->GetTotalBytes(),
+            EventResult::WARNED);
   }
 }
 
@@ -154,6 +155,7 @@ void DownloadReporter::OnDownloadUpdated(download::DownloadItem* download) {
   download::DownloadDangerType current_danger_type = download->GetDangerType();
 
   if (!DangerTypeIsDangerous(old_danger_type) &&
+      old_danger_type != download::DOWNLOAD_DANGER_TYPE_ASYNC_SCANNING &&
       DangerTypeIsDangerous(current_danger_type)) {
     ReportDangerousDownloadWarning(download);
   }

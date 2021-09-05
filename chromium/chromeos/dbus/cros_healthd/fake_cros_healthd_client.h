@@ -35,7 +35,7 @@ class COMPONENT_EXPORT(CROS_HEALTHD) FakeCrosHealthdClient
 
   // CrosHealthdClient overrides:
   mojo::Remote<mojom::CrosHealthdServiceFactory> BootstrapMojoConnection(
-      base::OnceCallback<void(bool success)> result_callback) override;
+      BootstrapMojoConnectionCallback result_callback) override;
 
   // Set the list of routines that will be used in the response to any
   // GetAvailableRoutines IPCs received.
@@ -54,6 +54,10 @@ class COMPONENT_EXPORT(CROS_HEALTHD) FakeCrosHealthdClient
   // ProbeTelemetryInfo IPCs received.
   void SetProbeTelemetryInfoResponseForTesting(mojom::TelemetryInfoPtr& info);
 
+  // Set the ProcessResultPtr that will be used in the response to any
+  // ProbeProcessInfo IPCs received.
+  void SetProbeProcessInfoResponseForTesting(mojom::ProcessResultPtr& result);
+
   // Calls the power event OnAcInserted on all registered power observers.
   void EmitAcInsertedEventForTesting();
 
@@ -63,6 +67,17 @@ class COMPONENT_EXPORT(CROS_HEALTHD) FakeCrosHealthdClient
 
   // Calls the lid event OnLidClosed on all registered lid observers.
   void EmitLidClosedEventForTesting();
+
+  // Requests the network health state using the NetworkHealthService remote.
+  void RequestNetworkHealthForTesting(
+      chromeos::network_health::mojom::NetworkHealthService::
+          GetHealthSnapshotCallback callback);
+
+  // Calls the LanConnectivity routine using the NetworkDiagnosticsRoutines
+  // remote.
+  void RunLanConnectivityRoutineForTesting(
+      chromeos::network_diagnostics::mojom::NetworkDiagnosticsRoutines::
+          LanConnectivityCallback);
 
  private:
   FakeCrosHealthdService fake_service_;

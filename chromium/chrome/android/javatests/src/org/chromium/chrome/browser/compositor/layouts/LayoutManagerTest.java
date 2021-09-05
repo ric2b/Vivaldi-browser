@@ -10,7 +10,6 @@ import static org.chromium.base.test.util.Restriction.RESTRICTION_TYPE_NON_LOW_E
 import android.content.Context;
 import android.graphics.PointF;
 import android.support.test.InstrumentationRegistry;
-import android.support.test.annotation.UiThreadTest;
 import android.util.Log;
 import android.view.MotionEvent;
 import android.view.MotionEvent.PointerCoords;
@@ -25,10 +24,10 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.TestRule;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.MathUtils;
+import org.chromium.base.test.UiThreadTest;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
@@ -36,6 +35,7 @@ import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.browser.accessibility_tab_switcher.OverviewListLayout;
 import org.chromium.chrome.browser.compositor.animation.CompositorAnimationHandler;
 import org.chromium.chrome.browser.compositor.layouts.components.LayoutTab;
+import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
 import org.chromium.chrome.browser.compositor.layouts.eventfilter.EdgeSwipeHandler;
 import org.chromium.chrome.browser.compositor.layouts.eventfilter.ScrollDirection;
 import org.chromium.chrome.browser.compositor.layouts.phone.StackLayout;
@@ -59,7 +59,6 @@ import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.chrome.test.util.browser.tabmodel.MockTabModel.MockTabModelDelegate;
 import org.chromium.chrome.test.util.browser.tabmodel.MockTabModelSelector;
-import org.chromium.content_public.browser.test.util.Criteria;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.ui.test.util.UiRestriction;
@@ -73,9 +72,6 @@ public class LayoutManagerTest implements MockTabModelDelegate {
 
     @Rule
     public ChromeTabbedActivityTestRule mActivityTestRule = new ChromeTabbedActivityTestRule();
-
-    @Rule
-    public TestRule mProcessor = new Features.InstrumentationProcessor();
 
     private long mLastDownTime;
 
@@ -153,16 +149,18 @@ public class LayoutManagerTest implements MockTabModelDelegate {
         }
         mTabModelSelector.selectModel(incognitoSelected);
         LayoutManagerHost layoutManagerHost = new MockLayoutHost(context);
+        TabContentManager tabContentManager = new TabContentManager(context, null, false, null);
+        tabContentManager.initWithNative();
 
         // Build a fake content container
         FrameLayout parentContainer = new FrameLayout(context);
         FrameLayout container = new FrameLayout(context);
         parentContainer.addView(container);
 
-        mManagerPhone = new LayoutManagerChromePhone(layoutManagerHost, null);
+        mManagerPhone = new LayoutManagerChromePhone(layoutManagerHost, container, null);
         mManager = mManagerPhone;
         CompositorAnimationHandler.setTestingMode(true);
-        mManager.init(mTabModelSelector, null, null, container, null, null, null);
+        mManager.init(mTabModelSelector, null, tabContentManager, null, null, null);
         initializeMotionEvent();
     }
 
@@ -685,17 +683,14 @@ public class LayoutManagerTest implements MockTabModelDelegate {
 
     private void launchedChromeAndEnterTabSwitcher() {
         mActivityTestRule.startMainActivityOnBlankPage();
-        CriteriaHelper.pollUiThread(Criteria.equals(true,
-                mActivityTestRule.getActivity()
-                        .getTabModelSelector()
-                        .getTabModelFilterProvider()
-                        .getCurrentTabModelFilter()::isTabModelRestored));
+        CriteriaHelper.pollUiThread(
+                mActivityTestRule.getActivity().getTabModelSelector()::isTabStateInitialized);
 
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             LayoutManagerChrome layoutManager = mActivityTestRule.getActivity().getLayoutManager();
             layoutManager.showOverview(false);
 
-            CriteriaHelper.pollUiThread(Criteria.equals(true, layoutManager::overviewVisible));
+            CriteriaHelper.pollUiThread(layoutManager::overviewVisible);
         });
     }
 

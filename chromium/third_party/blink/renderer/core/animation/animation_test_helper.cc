@@ -61,32 +61,23 @@ KeyframeEffect* CreateSimpleKeyframeEffectForTest(Element* target,
   return MakeGarbageCollected<KeyframeEffect>(target, model, timing);
 }
 
-void EnsureInterpolatedValueCached(const ActiveInterpolations& interpolations,
+void EnsureInterpolatedValueCached(ActiveInterpolations* interpolations,
                                    Document& document,
                                    Element* element) {
   // TODO(smcgruer): We should be able to use a saner API approach like
-  // document.EnsureStyleResolver().StyleForElement(element). However that would
-  // require our callers to propertly register every animation they pass in
+  // document.GetStyleResolver().StyleForElement(element). However that would
+  // require our callers to properly register every animation they pass in
   // here, which the current tests do not do.
   auto style = ComputedStyle::Create();
   StyleResolverState state(document, *element, style.get(), style.get());
   state.SetStyle(style);
-  if (RuntimeEnabledFeatures::CSSCascadeEnabled()) {
-    // We must apply the animation effects via StyleCascade when the cascade
-    // is enabled.
-    StyleCascade cascade(state);
 
-    ActiveInterpolationsMap map;
-    map.Set(PropertyHandle("--unused"), interpolations);
+  ActiveInterpolationsMap map;
+  map.Set(PropertyHandle("--unused"), interpolations);
 
-    cascade.AddInterpolations(&map, CascadeOrigin::kAnimation);
-    cascade.Apply();
-  } else {
-    CSSInterpolationTypesMap map(state.GetDocument().GetPropertyRegistry(),
-                                 state.GetDocument());
-    CSSInterpolationEnvironment environment(map, state, nullptr);
-    InvalidatableInterpolation::ApplyStack(interpolations, environment);
-  }
+  StyleCascade cascade(state);
+  cascade.AddInterpolations(&map, CascadeOrigin::kAnimation);
+  cascade.Apply();
 }
 
 }  // namespace blink

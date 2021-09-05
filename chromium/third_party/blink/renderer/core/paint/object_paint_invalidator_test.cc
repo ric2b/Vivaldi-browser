@@ -111,6 +111,14 @@ TEST_F(ObjectPaintInvalidatorTest, TraverseNonCompositingDescendants) {
           ->SelfNeedsRepaint());
 }
 
+static const LayoutBoxModelObject& EnclosingCompositedContainer(
+    const LayoutObject& layout_object) {
+  DCHECK(!RuntimeEnabledFeatures::CompositeAfterPaintEnabled());
+  return layout_object.PaintingLayer()
+      ->EnclosingLayerForPaintInvalidationCrossingFrameBoundaries()
+      ->GetLayoutObject();
+}
+
 TEST_F(ObjectPaintInvalidatorTest, TraverseFloatUnderCompositedInline) {
   if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled())
     return;
@@ -142,10 +150,10 @@ TEST_F(ObjectPaintInvalidatorTest, TraverseFloatUnderCompositedInline) {
   EXPECT_TRUE(span->IsPaintInvalidationContainer());
   EXPECT_TRUE(span->IsStackingContext());
   if (RuntimeEnabledFeatures::LayoutNGEnabled()) {
-    EXPECT_EQ(span, &target->ContainerForPaintInvalidation());
+    EXPECT_EQ(span, &EnclosingCompositedContainer(*target));
     EXPECT_EQ(span_layer, target->PaintingLayer());
   } else {
-    EXPECT_EQ(composited_container, &target->ContainerForPaintInvalidation());
+    EXPECT_EQ(composited_container, &EnclosingCompositedContainer(*target));
     EXPECT_EQ(containing_block_layer, target->PaintingLayer());
   }
 
@@ -216,7 +224,7 @@ TEST_F(ObjectPaintInvalidatorTest, TraverseStackedFloatUnderCompositedInline) {
 
   EXPECT_TRUE(span->IsPaintInvalidationContainer());
   EXPECT_TRUE(span->IsStackingContext());
-  EXPECT_EQ(span, &target->ContainerForPaintInvalidation());
+  EXPECT_EQ(span, &EnclosingCompositedContainer(*target));
   EXPECT_EQ(target_layer, target->PaintingLayer());
 
   ValidateDisplayItemClient(target);
@@ -237,55 +245,9 @@ TEST_F(ObjectPaintInvalidatorTest, TraverseStackedFloatUnderCompositedInline) {
   EXPECT_TRUE(span_layer->SelfNeedsRepaint());
 }
 
-TEST_F(ObjectPaintInvalidatorTest, InvalidatePaintRectangle) {
-  SetBodyInnerHTML(
-      "<div id='target' style='width: 200px; height: 200px; background: blue'>"
-      "</div>");
-
-  GetDocument().View()->SetTracksRasterInvalidations(true);
-
-  auto* target = GetLayoutObjectByElementId("target");
-  target->InvalidatePaintRectangle(PhysicalRect(10, 10, 50, 50));
-  EXPECT_EQ(PhysicalRect(10, 10, 50, 50),
-            target->PartialInvalidationLocalRect());
-  target->InvalidatePaintRectangle(PhysicalRect(30, 30, 60, 60));
-  EXPECT_EQ(PhysicalRect(10, 10, 80, 80),
-            target->PartialInvalidationLocalRect());
-  EXPECT_TRUE(target->ShouldCheckForPaintInvalidation());
-
-  EXPECT_TRUE(IsValidDisplayItemClient(target));
-  GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint(
-      DocumentUpdateReason::kTest);
-  EXPECT_EQ(PhysicalRect(), target->PartialInvalidationLocalRect());
-  EXPECT_EQ(IntRect(18, 18, 80, 80), target->PartialInvalidationVisualRect());
-  EXPECT_FALSE(IsValidDisplayItemClient(target));
-
-  target->InvalidatePaintRectangle(PhysicalRect(30, 30, 50, 80));
-  EXPECT_EQ(PhysicalRect(30, 30, 50, 80),
-            target->PartialInvalidationLocalRect());
-  GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint(
-      DocumentUpdateReason::kTest);
-  // PartialInvalidationVisualRect should accumulate until painting.
-  EXPECT_EQ(IntRect(18, 18, 80, 100), target->PartialInvalidationVisualRect());
-
-  UpdateAllLifecyclePhasesForTest();
-  const auto& raster_invalidations = GetLayoutView()
-                                         .Layer()
-                                         ->GraphicsLayerBacking()
-                                         ->GetRasterInvalidationTracking()
-                                         ->Invalidations();
-  ASSERT_EQ(1u, raster_invalidations.size());
-  EXPECT_EQ(IntRect(18, 18, 80, 100), raster_invalidations[0].rect);
-  EXPECT_EQ(PaintInvalidationReason::kRectangle,
-            raster_invalidations[0].reason);
-
-  EXPECT_TRUE(IsValidDisplayItemClient(target));
-}
-
 TEST_F(ObjectPaintInvalidatorTest, Selection) {
   SetBodyInnerHTML("<img id='target' style='width: 100px; height: 100px'>");
   auto* target = GetLayoutObjectByElementId("target");
-  EXPECT_EQ(IntRect(), target->SelectionVisualRect());
 
   // Add selection.
   GetDocument().View()->SetTracksRasterInvalidations(true);
@@ -297,7 +259,6 @@ TEST_F(ObjectPaintInvalidatorTest, Selection) {
   ASSERT_EQ(1u, invalidations->size());
   EXPECT_EQ(IntRect(8, 8, 100, 100), (*invalidations)[0].rect);
   EXPECT_EQ(PaintInvalidationReason::kSelection, (*invalidations)[0].reason);
-  EXPECT_EQ(IntRect(8, 8, 100, 100), target->SelectionVisualRect());
   GetDocument().View()->SetTracksRasterInvalidations(false);
 
   // Simulate a change without full invalidation or selection change.
@@ -307,7 +268,6 @@ TEST_F(ObjectPaintInvalidatorTest, Selection) {
   EXPECT_TRUE(graphics_layer->GetRasterInvalidationTracking()
                   ->Invalidations()
                   .IsEmpty());
-  EXPECT_EQ(IntRect(8, 8, 100, 100), target->SelectionVisualRect());
   GetDocument().View()->SetTracksRasterInvalidations(false);
 
   // Remove selection.
@@ -319,7 +279,6 @@ TEST_F(ObjectPaintInvalidatorTest, Selection) {
   ASSERT_EQ(1u, invalidations->size());
   EXPECT_EQ(IntRect(8, 8, 100, 100), (*invalidations)[0].rect);
   EXPECT_EQ(PaintInvalidationReason::kSelection, (*invalidations)[0].reason);
-  EXPECT_EQ(IntRect(), target->SelectionVisualRect());
   GetDocument().View()->SetTracksRasterInvalidations(false);
 }
 
@@ -332,6 +291,48 @@ TEST_F(ObjectPaintInvalidatorTest, ZeroWidthForeignObject) {
       </foreignObject>
     </svg>
   )HTML");
+}
+
+TEST_F(ObjectPaintInvalidatorTest, VisibilityHidden) {
+  SetBodyInnerHTML(R"HTML(
+    <style>
+      #target {
+        visibility: hidden;
+        width: 100px;
+        height: 100px;
+        background: blue;
+      }
+    </style>
+    <div id="target"></div>
+  )HTML");
+
+  auto* target_element = GetDocument().getElementById("target");
+  const auto* target = target_element->GetLayoutObject();
+  ValidateDisplayItemClient(target);
+  EXPECT_TRUE(IsValidDisplayItemClient(target));
+
+  target_element->setAttribute(html_names::kStyleAttr, "width: 200px");
+  GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint(
+      DocumentUpdateReason::kTest);
+  EXPECT_TRUE(IsValidDisplayItemClient(target));
+  UpdateAllLifecyclePhasesForTest();
+
+  target_element->setAttribute(html_names::kStyleAttr,
+                               "width: 200px; visibility: visible");
+  GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint(
+      DocumentUpdateReason::kTest);
+  EXPECT_FALSE(IsValidDisplayItemClient(target));
+  UpdateAllLifecyclePhasesForTest();
+  EXPECT_TRUE(IsValidDisplayItemClient(target));
+
+  target_element->setAttribute(html_names::kStyleAttr,
+                               "width: 200px; visibility: hidden");
+  GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint(
+      DocumentUpdateReason::kTest);
+  EXPECT_FALSE(IsValidDisplayItemClient(target));
+  UpdateAllLifecyclePhasesForTest();
+  // |target| is not validated because it didn't paint anything.
+  EXPECT_FALSE(IsValidDisplayItemClient(target));
 }
 
 }  // namespace blink

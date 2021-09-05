@@ -470,7 +470,7 @@ blink::WebRect BoundsForCharacter(const blink::WebAXObject& object,
       return blink::WebRect();
 
     switch (inline_text_box.GetTextDirection()) {
-      case ax::mojom::TextDirection::kLtr: {
+      case ax::mojom::WritingDirection::kLtr: {
         if (local_index) {
           int left =
               inline_text_box_rect.x + character_offsets[local_index - 1];
@@ -483,7 +483,7 @@ blink::WebRect BoundsForCharacter(const blink::WebAXObject& object,
                               character_offsets[0],
                               inline_text_box_rect.height);
       }
-      case ax::mojom::TextDirection::kRtl: {
+      case ax::mojom::WritingDirection::kRtl: {
         int right = inline_text_box_rect.x + inline_text_box_rect.width;
 
         if (local_index) {
@@ -498,7 +498,7 @@ blink::WebRect BoundsForCharacter(const blink::WebAXObject& object,
                               character_offsets[0],
                               inline_text_box_rect.height);
       }
-      case ax::mojom::TextDirection::kTtb: {
+      case ax::mojom::WritingDirection::kTtb: {
         if (local_index) {
           int top = inline_text_box_rect.y + character_offsets[local_index - 1];
           int height = character_offsets[local_index] -
@@ -509,7 +509,7 @@ blink::WebRect BoundsForCharacter(const blink::WebAXObject& object,
         return blink::WebRect(inline_text_box_rect.x, inline_text_box_rect.y,
                               inline_text_box_rect.width, character_offsets[0]);
       }
-      case ax::mojom::TextDirection::kBtt: {
+      case ax::mojom::WritingDirection::kBtt: {
         int bottom = inline_text_box_rect.y + inline_text_box_rect.height;
 
         if (local_index) {
@@ -584,7 +584,7 @@ void GetBoundariesForOneWord(const blink::WebAXObject& object,
 
     // Look for a character within any word other than the last.
     for (size_t j = 0; j < word_count - 1; j++) {
-      if (local_index <= ends[j]) {
+      if (local_index < ends[j]) {
         word_start = start + starts[j];
         word_end = start + ends[j];
         return;
@@ -1221,7 +1221,9 @@ bool WebAXObjectProxy::IsSelectable() {
   ui::AXNodeData node_data;
   accessibility_object_.Serialize(&node_data);
   // It's selectable if it has the attribute, whether it's true or false.
-  return node_data.HasBoolAttribute(ax::mojom::BoolAttribute::kSelected);
+  return node_data.HasBoolAttribute(ax::mojom::BoolAttribute::kSelected) &&
+         accessibility_object_.Restriction() !=
+             blink::kWebAXRestrictionDisabled;
 }
 
 bool WebAXObjectProxy::IsMultiLine() {

@@ -20,6 +20,7 @@
 #include "base/notreached.h"
 #include "base/strings/string_util.h"
 #include "components/bookmarks/browser/bookmark_expanded_state_tracker.h"
+#include "components/bookmarks/browser/bookmark_load_details.h"
 #include "components/bookmarks/browser/bookmark_model_observer.h"
 #include "components/bookmarks/browser/bookmark_node_data.h"
 #include "components/bookmarks/browser/bookmark_storage.h"
@@ -137,7 +138,7 @@ void AddGuidsToIndexRecursive(const BookmarkNode* node,
 BookmarkModel::BookmarkModel(std::unique_ptr<BookmarkClient> client)
     : client_(std::move(client)),
       owned_root_(std::make_unique<BookmarkNode>(/*id=*/0,
-                                                 BookmarkNode::RootNodeGuid(),
+                                                 BookmarkNode::kRootNodeGuid,
                                                  GURL())),
       root_(owned_root_.get()),
       observers_(base::ObserverListPolicy::EXISTING_ONLY),
@@ -164,11 +165,8 @@ BookmarkModel::~BookmarkModel() {
   }
 }
 
-void BookmarkModel::Load(
-    PrefService* pref_service,
-    const base::FilePath& profile_path,
-    const scoped_refptr<base::SequencedTaskRunner>& io_task_runner,
-    const scoped_refptr<base::SequencedTaskRunner>& ui_task_runner) {
+void BookmarkModel::Load(PrefService* pref_service,
+                         const base::FilePath& profile_path) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   // If the store is non-null, it means Load was already invoked. Load should
   // only be invoked once.
@@ -177,11 +175,10 @@ void BookmarkModel::Load(
   expanded_state_tracker_ =
       std::make_unique<BookmarkExpandedStateTracker>(this, pref_service);
 
-  store_ = std::make_unique<BookmarkStorage>(this, profile_path,
-                                             io_task_runner.get());
-  // Creating ModelLoader schedules the load on |io_task_runner|.
+  store_ = std::make_unique<BookmarkStorage>(this, profile_path);
+  // Creating ModelLoader schedules the load on a backend task runner.
   model_loader_ = ModelLoader::Create(
-      profile_path.Append(kBookmarksFileName), io_task_runner.get(),
+      profile_path.Append(kBookmarksFileName),
       std::make_unique<BookmarkLoadDetails>(client_.get()),
       base::BindOnce(&BookmarkModel::DoneLoading, AsWeakPtr()));
 }
@@ -374,17 +371,9 @@ const gfx::Image& BookmarkModel::GetFavicon(const BookmarkNode* node) {
   DCHECK(node);
   if (node->favicon_state() == BookmarkNode::INVALID_FAVICON) {
     BookmarkNode* mutable_node = AsMutable(node);
-    LoadFavicon(mutable_node, client_->PreferTouchIcon()
-                                  ? favicon_base::IconType::kTouchIcon
-                                  : favicon_base::IconType::kFavicon);
+    LoadFavicon(mutable_node);
   }
   return node->favicon();
-}
-
-favicon_base::IconType BookmarkModel::GetFaviconType(const BookmarkNode* node) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK(node);
-  return node->favicon_type();
 }
 
 void BookmarkModel::SetTitle(const BookmarkNode* node,
@@ -925,7 +914,6 @@ bool BookmarkModel::IsValidIndex(const BookmarkNode* parent,
 
 void BookmarkModel::OnFaviconDataAvailable(
     BookmarkNode* node,
-    favicon_base::IconType icon_type,
     const favicon_base::FaviconImageResult& image_result) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(node);
@@ -933,22 +921,16 @@ void BookmarkModel::OnFaviconDataAvailable(
   node->set_favicon_load_task_id(base::CancelableTaskTracker::kBadTaskId);
   node->set_favicon_state(BookmarkNode::LOADED_FAVICON);
   if (!image_result.image.IsEmpty()) {
-    node->set_favicon_type(icon_type);
     node->set_favicon(image_result.image);
     node->set_icon_url(image_result.icon_url);
     FaviconLoaded(node);
-  } else if (icon_type == favicon_base::IconType::kTouchIcon) {
-    // Couldn't load the touch icon, fallback to the regular favicon.
-    DCHECK(client_->PreferTouchIcon());
-    LoadFavicon(node, favicon_base::IconType::kFavicon);
   } else {
     // No favicon available, but we still notify observers.
     FaviconLoaded(node);
   }
 }
 
-void BookmarkModel::LoadFavicon(BookmarkNode* node,
-                                favicon_base::IconType icon_type) {
+void BookmarkModel::LoadFavicon(BookmarkNode* node) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   if (node->is_folder())
@@ -958,9 +940,9 @@ void BookmarkModel::LoadFavicon(BookmarkNode* node,
   node->set_favicon_state(BookmarkNode::LOADING_FAVICON);
   base::CancelableTaskTracker::TaskId taskId =
       client_->GetFaviconImageForPageURL(
-          node->url(), icon_type,
+          node->url(),
           base::BindOnce(&BookmarkModel::OnFaviconDataAvailable,
-                         base::Unretained(this), node, icon_type),
+                         base::Unretained(this), node),
           &cancelable_task_tracker_);
   if (taskId != base::CancelableTaskTracker::kBadTaskId)
     node->set_favicon_load_task_id(taskId);

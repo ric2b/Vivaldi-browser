@@ -16,7 +16,7 @@ import static androidx.test.espresso.matcher.ViewMatchers.withId;
 import static androidx.test.espresso.matcher.ViewMatchers.withParent;
 
 import static org.hamcrest.Matchers.allOf;
-import static org.hamcrest.Matchers.instanceOf;
+import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.not;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -30,7 +30,6 @@ import static org.chromium.content_public.browser.test.util.CriteriaHelper.DEFAU
 import android.app.Activity;
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
-import android.os.Build;
 import android.provider.Settings;
 import android.support.test.InstrumentationRegistry;
 import android.view.View;
@@ -40,7 +39,6 @@ import androidx.annotation.Nullable;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.test.espresso.NoMatchingRootException;
 import androidx.test.espresso.NoMatchingViewException;
-import androidx.test.espresso.Root;
 import androidx.test.espresso.UiController;
 import androidx.test.espresso.ViewAction;
 import androidx.test.espresso.ViewAssertion;
@@ -50,9 +48,7 @@ import androidx.test.espresso.action.Press;
 import androidx.test.espresso.action.Swipe;
 import androidx.test.espresso.contrib.RecyclerViewActions;
 
-import org.hamcrest.Description;
 import org.hamcrest.Matcher;
-import org.hamcrest.TypeSafeMatcher;
 
 import org.chromium.base.ContextUtils;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
@@ -62,7 +58,6 @@ import org.chromium.chrome.browser.tab.TabSelectionType;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tasks.pseudotab.PseudoTab;
 import org.chromium.chrome.browser.tasks.tab_groups.TabGroupModelFilter;
-import org.chromium.chrome.browser.widget.ScrimView;
 import org.chromium.chrome.tab_ui.R;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.ApplicationTestUtils;
@@ -289,7 +284,7 @@ public class TabUiTestHelper {
      * Merge all normal tabs into a single tab group.
      * @param cta   The current running activity.
      */
-    static void mergeAllNormalTabsToAGroup(ChromeTabbedActivity cta) {
+    public static void mergeAllNormalTabsToAGroup(ChromeTabbedActivity cta) {
         mergeAllTabsToAGroup(cta, false);
     }
 
@@ -329,10 +324,14 @@ public class TabUiTestHelper {
      */
     public static void verifyTabModelTabCount(
             ChromeTabbedActivity cta, int normalTabs, int incognitoTabs) {
-        CriteriaHelper.pollUiThread(Criteria.equals(
-                normalTabs, () -> cta.getTabModelSelector().getModel(false).getCount()));
-        CriteriaHelper.pollUiThread(Criteria.equals(
-                incognitoTabs, () -> cta.getTabModelSelector().getModel(true).getCount()));
+        CriteriaHelper.pollUiThread(() -> {
+            Criteria.checkThat(
+                    cta.getTabModelSelector().getModel(false).getCount(), is(normalTabs));
+        });
+        CriteriaHelper.pollUiThread(() -> {
+            Criteria.checkThat(
+                    cta.getTabModelSelector().getModel(true).getCount(), is(incognitoTabs));
+        });
     }
 
     /**
@@ -408,15 +407,9 @@ public class TabUiTestHelper {
         cta.setRequestedOrientation(orientation == Configuration.ORIENTATION_LANDSCAPE
                         ? ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
                         : ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
-        CriteriaHelper.pollUiThread(Criteria.equals(
-                orientation, () -> cta.getResources().getConfiguration().orientation));
-    }
-
-    /**
-     * @return whether current running API is lower or equal to KitKat.
-     */
-    static boolean isKitKatAndBelow() {
-        return Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP;
+        CriteriaHelper.pollUiThread(() -> {
+            Criteria.checkThat(cta.getResources().getConfiguration().orientation, is(orientation));
+        });
     }
 
     /**
@@ -467,7 +460,7 @@ public class TabUiTestHelper {
 
     private static void verifyAllTabsHaveUrl(TabModel tabModel, String url) {
         for (int i = 0; i < tabModel.getCount(); i++) {
-            assertEquals(url, tabModel.getTabAt(i).getUrlString());
+            assertEquals(url, ChromeTabUtils.getUrlStringOnUiThread(tabModel.getTabAt(i)));
         }
     }
 
@@ -532,8 +525,11 @@ public class TabUiTestHelper {
         assertEquals(numTabs + previousTabCount,
                 rule.getActivity().getTabModelSelector().getModel(isIncognito).getCount());
 
-        CriteriaHelper.pollUiThread(Criteria.equals(0,
-                () -> rule.getActivity().getTabContentManager().getPendingReadbacksForTesting()));
+        CriteriaHelper.pollUiThread(() -> {
+            Criteria.checkThat(
+                    rule.getActivity().getTabContentManager().getPendingReadbacksForTesting(),
+                    is(0));
+        });
     }
 
     public static void verifyAllTabsHaveThumbnail(TabModel tabModel) {
@@ -555,54 +551,12 @@ public class TabUiTestHelper {
     }
 
     /**
-     * Exit the PopupWindow dialog by clicking the outer ScrimView.
-     * @param cta  The current running activity.
-     */
-    static void clickScrimToExitDialog(ChromeTabbedActivity cta) {
-        onView(instanceOf(ScrimView.class))
-                .inRoot(new TypeSafeMatcher<Root>() {
-                    @Override
-                    protected boolean matchesSafely(Root root) {
-                        // Make sure we match the root window that takes up the whole screen.
-                        return root.getDecorView() != cta.getWindow().getDecorView()
-                                && root.getDecorView().getWidth()
-                                >= cta.getCompositorViewHolder().getWidth()
-                                && root.getDecorView().getHeight()
-                                >= cta.getCompositorViewHolder().getHeight();
-                    }
-
-                    @Override
-                    public void describeTo(Description description) {
-                        description.appendText("is full screen PopupWindow");
-                    }
-                })
-                .perform(new ViewAction() {
-                    @Override
-                    public Matcher<View> getConstraints() {
-                        return isDisplayed();
-                    }
-
-                    @Override
-                    public String getDescription() {
-                        return "click on ScrimView";
-                    }
-
-                    @Override
-                    public void perform(UiController uiController, View view) {
-                        assertTrue(view instanceof ScrimView);
-                        ScrimView scrimView = (ScrimView) view;
-                        scrimView.performClick();
-                    }
-                });
-    }
-
-    /**
      * Verify that the snack bar is showing and click on the snack bar button. Right now it is only
      * used for undoing a tab closure. This should be used with
      * CriteriaHelper.pollInstrumentationThread().
      * @return whether the visibility checking and the clicking have finished or not.
      */
-    static boolean verifyUndoBarShowingAndClickUndo() {
+    public static boolean verifyUndoBarShowingAndClickUndo() {
         boolean hasClicked = true;
         try {
             onView(withId(R.id.snackbar_button)).check(matches(isCompletelyDisplayed()));
@@ -653,8 +607,9 @@ public class TabUiTestHelper {
                                : R.string.accessibility_tab_switcher_standard_stack))
                 .perform(click());
 
-        CriteriaHelper.pollUiThread(Criteria.equals(
-                isIncognito, () -> cta.getTabModelSelector().isIncognitoSelected()));
+        CriteriaHelper.pollUiThread(() -> {
+            Criteria.checkThat(cta.getTabModelSelector().isIncognitoSelected(), is(isIncognito));
+        });
         // Wait for tab list recyclerView to finish animation after tab model switch.
         RecyclerView recyclerView = cta.findViewById(R.id.tab_list_view);
         waitForStableRecyclerView(recyclerView);

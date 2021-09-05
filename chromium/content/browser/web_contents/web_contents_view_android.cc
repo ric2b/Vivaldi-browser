@@ -12,7 +12,6 @@
 #include "base/optional.h"
 #include "cc/layers/layer.h"
 #include "content/browser/accessibility/browser_accessibility_manager_android.h"
-#include "content/browser/android/content_feature_list.h"
 #include "content/browser/android/content_ui_event_handler.h"
 #include "content/browser/android/gesture_listener_manager.h"
 #include "content/browser/android/select_popup.h"
@@ -518,6 +517,11 @@ bool WebContentsViewAndroid::DoBrowserControlsShrinkRendererSize() const {
          delegate->DoBrowserControlsShrinkRendererSize(web_contents_);
 }
 
+bool WebContentsViewAndroid::OnlyExpandTopControlsAtPageTop() const {
+  auto* delegate = web_contents_->GetDelegate();
+  return delegate && delegate->OnlyExpandTopControlsAtPageTop();
+}
+
 bool WebContentsViewAndroid::OnTouchEvent(const ui::MotionEventAndroid& event) {
   if (event.GetAction() == ui::MotionEventAndroid::Action::DOWN &&
       ShouldRequestUnbufferedDispatch()) {
@@ -580,12 +584,20 @@ void WebContentsViewAndroid::OnSizeChanged() {
   }
 }
 
-void WebContentsViewAndroid::OnPhysicalBackingSizeChanged() {
+void WebContentsViewAndroid::OnPhysicalBackingSizeChanged(
+    base::Optional<base::TimeDelta> deadline_override) {
   if (web_contents_->GetRenderWidgetHostView())
     web_contents_->SendScreenRects();
 }
 
 void WebContentsViewAndroid::OnBrowserControlsHeightChanged() {
+  auto* rwhv = GetRenderWidgetHostViewAndroid();
+  if (rwhv)
+    rwhv->SynchronizeVisualProperties(cc::DeadlinePolicy::UseDefaultDeadline(),
+                                      base::nullopt);
+}
+
+void WebContentsViewAndroid::OnControlsResizeViewChanged() {
   auto* rwhv = GetRenderWidgetHostViewAndroid();
   if (rwhv)
     rwhv->SynchronizeVisualProperties(cc::DeadlinePolicy::UseDefaultDeadline(),

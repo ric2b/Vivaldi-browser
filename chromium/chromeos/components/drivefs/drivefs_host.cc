@@ -59,6 +59,7 @@ class DriveFsHost::MountState : public DriveFsSession,
   ~MountState() override {
     DCHECK_CALLED_ON_VALID_SEQUENCE(host_->sequence_checker_);
     if (team_drives_fetched_) {
+      host_->delegate_->GetDriveNotificationManager().ClearTeamDriveIds();
       host_->delegate_->GetDriveNotificationManager().RemoveObserver(this);
     }
     if (is_mounted()) {
@@ -151,6 +152,15 @@ class DriveFsHost::MountState : public DriveFsSession,
     }
     host_->delegate_->GetDriveNotificationManager().UpdateTeamDriveIds(
         additions, removals);
+  }
+
+  void ConnectToExtension(
+      mojom::ExtensionConnectionParamsPtr params,
+      mojo::PendingReceiver<mojom::NativeMessagingPort> port,
+      mojo::PendingRemote<mojom::NativeMessagingHost> host,
+      ConnectToExtensionCallback callback) override {
+    std::move(callback).Run(host_->delegate_->ConnectToExtension(
+        std::move(params), std::move(port), std::move(host)));
   }
 
   // DriveNotificationObserver overrides:

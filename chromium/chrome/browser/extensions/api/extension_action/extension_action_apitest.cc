@@ -14,12 +14,10 @@
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/extensions/api/extension_action/test_extension_action_api_observer.h"
 #include "chrome/browser/extensions/api/extension_action/test_icon_image_observer.h"
-#include "chrome/browser/extensions/extension_action_manager.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/extensions/extension_action_test_helper.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/common/extensions/api/extension_action/action_info_test_util.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/sessions/content/session_tab_helper.h"
 #include "components/version_info/channel.h"
@@ -30,9 +28,11 @@
 #include "content/public/test/test_utils.h"
 #include "extensions/browser/browsertest_util.h"
 #include "extensions/browser/extension_action.h"
+#include "extensions/browser/extension_action_manager.h"
 #include "extensions/browser/extension_icon_image.h"
 #include "extensions/browser/process_manager.h"
 #include "extensions/browser/state_store.h"
+#include "extensions/common/api/extension_action/action_info_test_util.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/features/feature_channel.h"
 #include "extensions/test/extension_test_message_listener.h"
@@ -254,7 +254,7 @@ class MultiActionAPICanvasTest : public MultiActionAPITest {
  public:
   void SetUp() override {
     EnablePixelOutput();
-    ExtensionActionAPITest::SetUp();
+    MultiActionAPITest::SetUp();
   }
 };
 
@@ -534,6 +534,108 @@ IN_PROC_BROWSER_TEST_P(MultiActionAPITest, PopupCreation) {
 
   frames = process_manager->GetRenderFrameHostsForExtension(extension->id());
   EXPECT_EQ(0u, frames.size());
+}
+
+// Tests that sessionStorage does not persist between closing and opening of a
+// popup.
+IN_PROC_BROWSER_TEST_P(MultiActionAPITest,
+                       SessionStorageDoesNotPersistBetweenOpenings) {
+  constexpr char kManifestTemplate[] =
+      R"({
+           "name": "Test sessionStorage",
+           "manifest_version": 2,
+           "version": "0.1",
+           "%s": {
+             "default_popup": "popup.html"
+           }
+         })";
+
+  constexpr char kPopupHtml[] =
+      R"(<!doctype html>
+         <html>
+           <script src="popup.js"></script>
+         </html>)";
+
+  constexpr char kPopupJs[] =
+      R"(window.onload = function() {
+           if (!sessionStorage.foo) {
+             sessionStorage.foo = 1;
+           } else {
+             sessionStorage.foo = parseInt(sessionStorage.foo) + 1;
+           }
+           chrome.test.notifyPass();};
+        )";
+
+  TestExtensionDir test_dir;
+  test_dir.WriteManifest(base::StringPrintf(
+      kManifestTemplate, GetManifestKeyForActionType(GetParam())));
+  test_dir.WriteFile(FILE_PATH_LITERAL("popup.html"), kPopupHtml);
+  test_dir.WriteFile(FILE_PATH_LITERAL("popup.js"), kPopupJs);
+
+  const Extension* extension = LoadExtension(test_dir.UnpackedPath());
+  ASSERT_TRUE(extension);
+
+  std::unique_ptr<ExtensionActionTestHelper> toolbar_helper =
+      ExtensionActionTestHelper::Create(browser());
+
+  ExtensionAction* action = GetExtensionAction(*extension);
+  ASSERT_TRUE(action);
+
+  int tab_id = GetActiveTabId();
+  EnsureActionIsEnabledOnActiveTab(action);
+  EXPECT_TRUE(action->HasPopup(tab_id));
+
+  ResultCatcher result_catcher;
+  toolbar_helper->Press(0);
+  EXPECT_TRUE(result_catcher.GetNextResult()) << result_catcher.message();
+
+  ProcessManager* process_manager = ProcessManager::Get(profile());
+  ProcessManager::FrameSet frames =
+      process_manager->GetRenderFrameHostsForExtension(extension->id());
+  ASSERT_EQ(1u, frames.size());
+  content::RenderFrameHost* render_frame_host = *frames.begin();
+
+  content::WebContents* popup_contents =
+      content::WebContents::FromRenderFrameHost(render_frame_host);
+  ASSERT_TRUE(popup_contents);
+
+  std::string foo;
+  EXPECT_TRUE(content::ExecuteScriptAndExtractString(
+      popup_contents, "domAutomationController.send(sessionStorage.foo)",
+      &foo));
+  EXPECT_EQ("1", foo);
+
+  const std::string session_storage_id1 =
+      popup_contents->GetController().GetDefaultSessionStorageNamespace()->id();
+
+  // Close the popup.
+  content::WebContentsDestroyedWatcher contents_destroyed(popup_contents);
+  EXPECT_TRUE(content::ExecuteScript(popup_contents, "window.close()"));
+  contents_destroyed.Wait();
+
+  frames = process_manager->GetRenderFrameHostsForExtension(extension->id());
+  EXPECT_EQ(0u, frames.size());
+
+  // Open the popup again.
+  toolbar_helper->Press(0);
+  EXPECT_TRUE(result_catcher.GetNextResult()) << result_catcher.message();
+
+  frames = process_manager->GetRenderFrameHostsForExtension(extension->id());
+  ASSERT_EQ(1u, frames.size());
+  render_frame_host = *frames.begin();
+
+  popup_contents = content::WebContents::FromRenderFrameHost(render_frame_host);
+  const std::string session_storage_id2 =
+      popup_contents->GetController().GetDefaultSessionStorageNamespace()->id();
+
+  // Verify that sessionStorage did not persist. The reason is that closing the
+  // popup ends the session and clears objects in sessionStorage.
+  EXPECT_NE(session_storage_id1, session_storage_id2);
+  foo = "";
+  EXPECT_TRUE(content::ExecuteScriptAndExtractString(
+      popup_contents, "domAutomationController.send(sessionStorage.foo)",
+      &foo));
+  EXPECT_EQ("1", foo);
 }
 
 // Tests setting the icon dynamically from the background page.

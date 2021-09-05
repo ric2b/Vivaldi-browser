@@ -14,6 +14,7 @@
 #include "third_party/blink/renderer/core/css/css_computed_style_declaration.h"
 #include "third_party/blink/renderer/core/display_lock/display_lock_utilities.h"
 #include "third_party/blink/renderer/core/dom/element.h"
+#include "third_party/blink/renderer/core/dom/node_computed_style.h"
 #include "third_party/blink/renderer/core/dom/shadow_root.h"
 #include "third_party/blink/renderer/core/dom/static_node_list.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
@@ -105,14 +106,12 @@ SearchingForNodeTool::SearchingForNodeTool(InspectorDOMAgent* dom_agent,
                                            bool ua_shadow,
                                            const std::vector<uint8_t>& config)
     : dom_agent_(dom_agent), ua_shadow_(ua_shadow) {
-  auto value = protocol::Value::parseBinary(config.data(), config.size());
-  if (!value)
-    return;
-  protocol::ErrorSupport errors;
-  std::unique_ptr<protocol::Overlay::HighlightConfig> highlight_config =
-      protocol::Overlay::HighlightConfig::fromValue(value.get(), &errors);
-  highlight_config_ =
-      InspectorOverlayAgent::ToHighlightConfig(highlight_config.get());
+  auto parsed_config = protocol::Overlay::HighlightConfig::FromBinary(
+      config.data(), config.size());
+  if (parsed_config) {
+    highlight_config_ =
+        InspectorOverlayAgent::ToHighlightConfig(parsed_config.get());
+  }
 }
 
 void SearchingForNodeTool::Trace(Visitor* visitor) const {
@@ -229,6 +228,9 @@ bool SearchingForNodeTool::HandleGestureTapEvent(const WebGestureEvent& event) {
 }
 
 bool SearchingForNodeTool::HandlePointerEvent(const WebPointerEvent& event) {
+  // Trigger Inspect only when a pointer device is pressed down.
+  if (event.GetType() != WebInputEvent::Type::kPointerDown)
+    return false;
   Node* node = HoveredNodeForEvent(overlay_->GetFrame(), event, false);
   if (node) {
     overlay_->Inspect(node);
@@ -357,6 +359,134 @@ NodeHighlightTool::GetNodeInspectorHighlightAsJson(
   return highlight.AsProtocolValue();
 }
 
+// GridHighlightTool -----------------------------------------------------------
+
+int GridHighlightTool::GetDataResourceId() {
+  return IDR_INSPECT_TOOL_HIGHLIGHT_GRID_JS;
+}
+
+void GridHighlightTool::AddGridConfig(
+    Node* node,
+    std::unique_ptr<InspectorGridHighlightConfig> grid_highlight_config) {
+  grid_node_highlights_.emplace_back(
+      std::make_pair(node, std::move(grid_highlight_config)));
+}
+
+bool GridHighlightTool::ForwardEventsToOverlay() {
+  return false;
+}
+
+bool GridHighlightTool::HideOnHideHighlight() {
+  return false;
+}
+
+bool GridHighlightTool::HideOnMouseMove() {
+  return false;
+}
+
+void GridHighlightTool::Draw(float scale) {
+  for (auto& entry : grid_node_highlights_) {
+    std::unique_ptr<protocol::Value> highlight =
+        InspectorGridHighlight(entry.first.Get(), *(entry.second));
+    if (!highlight)
+      continue;
+    overlay_->EvaluateInOverlay("drawGridHighlight", std::move(highlight));
+  }
+}
+
+std::unique_ptr<protocol::DictionaryValue>
+GridHighlightTool::GetGridInspectorHighlightsAsJson() const {
+  std::unique_ptr<protocol::ListValue> highlights =
+      protocol::ListValue::create();
+  for (auto& entry : grid_node_highlights_) {
+    std::unique_ptr<protocol::Value> highlight =
+        InspectorGridHighlight(entry.first.Get(), *(entry.second));
+    if (!highlight)
+      continue;
+    highlights->pushValue(std::move(highlight));
+  }
+  std::unique_ptr<protocol::DictionaryValue> result =
+      protocol::DictionaryValue::create();
+  if (highlights->size() > 0) {
+    result->setValue("gridHighlights", std::move(highlights));
+  }
+  return result;
+}
+
+// SourceOrderTool -----------------------------------------------------------
+
+SourceOrderTool::SourceOrderTool(
+    Node* node,
+    std::unique_ptr<InspectorSourceOrderConfig> source_order_config)
+    : source_order_config_(std::move(source_order_config)) {
+  if (Node* locked_ancestor =
+          DisplayLockUtilities::HighestLockedExclusiveAncestor(*node)) {
+    node_ = locked_ancestor;
+  } else {
+    node_ = node;
+  }
+}
+
+void SourceOrderTool::Draw(float scale) {
+  DrawParentNode();
+
+  // Draw child outlines and labels.
+  int position_number = 1;
+  for (Node& child_node : NodeTraversal::ChildrenOf(*node_)) {
+    // Don't draw if it's not an element or is not the direct child of the
+    // parent node.
+    if (!child_node.IsElementNode())
+      continue;
+    // Don't draw if it's not rendered/would be ignored by a screen reader.
+    if (child_node.GetComputedStyle()) {
+      bool display_none =
+          child_node.GetComputedStyle()->Display() == EDisplay::kNone;
+      bool visibility_hidden =
+          child_node.GetComputedStyle()->Visibility() == EVisibility::kHidden;
+      if (display_none || visibility_hidden)
+        continue;
+    }
+    DrawNode(&child_node, position_number);
+    position_number++;
+  }
+}
+
+void SourceOrderTool::DrawNode(Node* node, int source_order_position) {
+  InspectorSourceOrderHighlight highlight(
+      node, source_order_config_->child_outline_color, source_order_position);
+  overlay_->EvaluateInOverlay("drawSourceOrder", highlight.AsProtocolValue());
+}
+
+void SourceOrderTool::DrawParentNode() {
+  InspectorSourceOrderHighlight highlight(
+      node_.Get(), source_order_config_->parent_outline_color, 0);
+  overlay_->EvaluateInOverlay("drawSourceOrder", highlight.AsProtocolValue());
+}
+
+bool SourceOrderTool::HideOnHideHighlight() {
+  return true;
+}
+
+bool SourceOrderTool::HideOnMouseMove() {
+  return false;
+}
+
+int SourceOrderTool::GetDataResourceId() {
+  return IDR_INSPECT_TOOL_SOURCE_ORDER_JS;
+}
+
+std::unique_ptr<protocol::DictionaryValue>
+SourceOrderTool::GetNodeInspectorSourceOrderHighlightAsJson() const {
+  InspectorSourceOrderHighlight highlight(
+      node_.Get(), source_order_config_->parent_outline_color, 0);
+  return highlight.AsProtocolValue();
+}
+
+void SourceOrderTool::Trace(Visitor* visitor) const {
+  InspectTool::Trace(visitor);
+  visitor->Trace(node_);
+}
+
 // NearbyDistanceTool ----------------------------------------------------------
 
 int NearbyDistanceTool::GetDataResourceId() {
@@ -464,16 +594,10 @@ void ScreenshotTool::Dispatch(const String& message) {
             message.length()),
         &cbor);
   }
-  std::unique_ptr<protocol::Value> value =
-      protocol::Value::parseBinary(cbor.data(), cbor.size());
-  if (!value)
-    return;
-  protocol::ErrorSupport errors;
   std::unique_ptr<protocol::DOM::Rect> box =
-      protocol::DOM::Rect::fromValue(value.get(), &errors);
-  if (!errors.Errors().empty())
+      protocol::DOM::Rect::FromBinary(cbor.data(), cbor.size());
+  if (!box)
     return;
-
   float scale = 1.0f;
   // Capture values in the CSS pixels.
   IntPoint p1(box->getX(), box->getY());

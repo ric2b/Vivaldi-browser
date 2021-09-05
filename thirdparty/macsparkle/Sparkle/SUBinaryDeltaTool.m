@@ -20,6 +20,8 @@
 #define VERSION_COMMAND @"version"
 #define VERSION_ALTERNATE_COMMAND @"--version"
 
+#include "AppKitPrevention.h"
+
 static void printUsage(NSString *programName)
 {
     fprintf(stderr, "Usage:\n");
@@ -28,14 +30,14 @@ static void printUsage(NSString *programName)
     fprintf(stderr, "%s version [<patch-file>]\n", [programName UTF8String]);
 }
 
-static BOOL runCreateCommand(NSString *programName, NSArray *args)
+static BOOL runCreateCommand(NSString *programName, NSArray<NSString *> *args)
 {
     if (args.count < 3 || args.count > 5) {
         printUsage(programName);
         return NO;
     }
 
-    NSUInteger numberOflagsFound = 0;
+    NSUInteger numberOfFlagsFound = 0;
     NSUInteger verboseIndex = [args indexOfObject:VERBOSE_FLAG];
     NSUInteger versionIndex = NSNotFound;
     for (NSUInteger argumentIndex = 0; argumentIndex < args.count; ++argumentIndex) {
@@ -46,13 +48,13 @@ static BOOL runCreateCommand(NSString *programName, NSArray *args)
     }
 
     if (verboseIndex != NSNotFound) {
-        ++numberOflagsFound;
+        ++numberOfFlagsFound;
     }
     if (versionIndex != NSNotFound) {
-        ++numberOflagsFound;
+        ++numberOfFlagsFound;
     }
 
-    if (args.count - numberOflagsFound < 3) {
+    if (args.count - numberOfFlagsFound < 3) {
         printUsage(programName);
         return NO;
     }
@@ -60,7 +62,7 @@ static BOOL runCreateCommand(NSString *programName, NSArray *args)
     BOOL verbose = (verboseIndex != NSNotFound);
     NSString *versionField = (versionIndex != NSNotFound) ? args[versionIndex] : nil;
 
-    NSArray *versionComponents = nil;
+    NSArray<NSString *> *versionComponents = nil;
     if (versionField) {
         versionComponents = [versionField componentsSeparatedByString:@"="];
         if (versionComponents.count != 2) {
@@ -96,21 +98,25 @@ static BOOL runCreateCommand(NSString *programName, NSArray *args)
         return NO;
     }
 
+    NSString *sourcePath = fileArgs[0];
+    NSString *destPath = fileArgs[1];
+    NSString *patchPath = fileArgs[2];
+
     BOOL isDirectory;
-    if (![[NSFileManager defaultManager] fileExistsAtPath:fileArgs[0] isDirectory:&isDirectory] || !isDirectory) {
+    if (![[NSFileManager defaultManager] fileExistsAtPath:sourcePath isDirectory:&isDirectory] || !isDirectory) {
         printUsage(programName);
         fprintf(stderr, "Error: before-tree must be a directory\n");
         return NO;
     }
 
-    if (![[NSFileManager defaultManager] fileExistsAtPath:fileArgs[1] isDirectory:&isDirectory] || !isDirectory) {
+    if (![[NSFileManager defaultManager] fileExistsAtPath:destPath isDirectory:&isDirectory] || !isDirectory) {
         printUsage(programName);
         fprintf(stderr, "Error: after-tree must be a directory\n");
         return NO;
     }
 
     NSError *createDiffError = nil;
-    if (!createBinaryDelta(fileArgs[0], fileArgs[1], fileArgs[2], patchVersion, verbose, &createDiffError)) {
+    if (!createBinaryDelta(sourcePath, destPath, patchPath, patchVersion, verbose, &createDiffError)) {
         fprintf(stderr, "%s\n", [createDiffError.localizedDescription UTF8String]);
         return NO;
     }
@@ -118,7 +124,7 @@ static BOOL runCreateCommand(NSString *programName, NSArray *args)
     return YES;
 }
 
-static BOOL runApplyCommand(NSString *programName, NSArray *args)
+static BOOL runApplyCommand(NSString *programName, NSArray<NSString *> *args)
 {
     if (args.count < 3 || args.count > 4) {
         printUsage(programName);
@@ -132,7 +138,7 @@ static BOOL runApplyCommand(NSString *programName, NSArray *args)
         return NO;
     }
 
-    NSMutableArray *fileArgs = [NSMutableArray array];
+    NSMutableArray<NSString *> *fileArgs = [NSMutableArray array];
     for (NSString *argument in args) {
         if (![argument isEqualToString:VERBOSE_FLAG]) {
             [fileArgs addObject:argument];
@@ -158,7 +164,7 @@ static BOOL runApplyCommand(NSString *programName, NSArray *args)
     }
 
     NSError *applyDiffError = nil;
-    if (!applyBinaryDelta(fileArgs[0], fileArgs[1], fileArgs[2], verbose, &applyDiffError)) {
+    if (!applyBinaryDelta(fileArgs[0], fileArgs[1], fileArgs[2], verbose, ^(__unused double x){}, &applyDiffError)) {
         fprintf(stderr, "%s\n", [applyDiffError.localizedDescription UTF8String]);
         return NO;
     }
@@ -166,7 +172,7 @@ static BOOL runApplyCommand(NSString *programName, NSArray *args)
     return YES;
 }
 
-static BOOL runVersionCommand(NSString *programName, NSArray *args)
+static BOOL runVersionCommand(NSString *programName, NSArray<NSString *> *args)
 {
     if (args.count > 1) {
         printUsage(programName);
@@ -184,7 +190,7 @@ static BOOL runVersionCommand(NSString *programName, NSArray *args)
         }
 
         SUBinaryDeltaMajorVersion majorDiffVersion = FIRST_DELTA_DIFF_MAJOR_VERSION;
-        SUBinaryDeltaMinorVersion minorDiffVersion = FIRST_DELTA_DIFF_MINOR_VERSION;
+        int minorDiffVersion = 0;
 
         xar_subdoc_t subdoc;
         for (subdoc = xar_subdoc_first(x); subdoc; subdoc = xar_subdoc_next(subdoc)) {
@@ -199,7 +205,7 @@ static BOOL runVersionCommand(NSString *programName, NSArray *args)
                 // available in version 2.0 or later
                 xar_subdoc_prop_get(subdoc, MINOR_DIFF_VERSION_KEY, &value);
                 if (value)
-                    minorDiffVersion = (SUBinaryDeltaMinorVersion)[@(value) intValue];
+                    minorDiffVersion = [@(value) intValue];
             }
         }
 
@@ -212,7 +218,7 @@ static BOOL runVersionCommand(NSString *programName, NSArray *args)
 int main(int __unused argc, char __unused *argv[])
 {
     @autoreleasepool {
-        NSArray *args = [[NSProcessInfo processInfo] arguments];
+        NSArray<NSString *> *args = [[NSProcessInfo processInfo] arguments];
         NSString *programName = [args[0] lastPathComponent];
 
         if (args.count < 2) {
@@ -221,7 +227,7 @@ int main(int __unused argc, char __unused *argv[])
         }
 
         NSString *command = args[1];
-        NSArray *commandArguments = [args subarrayWithRange:NSMakeRange(2, args.count - 2)];
+        NSArray<NSString *> *commandArguments = [args subarrayWithRange:NSMakeRange(2, args.count - 2)];
 
         BOOL result;
         if ([command isEqualToString:CREATE_COMMAND]) {

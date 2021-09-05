@@ -13,6 +13,7 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/traced_value.h"
 #include "components/exo/buffer.h"
@@ -39,10 +40,11 @@
 #include "ui/base/cursor/mojom/cursor_type.mojom-shared.h"
 #include "ui/base/hit_test.h"
 #include "ui/compositor/layer.h"
+#include "ui/display/display.h"
+#include "ui/display/screen.h"
 #include "ui/events/event.h"
 #include "ui/gfx/buffer_format_util.h"
 #include "ui/gfx/geometry/dip_util.h"
-#include "ui/gfx/geometry/safe_integer_conversions.h"
 #include "ui/gfx/geometry/size_conversions.h"
 #include "ui/gfx/gpu_fence.h"
 #include "ui/gfx/gpu_memory_buffer.h"
@@ -161,8 +163,8 @@ class CustomWindowDelegate : public aura::WindowDelegate {
   void OnWindowDestroying(aura::Window* window) override {}
   void OnWindowDestroyed(aura::Window* window) override { delete this; }
   void OnWindowTargetVisibilityChanged(bool visible) override {}
-  void OnWindowOcclusionChanged(aura::Window::OcclusionState occlusion_state,
-                                const SkRegion& occluded_region) override {
+  void OnWindowOcclusionChanged(
+      aura::Window::OcclusionState occlusion_state) override {
     surface_->OnWindowOcclusionChanged();
   }
   bool HasHitTestMask() const override { return true; }
@@ -365,6 +367,18 @@ void Surface::AddSubSurface(Surface* sub_surface) {
   pending_sub_surfaces_.push_back(std::make_pair(sub_surface, gfx::Point()));
   sub_surfaces_.push_back(std::make_pair(sub_surface, gfx::Point()));
   sub_surfaces_changed_ = true;
+
+  // The shell might have not be added to the root yet.
+  if (window_->GetRootWindow()) {
+    auto display =
+        display::Screen::GetScreen()->GetDisplayNearestWindow(window_.get());
+    sub_surface->UpdateDisplay(display::kInvalidDisplayId, display.id());
+  }
+}
+
+void Surface::OnNewOutputAdded() {
+  if (delegate_)
+    delegate_->OnNewOutputAdded();
 }
 
 void Surface::RemoveSubSurface(Surface* sub_surface) {
@@ -524,6 +538,13 @@ void Surface::SetApplicationId(const char* application_id) {
     delegate_->OnSetApplicationId(application_id);
 }
 
+void Surface::SetUseImmersiveForFullscreen(bool value) {
+  TRACE_EVENT1("exo", "Surface::SetUseImmersiveForFullscreen", "value", value);
+
+  if (delegate_)
+    delegate_->SetUseImmersiveForFullscreen(value);
+}
+
 void Surface::SetColorSpace(gfx::ColorSpace color_space) {
   TRACE_EVENT1("exo", "Surface::SetColorSpace", "color_space",
                color_space.ToString());
@@ -591,6 +612,15 @@ void Surface::Commit() {
     delegate_->OnSurfaceCommit();
   else
     CommitSurfaceHierarchy(false);
+}
+
+void Surface::UpdateDisplay(int64_t old_display, int64_t new_display) {
+  if (!leave_enter_callback_.is_null())
+    leave_enter_callback_.Run(old_display, new_display);
+  for (const auto& sub_surface_entry : base::Reversed(sub_surfaces_)) {
+    auto* sub_surface = sub_surface_entry.first;
+    sub_surface->UpdateDisplay(old_display, new_display);
+  }
 }
 
 void Surface::CommitSurfaceHierarchy(bool synchronized) {
@@ -948,7 +978,15 @@ void Surface::UpdateResource(FrameSinkResourceManager* resource_manager) {
             state_.only_visible_on_secure_output, &current_resource_)) {
       current_resource_has_alpha_ =
           FormatHasAlpha(current_buffer_.buffer()->GetFormat());
-      current_resource_.color_space = state_.color_space;
+      // Planar buffers are sampled as RGB. Technically, the driver is supposed
+      // to preserve the colorspace, so we could still pass the primaries and
+      // transfer function.  However, we don't actually pass the colorspace
+      // to the driver, and it's unclear what drivers would actually do if we
+      // did. So in effect, the colorspace is undefined.
+      if (NumberOfPlanesForLinearBufferFormat(
+              current_buffer_.buffer()->GetFormat()) > 1) {
+        current_resource_.color_space = state_.color_space;
+      }
     } else {
       current_resource_.id = 0;
       // Use the buffer's size, so the AppendContentsToFrame() will append
@@ -1005,8 +1043,18 @@ void Surface::AppendContentsToFrame(const gfx::Point& origin,
     damage_rect.Inset(-1, -1);
     damage_rect += origin.OffsetFromOrigin();
     damage_rect.Intersect(output_rect);
-    render_pass->damage_rect.Union(
-        gfx::ConvertRectToPixel(device_scale_factor, damage_rect));
+    if (device_scale_factor <= 1) {
+      render_pass->damage_rect.Union(
+          gfx::ConvertRectToPixel(device_scale_factor, damage_rect));
+    } else {
+      // The damage will eventually be rescaled by 1/device_scale_factor. Since
+      // that scale factor is <1, taking the enclosed rect here means that that
+      // rescaled RectF is <1px smaller than |damage_rect| in each dimension,
+      // which makes the enclosing rect equal to |damage_rect|.
+      gfx::RectF scaled_damage(damage_rect);
+      scaled_damage.Scale(device_scale_factor);
+      render_pass->damage_rect.Union(gfx::ToEnclosedRect(scaled_damage));
+    }
   }
   damage_.Clear();
 
@@ -1062,6 +1110,7 @@ void Surface::AppendContentsToFrame(const gfx::Point& origin,
       gfx::RRectF() /*rounded_corner_bounds=*/, gfx::Rect() /*clip_rect=*/,
       false /*is_clipped=*/, are_contents_opaque, state_.alpha /*opacity=*/,
       SkBlendMode::kSrcOver /*blend_mode=*/, 0 /*sorting_context_id=*/);
+  quad_state->no_damage = damage_rect.IsEmpty();
 
   if (current_resource_.id) {
     gfx::RectF uv_crop(gfx::SizeF(1, 1));
@@ -1142,8 +1191,9 @@ void Surface::UpdateContentSize() {
   if (!state_.viewport.IsEmpty()) {
     content_size = state_.viewport;
   } else if (!state_.crop.IsEmpty()) {
-    DLOG_IF(WARNING, !gfx::IsExpressibleAsInt(state_.crop.width()) ||
-                         !gfx::IsExpressibleAsInt(state_.crop.height()))
+    DLOG_IF(WARNING,
+            !base::IsValueInRangeForNumericType<int>(state_.crop.width()) ||
+                !base::IsValueInRangeForNumericType<int>(state_.crop.height()))
         << "Crop rectangle size (" << state_.crop.size().ToString()
         << ") most be expressible using integers when viewport is not set";
     content_size = gfx::ToCeiledSize(state_.crop.size());
@@ -1163,6 +1213,9 @@ void Surface::UpdateContentSize() {
   if (content_size_ != content_size) {
     content_size_ = content_size;
     window_->SetBounds(gfx::Rect(window_->bounds().origin(), content_size_));
+
+    for (SurfaceObserver& observer : observers_)
+      observer.OnContentSizeChanged(this);
   }
 }
 

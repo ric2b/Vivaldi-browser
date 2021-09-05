@@ -31,6 +31,7 @@
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/events/event.h"
 #include "third_party/blink/renderer/core/dom/text.h"
+#include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/frame/csp/content_security_policy.h"
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/core/script/script_loader.h"
@@ -270,9 +271,10 @@ bool HTMLScriptElement::AllowInlineScriptForCSP(
     const AtomicString& nonce,
     const WTF::OrdinalNumber& context_line,
     const String& script_content) {
-  return GetExecutionContext()->GetContentSecurityPolicyForWorld()->AllowInline(
-      ContentSecurityPolicy::InlineType::kScript, this, script_content, nonce,
-      GetDocument().Url(), context_line);
+  return GetExecutionContext()
+      ->GetContentSecurityPolicyForCurrentWorld()
+      ->AllowInline(ContentSecurityPolicy::InlineType::kScript, this,
+                    script_content, nonce, GetDocument().Url(), context_line);
 }
 
 Document& HTMLScriptElement::GetDocument() const {

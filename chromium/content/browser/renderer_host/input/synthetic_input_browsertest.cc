@@ -84,7 +84,7 @@ class GestureScrollObserver : public RenderWidgetHost::InputEventObserver {
 // being closed.
 IN_PROC_BROWSER_TEST_F(SyntheticInputTest, DestroyWidgetWithOngoingGesture) {
   EXPECT_TRUE(NavigateToURL(shell(), GURL("about:blank")));
-  WaitForLoadStop(shell()->web_contents());
+  EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
 
   GestureScrollObserver gesture_observer;
 
@@ -160,7 +160,10 @@ IN_PROC_BROWSER_TEST_F(SyntheticInputTest, SmoothScrollWheel) {
 
 // This test ensures that slow synthetic wheel scrolling does not lose precision
 // over time.
-IN_PROC_BROWSER_TEST_F(SyntheticInputTest, SlowSmoothScrollWheel) {
+// https://crbug.com/1103731. Flaky on Android bots.
+// https://crbug.com/1086334. Flaky on all desktop bots, but maybe for a
+// different reason.
+IN_PROC_BROWSER_TEST_F(SyntheticInputTest, DISABLED_SlowSmoothScrollWheel) {
   LoadURL(R"HTML(
     data:text/html;charset=utf-8,
     <!DOCTYPE html>

@@ -37,8 +37,8 @@ import org.chromium.base.annotations.NativeMethods;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.task.PostTask;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.compositor.CompositorView;
 import org.chromium.chrome.browser.offlinepages.OfflinePageUtils;
 import org.chromium.chrome.browser.page_info.ChromePageInfoControllerDelegate;
@@ -53,7 +53,7 @@ import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tab.TabObserver;
 import org.chromium.chrome.browser.tabmodel.ChromeTabCreator;
 import org.chromium.chrome.browser.tabmodel.EmptyTabModelSelectorObserver;
-import org.chromium.chrome.browser.tabmodel.TabCreatorManager.TabCreator;
+import org.chromium.chrome.browser.tabmodel.TabCreator;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorObserver;
@@ -400,7 +400,7 @@ public class VrShell extends GvrLayout
 
         // Start with content rendering paused if the renderer-drawn controls are visible, as this
         // would cause the in-content omnibox to be shown to users.
-        boolean pauseContent = mActivity.getFullscreenManager().getContentOffset() > 0;
+        boolean pauseContent = mActivity.getBrowserControlsManager().getContentOffset() > 0;
 
         // Get physical and pixel size of the display, which is needed by native
         // to dynamically calculate the content's resolution and window size.
@@ -1040,7 +1040,7 @@ public class VrShell extends GvrLayout
 
     @CalledByNative
     public boolean hasDaydreamSupport() {
-        return mDelegate.hasDaydreamSupport();
+        return VrCoreInstallUtils.hasDaydreamSupport();
     }
 
     public void requestToExitVr(@UiUnsupportedMode int reason, boolean showExitPromptBeforeDoff) {

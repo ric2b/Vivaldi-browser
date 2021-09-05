@@ -10,7 +10,8 @@ import android.view.View;
 
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.chrome.browser.compositor.TitleCache;
-import org.chromium.chrome.browser.fullscreen.ChromeFullscreenManager;
+import org.chromium.chrome.browser.fullscreen.BrowserControlsManager;
+import org.chromium.chrome.browser.fullscreen.FullscreenManager;
 
 /**
  * This is the minimal interface of the host view from the layout side.
@@ -106,14 +107,19 @@ public interface LayoutManagerHost {
     TitleCache getTitleCache();
 
     /**
-     * @return The manager in charge of handling fullscreen changes.
+     * @return The manager providing browser control state.
      */
-    ChromeFullscreenManager getFullscreenManager();
+    BrowserControlsManager getBrowserControlsManager();
 
     /**
-     * @return An {@link ObservableSupplier} supplier for the {@link ChromeFullscreenManager}.
+     * @return An {@link ObservableSupplier} supplier for the {@link BrowserControlsManager}.
      */
-    ObservableSupplier<ChromeFullscreenManager> getFullscreenManagerSupplier();
+    ObservableSupplier<BrowserControlsManager> getBrowserControlsManagerSupplier();
+
+    /**
+     * @return The manager in charge of handling fullscreen changes.
+     */
+    FullscreenManager getFullscreenManager();
 
     /**
      * Called when the currently visible content has been changed.

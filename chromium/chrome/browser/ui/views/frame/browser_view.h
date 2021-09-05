@@ -29,13 +29,13 @@
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "chrome/browser/ui/views/exclusive_access_bubble_views_context.h"
 #include "chrome/browser/ui/views/extensions/extension_keybinding_registry_views.h"
-#include "chrome/browser/ui/views/feature_promos/reopen_tab_promo_controller.h"
 #include "chrome/browser/ui/views/frame/browser_frame.h"
 #include "chrome/browser/ui/views/frame/browser_view_layout.h"
 #include "chrome/browser/ui/views/frame/contents_web_view.h"
 #include "chrome/browser/ui/views/frame/immersive_mode_controller.h"
 #include "chrome/browser/ui/views/frame/top_controls_slide_controller.h"
 #include "chrome/browser/ui/views/frame/web_contents_close_handler.h"
+#include "chrome/browser/ui/views/in_product_help/reopen_tab_promo_controller.h"
 #include "chrome/browser/ui/views/intent_picker_bubble_view.h"
 #include "chrome/browser/ui/views/load_complete_listener.h"
 #include "chrome/browser/ui/views/tabs/tab.h"
@@ -60,6 +60,7 @@ class Browser;
 class ContentsLayoutManager;
 class DownloadShelfView;
 class ExclusiveAccessBubbleViews;
+class FeaturePromoControllerViews;
 class FullscreenControlHost;
 class InfoBarContainerView;
 class LocationBarView;
@@ -76,10 +77,15 @@ class WebContentsCloseHandler;
 class WebUITabStripContainerView;
 
 namespace extensions {
-class ActiveTabPermissionGranter;
 class Command;
 class Extension;
 }
+
+#if defined(OS_CHROMEOS)
+namespace ui {
+class ThroughputTracker;
+}
+#endif
 
 namespace version_info {
 enum class Channel;
@@ -178,6 +184,10 @@ class BrowserView : public BrowserWindow,
     return GetBrowserViewLayout()->contents_border_widget();
   }
 
+  TabStripRegionView* tab_strip_region_view() const {
+    return tab_strip_region_view_;
+  }
+
   // Accessor for the TabStrip.
   TabStrip* tabstrip() { return tabstrip_; }
   const TabStrip* tabstrip() const { return tabstrip_; }
@@ -260,6 +270,16 @@ class BrowserView : public BrowserWindow,
   // page.
   bool IsTopControlsSlideBehaviorEnabled() const;
 
+#if defined(OS_WIN)
+  // Returns whether the browser can ever display a titlebar. Used in Windows
+  // touch mode. Possibly expand to ChromeOS if we add a titlebar back there in
+  // touch mode.
+  bool CanShowWindowTitle() const;
+
+  // Returns whether the browser can ever display a window icon.
+  bool CanShowWindowIcon() const;
+#endif
+
   // Returns the current shown ratio of the top browser controls.
   float GetTopControlsSlideBehaviorShownRatio() const;
 
@@ -288,6 +308,10 @@ class BrowserView : public BrowserWindow,
 
   TabGroupsIPHController* tab_groups_iph_controller() {
     return tab_groups_iph_controller_.get();
+  }
+
+  FeaturePromoControllerViews* feature_promo_controller() {
+    return feature_promo_controller_.get();
   }
 
   // BrowserWindow:
@@ -437,6 +461,7 @@ class BrowserView : public BrowserWindow,
   void UnhideDownloadShelf();
 
   void ShowEmojiPanel() override;
+  void ShowCaretBrowsingDialog() override;
 
   std::unique_ptr<content::EyeDropper> OpenEyeDropper(
       content::RenderFrameHost* frame,
@@ -490,9 +515,11 @@ class BrowserView : public BrowserWindow,
   // views::WidgetObserver:
   void OnWidgetDestroying(views::Widget* widget) override;
   void OnWidgetActivationChanged(views::Widget* widget, bool active) override;
+  void OnWidgetBoundsChanged(views::Widget* widget,
+                             const gfx::Rect& new_bounds) override;
 
   // views::ClientView:
-  bool CanClose() override;
+  views::CloseRequestResult OnWindowCloseRequested() override;
   int NonClientHitTest(const gfx::Point& point) override;
   gfx::Size GetMinimumSize() const override;
 
@@ -537,8 +564,7 @@ class BrowserView : public BrowserWindow,
   bool CanTriggerOnMouse() const override;
 
   // extension::ExtensionKeybindingRegistry::Delegate:
-  extensions::ActiveTabPermissionGranter* GetActiveTabPermissionGranter()
-      override;
+  content::WebContents* GetWebContentsForExtension() override;
 
   // ImmersiveModeController::Observer:
   void OnImmersiveRevealStarted() override;
@@ -568,6 +594,9 @@ class BrowserView : public BrowserWindow,
   // feature is enabled).
   std::vector<views::NativeViewHost*> GetNativeViewHostsForTopControlsSlide()
       const;
+
+  // Create and open the tab search bubble.
+  void CreateTabSearchBubble() override;
 
  private:
   // Do not friend BrowserViewLayout. Use the BrowserViewLayoutDelegate
@@ -703,6 +732,9 @@ class BrowserView : public BrowserWindow,
   // and activates them. It returns true if it succeeded activating a bubble or
   // false otherwise.
   bool ActivateFirstInactiveBubbleForAccessibility();
+
+  // Notifies that window bounds changed to extensions if needed.
+  void TryNotifyWindowBoundsChanged(const gfx::Rect& widget_bounds);
 
   // The BrowserFrame that hosts this view.
   BrowserFrame* frame_ = nullptr;
@@ -881,9 +913,19 @@ class BrowserView : public BrowserWindow,
 
   bool interactive_resize_in_progress_ = false;
 
+  // The last bounds we notified about in TryNotifyWindowBoundsChanged().
+  gfx::Rect last_widget_bounds_;
+
   std::unique_ptr<AccessibilityFocusHighlight> accessibility_focus_highlight_;
 
   std::unique_ptr<TabGroupsIPHController> tab_groups_iph_controller_;
+  std::unique_ptr<FeaturePromoControllerViews> feature_promo_controller_;
+
+#if defined(OS_CHROMEOS)
+  // |loading_animation_tracker_| is used to measure animation smoothness for
+  // tab loading animation.
+  base::Optional<ui::ThroughputTracker> loading_animation_tracker_;
+#endif
 
   mutable base::WeakPtrFactory<BrowserView> weak_ptr_factory_{this};
 

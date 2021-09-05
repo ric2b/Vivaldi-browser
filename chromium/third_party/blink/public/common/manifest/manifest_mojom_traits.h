@@ -71,7 +71,12 @@ struct BLINK_COMMON_EXPORT
     return manifest.display;
   }
 
-  static blink::WebScreenOrientationLockType orientation(
+  static const std::vector<blink::mojom::DisplayMode> display_override(
+      const ::blink::Manifest& manifest) {
+    return manifest.display_override;
+  }
+
+  static device::mojom::ScreenOrientationLockType orientation(
       const ::blink::Manifest& manifest) {
     return manifest.orientation;
   }
@@ -328,8 +333,8 @@ struct BLINK_COMMON_EXPORT
     switch (purpose) {
       case ::blink::Manifest::ImageResource::Purpose::ANY:
         return blink::mojom::ManifestImageResource_Purpose::ANY;
-      case ::blink::Manifest::ImageResource::Purpose::BADGE:
-        return blink::mojom::ManifestImageResource_Purpose::BADGE;
+      case ::blink::Manifest::ImageResource::Purpose::MONOCHROME:
+        return blink::mojom::ManifestImageResource_Purpose::MONOCHROME;
       case ::blink::Manifest::ImageResource::Purpose::MASKABLE:
         return blink::mojom::ManifestImageResource_Purpose::MASKABLE;
     }
@@ -342,8 +347,8 @@ struct BLINK_COMMON_EXPORT
       case blink::mojom::ManifestImageResource_Purpose::ANY:
         *out = ::blink::Manifest::ImageResource::Purpose::ANY;
         return true;
-      case blink::mojom::ManifestImageResource_Purpose::BADGE:
-        *out = ::blink::Manifest::ImageResource::Purpose::BADGE;
+      case blink::mojom::ManifestImageResource_Purpose::MONOCHROME:
+        *out = ::blink::Manifest::ImageResource::Purpose::MONOCHROME;
         return true;
       case blink::mojom::ManifestImageResource_Purpose::MASKABLE:
         *out = ::blink::Manifest::ImageResource::Purpose::MASKABLE;

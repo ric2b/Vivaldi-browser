@@ -6,17 +6,11 @@
 
 #include <dawn_native/VulkanBackend.h>
 
-#include <iostream>
 #include <utility>
 #include <vector>
 
 #include "base/posix/eintr_wrapper.h"
-#include "build/build_config.h"
-#include "gpu/vulkan/vulkan_function_pointers.h"
 #include "gpu/vulkan/vulkan_image.h"
-#include "gpu/vulkan/vulkan_implementation.h"
-#include "gpu/vulkan/vulkan_instance.h"
-#include "ui/gl/buildflags.h"
 
 namespace gpu {
 
@@ -46,9 +40,9 @@ ExternalVkImageDawnRepresentation::~ExternalVkImageDawnRepresentation() {
 
 WGPUTexture ExternalVkImageDawnRepresentation::BeginAccess(
     WGPUTextureUsage usage) {
-  std::vector<SemaphoreHandle> handles;
-
-  if (!backing_impl()->BeginAccess(false, &handles, false /* is_gl */)) {
+  DCHECK(begin_access_semaphores_.empty());
+  if (!backing_impl()->BeginAccess(false, &begin_access_semaphores_,
+                                   false /* is_gl */)) {
     return nullptr;
   }
 
@@ -58,7 +52,6 @@ WGPUTexture ExternalVkImageDawnRepresentation::BeginAccess(
   texture_descriptor.usage = usage;
   texture_descriptor.dimension = WGPUTextureDimension_2D;
   texture_descriptor.size = {size().width(), size().height(), 1};
-  texture_descriptor.arrayLayerCount = 1;
   texture_descriptor.mipLevelCount = 1;
   texture_descriptor.sampleCount = 1;
 
@@ -72,9 +65,9 @@ WGPUTexture ExternalVkImageDawnRepresentation::BeginAccess(
   // TODO(http://crbug.com/dawn/200): We may not be obeying all of the rules
   // specified by Vulkan for external queue transfer barriers. Investigate this.
 
-  // Take ownership of file descriptors and transfer to dawn
-  for (SemaphoreHandle& handle : handles) {
-    descriptor.waitFDs.push_back(handle.TakeHandle().release());
+  for (auto& external_semaphore : begin_access_semaphores_) {
+    descriptor.waitFDs.push_back(
+        external_semaphore.handle().TakeHandle().release());
   }
 
   texture_ = dawn_native::vulkan::WrapVulkanImage(device_, &descriptor);
@@ -102,17 +95,24 @@ void ExternalVkImageDawnRepresentation::EndAccess() {
   }
 
   // Wrap file descriptor in a handle
-  SemaphoreHandle signal_semaphore(
-      VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT_KHR,
-      base::ScopedFD(signal_semaphore_fd));
+  SemaphoreHandle handle(VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT_KHR,
+                         base::ScopedFD(signal_semaphore_fd));
 
-  backing_impl()->EndAccess(false, std::move(signal_semaphore),
-                            false /* is_gl */);
+  auto semaphore = ExternalSemaphore::CreateFromHandle(
+      backing_impl()->context_provider(), std::move(handle));
+
+  backing_impl()->EndAccess(false, std::move(semaphore), false /* is_gl */);
 
   // Destroy the texture, signaling the semaphore in dawn
   dawn_procs_.textureDestroy(texture_);
   dawn_procs_.textureRelease(texture_);
   texture_ = nullptr;
+
+  // We have done with |begin_access_semaphores_|. They should have been waited.
+  // So add them to pending semaphores for reusing or relaeasing.
+  backing_impl()->AddSemaphoresToPendingListOrRelease(
+      std::move(begin_access_semaphores_));
+  begin_access_semaphores_.clear();
 }
 
 }  // namespace gpu

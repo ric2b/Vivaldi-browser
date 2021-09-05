@@ -17,24 +17,14 @@
 
 struct DefineWriter {
   DefineWriter() { options.mode = ESCAPE_NINJA_COMMAND; }
-  DefineWriter(EscapingMode mode, bool escape_strings)
-      : escape_strings(escape_strings) {
-    options.mode = mode;
-  }
+  DefineWriter(EscapingMode mode) { options.mode = mode; }
 
   void operator()(const std::string& s, std::ostream& out) const {
     out << " ";
-    if (escape_strings) {
-      std::string dest;
-      base::EscapeJSONString(s, false, &dest);
-      EscapeStringToStream(out, "-D" + dest, options);
-      return;
-    }
     EscapeStringToStream(out, "-D" + s, options);
   }
 
   EscapeOptions options;
-  bool escape_strings = false;
 };
 
 struct FrameworkDirsWriter {
@@ -59,29 +49,19 @@ struct FrameworkDirsWriter {
 
 struct FrameworksWriter {
   explicit FrameworksWriter(const std::string& tool_switch)
-      : FrameworksWriter(ESCAPE_NINJA_COMMAND, false, tool_switch) {}
-  FrameworksWriter(EscapingMode mode,
-                   bool escape_strings,
-                   const std::string& tool_switch)
-      : escape_strings_(escape_strings), tool_switch_(tool_switch) {
+      : FrameworksWriter(ESCAPE_NINJA_COMMAND, tool_switch) {}
+  FrameworksWriter(EscapingMode mode, const std::string& tool_switch)
+      : tool_switch_(tool_switch) {
     options_.mode = mode;
   }
 
   void operator()(const std::string& s, std::ostream& out) const {
     out << " " << tool_switch_;
     std::string_view framework_name = GetFrameworkName(s);
-
-    if (escape_strings_) {
-      std::string dest;
-      base::EscapeJSONString(framework_name, false, &dest);
-      EscapeStringToStream(out, dest, options_);
-      return;
-    }
     EscapeStringToStream(out, framework_name, options_);
   }
 
   EscapeOptions options_;
-  bool escape_strings_;
   std::string tool_switch_;
 };
 

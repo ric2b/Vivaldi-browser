@@ -7,14 +7,16 @@
 
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
+#include "third_party/blink/renderer/core/style/computed_style_base_constants.h"
 #include "third_party/blink/renderer/platform/scheduler/public/post_cancellable_task.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 
 namespace blink {
 
-class Element;
 class DisplayLockScopedLogger;
+class Document;
+class Element;
 class StyleRecalcChange;
 
 enum class DisplayLockLifecycleTarget { kSelf, kChildren };
@@ -64,8 +66,6 @@ static_assert(static_cast<uint32_t>(DisplayLockActivationReason::kAny) <
 class CORE_EXPORT DisplayLockContext final
     : public GarbageCollected<DisplayLockContext>,
       public LocalFrameView::LifecycleNotificationObserver {
-  USING_GARBAGE_COLLECTED_MIXIN(DisplayLockContext);
-
  public:
   // The type of style that was blocked by this display lock.
   enum StyleType {
@@ -123,6 +123,8 @@ class CORE_EXPORT DisplayLockContext final
 
   // Returns true if this context is locked.
   bool IsLocked() const { return is_locked_; }
+
+  EContentVisibility GetState() { return state_; }
 
   bool UpdateForced() const { return update_forced_; }
 
@@ -198,6 +200,10 @@ class CORE_EXPORT DisplayLockContext final
       MarkForStyleRecalcIfNeeded();
       MarkForLayoutIfNeeded();
     }
+  }
+
+  bool HadAnyViewportIntersectionNotifications() const {
+    return had_any_viewport_intersection_notifications_;
   }
 
   // GC functions.
@@ -369,6 +375,11 @@ class CORE_EXPORT DisplayLockContext final
   bool keep_unlocked_until_lifecycle_ = false;
 
   bool needs_graphics_layer_rebuild_ = false;
+
+  // This is set to true if we're in the 'auto' mode and had our first
+  // intersection / non-intersection notification. This is reset to false if the
+  // 'auto' mode is added again (after being removed).
+  bool had_any_viewport_intersection_notifications_ = false;
 
   enum class RenderAffectingState : int {
     kLockRequested,

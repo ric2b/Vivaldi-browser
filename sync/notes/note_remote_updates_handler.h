@@ -39,6 +39,11 @@ class NoteRemoteUpdatesHandler {
   static std::vector<const syncer::UpdateResponseData*> ReorderUpdatesForTest(
       const syncer::UpdateResponseDataList* updates);
 
+  static size_t ComputeChildNodeIndexForTest(
+      const vivaldi::NoteNode* parent,
+      const sync_pb::UniquePosition& unique_position,
+      const SyncedNoteTracker* note_tracker);
+
  private:
   // Reorders incoming updates such that parent creation is before child
   // creation and child deletion is before parent deletion, and deletions should
@@ -93,7 +98,9 @@ class NoteRemoteUpdatesHandler {
   // from |note_tracker_|.
   void RemoveEntityAndChildrenFromTracker(const vivaldi::NoteNode* node);
 
-  void ReuploadEntityIfNeeded(const sync_pb::NotesSpecifics& specifics,
+  // Initiate reupload for the update with |entity_data|. |tracked_entity| must
+  // not be nullptr.
+  void ReuploadEntityIfNeeded(const syncer::EntityData& entity_data,
                               const SyncedNoteTracker::Entity* tracked_entity);
 
   vivaldi::NotesModel* const notes_model_;

@@ -1,4 +1,3 @@
-import("//build/config/jumbo.gni")
 
 source_set("adverse_adblocking") {
   sources = [

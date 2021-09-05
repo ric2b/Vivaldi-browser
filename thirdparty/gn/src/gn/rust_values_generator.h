@@ -11,13 +11,13 @@
 class FunctionCallNode;
 
 // Collects and writes specified data.
-class RustTargetGenerator {
+class RustValuesGenerator {
  public:
-  RustTargetGenerator(Target* target,
+  RustValuesGenerator(Target* target,
                       Scope* scope,
                       const FunctionCallNode* function_call,
                       Err* err);
-  ~RustTargetGenerator();
+  ~RustValuesGenerator();
 
   void Run();
 
@@ -33,7 +33,7 @@ class RustTargetGenerator {
   const FunctionCallNode* function_call_;
   Err* err_;
 
-  DISALLOW_COPY_AND_ASSIGN(RustTargetGenerator);
+  DISALLOW_COPY_AND_ASSIGN(RustValuesGenerator);
 };
 
 #endif  // TOOLS_GN_RUST_VALUES_GENERATOR_H_

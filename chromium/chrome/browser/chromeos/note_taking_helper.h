@@ -15,7 +15,7 @@
 #include "base/observer_list.h"
 #include "base/optional.h"
 #include "base/scoped_observer.h"
-#include "chrome/browser/chromeos/arc/session/arc_session_manager.h"
+#include "chrome/browser/chromeos/arc/session/arc_session_manager_observer.h"
 #include "chrome/browser/profiles/profile_manager_observer.h"
 #include "components/arc/intent_helper/arc_intent_helper_observer.h"
 #include "components/arc/mojom/intent_helper.mojom-forward.h"
@@ -89,7 +89,7 @@ using NoteTakingAppInfos = std::vector<NoteTakingAppInfo>;
 
 // Singleton class used to launch a note-taking app.
 class NoteTakingHelper : public arc::ArcIntentHelperObserver,
-                         public arc::ArcSessionManager::Observer,
+                         public arc::ArcSessionManagerObserver,
                          public extensions::ExtensionRegistryObserver,
                          public ProfileManagerObserver {
  public:
@@ -198,7 +198,7 @@ class NoteTakingHelper : public arc::ArcIntentHelperObserver,
   void OnIntentFiltersUpdated(
       const base::Optional<std::string>& package_name) override;
 
-  // arc::ArcSessionManager::Observer:
+  // arc::ArcSessionManagerObserver:
   void OnArcPlayStoreEnabledChanged(bool enabled) override;
 
   // ProfileManagerObserver:
@@ -262,7 +262,7 @@ class NoteTakingHelper : public arc::ArcIntentHelperObserver,
       Profile* profile,
       const extensions::Extension* app);
 
-  // Called when kNoteTakingAppsLockScreenWhitelist pref changes for
+  // Called when kNoteTakingAppsLockScreenAllowlist pref changes for
   // |profile_with_enabled_lock_screen_apps_|.
   void OnAllowedNoteTakingAppsChanged();
 
@@ -313,7 +313,7 @@ class NoteTakingHelper : public arc::ArcIntentHelperObserver,
   // and when |lock_screen_whitelist_state_| equals kAppsWhitelisted.
   std::set<std::string> lock_screen_apps_allowed_by_policy_;
 
-  // Tracks kNoteTakingAppsLockScreenWhitelist pref for the profile for which
+  // Tracks kNoteTakingAppsLockScreenAllowlist pref for the profile for which
   // lock screen apps are enabled.
   PrefChangeRegistrar pref_change_registrar_;
 

@@ -112,17 +112,11 @@ class OptimizationGuideHintsManager
   bool HasLoadedOptimizationBlocklist(
       optimization_guide::proto::OptimizationType optimization_type);
 
-  // Returns the OptimizationTargetDecision based on the given parameters.
-  // TODO(crbug/1021364): Remove this method once the hints have nothing to do
-  // with predicting navigations.
-  optimization_guide::OptimizationTargetDecision ShouldTargetNavigation(
-      content::NavigationHandle* navigation_handle,
-      optimization_guide::proto::OptimizationTarget optimization_target);
-
   // Returns the OptimizationTypeDecision based on the given parameters.
   // |optimization_metadata| will be populated, if applicable.
   optimization_guide::OptimizationTypeDecision CanApplyOptimization(
       const GURL& navigation_url,
+      const base::Optional<int64_t>& navigation_id,
       optimization_guide::proto::OptimizationType optimization_type,
       optimization_guide::OptimizationMetadata* optimization_metadata);
 
@@ -131,6 +125,7 @@ class OptimizationGuideHintsManager
   // |this| to make the decision. Virtual for testing.
   virtual void CanApplyOptimizationAsync(
       const GURL& navigation_url,
+      const base::Optional<int64_t>& navigation_id,
       optimization_guide::proto::OptimizationType optimization_type,
       optimization_guide::OptimizationGuideDecisionCallback callback);
 
@@ -276,6 +271,7 @@ class OptimizationGuideHintsManager
   // Optimization Guide Service and are ready for parsing. This is used when
   // fetching hints in batch mode.
   void OnTopHostsHintsFetched(
+      const base::flat_set<std::string>& hosts_fetched,
       base::Optional<
           std::unique_ptr<optimization_guide::proto::GetHintsResponse>>
           get_hints_response);
@@ -412,12 +408,15 @@ class OptimizationGuideHintsManager
                  std::unique_ptr<optimization_guide::OptimizationFilter>>
       blocklist_optimization_filters_ GUARDED_BY(optimization_filters_lock_);
 
-  // A map from URL to a map of callbacks keyed by their optimization type.
+  // A map from URL to a map of callbacks (along with the navigation IDs that
+  // they were called for) keyed by their optimization type.
   base::flat_map<
       GURL,
       base::flat_map<
           optimization_guide::proto::OptimizationType,
-          std::vector<optimization_guide::OptimizationGuideDecisionCallback>>>
+          std::vector<std::pair<
+              base::Optional<int64_t>,
+              optimization_guide::OptimizationGuideDecisionCallback>>>>
       registered_callbacks_;
 
   // Background thread where hints processing should be performed.

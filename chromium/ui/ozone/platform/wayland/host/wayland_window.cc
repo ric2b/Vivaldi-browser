@@ -6,6 +6,7 @@
 
 #include <wayland-client.h>
 
+#include <algorithm>
 #include <memory>
 
 #include "base/bind.h"
@@ -21,28 +22,42 @@
 #include "ui/ozone/platform/wayland/host/wayland_cursor_position.h"
 #include "ui/ozone/platform/wayland/host/wayland_output_manager.h"
 #include "ui/ozone/platform/wayland/host/wayland_pointer.h"
+#include "ui/ozone/platform/wayland/host/wayland_subsurface.h"
+#include "ui/ozone/public/mojom/wayland/wayland_overlay_config.mojom.h"
+
+namespace {
+
+bool OverlayStackOrderCompare(
+    const ui::ozone::mojom::WaylandOverlayConfigPtr& i,
+    const ui::ozone::mojom::WaylandOverlayConfigPtr& j) {
+  return i->z_order < j->z_order;
+}
+
+}  // namespace
 
 namespace ui {
 
 WaylandWindow::WaylandWindow(PlatformWindowDelegate* delegate,
                              WaylandConnection* connection)
-    : delegate_(delegate), connection_(connection) {}
+    : delegate_(delegate),
+      connection_(connection),
+      accelerated_widget_(
+          connection->wayland_window_manager()->AllocateAcceleratedWidget()) {}
 
 WaylandWindow::~WaylandWindow() {
+  shutting_down_ = true;
+
   PlatformEventSource::GetInstance()->RemovePlatformEventDispatcher(this);
-  if (surface())
+
+  for (const auto& widget_subsurface : wayland_subsurfaces()) {
+    connection_->wayland_window_manager()->RemoveSubsurface(
+        GetWidget(), widget_subsurface.get());
+  }
+  if (root_surface_)
     connection_->wayland_window_manager()->RemoveWindow(GetWidget());
 
   if (parent_window_)
     parent_window_->set_child_window(nullptr);
-}
-
-// static
-WaylandWindow* WaylandWindow::FromSurface(wl_surface* surface) {
-  if (!surface)
-    return nullptr;
-  return static_cast<WaylandWindow*>(
-      wl_proxy_get_user_data(reinterpret_cast<wl_proxy*>(surface)));
 }
 
 void WaylandWindow::OnWindowLostCapture() {
@@ -76,12 +91,17 @@ void WaylandWindow::UpdateBufferScale(bool update_bounds) {
     else
       ui_scale_ = display.device_scale_factor();
   }
-  SetBufferScale(new_scale, update_bounds);
+  // At this point, buffer_scale() still returns the old scale.
+  if (update_bounds)
+    SetBoundsDip(gfx::ScaleToRoundedRect(bounds_px_, 1.0 / buffer_scale()));
+
+  root_surface_->SetBufferScale(new_scale, update_bounds);
 }
 
 gfx::AcceleratedWidget WaylandWindow::GetWidget() const {
-  return wayland_surface_.GetWidget();
+  return accelerated_widget_;
 }
+
 void WaylandWindow::SetPointerFocus(bool focus) {
   has_pointer_focus_ = focus;
 
@@ -116,10 +136,7 @@ void WaylandWindow::SetBounds(const gfx::Rect& bounds_px) {
     return;
   bounds_px_ = bounds_px;
 
-  // Opaque region is based on the size of the window. Thus, update the region
-  // on each update.
-  MaybeUpdateOpaqueRegion();
-
+  root_surface_->SetBounds(bounds_px);
   delegate_->OnBoundsChanged(bounds_px_);
 }
 
@@ -316,23 +333,18 @@ void WaylandWindow::SetBoundsDip(const gfx::Rect& bounds_dip) {
 }
 
 bool WaylandWindow::Initialize(PlatformWindowInitProperties properties) {
-  // Properties contain DIP bounds but the buffer scale is initially 1 so it's
-  // OK to assign.  The bounds will be recalculated when the buffer scale
-  // changes.
-  DCHECK_EQ(buffer_scale(), 1);
-  bounds_px_ = properties.bounds;
-  opacity_ = properties.opacity;
-  type_ = properties.type;
-
-  wayland_surface_.surface_.reset(
-      wl_compositor_create_surface(connection_->compositor()));
-  wayland_surface_.root_window_ = this;
-  if (!surface()) {
+  root_surface_ = std::make_unique<WaylandSurface>(connection_, this);
+  if (!root_surface_->Initialize()) {
     LOG(ERROR) << "Failed to create wl_surface";
     return false;
   }
-  wl_surface_set_user_data(surface(), this);
-  AddSurfaceListener();
+
+  // Properties contain DIP bounds but the buffer scale is initially 1 so it's
+  // OK to assign.  The bounds will be recalculated when the buffer scale
+  // changes.
+  bounds_px_ = properties.bounds;
+  opacity_ = properties.opacity;
+  type_ = properties.type;
 
   connection_->wayland_window_manager()->AddWindow(GetWidget(), this);
 
@@ -346,25 +358,9 @@ bool WaylandWindow::Initialize(PlatformWindowInitProperties properties) {
 
   // Will do nothing for menus because they have got their scale above.
   UpdateBufferScale(false);
+  root_surface_->SetBounds(bounds_px_);
 
-  MaybeUpdateOpaqueRegion();
   return true;
-}
-
-void WaylandWindow::SetBufferScale(int32_t new_scale, bool update_bounds) {
-  DCHECK_GT(new_scale, 0);
-
-  if (new_scale == buffer_scale())
-    return;
-
-  auto old_scale = buffer_scale();
-  wayland_surface_.buffer_scale_ = new_scale;
-  if (update_bounds)
-    SetBoundsDip(gfx::ScaleToRoundedRect(bounds_px_, 1.0 / old_scale));
-
-  DCHECK(surface());
-  wl_surface_set_buffer_scale(surface(), buffer_scale());
-  connection_->ScheduleFlush();
 }
 
 WaylandWindow* WaylandWindow::GetParentWindow(
@@ -391,14 +387,6 @@ WaylandWindow* WaylandWindow::GetParentWindow(
 
 WaylandWindow* WaylandWindow::GetRootParentWindow() {
   return parent_window_ ? parent_window_->GetRootParentWindow() : this;
-}
-
-void WaylandWindow::AddSurfaceListener() {
-  static struct wl_surface_listener surface_listener = {
-      &WaylandWindow::Enter,
-      &WaylandWindow::Leave,
-  };
-  wl_surface_add_listener(surface(), &surface_listener, this);
 }
 
 void WaylandWindow::AddEnteredOutputId(struct wl_output* output) {
@@ -477,18 +465,6 @@ WaylandWindow* WaylandWindow::GetTopMostChildWindow() {
   return child_window_ ? child_window_->GetTopMostChildWindow() : this;
 }
 
-void WaylandWindow::MaybeUpdateOpaqueRegion() {
-  if (!IsOpaqueWindow())
-    return;
-
-  wl::Object<wl_region> region(
-      wl_compositor_create_region(connection_->compositor()));
-  wl_region_add(region.get(), 0, 0, bounds_px_.width(), bounds_px_.height());
-  wl_surface_set_opaque_region(surface(), region.get());
-
-  connection_->ScheduleFlush();
-}
-
 bool WaylandWindow::IsOpaqueWindow() const {
   return opacity_ == ui::PlatformWindowOpacity::kOpaqueWindow;
 }
@@ -505,26 +481,145 @@ uint32_t WaylandWindow::DispatchEventToDelegate(
   return handled ? POST_DISPATCH_STOP_PROPAGATION : POST_DISPATCH_NONE;
 }
 
-// static
-void WaylandWindow::Enter(void* data,
-                          struct wl_surface* wl_surface,
-                          struct wl_output* output) {
-  auto* window = static_cast<WaylandWindow*>(data);
-  if (window) {
-    DCHECK(window->surface() == wl_surface);
-    window->AddEnteredOutputId(output);
-  }
+std::unique_ptr<WaylandSurface> WaylandWindow::TakeWaylandSurface() {
+  DCHECK(shutting_down_);
+  DCHECK(root_surface_);
+  return std::move(root_surface_);
 }
 
-// static
-void WaylandWindow::Leave(void* data,
-                          struct wl_surface* wl_surface,
-                          struct wl_output* output) {
-  auto* window = static_cast<WaylandWindow*>(data);
-  if (window) {
-    DCHECK(window->surface() == wl_surface);
-    window->RemoveEnteredOutputId(output);
+bool WaylandWindow::RequestSubsurface() {
+  auto subsurface = std::make_unique<WaylandSubsurface>(connection_, this);
+  if (!subsurface->surface())
+    return false;
+  connection_->wayland_window_manager()->AddSubsurface(GetWidget(),
+                                                       subsurface.get());
+  subsurface_stack_above_.push_back(subsurface.get());
+  auto result = wayland_subsurfaces_.emplace(std::move(subsurface));
+  DCHECK(result.second);
+  return true;
+}
+
+bool WaylandWindow::ArrangeSubsurfaceStack(size_t above, size_t below) {
+  while (wayland_subsurfaces_.size() < above + below) {
+    if (!RequestSubsurface())
+      return false;
   }
+
+  DCHECK(subsurface_stack_below_.size() + subsurface_stack_above_.size() >=
+         above + below);
+
+  if (subsurface_stack_above_.size() < above) {
+    auto splice_start = subsurface_stack_below_.begin();
+    for (size_t i = 0; i < below; ++i)
+      ++splice_start;
+    subsurface_stack_above_.splice(subsurface_stack_above_.end(),
+                                   subsurface_stack_below_, splice_start,
+                                   subsurface_stack_below_.end());
+
+  } else if (subsurface_stack_below_.size() < below) {
+    auto splice_start = subsurface_stack_above_.end();
+    for (size_t i = 0; i < below - subsurface_stack_below_.size(); ++i)
+      --splice_start;
+    subsurface_stack_below_.splice(subsurface_stack_below_.end(),
+                                   subsurface_stack_above_, splice_start,
+                                   subsurface_stack_above_.end());
+  }
+
+  DCHECK(subsurface_stack_below_.size() >= below);
+  DCHECK(subsurface_stack_above_.size() >= above);
+  return true;
+}
+
+bool WaylandWindow::CommitOverlays(
+    std::vector<ui::ozone::mojom::WaylandOverlayConfigPtr>& overlays) {
+  // |overlays| is sorted from bottom to top.
+  std::sort(overlays.begin(), overlays.end(), OverlayStackOrderCompare);
+
+  // Find the location where z_oder becomes non-negative.
+  ozone::mojom::WaylandOverlayConfigPtr value =
+      ozone::mojom::WaylandOverlayConfig::New();
+  auto split = std::lower_bound(overlays.begin(), overlays.end(), value,
+                                OverlayStackOrderCompare);
+  CHECK((*split)->z_order >= 0);
+  size_t num_primary_planes = (*split)->z_order == 0 ? 1 : 0;
+
+  size_t above = (overlays.end() - split) - num_primary_planes;
+  size_t below = split - overlays.begin();
+  // Re-arrange the list of subsurfaces to fit the |overlays|. Request extra
+  // subsurfaces if needed.
+  if (!ArrangeSubsurfaceStack(above, below))
+    return false;
+
+  {
+    // Iterate through |subsurface_stack_below_|, setup subsurfaces and place
+    // them in corresponding order. Commit wl_buffers once a subsurface is
+    // configured.
+    auto overlay_iter = split - 1;
+    for (auto iter = subsurface_stack_below_.begin();
+         iter != subsurface_stack_below_.end(); ++iter, --overlay_iter) {
+      if (overlay_iter >= overlays.begin()) {
+        WaylandSurface* reference_above = nullptr;
+        if (overlay_iter == split - 1) {
+          // It's possible that |overlays| does not contain primary plane, we
+          // still want to place relative to the surface with z_order=0.
+          reference_above = root_surface();
+        } else {
+          reference_above = (*std::next(iter))->wayland_surface();
+        }
+        (*iter)->ConfigureAndShowSurface(
+            (*overlay_iter)->transform, (*overlay_iter)->bounds_rect,
+            (*overlay_iter)->enable_blend, nullptr, reference_above);
+        connection_->buffer_manager_host()->CommitBufferInternal(
+            (*iter)->wayland_surface(), (*overlay_iter)->buffer_id,
+            gfx::Rect());
+      } else {
+        // If there're more subsurfaces requested that we don't need at the
+        // moment, hide them.
+        (*iter)->Hide();
+      }
+    }
+
+    // Iterate through |subsurface_stack_above_|, setup subsurfaces and place
+    // them in corresponding order. Commit wl_buffers once a subsurface is
+    // configured.
+    overlay_iter = split + num_primary_planes;
+    for (auto iter = subsurface_stack_above_.begin();
+         iter != subsurface_stack_above_.end(); ++iter, ++overlay_iter) {
+      if (overlay_iter < overlays.end()) {
+        WaylandSurface* reference_below = nullptr;
+        if (overlay_iter == split + num_primary_planes) {
+          // It's possible that |overlays| does not contain primary plane, we
+          // still want to place relative to the surface with z_order=0.
+          reference_below = root_surface();
+        } else {
+          reference_below = (*std::prev(iter))->wayland_surface();
+        }
+        (*iter)->ConfigureAndShowSurface(
+            (*overlay_iter)->transform, (*overlay_iter)->bounds_rect,
+            (*overlay_iter)->enable_blend, reference_below, nullptr);
+        connection_->buffer_manager_host()->CommitBufferInternal(
+            (*iter)->wayland_surface(), (*overlay_iter)->buffer_id,
+            gfx::Rect());
+      } else {
+        // If there're more subsurfaces requested that we don't need at the
+        // moment, hide them.
+        (*iter)->Hide();
+      }
+    }
+  }
+
+  if (num_primary_planes) {
+    // TODO: forward fence.
+    connection_->buffer_manager_host()->CommitBufferInternal(
+        root_surface(), (*split)->buffer_id, (*split)->damage_region);
+  } else {
+    // Subsurfaces are set to desync, above operations will only take effects
+    // when root_surface is committed.
+    root_surface()->Commit();
+  }
+
+  // commit all;
+  return true;
 }
 
 }  // namespace ui

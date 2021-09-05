@@ -11,6 +11,8 @@ source_set("elements") {
     "fade_truncating_label.mm",
     "gray_highlight_button.h",
     "gray_highlight_button.mm",
+    "home_waiting_view.h",
+    "home_waiting_view.mm",
     "selector_picker_presentation_controller.h",
     "selector_picker_presentation_controller.mm",
     "selector_picker_view_controller.h",
@@ -28,6 +30,8 @@ source_set("elements") {
   deps = [
     "//base",
     "//ios/chrome/browser/ui:feature_flags",
+    "//ios/chrome/browser/ui/colors",
+    "//ios/chrome/browser/ui/material_components",
     "//ios/chrome/browser/ui/util",
     "//ios/chrome/common/ui/colors",
   ]
@@ -89,11 +93,13 @@ source_set("elements_internal") {
     "//base",
     "//ios/chrome/browser",
     "//ios/chrome/browser/ui/coordinators:chrome_coordinators",
+    "//ios/chrome/browser/ui/main:scene_state_header",
     "//ios/chrome/browser/ui/material_components",
+    "//ios/chrome/browser/ui/scoped_ui_blocker:scoped_ui_blocker",
     "//ios/chrome/browser/ui/util",
     "//ios/chrome/common/ui/colors",
     "//ios/chrome/common/ui/util",
     "//ios/third_party/material_components_ios",
   ]
-  libs = [ "UIKit.framework" ]
+  frameworks = [ "UIKit.framework" ]
 }

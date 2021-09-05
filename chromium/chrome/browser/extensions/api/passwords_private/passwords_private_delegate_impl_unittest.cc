@@ -23,6 +23,7 @@
 #include "chrome/browser/extensions/api/passwords_private/passwords_private_delegate_impl.h"
 #include "chrome/browser/extensions/api/passwords_private/passwords_private_event_router.h"
 #include "chrome/browser/extensions/api/passwords_private/passwords_private_event_router_factory.h"
+#include "chrome/browser/password_manager/account_password_store_factory.h"
 #include "chrome/browser/password_manager/chrome_password_manager_client.h"
 #include "chrome/browser/password_manager/password_store_factory.h"
 #include "chrome/common/extensions/api/passwords_private.h"
@@ -36,6 +37,7 @@
 #include "components/password_manager/core/browser/password_manager_test_utils.h"
 #include "components/password_manager/core/browser/reauth_purpose.h"
 #include "components/password_manager/core/browser/test_password_store.h"
+#include "components/password_manager/core/common/password_manager_features.h"
 #include "components/signin/public/base/signin_metrics.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/test/browser_task_environment.h"
@@ -69,6 +71,21 @@ scoped_refptr<TestPasswordStore> CreateAndUseTestPasswordStore(
     Profile* profile) {
   return base::WrapRefCounted(static_cast<TestPasswordStore*>(
       PasswordStoreFactory::GetInstance()
+          ->SetTestingFactoryAndUse(
+              profile,
+              base::BindRepeating(&password_manager::BuildPasswordStore<
+                                  content::BrowserContext, TestPasswordStore>))
+          .get()));
+}
+
+scoped_refptr<TestPasswordStore> CreateAndUseTestAccountPasswordStore(
+    Profile* profile) {
+  if (!base::FeatureList::IsEnabled(
+          password_manager::features::kEnablePasswordsAccountStorage)) {
+    return nullptr;
+  }
+  return base::WrapRefCounted(static_cast<TestPasswordStore*>(
+      AccountPasswordStoreFactory::GetInstance()
           ->SetTestingFactoryAndUse(
               profile,
               base::BindRepeating(&password_manager::BuildPasswordStore<
@@ -200,6 +217,8 @@ class PasswordsPrivateDelegateImplTest : public testing::Test {
   extensions::TestEventRouter* event_router_ = nullptr;
   scoped_refptr<TestPasswordStore> store_ =
       CreateAndUseTestPasswordStore(&profile_);
+  scoped_refptr<TestPasswordStore> account_store_ =
+      CreateAndUseTestAccountPasswordStore(&profile_);
   ui::TestClipboard* test_clipboard_ =
       ui::TestClipboard::CreateForCurrentThread();
 
@@ -302,10 +321,10 @@ TEST_F(PasswordsPrivateDelegateImplTest,
   PasswordsPrivateDelegateImpl delegate(&profile_);
 
   auto account_exception = std::make_unique<autofill::PasswordForm>();
-  account_exception->blacklisted_by_user = true;
+  account_exception->blocked_by_user = true;
   account_exception->in_store = autofill::PasswordForm::Store::kAccountStore;
   auto profile_exception = std::make_unique<autofill::PasswordForm>();
-  profile_exception->blacklisted_by_user = true;
+  profile_exception->blocked_by_user = true;
   profile_exception->in_store = autofill::PasswordForm::Store::kProfileStore;
 
   PasswordFormList list;
@@ -352,8 +371,8 @@ TEST_F(PasswordsPrivateDelegateImplTest, ChangeSavedPassword) {
 
   int sample_form_id = delegate.GetPasswordIdGeneratorForTesting().GenerateId(
       password_manager::CreateSortKey(sample_form));
-  delegate.ChangeSavedPassword(sample_form_id, base::ASCIIToUTF16("new_user"),
-                               base::ASCIIToUTF16("new_pass"));
+  EXPECT_TRUE(delegate.ChangeSavedPassword({sample_form_id},
+                                           base::ASCIIToUTF16("new_pass")));
 
   // Spin the loop to allow PasswordStore tasks posted when changing the
   // password to be completed.
@@ -365,8 +384,6 @@ TEST_F(PasswordsPrivateDelegateImplTest, ChangeSavedPassword) {
       [&](const PasswordsPrivateDelegate::UiEntries& password_list) {
         got_passwords = true;
         ASSERT_EQ(1u, password_list.size());
-        EXPECT_EQ(base::ASCIIToUTF16("new_user"),
-                  base::UTF8ToUTF16(password_list[0].username));
       }));
   EXPECT_TRUE(got_passwords);
 }
@@ -393,7 +410,8 @@ TEST_F(PasswordsPrivateDelegateImplTest, TestCopyPasswordCallbackResult) {
       nullptr);
 
   base::string16 result;
-  test_clipboard_->ReadText(ui::ClipboardBuffer::kCopyPaste, &result);
+  test_clipboard_->ReadText(ui::ClipboardBuffer::kCopyPaste,
+                            /* data_dst = */ nullptr, &result);
   EXPECT_EQ(form.password_value, result);
 
   histogram_tester().ExpectUniqueSample(
@@ -465,7 +483,8 @@ TEST_F(PasswordsPrivateDelegateImplTest, TestCopyPasswordCallbackResultFail) {
       nullptr);
   // Clipboard should not be modifiend in case Reauth failed
   base::string16 result;
-  test_clipboard_->ReadText(ui::ClipboardBuffer::kCopyPaste, &result);
+  test_clipboard_->ReadText(ui::ClipboardBuffer::kCopyPaste,
+                            /* data_dst = */ nullptr, &result);
   EXPECT_EQ(base::string16(), result);
   EXPECT_EQ(before_call, test_clipboard_->GetLastModifiedTime());
 

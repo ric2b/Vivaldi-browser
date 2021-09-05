@@ -108,6 +108,12 @@ class COMPONENT_EXPORT(DEVICE_FIDO) VirtualFidoDevice : public FidoDevice {
     // rp is only valid if |is_resident| is true.
     base::Optional<device::PublicKeyCredentialRpEntity> rp;
 
+    // hmac_key is present iff the credential has the hmac_secret extension
+    // enabled. The first element of the pair is the HMAC key for non-UV, and
+    // the second for when UV is used.
+    base::Optional<std::pair<std::array<uint8_t, 32>, std::array<uint8_t, 32>>>
+        hmac_key;
+
     DISALLOW_COPY_AND_ASSIGN(RegistrationData);
   };
 
@@ -212,6 +218,11 @@ class COMPONENT_EXPORT(DEVICE_FIDO) VirtualFidoDevice : public FidoDevice {
     // pending_registrations contains the remaining |is_resident| registration
     // to return from a previous authenticatorCredentialManagement command.
     std::list<cbor::Value::MapValue> pending_registrations;
+
+    // allow_list_sizes contains the lengths of the allow_lists that have been
+    // seen in assertion requests. This is for tests to confirm that the
+    // expected sequence of requests was sent.
+    std::vector<size_t> allow_list_sizes;
 
     FidoTransportProtocol transport =
         FidoTransportProtocol::kUsbHumanInterfaceDevice;

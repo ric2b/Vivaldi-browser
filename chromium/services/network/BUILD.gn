@@ -2,13 +2,12 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//build/config/jumbo.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
 import("//net/features.gni")
 import("//services/network/public/cpp/features.gni")
 import("//testing/libfuzzer/fuzzer_test.gni")
 
-jumbo_component("network_service") {
+component("network_service") {
   sources = [
     "chunked_data_pipe_upload_data_stream.cc",
     "chunked_data_pipe_upload_data_stream.h",
@@ -30,8 +29,8 @@ jumbo_component("network_service") {
     "crash_keys.h",
     "crl_set_distributor.cc",
     "crl_set_distributor.h",
-    "cross_origin_read_blocking.cc",
-    "cross_origin_read_blocking.h",
+    "cross_origin_read_blocking_exception_for_plugin.cc",
+    "cross_origin_read_blocking_exception_for_plugin.h",
     "data_pipe_element_reader.cc",
     "data_pipe_element_reader.h",
     "dns_config_change_manager.cc",
@@ -70,8 +69,6 @@ jumbo_component("network_service") {
     "network_quality_estimator_manager.h",
     "network_sandbox_hook_linux.cc",
     "network_sandbox_hook_linux.h",
-    "network_sandbox_win.cc",
-    "network_sandbox_win.h",
     "network_service.cc",
     "network_service.h",
     "network_service_network_delegate.cc",
@@ -242,7 +239,6 @@ jumbo_component("network_service") {
     "//services/network/trust_tokens",
     "//services/service_manager/public/cpp",
     "//services/service_manager/public/mojom",
-    "//services/service_manager/sandbox:sandbox",
     "//third_party/webrtc_overrides:webrtc_component",
     "//url",
   ]
@@ -253,14 +249,16 @@ jumbo_component("network_service") {
     sources += [
       "expect_ct_reporter.cc",
       "expect_ct_reporter.h",
+      "sct_auditing_cache.cc",
+      "sct_auditing_cache.h",
     ]
     deps += [ "//components/certificate_transparency" ]
   }
 
-  if (is_linux) {
+  if (is_linux || is_chromeos) {
     deps += [
       "//sandbox/linux:sandbox_services",
-      "//services/service_manager/sandbox:sandbox",
+      "//sandbox/policy",
     ]
   }
 
@@ -288,7 +286,6 @@ source_set("tests") {
     "cors/cors_url_loader_factory_unittest.cc",
     "cors/cors_url_loader_unittest.cc",
     "cors/preflight_controller_unittest.cc",
-    "cross_origin_read_blocking_unittest.cc",
     "data_pipe_element_reader_unittest.cc",
     "dns_config_change_manager_unittest.cc",
     "host_resolver_unittest.cc",
@@ -399,7 +396,10 @@ source_set("tests") {
   ]
 
   if (is_ct_supported) {
-    sources += [ "expect_ct_reporter_unittest.cc" ]
+    sources += [
+      "expect_ct_reporter_unittest.cc",
+      "sct_auditing_cache_unittest.cc",
+    ]
     deps += [ "//components/certificate_transparency" ]
   }
 
@@ -408,7 +408,7 @@ source_set("tests") {
   }
 }
 
-jumbo_source_set("test_support") {
+source_set("test_support") {
   testonly = true
 
   sources = [
@@ -440,8 +440,8 @@ jumbo_source_set("test_support") {
     "test/test_url_loader_factory.h",
     "test/test_utils.cc",
     "test/test_utils.h",
-    "udp_socket_test_util.cc",
-    "udp_socket_test_util.h",
+    "test/udp_socket_test_util.cc",
+    "test/udp_socket_test_util.h",
   ]
 
   if (is_chromeos) {

@@ -13,15 +13,15 @@ const base::Feature kAdvancedPpdAttributes{"AdvancedPpdAttributes",
                                            base::FEATURE_ENABLED_BY_DEFAULT};
 #endif  // defined(OS_CHROMEOS)
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 // Use the CUPS IPP printing backend instead of the original CUPS backend that
 // calls the deprecated PPD API.
 const base::Feature kCupsIppPrintingBackend{"CupsIppPrintingBackend",
                                             base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kEnableCustomMacPaperSizes{
-    "EnableCustomMacPaperSizes", base::FEATURE_DISABLED_BY_DEFAULT};
-#endif  // defined(OS_MACOSX)
+    "EnableCustomMacPaperSizes", base::FEATURE_ENABLED_BY_DEFAULT};
+#endif  // defined(OS_MAC)
 
 #if defined(OS_WIN)
 // When using GDI printing, avoid rasterization if possible.
@@ -49,11 +49,6 @@ bool ShouldPrintUsingXps(bool source_is_pdf) {
                                           : features::kUseXpsForPrinting);
 }
 #endif  // defined(OS_WIN)
-
-// When enabled, PrintRenderFrameHelper uses a frame-associated
-// URLLoaderFactory rather than renderer-associated one.
-const base::Feature kUseFrameAssociatedLoaderFactory{
-    "UseFrameAssociatedLoaderFactory", base::FEATURE_ENABLED_BY_DEFAULT};
 
 }  // namespace features
 }  // namespace printing

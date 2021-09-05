@@ -15,6 +15,7 @@
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
+#include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/chromeos/child_accounts/secondary_account_consent_logger.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/chrome_device_id_helper.h"
@@ -22,9 +23,10 @@
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/webui/signin/inline_login_dialog_chromeos.h"
 #include "chrome/browser/ui/webui/signin/inline_login_handler.h"
-#include "chromeos/components/account_manager/account_manager.h"
+#include "chrome/common/pref_names.h"
 #include "chromeos/components/account_manager/account_manager_factory.h"
 #include "chromeos/constants/chromeos_features.h"
+#include "components/prefs/pref_service.h"
 #include "components/signin/public/identity_manager/account_info.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "crypto/sha2.h"
@@ -37,6 +39,16 @@ namespace {
 
 constexpr char kCrosAddAccountFlow[] = "crosAddAccount";
 constexpr char kCrosAddAccountEduFlow[] = "crosAddAccountEdu";
+
+std::string AnonymizeAccountEmail(const std::string& email) {
+  std::string result;
+  base::Base64Encode(crypto::SHA256HashString(email), &result);
+  return result + "@example.com";
+}
+
+bool GaiaActionButtonsEnabled() {
+  return base::FeatureList::IsEnabled(chromeos::features::kGaiaActionButtons);
+}
 
 // Returns a base64-encoded hash code of "signin_scoped_device_id:gaia_id".
 std::string GetAccountDeviceId(const std::string& signin_scoped_device_id,
@@ -65,7 +77,6 @@ std::string GetInlineLoginFlowName(Profile* profile, const std::string* email) {
   }
 
   // Child user is adding/reauthenticating a secondary account.
-  CHECK(features::IsEduCoexistenceEnabled());
   return kCrosAddAccountEduFlow;
 }
 
@@ -210,6 +221,13 @@ class ChildSigninHelper : public SigninHelper {
     UMA_HISTOGRAM_ENUMERATION("Signin.SecondaryAccountConsentLog", result);
     secondary_account_consent_logger_.reset();
     if (result == SecondaryAccountConsentLogger::Result::kSuccess) {
+      // The EDU account has been added/reauthenticated. Mark migration to ARC++
+      // as completed.
+      if (arc::IsSecondaryAccountForChildEnabled()) {
+        pref_service_->SetBoolean(prefs::kEduCoexistenceArcMigrationCompleted,
+                                  true);
+      }
+
       UpsertAccount(refresh_token);
     } else {
       LOG(ERROR) << "Could not log parent consent, the result was: "
@@ -248,6 +266,10 @@ void InlineLoginHandlerChromeOS::RegisterMessages() {
       base::BindRepeating(
           &InlineLoginHandlerChromeOS::ShowIncognitoAndCloseDialog,
           base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "getAccounts",
+      base::BindRepeating(&InlineLoginHandlerChromeOS::GetAccountsInSession,
+                          base::Unretained(this)));
 }
 
 void InlineLoginHandlerChromeOS::SetExtraInitParams(
@@ -263,18 +285,13 @@ void InlineLoginHandlerChromeOS::SetExtraInitParams(
                             Profile::FromWebUI(web_ui()),
                             params.FindStringKey("email"))));
   params.SetBoolean("dontResizeNonEmbeddedPages", true);
+  params.SetBoolean("enableGaiaActionButtons", GaiaActionButtonsEnabled());
 
   // For in-session login flows, request Gaia to ignore third party SAML IdP SSO
   // redirection policies (and redirect to SAML IdPs by default), otherwise some
   // managed users will not be able to login to Chrome OS at all. Please check
   // https://crbug.com/984525 and https://crbug.com/984525#c20 for more context.
   params.SetBoolean("ignoreCrOSIdpSetting", true);
-}
-
-void InlineLoginHandlerChromeOS::HandleAuthExtensionReadyMessage(
-    const base::ListValue* args) {
-  AllowJavascript();
-  FireWebUIListener("show-back-button");
 }
 
 void InlineLoginHandlerChromeOS::CompleteLogin(const std::string& email,
@@ -310,9 +327,7 @@ void InlineLoginHandlerChromeOS::CompleteLogin(const std::string& email,
 
   // Child user added a secondary account.
   if (profile->IsChild() &&
-      !gaia::AreEmailsSame(primary_account_email, email) &&
-      base::FeatureList::IsEnabled(features::kEduCoexistenceConsentLog)) {
-    CHECK(features::IsEduCoexistenceEnabled());
+      !gaia::AreEmailsSame(primary_account_email, email)) {
     const std::string* rapt =
         edu_login_params.FindStringKey("reAuthProofToken");
     CHECK(rapt);
@@ -339,7 +354,6 @@ void InlineLoginHandlerChromeOS::CompleteLogin(const std::string& email,
 
 void InlineLoginHandlerChromeOS::HandleDialogClose(
     const base::ListValue* args) {
-  AllowJavascript();
   close_dialog_closure_.Run();
 }
 
@@ -347,6 +361,38 @@ void InlineLoginHandlerChromeOS::ShowIncognitoAndCloseDialog(
     const base::ListValue* args) {
   chrome::NewIncognitoWindow(Profile::FromWebUI(web_ui()));
   close_dialog_closure_.Run();
+}
+
+void InlineLoginHandlerChromeOS::GetAccountsInSession(
+    const base::ListValue* args) {
+  const std::string& callback_id = args->GetList()[0].GetString();
+  const Profile* profile = Profile::FromWebUI(web_ui());
+  chromeos::AccountManager* account_manager =
+      g_browser_process->platform_part()
+          ->GetAccountManagerFactory()
+          ->GetAccountManager(profile->GetPath().value());
+
+  account_manager->GetAccounts(
+      base::BindOnce(&InlineLoginHandlerChromeOS::OnGetAccounts,
+                     weak_factory_.GetWeakPtr(), callback_id));
+}
+
+void InlineLoginHandlerChromeOS::OnGetAccounts(
+    const std::string& callback_id,
+    const std::vector<AccountManager::Account>& accounts) {
+  base::ListValue account_emails;
+  for (const auto& account : accounts) {
+    if (account.key.account_type ==
+        account_manager::AccountType::ACCOUNT_TYPE_ACTIVE_DIRECTORY) {
+      // Don't send Active Directory account email to Gaia.
+      account_emails.Append(AnonymizeAccountEmail(account.raw_email));
+    } else {
+      account_emails.Append(account.raw_email);
+    }
+  }
+
+  ResolveJavascriptCallback(base::Value(callback_id),
+                            std::move(account_emails));
 }
 
 }  // namespace chromeos

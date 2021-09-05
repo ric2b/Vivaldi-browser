@@ -21,7 +21,6 @@
 #include "base/test/task_environment.h"
 #include "base/test/test_simple_task_runner.h"
 #include "components/favicon/core/favicon_driver.h"
-#include "components/favicon/core/features.h"
 #include "components/favicon/core/test/mock_favicon_service.h"
 #include "skia/ext/image_operations.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -578,6 +577,18 @@ TEST_F(FaviconHandlerTest, UpdateFaviconMappingsAndFetch) {
                                             /*desired_size_in_dip=*/16, _, _));
 
   RunHandlerWithSimpleFaviconCandidates({kIconURL16x16});
+}
+
+// Verifies same document navigation to the last page does not trigger fetch.
+TEST_F(FaviconHandlerTest, SameDocumentNavigationToLastUrlDoesNotFetchAgain) {
+  EXPECT_CALL(favicon_service_,
+              UpdateFaviconMappingsAndFetch(base::flat_set<GURL>{kPageURL},
+                                            kIconURL16x16, kFavicon,
+                                            /*desired_size_in_dip=*/16, _, _));
+  EXPECT_CALL(favicon_service_, GetFaviconForPageURL(_, _, _, _, _)).Times(1);
+
+  auto handler = RunHandlerWithSimpleFaviconCandidates({kIconURL16x16});
+  handler->FetchFavicon(kPageURL, true);
 }
 
 // Test that we don't try to delete favicon mappings when a page URL is not in

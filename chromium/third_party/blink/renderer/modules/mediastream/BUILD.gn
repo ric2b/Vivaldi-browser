@@ -2,7 +2,6 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//build/config/jumbo.gni")
 import("//third_party/blink/renderer/modules/modules.gni")
 
 blink_modules_sources("mediastream") {
@@ -45,8 +44,8 @@ blink_modules_sources("mediastream") {
     "media_stream_event.h",
     "media_stream_local_frame_wrapper.cc",
     "media_stream_local_frame_wrapper.h",
-    "media_stream_renderer_factory_impl.cc",
-    "media_stream_renderer_factory_impl.h",
+    "media_stream_renderer_factory.cc",
+    "media_stream_renderer_factory.h",
     "media_stream_track.cc",
     "media_stream_track.h",
     "media_stream_track_content_hint.h",
@@ -61,6 +60,7 @@ blink_modules_sources("mediastream") {
     "media_stream_video_sink.cc",
     "media_stream_video_source.cc",
     "media_stream_video_track.cc",
+    "media_stream_video_track.h",
     "navigator_media_stream.cc",
     "navigator_media_stream.h",
     "navigator_user_media.cc",
@@ -100,7 +100,7 @@ blink_modules_sources("mediastream") {
   ]
 }
 
-jumbo_source_set("test_support") {
+source_set("test_support") {
   testonly = true
 
   sources = [

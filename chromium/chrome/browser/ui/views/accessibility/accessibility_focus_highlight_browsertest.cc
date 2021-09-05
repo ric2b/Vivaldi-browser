@@ -10,6 +10,9 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "content/public/browser/focused_node_details.h"
+#include "content/public/browser/notification_registrar.h"
+#include "content/public/browser/notification_types.h"
 #include "content/public/test/browser_test.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/accessibility/accessibility_features.h"
@@ -19,11 +22,6 @@
 
 class AccessibilityFocusHighlightBrowserTest : public InProcessBrowserTest {
  public:
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    // This is required for the output to be rendered, then captured.
-    command_line->AppendSwitch(switches::kEnablePixelOutputInTests);
-  }
-
   AccessibilityFocusHighlightBrowserTest() = default;
   ~AccessibilityFocusHighlightBrowserTest() override = default;
   AccessibilityFocusHighlightBrowserTest(
@@ -33,6 +31,7 @@ class AccessibilityFocusHighlightBrowserTest : public InProcessBrowserTest {
 
   // InProcessBrowserTest overrides:
   void SetUp() override {
+    EnablePixelOutput();
     scoped_feature_list_.InitAndEnableFeature(
         features::kAccessibilityFocusHighlight);
     InProcessBrowserTest::SetUp();
@@ -118,7 +117,7 @@ class AccessibilityFocusHighlightBrowserTest : public InProcessBrowserTest {
 // focus highlight actually gets drawn.
 //
 // Flaky on Mac. TODO(crbug.com/1083806): Enable this test.
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #define MAYBE_DrawsHighlight DISABLED_DrawsHighlight
 #else
 #define MAYBE_DrawsHighlight DrawsHighlight
@@ -164,4 +163,69 @@ IN_PROC_BROWSER_TEST_F(AccessibilityFocusHighlightBrowserTest,
     base::RunLoop().RunUntilIdle();
     image = CaptureWindowContents();
   } while (CountPercentPixelsWithColor(image, highlight_color) < 0.1f);
+}
+
+// Observes the notifications for changes in focused node/element in the page.
+class FocusedNodeChangedObserver : content::NotificationObserver {
+ public:
+  FocusedNodeChangedObserver() {
+    registrar_.Add(this, content::NOTIFICATION_FOCUS_CHANGED_IN_PAGE,
+                   content::NotificationService::AllSources());
+  }
+
+  void WaitForFocusChangeInPage() {
+    if (observed_)
+      return;
+    run_loop_ = std::make_unique<base::RunLoop>();
+    run_loop_->Run();
+  }
+
+  // content::NotificationObserver override.
+  void Observe(int type,
+               const content::NotificationSource& source,
+               const content::NotificationDetails& details) override {
+    auto focused_node_details =
+        content::Details<content::FocusedNodeDetails>(details);
+    focused_node_bounds_in_screen_ =
+        focused_node_details->node_bounds_in_screen;
+    observed_ = true;
+    if (run_loop_)
+      run_loop_->Quit();
+  }
+
+  const gfx::Rect& focused_node_bounds_in_screen() const {
+    return focused_node_bounds_in_screen_;
+  }
+
+ private:
+  content::NotificationRegistrar registrar_;
+  bool observed_{false};
+  gfx::Rect focused_node_bounds_in_screen_;
+  std::unique_ptr<base::RunLoop> run_loop_;
+
+  DISALLOW_COPY_AND_ASSIGN(FocusedNodeChangedObserver);
+};
+
+IN_PROC_BROWSER_TEST_F(AccessibilityFocusHighlightBrowserTest,
+                       FocusBoundsIncludeImages) {
+  ui_test_utils::NavigateToURL(browser(),
+                               GURL("data:text/html,"
+                                    "<a id='link' href=''>"
+                                    "<img id='image' width='220' height='147' "
+                                    "style='vertical-align: middle;'>"
+                                    "</a>"));
+
+  FocusedNodeChangedObserver observer;
+
+  content::WebContents* web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  std::string script("document.getElementById('link').focus();");
+  ASSERT_TRUE(content::ExecuteScript(web_contents, script));
+  observer.WaitForFocusChangeInPage();
+
+  gfx::Rect bounds = observer.focused_node_bounds_in_screen();
+  EXPECT_EQ(220, bounds.width());
+
+  // Not sure where the extra px of height are coming from...
+  EXPECT_EQ(147, bounds.height());
 }

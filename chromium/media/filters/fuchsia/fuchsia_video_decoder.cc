@@ -71,7 +71,8 @@ class OutputMailbox {
                      gpu::SHARED_IMAGE_USAGE_DISPLAY |
                      gpu::SHARED_IMAGE_USAGE_SCANOUT;
     mailbox_ = shared_image_interface_->CreateSharedImage(
-        gmb.get(), nullptr, gfx::ColorSpace(), usage);
+        gmb.get(), nullptr, gfx::ColorSpace(), kTopLeft_GrSurfaceOrigin,
+        kPremul_SkAlphaType, usage);
   }
   ~OutputMailbox() {
     shared_image_interface_->DestroySharedImage(sync_token_, mailbox_);
@@ -173,9 +174,12 @@ class FuchsiaVideoDecoder : public VideoDecoder,
                       bool enable_sw_decoding);
   ~FuchsiaVideoDecoder() override;
 
-  // VideoDecoder implementation.
-  std::string GetDisplayName() const override;
+  // Decoder implementation.
   bool IsPlatformDecoder() const override;
+  bool SupportsDecryption() const override;
+  std::string GetDisplayName() const override;
+
+  // VideoDecoder implementation.
   void Initialize(const VideoDecoderConfig& config,
                   bool low_delay,
                   CdmContext* cdm_context,
@@ -327,12 +331,16 @@ FuchsiaVideoDecoder::~FuchsiaVideoDecoder() {
   ReleaseOutputBuffers();
 }
 
-std::string FuchsiaVideoDecoder::GetDisplayName() const {
-  return "FuchsiaVideoDecoder";
-}
-
 bool FuchsiaVideoDecoder::IsPlatformDecoder() const {
   return true;
+}
+
+bool FuchsiaVideoDecoder::SupportsDecryption() const {
+  return true;
+}
+
+std::string FuchsiaVideoDecoder::GetDisplayName() const {
+  return "FuchsiaVideoDecoder";
 }
 
 void FuchsiaVideoDecoder::Initialize(const VideoDecoderConfig& config,
@@ -638,8 +646,8 @@ void FuchsiaVideoDecoder::SendInputPacket(
   fuchsia::media::Packet media_packet;
   media_packet.mutable_header()->set_buffer_lifetime_ordinal(
       input_buffer_lifetime_ordinal_);
-  media_packet.mutable_header()->set_packet_index(packet.index());
-  media_packet.set_buffer_index(packet.index());
+  media_packet.mutable_header()->set_packet_index(packet.buffer_index());
+  media_packet.set_buffer_index(packet.buffer_index());
   media_packet.set_timestamp_ish(packet.timestamp().InNanoseconds());
   media_packet.set_stream_lifetime_ordinal(stream_lifetime_ordinal_);
   media_packet.set_start_offset(packet.offset());
@@ -649,10 +657,10 @@ void FuchsiaVideoDecoder::SendInputPacket(
 
   active_stream_ = true;
 
-  DCHECK(in_flight_input_packets_.find(packet.index()) ==
+  DCHECK(in_flight_input_packets_.find(packet.buffer_index()) ==
          in_flight_input_packets_.end());
   in_flight_input_packets_.insert_or_assign(
-      packet.index(), InputDecoderPacket{std::move(packet)});
+      packet.buffer_index(), InputDecoderPacket{std::move(packet)});
 }
 
 void FuchsiaVideoDecoder::ProcessEndOfStream() {

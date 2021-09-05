@@ -15,13 +15,14 @@ android_library("java") {
     "//components/browser_ui/widget/android:java",
     "//components/strings:components_strings_grd",
     "//third_party/android_deps:androidx_appcompat_appcompat_java",
-    "//third_party/android_deps:com_google_android_material_material_java",
+    "//third_party/android_deps:material_design_java",
     "//ui/android:ui_java",
   ]
+  resources_package = "org.chromium.components.browser_ui.http_auth"
 }
 
 android_resources("java_resources") {
-  custom_package = "org.chromium.components.browser_ui.http_auth"
+  create_srcjar = false
   sources = [ "java/res/layout/http_auth_dialog.xml" ]
 
   deps = [

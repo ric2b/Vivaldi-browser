@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="id">
-<translation id="1152921474424827756">Akses <ph name="BEGIN_LINK" />salinan yang tersimpan dalam tembolok<ph name="END_LINK" /> dari <ph name="URL" /></translation>
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> mendadak menutup sambungan.</translation>
 <translation id="1161325031994447685">Menyambungkan ulang ke Wi-Fi</translation>
 <translation id="129863573139666797"><ph name="BEGIN_LINK" />Coba hapus reremah anda<ph name="END_LINK" /></translation>
@@ -13,8 +12,6 @@
 <translation id="1710259589646384581">OS</translation>
 <translation id="1728677426644403582">Anda melihat sumber halaman web</translation>
 <translation id="1734878702283171397">Coba hubungi admin sistem.</translation>
-<translation id="194030505837763158">Pergi ke <ph name="LINK" /></translation>
-<translation id="2030481566774242610">Mungkin maksud anda <ph name="LINK" />?</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Memeriksa proxy dan firewall<ph name="END_LINK" /></translation>
 <translation id="2166378884831602661">Situs ini tidak dapat menyediakan sambungan aman</translation>
 <translation id="2230458221926704099">Perbaiki sambungan menggunakan <ph name="BEGIN_LINK" />aplikasi diagnosa<ph name="END_LINK" /></translation>
@@ -57,7 +54,6 @@
 <translation id="5023310440958281426">Periksa kebijakan admin anda</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />Memeriksa alamat proxy<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64 bit)</translation>
-<translation id="5431657950005405462">Berkas anda tidak di temukan</translation>
 <translation id="5452270690849572955">Halaman <ph name="HOST_NAME" /> ini tidak dapat ditemukan</translation>
 <translation id="5492298309214877701">Situs yang ada di intranet perusahaan, organisasi, atau sekolah ini memiliki URL yang sama dengan situs web eksternal.
     <ph name="LINE_BREAK" />

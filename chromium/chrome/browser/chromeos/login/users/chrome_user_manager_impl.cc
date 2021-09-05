@@ -54,8 +54,8 @@
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/policy/device_network_configuration_updater.h"
 #include "chrome/browser/chromeos/policy/external_data_handlers/crostini_ansible_playbook_external_data_handler.h"
-#include "chrome/browser/chromeos/policy/external_data_handlers/native_printers_external_data_handler.h"
 #include "chrome/browser/chromeos/policy/external_data_handlers/print_servers_external_data_handler.h"
+#include "chrome/browser/chromeos/policy/external_data_handlers/printers_external_data_handler.h"
 #include "chrome/browser/chromeos/policy/external_data_handlers/user_avatar_image_external_data_handler.h"
 #include "chrome/browser/chromeos/policy/external_data_handlers/wallpaper_image_external_data_handler.h"
 #include "chrome/browser/chromeos/policy/user_network_configuration_updater.h"
@@ -346,7 +346,7 @@ ChromeUserManagerImpl::ChromeUserManagerImpl()
       kAccountsPrefSupervisedUsersEnabled,
       base::Bind(&UserManager::NotifyUsersSignInConstraintsChanged,
                  weak_factory_.GetWeakPtr()));
-  // user whitelist
+  // For user allowlist.
   users_subscription_ = cros_settings_->AddSettingsObserver(
       kAccountsPrefUsers,
       base::Bind(&UserManager::NotifyUsersSignInConstraintsChanged,
@@ -375,7 +375,7 @@ ChromeUserManagerImpl::ChromeUserManagerImpl()
       std::make_unique<policy::WallpaperImageExternalDataHandler>(
           cros_settings_, device_local_account_policy_service));
   cloud_external_data_policy_handlers_.push_back(
-      std::make_unique<policy::NativePrintersExternalDataHandler>(
+      std::make_unique<policy::PrintersExternalDataHandler>(
           cros_settings_, device_local_account_policy_service));
   cloud_external_data_policy_handlers_.push_back(
       std::make_unique<policy::PrintServersExternalDataHandler>(
@@ -946,7 +946,9 @@ void ChromeUserManagerImpl::KioskAppLoggedIn(user_manager::User* user) {
 
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   command_line->AppendSwitch(::switches::kForceAppMode);
-  command_line->AppendSwitchASCII(::switches::kAppId, kiosk_app_id);
+  // This happens in Web and Arc kiosks.
+  if (!kiosk_app_id.empty())
+    command_line->AppendSwitchASCII(::switches::kAppId, kiosk_app_id);
 
   // Disable window animation since kiosk app runs in a single full screen
   // window and window animation causes start-up janks.
@@ -955,49 +957,10 @@ void ChromeUserManagerImpl::KioskAppLoggedIn(user_manager::User* user) {
   // If restoring auto-launched kiosk session, make sure the app is marked
   // as auto-launched.
   if (command_line->HasSwitch(switches::kLoginUser) &&
-      command_line->HasSwitch(switches::kAppAutoLaunched)) {
+      command_line->HasSwitch(switches::kAppAutoLaunched) &&
+      !kiosk_app_id.empty()) {
     KioskAppManager::Get()->SetAppWasAutoLaunchedWithZeroDelay(kiosk_app_id);
   }
-}
-
-void ChromeUserManagerImpl::ArcKioskAppLoggedIn(user_manager::User* user) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  DCHECK(arc::IsArcKioskAvailable());
-
-  active_user_ = user;
-  active_user_->SetStubImage(
-      std::make_unique<user_manager::UserImage>(
-          *ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
-              IDR_LOGIN_DEFAULT_USER)),
-      user_manager::User::USER_IMAGE_INVALID, false);
-
-  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  command_line->AppendSwitch(::switches::kForceAppMode);
-  command_line->AppendSwitch(::switches::kSilentLaunch);
-
-  // Disable window animation since kiosk app runs in a single full screen
-  // window and window animation causes start-up janks.
-  command_line->AppendSwitch(wm::switches::kWindowAnimationsDisabled);
-}
-
-void ChromeUserManagerImpl::WebKioskAppLoggedIn(user_manager::User* user) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-
-  active_user_ = user;
-  active_user_->SetStubImage(
-      std::make_unique<user_manager::UserImage>(
-          *ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
-              IDR_LOGIN_DEFAULT_USER)),
-      user_manager::User::USER_IMAGE_INVALID, false);
-
-  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  command_line->AppendSwitch(::switches::kForceAppMode);
-  command_line->AppendSwitch(
-      ::switches::kSilentLaunch);  // To open no extra windows.
-
-  // Disable window animation since kiosk app runs in a single full screen
-  // window and window animation causes start-up janks.
-  command_line->AppendSwitch(wm::switches::kWindowAnimationsDisabled);
 }
 
 void ChromeUserManagerImpl::DemoAccountLoggedIn() {
@@ -1259,7 +1222,7 @@ bool ChromeUserManagerImpl::IsGuestSessionAllowed() const {
 bool ChromeUserManagerImpl::IsGaiaUserAllowed(
     const user_manager::User& user) const {
   DCHECK(user.HasGaiaAccount());
-  return cros_settings_->IsUserWhitelisted(user.GetAccountId().GetUserEmail(),
+  return cros_settings_->IsUserAllowlisted(user.GetAccountId().GetUserEmail(),
                                            nullptr);
 }
 

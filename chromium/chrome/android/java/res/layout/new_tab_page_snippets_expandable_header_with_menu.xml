@@ -24,17 +24,17 @@
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"
-        android:textAppearance="@style/TextAppearance.TextSmall.Secondary"
+        android:textAppearance="@style/TextAppearance.TextAccentMediumThick.Secondary"
         android:textDirection="locale" />
 
     <org.chromium.components.browser_ui.widget.listmenu.ListMenuButton
         android:id="@+id/header_menu"
-        android:layout_width="48dp"
-        android:layout_height="48dp"
+        android:layout_width="@dimen/snippets_article_header_menu_size"
+        android:layout_height="@dimen/snippets_article_header_menu_size"
         android:scaleType="fitXY"
         android:padding="15dp"
         android:background="@null"
-        android:src="@drawable/ic_more_vert_24dp"
+        android:src="@drawable/ic_settings_gear_24dp"
         android:contentDescription="@string/accessibility_ntp_feed_menu_button"
         app:menuMaxWidth="@dimen/feed_header_menu_max_width"
         app:tint="@color/default_icon_color_tint_list" />

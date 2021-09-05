@@ -142,6 +142,7 @@
 #include "services/device/public/mojom/wake_lock.mojom.h"
 #include "services/device/public/mojom/wake_lock_provider.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/common/loader/referrer_utils.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/page_transition_types.h"
 
@@ -257,7 +258,7 @@ class OnCanDownloadDecidedObserver {
  private:
   std::vector<bool> decisions_;
   size_t expected_num_of_decisions_ = 0;
-  base::Closure completion_closure_;
+  base::OnceClosure completion_closure_;
 
   DISALLOW_COPY_AND_ASSIGN(OnCanDownloadDecidedObserver);
 };
@@ -506,8 +507,6 @@ bool DownloadTestObserverNotInProgress::IsDownloadInFinalState(
 
 class HistoryObserver : public DownloadHistory::Observer {
  public:
-  using FilterCallback = base::Callback<bool(const history::DownloadRow&)>;
-
   explicit HistoryObserver(Profile* profile) : profile_(profile) {
     DownloadCoreServiceFactory::GetForBrowserContext(profile_)
         ->GetDownloadHistory()
@@ -800,7 +799,7 @@ class DownloadTest : public InProcessBrowserTest {
   DownloadItem* CreateSlowTestDownload() {
     std::unique_ptr<content::DownloadTestObserver> observer(
         CreateInProgressDownloadObserver(1));
-    embedded_test_server()->RegisterRequestHandler(base::Bind(
+    embedded_test_server()->RegisterRequestHandler(base::BindRepeating(
         &content::SlowDownloadHttpResponse::HandleSlowDownloadRequest));
     EXPECT_TRUE(embedded_test_server()->Start());
     GURL slow_download_url = embedded_test_server()->GetURL(
@@ -837,7 +836,7 @@ class DownloadTest : public InProcessBrowserTest {
                    const std::string& partial_indication,
                    const std::string& total_indication) {
     embedded_test_server()->ServeFilesFromDirectory(GetTestDataDirectory());
-    embedded_test_server()->RegisterRequestHandler(base::Bind(
+    embedded_test_server()->RegisterRequestHandler(base::BindRepeating(
         &content::SlowDownloadHttpResponse::HandleSlowDownloadRequest));
     EXPECT_TRUE(embedded_test_server()->Start());
 
@@ -1512,7 +1511,7 @@ RespondWithContentTypeHandler(const net::test_server::HttpRequest& request) {
 
 IN_PROC_BROWSER_TEST_F(DownloadTest, MimeTypesToShowNotDownload) {
   embedded_test_server()->RegisterRequestHandler(
-      base::Bind(&RespondWithContentTypeHandler));
+      base::BindRepeating(&RespondWithContentTypeHandler));
   ASSERT_TRUE(embedded_test_server()->Start());
 
   // These files should all be displayed in the browser.
@@ -1981,7 +1980,7 @@ IN_PROC_BROWSER_TEST_F(DownloadTest, CloseNewTab4) {
   EnableFileChooser(false);
 
   // Get the download URL
-  embedded_test_server()->RegisterRequestHandler(base::Bind(
+  embedded_test_server()->RegisterRequestHandler(base::BindRepeating(
       &content::SlowDownloadHttpResponse::HandleSlowDownloadRequest));
   ASSERT_TRUE(embedded_test_server()->Start());
 
@@ -2062,8 +2061,8 @@ ServerRedirectRequestHandler(const net::test_server::HttpRequest& request) {
 IN_PROC_BROWSER_TEST_F(DownloadTest, MAYBE_DownloadHistoryCheck) {
   // Rediret to the actual download URL.
   embedded_test_server()->RegisterRequestHandler(
-      base::Bind(&ServerRedirectRequestHandler));
-  embedded_test_server()->RegisterRequestHandler(base::Bind(
+      base::BindRepeating(&ServerRedirectRequestHandler));
+  embedded_test_server()->RegisterRequestHandler(base::BindRepeating(
       &content::SlowDownloadHttpResponse::HandleSlowDownloadRequest));
   ASSERT_TRUE(embedded_test_server()->Start());
 
@@ -2313,8 +2312,9 @@ IN_PROC_BROWSER_TEST_F(DownloadTest, AutoOpenByUser) {
 
   // Unfortunately, this will block forever, causing a timeout, if
   // the download is never opened.
-  content::DownloadUpdatedObserver(
-      downloads[0], base::Bind(&WasAutoOpened)).WaitForEvent();
+  content::DownloadUpdatedObserver(downloads[0],
+                                   base::BindRepeating(&WasAutoOpened))
+      .WaitForEvent();
   EXPECT_TRUE(downloads[0]->GetOpened());  // Confirm it anyway.
 
   // As long as we're here, confirmed everything else is good.
@@ -2378,8 +2378,9 @@ IN_PROC_BROWSER_TEST_F(DownloadTest, CrxInstallDenysPermissions) {
   content::DownloadManager::DownloadVector downloads;
   DownloadManagerForBrowser(browser())->GetAllDownloads(&downloads);
   ASSERT_EQ(1u, downloads.size());
-  content::DownloadUpdatedObserver(
-      downloads[0], base::Bind(&WasAutoOpened)).WaitForEvent();
+  content::DownloadUpdatedObserver(downloads[0],
+                                   base::BindRepeating(&WasAutoOpened))
+      .WaitForEvent();
 
   // Check that the extension was not installed.
   extensions::ExtensionRegistry* extension_registry =
@@ -2418,8 +2419,9 @@ IN_PROC_BROWSER_TEST_F(DownloadTest, CrxInstallAcceptPermissions) {
   content::DownloadManager::DownloadVector downloads;
   DownloadManagerForBrowser(browser())->GetAllDownloads(&downloads);
   ASSERT_EQ(1u, downloads.size());
-  content::DownloadUpdatedObserver(
-      downloads[0], base::Bind(&WasAutoOpened)).WaitForEvent();
+  content::DownloadUpdatedObserver(downloads[0],
+                                   base::BindRepeating(&WasAutoOpened))
+      .WaitForEvent();
 
   // Check that the extension was installed.
   extensions::ExtensionRegistry* extension_registry =
@@ -2485,8 +2487,9 @@ IN_PROC_BROWSER_TEST_F(DownloadTest, CrxLargeTheme) {
   content::DownloadManager::DownloadVector downloads;
   DownloadManagerForBrowser(browser())->GetAllDownloads(&downloads);
   ASSERT_EQ(1u, downloads.size());
-  content::DownloadUpdatedObserver(
-      downloads[0], base::Bind(&WasAutoOpened)).WaitForEvent();
+  content::DownloadUpdatedObserver(downloads[0],
+                                   base::BindRepeating(&WasAutoOpened))
+      .WaitForEvent();
 
   // Check that the extension was installed.
   extensions::ExtensionRegistry* extension_registry =
@@ -2565,8 +2568,9 @@ IN_PROC_BROWSER_TEST_F(DownloadTest, DownloadUrlToPath) {
   std::vector<DownloadItem*> downloads;
   DownloadManagerForBrowser(browser())->GetAllDownloads(&downloads);
   ASSERT_EQ(1u, downloads.size());
-  content::DownloadUpdatedObserver(
-      downloads[0], base::Bind(&WasAutoOpened)).WaitForEvent();
+  content::DownloadUpdatedObserver(downloads[0],
+                                   base::BindRepeating(&WasAutoOpened))
+      .WaitForEvent();
 }
 
 IN_PROC_BROWSER_TEST_F(DownloadTest, TransientDownload) {
@@ -2784,7 +2788,7 @@ FilterPostOnlyURLsHandler(const net::test_server::HttpRequest& request) {
 
 IN_PROC_BROWSER_TEST_F(DownloadTest, SavePageNonHTMLViaPost) {
   embedded_test_server()->RegisterRequestHandler(
-      base::Bind(&FilterPostOnlyURLsHandler));
+      base::BindRepeating(&FilterPostOnlyURLsHandler));
   embedded_test_server()->ServeFilesFromDirectory(GetTestDataDirectory());
   ASSERT_TRUE(embedded_test_server()->Start());
   EnableFileChooser(true);
@@ -2911,7 +2915,7 @@ IN_PROC_BROWSER_TEST_F(DownloadTest, DownloadErrorsServer) {
   DownloadFilesCheckErrors(base::size(download_info), download_info);
 }
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 // https://crbug.com/739766
 #define MAYBE_DownloadErrorsFile DISABLED_DownloadErrorsFile
 #else
@@ -3093,7 +3097,7 @@ EchoReferrerRequestHandler(const net::test_server::HttpRequest& request) {
 IN_PROC_BROWSER_TEST_P(DownloadReferrerPolicyTest,
                        AltClickDownloadReferrerPolicy) {
   embedded_test_server()->RegisterRequestHandler(
-      base::Bind(&EchoReferrerRequestHandler));
+      base::BindRepeating(&EchoReferrerRequestHandler));
   embedded_test_server()->ServeFilesFromDirectory(GetTestDataDirectory());
   ASSERT_TRUE(embedded_test_server()->Start());
   EnableFileChooser(true);
@@ -3167,7 +3171,7 @@ IN_PROC_BROWSER_TEST_P(DownloadReferrerPolicyTest,
 // referrer policies.
 IN_PROC_BROWSER_TEST_P(DownloadReferrerPolicyTest, SaveLinkAsReferrerPolicy) {
   embedded_test_server()->RegisterRequestHandler(
-      base::Bind(&EchoReferrerRequestHandler));
+      base::BindRepeating(&EchoReferrerRequestHandler));
   ASSERT_TRUE(embedded_test_server()->Start());
   EnableFileChooser(true);
   std::vector<DownloadItem*> download_items;
@@ -3311,7 +3315,7 @@ IN_PROC_BROWSER_TEST_F(DownloadTest, SaveLinkAsVsCrossOriginResourcePolicy) {
 IN_PROC_BROWSER_TEST_P(DownloadReferrerPolicyTest,
                        DISABLED_SaveImageAsReferrerPolicy) {
   embedded_test_server()->RegisterRequestHandler(
-      base::Bind(&EchoReferrerRequestHandler));
+      base::BindRepeating(&EchoReferrerRequestHandler));
   ASSERT_TRUE(embedded_test_server()->Start());
   EnableFileChooser(true);
   std::vector<DownloadItem*> download_items;
@@ -3390,9 +3394,9 @@ IN_PROC_BROWSER_TEST_P(DownloadReferrerPolicyTest,
 IN_PROC_BROWSER_TEST_P(DownloadReferrerPolicyTest,
                        DownloadCrossDomainReferrerPolicy) {
   embedded_test_server()->RegisterRequestHandler(
-      base::Bind(&ServerRedirectRequestHandler));
+      base::BindRepeating(&ServerRedirectRequestHandler));
   embedded_test_server()->RegisterRequestHandler(
-      base::Bind(&EchoReferrerRequestHandler));
+      base::BindRepeating(&EchoReferrerRequestHandler));
   embedded_test_server()->ServeFilesFromDirectory(GetTestDataDirectory());
   ASSERT_TRUE(embedded_test_server()->Start());
   EnableFileChooser(true);
@@ -3447,9 +3451,8 @@ IN_PROC_BROWSER_TEST_P(DownloadReferrerPolicyTest,
   // resolve referrer_policy() into a concrete policy.
   auto policy_for_comparison = referrer_policy();
   if (policy_for_comparison == network::mojom::ReferrerPolicy::kDefault) {
-    policy_for_comparison =
-        content::Referrer::NetReferrerPolicyToBlinkReferrerPolicy(
-            content::Referrer::GetDefaultReferrerPolicy());
+    policy_for_comparison = blink::ReferrerUtils::NetToMojoReferrerPolicy(
+        blink::ReferrerUtils::GetDefaultNetReferrerPolicy());
   }
 
   switch (policy_for_comparison) {
@@ -3660,15 +3663,15 @@ IN_PROC_BROWSER_TEST_F(DownloadTest, MAYBE_DownloadTest_CrazyFilenames) {
   static constexpr const wchar_t* kCrazyFilenames[] = {
       L"a_file_name.zip",
       L"\u89c6\u9891\u76f4\u64ad\u56fe\u7247.zip",  // chinese chars
-      L"\u0412\u043e "
-      L"\u0424\u043b\u043e\u0440\u0438\u0434\u0435\u043e\u0431\u044a"
-      L"\u044f\u0432\u043b\u0435\u043d\u0440\u0435\u0436\u0438\u043c \u0427"
-      L"\u041f \u0438\u0437-\u0437\u0430 \u0443\u0442\u0435\u0447\u043a\u0438 "
-      L"\u043d\u0435\u0444\u0442\u0438.zip",  // russian
+      (L"\u0412\u043e "
+       L"\u0424\u043b\u043e\u0440\u0438\u0434\u0435\u043e\u0431\u044a"
+       L"\u044f\u0432\u043b\u0435\u043d\u0440\u0435\u0436\u0438\u043c \u0427"
+       L"\u041f \u0438\u0437-\u0437\u0430 \u0443\u0442\u0435\u0447\u043a\u0438 "
+       L"\u043d\u0435\u0444\u0442\u0438.zip"),  // russian
       L"Desocupa\xe7\xe3o est\xe1vel.zip",
       // arabic:
-      L"\u0638\u2026\u0638\u02c6\u0637\xa7\u0638\u201a\u0637\xb9 \u0638\u201e"
-      L"\u0638\u201e\u0637\xb2\u0638\u0679\u0637\xa7\u0637\xb1\u0637\xa9.zip",
+      (L"\u0638\u2026\u0638\u02c6\u0637\xa7\u0638\u201a\u0637\xb9 \u0638\u201e"
+       L"\u0638\u201e\u0637\xb2\u0638\u0679\u0637\xa7\u0637\xb1\u0637\xa9.zip"),
       L"\u05d4\u05e2\u05d3\u05e4\u05d5\u05ea.zip",  // hebrew
       L"\u092d\u093e\u0930\u0924.zip",              // hindi
       L"d\xe9stabilis\xe9.zip",                     // french
@@ -3676,7 +3679,8 @@ IN_PROC_BROWSER_TEST_F(DownloadTest, MAYBE_DownloadTest_CrazyFilenames) {
       L"\u97d3-\u4e2d \uc815\uc0c1, \ucc9c\uc548\ud568 \uc758\uacac.zip",
       L"jiho....tiho...miho.zip",
       L"jiho!@#$tiho$%^&-()_+=miho copy.zip",  // special chars
-      L"Wohoo-to hoo+I.zip", L"Picture 1.zip",
+      L"Wohoo-to hoo+I.zip",
+      L"Picture 1.zip",
       L"This is a very very long english sentence with spaces and , and +.zip",
   };
 

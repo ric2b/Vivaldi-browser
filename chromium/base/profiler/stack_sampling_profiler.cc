@@ -28,6 +28,15 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/trace_event/base_tracing.h"
+#include "build/build_config.h"
+
+#if defined(OS_WIN)
+#include "base/win/static_constants.h"
+#endif
+
+#if defined(OS_APPLE)
+#include "base/mac/mac_util.h"
+#endif
 
 namespace base {
 
@@ -72,8 +81,7 @@ TimeTicks GetNextSampleTimeImpl(TimeTicks scheduled_current_sample_time,
   // The minimum number of sampling intervals required to get from the scheduled
   // current sample time to the earliest next sample time.
   const int64_t required_sampling_intervals = static_cast<int64_t>(
-      std::ceil(minimum_time_delta_to_next_sample.InMicrosecondsF() /
-                sampling_interval.InMicroseconds()));
+      std::ceil(minimum_time_delta_to_next_sample / sampling_interval));
   return scheduled_current_sample_time +
          required_sampling_intervals * sampling_interval;
 }
@@ -729,16 +737,48 @@ TimeTicks StackSamplingProfiler::TestPeer::GetNextSampleTime(
                                now);
 }
 
+// static
+// The profiler is currently only implemented for Windows x64 and MacOSX.
+// TODO(https://crbug.com/1004855): enable for Android arm.
+bool StackSamplingProfiler::IsSupported() {
+#if (defined(OS_WIN) && defined(ARCH_CPU_X86_64)) || \
+    (defined(OS_MAC) && defined(ARCH_CPU_X86_64)) || \
+    (defined(OS_ANDROID) && BUILDFLAG(ENABLE_ARM_CFI_TABLE))
+#if defined(OS_MAC)
+  // TODO(https://crbug.com/1098119): Fix unwinding on macOS 11. The OS has
+  // moved all system libraries into the dyld shared cache and this seems to
+  // break the sampling profiler.
+  if (base::mac::IsAtLeastOS11())
+    return false;
+#endif
+#if defined(OS_WIN)
+  // Do not start the profiler when Application Verifier is in use; running them
+  // simultaneously can cause crashes and has no known use case.
+  if (GetModuleHandleA(base::win::kApplicationVerifierDllName))
+    return false;
+  // Checks if Trend Micro DLLs are loaded in process, so we can disable the
+  // profiler to avoid hitting their performance bug. See
+  // https://crbug.com/1018291 and https://crbug.com/1113832.
+  if (GetModuleHandleA("tmmon64.dll") || GetModuleHandleA("tmmonmgr64.dll"))
+    return false;
+#endif
+  return true;
+#else
+  return false;
+#endif
+}
+
 StackSamplingProfiler::StackSamplingProfiler(
     SamplingProfilerThreadToken thread_token,
     const SamplingParams& params,
     std::unique_ptr<ProfileBuilder> profile_builder,
     std::vector<std::unique_ptr<Unwinder>> unwinders,
+    RepeatingClosure record_sample_callback,
     StackSamplerTestDelegate* test_delegate)
     : StackSamplingProfiler(params, std::move(profile_builder), nullptr) {
-  sampler_ =
-      StackSampler::Create(thread_token, profile_builder_->GetModuleCache(),
-                           std::move(unwinders), test_delegate);
+  sampler_ = StackSampler::Create(
+      thread_token, profile_builder_->GetModuleCache(), std::move(unwinders),
+      std::move(record_sample_callback), test_delegate);
 }
 
 StackSamplingProfiler::StackSamplingProfiler(

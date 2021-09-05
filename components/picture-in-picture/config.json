@@ -1,5 +1,6 @@
 [
   { "host": "ceskatelevize.cz", "selector": "#ctPlayer1", "capture": true },
+  { "host": "dailymotion.com", "selector": "#player-body", "capture": true },
   { "host": "netflix.com", "selector": "html", "capture": true },
   { "host": "nicovideo.jp", "selector": ".PlayerContainer", "capture": true },
   { "host": "kvs-demo.com", "selector": "#kt_player", "capture": true },

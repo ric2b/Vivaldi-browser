@@ -8,18 +8,21 @@
 
 #include <atomic>
 #include <memory>
+#include <utility>
 
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
 #include "base/containers/flat_map.h"
+#include "base/cpu.h"
 #include "base/lazy_instance.h"
-#include "base/message_loop/message_loop_current.h"
+#include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/no_destructor.h"
 #include "base/process/process_metrics.h"
 #include "base/sequence_checker.h"
 #include "base/strings/pattern.h"
 #include "base/strings/string_util.h"
+#include "base/task/current_thread.h"
 #include "base/task/post_task.h"
 #include "base/task/task_observer.h"
 #include "base/threading/platform_thread.h"
@@ -87,6 +90,60 @@ const char* GetPerThreadHistogramNameForProcessType(ProcessTypeForUma type) {
     default:
       return "Power.CpuTimeSecondsPerThreadType.Other";
   }
+}
+
+std::string GetPerCoreCpuTimeHistogramName(ProcessTypeForUma process_type,
+                                           base::CPU::CoreType core_type,
+                                           bool is_approximate) {
+  std::string process_suffix;
+  switch (process_type) {
+    case ProcessTypeForUma::kBrowser:
+      process_suffix = "Browser";
+      break;
+    case ProcessTypeForUma::kRenderer:
+      process_suffix = "Renderer";
+      break;
+    case ProcessTypeForUma::kGpu:
+      process_suffix = "GPU";
+      break;
+    default:
+      process_suffix = "Other";
+      break;
+  }
+
+  std::string cpu_suffix;
+  switch (core_type) {
+    case base::CPU::CoreType::kUnknown:
+      cpu_suffix = "Unknown";
+      break;
+    case base::CPU::CoreType::kOther:
+      cpu_suffix = "Other";
+      break;
+    case base::CPU::CoreType::kSymmetric:
+      cpu_suffix = "Symmetric";
+      break;
+    case base::CPU::CoreType::kBigLittle_Little:
+      cpu_suffix = "BigLittle.Little";
+      break;
+    case base::CPU::CoreType::kBigLittle_Big:
+      cpu_suffix = "BigLittle.Big";
+      break;
+    case base::CPU::CoreType::kBigLittleBigger_Little:
+      cpu_suffix = "BigLittleBigger.Little";
+      break;
+    case base::CPU::CoreType::kBigLittleBigger_Big:
+      cpu_suffix = "BigLittleBigger.Big";
+      break;
+    case base::CPU::CoreType::kBigLittleBigger_Bigger:
+      cpu_suffix = "BigLittleBigger.Bigger";
+      break;
+  }
+
+  std::string prefix = std::string("Power.") +
+                       (is_approximate ? "Approx" : "") +
+                       "CpuTimeSecondsPerCoreTypeAndFrequency";
+
+  return base::JoinString({prefix, cpu_suffix, process_suffix}, ".");
 }
 
 // Keep in sync with CpuTimeMetricsThreadType in
@@ -192,6 +249,35 @@ CpuTimeMetricsThreadType GetThreadTypeFromName(const char* const thread_name) {
   return CpuTimeMetricsThreadType::kOtherThread;
 }
 
+class TimeInStateReporter {
+ public:
+  TimeInStateReporter(ProcessTypeForUma process_type,
+                      base::CPU::CoreType core_type,
+                      bool is_approximate)
+      : histogram_(GetPerCoreCpuTimeHistogramName(process_type,
+                                                  core_type,
+                                                  is_approximate),
+                   1,
+                   // ScaledLinearHistogram requires buckets of size 1. Each
+                   // bucket here represents a range of frequency values.
+                   kNumBuckets,
+                   kNumBuckets + 1,
+                   base::Time::kMicrosecondsPerSecond,
+                   base::HistogramBase::kUmaTargetedHistogramFlag) {}
+
+  void AddMicroseconds(int frequency_mhz, int cpu_time_us) {
+    int frequency_bucket = frequency_mhz / kBucketSizeMhz;
+    histogram_.AddScaledCount(frequency_bucket, cpu_time_us);
+  }
+
+ private:
+  static constexpr int32_t kMaxFrequencyMhz = 10 * 1000;  // 10 GHz.
+  static constexpr int32_t kBucketSizeMhz = 50;  // one bucket for every 50 MHz.
+  static constexpr int32_t kNumBuckets = kMaxFrequencyMhz / kBucketSizeMhz;
+
+  base::ScaledLinearHistogram histogram_;
+};
+
 // Samples the process's CPU time after a specific number of task were executed
 // on the current thread (process main). The number of tasks is a crude proxy
 // for CPU activity within this process. We sample more frequently when the
@@ -261,16 +347,70 @@ class ProcessCpuTimeTaskObserver : public base::TaskObserver {
     // GetCumulativeCPUUsage() may return a negative value if sampling failed.
     base::TimeDelta cumulative_cpu_time =
         process_metrics_->GetCumulativeCPUUsage();
-    base::TimeDelta cpu_time_delta = cumulative_cpu_time - reported_cpu_time_;
-    if (cpu_time_delta > base::TimeDelta()) {
-      UMA_HISTOGRAM_SCALED_ENUMERATION(
-          "Power.CpuTimeSecondsPerProcessType", process_type_,
-          cpu_time_delta.InMicroseconds(), base::Time::kMicrosecondsPerSecond);
+    base::TimeDelta process_cpu_time_delta =
+        cumulative_cpu_time - reported_cpu_time_;
+    if (process_cpu_time_delta > base::TimeDelta()) {
+      UMA_HISTOGRAM_SCALED_ENUMERATION("Power.CpuTimeSecondsPerProcessType",
+                                       process_type_,
+                                       process_cpu_time_delta.InMicroseconds(),
+                                       base::Time::kMicrosecondsPerSecond);
       reported_cpu_time_ = cumulative_cpu_time;
     }
 
+    // Approximate breakdown by CPU core type & frequency. The per-pid
+    // time_in_state used by the per-thread breakdown isn't supported by many
+    // kernels. This breakdown approximates Chrome's total per
+    // core-type/frequency usage by splitting the process's CPU time across
+    // cores/frequencies according to global per-core time_in_state values.
+    if (base::CPU::GetTimeInState(time_in_state_)) {
+      // Compute the total CPU time delta since the last cycle across all
+      // clusters and frequencies, so that we can compute proportional deltas in
+      // the second loop below.
+      base::TimeDelta total_cumulative;
+      for (const base::CPU::TimeInStateEntry& entry : time_in_state_) {
+        total_cumulative += entry.cumulative_cpu_time;
+      }
+
+      base::TimeDelta total_delta =
+          total_cumulative - total_reported_time_in_state_;
+      total_reported_time_in_state_ = total_cumulative;
+
+      if (process_cpu_time_delta > base::TimeDelta() &&
+          total_delta > base::TimeDelta()) {
+        for (const base::CPU::TimeInStateEntry& entry : time_in_state_) {
+          DCHECK_GT(approximate_time_in_state_reporters_.size(),
+                    static_cast<size_t>(entry.core_type));
+          std::unique_ptr<TimeInStateReporter>& reporter =
+              approximate_time_in_state_reporters_[static_cast<size_t>(
+                  entry.core_type)];
+          if (!reporter) {
+            reporter = std::make_unique<TimeInStateReporter>(
+                process_type_, entry.core_type, /*is_approximate=*/true);
+          }
+
+          // Compute delta since last cycle per entry.
+          uint32_t frequency_mhz = entry.core_frequency_khz / 1000;
+          base::TimeDelta& reported_time =
+              reported_time_in_state_[std::make_tuple(
+                  entry.core_type, entry.cluster_core_index, frequency_mhz)];
+          base::TimeDelta time_delta =
+              entry.cumulative_cpu_time - reported_time;
+          reported_time = entry.cumulative_cpu_time;
+
+          if (time_delta > base::TimeDelta()) {
+            // Scale the process's cpu time by each cluster/frequency pair's
+            // relative proportion of execution time.
+            uint64_t delta_us = (process_cpu_time_delta.InMicroseconds() *
+                                 time_delta.InMicroseconds()) /
+                                total_delta.InMicroseconds();
+            reporter->AddMicroseconds(frequency_mhz, delta_us);
+          }
+        }
+      }
+    }
+
     // Also report a breakdown by thread type.
-    base::TimeDelta unattributed_delta = cpu_time_delta;
+    base::TimeDelta unattributed_delta = process_cpu_time_delta;
     if (process_metrics_->GetCumulativeCPUUsagePerThread(
             cumulative_thread_times_)) {
       for (const auto& entry : cumulative_thread_times_) {
@@ -306,6 +446,44 @@ class ProcessCpuTimeTaskObserver : public base::TaskObserver {
         thread_details->reported_cpu_time = cumulative_time;
       }
 
+      // Breakdown by CPU core type & frequency.
+      if (process_metrics_->GetPerThreadCumulativeCPUTimeInState(
+              time_in_state_per_thread_)) {
+        auto thread_it = thread_details_.end();
+        for (const base::ProcessMetrics::ThreadTimeInState& entry :
+             time_in_state_per_thread_) {
+          DCHECK_GT(time_in_state_reporters_.size(),
+                    static_cast<size_t>(entry.core_type));
+          std::unique_ptr<TimeInStateReporter>& reporter =
+              time_in_state_reporters_[static_cast<size_t>(entry.core_type)];
+          if (!reporter) {
+            reporter = std::make_unique<TimeInStateReporter>(
+                process_type_, entry.core_type,
+                /*is_approximate=*/false);
+          }
+
+          if (thread_it == thread_details_.end() ||
+              thread_it->first != entry.thread_id) {
+            thread_it = thread_details_.find(entry.thread_id);
+            if (thread_it == thread_details_.end()) {
+              // New thread that we didn't pick up above. We'll report it in the
+              // next cycle instead.
+              continue;
+            }
+          }
+
+          uint32_t frequency_mhz = entry.core_frequency_khz / 1000;
+          base::TimeDelta& reported_time =
+              thread_it->second.reported_time_in_state[std::make_tuple(
+                  entry.core_type, entry.cluster_core_index, frequency_mhz)];
+          base::TimeDelta time_delta =
+              entry.cumulative_cpu_time - reported_time;
+          reported_time = entry.cumulative_cpu_time;
+
+          reporter->AddMicroseconds(frequency_mhz, time_delta.InMicroseconds());
+        }
+      }
+
       // Erase tracking for threads that have disappeared, as their
       // PlatformThreadId may be reused later.
       for (auto it = thread_details_.begin(); it != thread_details_.end();) {
@@ -328,10 +506,16 @@ class ProcessCpuTimeTaskObserver : public base::TaskObserver {
   }
 
  private:
+  using ClusterFrequency = std::tuple<base::CPU::CoreType,
+                                      uint32_t /*cluster_core_index*/,
+                                      uint32_t /*frequency_mhz*/>;
+
   struct ThreadDetails {
     base::TimeDelta reported_cpu_time;
     uint32_t last_updated_cycle = 0;
     CpuTimeMetricsThreadType type = CpuTimeMetricsThreadType::kOtherThread;
+    base::flat_map<ClusterFrequency, base::TimeDelta /*time_in_state*/>
+        reported_time_in_state;
   };
 
   void ReportThreadCpuTimeDelta(CpuTimeMetricsThreadType type,
@@ -372,9 +556,20 @@ class ProcessCpuTimeTaskObserver : public base::TaskObserver {
   ProcessTypeForUma process_type_;
   base::PlatformThreadId main_thread_id_;
   base::TimeDelta reported_cpu_time_;
-  // Stored as instance variable to avoid allocation churn.
-  base::ProcessMetrics::CPUUsagePerThread cumulative_thread_times_;
   base::flat_map<base::PlatformThreadId, ThreadDetails> thread_details_;
+  std::array<std::unique_ptr<TimeInStateReporter>,
+             static_cast<size_t>(base::CPU::CoreType::kMaxValue) + 1u>
+      time_in_state_reporters_ = {};
+  std::array<std::unique_ptr<TimeInStateReporter>,
+             static_cast<size_t>(base::CPU::CoreType::kMaxValue) + 1u>
+      approximate_time_in_state_reporters_ = {};
+  base::flat_map<ClusterFrequency, base::TimeDelta /*time_in_state*/>
+      reported_time_in_state_;
+  base::TimeDelta total_reported_time_in_state_;
+  // Stored as instance variables to avoid allocation churn.
+  base::ProcessMetrics::CPUUsagePerThread cumulative_thread_times_;
+  base::ProcessMetrics::TimeInStatePerThread time_in_state_per_thread_;
+  base::CPU::TimeInState time_in_state_;
 
   // Accessed on both sequences.
   std::atomic<bool> collection_in_progress_;
@@ -387,7 +582,7 @@ void SetupCpuTimeMetrics() {
   static bool did_setup = false;
   if (did_setup)
     return;
-  base::MessageLoopCurrent::Get()->AddTaskObserver(
+  base::CurrentThread::Get()->AddTaskObserver(
       ProcessCpuTimeTaskObserver::GetInstance());
   did_setup = true;
 }

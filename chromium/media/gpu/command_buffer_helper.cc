@@ -35,14 +35,14 @@ class CommandBufferHelperImpl
 
     stub_->AddDestructionObserver(this);
     wait_sequence_id_ = stub_->channel()->scheduler()->CreateSequence(
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
         // Workaround for crbug.com/1035750.
         // TODO(sandersd): Investigate whether there is a deeper scheduling
         // problem that can be resolved.
         gpu::SchedulingPriority::kHigh
 #else
         gpu::SchedulingPriority::kNormal
-#endif  // defined(OS_MACOSX)
+#endif  // defined(OS_MAC)
     );
     decoder_helper_ = GLES2DecoderHelper::Create(stub_->decoder_context());
   }
@@ -55,6 +55,12 @@ class CommandBufferHelperImpl
       return nullptr;
 
     return decoder_helper_->GetGLContext();
+  }
+
+  gpu::SharedImageStub* GetSharedImageStub() override {
+    if (!stub_)
+      return nullptr;
+    return stub_->channel()->shared_image_stub();
   }
 
   bool HasStub() override {

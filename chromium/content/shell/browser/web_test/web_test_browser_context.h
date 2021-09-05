@@ -16,29 +16,29 @@ class ScopedGeolocationOverrider;
 namespace content {
 
 class BackgroundSyncController;
-class ContentIndexProvider;
 class DownloadManagerDelegate;
 class PermissionControllerDelegate;
 class PushMessagingService;
 class WebTestBackgroundFetchDelegate;
 class WebTestPermissionManager;
 class WebTestPushMessagingService;
+class WebTestStorageAccessManager;
 
 class WebTestBrowserContext final : public ShellBrowserContext {
  public:
   explicit WebTestBrowserContext(bool off_the_record);
   ~WebTestBrowserContext() override;
 
-  // BrowserContext implementation.
+  // ShellBrowserContext overrides.
   DownloadManagerDelegate* GetDownloadManagerDelegate() override;
   PushMessagingService* GetPushMessagingService() override;
   PermissionControllerDelegate* GetPermissionControllerDelegate() override;
   BackgroundFetchDelegate* GetBackgroundFetchDelegate() override;
   BackgroundSyncController* GetBackgroundSyncController() override;
-  ContentIndexProvider* GetContentIndexProvider() override;
   ClientHintsControllerDelegate* GetClientHintsControllerDelegate() override;
 
   WebTestPermissionManager* GetWebTestPermissionManager();
+  WebTestStorageAccessManager* GetWebTestStorageAccessManager();
 
  private:
   std::unique_ptr<WebTestPushMessagingService> push_messaging_service_;
@@ -46,9 +46,9 @@ class WebTestBrowserContext final : public ShellBrowserContext {
   std::unique_ptr<WebTestBackgroundFetchDelegate> background_fetch_delegate_;
   std::unique_ptr<BackgroundSyncController> background_sync_controller_;
   std::unique_ptr<device::ScopedGeolocationOverrider> geolocation_overrider_;
-  std::unique_ptr<ContentIndexProvider> content_index_provider_;
   std::unique_ptr<ClientHintsControllerDelegate>
       client_hints_controller_delegate_;
+  std::unique_ptr<WebTestStorageAccessManager> storage_access_;
 
   DISALLOW_COPY_AND_ASSIGN(WebTestBrowserContext);
 };

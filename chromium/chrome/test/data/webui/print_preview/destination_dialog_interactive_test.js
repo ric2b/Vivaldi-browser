@@ -2,30 +2,34 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {CloudPrintInterfaceImpl, Destination, makeRecentDestination, NativeLayer, NativeLayerImpl, State} from 'chrome://print/print_preview.js';
+import {CloudPrintInterfaceImpl, Destination, makeRecentDestination, NativeLayerImpl, State} from 'chrome://print/print_preview.js';
 import {assert} from 'chrome://resources/js/assert.m.js';
 import {keyDownOn} from 'chrome://resources/polymer/v3_0/iron-test-helpers/mock-interactions.js';
-import {CloudPrintInterfaceStub} from 'chrome://test/print_preview/cloud_print_interface_stub.js';
-import {NativeLayerStub} from 'chrome://test/print_preview/native_layer_stub.js';
-import {getDestinations, setupTestListenerElement} from 'chrome://test/print_preview/print_preview_test_utils.js';
-import {eventToPromise, fakeDataBind} from 'chrome://test/test_util.m.js';
+
+import {assertEquals, assertFalse, assertTrue} from '../chai_assert.js';
+import {eventToPromise, fakeDataBind} from '../test_util.m.js';
+
+import {CloudPrintInterfaceStub} from './cloud_print_interface_stub.js';
+import {NativeLayerStub} from './native_layer_stub.js';
+import {getDestinations, setupTestListenerElement} from './print_preview_test_utils.js';
 
 window.destination_dialog_interactive_test = {};
+const destination_dialog_interactive_test =
+    window.destination_dialog_interactive_test;
 destination_dialog_interactive_test.suiteName =
     'DestinationDialogInteractiveTest';
 /** @enum {string} */
 destination_dialog_interactive_test.TestNames = {
   FocusSearchBox: 'focus search box',
-  FocusSearchBoxOnSignIn: 'focus search box on sign in',
   EscapeSearchBox: 'escape search box',
 };
 
 suite(destination_dialog_interactive_test.suiteName, function() {
-  /** @type {?PrintPreviewDestinationDialogElement} */
-  let dialog = null;
+  /** @type {!PrintPreviewDestinationDialogElement} */
+  let dialog;
 
-  /** @type {?NativeLayer} */
-  let nativeLayer = null;
+  /** @type {!NativeLayerStub} */
+  let nativeLayer;
 
   /** @override */
   suiteSetup(function() {
@@ -67,7 +71,8 @@ suite(destination_dialog_interactive_test.suiteName, function() {
         [] /* userAccounts */, true /* syncAvailable */);
     return nativeLayer.whenCalled('getPrinterCapabilities').then(() => {
       // Retrieve a reference to dialog
-      dialog = destinationSettings.$.destinationDialog.get();
+      dialog = /** @type {!PrintPreviewDestinationDialogElement} */ (
+          destinationSettings.$$('#destinationDialog').get());
     });
   });
 
@@ -76,7 +81,9 @@ suite(destination_dialog_interactive_test.suiteName, function() {
   test(
       assert(destination_dialog_interactive_test.TestNames.FocusSearchBox),
       function() {
-        const searchInput = dialog.$.searchBox.getSearchInput();
+        const searchInput = /** @type {!PrintPreviewSearchBoxElement} */ (
+                                dialog.$$('#searchBox'))
+                                .getSearchInput();
         assertTrue(!!searchInput);
         const whenFocusDone = eventToPromise('focus', searchInput);
         dialog.destinationStore.startLoadAllDestinations();
@@ -84,60 +91,26 @@ suite(destination_dialog_interactive_test.suiteName, function() {
         return whenFocusDone;
       });
 
-  // Tests that the search input text field is automatically focused when the
-  // user signs in successfully after clicking the sign in link. See
-  // https://crbug.com/924921
-  test(
-      assert(
-          destination_dialog_interactive_test.TestNames.FocusSearchBoxOnSignIn),
-      function() {
-        const searchInput = dialog.$.searchBox.getSearchInput();
-        assertTrue(!!searchInput);
-        const signInLink = dialog.$$('.sign-in');
-        assertTrue(!!signInLink);
-        const whenFocusDone = eventToPromise('focus', searchInput);
-        dialog.destinationStore.startLoadAllDestinations();
-        dialog.show();
-        return whenFocusDone
-            .then(() => {
-              signInLink.focus();
-              nativeLayer.setSignIn([]);
-              signInLink.click();
-              return nativeLayer.whenCalled('signIn');
-            })
-            .then(() => {
-              // Link stays focused until successful signin.
-              // See https://crbug.com/979603.
-              assertEquals(signInLink, dialog.shadowRoot.activeElement);
-              nativeLayer.setSignIn(['foo@chromium.org']);
-              const whenSearchFocused = eventToPromise('focus', searchInput);
-              signInLink.click();
-              return whenSearchFocused;
-            })
-            .then(() => {
-              assertEquals('foo@chromium.org', dialog.activeUser);
-              assertEquals(1, dialog.users.length);
-            });
-      });
-
   // Tests that pressing the escape key while the search box is focused
   // closes the dialog if and only if the query is empty.
   test(
       assert(destination_dialog_interactive_test.TestNames.EscapeSearchBox),
       function() {
-        const searchInput = dialog.$.searchBox.getSearchInput();
+        const searchBox = /** @type {!PrintPreviewSearchBoxElement} */ (
+            dialog.$$('#searchBox'));
+        const searchInput = searchBox.getSearchInput();
         assertTrue(!!searchInput);
         const whenFocusDone = eventToPromise('focus', searchInput);
         dialog.destinationStore.startLoadAllDestinations();
         dialog.show();
         return whenFocusDone
             .then(() => {
-              assertTrue(dialog.$.dialog.open);
+              assertTrue(dialog.$$('#dialog').open);
 
               // Put something in the search box.
               const whenSearchChanged =
-                  eventToPromise('search-changed', dialog.$.searchBox);
-              dialog.$.searchBox.setValue('query');
+                  eventToPromise('search-changed', searchBox);
+              searchBox.setValue('query');
               return whenSearchChanged;
             })
             .then(() => {
@@ -150,12 +123,12 @@ suite(destination_dialog_interactive_test.suiteName, function() {
             })
             .then(() => {
               // Dialog should still be open.
-              assertTrue(dialog.$.dialog.open);
+              assertTrue(dialog.$$('#dialog').open);
 
               // Clear the search box.
               const whenSearchChanged =
-                  eventToPromise('search-changed', dialog.$.searchBox);
-              dialog.$.searchBox.setValue('');
+                  eventToPromise('search-changed', searchBox);
+              searchBox.setValue('');
               return whenSearchChanged;
             })
             .then(() => {
@@ -168,7 +141,7 @@ suite(destination_dialog_interactive_test.suiteName, function() {
             })
             .then(() => {
               // Dialog is closed.
-              assertFalse(dialog.$.dialog.open);
+              assertFalse(dialog.$$('#dialog').open);
             });
       });
 });

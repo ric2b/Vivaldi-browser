@@ -7,6 +7,7 @@
 #include <string>
 
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_focus_options.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/dom/node.h"
@@ -1059,6 +1060,12 @@ TEST_F(AccessibilitySelectionTest, ForwardSelectionInTextField) {
   EXPECT_EQ(0u, ToTextControl(*input).selectionStart());
   EXPECT_EQ(18u, ToTextControl(*input).selectionEnd());
   EXPECT_EQ("forward", ToTextControl(*input).selectionDirection());
+
+  // Ensure that the selection that was just set could be successfully
+  // retrieved.
+  const auto ax_current_selection =
+      AXSelection::FromCurrentSelection(ToTextControl(*input));
+  EXPECT_EQ(ax_selection, ax_current_selection);
 }
 
 TEST_F(AccessibilitySelectionTest, BackwardSelectionInTextField) {
@@ -1088,6 +1095,12 @@ TEST_F(AccessibilitySelectionTest, BackwardSelectionInTextField) {
   EXPECT_EQ(3u, ToTextControl(*input).selectionStart());
   EXPECT_EQ(10u, ToTextControl(*input).selectionEnd());
   EXPECT_EQ("backward", ToTextControl(*input).selectionDirection());
+
+  // Ensure that the selection that was just set could be successfully
+  // retrieved.
+  const auto ax_current_selection =
+      AXSelection::FromCurrentSelection(ToTextControl(*input));
+  EXPECT_EQ(ax_selection, ax_current_selection);
 }
 
 TEST_F(AccessibilitySelectionTest, SelectingTheWholeOfTheTextField) {
@@ -1358,6 +1371,12 @@ TEST_F(AccessibilitySelectionTest, ForwardSelectionInTextarea) {
   EXPECT_EQ(0u, ToTextControl(*textarea).selectionStart());
   EXPECT_EQ(53u, ToTextControl(*textarea).selectionEnd());
   EXPECT_EQ("forward", ToTextControl(*textarea).selectionDirection());
+
+  // Ensure that the selection that was just set could be successfully
+  // retrieved.
+  const auto ax_current_selection =
+      AXSelection::FromCurrentSelection(ToTextControl(*textarea));
+  EXPECT_EQ(ax_selection, ax_current_selection);
 }
 
 TEST_F(AccessibilitySelectionTest, BackwardSelectionInTextarea) {
@@ -1391,6 +1410,12 @@ TEST_F(AccessibilitySelectionTest, BackwardSelectionInTextarea) {
   EXPECT_EQ(3u, ToTextControl(*textarea).selectionStart());
   EXPECT_EQ(10u, ToTextControl(*textarea).selectionEnd());
   EXPECT_EQ("backward", ToTextControl(*textarea).selectionDirection());
+
+  // Ensure that the selection that was just set could be successfully
+  // retrieved.
+  const auto ax_current_selection =
+      AXSelection::FromCurrentSelection(ToTextControl(*textarea));
+  EXPECT_EQ(ax_selection, ax_current_selection);
 }
 
 TEST_F(AccessibilitySelectionTest, SelectTheWholeOfTheTextarea) {

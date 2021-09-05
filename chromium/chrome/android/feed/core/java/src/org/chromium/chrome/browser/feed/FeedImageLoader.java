@@ -20,13 +20,14 @@ import org.chromium.base.Consumer;
 import org.chromium.base.DiscardableReferencePool;
 import org.chromium.base.SysUtils;
 import org.chromium.base.task.PostTask;
+import org.chromium.chrome.R;
 import org.chromium.chrome.browser.feed.library.api.host.imageloader.BundledAssets;
 import org.chromium.chrome.browser.feed.library.api.host.imageloader.ImageLoaderApi;
 import org.chromium.chrome.browser.image_fetcher.ImageFetcher;
 import org.chromium.chrome.browser.image_fetcher.ImageFetcherConfig;
 import org.chromium.chrome.browser.image_fetcher.ImageFetcherFactory;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.suggestions.ThumbnailGradient;
-import org.chromium.chrome.feed.R;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
 
 import java.util.Iterator;
@@ -56,7 +57,7 @@ public class FeedImageLoader implements ImageLoaderApi {
         mImageFetcher = ImageFetcherFactory.createImageFetcher(SysUtils.isLowEndDevice()
                         ? ImageFetcherConfig.DISK_CACHE_ONLY
                         : ImageFetcherConfig.IN_MEMORY_WITH_DISK_CACHE,
-                referencePool);
+                Profile.getLastUsedRegularProfile(), referencePool);
     }
 
     public void destroy() {

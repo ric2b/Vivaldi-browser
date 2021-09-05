@@ -27,7 +27,7 @@ interface AppService {
       AppType app_type,
       string app_id,
       IconKey icon_key,
-      IconCompression icon_compression,
+      IconType icon_type,
       int32 size_hint_in_dip,
       bool allow_placeholder_icon) => (IconValue icon_value);
 
@@ -71,6 +71,7 @@ interface AppService {
   Uninstall(
       AppType app_type,
       string app_id,
+      UninstallSource uninstall_source,
       bool clear_site_data,
       bool report_abuse);
 
@@ -130,7 +131,7 @@ interface Publisher {
   LoadIcon(
       string app_id,
       IconKey icon_key,
-      IconCompression icon_compression,
+      IconType icon_type,
       int32 size_hint_in_dip,
       bool allow_placeholder_icon) => (IconValue icon_value);
 
@@ -169,6 +170,7 @@ interface Publisher {
   // reported for abuse to the Web Store.
   Uninstall(
       string app_id,
+      UninstallSource uninstall_source,
       bool clear_site_data,
       bool report_abuse);
 

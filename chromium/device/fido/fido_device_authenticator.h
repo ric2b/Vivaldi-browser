@@ -22,6 +22,7 @@
 namespace device {
 
 struct CtapGetAssertionRequest;
+struct CtapGetAssertionOptions;
 struct CtapMakeCredentialRequest;
 struct EnumerateRPsResponse;
 class FidoDevice;
@@ -41,6 +42,7 @@ class COMPONENT_EXPORT(DEVICE_FIDO) FidoDeviceAuthenticator
   void MakeCredential(CtapMakeCredentialRequest request,
                       MakeCredentialCallback callback) override;
   void GetAssertion(CtapGetAssertionRequest request,
+                    CtapGetAssertionOptions options,
                     GetAssertionCallback callback) override;
   void GetNextAssertion(GetAssertionCallback callback) override;
   void GetTouch(base::OnceCallback<void()> callback) override;
@@ -99,6 +101,7 @@ class COMPONENT_EXPORT(DEVICE_FIDO) FidoDeviceAuthenticator
   base::string16 GetDisplayName() const override;
   ProtocolVersion SupportedProtocol() const override;
   bool SupportsHMACSecretExtension() const override;
+  bool SupportsEnterpriseAttestation() const override;
   const base::Optional<AuthenticatorSupportedOptions>& Options() const override;
   base::Optional<FidoTransportProtocol> AuthenticatorTransport() const override;
   bool IsInPairingMode() const override;
@@ -107,9 +110,12 @@ class COMPONENT_EXPORT(DEVICE_FIDO) FidoDeviceAuthenticator
 #if defined(OS_WIN)
   bool IsWinNativeApiAuthenticator() const override;
 #endif  // defined(OS_WIN)
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   bool IsTouchIdAuthenticator() const override;
-#endif  // defined(OS_MACOSX)
+#endif  // defined(OS_MAC)
+#if defined(OS_CHROMEOS)
+  bool IsChromeOSAuthenticator() const override;
+#endif  // defined(OS_CHROMEOS)
   base::WeakPtr<FidoAuthenticator> GetWeakPtr() override;
 
   FidoDevice* device() { return device_.get(); }
@@ -129,9 +135,15 @@ class COMPONENT_EXPORT(DEVICE_FIDO) FidoDeviceAuthenticator
                               base::Optional<pin::KeyAgreementResponse>)>;
   void InitializeAuthenticatorDone(base::OnceClosure callback);
   void GetEphemeralKey(GetEphemeralKeyCallback callback);
-  void OnHaveEphemeralKey(GetEphemeralKeyCallback callback,
-                          CtapDeviceResponseCode status,
-                          base::Optional<pin::KeyAgreementResponse> key);
+  void DoGetAssertion(CtapGetAssertionRequest request,
+                      CtapGetAssertionOptions options,
+                      GetAssertionCallback callback);
+  void OnHaveEphemeralKeyForGetAssertion(
+      CtapGetAssertionRequest request,
+      CtapGetAssertionOptions options,
+      GetAssertionCallback callback,
+      CtapDeviceResponseCode status,
+      base::Optional<pin::KeyAgreementResponse> key);
   void OnHaveEphemeralKeyForGetPINToken(
       std::string pin,
       uint8_t permissions,
@@ -187,7 +199,6 @@ class COMPONENT_EXPORT(DEVICE_FIDO) FidoDeviceAuthenticator
   base::Optional<AuthenticatorSupportedOptions> options_;
   std::unique_ptr<FidoTask> task_;
   std::unique_ptr<GenericDeviceOperation> operation_;
-  base::Optional<pin::KeyAgreementResponse> cached_ephemeral_key_;
   base::WeakPtrFactory<FidoDeviceAuthenticator> weak_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(FidoDeviceAuthenticator);

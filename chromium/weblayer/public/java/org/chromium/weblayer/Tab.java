@@ -17,8 +17,10 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import org.chromium.weblayer_private.interfaces.APICallException;
+import org.chromium.weblayer_private.interfaces.IClientNavigation;
 import org.chromium.weblayer_private.interfaces.IErrorPageCallbackClient;
 import org.chromium.weblayer_private.interfaces.IFullscreenCallbackClient;
+import org.chromium.weblayer_private.interfaces.IGoogleAccountsCallbackClient;
 import org.chromium.weblayer_private.interfaces.IObjectWrapper;
 import org.chromium.weblayer_private.interfaces.ITab;
 import org.chromium.weblayer_private.interfaces.ITabClient;
@@ -163,6 +165,52 @@ public class Tab {
     }
 
     /**
+     * Creates a {@link FaviconFetcher} that notifies a {@link FaviconCallback} when the favicon
+     * changes.
+     *
+     * When the fetcher is no longer necessary, call {@link destroy}. Destroying the Tab implicitly
+     * destroys any fetchers that were created.
+     *
+     * A page may provide any number of favicons. This favors a largish favicon. If a previously
+     * cached icon is available, it is used, otherwise the icon is downloaded.
+     *
+     * {@link callback} may be called multiple times for the same navigation. This happens if the
+     * page dynamically updates the favicon.
+     *
+     * @param callback The callback to notify of changes.
+     *
+     * @since 86
+     */
+    public @NonNull FaviconFetcher createFaviconFetcher(@NonNull FaviconCallback callback) {
+        ThreadCheck.ensureOnUiThread();
+        if (WebLayer.getSupportedMajorVersionInternal() < 86) {
+            throw new UnsupportedOperationException();
+        }
+        return new FaviconFetcher(mImpl, callback);
+    }
+
+    /**
+     * Sets the target language for translation such that whenever the translate UI shows in this
+     * Tab, the target language will be |targetLanguage|. Notes:
+     * - |targetLanguage| should be specified as the language code (e.g., "de" for German).
+     * - Passing an empty string causes behavior to revert to default.
+     * - Even with the target language specified, the translate UI will not trigger for pages in the
+     *   user's locale.
+     * @since 86
+     */
+    public void setTranslateTargetLanguage(@NonNull String targetLanguage) {
+        ThreadCheck.ensureOnUiThread();
+        if (WebLayer.getSupportedMajorVersionInternal() < 86) {
+            throw new UnsupportedOperationException();
+        }
+        try {
+            mImpl.setTranslateTargetLanguage(targetLanguage);
+        } catch (RemoteException e) {
+            throw new APICallException(e);
+        }
+    }
+
+    /**
      * Executes the script, and returns the result as a JSON object to the callback if provided. The
      * object passed to the callback will have a single key SCRIPT_RESULT_KEY which will hold the
      * result of running the script.
@@ -281,12 +329,12 @@ public class Tab {
         return mMediaCaptureController;
     }
 
-    public void registerTabCallback(@Nullable TabCallback callback) {
+    public void registerTabCallback(@NonNull TabCallback callback) {
         ThreadCheck.ensureOnUiThread();
         mCallbacks.addObserver(callback);
     }
 
-    public void unregisterTabCallback(@Nullable TabCallback callback) {
+    public void unregisterTabCallback(@NonNull TabCallback callback) {
         ThreadCheck.ensureOnUiThread();
         mCallbacks.removeObserver(callback);
     }
@@ -386,6 +434,26 @@ public class Tab {
         }
         try {
             return (Map<String, String>) mImpl.getData();
+        } catch (RemoteException e) {
+            throw new APICallException(e);
+        }
+    }
+
+    /**
+     * Sets a callback to intercept interaction with GAIA accounts. If this callback is set, any
+     * link that would result in a change to a user's GAIA account state will trigger a call to
+     * {@link GoogleAccountsCallback#onGoogleAccountsRequest}.
+     *
+     * @since 86
+     */
+    public void setGoogleAccountsCallback(@Nullable GoogleAccountsCallback callback) {
+        ThreadCheck.ensureOnUiThread();
+        if (WebLayer.getSupportedMajorVersionInternal() < 86) {
+            throw new UnsupportedOperationException();
+        }
+        try {
+            mImpl.setGoogleAccountsCallbackClient(
+                    callback == null ? null : new GoogleAccountsCallbackClientImpl(callback));
         } catch (RemoteException e) {
             throw new APICallException(e);
         }
@@ -761,6 +829,12 @@ public class Tab {
             StrictModeWorkaround.apply();
             return mCallback.onBackToSafety();
         }
+        @Override
+        public String getErrorPageContent(IClientNavigation navigation) {
+            StrictModeWorkaround.apply();
+            ErrorPage errorPage = mCallback.getErrorPage((Navigation) navigation);
+            return errorPage == null ? null : errorPage.htmlContent;
+        }
     }
 
     private static final class FullscreenCallbackClientImpl extends IFullscreenCallbackClient.Stub {
@@ -786,6 +860,27 @@ public class Tab {
         public void exitFullscreen() {
             StrictModeWorkaround.apply();
             mCallback.onExitFullscreen();
+        }
+    }
+
+    private static final class GoogleAccountsCallbackClientImpl
+            extends IGoogleAccountsCallbackClient.Stub {
+        private GoogleAccountsCallback mCallback;
+
+        GoogleAccountsCallbackClientImpl(GoogleAccountsCallback callback) {
+            mCallback = callback;
+        }
+
+        @Override
+        public void onGoogleAccountsRequest(
+                int serviceType, String email, String continueUrl, boolean isSameTab) {
+            mCallback.onGoogleAccountsRequest(new GoogleAccountsParams(
+                    serviceType, email, Uri.parse(continueUrl), isSameTab));
+        }
+
+        @Override
+        public String getGaiaId() {
+            return mCallback.getGaiaId();
         }
     }
 }

@@ -28,6 +28,7 @@
 #include "base/thread_annotations.h"
 #include "media/gpu/media_gpu_export.h"
 #include "media/gpu/vaapi/va_surface.h"
+#include "media/gpu/vaapi/vaapi_utils.h"
 #include "media/video/video_decode_accelerator.h"
 #include "media/video/video_encode_accelerator.h"
 #include "ui/gfx/geometry/size.h"
@@ -43,12 +44,22 @@ class NativePixmapDmaBuf;
 class Rect;
 }
 
+namespace gpu {
+class GpuDriverBugWorkarounds;
+}
+
 namespace media {
 constexpr unsigned int kInvalidVaRtFormat = 0u;
 
-class ScopedVAImage;
-class ScopedVASurface;
 class VideoFrame;
+
+// Enum, function and callback type to allow VaapiWrapper to log errors in VA
+// function calls executed on behalf of its owner. |histogram_name| is prebound
+// to allow for disinguishing such owners.
+enum class VaapiFunctions;
+void ReportVaapiErrorToUMA(const std::string& histogram_name,
+                           VaapiFunctions value);
+using ReportErrorToUMACB = base::RepeatingCallback<void(VaapiFunctions)>;
 
 // This struct holds a NativePixmapDmaBuf, usually the result of exporting a VA
 // surface, and some associated size information needed to tell clients about
@@ -114,6 +125,7 @@ class MEDIA_GPU_EXPORT VaapiWrapper
 
   using InternalFormats = struct {
     bool yuv420 : 1;
+    bool yuv420_10 : 1;
     bool yuv422 : 1;
     bool yuv444 : 1;
   };
@@ -127,7 +139,7 @@ class MEDIA_GPU_EXPORT VaapiWrapper
   static scoped_refptr<VaapiWrapper> Create(
       CodecMode mode,
       VAProfile va_profile,
-      const base::Closure& report_error_to_uma_cb);
+      const ReportErrorToUMACB& report_error_to_uma_cb);
 
   // Create VaapiWrapper for VideoCodecProfile. It maps VideoCodecProfile
   // |profile| to VAProfile.
@@ -136,13 +148,14 @@ class MEDIA_GPU_EXPORT VaapiWrapper
   static scoped_refptr<VaapiWrapper> CreateForVideoCodec(
       CodecMode mode,
       VideoCodecProfile profile,
-      const base::Closure& report_error_to_uma_cb);
+      const ReportErrorToUMACB& report_error_to_uma_cb);
 
   // Return the supported video encode profiles.
   static VideoEncodeAccelerator::SupportedProfiles GetSupportedEncodeProfiles();
 
   // Return the supported video decode profiles.
-  static VideoDecodeAccelerator::SupportedProfiles GetSupportedDecodeProfiles();
+  static VideoDecodeAccelerator::SupportedProfiles GetSupportedDecodeProfiles(
+      const gpu::GpuDriverBugWorkarounds& workarounds);
 
   // Return true when decoding using |va_profile| is supported.
   static bool IsDecodeSupported(VAProfile va_profile);
@@ -419,7 +432,7 @@ class MEDIA_GPU_EXPORT VaapiWrapper
 
   bool Initialize(CodecMode mode, VAProfile va_profile);
   void Deinitialize();
-  bool VaInitialize(const base::Closure& report_error_to_uma_cb);
+  bool VaInitialize(const ReportErrorToUMACB& report_error_to_uma_cb);
 
   // Tries to allocate |num_surfaces| VASurfaceIDs of |size| and |va_format|.
   // Fills |va_surfaces| and returns true if successful, or returns false.
@@ -456,15 +469,18 @@ class MEDIA_GPU_EXPORT VaapiWrapper
   VAEntrypoint va_entrypoint_;
 
   // Data queued up for HW codec, to be committed on next execution.
-  std::vector<VABufferID> pending_slice_bufs_;
-  std::vector<VABufferID> pending_va_bufs_;
+  std::vector<VABufferID> pending_va_buffers_;
 
-  // Buffers for kEncode or kVideoProcess.
+  // VABufferIDs for kEncode*.
   std::set<VABufferID> va_buffers_;
+
+  // VABufferID to be used for kVideoProcess. Allocated the first time around,
+  // and reused afterwards.
+  std::unique_ptr<ScopedID<VABufferID>> va_buffer_for_vpp_;
 
   // Called to report codec errors to UMA. Errors to clients are reported via
   // return values from public methods.
-  base::Closure report_error_to_uma_cb_;
+  ReportErrorToUMACB report_error_to_uma_cb_;
 
   DISALLOW_COPY_AND_ASSIGN(VaapiWrapper);
 };

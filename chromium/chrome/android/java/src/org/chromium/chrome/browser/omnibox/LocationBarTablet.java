@@ -106,8 +106,8 @@ public class LocationBarTablet extends LocationBarLayout {
         mSaveOfflineButton = findViewById(R.id.save_offline_button);
 
         mTargets = new View[] {mUrlBar, mDeleteButton};
-        mStatusViewCoordinator.setShowIconsWhenUrlFocused(true);
-        mStatusViewCoordinator.setStatusIconShown(true);
+        mStatusCoordinator.setShowIconsWhenUrlFocused(true);
+        mStatusCoordinator.setStatusIconShown(true);
     }
 
     @Override
@@ -228,13 +228,13 @@ public class LocationBarTablet extends LocationBarLayout {
     @Override
     public void onSuggestionsHidden() {
         super.onSuggestionsHidden();
-        mStatusViewCoordinator.setFirstSuggestionIsSearchType(false);
+        mStatusCoordinator.setFirstSuggestionIsSearchType(false);
     }
 
     @Override
     public void onSuggestionsChanged(String autocompleteText) {
         super.onSuggestionsChanged(autocompleteText);
-        mStatusViewCoordinator.setFirstSuggestionIsSearchType(
+        mStatusCoordinator.setFirstSuggestionIsSearchType(
                 mAutocompleteCoordinator.getSuggestionCount() > 0
                 && mAutocompleteCoordinator.getSuggestionAt(0).isSearchSuggestion());
     }

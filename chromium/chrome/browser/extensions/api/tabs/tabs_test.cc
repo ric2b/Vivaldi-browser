@@ -66,7 +66,7 @@
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_observer.h"
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include "base/mac/mac_util.h"
 #include "ui/base/test/scoped_fake_nswindow_fullscreen.h"
 #endif
@@ -344,13 +344,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionTabsTest, GetAllWindows) {
   CloseAppWindow(app_window);
 }
 
-// Flaky on Windows. https://crbug.com/1035620
-#if defined(OS_WIN)
-#define MAYBE_GetAllWindowsAllTypes DISABLED_GetAllWindowsAllTypes
-#else
-#define MAYBE_GetAllWindowsAllTypes GetAllWindowsAllTypes
-#endif
-IN_PROC_BROWSER_TEST_F(ExtensionTabsTest, MAYBE_GetAllWindowsAllTypes) {
+IN_PROC_BROWSER_TEST_F(ExtensionTabsTest, GetAllWindowsAllTypes) {
   const size_t NUM_WINDOWS = 5;
   std::set<int> window_ids;
   std::set<int> result_ids;
@@ -792,7 +786,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionTabsTest, UpdateDevToolsWindow) {
 // MacOSX. Deactivate for now.
 // TODO(warx): Move ExtensionWindowLastFocusedTest to interactive
 // uitest as it triggers native widget activation.
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
 class ExtensionWindowLastFocusedTest : public ExtensionTabsTest {
  public:
   void SetUpOnMainThread() override;
@@ -1036,16 +1030,16 @@ IN_PROC_BROWSER_TEST_F(ExtensionWindowLastFocusedTest,
   DevToolsWindowTesting::CloseDevToolsWindowSync(devtools);
   CloseAppWindow(app_window);
 }
-#endif  // !defined(OS_MACOSX)
+#endif  // !defined(OS_MAC)
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 // https://crbug.com/836327
 #define MAYBE_AcceptState DISABLED_AcceptState
 #else
 #define MAYBE_AcceptState AcceptState
 #endif
 IN_PROC_BROWSER_TEST_F(ExtensionWindowCreateTest, MAYBE_AcceptState) {
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   if (base::mac::IsOS10_10())
     return;  // Fails when swarmed. http://crbug.com/660582
   ui::test::ScopedFakeNSWindowFullscreen fake_fullscreen;
@@ -1226,7 +1220,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionTabsTest, NoTabsAppWindow) {
 }
 
 // Crashes on Mac/Win only.  http://crbug.com/708996
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #define MAYBE_FilteredEvents DISABLED_FilteredEvents
 #else
 #define MAYBE_FilteredEvents FilteredEvents
@@ -1261,11 +1255,29 @@ IN_PROC_BROWSER_TEST_F(ExtensionTabsTest, MAYBE_FilteredEvents) {
   // TODO(llandwerlin): It seems creating an app window on MacOSX
   // won't create an activation event whereas it does on all other
   // platform. Disable focus event tests for now.
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   listener.Reply("");
 #else
   listener.Reply("focus");
 #endif
+
+  ASSERT_TRUE(catcher.GetNextResult());
+}
+
+IN_PROC_BROWSER_TEST_F(ExtensionTabsTest, OnBoundsChanged) {
+  extensions::ResultCatcher catcher;
+  ExtensionTestMessageListener listener("ready", true);
+  ASSERT_TRUE(
+      LoadExtension(test_data_dir_.AppendASCII("api_test/windows/bounds")));
+  ASSERT_TRUE(listener.WaitUntilSatisfied());
+
+  gfx::Rect rect = browser()->window()->GetBounds();
+  rect.Inset(10, 10);
+  browser()->window()->SetBounds(rect);
+
+  listener.Reply(base::StringPrintf(
+      R"({"top": %u, "left": %u, "width": %u, "height": %u})", rect.y(),
+      rect.x(), rect.width(), rect.height()));
 
   ASSERT_TRUE(catcher.GetNextResult());
 }

@@ -24,7 +24,6 @@
 #include "content/common/unfreezable_frame_messages.h"
 #include "content/common/widget_messages.h"
 #include "content/public/common/content_switches.h"
-#include "content/public/common/previews_state.h"
 #include "content/public/renderer/content_renderer_client.h"
 #include "content/public/renderer/document_state.h"
 #include "content/public/test/frame_load_waiter.h"
@@ -48,6 +47,7 @@
 #include "services/service_manager/public/mojom/interface_provider.mojom.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/common/loader/previews_state.h"
 #include "third_party/blink/public/mojom/frame/frame_owner_properties.mojom.h"
 #include "third_party/blink/public/platform/web_runtime_features.h"
 #include "third_party/blink/public/platform/web_string.h"
@@ -164,14 +164,6 @@ class RenderFrameImplTest : public RenderViewTest {
     return frame->render_view()->GetWebView()->AutoplayFlagsForTest();
   }
 
-#if defined(OS_ANDROID)
-  void ReceiveOverlayRoutingToken(const base::UnguessableToken& token) {
-    overlay_routing_token_ = token;
-  }
-
-  base::Optional<base::UnguessableToken> overlay_routing_token_;
-#endif
-
  private:
   TestRenderFrame* frame_;
   FakeCompositorDependencies compositor_deps_;
@@ -190,7 +182,7 @@ class RenderFrameTestObserver : public RenderFrameObserver {
   void WasShown() override { visible_ = true; }
   void WasHidden() override { visible_ = false; }
   void OnDestruct() override { delete this; }
-  void OnMainFrameDocumentIntersectionChanged(
+  void OnMainFrameIntersectionChanged(
       const blink::WebRect& intersection_rect) override {
     last_intersection_rect_ = intersection_rect;
   }
@@ -219,7 +211,7 @@ TEST_F(RenderFrameImplTest, SubframeWidget) {
 TEST_F(RenderFrameImplTest, FrameResize) {
   // Make an update where the widget's size and the visible_viewport_size
   // are not the same.
-  VisualProperties visual_properties;
+  blink::VisualProperties visual_properties;
   gfx::Size widget_size(400, 200);
   gfx::Size visible_size(350, 170);
   visual_properties.new_size = widget_size;
@@ -231,11 +223,7 @@ TEST_F(RenderFrameImplTest, FrameResize) {
 
   // The main frame's widget will receive the resize message before the
   // subframe's widget, and it will set the size for the WebView.
-  {
-    WidgetMsg_UpdateVisualProperties resize_message(
-        main_frame_widget->routing_id(), visual_properties);
-    main_frame_widget->OnMessageReceived(resize_message);
-  }
+  main_frame_widget->GetWebWidget()->ApplyVisualProperties(visual_properties);
   // The main frame widget's size is the "widget size", not the visible viewport
   // size, which is given to blink separately.
   EXPECT_EQ(gfx::Size(view_->GetWebView()->MainFrameWidget()->Size()),
@@ -246,11 +234,7 @@ TEST_F(RenderFrameImplTest, FrameResize) {
   EXPECT_NE(gfx::Size(frame_widget()->GetWebWidget()->Size()), visible_size);
 
   // A subframe in the same process does not modify the WebView.
-  {
-    WidgetMsg_UpdateVisualProperties resize_message_subframe(
-        frame_widget()->routing_id(), visual_properties);
-    frame_widget()->OnMessageReceived(resize_message_subframe);
-  }
+  frame_widget()->GetWebWidget()->ApplyVisualProperties(visual_properties);
   EXPECT_EQ(gfx::Size(frame_widget()->GetWebWidget()->Size()), widget_size);
 
   // A subframe in another process would use the |visible_viewport_size| as its
@@ -397,61 +381,13 @@ TEST_F(RenderViewImplDownloadURLTest, DownloadUrlLimit) {
 TEST_F(RenderFrameImplTest, NoCrashWhenDeletingFrameDuringFind) {
   frame()->GetWebFrame()->FindForTesting(
       1, "foo", true /* match_case */, true /* forward */,
-      true /* new_session */, true /* force */, false /* wrap_within_frame */);
+      true /* new_session */, true /* force */, false /* wrap_within_frame */,
+      false /* async */);
 
   UnfreezableFrameMsg_Delete delete_message(
       0, FrameDeleteIntention::kNotMainFrame);
   frame()->OnMessageReceived(delete_message);
 }
-
-#if defined(OS_ANDROID)
-// Verify that RFI defers token requests if the token hasn't arrived yet.
-TEST_F(RenderFrameImplTest, TestOverlayRoutingTokenSendsLater) {
-  ASSERT_FALSE(overlay_routing_token_.has_value());
-
-  frame()->RequestOverlayRoutingToken(
-      base::BindOnce(&RenderFrameImplTest::ReceiveOverlayRoutingToken,
-                     base::Unretained(this)));
-  ASSERT_FALSE(overlay_routing_token_.has_value());
-
-  // The host should receive a request for it sent to the frame.
-  ASSERT_EQ(1u, frame()->RequestOverlayRoutingTokenCalled());
-
-  // Create a token in the browser.
-  base::UnguessableToken token = base::UnguessableToken::Create();
-  frame()->SetOverlayRoutingToken(token);
-
-  frame()->RequestOverlayRoutingToken(
-      base::BindOnce(&RenderFrameImplTest::ReceiveOverlayRoutingToken,
-                     base::Unretained(this)));
-  ASSERT_TRUE(overlay_routing_token_.has_value());
-  ASSERT_EQ(overlay_routing_token_.value(), token);
-}
-
-// Verify that RFI sends tokens if they're already available.
-TEST_F(RenderFrameImplTest, TestOverlayRoutingTokenSendsNow) {
-  ASSERT_FALSE(overlay_routing_token_.has_value());
-  base::UnguessableToken token = base::UnguessableToken::Create();
-  frame()->SetOverlayRoutingToken(token);
-
-  // The frame should receive the token.
-  frame()->RequestOverlayRoutingToken(
-      base::BindOnce(&RenderFrameImplTest::ReceiveOverlayRoutingToken,
-                     base::Unretained(this)));
-  ASSERT_EQ(1u, frame()->RequestOverlayRoutingTokenCalled());
-  ASSERT_TRUE(overlay_routing_token_.has_value());
-  ASSERT_EQ(overlay_routing_token_.value(), token);
-
-  // Since the token already arrived, a new request for it shouldn't be sent.
-  overlay_routing_token_ = base::nullopt;
-  frame()->RequestOverlayRoutingToken(
-      base::BindOnce(&RenderFrameImplTest::ReceiveOverlayRoutingToken,
-                     base::Unretained(this)));
-  ASSERT_TRUE(overlay_routing_token_.has_value());
-  ASSERT_EQ(overlay_routing_token_.value(), token);
-  ASSERT_EQ(1u, frame()->RequestOverlayRoutingTokenCalled());
-}
-#endif
 
 TEST_F(RenderFrameImplTest, AutoplayFlags) {
   // Add autoplay flags to the page.
@@ -516,29 +452,29 @@ TEST_F(RenderFrameImplTest, FileUrlPathAlias) {
   for (const auto& test_case : kTestCases) {
     WebURLRequest request;
     request.SetUrl(GURL(test_case.original));
-    GetMainRenderFrame()->WillSendRequest(request);
+    GetMainRenderFrame()->WillSendRequest(
+        request, blink::WebLocalFrameClient::ForRedirect(false));
     EXPECT_EQ(test_case.transformed, request.Url().GetString().Utf8());
   }
 }
 
-// TODO(https://crbug/1085175): Mainframe document intersections need to be
-// transformed into the main frame document's coordinate system from the
-// child frame's.
-TEST_F(RenderFrameImplTest, DISABLED_MainFrameDocumentIntersectionRecorded) {
+TEST_F(RenderFrameImplTest, MainFrameIntersectionRecorded) {
   RenderFrameTestObserver observer(frame());
-  gfx::Point viewport_offset(7, -11);
   blink::WebRect viewport_intersection(0, 11, 200, 89);
-
   blink::WebRect mainframe_intersection(0, 0, 200, 140);
   blink::FrameOcclusionState occlusion_state =
       blink::FrameOcclusionState::kUnknown;
+  gfx::Transform transform;
+  transform.Translate(100, 100);
+
   WidgetMsg_SetViewportIntersection set_viewport_intersection_message(
-      0, {viewport_offset, viewport_intersection, mainframe_intersection,
-          blink::WebRect(), occlusion_state});
+      0, {viewport_intersection, mainframe_intersection, blink::WebRect(),
+          occlusion_state, blink::WebSize(), gfx::Point(), transform});
   frame_widget()->OnMessageReceived(set_viewport_intersection_message);
   // Setting a new frame intersection in a local frame triggers the render frame
   // observer call.
-  EXPECT_EQ(observer.last_intersection_rect(), blink::WebRect(0, 0, 200, 140));
+  EXPECT_EQ(observer.last_intersection_rect(),
+            blink::WebRect(100, 100, 200, 140));
 }
 
 // Used to annotate the source of an interface request.

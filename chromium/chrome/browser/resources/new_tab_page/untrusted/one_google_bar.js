@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import {oneGoogleBarApi} from './one_google_bar_api.js';
+
 /**
  * The following |messageType|'s are sent to the parent frame:
  *  - loaded: sent on initial load.
@@ -24,36 +26,16 @@ function postMessage(messageType, data) {
       'chrome://new-tab-page');
 }
 
-// Object that exposes:
-//  - |getEnabled()|: returns whether dark theme is enabled.
-//  - |setEnabled(value)|: updates whether dark theme is enabled using the
-//        OneGoogleBar API.
-const darkTheme = (() => {
-  let enabled = false;
-
-  /** @return {boolean} */
-  const getEnabled = () => enabled;
-
-  /**
-   * @param {boolean} value
-   * @return {!Promise}
-   */
-  const setEnabled = async value => {
-    if (!window.gbar) {
-      return;
-    }
-    enabled = value;
-    const ogb = await window.gbar.a.bf();
-    ogb.pc.call(ogb, enabled ? 1 : 0);
-  };
-
-  return {getEnabled, setEnabled};
-})();
-
-// Object that exposes:
-//  - |track()|: sets up MutationObserver to track element visibility changes.
-//  - |update(potentialNewOverlays)|: determines visibility of tracked elements
-//        and sends an update to the top frame about element visibility.
+/**
+ * Object that exposes:
+ *  - |track()|: sets up MutationObserver to track element visibility changes.
+ *  - |update(potentialNewOverlays)|: determines visibility of tracked elements
+ *        and sends an update to the top frame about element visibility.
+ * @type {!{
+ *   track: !function(),
+ *   update: !function(!Array<!Element>),
+ * }}
+ */
 const overlayUpdater = (() => {
   const modalOverlays = document.documentElement.hasAttribute('modal-overlays');
   let shouldUndoDarkTheme = false;
@@ -90,6 +72,9 @@ const overlayUpdater = (() => {
 
   /** @param {!Element} potentialNewOverlays */
   const addOverlay = overlay => {
+    if (overlays.has(overlay)) {
+      return;
+    }
     // If an overlay starts a transition, the updated bounding rects need to
     // be sent to the top frame during the transition. The MutationObserver
     // will only handle new elements and changes to the element attributes.
@@ -107,6 +92,23 @@ const overlayUpdater = (() => {
         el.target = '_top';
       }
     });
+    if (!modalOverlays) {
+      const {transition} = getComputedStyle(overlay);
+      const opacityTransition = 'opacity 0.1s ease 0.02s';
+      // Check if the transition is the default computed transition style. If it
+      // is not, append to the existing transitions.
+      if (transition === 'all 0s ease 0s') {
+        overlay.style.transition = opacityTransition;
+      } else if (!transition.includes('opacity')) {
+        overlay.style.transition = transition + ', ' + opacityTransition;
+      }
+    }
+    // The element has an initial opacity of 1. If the element is being added to
+    // |overlays| and shown in the same |update()| call, the opacity transition
+    // will not work since the opacity is already 1. For this reason the
+    // 'fade-in' class is added to the element which runs an initial fade-in
+    // animation.
+    overlay.classList.add('fade-in');
     overlays.add(overlay);
   };
 
@@ -144,9 +146,14 @@ const overlayUpdater = (() => {
     overlays.forEach(overlay => {
       const {display, visibility} = window.getComputedStyle(overlay);
       const rect = overlay.getBoundingClientRect();
-      if (display !== 'none' && visibility !== 'hidden' &&
-          rect.bottom > barRect.bottom) {
+      const shown = display !== 'none' && visibility !== 'hidden' &&
+          rect.bottom > barRect.bottom;
+      if (shown) {
         overlayRects.push(rect);
+      }
+      if (!modalOverlays) {
+        // Setting the style here avoids triggering the mutation observer.
+        overlay.style.opacity = shown ? '1' : '0';
       }
     });
     if (!modalOverlays) {
@@ -170,13 +177,13 @@ const overlayUpdater = (() => {
     // OneGoogleBar iframe. The dark theme for the OneGoogleBar is then enabled
     // for better visibility.
     if (overlayShown) {
-      if (!darkTheme.getEnabled()) {
+      if (!oneGoogleBarApi.isForegroundLight()) {
         shouldUndoDarkTheme = true;
-        darkTheme.setEnabled(true);
+        oneGoogleBarApi.setForegroundLight(true);
       }
     } else if (shouldUndoDarkTheme) {
       shouldUndoDarkTheme = false;
-      darkTheme.setEnabled(false);
+      oneGoogleBarApi.setForegroundLight(false);
     }
   };
 
@@ -209,7 +216,7 @@ const overlayUpdater = (() => {
 
 window.addEventListener('message', ({data}) => {
   if (data.type === 'enableDarkTheme') {
-    darkTheme.setEnabled(data.enabled);
+    oneGoogleBarApi.setForegroundLight(data.enabled);
   }
 });
 
@@ -233,7 +240,7 @@ document.addEventListener('DOMContentLoaded', () => {
       el.target = '_top';
     }
   });
-  modalOverlays = document.documentElement.hasAttribute('modal-overlays');
   postMessage('loaded');
   overlayUpdater.track();
+  oneGoogleBarApi.trackDarkModeChanges();
 });

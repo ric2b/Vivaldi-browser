@@ -360,6 +360,8 @@ class PasswordProtectionService : public history::HistoryServiceObserver {
 
   virtual bool IsIncognito() = 0;
 
+  virtual bool IsUserMBBOptedIn() = 0;
+
   virtual bool IsInPasswordAlertMode(
       ReusedPasswordAccountType password_type) = 0;
 
@@ -392,6 +394,9 @@ class PasswordProtectionService : public history::HistoryServiceObserver {
   virtual bool IsUnderAdvancedProtection() = 0;
 #endif
 
+  // If Safe browsing endpoint is not enabled in the country.
+  virtual bool IsInExcludedCountry() = 0;
+
 #if defined(SYNC_PASSWORD_REUSE_WARNING_ENABLED)
   // Records a Chrome Sync event for the result of the URL reputation lookup
   // if the user enters their sync password on a website.
@@ -417,6 +422,11 @@ class PasswordProtectionService : public history::HistoryServiceObserver {
   // |NOT_SIGNED_IN|.
   virtual LoginReputationClientRequest::PasswordReuseEvent::SyncAccountType
   GetSyncAccountType() const = 0;
+
+  // Get information about Delayed Warnings and Omnibox URL display experiments.
+  // This information is sent in PhishGuard pings.
+  virtual LoginReputationClientRequest::UrlDisplayExperiment
+  GetUrlDisplayExperiment() const = 0;
 
   // Returns the reason why a ping is not sent based on the |trigger_type|,
   // |url| and |password_type|. Crash if |CanSendPing| is true.
@@ -470,7 +480,9 @@ class PasswordProtectionService : public history::HistoryServiceObserver {
 #if BUILDFLAG(FULL_SAFE_BROWSING)
   // Get the content area size of current browsing window.
   virtual gfx::Size GetCurrentContentAreaSize() const = 0;
+#endif
 
+#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
   // Binds the |phishing_detector| to the appropriate interface, as provided by
   // |provider|.
   virtual void GetPhishingDetector(

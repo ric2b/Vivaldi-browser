@@ -6,6 +6,7 @@
 <translation id="1012173283529841972">তালিকা আইটেম</translation>
 <translation id="1013742170491673792">srched</translation>
 <translation id="1014370462248694370">দুই আঙ্গুল দিয়ে ডানদিকে সোয়াইপ করুন</translation>
+<translation id="1016393160682012902">'লার্ন' মোডের ক্রিয়াকলাপের ব্যাপারে জানতে, একটি কোয়ার্টি কী (qwerty), রিফ্রেশ করা যায় এমন ব্রেইল কী প্রেস করুন অথবা 'টাচ জেসচার' ফিচার ব্যবহার করুন। মোড থেকে বাইরে বেরিয়ে আসার জন্য, Control কীয়ের সাথে একসঙ্গে w বা Escape কী প্রেস করুন।</translation>
 <translation id="1022586497894531524">আপনি কি ChromeVox-এর পড়ে কথ্য প্রতিবার্তার সুবিধাটি প্রথমবারের জন্য ব্যবহার করছেন? কিভাবে ChromeVox ব্যবহার করা শুরু করতে হয় এই সংক্ষিপ্ত টিউটোরিয়ালটি সে বিষয়ে প্রয়োজনীয় বিষয়গুলি ব্যাখ্যা করে।</translation>
 <translation id="1025074108959230262">স্টিকি মোড অক্ষম</translation>
 <translation id="1031961866430398710">তারপর</translation>
@@ -504,7 +505,6 @@
 <translation id="489907760999452556">ইন্টার্নাল লিঙ্ক</translation>
 <translation id="4909019435900810068">একটি শব্দের পিছনে রাখুন</translation>
 <translation id="4911349081560453449">কোনও পূর্ববর্তী চেকবক্স নেই</translation>
-<translation id="4915087353619183190">লার্ন মোড শুরু করা হচ্ছে। এটির ক্রিয়াকলাপ সম্বন্ধে জানার জন্য কোয়ার্টি কী, রিফ্রেশ করা যায় এমন ব্রেইল কী টিপুন বা স্ক্রিন স্পর্শ করুন। বেরিয়ে আসার জন্য Ctrl কী সহ w অথবা Esc কী টিপুন।</translation>
 <translation id="492295894462528572">মুখবন্ধ</translation>
 <translation id="495046168593986294">উপরের দিকে স্ক্রল করুন</translation>
 <translation id="495170559598752135">ক্রিয়াসমূহ</translation>
@@ -647,6 +647,7 @@
 <translation id="6017514345406065928">সবুজ</translation>
 <translation id="602001110135236999">বাঁ দিকে স্ক্রল করুন</translation>
 <translation id="6034000775414344507">হালকা ধূসর</translation>
+<translation id="6036135911048686884">টাচ করার মাধ্যমে কোনও টেক্সট পড়ে শোনানো</translation>
 <translation id="6037602951055904232">প্যান ফরওয়ার্ড</translation>
 <translation id="6044160928851315051">স্ক্রীনে আলো কমান</translation>
 <translation id="6082768461603900813">প্রাথমিক নেভিগেশান</translation>
@@ -716,7 +717,7 @@
 <translation id="6696967141280706829">মুখবন্ধ</translation>
 <translation id="6697092096875747123">পূর্ববর্তী কম্বো বাক্স</translation>
 <translation id="6702609185760332517">{COUNT,plural, =1{টি বিস্ময়সূচক চিহ্ন}one{#টি বিস্ময়সূচক চিহ্ন}other{#টি বিস্ময়সূচক চিহ্ন}}</translation>
-<translation id="6710213216561001401">পূর্ববর্তী</translation>
+<translation id="6710213216561001401">আগের</translation>
 <translation id="6714813999819678458">পূর্ববর্তী স্তর ২ শিরোনাম</translation>
 <translation id="6730312624811567147">'হোম' বা 'এন্ড'-এ যেতে সার্চের সাথে বাম অথবা ডানদিকের তীরচিহ্ন বোতামটি টিপুন, কন্ট্রোল হোম অথবা এন্ডের জন্য সার্চ কন্ট্রোলের সাথে বাম অথবা ডানদিকের তীরচিহ্ন বোতামটি টিপুন, পেজ আপ ও পেজ ডাউনের জন্য সার্চের সাথে উপরের বা নিচের তীরচিহ্ন বোতামটি টিপুন</translation>
 <translation id="6736510033526053669">ট্যাব তৈরি করা হয়েছে</translation>
@@ -923,6 +924,7 @@
 <translation id="8345569862449483843">{COUNT,plural, =1{পাউন্ড}one{#টি পাউন্ড চিহ্ন}other{#টি পাউন্ড চিহ্ন}}</translation>
 <translation id="8378855320830505539">অঞ্চল</translation>
 <translation id="8382679411218029383">স্বতসম্পূর্ণ ইনলাইন এবং তালিকা</translation>
+<translation id="8394908167088220973">মিডিয়া প্লে করুন/বিরতি</translation>
 <translation id="8428213095426709021">সেটিংস</translation>
 <translation id="8428603554127842284">স্তর <ph name="DEPTH" /></translation>
 <translation id="8430049249787218991">mnubr</translation>
@@ -967,6 +969,7 @@
 <translation id="8770473310765924354">সংগঠিত কন্টেন্ট বের করুন, যেমন সারণী</translation>
 <translation id="8779057862865475116">কোনও পূর্ববর্তী লিঙ্ক নেই</translation>
 <translation id="8796411681063377102">পরবর্তী স্তর ৩ শিরোনাম</translation>
+<translation id="8823311177246872527"><ph name="TOTALPAGES" />টির মধ্যে <ph name="CURRENTPAGE" /> নম্বর পৃষ্ঠা</translation>
 <translation id="8825828890761629845">bnr</translation>
 <translation id="8851136666856101339">প্রধান</translation>
 <translation id="8882002077197914455">সারি শিরোলেখ</translation>

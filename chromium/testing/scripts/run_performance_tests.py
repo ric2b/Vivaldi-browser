@@ -113,6 +113,10 @@ GTEST_CONVERSION_WHITELIST = [
   'xr.vr.common_perftests',
 ]
 
+BENCHMARKS_TO_SKIP_REF = [
+    'system_health.common_desktop',
+    'system_health.common_mobile'
+]
 
 class OutputFilePaths(object):
   """Provide paths to where results outputs should be written.
@@ -242,9 +246,12 @@ class GtestCommandGenerator(object):
 
 
 def write_simple_test_results(return_code, output_filepath, benchmark_name):
-  # TODO(crbug.com/920002): Fix to output
+  # TODO(crbug.com/1115658): Fix to output
   # https://chromium.googlesource.com/chromium/src/+/master/docs/testing/json_test_results_format.md
   # for each test rather than this summary.
+  # Append the shard index to the end of the name so that the merge script
+  # doesn't blow up trying to merge unmergeable results.
+  benchmark_name += '_shard_%s' % os.environ.get('GTEST_SHARD_INDEX', '0')
   output_json = {
       'tests': {
           benchmark_name: {
@@ -625,7 +632,7 @@ def main(sys_args):
               command_generator, output_paths, options.xvfb)
           overall_return_code = return_code or overall_return_code
           test_results_files.append(output_paths.test_results)
-          if options.run_ref_build:
+          if options.run_ref_build and benchmark not in BENCHMARKS_TO_SKIP_REF:
             reference_benchmark_foldername = benchmark + '.reference'
             reference_output_paths = OutputFilePaths(
                 isolated_out_dir, reference_benchmark_foldername).SetUp()

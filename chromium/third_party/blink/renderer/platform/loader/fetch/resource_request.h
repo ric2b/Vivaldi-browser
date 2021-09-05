@@ -224,6 +224,9 @@ class PLATFORM_EXPORT ResourceRequestHead {
   bool HasUserGesture() const { return has_user_gesture_; }
   void SetHasUserGesture(bool);
 
+  bool HasTextFragmentToken() const { return has_text_fragment_token_; }
+  void SetHasTextFragmentToken(bool);
+
   // True if request shuold be downloaded to blob.
   bool DownloadToBlob() const { return download_to_blob_; }
   void SetDownloadToBlob(bool download_to_blob) {
@@ -318,10 +321,8 @@ class PLATFORM_EXPORT ResourceRequestHead {
     fetch_integrity_ = integrity;
   }
 
-  WebURLRequest::PreviewsState GetPreviewsState() const {
-    return previews_state_;
-  }
-  void SetPreviewsState(WebURLRequest::PreviewsState previews_state) {
+  PreviewsState GetPreviewsState() const { return previews_state_; }
+  void SetPreviewsState(PreviewsState previews_state) {
     previews_state_ = previews_state;
   }
 
@@ -490,6 +491,7 @@ class PLATFORM_EXPORT ResourceRequestHead {
   bool report_upload_progress_ : 1;
   bool report_raw_headers_ : 1;
   bool has_user_gesture_ : 1;
+  bool has_text_fragment_token_ : 1;
   bool download_to_blob_ : 1;
   bool use_stream_on_response_ : 1;
   bool keepalive_ : 1;
@@ -502,7 +504,7 @@ class PLATFORM_EXPORT ResourceRequestHead {
   ResourceLoadPriority priority_;
   int intra_priority_value_;
   int requestor_id_;
-  WebURLRequest::PreviewsState previews_state_;
+  PreviewsState previews_state_;
   scoped_refptr<WebURLRequest::ExtraData> extra_data_;
   mojom::RequestContextType request_context_;
   network::mojom::RequestDestination destination_;

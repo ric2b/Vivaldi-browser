@@ -77,6 +77,7 @@
 #include "components/omnibox/browser/vector_icons.h"
 #include "components/omnibox/common/omnibox_features.h"
 #include "components/search/search.h"
+#include "components/search_engines/omnibox_focus_type.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/sessions/content/session_tab_helper.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
@@ -616,7 +617,10 @@ void SearchTabHelper::QueryAutocomplete(const base::string16& input,
   AutocompleteInput autocomplete_input(
       input, metrics::OmniboxEventProto::NTP_REALBOX,
       ChromeAutocompleteSchemeClassifier(profile()));
-  autocomplete_input.set_from_omnibox_focus(input.empty());
+  // TODO(tommycli): We use the input being empty as a signal we are requesting
+  // on-focus suggestions. It would be nice if we had a more explicit signal.
+  autocomplete_input.set_focus_type(input.empty() ? OmniboxFocusType::ON_FOCUS
+                                                  : OmniboxFocusType::DEFAULT);
   autocomplete_input.set_prevent_inline_autocomplete(
       prevent_inline_autocomplete);
 
@@ -752,8 +756,13 @@ void SearchTabHelper::ToggleSuggestionGroupIdVisibility(
   if (!autocomplete_controller_)
     return;
 
-  omnibox::ToggleSuggestionGroupIdVisibility(profile()->GetPrefs(),
-                                             suggestion_group_id);
+  omnibox::SuggestionGroupVisibility new_value =
+      autocomplete_controller_->result().IsSuggestionGroupIdHidden(
+          profile()->GetPrefs(), suggestion_group_id)
+          ? omnibox::SuggestionGroupVisibility::SHOWN
+          : omnibox::SuggestionGroupVisibility::HIDDEN;
+  omnibox::SetSuggestionGroupVisibility(profile()->GetPrefs(),
+                                        suggestion_group_id, new_value);
 }
 
 void SearchTabHelper::LogCharTypedToRepaintLatency(uint32_t latency_ms) {
@@ -831,11 +840,6 @@ void SearchTabHelper::OpenAutocompleteMatch(
   autocomplete_controller_->UpdateMatchDestinationURLWithQueryFormulationTime(
       elapsed_time_since_first_autocomplete_query, &match);
 
-  // Note: this is always false for the realbox.
-  UMA_HISTOGRAM_BOOLEAN(
-      "Omnibox.SuggestionUsed.RichEntity",
-      match.type == AutocompleteMatchType::SEARCH_SUGGEST_ENTITY);
-
   LOCAL_HISTOGRAM_BOOLEAN("Omnibox.EventCount", true);
 
   UMA_HISTOGRAM_MEDIUM_TIMES(
@@ -884,7 +888,9 @@ void SearchTabHelper::OpenAutocompleteMatch(
           : default_time_delta;
 
   OmniboxLog log(
-      /*text=*/input.from_omnibox_focus() ? base::string16() : input.text(),
+      /*text=*/input.focus_type() != OmniboxFocusType::DEFAULT
+          ? base::string16()
+          : input.text(),
       /*just_deleted_text=*/input.prevent_inline_autocomplete(),
       /*input_type=*/input.type(),
       /*in_keyword_mode=*/false,

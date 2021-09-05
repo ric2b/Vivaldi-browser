@@ -67,14 +67,12 @@ TEST_F(NGInlineLayoutAlgorithmTest, BreakToken) {
   EXPECT_FALSE(line1.BreakToken()->IsFinished());
 
   // Perform 2nd layout with the break token from the 1st line.
-  items_builder.ClearCurrentLineForTesting();
   scoped_refptr<const NGLayoutResult> layout_result2 =
       inline_node.Layout(constraint_space, line1.BreakToken(), &context);
   const auto& line2 = layout_result2->PhysicalFragment();
   EXPECT_FALSE(line2.BreakToken()->IsFinished());
 
   // Perform 3rd layout with the break token from the 2nd line.
-  items_builder.ClearCurrentLineForTesting();
   scoped_refptr<const NGLayoutResult> layout_result3 =
       inline_node.Layout(constraint_space, line2.BreakToken(), &context);
   const auto& line3 = layout_result3->PhysicalFragment();
@@ -462,15 +460,6 @@ TEST_F(NGInlineLayoutAlgorithmTest, InkOverflow) {
   PhysicalRect ink_overflow = cursor.Current().InkOverflow();
   EXPECT_EQ(LayoutUnit(-5), ink_overflow.offset.top);
   EXPECT_EQ(LayoutUnit(20), ink_overflow.size.height);
-
-  if (paint_fragment) {
-    // |ContentsInkOverflow| should match to |InkOverflow|, except the width
-    // because |<div id=container>| might be wider than the content.
-    const PhysicalRect contents_ink_overflow =
-        paint_fragment->ContentsInkOverflow();
-    EXPECT_EQ(ink_overflow.offset, contents_ink_overflow.offset);
-    EXPECT_EQ(ink_overflow.size.height, contents_ink_overflow.size.height);
-  }
 }
 
 #undef MAYBE_VerticalAlignBottomReplaced

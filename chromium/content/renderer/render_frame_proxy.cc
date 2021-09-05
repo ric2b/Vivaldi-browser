@@ -22,7 +22,6 @@
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/impression.h"
-#include "content/public/common/screen_info.h"
 #include "content/public/common/use_zoom_for_dsf_policy.h"
 #include "content/public/renderer/content_renderer_client.h"
 #include "content/renderer/child_frame_compositing_helper.h"
@@ -36,7 +35,6 @@
 #include "ipc/ipc_message.h"
 #include "ipc/ipc_message_macros.h"
 #include "mojo/public/cpp/bindings/pending_associated_remote.h"
-#include "printing/buildflags/buildflags.h"
 #include "third_party/blink/public/common/feature_policy/feature_policy.h"
 #include "third_party/blink/public/common/frame/frame_policy.h"
 #include "third_party/blink/public/common/navigation/triggering_event_info.h"
@@ -44,15 +42,10 @@
 #include "third_party/blink/public/platform/url_conversion.h"
 #include "third_party/blink/public/platform/web_rect.h"
 #include "third_party/blink/public/platform/web_string.h"
+#include "third_party/blink/public/web/web_frame_widget.h"
 #include "third_party/blink/public/web/web_local_frame.h"
 #include "third_party/blink/public/web/web_view.h"
 #include "ui/gfx/geometry/size_conversions.h"
-
-#if BUILDFLAG(ENABLE_PRINTING)
-// nogncheck because dependency on //printing is conditional upon
-// enable_basic_printing flags.
-#include "printing/metafile_skia.h"          // nogncheck
-#endif
 
 #include "app/vivaldi_apptools.h"
 
@@ -81,7 +74,6 @@ RenderFrameProxy* RenderFrameProxy::CreateProxyToReplaceFrame(
   CHECK_NE(routing_id, MSG_ROUTING_NONE);
 
   std::unique_ptr<RenderFrameProxy> proxy(new RenderFrameProxy(routing_id));
-  proxy->unique_name_ = frame_to_replace->unique_name();
   proxy->devtools_frame_token_ = frame_to_replace->GetDevToolsFrameToken();
 
   // When a RenderFrame is replaced by a RenderProxy, the WebRemoteFrame should
@@ -166,7 +158,6 @@ RenderFrameProxy* RenderFrameProxy::CreateFrameProxy(
         replicated_state.frame_owner_element_type, proxy.get(),
         proxy->blink_interface_registry_.get(),
         proxy->GetRemoteAssociatedInterfaces(), frame_token, opener);
-    proxy->unique_name_ = replicated_state.unique_name;
     render_view = parent->render_view();
     ancestor_widget = parent->ancestor_render_widget_;
   }
@@ -269,9 +260,17 @@ void RenderFrameProxy::Init(blink::WebRemoteFrame* web_frame,
   // propagate VisualProperty changes down the frame/process hierarchy. Remote
   // main frame proxies do not participate in this flow.
   if (ancestor_render_widget_) {
-    ancestor_render_widget_->RegisterRenderFrameProxy(this);
+    blink::WebFrameWidget* ancestor_frame_widget =
+        static_cast<blink::WebFrameWidget*>(
+            ancestor_render_widget_->GetWebWidget());
+    pending_visual_properties_.zoom_level = render_view->GetZoomLevel();
+    pending_visual_properties_.page_scale_factor =
+        ancestor_frame_widget->PageScaleInMainFrame();
+    pending_visual_properties_.is_pinch_gesture_active =
+        ancestor_frame_widget->PinchGestureActiveInMainFrame();
     pending_visual_properties_.screen_info =
         ancestor_render_widget_->GetOriginalScreenInfo();
+    ancestor_render_widget_->RegisterRenderFrameProxy(this);
   }
 
   std::pair<FrameProxyMap::iterator, bool> result =
@@ -289,7 +288,8 @@ void RenderFrameProxy::ResendVisualProperties() {
   SynchronizeVisualProperties();
 }
 
-void RenderFrameProxy::OnScreenInfoChanged(const ScreenInfo& screen_info) {
+void RenderFrameProxy::DidChangeScreenInfo(
+    const blink::ScreenInfo& screen_info) {
   DCHECK(ancestor_render_widget_);
 
   pending_visual_properties_.screen_info = screen_info;
@@ -302,7 +302,7 @@ void RenderFrameProxy::OnScreenInfoChanged(const ScreenInfo& screen_info) {
   SynchronizeVisualProperties();
 }
 
-void RenderFrameProxy::OnZoomLevelChanged(double zoom_level) {
+void RenderFrameProxy::ZoomLevelChanged(double zoom_level) {
   DCHECK(ancestor_render_widget_);
 
   pending_visual_properties_.zoom_level = zoom_level;
@@ -316,8 +316,8 @@ void RenderFrameProxy::OnRootWindowSegmentsChanged(
   SynchronizeVisualProperties();
 }
 
-void RenderFrameProxy::OnPageScaleFactorChanged(float page_scale_factor,
-                                                bool is_pinch_gesture_active) {
+void RenderFrameProxy::PageScaleFactorChanged(float page_scale_factor,
+                                              bool is_pinch_gesture_active) {
   DCHECK(ancestor_render_widget_);
 
   pending_visual_properties_.page_scale_factor = page_scale_factor;
@@ -367,7 +367,8 @@ void RenderFrameProxy::SetReplicatedState(const FrameReplicationState& state) {
            web_frame_->GetSecurityOrigin());
 #endif
 
-  web_frame_->SetReplicatedName(blink::WebString::FromUTF8(state.name));
+  web_frame_->SetReplicatedName(blink::WebString::FromUTF8(state.name),
+                                blink::WebString::FromUTF8(state.unique_name));
   web_frame_->SetReplicatedInsecureRequestPolicy(state.insecure_request_policy);
   web_frame_->SetReplicatedInsecureNavigationsSet(
       state.insecure_navigations_set);
@@ -382,7 +383,8 @@ void RenderFrameProxy::SetReplicatedState(const FrameReplicationState& state) {
     // and setting those (as well as the active one?). But the call to
     // UpdateUserActivationState sets the transient activation.
     web_frame_->UpdateUserActivationState(
-        blink::mojom::UserActivationUpdateType::kNotifyActivation);
+        blink::mojom::UserActivationUpdateType::kNotifyActivation,
+        blink::mojom::UserActivationNotificationType::kMedia);
   }
   } // vivaldi::IsVivaldiRunning()
   web_frame_->SetHadStickyUserActivationBeforeNavigation(
@@ -394,6 +396,11 @@ void RenderFrameProxy::SetReplicatedState(const FrameReplicationState& state) {
         blink::WebString::FromUTF8(header.header_value), header.type,
         header.source);
   }
+}
+
+std::string RenderFrameProxy::unique_name() const {
+  DCHECK(web_frame_);
+  return web_frame_->UniqueName().Utf8();
 }
 
 bool RenderFrameProxy::OnMessageReceived(const IPC::Message& msg) {
@@ -409,7 +416,6 @@ bool RenderFrameProxy::OnMessageReceived(const IPC::Message& msg) {
 
   bool handled = true;
   IPC_BEGIN_MESSAGE_MAP(RenderFrameProxy, msg)
-    IPC_MESSAGE_HANDLER(FrameMsg_DidUpdateName, OnDidUpdateName)
     IPC_MESSAGE_HANDLER(UnfreezableFrameMsg_DeleteProxy, OnDeleteProxy)
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
@@ -422,6 +428,8 @@ void RenderFrameProxy::OnAssociatedInterfaceRequest(
     const std::string& interface_name,
     mojo::ScopedInterfaceEndpointHandle handle) {
   if (interface_name == blink::mojom::RemoteFrame::Name_) {
+    associated_interfaces_.TryBindInterface(interface_name, &handle);
+  } else if (interface_name == blink::mojom::RemoteMainFrame::Name_) {
     associated_interfaces_.TryBindInterface(interface_name, &handle);
   } else if (interface_name == content::mojom::RenderFrameProxy::Name_) {
     render_frame_proxy_receiver_.Bind(
@@ -447,12 +455,6 @@ void RenderFrameProxy::ChildProcessGone() {
 
 void RenderFrameProxy::DidStartLoading() {
   web_frame_->DidStartLoading();
-}
-
-void RenderFrameProxy::OnDidUpdateName(const std::string& name,
-                                       const std::string& unique_name) {
-  web_frame_->SetReplicatedName(blink::WebString::FromUTF8(name));
-  unique_name_ = unique_name;
 }
 
 void RenderFrameProxy::DidUpdateVisualProperties(
@@ -580,12 +582,6 @@ void RenderFrameProxy::SynchronizeVisualProperties() {
 }
 
 void RenderFrameProxy::FrameDetached(DetachType type) {
-  if (type == DetachType::kRemove) {
-    // Let the browser process know this subframe is removed, so that it is
-    // destroyed in its current process.
-    Send(new FrameHostMsg_Detach(routing_id_));
-  }
-
   web_frame_->Close();
 
   // If this proxy was associated with a provisional RenderFrame, and we're not
@@ -729,26 +725,6 @@ void RenderFrameProxy::SetLayer(scoped_refptr<cc::Layer> layer,
 
 SkBitmap* RenderFrameProxy::GetSadPageBitmap() {
   return GetContentClient()->renderer()->GetSadWebViewBitmap();
-}
-
-uint32_t RenderFrameProxy::Print(const blink::WebRect& rect,
-                                 cc::PaintCanvas* canvas) {
-#if BUILDFLAG(ENABLE_PRINTING)
-  auto* metafile = canvas->GetPrintingMetafile();
-  DCHECK(metafile);
-
-  // Create a place holder content for the remote frame so it can be replaced
-  // with actual content later.
-  uint32_t content_id =
-      metafile->CreateContentForRemoteFrame(rect, routing_id_);
-
-  // Inform browser to print the remote subframe.
-  Send(new FrameHostMsg_PrintCrossProcessSubframe(
-      routing_id_, rect, metafile->GetDocumentCookie()));
-  return content_id;
-#else
-  return 0;
-#endif
 }
 
 const viz::LocalSurfaceId& RenderFrameProxy::GetLocalSurfaceId() const {

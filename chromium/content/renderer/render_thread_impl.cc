@@ -77,8 +77,6 @@
 #include "content/renderer/browser_exposed_renderer_interfaces.h"
 #include "content/renderer/categorized_worker_pool.h"
 #include "content/renderer/effective_connection_type_helper.h"
-#include "content/renderer/frame_swap_message_queue.h"
-#include "content/renderer/input/widget_input_handler_manager.h"
 #include "content/renderer/loader/resource_dispatcher.h"
 #include "content/renderer/media/audio/audio_renderer_mixer_manager.h"
 #include "content/renderer/media/gpu/gpu_video_accelerator_factories_impl.h"
@@ -156,7 +154,7 @@
 #include "media/base/android/media_codec_util.h"
 #endif
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include "base/mac/mac_util.h"
 #include "content/renderer/theme_helper_mac.h"
 #endif
@@ -180,7 +178,7 @@
 #include "mojo/public/cpp/bindings/message_dumper.h"
 #endif
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include <malloc/malloc.h>
 #else
 #include <malloc.h>
@@ -537,13 +535,14 @@ RenderThreadImpl::RenderThreadImpl(
     const InProcessChildThreadParams& params,
     int32_t client_id,
     std::unique_ptr<blink::scheduler::WebThreadScheduler> scheduler)
-    : ChildThreadImpl(base::DoNothing(),
-                      Options::Builder()
-                          .InBrowserProcess(params)
-                          .ConnectToBrowser(true)
-                          .IPCTaskRunner(scheduler->IPCTaskRunner())
-                          .ExposesInterfacesToBrowser()
-                          .Build()),
+    : ChildThreadImpl(
+          base::DoNothing(),
+          Options::Builder()
+              .InBrowserProcess(params)
+              .ConnectToBrowser(true)
+              .IPCTaskRunner(scheduler->DeprecatedDefaultTaskRunner())
+              .ExposesInterfacesToBrowser()
+              .Build()),
       main_thread_scheduler_(std::move(scheduler)),
       categorized_worker_pool_(new CategorizedWorkerPool()),
       client_id_(client_id) {
@@ -567,15 +566,15 @@ int32_t GetClientIdFromCommandLine() {
 RenderThreadImpl::RenderThreadImpl(
     base::RepeatingClosure quit_closure,
     std::unique_ptr<blink::scheduler::WebThreadScheduler> scheduler)
-    : ChildThreadImpl(std::move(quit_closure),
-                      Options::Builder()
-                          .ConnectToBrowser(true)
-                          .IPCTaskRunner(scheduler->IPCTaskRunner())
-                          .ExposesInterfacesToBrowser()
-                          .Build()),
+    : ChildThreadImpl(
+          std::move(quit_closure),
+          Options::Builder()
+              .ConnectToBrowser(true)
+              .IPCTaskRunner(scheduler->DeprecatedDefaultTaskRunner())
+              .ExposesInterfacesToBrowser()
+              .Build()),
       main_thread_scheduler_(std::move(scheduler)),
       categorized_worker_pool_(new CategorizedWorkerPool()),
-      is_scroll_animator_enabled_(false),
       client_id_(GetClientIdFromCommandLine()) {
   TRACE_EVENT0("startup", "RenderThreadImpl::Create");
   Init();
@@ -592,7 +591,7 @@ void RenderThreadImpl::Init() {
 
 #if BUILDFLAG(USE_EXTERNAL_POPUP_MENU)
   // On Mac and Android Java UI, the select popups are rendered by the browser.
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   // When UseCommonSelectPopup is enabled, the internal popup menu should be
   // used.
   if (!features::IsUseCommonSelectPopupEnabled())
@@ -660,16 +659,9 @@ void RenderThreadImpl::Init() {
   is_threaded_animation_enabled_ =
       !command_line.HasSwitch(cc::switches::kDisableThreadedAnimation);
 
-  is_zero_copy_enabled_ =
-      command_line.HasSwitch(blink::switches::kEnableZeroCopy);
-  is_partial_raster_enabled_ =
-      !command_line.HasSwitch(blink::switches::kDisablePartialRaster);
-  is_gpu_memory_buffer_compositor_resources_enabled_ = command_line.HasSwitch(
-      blink::switches::kEnableGpuMemoryBufferCompositorResources);
-
 // On macOS this value is adjusted in `UpdateScrollbarTheme()`,
 // but the system default is true.
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   is_elastic_overscroll_enabled_ = true;
 #elif defined(OS_WIN)
   is_elastic_overscroll_enabled_ =
@@ -687,7 +679,7 @@ void RenderThreadImpl::Init() {
   } else {
 #if defined(OS_ANDROID)
     is_lcd_text_enabled_ = false;
-#elif defined(OS_MACOSX)
+#elif defined(OS_MAC)
     if (base::FeatureList::IsEnabled(features::kRespectMacLCDTextSetting))
       is_lcd_text_enabled_ = IsSubpixelAntialiasingAvailable();
     else
@@ -700,18 +692,6 @@ void RenderThreadImpl::Init() {
   if (command_line.HasSwitch(switches::kDisableGpuCompositing))
     is_gpu_compositing_disabled_ = true;
 
-  if (command_line.HasSwitch(
-          blink::switches::kGpuRasterizationMSAASampleCount)) {
-    std::string string_value = command_line.GetSwitchValueASCII(
-        blink::switches::kGpuRasterizationMSAASampleCount);
-    bool parsed_msaa_sample_count =
-        base::StringToInt(string_value, &gpu_rasterization_msaa_sample_count_);
-    DCHECK(parsed_msaa_sample_count) << string_value;
-    DCHECK_GE(gpu_rasterization_msaa_sample_count_, 0);
-  } else {
-    gpu_rasterization_msaa_sample_count_ = -1;
-  }
-
   // Note that under Linux, the media library will normally already have
   // been initialized by the Zygote before this instance became a Renderer.
   media::InitializeMediaLibrary();
@@ -719,26 +699,7 @@ void RenderThreadImpl::Init() {
 #if defined(OS_ANDROID)
   if (!command_line.HasSwitch(switches::kDisableAcceleratedVideoDecode) &&
       media::MediaCodecUtil::IsMediaCodecAvailable()) {
-    bool accelerated_video_decode_blacklisted = false;
-    if (!command_line.HasSwitch(switches::kIgnoreGpuBlacklist)) {
-      int32_t major_version = 0, minor_version = 0, bugfix_version = 0;
-      base::SysInfo::OperatingSystemVersionNumbers(
-          &major_version, &minor_version, &bugfix_version);
-      if (major_version < 5) {
-        // Currently accelerated video decode is only blacklisted on
-        // Android older than Lollipop.
-        scoped_refptr<gpu::GpuChannelHost> gpu_channel_host =
-            EstablishGpuChannelSync();
-        if (!gpu_channel_host ||
-            gpu_channel_host->gpu_feature_info().status_values
-                    [gpu::GPU_FEATURE_TYPE_ACCELERATED_VIDEO_DECODE] !=
-                gpu::kGpuFeatureStatusEnabled) {
-          accelerated_video_decode_blacklisted = true;
-        }
-      }
-    }
-    if (!accelerated_video_decode_blacklisted)
-      media::EnablePlatformDecoderSupport();
+    media::EnablePlatformDecoderSupport();
   }
 #endif
 
@@ -788,7 +749,7 @@ void RenderThreadImpl::Init() {
   DCHECK(parsed_num_raster_threads) << string_value;
   DCHECK_GT(num_raster_threads, 0);
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
   categorized_worker_pool_->SetBackgroundingCallback(
       main_thread_scheduler_->DefaultTaskRunner(),
       base::BindOnce(
@@ -811,7 +772,7 @@ void RenderThreadImpl::Init() {
   base::DiscardableMemoryAllocator::SetInstance(
       discardable_memory_allocator_.get());
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
   if (base::FeatureList::IsEnabled(
           blink::features::kBlinkCompositorUseDisplayThreadPriority)) {
     render_message_filter()->SetThreadPriority(
@@ -1049,7 +1010,6 @@ void RenderThreadImpl::InitializeWebKit(mojo::BinderMap* binders) {
       ->SetRuntimeFeaturesDefaultsBeforeBlinkInitialization();
   SetRuntimeFeaturesDefaultsAndUpdateFromArgs(command_line);
 
-  isolate_ = blink::WebIsolate::Create();
   blink::Initialize(blink_platform_impl_.get(), binders,
                     main_thread_scheduler_.get());
 
@@ -1198,7 +1158,8 @@ media::GpuVideoAcceleratorFactories* RenderThreadImpl::GetGpuFactories() {
       !cmd_line->HasSwitch(switches::kDisableGpuMemoryBufferVideoFrames);
 #else
       cmd_line->HasSwitch(switches::kEnableGpuMemoryBufferVideoFrames);
-#endif  // defined(OS_MACOSX) || defined(OS_LINUX) || defined(OS_WIN)
+#endif  // defined(OS_MAC) || defined(OS_LINUX) || defined(OS_CHROMEOS) ||
+        // defined(OS_WIN)
   const bool enable_media_stream_gpu_memory_buffers =
       enable_gpu_memory_buffers &&
       base::FeatureList::IsEnabled(
@@ -1387,24 +1348,8 @@ RenderThreadImpl::GetIOTaskRunner() {
   return ChildProcess::current()->io_task_runner();
 }
 
-int RenderThreadImpl::GetGpuRasterizationMSAASampleCount() {
-  return gpu_rasterization_msaa_sample_count_;
-}
-
 bool RenderThreadImpl::IsLcdTextEnabled() {
   return is_lcd_text_enabled_;
-}
-
-bool RenderThreadImpl::IsZeroCopyEnabled() {
-  return is_zero_copy_enabled_;
-}
-
-bool RenderThreadImpl::IsPartialRasterEnabled() {
-  return is_partial_raster_enabled_;
-}
-
-bool RenderThreadImpl::IsGpuMemoryBufferCompositorResourcesEnabled() {
-  return is_gpu_memory_buffer_compositor_resources_enabled_;
 }
 
 bool RenderThreadImpl::IsElasticOverscrollEnabled() {
@@ -1428,7 +1373,7 @@ scoped_refptr<base::SingleThreadTaskRunner>
 RenderThreadImpl::GetCleanupTaskRunner() {
   return current_blink_platform_impl()
       ->main_thread_scheduler()
-      ->CleanupTaskRunner();
+      ->DefaultTaskRunner();
 }
 
 gpu::GpuMemoryBufferManager* RenderThreadImpl::GetGpuMemoryBufferManager() {
@@ -1466,12 +1411,6 @@ std::unique_ptr<cc::UkmRecorderFactory>
 RenderThreadImpl::CreateUkmRecorderFactory() {
   return std::make_unique<UkmRecorderFactoryImpl>(child_process_host());
 }
-
-#ifdef OS_ANDROID
-bool RenderThreadImpl::UsingSynchronousCompositing() {
-  return GetContentClient()->UsingSynchronousCompositing();
-}
-#endif
 
 bool RenderThreadImpl::IsMainThread() {
   return !!current();
@@ -1745,7 +1684,6 @@ scoped_refptr<gpu::GpuChannelHost> RenderThreadImpl::EstablishGpuChannelSync() {
 
 void RenderThreadImpl::RequestNewLayerTreeFrameSink(
     RenderWidget* render_widget,
-    scoped_refptr<FrameSwapMessageQueue> frame_swap_message_queue,
     const GURL& url,
     LayerTreeFrameSinkCallback callback,
     const char* client_name) {
@@ -1888,9 +1826,7 @@ void RenderThreadImpl::RequestNewLayerTreeFrameSink(
             compositor_task_runner_, GetGpuMemoryBufferManager(),
             sync_message_filter(), g_next_layer_tree_frame_sink_id++,
             std::move(params.synthetic_begin_frame_source),
-            render_widget->widget_input_handler_manager()
-                ->GetSynchronousCompositorRegistry(),
-            std::move(frame_swap_message_queue),
+            render_widget->GetWebWidget()->GetSynchronousCompositorRegistry(),
             std::move(params.pipes.compositor_frame_sink_remote),
             std::move(params.pipes.client_receiver)),
         std::move(render_frame_metadata_observer));
@@ -2038,7 +1974,7 @@ void RenderThreadImpl::SetCorsExemptHeaderList(
 
 void RenderThreadImpl::UpdateScrollbarTheme(
     mojom::UpdateScrollbarThemeParamsPtr params) {
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   blink::WebScrollbarTheme::UpdateScrollbarsWithNSDefaults(
       params->has_initial_button_delay
           ? base::make_optional(params->initial_button_delay)
@@ -2059,7 +1995,7 @@ void RenderThreadImpl::OnSystemColorsChanged(
     int32_t aqua_color_variant,
     const std::string& highlight_text_color,
     const std::string& highlight_color) {
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   SystemColorsDidChange(aqua_color_variant, highlight_text_color,
                         highlight_color);
 #else
@@ -2185,7 +2121,8 @@ RenderThreadImpl::SharedCompositorWorkerContextProvider(
               ->HasGrContextSupport()) {
         // Do not check GrContext above. It is lazy-created, and we only want to
         // create it if it might be used.
-        GrContext* gr_context = shared_worker_context_provider_->GrContext();
+        GrDirectContext* gr_context =
+            shared_worker_context_provider_->GrContext();
         really_support_gpu_rasterization = !!gr_context;
       }
     }
@@ -2255,6 +2192,7 @@ void RenderThreadImpl::OnRendererForegrounded() {
 }
 
 void RenderThreadImpl::ReleaseFreeMemory() {
+  TRACE_EVENT0("blink", "RenderThreadImpl::ReleaseFreeMemory()");
   base::allocator::ReleaseFreeMemory();
   discardable_memory_allocator_->ReleaseFreeMemory();
 
@@ -2291,8 +2229,9 @@ void RenderThreadImpl::OnSyncMemoryPressure(
 void RenderThreadImpl::OnRendererInterfaceReceiver(
     mojo::PendingAssociatedReceiver<mojom::Renderer> receiver) {
   DCHECK(!renderer_receiver_.is_bound());
-  renderer_receiver_.Bind(std::move(receiver),
-                          GetWebMainThreadScheduler()->IPCTaskRunner());
+  renderer_receiver_.Bind(
+      std::move(receiver),
+      GetWebMainThreadScheduler()->DeprecatedDefaultTaskRunner());
 }
 
 bool RenderThreadImpl::NeedsToRecordFirstActivePaint(

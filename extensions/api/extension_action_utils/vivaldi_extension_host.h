@@ -1,7 +1,12 @@
 // Copyright 2019 Vivaldi Technologies AS. All rights reserved.
 
+
 #ifndef VIVALDI_EXTENSION_HOST_H_
 #define VIVALDI_EXTENSION_HOST_H_
+
+#include "extensions/buildflags/buildflags.h"
+
+#if BUILDFLAG(ENABLE_EXTENSIONS)
 
 #include "base/macros.h"
 #include "base/strings/string16.h"
@@ -34,5 +39,7 @@ class VivaldiExtensionHost
 };
 
 }  // namespace vivaldi
+
+#endif // Extensions
 
 #endif  // VIVALDI_EXTENSION_HOST_H_

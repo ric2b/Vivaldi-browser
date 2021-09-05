@@ -13,6 +13,7 @@ import android.widget.TextView;
 import androidx.test.filters.MediumTest;
 import androidx.test.filters.SmallTest;
 
+import org.hamcrest.Matchers;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
@@ -97,16 +98,11 @@ public class NavigationPopupTest {
         final TestNavigationController controller = new TestNavigationController();
         final ListPopupWindow popup = showPopup(controller);
 
-        CriteriaHelper.pollUiThread(new Criteria("All favicons did not get updated.") {
-            @Override
-            public boolean isSatisfied() {
-                NavigationHistory history = controller.mHistory;
-                for (int i = 0; i < history.getEntryCount(); i++) {
-                    if (history.getEntryAtIndex(i).getFavicon() == null) {
-                        return false;
-                    }
-                }
-                return true;
+        CriteriaHelper.pollUiThread(() -> {
+            NavigationHistory history = controller.mHistory;
+            for (int i = 0; i < history.getEntryCount(); i++) {
+                Criteria.checkThat("Favicon[" + i + "] not updated",
+                        history.getEntryAtIndex(i).getFavicon(), Matchers.notNullValue());
             }
         });
 

@@ -57,7 +57,7 @@
 #include "net/test/embedded_test_server/controllable_http_response.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_request.h"
-#include "services/network/cross_origin_read_blocking.h"
+#include "services/network/public/cpp/cross_origin_read_blocking.h"
 #include "services/network/public/cpp/features.h"
 #include "services/network/public/mojom/network_context.mojom-shared.h"
 #include "services/network/public/mojom/trust_tokens.mojom-shared.h"
@@ -187,6 +187,7 @@ class ServiceWorkerConsoleObserver
  private:
   // ServiceWorkerContextObserver:
   void OnReportConsoleMessage(int64_t version_id,
+                              const GURL& scope,
                               const Message& message) override {
     messages_.push_back(message);
     run_loop_.Quit();
@@ -1704,7 +1705,8 @@ IN_PROC_BROWSER_TEST_P(CorbAndCorsExtensionBrowserTest,
   }
 }
 
-#if defined(OS_LINUX) || defined(OS_WIN) || defined(OS_MACOSX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_WIN) || \
+    defined(OS_MAC)
 // Flaky on Linux, especially under sanitizers: https://crbug.com/1073052
 // Flaky UAF on Mac under ASAN: https://crbug.com/1082355
 #define MAYBE_FromBackgroundServiceWorker_NoSniffXml \
@@ -2059,7 +2061,7 @@ IN_PROC_BROWSER_TEST_F(CorbAndCorsAppBrowserTest, WebViewContentScript) {
     content::WebContentsAddedObserver new_contents_observer;
     apps::AppServiceProxyFactory::GetForProfile(browser()->profile())
         ->BrowserAppLauncher()
-        .LaunchAppWithParams(apps::AppLaunchParams(
+        ->LaunchAppWithParams(apps::AppLaunchParams(
             app->id(), LaunchContainer::kLaunchContainerNone,
             WindowOpenDisposition::NEW_WINDOW,
             apps::mojom::AppLaunchSource::kSourceTest));

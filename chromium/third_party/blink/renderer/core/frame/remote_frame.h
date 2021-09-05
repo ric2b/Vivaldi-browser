@@ -32,11 +32,15 @@ class MessageEvent;
 class RemoteFrameClient;
 struct FrameLoadRequest;
 
+// A RemoteFrame is a frame that is possibly hosted outside this process.
 class CORE_EXPORT RemoteFrame final : public Frame,
+                                      public mojom::blink::RemoteMainFrame,
                                       public mojom::blink::RemoteFrame {
  public:
   // Returns the RemoteFrame for the given |frame_token|.
+  // TODO(crbug.com/1096617): Remove the UnguessableToken version of this.
   static RemoteFrame* FromFrameToken(const base::UnguessableToken& frame_token);
+  static RemoteFrame* FromFrameToken(const RemoteFrameToken& frame_token);
 
   // For a description of |inheriting_agent_factory| go see the comment on the
   // Frame constructor.
@@ -63,7 +67,7 @@ class CORE_EXPORT RemoteFrame final : public Frame,
   void SetInheritedEffectiveTouchAction(TouchAction) override;
   bool BubbleLogicalScrollFromChildFrame(
       mojom::blink::ScrollDirection direction,
-      ScrollGranularity granularity,
+      ui::ScrollGranularity granularity,
       Frame* child) override;
   void DidFocus() override;
   void AddResourceTimingFromChild(
@@ -102,14 +106,16 @@ class CORE_EXPORT RemoteFrame final : public Frame,
 
   void SetReplicatedFeaturePolicyHeaderAndOpenerPolicies(
       const ParsedFeaturePolicy& parsed_header,
-      const FeaturePolicy::FeatureState&);
+      const FeaturePolicyFeatureState&);
 
   void SetReplicatedSandboxFlags(network::mojom::blink::WebSandboxFlags);
   void SetInsecureRequestPolicy(mojom::blink::InsecureRequestPolicy);
   void SetInsecureNavigationsSet(const WebVector<unsigned>&);
 
+  const String& UniqueName() const { return unique_name_; }
+
   // blink::mojom::RemoteFrame overrides:
-  void WillEnterFullscreen() override;
+  void WillEnterFullscreen(mojom::blink::FullscreenOptionsPtr) override;
   void AddReplicatedContentSecurityPolicies(
       WTF::Vector<network::mojom::blink::ContentSecurityPolicyHeaderPtr>
           headers) override;
@@ -124,6 +130,8 @@ class CORE_EXPORT RemoteFrame final : public Frame,
       bool is_potentially_trustworthy_unique_origin) override;
   void SetReplicatedAdFrameType(
       mojom::blink::AdFrameType ad_frame_type) override;
+  void SetReplicatedName(const String& name,
+                         const String& unique_name) override;
   void DispatchLoadEventForFrameOwner() override;
   void Collapse(bool collapsed) final;
   void Focus() override;
@@ -132,7 +140,8 @@ class CORE_EXPORT RemoteFrame final : public Frame,
   void BubbleLogicalScroll(mojom::blink::ScrollDirection direction,
                            ui::ScrollGranularity granularity) override;
   void UpdateUserActivationState(
-      mojom::blink::UserActivationUpdateType) override;
+      mojom::blink::UserActivationUpdateType update_type,
+      mojom::blink::UserActivationNotificationType notification_type) override;
   void SetEmbeddingToken(
       const base::UnguessableToken& embedding_token) override;
   void SetPageFocus(bool is_focused) override;
@@ -156,14 +165,25 @@ class CORE_EXPORT RemoteFrame final : public Frame,
   void UpdateOpener(const base::Optional<base::UnguessableToken>&
                         opener_frame_token) override;
 
-  void TransferUserActivationToRenderer(
-      const base::UnguessableToken& source_frame_token) override;
-
   // Called only when this frame has a local frame owner.
   IntSize GetMainFrameViewportSize() const override;
   IntPoint GetMainFrameScrollOffset() const override;
 
   void SetOpener(Frame* opener) override;
+
+  // blink::mojom::RemoteMainFrame overrides:
+  //
+  // Use to transfer TextAutosizer state from the local main frame renderer to
+  // remote main frame renderers.
+  void UpdateTextAutosizerPageInfo(
+      mojom::blink::TextAutosizerPageInfoPtr page_info) override;
+
+  // Indicate that this frame was attached as a MainFrame.
+  void WasAttachedAsRemoteMainFrame();
+
+  RemoteFrameToken GetRemoteFrameToken() const {
+    return RemoteFrameToken(GetFrameToken());
+  }
 
  private:
   // Frame protected overrides:
@@ -178,8 +198,11 @@ class CORE_EXPORT RemoteFrame final : public Frame,
   void ApplyReplicatedFeaturePolicyHeader();
 
   static void BindToReceiver(
-      blink::RemoteFrame* frame,
+      RemoteFrame* frame,
       mojo::PendingAssociatedReceiver<mojom::blink::RemoteFrame> receiver);
+  static void BindToMainFrameReceiver(
+      RemoteFrame* frame,
+      mojo::PendingAssociatedReceiver<mojom::blink::RemoteMainFrame> receiver);
 
   Member<RemoteFrameView> view_;
   RemoteSecurityContext security_context_;
@@ -187,10 +210,15 @@ class CORE_EXPORT RemoteFrame final : public Frame,
   bool prevent_contents_opaque_changes_ = false;
   bool is_surface_layer_ = false;
   ParsedFeaturePolicy feature_policy_header_;
+  String unique_name_;
+
+  InterfaceRegistry* const interface_registry_;
 
   mojo::AssociatedRemote<mojom::blink::RemoteFrameHost>
       remote_frame_host_remote_;
   mojo::AssociatedReceiver<mojom::blink::RemoteFrame> receiver_{this};
+  mojo::AssociatedReceiver<mojom::blink::RemoteMainFrame> main_frame_receiver_{
+      this};
 };
 
 inline RemoteFrameView* RemoteFrame::View() const {

@@ -13,7 +13,6 @@
 #include "cc/paint/element_id.h"
 #include "third_party/blink/public/common/input/web_coalesced_input_event.h"
 #include "third_party/blink/public/common/input/web_gesture_event.h"
-#include "third_party/blink/public/platform/input/elastic_overscroll_controller.h"
 #include "third_party/blink/public/platform/input/synchronous_input_handler_proxy.h"
 #include "third_party/blink/public/platform/web_common.h"
 
@@ -29,6 +28,7 @@ namespace blink {
 class WebInputEventAttribution;
 class WebMouseWheelEvent;
 class WebTouchEvent;
+class ElasticOverscrollController;
 }  // namespace blink
 
 namespace blink {
@@ -37,12 +37,12 @@ namespace test {
 class InputHandlerProxyTest;
 class InputHandlerProxyEventQueueTest;
 class InputHandlerProxyMomentumScrollJankTest;
+class InputHandlerProxyForceHandlingOnMainThread;
 class TestInputHandlerProxy;
 class UnifiedScrollingInputHandlerProxyTest;
 }  // namespace test
 
 class CompositorThreadEventQueue;
-class ElasticOverscrollController;
 class EventWithCallback;
 class InputHandlerProxyClient;
 class ScrollPredictor;
@@ -215,6 +215,7 @@ class BLINK_PLATFORM_EXPORT InputHandlerProxy
   friend class test::UnifiedScrollingInputHandlerProxyTest;
   friend class test::InputHandlerProxyEventQueueTest;
   friend class test::InputHandlerProxyMomentumScrollJankTest;
+  friend class test::InputHandlerProxyForceHandlingOnMainThread;
 
   void DispatchSingleInputEvent(std::unique_ptr<EventWithCallback>,
                                 const base::TimeTicks);
@@ -264,6 +265,10 @@ class BLINK_PLATFORM_EXPORT InputHandlerProxy
       EventWithCallback* event_with_callback,
       const ui::LatencyInfo& original_latency_info,
       const blink::WebInputEventAttribution& original_attribution);
+
+  void set_event_attribution_enabled(bool enabled) {
+    event_attribution_enabled_ = enabled;
+  }
 
   InputHandlerProxyClient* client_;
   cc::InputHandler* input_handler_;
@@ -340,6 +345,10 @@ class BLINK_PLATFORM_EXPORT InputHandlerProxy
   // queue will be flushed and this bit cleared. Used only in scroll
   // unification.
   bool hit_testing_scroll_begin_on_main_thread_ = false;
+
+  // This bit can be used to disable event attribution in cases where the
+  // hit test information is unnecessary (e.g. tests).
+  bool event_attribution_enabled_ = true;
 
   // Helpers for the momentum scroll jank UMAs.
   std::unique_ptr<MomentumScrollJankTracker> momentum_scroll_jank_tracker_;

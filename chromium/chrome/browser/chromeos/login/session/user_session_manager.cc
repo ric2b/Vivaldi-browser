@@ -13,7 +13,6 @@
 #include <utility>
 #include <vector>
 
-#include "ash/public/cpp/ash_features.h"
 #include "ash/public/cpp/notification_utils.h"
 #include "ash/public/cpp/vector_icons/vector_icons.h"
 #include "base/base_paths.h"
@@ -57,9 +56,12 @@
 #include "chrome/browser/chromeos/login/login_pref_names.h"
 #include "chrome/browser/chromeos/login/profile_auth_data.h"
 #include "chrome/browser/chromeos/login/quick_unlock/pin_backend.h"
+#include "chrome/browser/chromeos/login/saml/password_sync_token_verifier.h"
+#include "chrome/browser/chromeos/login/saml/password_sync_token_verifier_factory.h"
 #include "chrome/browser/chromeos/login/saml/saml_offline_signin_limiter.h"
 #include "chrome/browser/chromeos/login/saml/saml_offline_signin_limiter_factory.h"
 #include "chrome/browser/chromeos/login/screens/arc_terms_of_service_screen.h"
+#include "chrome/browser/chromeos/login/screens/discover_screen.h"
 #include "chrome/browser/chromeos/login/screens/sync_consent_screen.h"
 #include "chrome/browser/chromeos/login/session/user_session_initializer.h"
 #include "chrome/browser/chromeos/login/signin/oauth2_login_manager_factory.h"
@@ -71,6 +73,7 @@
 #include "chrome/browser/chromeos/login/users/chrome_user_manager.h"
 #include "chrome/browser/chromeos/login/users/supervised_user_manager.h"
 #include "chrome/browser/chromeos/login/wizard_controller.h"
+#include "chrome/browser/chromeos/policy/adb_sideloading_allowance_mode_policy_handler.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/policy/minimum_version_policy_handler.h"
 #include "chrome/browser/chromeos/policy/tpm_auto_update_mode_policy_handler.h"
@@ -1262,7 +1265,7 @@ void UserSessionManager::InitProfilePreferences(
                        user_context.GetPublicSessionInputMethod());
 
     if (user_manager->GetPrimaryUser() == user &&
-        user->GetType() == user_manager::USER_TYPE_REGULAR &&
+        !DiscoverScreen::ShouldSkip() &&
         !user_manager->IsUserNonCryptohomeDataEphemeral(user->GetAccountId())) {
       chromeos::DiscoverManager::Get()
           ->GetModule<chromeos::DiscoverModulePinSetup>()
@@ -1431,18 +1434,19 @@ void UserSessionManager::InitProfilePreferences(
 void UserSessionManager::UserProfileInitialized(Profile* profile,
                                                 bool is_incognito_profile,
                                                 const AccountId& account_id) {
-  os_sync_util::MigrateOsSyncPreferences(profile->GetPrefs());
+  // Only migrate sync prefs for existing users. New users are given the choice
+  // to turn on OS sync in OOBE, so they get the default sync pref values.
+  if (!IsNewProfile(profile))
+    os_sync_util::MigrateOsSyncPreferences(profile->GetPrefs());
 
   // http://crbug/866790: After Supervised Users are deprecated, remove this.
-  if (ash::features::IsSupervisedUserDeprecationNoticeEnabled()) {
-    bool is_supervised_user =
-        user_manager::UserManager::Get()->IsLoggedInAsSupervisedUser();
-    bool is_manager = ChromeUserManager::Get()
-                          ->GetSupervisedUserManager()
-                          ->HasSupervisedUsers(account_id.GetUserEmail());
-    if (is_manager || is_supervised_user)
-      ShowSupervisedUserDeprecationNotification(profile, is_manager);
-  }
+  bool is_supervised_user =
+      user_manager::UserManager::Get()->IsLoggedInAsSupervisedUser();
+  bool is_manager =
+      ChromeUserManager::Get()->GetSupervisedUserManager()->HasSupervisedUsers(
+          account_id.GetUserEmail());
+  if (is_manager || is_supervised_user)
+    ShowSupervisedUserDeprecationNotification(profile, is_manager);
 
   // Demo user signed in.
   if (is_incognito_profile) {
@@ -1608,6 +1612,11 @@ void UserSessionManager::FinalizePrepareProfile(Profile* profile) {
           user_context_.GetAccountId(),
           user_context_.IsUsingSamlPrincipalsApi());
     }
+    PasswordSyncTokenVerifier* password_sync_token_verifier =
+        PasswordSyncTokenVerifierFactory::GetForProfile(profile);
+    if (password_sync_token_verifier)
+      password_sync_token_verifier->CheckForPasswordNotInSync();
+
     SAMLOfflineSigninLimiter* saml_offline_signin_limiter =
         SAMLOfflineSigninLimiterFactory::GetForProfile(profile);
     if (saml_offline_signin_limiter)
@@ -1644,19 +1653,6 @@ void UserSessionManager::FinalizePrepareProfile(Profile* profile) {
 
   VLOG(1) << "Clearing all secrets";
   user_context_.ClearSecrets();
-  if (TokenHandlesEnabled()) {
-    CreateTokenUtilIfMissing();
-    if (token_handle_util_->ShouldObtainHandle(user->GetAccountId())) {
-      if (!token_handle_fetcher_.get()) {
-        token_handle_fetcher_.reset(new TokenHandleFetcher(
-            token_handle_util_.get(), user->GetAccountId()));
-        token_handle_fetcher_->BackfillToken(
-            profile, base::Bind(&UserSessionManager::OnTokenHandleObtained,
-                                weak_factory_.GetWeakPtr()));
-      }
-    }
-  }
-
   if (user->GetType() == user_manager::USER_TYPE_CHILD) {
     if (base::FeatureList::IsEnabled(::features::kDMServerOAuthForChildUser)) {
       VLOG(1) << "Waiting for child policy refresh before showing session UI";
@@ -1765,9 +1761,7 @@ bool UserSessionManager::InitializeUserSession(Profile* profile) {
 
       ActivateWizard(TermsOfServiceScreenView::kScreenId);
       return false;
-    } else if (base::FeatureList::IsEnabled(
-                   chromeos::features::kEnableSupervisionTransitionScreens) &&
-               !user_manager->IsCurrentUserNew() &&
+    } else if (!user_manager->IsCurrentUserNew() &&
                arc::GetSupervisionTransition(profile) !=
                    arc::ArcSupervisionTransition::NO_TRANSITION) {
       ActivateWizard(SupervisionTransitionScreenView::kScreenId);
@@ -1837,6 +1831,20 @@ void UserSessionManager::NotifyUserProfileLoaded(
 
   session_manager::SessionManager::Get()->NotifyUserProfileLoaded(
       user->GetAccountId());
+
+  if (TokenHandlesEnabled() && user && user->HasGaiaAccount()) {
+    CreateTokenUtilIfMissing();
+    if (token_handle_util_->ShouldObtainHandle(user->GetAccountId())) {
+      if (!token_handle_fetcher_.get()) {
+        token_handle_fetcher_.reset(new TokenHandleFetcher(
+            token_handle_util_.get(), user->GetAccountId()));
+        token_handle_fetcher_->BackfillToken(
+            profile, base::Bind(&UserSessionManager::OnTokenHandleObtained,
+                                weak_factory_.GetWeakPtr()));
+        token_handle_backfill_tried_for_testing_ = true;
+      }
+    }
+  }
 }
 
 void UserSessionManager::StartTetherServiceIfPossible(Profile* profile) {
@@ -1862,6 +1870,12 @@ void UserSessionManager::ShowNotificationsIfNeeded(Profile* profile) {
       ->ShowTPMAutoUpdateNotificationIfNeeded();
 
   GetMinimumVersionPolicyHandler()->MaybeShowNotificationOnLogin();
+
+  // Show a notification about ADB sideloading policy change if applicable.
+  g_browser_process->platform_part()
+      ->browser_policy_connector_chromeos()
+      ->GetAdbSideloadingAllowanceModePolicyHandler()
+      ->ShowAdbSideloadingPolicyChangeNotificationIfNeeded();
 }
 
 void UserSessionManager::MaybeLaunchSettings(Profile* profile) {
@@ -2049,9 +2063,6 @@ void UserSessionManager::OnChildPolicyReady(
 }
 
 void UserSessionManager::ActiveUserChanged(user_manager::User* active_user) {
-  if (!user_manager::UserManager::Get()->IsCurrentUserNew())
-    SendUserPodsMetrics();
-
   Profile* profile = ProfileHelper::Get()->GetProfileByUser(active_user);
   // If profile has not yet been initialized, delay initialization of IME.
   if (!profile)
@@ -2112,7 +2123,7 @@ EasyUnlockKeyManager* UserSessionManager::GetEasyUnlockKeyManager() {
 void UserSessionManager::DoBrowserLaunchInternal(Profile* profile,
                                                  LoginDisplayHost* login_host,
                                                  bool locale_pref_checked) {
-  if (browser_shutdown::IsTryingToQuit())
+  if (browser_shutdown::IsTryingToQuit() || chrome::IsAttemptingShutdown())
     return;
 
   if (!locale_pref_checked) {
@@ -2185,7 +2196,7 @@ void UserSessionManager::DoBrowserLaunchInternal(Profile* profile,
 void UserSessionManager::RespectLocalePreferenceWrapper(
     Profile* profile,
     const base::Closure& callback) {
-  if (browser_shutdown::IsTryingToQuit())
+  if (browser_shutdown::IsTryingToQuit() || chrome::IsAttemptingShutdown())
     return;
 
   const user_manager::User* const user =
@@ -2215,29 +2226,6 @@ void UserSessionManager::InjectAuthenticatorBuilder(
     std::unique_ptr<StubAuthenticatorBuilder> builder) {
   injected_authenticator_builder_ = std::move(builder);
   authenticator_.reset();
-}
-
-void UserSessionManager::SendUserPodsMetrics() {
-  bool show_users_on_signin;
-  CrosSettings::Get()->GetBoolean(kAccountsPrefShowUserNamesOnSignIn,
-                                  &show_users_on_signin);
-  bool is_enterprise_managed = g_browser_process->platform_part()
-                                   ->browser_policy_connector_chromeos()
-                                   ->IsEnterpriseManaged();
-  UserPodsDisplay display;
-  if (show_users_on_signin) {
-    if (is_enterprise_managed)
-      display = USER_PODS_DISPLAY_ENABLED_MANAGED;
-    else
-      display = USER_PODS_DISPLAY_ENABLED_REGULAR;
-  } else {
-    if (is_enterprise_managed)
-      display = USER_PODS_DISPLAY_DISABLED_MANAGED;
-    else
-      display = USER_PODS_DISPLAY_DISABLED_REGULAR;
-  }
-  UMA_HISTOGRAM_ENUMERATION("UserSessionManager.UserPodsDisplay", display,
-                            NUM_USER_PODS_DISPLAY);
 }
 
 void UserSessionManager::OnOAuth2TokensFetched(UserContext context) {

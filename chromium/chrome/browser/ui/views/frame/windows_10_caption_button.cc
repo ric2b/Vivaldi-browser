@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/views/frame/windows_10_caption_button.h"
 
+#include "base/numerics/safe_conversions.h"
 #include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/ui/frame/window_frame_util.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
@@ -112,13 +113,13 @@ void Windows10CaptionButton::OnPaintBackground(gfx::Canvas* canvas) {
       // Theme buttons have slightly increased opacity to make them stand out
       // against a visually-busy frame image.
       constexpr float kAlphaScale = 1.3f;
-      hovered_alpha = gfx::ToRoundedInt(hovered_alpha * kAlphaScale);
-      pressed_alpha = gfx::ToRoundedInt(pressed_alpha * kAlphaScale);
+      hovered_alpha = base::ClampRound<SkAlpha>(hovered_alpha * kAlphaScale);
+      pressed_alpha = base::ClampRound<SkAlpha>(pressed_alpha * kAlphaScale);
     }
   }
 
   SkAlpha alpha;
-  if (state() == STATE_PRESSED)
+  if (GetState() == STATE_PRESSED)
     alpha = pressed_alpha;
   else
     alpha = gfx::Tween::IntValueBetween(hover_animation().GetCurrentValue(),
@@ -179,8 +180,9 @@ void DrawRect(gfx::Canvas* canvas,
 
 void Windows10CaptionButton::PaintSymbol(gfx::Canvas* canvas) {
   SkColor symbol_color = GetBaseColor();
-  if (!frame_view_->ShouldPaintAsActive() && state() != STATE_HOVERED &&
-      state() != STATE_PRESSED) {
+  if (!GetEnabled() ||
+      (!frame_view_->ShouldPaintAsActive() && GetState() != STATE_HOVERED &&
+       GetState() != STATE_PRESSED)) {
     symbol_color = SkColorSetA(
         symbol_color, GlassBrowserFrameView::kInactiveTitlebarFeatureAlpha);
   } else if (button_type_ == VIEW_ID_CLOSE_BUTTON &&
@@ -188,7 +190,7 @@ void Windows10CaptionButton::PaintSymbol(gfx::Canvas* canvas) {
     symbol_color = gfx::Tween::ColorValueBetween(
         hover_animation().GetCurrentValue(), symbol_color, SK_ColorWHITE);
   } else if (button_type_ == VIEW_ID_CLOSE_BUTTON &&
-             (state() == STATE_HOVERED || state() == STATE_PRESSED)) {
+             (GetState() == STATE_HOVERED || GetState() == STATE_PRESSED)) {
     symbol_color = SK_ColorWHITE;
   }
 

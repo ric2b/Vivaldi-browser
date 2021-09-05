@@ -20,6 +20,7 @@
 #include "third_party/blink/public/web/web_remote_frame.h"
 
 namespace blink {
+struct ScreenInfo;
 class WebURLRequest;
 struct WebRect;
 
@@ -61,14 +62,18 @@ class WebRemoteFrameClient {
     return base::UnguessableToken::Create();
   }
 
-  // Print out this frame.
-  // |rect| is the rectangular area where this frame resides in its parent
-  // frame.
-  // |canvas| is the canvas we are printing on.
-  // Returns the id of the placeholder content.
-  virtual uint32_t Print(const WebRect& rect, cc::PaintCanvas* canvas) {
-    return 0;
-  }
+  // Called when the main frame's zoom level is changed and should be propagated
+  // to the remote's associated view.
+  virtual void ZoomLevelChanged(double zoom_level) {}
+
+  // Called when the local root's capture sequence number has changed.
+  virtual void UpdateCaptureSequenceNumber(uint32_t sequence_number) {}
+
+  // Called when the local page scale factor changed.
+  virtual void PageScaleFactorChanged(float page_scale_factor,
+                                      bool is_pinch_gesture_active) {}
+
+  virtual void DidChangeScreenInfo(const ScreenInfo& original_screen_info) {}
 
  protected:
   virtual ~WebRemoteFrameClient() = default;

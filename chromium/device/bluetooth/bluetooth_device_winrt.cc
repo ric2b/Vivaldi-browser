@@ -24,6 +24,7 @@
 #include "device/bluetooth/bluetooth_pairing_winrt.h"
 #include "device/bluetooth/bluetooth_remote_gatt_service_winrt.h"
 #include "device/bluetooth/event_utils_winrt.h"
+#include "device/bluetooth/public/cpp/bluetooth_address.h"
 #include "device/bluetooth/public/cpp/bluetooth_uuid.h"
 
 namespace device {
@@ -309,15 +310,14 @@ bool BluetoothDeviceWinrt::ExpectingConfirmation() const {
   return false;
 }
 
-void BluetoothDeviceWinrt::GetConnectionInfo(
-    const ConnectionInfoCallback& callback) {
+void BluetoothDeviceWinrt::GetConnectionInfo(ConnectionInfoCallback callback) {
   NOTIMPLEMENTED();
 }
 
 void BluetoothDeviceWinrt::SetConnectionLatency(
     ConnectionLatency connection_latency,
-    const base::Closure& callback,
-    const ErrorCallback& error_callback) {
+    base::OnceClosure callback,
+    ErrorCallback error_callback) {
   NOTIMPLEMENTED();
 }
 
@@ -412,34 +412,34 @@ void BluetoothDeviceWinrt::CancelPairing() {
     pairing_->CancelPairing();
 }
 
-void BluetoothDeviceWinrt::Disconnect(const base::Closure& callback,
-                                      const ErrorCallback& error_callback) {
+void BluetoothDeviceWinrt::Disconnect(base::OnceClosure callback,
+                                      ErrorCallback error_callback) {
   NOTIMPLEMENTED();
 }
 
-void BluetoothDeviceWinrt::Forget(const base::Closure& callback,
-                                  const ErrorCallback& error_callback) {
+void BluetoothDeviceWinrt::Forget(base::OnceClosure callback,
+                                  ErrorCallback error_callback) {
   NOTIMPLEMENTED();
 }
 
 void BluetoothDeviceWinrt::ConnectToService(
     const BluetoothUUID& uuid,
-    const ConnectToServiceCallback& callback,
-    const ConnectToServiceErrorCallback& error_callback) {
+    ConnectToServiceCallback callback,
+    ConnectToServiceErrorCallback error_callback) {
   NOTIMPLEMENTED();
 }
 
 void BluetoothDeviceWinrt::ConnectToServiceInsecurely(
     const device::BluetoothUUID& uuid,
-    const ConnectToServiceCallback& callback,
-    const ConnectToServiceErrorCallback& error_callback) {
+    ConnectToServiceCallback callback,
+    ConnectToServiceErrorCallback error_callback) {
   NOTIMPLEMENTED();
 }
 
 // static
 std::string BluetoothDeviceWinrt::CanonicalizeAddress(uint64_t address) {
-  std::string bluetooth_address = BluetoothDevice::CanonicalizeAddress(
-      base::StringPrintf("%012llX", address));
+  std::string bluetooth_address =
+      CanonicalizeBluetoothAddress(base::StringPrintf("%012llX", address));
   DCHECK(!bluetooth_address.empty());
   return bluetooth_address;
 }

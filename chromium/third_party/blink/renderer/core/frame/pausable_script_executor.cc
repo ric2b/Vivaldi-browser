@@ -11,13 +11,13 @@
 #include "third_party/blink/public/platform/web_vector.h"
 #include "third_party/blink/public/web/web_script_execution_callback.h"
 #include "third_party/blink/renderer/bindings/core/v8/sanitize_script_errors.h"
-#include "third_party/blink/renderer/bindings/core/v8/script_controller.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_source_code.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
 #include "third_party/blink/renderer/bindings/core/v8/window_proxy.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
+#include "third_party/blink/renderer/core/script/classic_script.h"
 #include "third_party/blink/renderer/platform/bindings/trace_wrapper_v8_reference.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/heap/heap_allocator.h"
@@ -54,21 +54,22 @@ WebScriptExecutor::WebScriptExecutor(
     : sources_(sources), world_id_(world_id), user_gesture_(user_gesture) {}
 
 Vector<v8::Local<v8::Value>> WebScriptExecutor::Execute(LocalFrame* frame) {
-  if (user_gesture_)
-    LocalFrame::NotifyUserActivation(frame);
+  if (user_gesture_) {
+    // TODO(mustaq): Need to make sure this is safe. https://crbug.com/1082273
+    LocalFrame::NotifyUserActivation(
+        frame, mojom::blink::UserActivationNotificationType::kWebScriptExec);
+  }
 
   Vector<v8::Local<v8::Value>> results;
   for (const auto& source : sources_) {
     // Note: An error event in an isolated world will never be dispatched to
     // a foreign world.
+    ClassicScript* classic_script = ClassicScript::CreateUnspecifiedScript(
+        source, SanitizeScriptErrors::kDoNotSanitize);
     v8::Local<v8::Value> script_value =
-        world_id_
-            ? frame->GetScriptController().ExecuteScriptInIsolatedWorld(
-                  world_id_, source, KURL(),
-                  SanitizeScriptErrors::kDoNotSanitize)
-            : frame->GetScriptController()
-                  .ExecuteScriptInMainWorldAndReturnValue(
-                      source, KURL(), SanitizeScriptErrors::kDoNotSanitize);
+        world_id_ ? classic_script->RunScriptInIsolatedWorldAndReturnValue(
+                        frame, world_id_)
+                  : classic_script->RunScriptAndReturnValue(frame);
     results.push_back(script_value);
   }
 
@@ -206,10 +207,7 @@ void PausableScriptExecutor::Run() {
     ExecuteAndDestroySelf();
     return;
   }
-  task_handle_ = PostCancellableTask(
-      *context->GetTaskRunner(TaskType::kJavascriptTimer), FROM_HERE,
-      WTF::Bind(&PausableScriptExecutor::ExecuteAndDestroySelf,
-                WrapPersistent(this)));
+  PostExecuteAndDestroySelf(context);
 }
 
 void PausableScriptExecutor::RunAsync(BlockingOption blocking) {
@@ -219,8 +217,13 @@ void PausableScriptExecutor::RunAsync(BlockingOption blocking) {
   if (blocking_option_ == kOnloadBlocking)
     To<LocalDOMWindow>(context)->document()->IncrementLoadEventDelayCount();
 
+  PostExecuteAndDestroySelf(context);
+}
+
+void PausableScriptExecutor::PostExecuteAndDestroySelf(
+    ExecutionContext* context) {
   task_handle_ = PostCancellableTask(
-      *context->GetTaskRunner(TaskType::kJavascriptTimer), FROM_HERE,
+      *context->GetTaskRunner(TaskType::kJavascriptTimerImmediate), FROM_HERE,
       WTF::Bind(&PausableScriptExecutor::ExecuteAndDestroySelf,
                 WrapPersistent(this)));
 }

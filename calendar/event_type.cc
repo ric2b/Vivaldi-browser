@@ -216,8 +216,6 @@ void EventQueryResults::AppendEventBySwapping(EventResult* result) {
 
 EventResult::~EventResult() {}
 
-CreateEventResult::CreateEventResult() {}
-
 UpdateEventResult::UpdateEventResult() {}
 
 DeleteEventResult::DeleteEventResult() {}

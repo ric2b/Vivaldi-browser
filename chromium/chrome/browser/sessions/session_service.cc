@@ -59,7 +59,7 @@
 #include "chrome/browser/chromeos/crostini/crostini_util.h"
 #endif
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include "chrome/browser/app_controller_mac.h"
 #endif
 
@@ -129,12 +129,12 @@ bool SessionService::ShouldNewWindowStartSession() {
   if (!has_open_trackable_browsers_ &&
       !StartupBrowserCreator::InSynchronousProfileLaunch() &&
       !SessionRestore::IsRestoring(profile())
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
       // On OSX, a new window should not start a new session if it was opened
       // from the dock or the menubar.
       && !app_controller_mac::IsOpeningNewWindow()
-#endif  // OS_MACOSX
-      ) {
+#endif  // OS_MAC
+  ) {
     return true;
   }
   return false;
@@ -462,15 +462,12 @@ void SessionService::SetLastActiveTime(const SessionID& window_id,
       sessions::CreateLastActiveTimeCommand(tab_id, last_active_time));
 }
 
-base::CancelableTaskTracker::TaskId SessionService::GetLastSession(
-    sessions::GetLastSessionCallback callback,
-    base::CancelableTaskTracker* tracker) {
+void SessionService::GetLastSession(sessions::GetLastSessionCallback callback) {
   // OnGotSessionCommands maps the SessionCommands to browser state, then run
   // the callback.
-  return command_storage_manager_->ScheduleGetLastSessionCommands(
+  return command_storage_manager_->GetLastSessionCommands(
       base::BindOnce(&SessionService::OnGotSessionCommands,
-                     weak_factory_.GetWeakPtr(), std::move(callback)),
-      tracker);
+                     weak_factory_.GetWeakPtr(), std::move(callback)));
 }
 
 bool SessionService::ShouldUseDelayedSave() {
@@ -931,7 +928,7 @@ bool SessionService::ShouldTrackBrowser(Browser* browser) const {
   // restarted on restore, and we don't want terminal to force the VM to start.
   if (crostini::CrostiniAppIdFromAppName(browser->app_name()) ||
       web_app::GetAppIdFromApplicationName(browser->app_name()) ==
-          crostini::GetTerminalId()) {
+          crostini::kCrostiniTerminalSystemAppId) {
     return false;
   }
 

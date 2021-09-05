@@ -345,7 +345,6 @@
 <translation id="6639554308659482635">SQLite 메모리</translation>
 <translation id="6686817083349815241">비밀번호 저장</translation>
 <translation id="6691936601825168937">앞으로(F)</translation>
-<translation id="6723354935081862304">Google 문서도구나 기타 클라우드 대상으로 인쇄합니다. Google 클라우드 프린트로 인쇄하려면 <ph name="BEGIN_LINK" />로그인<ph name="END_LINK" />하세요.</translation>
 <translation id="6798954102094737107">플러그인: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">변경사항 유지</translation>
 <translation id="6817174620439930047">사이트에서 시스템 전용 메시지를 사용하여 MIDI 기기에 액세스하려는 경우 확인(권장)</translation>
@@ -418,7 +417,7 @@
 <translation id="7982789257301363584">네트워크</translation>
 <translation id="7997826902155442747">프로세스 우선순위</translation>
 <translation id="7999229196265990314">생성된 파일:
-        
+
 확장 프로그램: <ph name="EXTENSION_FILE" />
 키 파일: <ph name="KEY_FILE" />
 

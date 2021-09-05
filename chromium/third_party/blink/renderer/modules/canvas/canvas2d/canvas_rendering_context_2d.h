@@ -46,6 +46,7 @@
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
 #include "third_party/blink/renderer/platform/graphics/graphics_types.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
+#include "third_party/blink/renderer/platform/privacy_budget/identifiability_digest_helpers.h"
 #include "third_party/blink/renderer/platform/scheduler/public/thread.h"
 #include "third_party/blink/renderer/platform/wtf/linked_hash_set.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
@@ -75,7 +76,6 @@ class MODULES_EXPORT CanvasRenderingContext2D final
       public BaseRenderingContext2D,
       public SVGResourceClient {
   DEFINE_WRAPPERTYPEINFO();
-  USING_GARBAGE_COLLECTED_MIXIN(CanvasRenderingContext2D);
 
  public:
   class Factory : public CanvasRenderingContextFactory {
@@ -214,8 +214,16 @@ class MODULES_EXPORT CanvasRenderingContext2D final
 
   CanvasColorParams ColorParamsForTest() const { return ColorParams(); }
 
-  uint64_t IdentifiabilityTextDigest() override {
-    return identifiability_study_helper_.digest();
+  IdentifiableToken IdentifiableTextToken() const override {
+    return identifiability_study_helper_.GetToken();
+  }
+
+  bool IdentifiabilityEncounteredSkippedOps() const override {
+    return identifiability_study_helper_.encountered_skipped_ops();
+  }
+
+  bool IdentifiabilityEncounteredSensitiveOps() const override {
+    return identifiability_study_helper_.encountered_sensitive_ops();
   }
 
  protected:
@@ -290,8 +298,6 @@ class MODULES_EXPORT CanvasRenderingContext2D final
   static constexpr float kRasterMetricProbability = 0.01;
   std::mt19937 random_generator_;
   std::bernoulli_distribution bernoulli_distribution_;
-
-  IdentifiabilityStudyHelper identifiability_study_helper_;
 
   ukm::UkmRecorder* ukm_recorder_;
   ukm::SourceId ukm_source_id_;

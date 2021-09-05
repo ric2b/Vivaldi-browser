@@ -103,6 +103,10 @@ class TileManagerImpl : public TileManager {
     accept_languages_ = accept_languages;
   }
 
+  TileGroup* GetTileGroup() override {
+    return tile_group_ ? tile_group_.get() : nullptr;
+  }
+
   void OnTileStoreInitialized(
       TileGroupStatusCallback callback,
       bool success,

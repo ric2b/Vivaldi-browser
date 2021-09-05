@@ -88,6 +88,8 @@ class FakeArcBridgeHost : public mojom::ArcBridgeHost {
                                      obb_mounter_remote) override;
   void OnOemCryptoInstanceReady(
       mojo::PendingRemote<mojom::OemCryptoInstance> oemcrypto_remote) override;
+  void OnPaymentAppInstanceReady(mojo::PendingRemote<mojom::PaymentAppInstance>
+                                     payment_app_remote) override;
   void OnPipInstanceReady(
       mojo::PendingRemote<mojom::PipInstance> pip_remote) override;
   void OnPolicyInstanceReady(
@@ -107,6 +109,8 @@ class FakeArcBridgeHost : public mojom::ArcBridgeHost {
   void OnScreenCaptureInstanceReady(
       mojo::PendingRemote<mojom::ScreenCaptureInstance> screen_capture_remote)
       override;
+  void OnSensorInstanceReady(
+      mojo::PendingRemote<mojom::SensorInstance> sensor_remote) override;
   void OnSmartCardManagerInstanceReady(
       mojo::PendingRemote<mojom::SmartCardManagerInstance>
           smart_card_manager_remote) override;

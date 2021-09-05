@@ -21,6 +21,7 @@
 <translation id="1150565364351027703">משקפי שמש</translation>
 <translation id="115443833402798225">Hangul Ahnmatae</translation>
 <translation id="1155759005174418845">קטלאנית</translation>
+<translation id="1172970565351728681">נותרו כ-<ph name="REMAINING_TIME" /></translation>
 <translation id="1173894706177603556">שנה שם</translation>
 <translation id="117624967391683467">מעתיק את <ph name="FILE_NAME" />...</translation>
 <translation id="1178581264944972037">השהה</translation>
@@ -106,7 +107,6 @@
 <translation id="2085470240340828803">כבר קיים קובץ בשם "<ph name="FILENAME" />". מה ברצונך לעשות?</translation>
 <translation id="2121825465123208577">שנה גודל</translation>
 <translation id="2136953289241069843">‏תעתוק (namaste → नमस्कार)</translation>
-<translation id="2138867954865495510">לא ניתן לפתוח את "<ph name="PATH" />": <ph name="ERROR_MESSAGE" /></translation>
 <translation id="2163152940313951844">תו לא חוקי: <ph name="CHARACTER_NAME" /></translation>
 <translation id="2164862903024139959">‏מקלדת וייטנאמית (TCVN)</translation>
 <translation id="2168214441502403371">מקלדת פרסית</translation>
@@ -198,6 +198,7 @@
 <translation id="3236289833370040187">הבעלות תועבר אל <ph name="DESTINATION_DOMAIN" />.</translation>
 <translation id="3241720467332021590">אירית</translation>
 <translation id="3245321423178950146">אמן לא ידוע</translation>
+<translation id="3248185426436836442">בהמתנה</translation>
 <translation id="3252266817569339921">צרפתית</translation>
 <translation id="3254434849914415189">בחר את יישום ברירת המחדל עבור קובצי <ph name="FILE_TYPE" />:</translation>
 <translation id="3264582393905923483">הקשר</translation>
@@ -208,6 +209,7 @@
 <translation id="3335337277364016868">שנת הקלטה</translation>
 <translation id="3338239663705455570">מקלדת סלובנית</translation>
 <translation id="3353984535370177728">בחר תיקיה להעלאה</translation>
+<translation id="3356580349448036450">בוצע</translation>
 <translation id="3399597614303179694">מקלדת מקדונית</translation>
 <translation id="3414856743105198592">פרמוט המדיה הנשלפת יגרום למחיקת כל הנתונים. האם ברצונך להמשיך?</translation>
 <translation id="3437801641691368414">שעת יצירה</translation>
@@ -243,6 +245,7 @@
 <translation id="3780536599611287598">אין לך הרשאה להעביר קבצים אל '<ph name="FOLDER_NAME" />'.</translation>
 <translation id="3786301125658655746">אינך מחובר לאינטרנט</translation>
 <translation id="3789841737615482174">התקן</translation>
+<translation id="3793469551756281394">נותרו כ-<ph name="REMAINING_TIME_HOUR" /> ו-<ph name="REMAINING_TIME_MINUTE" /></translation>
 <translation id="3798449238516105146">גרסה</translation>
 <translation id="3801082500826908679">פארואזית</translation>
 <translation id="3809272675881623365">ארנב</translation>
@@ -299,6 +302,7 @@
 <translation id="4481711095103932593">‏התיקייה הזו משותפת עם Windows</translation>
 <translation id="4487088045714738411">מקלדת בלגית</translation>
 <translation id="4522570452068850558">פרטים</translation>
+<translation id="4542387084127299777">לא ניתן לפתוח את "<ph name="PATH" />"</translation>
 <translation id="4552678318981539154">קנה עוד שטח אחסון</translation>
 <translation id="4559767610552730302">טשטוש</translation>
 <translation id="4572815280350369984">קובץ <ph name="FILE_TYPE" /></translation>
@@ -512,6 +516,7 @@
 <translation id="6629841649550503054">‏הכל מגובה ב-<ph name="BEGIN_LINK" />Google Drive!<ph name="END_LINK" /></translation>
 <translation id="6643016212128521049">ניקוי</translation>
 <translation id="6650726141019353908">פרפר ורוד</translation>
+<translation id="6657585470893396449">סיסמה</translation>
 <translation id="6710213216561001401">הקודם</translation>
 <translation id="6718273304615422081">דוחס...</translation>
 <translation id="6751256176799620176">תיקייה אחת נבחרה</translation>
@@ -552,7 +557,6 @@
 <translation id="7012943028104619157"><ph name="ROOT_TITLE" /> (<ph name="ROOT_SUMMARY" />)</translation>
 <translation id="7014174261166285193">ההתקנה נכשלה.</translation>
 <translation id="7040138676081995583">פתח באמצעות...</translation>
-<translation id="7059566040011178088">פחות מ-<ph name="REMAINING_TIME" /></translation>
 <translation id="7100897339030255923">נבחרו <ph name="COUNT" /> פריטים</translation>
 <translation id="7106346894903675391">קנה שטח אחסון נוסף...</translation>
 <translation id="7126604456862387217">‏'&lt;b&gt;<ph name="SEARCH_STRING" />&lt;/b&gt;' - &lt;em&gt;חפש בכונן&lt;/em&gt;</translation>
@@ -663,7 +667,6 @@
 <translation id="8193175696669055101">דגם מכשיר</translation>
 <translation id="8208580316430297579">עטיפת האלבום</translation>
 <translation id="8223479393428528563">כדי לשמור קבצים אלה לשימוש לא מקוון, חזור למצב מקוון, לחץ לחיצה ימנית על הקבצים ובחר את האפשרות <ph name="OFFLINE_CHECKBOX_NAME" />.</translation>
-<translation id="8231972167769262174">בערך <ph name="REMAINING_TIME" /></translation>
 <translation id="8249296373107784235">בטל</translation>
 <translation id="8261506727792406068">מחיקה</translation>
 <translation id="8269755669432358899">כיווץ חלוניות המשוב של הקבצים</translation>
@@ -726,6 +729,7 @@
 <translation id="9065203028668620118">עריכה</translation>
 <translation id="9099674669267916096">מספר עמודים</translation>
 <translation id="9110990317705400362">‏אנחנו מחפשים כל הזמן דרכים לגלישה בטוחה יותר. בעבר, כל אתר יכול היה להציע לך להוסיף תוסף לדפדפן. בגרסאות האחרונות של Google Chrome, עליך לציין באופן מפורש ל-Chrome שברצונך להתקין תוספים אלה על-ידי הוספתם דרך הדף 'תוספים'. <ph name="BEGIN_LINK" />למידע נוסף<ph name="END_LINK" /></translation>
+<translation id="9111102763498581341">בטל נעילה</translation>
 <translation id="912419004897138677">Codec</translation>
 <translation id="9129931661813833980">הצמדת התיקייה</translation>
 <translation id="9130775360844693113">חברים באחסון השיתופי '<ph name="DESTINATION_NAME" />' יקבלו גישה לפריטים האלה.</translation>

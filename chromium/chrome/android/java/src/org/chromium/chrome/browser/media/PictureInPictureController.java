@@ -23,7 +23,7 @@ import org.chromium.base.MathUtils;
 import org.chromium.base.annotations.VerifiesOnO;
 import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.metrics.RecordHistogram;
-import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.fullscreen.FullscreenManager;
 import org.chromium.chrome.browser.infobar.InfoBarContainer;
@@ -224,7 +224,8 @@ public class PictureInPictureController {
             }
         };
 
-        activity.getFullscreenManager().addObserver(fullscreenListener);
+        FullscreenManager fullscreenManager = activity.getFullscreenManager();
+        fullscreenManager.addObserver(fullscreenListener);
         activityTab.addObserver(tabObserver);
         tabModelSelector.addObserver(tabModelSelectorObserver);
         webContents.addObserver(webContentsObserver);
@@ -235,7 +236,7 @@ public class PictureInPictureController {
                 activityTab.removeObserver(tabObserver);
                 tabModelSelector.removeObserver(tabModelSelectorObserver);
                 webContents.removeObserver(webContentsObserver);
-                activity.getFullscreenManager().removeObserver(fullscreenListener);
+                fullscreenManager.removeObserver(fullscreenListener);
             }
         });
 

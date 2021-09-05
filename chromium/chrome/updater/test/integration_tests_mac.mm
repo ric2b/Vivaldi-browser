@@ -11,9 +11,9 @@
 #include "base/process/process.h"
 #include "chrome/common/mac/launchd.h"
 #include "chrome/updater/constants.h"
-#include "chrome/updater/mac/setup/info_plist.h"
 #include "chrome/updater/mac/xpc_service_names.h"
 #include "chrome/updater/updater_version.h"
+#include "chrome/updater/util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace updater {
@@ -21,16 +21,6 @@ namespace updater {
 namespace test {
 
 namespace {
-
-base::FilePath GetInfoPlistPath() {
-  base::FilePath test_executable;
-  if (!base::PathService::Get(base::FILE_EXE, &test_executable))
-    return base::FilePath();
-  return test_executable.DirName()
-      .Append(FILE_PATH_LITERAL(PRODUCT_FULLNAME_STRING ".App"))
-      .Append(FILE_PATH_LITERAL("Contents"))
-      .Append(FILE_PATH_LITERAL("Info.plist"));
-}
 
 base::FilePath GetExecutablePath() {
   base::FilePath test_executable;
@@ -49,6 +39,13 @@ base::FilePath GetProductPath() {
       .AppendASCII(PRODUCT_FULLNAME_STRING);
 }
 
+base::FilePath GetDataDirPath() {
+  return base::mac::GetUserLibraryPath()
+      .AppendASCII("Application Support")
+      .AppendASCII(COMPANY_SHORTNAME_STRING)
+      .AppendASCII(PRODUCT_FULLNAME_STRING);
+}
+
 bool Run(base::CommandLine command_line, int* exit_code) {
   auto process = base::LaunchProcess(command_line, {});
   if (!process.IsValid())
@@ -62,53 +59,56 @@ bool Run(base::CommandLine command_line, int* exit_code) {
 }  // namespace
 
 void Clean() {
-  const std::unique_ptr<InfoPlist> info_plist =
-      InfoPlist::Create(GetInfoPlistPath());
-  EXPECT_TRUE(info_plist != nullptr);
+  EXPECT_TRUE(base::DeletePathRecursively(GetProductPath()));
+  EXPECT_TRUE(Launchd::GetInstance()->DeletePlist(
+      Launchd::User, Launchd::Agent, updater::CopyWakeLaunchdName()));
+  EXPECT_TRUE(Launchd::GetInstance()->DeletePlist(
+      Launchd::User, Launchd::Agent, updater::CopyControlLaunchdName()));
+  EXPECT_TRUE(Launchd::GetInstance()->DeletePlist(
+      Launchd::User, Launchd::Agent, updater::CopyServiceLaunchdName()));
+  EXPECT_TRUE(base::DeletePathRecursively(GetDataDirPath()));
 
-  EXPECT_TRUE(base::DeleteFile(GetProductPath(), true));
-  EXPECT_TRUE(Launchd::GetInstance()->DeletePlist(
-      Launchd::User, Launchd::Agent,
-      info_plist->GoogleUpdateAdministrationLaunchdNameVersioned()));
-  EXPECT_TRUE(Launchd::GetInstance()->DeletePlist(
-      Launchd::User, Launchd::Agent,
-      info_plist->GoogleUpdateServiceLaunchdNameVersioned()));
-  EXPECT_TRUE(Launchd::GetInstance()->DeletePlist(
-      Launchd::User, Launchd::Agent,
-      updater::CopyGoogleUpdateServiceLaunchDName()));
+  @autoreleasepool {
+    NSUserDefaults* userDefaults = [NSUserDefaults standardUserDefaults];
+    [userDefaults
+        removeObjectForKey:[NSString stringWithUTF8String:kDevOverrideKeyUrl]];
+    [userDefaults
+        removeObjectForKey:[NSString
+                               stringWithUTF8String:kDevOverrideKeyUseCUP]];
+  }
 }
 
 void ExpectClean() {
-  const std::unique_ptr<InfoPlist> info_plist =
-      InfoPlist::Create(GetInfoPlistPath());
-  EXPECT_TRUE(info_plist != nullptr);
-
   // Files must not exist on the file system.
   EXPECT_FALSE(base::PathExists(GetProductPath()));
   EXPECT_FALSE(Launchd::GetInstance()->PlistExists(
-      Launchd::User, Launchd::Agent,
-      info_plist->GoogleUpdateAdministrationLaunchdNameVersioned()));
+      Launchd::User, Launchd::Agent, updater::CopyWakeLaunchdName()));
   EXPECT_FALSE(Launchd::GetInstance()->PlistExists(
-      Launchd::User, Launchd::Agent,
-      info_plist->GoogleUpdateServiceLaunchdNameVersioned()));
+      Launchd::User, Launchd::Agent, updater::CopyControlLaunchdName()));
   EXPECT_FALSE(Launchd::GetInstance()->PlistExists(
-      Launchd::User, Launchd::Agent,
-      updater::CopyGoogleUpdateServiceLaunchDName()));
+      Launchd::User, Launchd::Agent, updater::CopyServiceLaunchdName()));
+  EXPECT_FALSE(base::PathExists(GetDataDirPath()));
+}
+
+void EnterTestMode() {
+  // TODO(crbug.com/1119857): Point this to an actual fake server.
+  @autoreleasepool {
+    NSUserDefaults* userDefaults = [NSUserDefaults standardUserDefaults];
+    [userDefaults setURL:[NSURL URLWithString:@"http://localhost:8367"]
+                  forKey:[NSString stringWithUTF8String:kDevOverrideKeyUrl]];
+    [userDefaults
+        setBool:NO
+         forKey:[NSString stringWithUTF8String:kDevOverrideKeyUseCUP]];
+  }
 }
 
 void ExpectInstalled() {
-  const std::unique_ptr<InfoPlist> info_plist =
-      InfoPlist::Create(GetInfoPlistPath());
-  EXPECT_TRUE(info_plist != nullptr);
-
   // Files must exist on the file system.
   EXPECT_TRUE(base::PathExists(GetProductPath()));
-  EXPECT_TRUE(Launchd::GetInstance()->PlistExists(
-      Launchd::User, Launchd::Agent,
-      info_plist->GoogleUpdateAdministrationLaunchdNameVersioned()));
-  EXPECT_TRUE(Launchd::GetInstance()->PlistExists(
-      Launchd::User, Launchd::Agent,
-      info_plist->GoogleUpdateServiceLaunchdNameVersioned()));
+  EXPECT_TRUE(Launchd::GetInstance()->PlistExists(Launchd::User, Launchd::Agent,
+                                                  CopyWakeLaunchdName()));
+  EXPECT_TRUE(Launchd::GetInstance()->PlistExists(Launchd::User, Launchd::Agent,
+                                                  CopyControlLaunchdName()));
 }
 
 void Install() {
@@ -122,32 +122,20 @@ void Install() {
 }
 
 void ExpectActive() {
-  const std::unique_ptr<InfoPlist> info_plist =
-      InfoPlist::Create(GetInfoPlistPath());
-  EXPECT_TRUE(info_plist != nullptr);
-
   // Files must exist on the file system.
   EXPECT_TRUE(base::PathExists(GetProductPath()));
-  EXPECT_TRUE(Launchd::GetInstance()->PlistExists(
-      Launchd::User, Launchd::Agent,
-      info_plist->GoogleUpdateAdministrationLaunchdNameVersioned()));
-  EXPECT_TRUE(Launchd::GetInstance()->PlistExists(
-      Launchd::User, Launchd::Agent, CopyGoogleUpdateServiceLaunchDName()));
-  EXPECT_TRUE(Launchd::GetInstance()->PlistExists(
-      Launchd::User, Launchd::Agent, CopyGoogleUpdateServiceLaunchDName()));
-  EXPECT_TRUE(Launchd::GetInstance()->PlistExists(
-      Launchd::User, Launchd::Agent,
-      info_plist->GoogleUpdateServiceLaunchdNameVersioned()));
+  EXPECT_TRUE(Launchd::GetInstance()->PlistExists(Launchd::User, Launchd::Agent,
+                                                  CopyServiceLaunchdName()));
 }
 
-void PromoteCandidate() {
+void RunWake(int expected_exit_code) {
   const base::FilePath path = GetExecutablePath();
   ASSERT_FALSE(path.empty());
   base::CommandLine command_line(path);
-  command_line.AppendSwitch(kPromoteCandidateSwitch);
+  command_line.AppendSwitch(kWakeSwitch);
   int exit_code = -1;
   ASSERT_TRUE(Run(command_line, &exit_code));
-  EXPECT_EQ(0, exit_code);
+  EXPECT_EQ(exit_code, expected_exit_code);
 }
 
 void Uninstall() {

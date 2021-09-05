@@ -21,6 +21,33 @@
 
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
+namespace {
+
+std::unique_ptr<KeyedService> BuildHistoryService(
+    content::BrowserContext* context) {
+  auto history_service = std::make_unique<history::HistoryService>(
+      std::make_unique<ChromeHistoryClient>(
+          BookmarkModelFactory::GetForBrowserContext(context)),
+      std::make_unique<history::ContentVisitDelegate>(context));
+#if !defined(OS_ANDROID)
+  Profile *profile = Profile::FromBrowserContext(context);
+  int number_of_days_to_keep_visits = profile->GetPrefs()->GetInteger(
+      vivaldiprefs::kHistoryDaysToKeepVisits);
+#else
+  int number_of_days_to_keep_visits = 90;
+#endif
+  history::HistoryDatabaseParams param =
+      history::HistoryDatabaseParamsForPath(context->GetPath());
+  param.number_of_days_to_keep_visits = number_of_days_to_keep_visits;
+
+  if (!history_service->Init(param)) {
+    return nullptr;
+  }
+  return history_service;
+}
+
+}  // namespace
+
 // static
 history::HistoryService* HistoryServiceFactory::GetForProfile(
     Profile* profile,
@@ -67,6 +94,12 @@ void HistoryServiceFactory::ShutdownForProfile(Profile* profile) {
   factory->BrowserContextDestroyed(profile);
 }
 
+// static
+BrowserContextKeyedServiceFactory::TestingFactory
+HistoryServiceFactory::GetDefaultFactory() {
+  return base::BindRepeating(&BuildHistoryService);
+}
+
 HistoryServiceFactory::HistoryServiceFactory()
     : BrowserContextKeyedServiceFactory(
           "HistoryService",
@@ -79,26 +112,7 @@ HistoryServiceFactory::~HistoryServiceFactory() {
 
 KeyedService* HistoryServiceFactory::BuildServiceInstanceFor(
     content::BrowserContext* context) const {
-  std::unique_ptr<history::HistoryService> history_service(
-      new history::HistoryService(
-          std::make_unique<ChromeHistoryClient>(
-              BookmarkModelFactory::GetForBrowserContext(context)),
-          std::make_unique<history::ContentVisitDelegate>(context)));
-#if !defined(OS_ANDROID)
-  Profile *profile = Profile::FromBrowserContext(context);
-  int number_of_days_to_keep_visits = profile->GetPrefs()->GetInteger(
-      vivaldiprefs::kHistoryDaysToKeepVisits);
-#else
-  int number_of_days_to_keep_visits = 90;
-#endif
-  history::HistoryDatabaseParams param =
-      history::HistoryDatabaseParamsForPath(context->GetPath());
-  param.number_of_days_to_keep_visits = number_of_days_to_keep_visits;
-
-  if (!history_service->Init(param)) {
-    return nullptr;
-  }
-  return history_service.release();
+  return BuildHistoryService(context).release();
 }
 
 content::BrowserContext* HistoryServiceFactory::GetBrowserContextToUse(

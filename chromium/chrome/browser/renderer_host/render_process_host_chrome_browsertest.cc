@@ -42,9 +42,9 @@
 #include "net/base/filename_util.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include "content/public/browser/browser_child_process_host.h"
-#endif  // defined(OS_MACOSX)
+#endif  // defined(OS_MAC)
 
 using content::RenderViewHost;
 using content::RenderWidgetHost;
@@ -373,7 +373,7 @@ class ChromeRenderProcessHostBackgroundingTest
     if (base::Process::CanBackgroundProcesses()) {
       base::Process p = ProcessFromHandle(process->GetProcess().Handle());
       ASSERT_TRUE(p.IsValid());
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
       base::PortProvider* port_provider =
           content::BrowserChildProcessHost::GetPortProvider();
       EXPECT_EQ(expected_is_backgrounded,
@@ -400,7 +400,7 @@ class ChromeRenderProcessHostBackgroundingTest
   } while (0);
 
 // Flaky on Mac: https://crbug.com/888308
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #define MAYBE_MultipleTabs DISABLED_MultipleTabs
 #else
 #define MAYBE_MultipleTabs MultipleTabs
@@ -588,7 +588,7 @@ class WindowDestroyer : public content::WebContentsObserver {
 // RenderProcessHost and invalidating them, we remove them properly and don't
 // access already freed objects. See http://crbug.com/255524.
 // Crashes on Win/Linux only.  http://crbug.com/606485.
-#if defined(OS_WIN) || defined(OS_LINUX)
+#if defined(OS_WIN) || defined(OS_LINUX) || defined(OS_CHROMEOS)
 #define MAYBE_CloseAllTabsDuringProcessDied \
   DISABLED_CloseAllTabsDuringProcessDied
 #else
@@ -676,9 +676,9 @@ class ChromeRenderProcessHostBackgroundingTestWithAudio
     ASSERT_NE(audio_process_.Pid(), no_audio_process_.Pid());
     ASSERT_TRUE(no_audio_process_.IsValid());
     ASSERT_TRUE(audio_process_.IsValid());
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
     port_provider_ = content::BrowserChildProcessHost::GetPortProvider();
-#endif  //  defined(OS_MACOSX)
+#endif  //  defined(OS_MAC)
   }
 
  protected:
@@ -703,14 +703,14 @@ class ChromeRenderProcessHostBackgroundingTestWithAudio
 
  private:
   bool IsProcessBackgrounded(const base::Process& process) {
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
     return process.IsProcessBackgrounded(port_provider_);
 #else
     return process.IsProcessBackgrounded();
 #endif
   }
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   base::PortProvider* port_provider_;
 #endif
 

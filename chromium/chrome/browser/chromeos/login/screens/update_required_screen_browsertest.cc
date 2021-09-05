@@ -127,7 +127,7 @@ class UpdateRequiredScreenTest : public OobeBaseTest {
     network_state_test_helper_->manager_test()->SetupDefaultEnvironment();
     // Fake networks have been set up. Connect to WiFi network.
     SetConnected(kWifiServicePath);
-    chromeos::OobeScreenWaiter(chromeos::GaiaView::kScreenId).Wait();
+    chromeos::OobeScreenWaiter(GetFirstSigninScreen()).Wait();
   }
   void TearDownOnMainThread() override {
     network_state_test_helper_.reset();
@@ -163,9 +163,9 @@ class UpdateRequiredScreenTest : public OobeBaseTest {
     policy::DevicePolicyBuilder* const device_policy(
         policy_helper_.device_policy());
     em::ChromeDeviceSettingsProto& proto(device_policy->payload());
-    proto.mutable_minimum_chrome_version_eol_message()->set_value(eol_message);
+    proto.mutable_device_minimum_version_aue_message()->set_value(eol_message);
     policy_helper_.RefreshPolicyAndWaitUntilDeviceSettingsUpdated(
-        {chromeos::kMinimumChromeVersionEolMessage});
+        {chromeos::kDeviceMinimumVersionAueMessage});
   }
 
  protected:

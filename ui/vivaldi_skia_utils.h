@@ -8,9 +8,20 @@
 namespace vivaldi {
 namespace skia_utils {
 
-extern SkBitmap SmartCropAndSize(const SkBitmap& capture,
+enum class ImageFormat {
+    kPNG,
+    kJPEG,
+};
+
+SkBitmap SmartCropAndSize(const SkBitmap& capture,
                                  int target_width,
                                  int target_height);
+
+bool EncodeBitmap(const SkBitmap& bitmap,
+                  ImageFormat image_format,
+                  int image_quality,
+                  std::vector<unsigned char>& data,
+                  std::string& mime_type);
 
 }  // namespace skia_utils
 }  // namespace vivaldi

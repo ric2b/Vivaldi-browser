@@ -124,8 +124,10 @@ public final class ShareButtonControllerTest {
     @MediumTest
     @Feature({"StartSurface"})
     @CommandLineFlags.Add({"force-fieldtrial-params=Study.Group:start_surface_variation/single"})
-    @Restriction(UiRestriction.RESTRICTION_TYPE_PHONE)
-    public void testShareButtonInToolbarNotAffectedByOverview() {
+    @Restriction(
+            {UiRestriction.RESTRICTION_TYPE_PHONE, Restriction.RESTRICTION_TYPE_NON_LOW_END_DEVICE})
+    public void
+    testShareButtonInToolbarNotAffectedByOverview() {
         // Sign in.
         mAccountManagerTestRule.addAndSignInTestAccount();
 
@@ -158,8 +160,10 @@ public final class ShareButtonControllerTest {
     @MediumTest
     @Feature({"StartSurface"})
     @CommandLineFlags.Add({"force-fieldtrial-params=Study.Group:start_surface_variation/single"})
-    @Restriction(UiRestriction.RESTRICTION_TYPE_PHONE)
-    public void testShareButtonDisabledOnDataUrl() {
+    @Restriction(
+            {UiRestriction.RESTRICTION_TYPE_PHONE, Restriction.RESTRICTION_TYPE_NON_LOW_END_DEVICE})
+    public void
+    testShareButtonDisabledOnDataUrl() {
         mActivityTestRule.loadUrl("data:,Hello%2C%20World!");
 
         ViewUtils.waitForView(allOf(withId(R.id.optional_toolbar_button),

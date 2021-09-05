@@ -3,14 +3,15 @@
 // META: script=/gen/layout_test_data/mojo/public/js/mojo_bindings.js
 // META: script=/gen/mojo/public/mojom/base/unguessable_token.mojom.js
 // META: script=/gen/third_party/blink/public/mojom/serial/serial.mojom.js
-// META: script=resources/serial-test-utils.js
+// META: script=resources/common.js
+// META: script=resources/automation.js
 
 serial_test(async (t, fake) => {
   const {port, fakePort} = await getFakeSerialPort(fake);
 
   assert_equals(port.writable, null);
 
-  await port.open({baudrate: 9600});
+  await port.open({baudRate: 9600});
   const writable = port.writable;
   assert_true(writable instanceof WritableStream);
 
@@ -25,7 +26,7 @@ serial_test(async (t, fake) => {
 serial_test(async (t, fake) => {
   const {port, fakePort} = await getFakeSerialPort(fake);
 
-  await port.open({baudrate: 9600});
+  await port.open({baudRate: 9600});
   assert_true(port.writable instanceof WritableStream);
 
   const writer = port.writable.getWriter();
@@ -39,13 +40,13 @@ serial_test(async (t, fake) => {
 serial_test(async (t, fake) => {
   const {port, fakePort} = await getFakeSerialPort(fake);
 
-  await port.open({baudrate: 9600});
+  await port.open({baudRate: 9600});
   assert_true(port.writable instanceof WritableStream);
 
   const writer = port.writable.getWriter();
   const data = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]);
   let writePromise = writer.write(data);
-  writer.close();
+  writer.releaseLock();
 
   await fakePort.readable();
   let {value, done} = await fakePort.read();
@@ -59,19 +60,17 @@ serial_test(async (t, fake) => {
 serial_test(async (t, fake) => {
   const {port, fakePort} = await getFakeSerialPort(fake);
   // Select a buffer size smaller than the amount of data transferred.
-  await port.open({baudrate: 9600, buffersize: 64});
+  await port.open({baudRate: 9600, bufferSize: 64});
 
   const writer = port.writable.getWriter();
-  const data = new Uint8Array(1024);  // Much larger than buffersize above.
+  const data = new Uint8Array(1024);  // Much larger than bufferSize above.
   for (let i = 0; i < data.byteLength; ++i)
     data[i] = i & 0xff;
   writer.write(data);
-  writer.close();
+  writer.releaseLock();
 
   await fakePort.readable();
-  const reader = fakePort.readable_.getReader();
-  const value = await readWithLength(reader, data.byteLength);
-  reader.releaseLock();
+  const value = await fakePort.readWithLength(data.byteLength);
   compareArrays(data, value);
 
   await port.close();
@@ -79,7 +78,7 @@ serial_test(async (t, fake) => {
 
 serial_test(async (t, fake) => {
   const {port, fakePort} = await getFakeSerialPort(fake);
-  await port.open({baudrate: 9600});
+  await port.open({baudRate: 9600});
 
   const writable = port.writable;
   assert_true(writable instanceof WritableStream);
@@ -95,7 +94,7 @@ serial_test(async (t, fake) => {
 
   writer = port.writable.getWriter();
   let writePromise = writer.write(data);
-  writer.close();
+  writer.releaseLock();
   await fakePort.readable();
   let {value, done} = await fakePort.read();
   await writePromise;
@@ -107,7 +106,7 @@ serial_test(async (t, fake) => {
 
 serial_test(async (t, fake) => {
   const {port, fakePort} = await getFakeSerialPort(fake);
-  await port.open({baudrate: 9600});
+  await port.open({baudRate: 9600});
 
   assert_true(port.writable instanceof WritableStream);
   const writer = port.writable.getWriter();
@@ -124,7 +123,65 @@ serial_test(async (t, fake) => {
 serial_test(async (t, fake) => {
   const {port, fakePort} = await getFakeSerialPort(fake);
 
-  await port.open({baudrate: 9600});
+  await port.open({baudRate: 9600, bufferSize: 64});
+  const originalWritable = port.writable;
+  assert_true(originalWritable instanceof WritableStream);
+
+  let writer = originalWritable.getWriter();
+  let data = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]);
+  // The buffer size is large enough to allow this write to complete without
+  // the data being read from the fake port.
+  await writer.write(data);
+  await writer.abort();
+
+  assert_true(port.writable instanceof WritableStream);
+  assert_true(port.writable !== originalWritable);
+  writer = port.writable.getWriter();
+  data = new Uint8Array([9, 10, 11, 12, 13, 14, 15, 16]);
+  const writePromise = writer.write(data);
+  writer.releaseLock();
+
+  await fakePort.readable();
+  const {value, done} = await fakePort.read();
+  await writePromise;
+  compareArrays(value, data);
+
+  await port.close();
+  assert_equals(port.writable, null);
+}, 'abort() discards the write buffer');
+
+serial_test(async (t, fake) => {
+  const {port, fakePort} = await getFakeSerialPort(fake);
+  // Select a buffer size smaller than the amount of data transferred.
+  await port.open({baudRate: 9600, bufferSize: 64});
+
+  const writer = port.writable.getWriter();
+  const data = new Uint8Array(1024);  // Much larger than bufferSize above.
+  for (let i = 0; i < data.byteLength; ++i)
+    data[i] = i & 0xff;
+  writer.write(data);
+
+  let readComplete = false;
+  let writePromise = writer.close().then(() => {
+    assert_true(readComplete);
+  });
+
+  await fakePort.readable();
+  let readPromise = fakePort.readWithLength(data.byteLength).then(result => {
+    readComplete = true;
+    return result;
+  });
+  const value = await readPromise;
+  compareArrays(data, value);
+  await writePromise;
+
+  await port.close();
+}, 'close() waits for the write buffer to be cleared');
+
+serial_test(async (t, fake) => {
+  const {port, fakePort} = await getFakeSerialPort(fake);
+
+  await port.open({baudRate: 9600});
   assert_true(port.writable instanceof WritableStream);
 
   const encoder = new TextEncoderStream();
@@ -146,7 +203,7 @@ serial_test(async (t, fake) => {
 serial_test(async (t, fake) => {
   const {port, fakePort} = await getFakeSerialPort(fake);
 
-  await port.open({baudrate: 9600});
+  await port.open({baudRate: 9600});
   assert_true(port.writable instanceof WritableStream);
 
   const transform = new TransformStream();

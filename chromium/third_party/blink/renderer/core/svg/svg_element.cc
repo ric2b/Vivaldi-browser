@@ -196,7 +196,7 @@ void SVGElement::ApplyActiveWebAnimations() {
     SVGInterpolationTypesMap map;
     SVGInterpolationEnvironment environment(
         map, *this, PropertyFromAttribute(attribute)->BaseValueBase());
-    InvalidatableInterpolation::ApplyStack(entry.value, environment);
+    InvalidatableInterpolation::ApplyStack(*entry.value, environment);
   }
   if (!HasSVGRareData())
     return;
@@ -964,14 +964,14 @@ void SVGElement::CollectStyleForAnimatedPresentationAttributes(
 scoped_refptr<ComputedStyle> SVGElement::CustomStyleForLayoutObject() {
   SVGElement* corresponding_element = CorrespondingElement();
   if (!corresponding_element)
-    return GetDocument().EnsureStyleResolver().StyleForElement(this);
+    return GetDocument().GetStyleResolver().StyleForElement(this);
 
   const ComputedStyle* style = nullptr;
   if (Element* parent = ParentOrShadowHostElement())
     style = parent->GetComputedStyle();
 
-  return GetDocument().EnsureStyleResolver().StyleForElement(
-      corresponding_element, style, style);
+  return GetDocument().GetStyleResolver().StyleForElement(corresponding_element,
+                                                          style, style);
 }
 
 bool SVGElement::LayoutObjectIsNeeded(const ComputedStyle& style) const {
@@ -993,20 +993,12 @@ MutableCSSPropertyValueSet* SVGElement::EnsureAnimatedSMILStyleProperties() {
   return EnsureSVGRareData()->EnsureAnimatedSMILStyleProperties();
 }
 
-void SVGElement::SetUseOverrideComputedStyle(bool value) {
-  if (HasSVGRareData())
-    SvgRareData()->SetUseOverrideComputedStyle(value);
-}
-
-const ComputedStyle* SVGElement::EnsureComputedStyle(
-    PseudoId pseudo_element_specifier) {
-  if (!HasSVGRareData() || !SvgRareData()->UseOverrideComputedStyle())
-    return Element::EnsureComputedStyle(pseudo_element_specifier);
-
+const ComputedStyle* SVGElement::BaseComputedStyleForSMIL() {
+  if (!HasSVGRareData())
+    return EnsureComputedStyle();
   const ComputedStyle* parent_style = nullptr;
   if (ContainerNode* parent = LayoutTreeBuilderTraversal::Parent(*this))
     parent_style = parent->EnsureComputedStyle();
-
   return SvgRareData()->OverrideComputedStyle(this, parent_style);
 }
 

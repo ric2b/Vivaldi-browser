@@ -8,6 +8,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -35,38 +36,59 @@ class TestClipboard : public Clipboard {
   // Clipboard overrides.
   void OnPreShutdown() override;
   uint64_t GetSequenceNumber(ClipboardBuffer buffer) const override;
+  void SetClipboardDlpController(
+      std::unique_ptr<ClipboardDlpController> dlp_controller) override;
   bool IsFormatAvailable(const ClipboardFormatType& format,
-                         ClipboardBuffer buffer) const override;
+                         ClipboardBuffer buffer,
+                         const ClipboardDataEndpoint* data_dst) const override;
   void Clear(ClipboardBuffer buffer) override;
   void ReadAvailableTypes(ClipboardBuffer buffer,
+                          const ClipboardDataEndpoint* data_dst,
                           std::vector<base::string16>* types) const override;
   std::vector<base::string16> ReadAvailablePlatformSpecificFormatNames(
-      ClipboardBuffer buffer) const override;
-  void ReadText(ClipboardBuffer buffer, base::string16* result) const override;
+      ClipboardBuffer buffer,
+      const ClipboardDataEndpoint* data_dst) const override;
+  void ReadText(ClipboardBuffer buffer,
+                const ClipboardDataEndpoint* data_dst,
+                base::string16* result) const override;
   void ReadAsciiText(ClipboardBuffer buffer,
+                     const ClipboardDataEndpoint* data_dst,
                      std::string* result) const override;
   void ReadHTML(ClipboardBuffer buffer,
+                const ClipboardDataEndpoint* data_dst,
                 base::string16* markup,
                 std::string* src_url,
                 uint32_t* fragment_start,
                 uint32_t* fragment_end) const override;
-  void ReadRTF(ClipboardBuffer buffer, std::string* result) const override;
+  void ReadRTF(ClipboardBuffer buffer,
+               const ClipboardDataEndpoint* data_dst,
+               std::string* result) const override;
   void ReadImage(ClipboardBuffer buffer,
+                 const ClipboardDataEndpoint* data_dst,
                  ReadImageCallback callback) const override;
   void ReadCustomData(ClipboardBuffer buffer,
                       const base::string16& type,
+                      const ClipboardDataEndpoint* data_dst,
                       base::string16* result) const override;
-  void ReadBookmark(base::string16* title, std::string* url) const override;
+  void ReadBookmark(const ClipboardDataEndpoint* data_dst,
+                    base::string16* title,
+                    std::string* url) const override;
   void ReadData(const ClipboardFormatType& format,
+                const ClipboardDataEndpoint* data_dst,
                 std::string* result) const override;
   base::Time GetLastModifiedTime() const override;
   void ClearLastModifiedTime() override;
-  void WritePortableRepresentations(ClipboardBuffer buffer,
-                                    const ObjectMap& objects) override;
+#if defined(USE_OZONE)
+  bool IsSelectionBufferAvailable() const override;
+#endif  // defined(USE_OZONE)
+  void WritePortableRepresentations(
+      ClipboardBuffer buffer,
+      const ObjectMap& objects,
+      std::unique_ptr<ClipboardDataEndpoint> data_src) override;
   void WritePlatformRepresentations(
       ClipboardBuffer buffer,
-      std::vector<Clipboard::PlatformRepresentation> platform_representations)
-      override;
+      std::vector<Clipboard::PlatformRepresentation> platform_representations,
+      std::unique_ptr<ClipboardDataEndpoint> data_src) override;
   void WriteText(const char* text_data, size_t text_len) override;
   void WriteHTML(const char* markup_data,
                  size_t markup_len,
@@ -87,13 +109,16 @@ class TestClipboard : public Clipboard {
   struct DataStore {
     DataStore();
     DataStore(const DataStore& other);
+    DataStore& operator=(const DataStore& other);
     ~DataStore();
     void Clear();
-    uint64_t sequence_number;
+    void SetDataSource(std::unique_ptr<ClipboardDataEndpoint> data_src);
+    uint64_t sequence_number = 0;
     base::flat_map<ClipboardFormatType, std::string> data;
     std::string url_title;
     std::string html_src_url;
     SkBitmap image;
+    std::unique_ptr<ClipboardDataEndpoint> data_src = nullptr;
   };
 
   // The non-const versions increment the sequence number as a side effect.
@@ -105,6 +130,8 @@ class TestClipboard : public Clipboard {
   ClipboardBuffer default_store_buffer_;
   mutable base::flat_map<ClipboardBuffer, DataStore> stores_;
   base::Time last_modified_time_;
+
+  std::unique_ptr<ClipboardDlpController> dlp_controller_;
 
   DISALLOW_COPY_AND_ASSIGN(TestClipboard);
 };

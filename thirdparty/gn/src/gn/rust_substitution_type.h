@@ -20,6 +20,7 @@ extern const Substitution kRustSubstitutionExterns;
 extern const Substitution kRustSubstitutionRustDeps;
 extern const Substitution kRustSubstitutionRustEnv;
 extern const Substitution kRustSubstitutionRustFlags;
+extern const Substitution kRustSubstitutionSources;
 
 bool IsValidRustSubstitution(const Substitution* type);
 

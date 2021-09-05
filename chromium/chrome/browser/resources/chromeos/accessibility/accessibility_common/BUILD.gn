@@ -25,6 +25,7 @@ run_jsbundler("accessibility_common_copied_files") {
   sources = [
     "accessibility_common_loader.js",
     "autoclick/autoclick.js",
+    "magnifier/magnifier.js",
   ]
   rewrite_rules = [
     rebase_path(".", root_build_dir) + ":",
@@ -56,10 +57,14 @@ source_set("browser_tests") {
 
 js2gtest("accessibility_common_extjs_tests") {
   test_type = "extension"
-  sources = [ "autoclick_test.js" ]
+  sources = [
+    "accessibility_common_test.js",
+    "autoclick/autoclick_test.js",
+  ]
   gen_include_files = [
     "../common/testing/callback_helper.js",
-    "mock_accessibility_private.js",
+    "../common/testing/e2e_test_base.js",
+    "../common/testing/mock_accessibility_private.js",
   ]
 
   # The test base classes generate C++ code with these deps.
@@ -78,10 +83,26 @@ js_type_check("closure_compile") {
 }
 
 js_library("accessibility_common") {
-  deps = []
+  sources = [ "accessibility_common_loader.js" ]
+  deps = [
+    ":autoclick",
+    ":magnifier",
+  ]
+  externs_list = [
+    "$externs_path/chrome_extensions.js",
+    "$externs_path/accessibility_private.js",
+    "$externs_path/automation.js",
+  ]
+}
+
+js_library("autoclick") {
+  sources = [ "autoclick/autoclick.js" ]
   externs_list = [
     "$externs_path/accessibility_private.js",
     "$externs_path/automation.js",
-    "$externs_path/accessibility_features.js",
   ]
+}
+
+js_library("magnifier") {
+  sources = [ "magnifier/magnifier.js" ]
 }

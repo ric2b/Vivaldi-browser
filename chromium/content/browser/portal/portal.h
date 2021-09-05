@@ -111,7 +111,7 @@ class CONTENT_EXPORT Portal : public blink::mojom::Portal,
                    base::OnceCallback<void(bool)> callback) override;
 
   // Returns the token which uniquely identifies this Portal.
-  const base::UnguessableToken& portal_token() const { return portal_token_; }
+  const blink::PortalToken& portal_token() const { return portal_token_; }
 
   // Returns the devtools frame token for the portal's main frame.
   base::UnguessableToken GetDevToolsFrameToken() const;
@@ -191,11 +191,16 @@ class CONTENT_EXPORT Portal : public blink::mojom::Portal,
 
   void SetPortalContents(std::unique_ptr<WebContents> web_contents);
 
+  std::pair<bool, blink::mojom::PortalActivateResult> CanActivate();
+  void ActivateImpl(blink::TransferableMessage data,
+                    base::TimeTicks activation_time,
+                    ActivateCallback callback);
+
   RenderFrameHostImpl* owner_render_frame_host_;
 
   // Uniquely identifies the portal, this token is used by the browser process
   // to reference this portal when communicating with the renderer.
-  const base::UnguessableToken portal_token_;
+  const blink::PortalToken portal_token_;
 
   // Receives messages from the outer (host) frame.
   mojo::AssociatedReceiver<blink::mojom::Portal> receiver_{this};
@@ -214,9 +219,14 @@ class CONTENT_EXPORT Portal : public blink::mojom::Portal,
   // Set when |Close| is called. Destruction will occur shortly thereafter.
   bool is_closing_ = false;
 
+  // Set when portal is activating.
+  bool is_activating_ = false;
+
   // Another implementation of blink::mojom::Portal to bind instead.
   // For use in testing only.
   std::unique_ptr<blink::mojom::Portal> interceptor_;
+
+  base::WeakPtrFactory<Portal> weak_factory_{this};
 };
 
 }  // namespace content

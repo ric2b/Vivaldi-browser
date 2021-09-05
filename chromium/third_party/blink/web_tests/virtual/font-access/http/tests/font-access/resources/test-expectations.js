@@ -155,6 +155,79 @@ const MAC_FONTS = [
   },
 ];
 
+const WIN_FONTS = [
+  {
+    postscriptName: 'Verdana',
+    fullName: 'Verdana',
+    family: 'Verdana',
+    label: TEST_SIZE_CATEGORY.small,
+    expectedTables: [
+      // Tables related to TrueType.
+      'cvt ',
+      'glyf',
+      'loca',
+      'prep',
+      'gasp',
+    ],
+  },
+  {
+    postscriptName: 'Verdana-Bold',
+    fullName: 'Verdana Bold',
+    family: 'Verdana',
+    label: TEST_SIZE_CATEGORY.small,
+    expectedTables: [
+      // Tables related to TrueType.
+      'cvt ',
+      'glyf',
+      'loca',
+      'prep',
+      'gasp',
+    ],
+  },
+  {
+    postscriptName: 'Verdana-Italic',
+    fullName: 'Verdana Italic',
+    family: 'Verdana',
+    label: TEST_SIZE_CATEGORY.small,
+    expectedTables: [
+      // Tables related to TrueType.
+      'cvt ',
+      'glyf',
+      'loca',
+      'prep',
+      'gasp',
+    ],
+  },
+  // Korean.
+  {
+    postscriptName: 'MalgunGothicBold',
+    fullName: 'Malgun Gothic Bold',
+    family: 'Malgun Gothic',
+    label: TEST_SIZE_CATEGORY.medium,
+    expectedTables: [
+      // Tables related to TrueType.
+      'cvt ',
+      'glyf',
+      'loca',
+      'prep',
+      'gasp',
+    ],
+  },
+  // Chinese.
+  {
+    postscriptName: 'MicrosoftYaHei',
+    fullName: 'Microsoft YaHei',
+    family: 'Microsoft YaHei',
+    label: TEST_SIZE_CATEGORY.medium,
+  },
+  {
+    postscriptName: 'MicrosoftYaHei-Bold',
+    fullName: 'Microsoft YaHei Bold',
+    family: 'Microsoft YaHei',
+    label: TEST_SIZE_CATEGORY.medium,
+  },
+];
+
 // The OpenType spec mentions that the follow tables are required for a font to
 // function correctly. We'll have all the tables listed except for OS/2, which
 // is not present in all fonts on Mac OS.
@@ -191,6 +264,8 @@ function getEnumerationTestSet(options) {
   let output = [];
   if (platform === 'mac') {
     output = MAC_FONTS;
+  } else if (platform === 'win') {
+    output = WIN_FONTS;
   }
 
   if (options.labelFilter.length && output.length) {
@@ -340,4 +415,45 @@ async function getUint32(blob, offset) {
   const buf = await slice.arrayBuffer();
   const dataView = new DataView(buf);
   return dataView.getUint32(0);
+}
+
+function promiseDocumentReady() {
+  return new Promise(resolve => {
+    if (document.readyState === 'complete') {
+      resolve();
+    }
+    window.addEventListener('load', () => {
+      resolve();
+    }, {once: true});
+  });
+}
+
+function isPlatformSupported() {
+  if (navigator.platform.indexOf('Mac') != -1 || navigator.platform.indexOf('Win') != -1) {
+    return true;
+  }
+  return false;
+}
+
+async function simulateUserActivation() {
+  await promiseDocumentReady();
+  return new Promise(resolve => {
+    const button = document.createElement('button');
+    button.textContent = 'Click to enumerate fonts';
+    button.style.fontSize = '40px';
+    button.onclick = () => {
+      document.body.removeChild(button);
+      resolve();
+    };
+    document.body.appendChild(button);
+    test_driver.click(button);
+  });
+}
+
+function font_access_test(test_function, name, properties) {
+  return promise_test(async (t) => {
+    await test_driver.set_permission({name: 'font-access'}, 'granted');
+    await simulateUserActivation();
+    await test_function(t, name, properties);
+  });
 }

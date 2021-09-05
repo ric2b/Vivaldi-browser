@@ -13,7 +13,7 @@
 #include "components/blocked_content/popup_navigation_delegate.h"
 #include "components/blocked_content/popup_tracker.h"
 #include "components/blocked_content/safe_browsing_triggered_popup_blocker.h"
-#include "components/content_settings/browser/tab_specific_content_settings.h"
+#include "components/content_settings/browser/page_specific_content_settings.h"
 #include "content/public/browser/back_forward_cache.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_handle.h"
@@ -75,10 +75,10 @@ void PopupBlockerTabHelper::DidFinishNavigation(
 }
 
 void PopupBlockerTabHelper::HidePopupNotification() {
-  auto* tscs = content_settings::TabSpecificContentSettings::FromWebContents(
-      web_contents());
-  if (tscs)
-    tscs->ClearPopupsBlocked();
+  auto* pscs = content_settings::PageSpecificContentSettings::GetForFrame(
+      web_contents()->GetMainFrame());
+  if (pscs)
+    pscs->ClearPopupsBlocked();
 }
 
 void PopupBlockerTabHelper::AddBlockedPopup(
@@ -93,9 +93,15 @@ void PopupBlockerTabHelper::AddBlockedPopup(
   next_id_++;
   blocked_popups_[id] = std::make_unique<BlockedRequest>(
       std::move(delegate), window_features, block_type);
-  content_settings::TabSpecificContentSettings::FromWebContents(web_contents())
-      ->OnContentBlocked(ContentSettingsType::POPUPS);
+
+  auto* content_settings =
+      content_settings::PageSpecificContentSettings::GetForFrame(
+          web_contents()->GetMainFrame());
+  if (content_settings) {
+    content_settings->OnContentBlocked(ContentSettingsType::POPUPS);
+  }
   auto* raw_delegate = blocked_popups_[id]->delegate.get();
+
   manager_.NotifyObservers(id, raw_delegate->GetURL());
 
   raw_delegate->OnPopupBlocked(web_contents(), GetBlockedPopupsCount());

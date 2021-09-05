@@ -1,18 +1,47 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="pt-BR">
+<translation id="1397811292916898096">Pesquisar com o <ph name="PRODUCT_NAME" /></translation>
+<translation id="1598449788754183301">Alternar entre guias normais/privadas</translation>
+<translation id="1644574205037202324">Histórico</translation>
+<translation id="17513872634828108">Guias abertas</translation>
+<translation id="1829244130665387512">Encontrar na página</translation>
+<translation id="2038563949887743358">Ativar "Ver versão para computador"</translation>
 <translation id="2433507940547922241">Aparência</translation>
+<translation id="2501278716633472235">Voltar</translation>
+<translation id="2633278372998075009">Guias privadas</translation>
 <translation id="3076631378407175873">Copyright <ph name="YEAR" /> Vivaldi Technologies AS. Todos os direitos reservados.</translation>
+<translation id="3234355010754616171">Nova guia privada</translation>
+<translation id="3518985090088779359">Aceitar e continuar</translation>
 <translation id="3700829948786686853">Bem-vindo ao Vivaldi</translation>
+<translation id="3719826155360621982">Página inicial</translation>
+<translation id="385051799172605136">Voltar</translation>
+<translation id="4121750346708795461">Ao utilizar este aplicativo, você concorda com o <ph name="BEGIN_LINK1" />Acordo de Licença de Usuário Final<ph name="END_LINK1" /> e com a <ph name="BEGIN_LINK2" />Política de Privacidade<ph name="END_LINK2" /> do Vivaldi.</translation>
+<translation id="4243710787042215766">Abrir numa guia privada</translation>
+<translation id="4526803704855831732">Guias Privadas</translation>
+<translation id="4883379392681899581">Sair do modo privado</translation>
+<translation id="4943872375798546930">Nenhum resultado</translation>
+<translation id="49576331685473090">Bloqueador de conteúdo</translation>
+<translation id="4960569554487356883">Ligue todas as permissões para o Vivaldi nas <ph name="BEGIN_LINK" />Configurações do Android<ph name="END_LINK" />.</translation>
 <translation id="5118676864324397542">Armazenamento do <ph name="APP_NAME" /></translation>
+<translation id="5233638681132016545">Nova guia</translation>
+<translation id="5495228542153126976">Você entrou no modo privado</translation>
+<translation id="5553467336321715093">Ligue todas as permissões para o Vivaldi nas <ph name="BEGIN_LINK" />Configurações do Android<ph name="END_LINK" />.</translation>
+<translation id="572328651809341494">Guias recentes</translation>
 <translation id="5840488417521835756">Saiba mais sobre um determinado assunto de um site sem sair da página. Com o recurso "Tocar para pesquisar", você toca na palavra e o contexto relacionado é enviado para a Pesquisa Vivaldi, que então mostra definições, imagens, resultados da pesquisa e outros detalhes relacionados para você.
 
 Para ajustar o termo de pesquisa, toque nele e mantenha-o pressionado. Para refinar a pesquisa, deslize o painel totalmente para cima e toque na caixa de pesquisa.</translation>
+<translation id="6336451774241870485">Nova guia privada</translation>
+<translation id="6593061639179217415">Versão para computador</translation>
 <translation id="6610147964972079463">Fechar guias privadas</translation>
 <translation id="706339621163631076">Política de privacidade da Vivaldi</translation>
 <translation id="7427132068601343474">Sobre o Vivaldi</translation>
+<translation id="7465104139234185284">Fechar todas as guias privadas</translation>
 <translation id="7519434535192513364">O recurso "Tocar para pesquisar" envia a palavra selecionada e a página atual como contexto para a Pesquisa Vivaldi. É possível desativá-lo em <ph name="BEGIN_LINK" />Configurações<ph name="END_LINK" />.</translation>
 <translation id="7649070708921625228">Ajuda</translation>
 <translation id="804786196054284061">Acordo de Licença de Usuário Final</translation>
+<translation id="85991616550051997">Ir para a página inicial</translation>
 <translation id="8820817407110198400">Favoritos</translation>
+<translation id="9063523880881406963">Desativar "Ver versão para computador"</translation>
+<translation id="9080642952018487277">Entrar no modo privado</translation>
 </translationbundle>

@@ -27,6 +27,8 @@ import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.ui.base.ViewUtils;
 
+import org.vivaldi.browser.common.VivaldiUtils;
+
 /** Common functionality of the Omnibox suggestions dropdown. */
 class OmniboxSuggestionsDropdownDelegate implements View.OnAttachStateChangeListener {
     private ViewGroup mSuggestionsDropdown;
@@ -200,11 +202,21 @@ class OmniboxSuggestionsDropdownDelegate implements View.OnAttachStateChangeList
         // the anchor view.
         ViewGroup.LayoutParams layoutParams = mSuggestionsDropdown.getLayoutParams();
         if (layoutParams != null && layoutParams instanceof ViewGroup.MarginLayoutParams) {
+            // Note(david@vivaldi.com): We consider the bottomMargin when toolbar is at the bottom.
+            if (!VivaldiUtils.isTopToolbarOn()) {
+                ((ViewGroup.MarginLayoutParams) layoutParams).bottomMargin = topMargin;
+                ((ViewGroup.MarginLayoutParams) layoutParams).topMargin = 0;
+            } else
             ((ViewGroup.MarginLayoutParams) layoutParams).topMargin = topMargin;
         }
     }
 
     private int calculateAvailableViewportHeight(int anchorBottomRelativeToContent) {
+        // Note(david@vivaldi.com): We don't take the visible display frame into account when
+        // toolbar is at the bottom.
+        if(!VivaldiUtils.isTopToolbarOn()) {
+            return anchorBottomRelativeToContent;
+        }
         mEmbedder.getWindowDelegate().getWindowVisibleDisplayFrame(mTempRect);
         return mTempRect.height() - anchorBottomRelativeToContent;
     }

@@ -25,10 +25,9 @@ class PLATFORM_EXPORT ForeignLayerDisplayItem : public DisplayItem {
   ForeignLayerDisplayItem(const DisplayItemClient& client,
                           Type,
                           scoped_refptr<cc::Layer>,
-                          const FloatPoint& offset);
-  ~ForeignLayerDisplayItem() override;
+                          const IntPoint& offset);
 
-  cc::Layer* GetLayer() const;
+  cc::Layer* GetLayer() const { return layer_.get(); }
 
   // DisplayItem
   bool Equals(const DisplayItem&) const final;
@@ -36,10 +35,11 @@ class PLATFORM_EXPORT ForeignLayerDisplayItem : public DisplayItem {
   void PropertiesAsJSON(JSONObject&) const final;
 #endif
 
-  FloatPoint Offset() const { return offset_; }
+  IntPoint Offset() const { return offset_; }
 
  private:
-  FloatPoint offset_;
+  IntPoint offset_;
+  scoped_refptr<cc::Layer> layer_;
 };
 
 // When a foreign layer's debug name is a literal string, define a instance of
@@ -50,10 +50,6 @@ class LiteralDebugNameClient : public DisplayItemClient {
   LiteralDebugNameClient(const char* name) : name_(name) {}
 
   String DebugName() const override { return name_; }
-  IntRect VisualRect() const override {
-    NOTREACHED();
-    return IntRect();
-  }
 
  private:
   const char* name_;
@@ -68,8 +64,8 @@ PLATFORM_EXPORT void RecordForeignLayer(
     const DisplayItemClient& client,
     DisplayItem::Type type,
     scoped_refptr<cc::Layer> layer,
-    const FloatPoint& offset,
-    const PropertyTreeState* properties = nullptr);
+    const IntPoint& offset,
+    const PropertyTreeStateOrAlias* properties = nullptr);
 
 }  // namespace blink
 

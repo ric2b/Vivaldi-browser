@@ -13,6 +13,7 @@
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/global_media_controls/media_dialog_delegate.h"
 #include "chrome/browser/ui/global_media_controls/media_notification_container_impl.h"
+#include "chrome/browser/ui/global_media_controls/media_notification_device_provider_impl.h"
 #include "chrome/browser/ui/global_media_controls/media_notification_service_observer.h"
 #include "chrome/browser/ui/global_media_controls/overlay_media_notification.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -173,6 +174,7 @@ void MediaNotificationService::Session::SetController(
   if (controller.is_bound()) {
     observer_receiver_.reset();
     controller->AddObserver(observer_receiver_.BindNewPipeAndPassRemote());
+    controller_ = std::move(controller);
   }
 }
 
@@ -217,6 +219,10 @@ void MediaNotificationService::Session::OnSessionOverlayStateChanged(
 
 bool MediaNotificationService::Session::IsPlaying() {
   return is_playing_;
+}
+
+void MediaNotificationService::Session::SetAudioSinkId(const std::string& id) {
+  controller_->SetAudioSinkId(id);
 }
 
 // static
@@ -554,6 +560,13 @@ void MediaNotificationService::OnContainerDraggedOut(const std::string& id,
     observer.OnNotificationListChanged();
 }
 
+void MediaNotificationService::OnAudioSinkChosen(const std::string& id,
+                                                 const std::string& sink_id) {
+  auto it = sessions_.find(id);
+  DCHECK(it != sessions_.end());
+  it->second.SetAudioSinkId(sink_id);
+}
+
 void MediaNotificationService::Shutdown() {
   // |cast_notification_provider_| depends on MediaRouter, which is another
   // keyed service.
@@ -694,6 +707,21 @@ void MediaNotificationService::OnSessionBecameInactive(const std::string& id) {
   inactive_session_ids_.insert(id);
 
   HideNotification(id);
+}
+
+std::unique_ptr<
+    MediaNotificationDeviceProvider::GetOutputDevicesCallbackList::Subscription>
+MediaNotificationService::RegisterAudioOutputDeviceDescriptionsCallback(
+    MediaNotificationDeviceProvider::GetOutputDevicesCallback callback) {
+  if (!device_provider_)
+    device_provider_ = std::make_unique<MediaNotificationDeviceProviderImpl>();
+  return device_provider_->RegisterOutputDeviceDescriptionsCallback(
+      std::move(callback));
+}
+
+void MediaNotificationService::set_device_provider_for_testing(
+    std::unique_ptr<MediaNotificationDeviceProvider> device_provider) {
+  device_provider_ = std::move(device_provider);
 }
 
 void MediaNotificationService::OnItemUnfrozen(const std::string& id) {

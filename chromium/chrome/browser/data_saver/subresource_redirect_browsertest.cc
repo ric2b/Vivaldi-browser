@@ -31,7 +31,6 @@
 #include "components/optimization_guide/optimization_metadata.h"
 #include "components/optimization_guide/proto/hints.pb.h"
 #include "components/optimization_guide/proto/public_image_metadata.pb.h"
-#include "components/optimization_guide/test_hints_component_creator.h"
 #include "components/ukm/test_ukm_recorder.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
@@ -429,9 +428,6 @@ class SubresourceRedirectBrowserTest : public InProcessBrowserTest {
   CompressionServerFailureMode compression_server_failure_mode_ =
       CompressionServerFailureMode::NONE;
 
-  optimization_guide::testing::TestHintsComponentCreator
-      test_hints_component_creator_;
-
   DISALLOW_COPY_AND_ASSIGN(SubresourceRedirectBrowserTest);
 };
 
@@ -459,7 +455,7 @@ class InfoBarEnabledSubresourceRedirectBrowserTest
   }
 };
 
-#if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_CHROMEOS)
+#if defined(OS_WIN) || defined(OS_MAC) || defined(OS_CHROMEOS)
 #define DISABLE_ON_WIN_MAC_CHROMEOS(x) DISABLED_##x
 #else
 #define DISABLE_ON_WIN_MAC_CHROMEOS(x) x
@@ -1236,9 +1232,10 @@ IN_PROC_BROWSER_TEST_F(SubresourceRedirectBrowserTest,
   VerifyImageCompressionPageInfoState(false);
 }
 
-IN_PROC_BROWSER_TEST_F(
-    SubresourceRedirectBrowserTest,
-    DISABLE_ON_WIN_MAC_CHROMEOS(TestBypassOn503LoadShedFailure)) {
+// This used to be DISABLE_ON_WIN_MAC_CHROMEOS(), but now it is disabled on all
+// platforms, since the test is also flaky on Linux. crbug.com/1114038
+IN_PROC_BROWSER_TEST_F(SubresourceRedirectBrowserTest,
+                       DISABLED_TestBypassOn503LoadShedFailure) {
   g_browser_process->network_quality_tracker()
       ->ReportEffectiveConnectionTypeForTesting(
           net::EFFECTIVE_CONNECTION_TYPE_2G);

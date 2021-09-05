@@ -32,6 +32,7 @@
 #define THIRD_PARTY_BLINK_PUBLIC_PLATFORM_WEB_STRING_H_
 
 #include <cstring>
+#include <limits>
 #include <string>
 
 #include "base/memory/scoped_refptr.h"
@@ -121,6 +122,9 @@ class WebString {
 
   BLINK_PLATFORM_EXPORT std::string Utf8(
       UTF8ConversionMode = UTF8ConversionMode::kLenient) const;
+
+  BLINK_PLATFORM_EXPORT WebString
+  Substring(size_t pos, size_t len = std::numeric_limits<size_t>::max()) const;
 
   BLINK_PLATFORM_EXPORT static WebString FromUTF8(const char* data,
                                                   size_t length);

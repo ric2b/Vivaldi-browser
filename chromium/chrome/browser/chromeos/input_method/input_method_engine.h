@@ -16,9 +16,9 @@
 #include "chrome/browser/chromeos/input_method/input_method_engine_base.h"
 #include "chrome/browser/chromeos/input_method/suggestion_handler_interface.h"
 #include "ui/base/ime/candidate_window.h"
+#include "ui/base/ime/chromeos/ime_engine_handler_interface.h"
 #include "ui/base/ime/chromeos/input_method_descriptor.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
-#include "ui/base/ime/ime_engine_handler_interface.h"
 #include "url/gurl.h"
 
 namespace ui {
@@ -188,6 +188,10 @@ class InputMethodEngine : public InputMethodEngineBase,
       uint32_t before,
       uint32_t after,
       const std::vector<ui::ImeTextSpan>& text_spans) override;
+
+  gfx::Range GetAutocorrectRange() override;
+
+  gfx::Rect GetAutocorrectCharacterBounds() override;
 
   bool SetAutocorrectRange(const base::string16& autocorrect_text,
                            uint32_t start,

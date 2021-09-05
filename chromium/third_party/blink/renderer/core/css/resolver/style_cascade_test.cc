@@ -175,7 +175,7 @@ class TestCascade {
     CSSAnimations::CalculateAnimationUpdate(
         state_.AnimationUpdate(), &state_.GetElement(), state_.GetElement(),
         *state_.Style(), state_.ParentStyle(),
-        &GetDocument().EnsureStyleResolver());
+        &GetDocument().GetStyleResolver());
     AddAnimations();
   }
 
@@ -189,6 +189,11 @@ class TestCascade {
   }
   bool DependsOnCascadeAffectingProperty() const {
     return cascade_.depends_on_cascade_affecting_property_;
+  }
+
+  HeapHashMap<CSSPropertyName, Member<const CSSValue>> GetCascadedValues()
+      const {
+    return cascade_.GetCascadedValues();
   }
 
  private:
@@ -270,13 +275,11 @@ class TestCascadeAutoLock {
 
 class StyleCascadeTest
     : public PageTestBase,
-      private ScopedCSSCascadeForTest,
       private ScopedCSSRevertForTest,
       private ScopedCSSMatchedPropertiesCacheDependenciesForTest {
  public:
   StyleCascadeTest()
-      : ScopedCSSCascadeForTest(true),
-        ScopedCSSRevertForTest(true),
+      : ScopedCSSRevertForTest(true),
         ScopedCSSMatchedPropertiesCacheDependenciesForTest(true) {}
 
   CSSStyleSheet* CreateSheet(const String& css_text) {
@@ -346,6 +349,13 @@ class StyleCascadeTest
 
   CSSPropertyName PropertyName(String name) {
     return *CSSPropertyName::From(GetDocument().GetExecutionContext(), name);
+  }
+
+  String CssTextAt(
+      const HeapHashMap<CSSPropertyName, Member<const CSSValue>>& map,
+      String name) {
+    const CSSValue* value = map.at(PropertyName(name));
+    return value ? value->CssText() : g_null_atom;
   }
 };
 
@@ -3337,6 +3347,187 @@ TEST_F(StyleCascadeTest, InitialColor) {
 
   style->SetInsideLink(EInsideLink::kNotInsideLink);
   EXPECT_EQ(Color::kWhite, style->VisitedDependentColor(GetCSSPropertyColor()));
+}
+
+TEST_F(StyleCascadeTest, MaxSubstitutionTokens) {
+  StringBuilder builder;
+  for (size_t i = 0; i < StyleCascade::kMaxSubstitutionTokens; ++i)
+    builder.Append(':');  // <colon-token>
+
+  String at_limit = builder.ToString();
+  String above_limit = builder.ToString() + ":";
+
+  TestCascade cascade(GetDocument());
+  cascade.Add("--at-limit", at_limit);
+  cascade.Add("--above-limit", above_limit);
+  cascade.Add("--at-limit-reference", "var(--at-limit)");
+  cascade.Add("--above-limit-reference", "var(--above-limit)");
+  cascade.Add("--at-limit-reference-fallback",
+              "var(--unknown,var(--at-limit))");
+  cascade.Add("--above-limit-reference-fallback",
+              "var(--unknown,var(--above-limit))");
+  cascade.Apply();
+
+  EXPECT_EQ(at_limit, cascade.ComputedValue("--at-limit"));
+  EXPECT_EQ(above_limit, cascade.ComputedValue("--above-limit"));
+  EXPECT_EQ(at_limit, cascade.ComputedValue("--at-limit-reference"));
+  EXPECT_EQ(g_null_atom, cascade.ComputedValue("--above-limit-reference"));
+  EXPECT_EQ(at_limit, cascade.ComputedValue("--at-limit-reference-fallback"));
+  EXPECT_EQ(g_null_atom,
+            cascade.ComputedValue("--above-limit-reference-fallback"));
+}
+
+TEST_F(StyleCascadeTest, UseCountSummary) {
+  const auto feature = WebFeature::kSummaryElementWithDisplayBlockAuthorRule;
+
+  Element* summary = GetDocument().CreateRawElement(html_names::kSummaryTag);
+  GetDocument().body()->AppendChild(summary);
+
+  {
+    ASSERT_FALSE(GetDocument().IsUseCounted(feature));
+
+    TestCascade cascade(GetDocument(), summary);
+    cascade.Apply();
+    EXPECT_FALSE(GetDocument().IsUseCounted(feature));
+  }
+  {
+    ASSERT_FALSE(GetDocument().IsUseCounted(feature));
+
+    TestCascade cascade(GetDocument(), summary);
+    cascade.Add("color:green");
+    cascade.Apply();
+    EXPECT_FALSE(GetDocument().IsUseCounted(feature));
+  }
+  {
+    ASSERT_FALSE(GetDocument().IsUseCounted(feature));
+
+    TestCascade cascade(GetDocument(), summary);
+    cascade.Add("display:block", CascadeOrigin::kUserAgent);
+    cascade.Apply();
+    EXPECT_FALSE(GetDocument().IsUseCounted(feature));
+  }
+  {
+    ASSERT_FALSE(GetDocument().IsUseCounted(feature));
+
+    TestCascade cascade(GetDocument(), summary);
+    cascade.Add("display:block", CascadeOrigin::kUser);
+    cascade.Apply();
+    EXPECT_TRUE(GetDocument().IsUseCounted(feature));
+    GetDocument().ClearUseCounterForTesting(feature);
+  }
+  {
+    ASSERT_FALSE(GetDocument().IsUseCounted(feature));
+
+    TestCascade cascade(GetDocument(), summary);
+    cascade.Add("display:block", CascadeOrigin::kAuthor);
+    cascade.Apply();
+    EXPECT_TRUE(GetDocument().IsUseCounted(feature));
+    GetDocument().ClearUseCounterForTesting(feature);
+  }
+}
+
+TEST_F(StyleCascadeTest, GetCascadedValues) {
+  TestCascade cascade(GetDocument());
+  cascade.Add("top:1px", CascadeOrigin::kUserAgent);
+  cascade.Add("right:2px", CascadeOrigin::kUserAgent);
+  cascade.Add("bottom:3px", CascadeOrigin::kUserAgent);
+  cascade.Add("left:4px !important", CascadeOrigin::kUserAgent);
+  cascade.Add("width:5px", CascadeOrigin::kUserAgent);
+
+  cascade.Add("top:10px", CascadeOrigin::kUser);
+  cascade.Add("right:20px", CascadeOrigin::kUser);
+  cascade.Add("bottom:30px !important", CascadeOrigin::kUser);
+  cascade.Add("left:40px", CascadeOrigin::kUser);
+  cascade.Add("height:60px", CascadeOrigin::kUser);
+  cascade.Add("height:61px", CascadeOrigin::kUser);
+  cascade.Add("--x:70px", CascadeOrigin::kUser);
+  cascade.Add("--y:80px !important", CascadeOrigin::kUser);
+
+  cascade.Add("top:100px", CascadeOrigin::kAuthor);
+  cascade.Add("right:201px !important", CascadeOrigin::kAuthor);
+  cascade.Add("right:200px", CascadeOrigin::kAuthor);
+  cascade.Add("bottom:300px", CascadeOrigin::kAuthor);
+  cascade.Add("left:400px", CascadeOrigin::kAuthor);
+  cascade.Add("--x:700px", CascadeOrigin::kAuthor);
+  cascade.Add("--y:800px", CascadeOrigin::kAuthor);
+
+  cascade.Apply();
+
+  auto map = cascade.GetCascadedValues();
+  EXPECT_EQ(8u, map.size());
+
+  EXPECT_EQ("100px", CssTextAt(map, "top"));
+  EXPECT_EQ("201px", CssTextAt(map, "right"));
+  EXPECT_EQ("30px", CssTextAt(map, "bottom"));
+  EXPECT_EQ("4px", CssTextAt(map, "left"));
+  EXPECT_EQ("5px", CssTextAt(map, "width"));
+  EXPECT_EQ("61px", CssTextAt(map, "height"));
+  EXPECT_EQ("700px", CssTextAt(map, "--x"));
+  EXPECT_EQ("80px ", CssTextAt(map, "--y"));
+}
+
+TEST_F(StyleCascadeTest, GetCascadedValuesCssWide) {
+  TestCascade cascade(GetDocument());
+  cascade.Add("top:initial");
+  cascade.Add("right:inherit");
+  cascade.Add("bottom:unset");
+  cascade.Add("left:revert");
+  cascade.Apply();
+
+  auto map = cascade.GetCascadedValues();
+  EXPECT_EQ(4u, map.size());
+
+  EXPECT_EQ("initial", CssTextAt(map, "top"));
+  EXPECT_EQ("inherit", CssTextAt(map, "right"));
+  EXPECT_EQ("unset", CssTextAt(map, "bottom"));
+  EXPECT_EQ("revert", CssTextAt(map, "left"));
+}
+
+TEST_F(StyleCascadeTest, GetCascadedValuesLogical) {
+  TestCascade cascade(GetDocument());
+  cascade.Add("margin-inline-start:1px");
+  cascade.Add("margin-inline-end:2px");
+  cascade.Apply();
+
+  auto map = cascade.GetCascadedValues();
+  EXPECT_EQ(2u, map.size());
+
+  EXPECT_EQ("1px", CssTextAt(map, "margin-left"));
+  EXPECT_EQ("2px", CssTextAt(map, "margin-right"));
+}
+
+TEST_F(StyleCascadeTest, GetCascadedValuesInterpolated) {
+  AppendSheet(R"HTML(
+     @keyframes test {
+        from { --x: 100px; width: 100px; }
+        to { --x: 200px; width: 200px; }
+     }
+    )HTML");
+
+  TestCascade cascade(GetDocument());
+
+  cascade.Add("animation-name: test");
+  cascade.Add("animation-timing-function: linear");
+  cascade.Add("animation-duration: 10s");
+  cascade.Add("animation-delay: -5s");
+  cascade.Apply();
+
+  cascade.CalculateAnimationUpdate();
+  cascade.Apply();
+
+  // Verify that effect values from the animation did apply:
+  EXPECT_EQ(" 200px", cascade.ComputedValue("--x"));
+  EXPECT_EQ("150px", cascade.ComputedValue("width"));
+
+  // However, we don't currently support returning interpolated vales from
+  // GetCascadedValues:
+  auto map = cascade.GetCascadedValues();
+  EXPECT_EQ(4u, map.size());
+
+  EXPECT_EQ("test", CssTextAt(map, "animation-name"));
+  EXPECT_EQ("linear", CssTextAt(map, "animation-timing-function"));
+  EXPECT_EQ("10s", CssTextAt(map, "animation-duration"));
+  EXPECT_EQ("-5s", CssTextAt(map, "animation-delay"));
 }
 
 }  // namespace blink

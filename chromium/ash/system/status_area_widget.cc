@@ -4,7 +4,9 @@
 
 #include "ash/system/status_area_widget.h"
 
+#include "ash/capture_mode/stop_recording_button_tray.h"
 #include "ash/keyboard/ui/keyboard_ui_controller.h"
+#include "ash/public/cpp/ash_features.h"
 #include "ash/public/cpp/ash_switches.h"
 #include "ash/public/cpp/shelf_config.h"
 #include "ash/session/session_controller_impl.h"
@@ -14,6 +16,7 @@
 #include "ash/shell.h"
 #include "ash/system/accessibility/dictation_button_tray.h"
 #include "ash/system/accessibility/select_to_speak_tray.h"
+#include "ash/system/holding_space/holding_space_tray.h"
 #include "ash/system/ime_menu/ime_menu_tray.h"
 #include "ash/system/overview/overview_button_tray.h"
 #include "ash/system/palette/palette_tray.h"
@@ -28,6 +31,7 @@
 #include "base/command_line.h"
 #include "base/containers/adapters.h"
 #include "base/i18n/time_formatting.h"
+#include "base/metrics/histogram_macros.h"
 #include "chromeos/constants/chromeos_switches.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
 #include "ui/display/display.h"
@@ -81,6 +85,11 @@ void StatusAreaWidget::Initialize() {
       std::make_unique<StatusAreaOverflowButtonTray>(shelf_);
   AddTrayButton(overflow_button_tray_.get());
 
+  if (features::IsTemporaryHoldingSpaceEnabled()) {
+    holding_space_tray_ = std::make_unique<HoldingSpaceTray>(shelf_);
+    AddTrayButton(holding_space_tray_.get());
+  }
+
   logout_button_tray_ = std::make_unique<LogoutButtonTray>(shelf_);
   AddTrayButton(logout_button_tray_.get());
 
@@ -95,6 +104,12 @@ void StatusAreaWidget::Initialize() {
 
   virtual_keyboard_tray_ = std::make_unique<VirtualKeyboardTray>(shelf_);
   AddTrayButton(virtual_keyboard_tray_.get());
+
+  if (features::IsCaptureModeEnabled()) {
+    stop_recording_button_tray_ =
+        std::make_unique<StopRecordingButtonTray>(shelf_);
+    AddTrayButton(stop_recording_button_tray_.get());
+  }
 
   palette_tray_ = std::make_unique<PaletteTray>(shelf_);
   AddTrayButton(palette_tray_.get());
@@ -174,6 +189,26 @@ void StatusAreaWidget::UpdateCollapseState() {
 
   status_area_widget_delegate_->OnStatusAreaCollapseStateChanged(
       collapse_state_);
+}
+
+void StatusAreaWidget::LogVisiblePodCountMetric() {
+  int visible_pod_count = 0;
+  for (auto* tray_button : tray_buttons_) {
+    if (tray_button == overflow_button_tray_.get() ||
+        tray_button == overview_button_tray_.get() ||
+        tray_button == unified_system_tray_.get() || !tray_button->GetVisible())
+      continue;
+
+    visible_pod_count += 1;
+  }
+
+  if (Shell::Get()->tablet_mode_controller()->InTabletMode()) {
+    UMA_HISTOGRAM_COUNTS_100("ChromeOS.SystemTray.Tablet.ShelfPodCount",
+                             visible_pod_count);
+  } else {
+    UMA_HISTOGRAM_COUNTS_100("ChromeOS.SystemTray.ShelfPodCount",
+                             visible_pod_count);
+  }
 }
 
 void StatusAreaWidget::CalculateTargetBounds() {

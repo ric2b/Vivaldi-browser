@@ -13,7 +13,6 @@
 #include "base/test/metrics/histogram_tester.h"
 #include "content/browser/service_worker/embedded_worker_test_helper.h"
 #include "content/browser/service_worker/service_worker_context_core.h"
-#include "content/browser/service_worker/service_worker_disk_cache.h"
 #include "content/browser/service_worker/service_worker_test_utils.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/test/browser_task_environment.h"
@@ -43,7 +42,8 @@ class ExpectedScriptInfo {
         meta_data_(meta_data) {}
 
   storage::mojom::ServiceWorkerResourceRecordPtr WriteToDiskCache(
-      ServiceWorkerStorage* storage) const {
+      mojo::Remote<storage::mojom::ServiceWorkerStorageControl>& storage)
+      const {
     return ::content::WriteToDiskCacheWithIdSync(
         storage, script_url_, resource_id_, headers_, body_, meta_data_);
   }
@@ -126,8 +126,6 @@ class ServiceWorkerInstalledScriptsSenderTest : public testing::Test {
   void SetUp() override {
     helper_ = std::make_unique<EmbeddedWorkerTestHelper>(base::FilePath());
 
-    context()->storage()->LazyInitializeForTest();
-
     scope_ = GURL("http://www.example.com/test/");
     blink::mojom::ServiceWorkerRegistrationOptions options;
     options.scope = scope_;
@@ -202,7 +200,8 @@ TEST_F(ServiceWorkerInstalledScriptsSenderTest, SendScripts) {
   {
     std::vector<storage::mojom::ServiceWorkerResourceRecordPtr> records;
     for (const auto& info : kExpectedScriptInfoMap)
-      records.push_back(info.second.WriteToDiskCache(context()->storage()));
+      records.push_back(
+          info.second.WriteToDiskCache(context()->GetStorageControl()));
     version()->script_cache_map()->SetResources(records);
   }
 
@@ -236,6 +235,8 @@ TEST_F(ServiceWorkerInstalledScriptsSenderTest, SendScripts) {
     info.CheckIfIdentical(script_info);
   }
 
+  // Wait until the last send finishes.
+  base::RunLoop().RunUntilIdle();
   EXPECT_EQ(FinishedReason::kSuccess, sender->last_finished_reason());
 }
 
@@ -258,7 +259,8 @@ TEST_F(ServiceWorkerInstalledScriptsSenderTest, FailedToSendBody) {
   {
     std::vector<storage::mojom::ServiceWorkerResourceRecordPtr> records;
     for (const auto& info : kExpectedScriptInfoMap)
-      records.push_back(info.second.WriteToDiskCache(context()->storage()));
+      records.push_back(
+          info.second.WriteToDiskCache(context()->GetStorageControl()));
     version()->script_cache_map()->SetResources(records);
   }
 
@@ -317,7 +319,8 @@ TEST_F(ServiceWorkerInstalledScriptsSenderTest, FailedToSendMetaData) {
   {
     std::vector<storage::mojom::ServiceWorkerResourceRecordPtr> records;
     for (const auto& info : kExpectedScriptInfoMap)
-      records.push_back(info.second.WriteToDiskCache(context()->storage()));
+      records.push_back(
+          info.second.WriteToDiskCache(context()->GetStorageControl()));
     version()->script_cache_map()->SetResources(records);
   }
 
@@ -361,7 +364,7 @@ TEST_F(ServiceWorkerInstalledScriptsSenderTest, FailedToSendMetaData) {
 TEST_F(ServiceWorkerInstalledScriptsSenderTest, Histograms) {
   const GURL kMainScriptURL = version()->script_url();
   // Use script bodies small enough to be read by one
-  // ServiceWorkerResponseReader::ReadData(). The number of
+  // ServiceWorkerResourceReader::ReadData(). The number of
   // ServiceWorker.DiskCache.ReadResponseResult will be two per script (one is
   // reading the body and the other is saying EOD).
   std::map<GURL, ExpectedScriptInfo> kExpectedScriptInfoMap = {
@@ -388,7 +391,8 @@ TEST_F(ServiceWorkerInstalledScriptsSenderTest, Histograms) {
   {
     std::vector<storage::mojom::ServiceWorkerResourceRecordPtr> records;
     for (const auto& info : kExpectedScriptInfoMap)
-      records.push_back(info.second.WriteToDiskCache(context()->storage()));
+      records.push_back(
+          info.second.WriteToDiskCache(context()->GetStorageControl()));
     version()->script_cache_map()->SetResources(records);
   }
 
@@ -423,6 +427,8 @@ TEST_F(ServiceWorkerInstalledScriptsSenderTest, Histograms) {
     info.CheckIfIdentical(script_info);
   }
 
+  // Wait until the last send finishes.
+  base::RunLoop().RunUntilIdle();
   EXPECT_EQ(FinishedReason::kSuccess, sender->last_finished_reason());
 
   // The histogram should be recorded when reading the script.
@@ -468,7 +474,8 @@ TEST_F(ServiceWorkerInstalledScriptsSenderTest, RequestScriptBeforeStreaming) {
   {
     std::vector<storage::mojom::ServiceWorkerResourceRecordPtr> records;
     for (const auto& info : kExpectedScriptInfoMap)
-      records.push_back(info.second.WriteToDiskCache(context()->storage()));
+      records.push_back(
+          info.second.WriteToDiskCache(context()->GetStorageControl()));
     version()->script_cache_map()->SetResources(records);
   }
 
@@ -517,6 +524,9 @@ TEST_F(ServiceWorkerInstalledScriptsSenderTest, RequestScriptBeforeStreaming) {
     EXPECT_EQ(info.script_url(), script_info->script_url);
     info.CheckIfIdentical(script_info);
   }
+
+  // Wait until the last send finishes.
+  base::RunLoop().RunUntilIdle();
   EXPECT_EQ(FinishedReason::kSuccess, sender->last_finished_reason());
 }
 
@@ -555,7 +565,8 @@ TEST_F(ServiceWorkerInstalledScriptsSenderTest, RequestScriptAfterStreaming) {
   {
     std::vector<storage::mojom::ServiceWorkerResourceRecordPtr> records;
     for (const auto& info : kExpectedScriptInfoMap)
-      records.push_back(info.second.WriteToDiskCache(context()->storage()));
+      records.push_back(
+          info.second.WriteToDiskCache(context()->GetStorageControl()));
     version()->script_cache_map()->SetResources(records);
   }
 
@@ -591,6 +602,8 @@ TEST_F(ServiceWorkerInstalledScriptsSenderTest, RequestScriptAfterStreaming) {
     EXPECT_EQ(info.script_url(), script_info->script_url);
     info.CheckIfIdentical(script_info);
   }
+  // Wait until the initial "streaming" ends.
+  base::RunLoop().RunUntilIdle();
   EXPECT_EQ(FinishedReason::kSuccess, sender->last_finished_reason());
 
   // Request the main script again before receiving the other scripts.
@@ -603,6 +616,8 @@ TEST_F(ServiceWorkerInstalledScriptsSenderTest, RequestScriptAfterStreaming) {
     EXPECT_EQ(info.script_url(), script_info->script_url);
     info.CheckIfIdentical(script_info);
   }
+  // Wait until the second send for the main script finishes.
+  base::RunLoop().RunUntilIdle();
   EXPECT_EQ(FinishedReason::kSuccess, sender->last_finished_reason());
 }
 
@@ -622,7 +637,8 @@ TEST_F(ServiceWorkerInstalledScriptsSenderTest, NoContext) {
         "I'm meta data for the main script"}}};
   std::vector<storage::mojom::ServiceWorkerResourceRecordPtr> records;
   for (const auto& info : kExpectedScriptInfoMap)
-    records.push_back(info.second.WriteToDiskCache(context()->storage()));
+    records.push_back(
+        info.second.WriteToDiskCache(context()->GetStorageControl()));
   version()->script_cache_map()->SetResources(records);
   auto sender =
       std::make_unique<ServiceWorkerInstalledScriptsSender>(version());

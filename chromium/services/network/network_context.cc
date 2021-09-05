@@ -5,6 +5,7 @@
 #include "services/network/network_context.h"
 
 #include <memory>
+#include <string>
 #include <utility>
 
 #include "base/barrier_closure.h"
@@ -17,13 +18,13 @@
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
-#include "base/message_loop/message_loop_current.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/optional.h"
 #include "base/sequenced_task_runner.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/current_thread.h"
 #include "base/task/post_task.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
@@ -322,6 +323,52 @@ std::string HashesToBase64String(const net::HashValueVector& hashes) {
   return str;
 }
 
+#if BUILDFLAG(IS_CT_SUPPORTED)
+// SCTAuditingDelegate is an implementation of the delegate interface that is
+// aware of per-NetworkContext details (to allow the cache to notify the
+// associated NetworkContextClient of new reports, and to apply
+// per-NetworkContext enabled/disabled status for the auditing feature).
+class SCTAuditingDelegate : public net::SCTAuditingDelegate {
+ public:
+  explicit SCTAuditingDelegate(const base::WeakPtr<NetworkContext>& context);
+  ~SCTAuditingDelegate() override;
+
+  // net::SCTAuditingDelegate:
+  void MaybeEnqueueReport(
+      const net::HostPortPair& host_port_pair,
+      const net::X509Certificate* validated_certificate_chain,
+      const net::SignedCertificateTimestampAndStatusList&
+          signed_certificate_timestamps) override;
+  bool IsSCTAuditingEnabled() override;
+
+ private:
+  base::WeakPtr<NetworkContext> context_;
+};
+
+SCTAuditingDelegate::SCTAuditingDelegate(
+    const base::WeakPtr<NetworkContext>& context)
+    : context_(context) {}
+
+SCTAuditingDelegate::~SCTAuditingDelegate() = default;
+
+void SCTAuditingDelegate::MaybeEnqueueReport(
+    const net::HostPortPair& host_port_pair,
+    const net::X509Certificate* validated_certificate_chain,
+    const net::SignedCertificateTimestampAndStatusList&
+        signed_certificate_timestamps) {
+  if (!context_)
+    return;
+  context_->MaybeEnqueueSCTReport(host_port_pair, validated_certificate_chain,
+                                  signed_certificate_timestamps);
+}
+
+bool SCTAuditingDelegate::IsSCTAuditingEnabled() {
+  if (!context_)
+    return false;
+  return context_->is_sct_auditing_enabled();
+}
+#endif  // BUILDFLAG(IS_CT_SUPPORTED)
+
 }  // namespace
 
 constexpr uint32_t NetworkContext::kMaxOutstandingRequestsPerProcess;
@@ -344,9 +391,7 @@ NetworkContext::NetworkContext(
           std::make_unique<NetworkContextApplicationStatusListener>()),
 #endif
       receiver_(this, std::move(receiver)),
-      cors_preflight_controller_(
-          params_->cors_extra_safelisted_request_header_names,
-          network_service) {
+      cors_preflight_controller_(network_service) {
   mojo::PendingRemote<mojom::URLLoaderFactory>
       url_loader_factory_for_cert_net_fetcher;
   mojo::PendingReceiver<mojom::URLLoaderFactory>
@@ -417,7 +462,7 @@ NetworkContext::NetworkContext(
       socket_factory_(
           std::make_unique<SocketFactory>(url_request_context_->net_log(),
                                           url_request_context)),
-      cors_preflight_controller_(std::vector<std::string>(), network_service) {
+      cors_preflight_controller_(network_service) {
   // May be nullptr in tests.
   if (network_service_)
     network_service_->RegisterNetworkContext(this);
@@ -1106,6 +1151,20 @@ void NetworkContext::GetExpectCTState(
 
   std::move(callback).Run(std::move(result));
 }
+
+void NetworkContext::MaybeEnqueueSCTReport(
+    const net::HostPortPair& host_port_pair,
+    const net::X509Certificate* validated_certificate_chain,
+    const net::SignedCertificateTimestampAndStatusList&
+        signed_certificate_timestamps) {
+  network_service()->sct_auditing_cache()->MaybeEnqueueReport(
+      this, host_port_pair, validated_certificate_chain,
+      signed_certificate_timestamps);
+}
+
+void NetworkContext::SetSCTAuditingEnabled(bool enabled) {
+  is_sct_auditing_enabled_ = enabled;
+}
 #endif  // BUILDFLAG(IS_CT_SUPPORTED)
 
 void NetworkContext::CreateUDPSocket(
@@ -1204,16 +1263,25 @@ void NetworkContext::CreateWebSocket(
     int32_t render_frame_id,
     const url::Origin& origin,
     uint32_t options,
+    const net::MutableNetworkTrafficAnnotationTag& traffic_annotation,
     mojo::PendingRemote<mojom::WebSocketHandshakeClient> handshake_client,
     mojo::PendingRemote<mojom::AuthenticationHandler> auth_handler,
     mojo::PendingRemote<mojom::TrustedHeaderClient> header_client) {
 #if !defined(OS_IOS)
   if (!websocket_factory_)
     websocket_factory_ = std::make_unique<WebSocketFactory>(this);
+
+  DCHECK_GE(process_id, 0);
+  if (process_id == mojom::kBrowserProcessId) {
+    DCHECK_EQ(render_frame_id, 0);
+  }
+
   websocket_factory_->CreateWebSocket(
       url, requested_protocols, site_for_cookies, isolation_info,
       std::move(additional_headers), process_id, render_frame_id, origin,
-      options, std::move(handshake_client), std::move(auth_handler),
+      options,
+      static_cast<net::NetworkTrafficAnnotationTag>(traffic_annotation),
+      std::move(handshake_client), std::move(auth_handler),
       std::move(header_client));
 #endif  // !defined(OS_IOS)
 }
@@ -1346,15 +1414,6 @@ void NetworkContext::SetCorsOriginAccessListsForOrigin(
   cors_origin_access_list_.SetAllowListForOrigin(source_origin, allow_patterns);
   cors_origin_access_list_.SetBlockListForOrigin(source_origin, block_patterns);
   std::move(callback).Run();
-}
-
-void NetworkContext::SetCorsExtraSafelistedRequestHeaderNames(
-    const std::vector<std::string>&
-        cors_extra_safelisted_request_header_names) {
-  cors_preflight_controller_.set_extra_safelisted_header_names(
-      base::flat_set<std::string>(
-          cors_extra_safelisted_request_header_names.cbegin(),
-          cors_extra_safelisted_request_header_names.cend()));
 }
 
 void NetworkContext::AddHSTS(const std::string& host,
@@ -1667,6 +1726,44 @@ void NetworkContext::LookupServerBasicAuthCredentials(
     std::move(callback).Run(base::nullopt);
 }
 
+#if defined(OS_CHROMEOS)
+void NetworkContext::LookupProxyAuthCredentials(
+    const net::ProxyServer& proxy_server,
+    const std::string& auth_scheme,
+    const std::string& realm,
+    LookupProxyAuthCredentialsCallback callback) {
+  net::HttpAuth::Scheme net_scheme =
+      net::HttpAuth::StringToScheme(base::ToLowerASCII(auth_scheme));
+  if (net_scheme == net::HttpAuth::Scheme::AUTH_SCHEME_MAX) {
+    std::move(callback).Run(base::nullopt);
+    return;
+  }
+  net::HttpAuthCache* http_auth_cache =
+      url_request_context_->http_transaction_factory()
+          ->GetSession()
+          ->http_auth_cache();
+  // TODO(https://crbug.com/1103768): Mapping proxy addresses to URLs is a
+  // lossy conversion, shouldn't do this.
+  const char* scheme =
+      proxy_server.is_secure_http_like() ? "https://" : "http://";
+  GURL proxy_url(scheme + proxy_server.host_port_pair().ToString());
+  if (!proxy_url.is_valid()) {
+    std::move(callback).Run(base::nullopt);
+    return;
+  }
+
+  //  Unlike server credentials, proxy credentials are not keyed on
+  //  NetworkIsolationKey.
+  net::HttpAuthCache::Entry* entry =
+      http_auth_cache->Lookup(proxy_url, net::HttpAuth::AUTH_PROXY, realm,
+                              net_scheme, net::NetworkIsolationKey());
+  if (entry)
+    std::move(callback).Run(entry->credentials());
+  else
+    std::move(callback).Run(base::nullopt);
+}
+#endif
+
 const net::HttpAuthPreferences* NetworkContext::GetHttpAuthPreferences() const {
   return &http_auth_merged_preferences_;
 }
@@ -1971,6 +2068,8 @@ URLRequestContextOwner NetworkContext::MakeURLRequestContext(
     if (params_->reporting_delivery_interval) {
       reporting_policy->delivery_interval =
           *params_->reporting_delivery_interval;
+      reporting_policy->endpoint_backoff_policy.initial_delay_ms =
+          params_->reporting_delivery_interval->InMilliseconds();
     }
     builder.set_reporting_policy(std::move(reporting_policy));
   } else {
@@ -2071,6 +2170,9 @@ URLRequestContextOwner NetworkContext::MakeURLRequestContext(
             params_->ct_log_update_time, disqualified_logs,
             operated_by_google_logs));
   }
+
+  builder.set_sct_auditing_delegate(
+      std::make_unique<SCTAuditingDelegate>(weak_factory_.GetWeakPtr()));
 #endif  // BUILDFLAG(IS_CT_SUPPORTED)
 
   builder.set_host_mapping_rules(
@@ -2298,6 +2400,13 @@ void NetworkContext::OnCertVerifyForSignedExchangeComplete(int cert_verify_id,
             net::TransportSecurityState::ENABLE_EXPECT_CT_REPORTS,
             ct_verify_result.policy_compliance,
             net::NetworkIsolationKey::Todo());
+
+    if (url_request_context_->sct_auditing_delegate() &&
+        url_request_context_->sct_auditing_delegate()->IsSCTAuditingEnabled()) {
+      url_request_context_->sct_auditing_delegate()->MaybeEnqueueReport(
+          net::HostPortPair::FromURL(pending_cert_verify->url), verified_cert,
+          ct_verify_result.scts);
+    }
 
     switch (ct_requirement_status) {
       case net::TransportSecurityState::CT_REQUIREMENTS_NOT_MET:

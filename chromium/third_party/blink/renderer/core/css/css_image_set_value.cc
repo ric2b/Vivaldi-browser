@@ -29,6 +29,7 @@
 #include "third_party/blink/renderer/core/css/css_image_value.h"
 #include "third_party/blink/renderer/core/css/css_primitive_value.h"
 #include "third_party/blink/renderer/core/dom/document.h"
+#include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/loader/resource/image_resource_content.h"
 #include "third_party/blink/renderer/core/style/style_fetched_image_set.h"
@@ -124,7 +125,8 @@ StyleImage* CSSImageSetValue::CacheImage(
     resource_request.SetReferrerString(image.referrer.referrer);
     if (is_ad_related_)
       resource_request.SetIsAdResource();
-    ResourceLoaderOptions options;
+    ResourceLoaderOptions options(
+        document.GetExecutionContext()->GetCurrentWorld());
     options.initiator_info.name = parser_mode_ == kUASheetMode
                                       ? fetch_initiator_type_names::kUacss
                                       : fetch_initiator_type_names::kCSS;
@@ -132,8 +134,8 @@ StyleImage* CSSImageSetValue::CacheImage(
     FetchParameters params(std::move(resource_request), options);
 
     if (cross_origin != kCrossOriginAttributeNotSet) {
-      params.SetCrossOriginAccessControl(document.GetSecurityOrigin(),
-                                         cross_origin);
+      params.SetCrossOriginAccessControl(
+          document.GetExecutionContext()->GetSecurityOrigin(), cross_origin);
     }
 
     cached_image_ = MakeGarbageCollected<StyleFetchedImageSet>(

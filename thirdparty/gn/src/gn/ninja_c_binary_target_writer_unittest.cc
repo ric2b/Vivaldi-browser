@@ -58,7 +58,7 @@ TEST_F(NinjaCBinaryTargetWriterTest, SourceSet) {
         "build obj/foo/bar.stamp: stamp obj/foo/bar.input1.o "
         "obj/foo/bar.input2.o ../../foo/input3.o ../../foo/input4.obj\n";
     std::string out_str = out.str();
-    EXPECT_EQ(expected, out_str);
+    EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
   }
 
   // A shared library that depends on the source set.
@@ -90,10 +90,11 @@ TEST_F(NinjaCBinaryTargetWriterTest, SourceSet) {
         "  ldflags =\n"
         "  libs =\n"
         "  frameworks =\n"
+        "  swiftmodules =\n"
         "  output_extension = .so\n"
         "  output_dir = \n";
     std::string out_str = out.str();
-    EXPECT_EQ(expected, out_str);
+    EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
   }
 
   // A static library that depends on the source set (should not link it).
@@ -123,7 +124,7 @@ TEST_F(NinjaCBinaryTargetWriterTest, SourceSet) {
         "  output_extension = \n"
         "  output_dir = \n";
     std::string out_str = out.str();
-    EXPECT_EQ(expected, out_str);
+    EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
   }
 
   // Make the static library 'complete', which means it should be linked.
@@ -151,7 +152,7 @@ TEST_F(NinjaCBinaryTargetWriterTest, SourceSet) {
         "  output_extension = \n"
         "  output_dir = \n";
     std::string out_str = out.str();
-    EXPECT_EQ(expected, out_str);
+    EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
   }
 }
 
@@ -209,7 +210,7 @@ TEST_F(NinjaCBinaryTargetWriterTest, StaticLibrary) {
       "  output_extension = \n"
       "  output_dir = \n";
   std::string out_str = out.str();
-  EXPECT_EQ(expected, out_str);
+  EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
 }
 
 TEST_F(NinjaCBinaryTargetWriterTest, CompleteStaticLibrary) {
@@ -256,7 +257,7 @@ TEST_F(NinjaCBinaryTargetWriterTest, CompleteStaticLibrary) {
         "  output_extension = \n"
         "  output_dir = \n";
     std::string out_str = out.str();
-    EXPECT_EQ(expected, out_str);
+    EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
   }
 
   // Make the dependent static library complete.
@@ -285,7 +286,7 @@ TEST_F(NinjaCBinaryTargetWriterTest, CompleteStaticLibrary) {
         "  output_extension = \n"
         "  output_dir = \n";
     std::string out_str = out.str();
-    EXPECT_EQ(expected, out_str);
+    EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
   }
 }
 
@@ -340,11 +341,12 @@ TEST_F(NinjaCBinaryTargetWriterTest, OutputExtensionAndInputDeps) {
       "  ldflags =\n"
       "  libs =\n"
       "  frameworks =\n"
+      "  swiftmodules =\n"
       "  output_extension = .so.6\n"
       "  output_dir = foo\n";
 
   std::string out_str = out.str();
-  EXPECT_EQ(expected, out_str);
+  EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
 }
 
 TEST_F(NinjaCBinaryTargetWriterTest, NoHardDepsToNoPublicHeaderTarget) {
@@ -432,6 +434,7 @@ TEST_F(NinjaCBinaryTargetWriterTest, NoHardDepsToNoPublicHeaderTarget) {
       "  ldflags =\n"
       "  libs =\n"
       "  frameworks =\n"
+      "  swiftmodules =\n"
       "  output_extension = .so\n"
       "  output_dir = foo\n";
 
@@ -470,6 +473,7 @@ TEST_F(NinjaCBinaryTargetWriterTest, NoHardDepsToNoPublicHeaderTarget) {
       "  ldflags =\n"
       "  libs =\n"
       "  frameworks =\n"
+      "  swiftmodules =\n"
       "  output_extension = \n"
       "  output_dir = foo\n";
 
@@ -507,11 +511,12 @@ TEST_F(NinjaCBinaryTargetWriterTest, LibsAndLibDirs) {
       "  ldflags = -L../../foo/bar\n"
       "  libs = ../../foo/lib1.a -lfoo\n"
       "  frameworks =\n"
+      "  swiftmodules =\n"
       "  output_extension = .so\n"
       "  output_dir = \n";
 
   std::string out_str = out.str();
-  EXPECT_EQ(expected, out_str);
+  EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
 }
 
 // Tests frameworks are applied.
@@ -562,11 +567,12 @@ TEST_F(NinjaCBinaryTargetWriterTest, FrameworksAndFrameworkDirs) {
       "  libs =\n"
       "  frameworks = -framework System -framework Bar "
       "-weak_framework Whizbang\n"
+      "  swiftmodules =\n"
       "  output_extension = .so\n"
       "  output_dir = \n";
 
   std::string out_str = out.str();
-  EXPECT_EQ(expected, out_str);
+  EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
 }
 
 TEST_F(NinjaCBinaryTargetWriterTest, EmptyOutputExtension) {
@@ -608,11 +614,12 @@ TEST_F(NinjaCBinaryTargetWriterTest, EmptyOutputExtension) {
       "  ldflags =\n"
       "  libs =\n"
       "  frameworks =\n"
+      "  swiftmodules =\n"
       "  output_extension = \n"
       "  output_dir = \n";
 
   std::string out_str = out.str();
-  EXPECT_EQ(expected, out_str);
+  EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
 }
 
 TEST_F(NinjaCBinaryTargetWriterTest, SourceSetDataDeps) {
@@ -693,6 +700,7 @@ TEST_F(NinjaCBinaryTargetWriterTest, SourceSetDataDeps) {
       "  ldflags =\n"
       "  libs =\n"
       "  frameworks =\n"
+      "  swiftmodules =\n"
       "  output_extension = \n"
       "  output_dir = \n";
   EXPECT_EQ(final_expected, final_out.str());
@@ -730,6 +738,7 @@ TEST_F(NinjaCBinaryTargetWriterTest, SharedLibraryModuleDefinitionFile) {
       "  ldflags = /DEF:../../foo/bar.def\n"
       "  libs =\n"
       "  frameworks =\n"
+      "  swiftmodules =\n"
       "  output_extension = .so\n"
       "  output_dir = \n";
   EXPECT_EQ(expected, out.str());
@@ -766,6 +775,7 @@ TEST_F(NinjaCBinaryTargetWriterTest, LoadableModule) {
       "  ldflags =\n"
       "  libs =\n"
       "  frameworks =\n"
+      "  swiftmodules =\n"
       "  output_extension = .so\n"
       "  output_dir = \n";
   EXPECT_EQ(loadable_expected, out.str());
@@ -800,6 +810,7 @@ TEST_F(NinjaCBinaryTargetWriterTest, LoadableModule) {
       "  ldflags =\n"
       "  libs =\n"
       "  frameworks =\n"
+      "  swiftmodules =\n"
       "  output_extension = \n"
       "  output_dir = \n";
   EXPECT_EQ(final_expected, final_out.str());
@@ -1157,6 +1168,7 @@ TEST_F(NinjaCBinaryTargetWriterTest, InputFiles) {
         "  ldflags =\n"
         "  libs =\n"
         "  frameworks =\n"
+        "  swiftmodules =\n"
         "  output_extension = .so\n"
         "  output_dir = \n";
 
@@ -1297,6 +1309,7 @@ TEST_F(NinjaCBinaryTargetWriterTest, RustDeps) {
         "  ldflags =\n"
         "  libs =\n"
         "  frameworks =\n"
+        "  swiftmodules =\n"
         "  output_extension = \n"
         "  output_dir = \n";
 
@@ -1409,6 +1422,7 @@ TEST_F(NinjaCBinaryTargetWriterTest, RustDeps) {
         "  ldflags =\n"
         "  libs =\n"
         "  frameworks =\n"
+        "  swiftmodules =\n"
         "  output_extension = \n"
         "  output_dir = \n"
         "  rlibs = obj/quux/lib4.rlib obj/qux/lib2.rlib\n";
@@ -1470,10 +1484,209 @@ TEST_F(NinjaCBinaryTargetWriterTest, RustDeps) {
         "  ldflags =\n"
         "  libs =\n"
         "  frameworks =\n"
+        "  swiftmodules =\n"
         "  output_extension = \n"
         "  output_dir = \n";
 
     std::string out_str = out.str();
+    EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
+  }
+}
+
+TEST_F(NinjaCBinaryTargetWriterTest, ModuleMapInStaticLibrary) {
+  TestWithScope setup;
+  Err err;
+
+  std::unique_ptr<Tool> cxx_module_tool =
+      Tool::CreateTool(CTool::kCToolCxxModule);
+  cxx_module_tool->set_outputs(SubstitutionList::MakeForTest(
+      "{{source_out_dir}}/{{target_output_name}}.{{source_name_part}}.pcm"));
+  setup.toolchain()->SetTool(std::move(cxx_module_tool));
+
+  TestTarget target(setup, "//foo:bar", Target::STATIC_LIBRARY);
+  target.sources().push_back(SourceFile("//foo/bar.modulemap"));
+  target.source_types_used().Set(SourceFile::SOURCE_MODULEMAP);
+  ASSERT_TRUE(target.OnResolved(&err));
+
+  std::ostringstream out;
+  NinjaCBinaryTargetWriter writer(&target, out);
+  writer.Run();
+
+  const char expected[] =
+      "defines =\n"
+      "include_dirs =\n"
+      "root_out_dir = .\n"
+      "target_out_dir = obj/foo\n"
+      "target_output_name = libbar\n"
+      "\n"
+      "build obj/foo/libbar.bar.pcm: cxx_module ../../foo/bar.modulemap\n"
+      "\n"
+      "build obj/foo/libbar.a: alink obj/foo/libbar.bar.pcm\n"
+      "  arflags =\n"
+      "  output_extension = \n"
+      "  output_dir = \n";
+  std::string out_str = out.str();
+  EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
+}
+
+// Test linking of targets containing Swift modules.
+TEST_F(NinjaCBinaryTargetWriterTest, SwiftModule) {
+  Err err;
+  TestWithScope setup;
+
+  // A single Swift module.
+  Target foo_target(setup.settings(), Label(SourceDir("//foo/"), "foo"));
+  foo_target.set_output_type(Target::SOURCE_SET);
+  foo_target.visibility().SetPublic();
+  foo_target.sources().push_back(SourceFile("//foo/file1.swift"));
+  foo_target.sources().push_back(SourceFile("//foo/file2.swift"));
+  foo_target.source_types_used().Set(SourceFile::SOURCE_SWIFT);
+  foo_target.swift_values().module_name() = "Foo";
+  foo_target.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(foo_target.OnResolved(&err));
+
+  {
+    std::ostringstream out;
+    NinjaCBinaryTargetWriter writer(&foo_target, out);
+    writer.Run();
+
+    const char expected[] =
+        "defines =\n"
+        "include_dirs =\n"
+        "module_name = Foo\n"
+        "module_dirs =\n"
+        "root_out_dir = .\n"
+        "target_out_dir = obj/foo\n"
+        "target_output_name = foo\n"
+        "\n"
+        "build obj/foo/Foo.swiftmodule: swift"
+        " ../../foo/file1.swift ../../foo/file2.swift\n"
+        "\n"
+        "build obj/foo/file1.o obj/foo/file2.o: stamp obj/foo/Foo.swiftmodule\n"
+        "\n"
+        "build obj/foo/foo.stamp: stamp"
+        " obj/foo/file1.o obj/foo/file2.o\n";
+
+    const std::string out_str = out.str();
+    EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
+  }
+
+  // Swift module_dirs correctly set if dependency between Swift modules.
+  {
+    Target bar_target(setup.settings(), Label(SourceDir("//bar/"), "bar"));
+    bar_target.set_output_type(Target::SOURCE_SET);
+    bar_target.visibility().SetPublic();
+    bar_target.sources().push_back(SourceFile("//bar/bar.swift"));
+    bar_target.source_types_used().Set(SourceFile::SOURCE_SWIFT);
+    bar_target.swift_values().module_name() = "Bar";
+    bar_target.private_deps().push_back(LabelTargetPair(&foo_target));
+    bar_target.SetToolchain(setup.toolchain());
+    ASSERT_TRUE(bar_target.OnResolved(&err));
+
+    std::ostringstream out;
+    NinjaCBinaryTargetWriter writer(&bar_target, out);
+    writer.Run();
+
+    const char expected[] =
+        "defines =\n"
+        "include_dirs =\n"
+        "module_name = Bar\n"
+        "module_dirs = -Iobj/foo\n"
+        "root_out_dir = .\n"
+        "target_out_dir = obj/bar\n"
+        "target_output_name = bar\n"
+        "\n"
+        "build obj/bar/Bar.swiftmodule: swift ../../bar/bar.swift"
+        " || obj/foo/foo.stamp\n"
+        "\n"
+        "build obj/bar/bar.o: stamp obj/bar/Bar.swiftmodule"
+        " || obj/foo/foo.stamp\n"
+        "\n"
+        "build obj/bar/bar.stamp: stamp obj/bar/bar.o "
+        "|| obj/foo/foo.stamp\n";
+
+    const std::string out_str = out.str();
+    EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
+  }
+
+  // Swift module_dirs correctly set if dependency between Swift modules,
+  // even if the dependency is indirect (via public_deps).
+  {
+    Target group(setup.settings(), Label(SourceDir("//bar/"), "group"));
+    group.set_output_type(Target::GROUP);
+    group.visibility().SetPublic();
+    group.public_deps().push_back(LabelTargetPair(&foo_target));
+    group.SetToolchain(setup.toolchain());
+    ASSERT_TRUE(group.OnResolved(&err));
+
+    Target bar_target(setup.settings(), Label(SourceDir("//bar/"), "bar"));
+    bar_target.set_output_type(Target::SOURCE_SET);
+    bar_target.visibility().SetPublic();
+    bar_target.sources().push_back(SourceFile("//bar/bar.swift"));
+    bar_target.source_types_used().Set(SourceFile::SOURCE_SWIFT);
+    bar_target.swift_values().module_name() = "Bar";
+    bar_target.private_deps().push_back(LabelTargetPair(&group));
+    bar_target.SetToolchain(setup.toolchain());
+    ASSERT_TRUE(bar_target.OnResolved(&err));
+
+    std::ostringstream out;
+    NinjaCBinaryTargetWriter writer(&bar_target, out);
+    writer.Run();
+
+    const char expected[] =
+        "defines =\n"
+        "include_dirs =\n"
+        "module_name = Bar\n"
+        "module_dirs = -Iobj/foo\n"
+        "root_out_dir = .\n"
+        "target_out_dir = obj/bar\n"
+        "target_output_name = bar\n"
+        "\n"
+        "build obj/bar/Bar.swiftmodule: swift ../../bar/bar.swift"
+        " || obj/foo/foo.stamp\n"
+        "\n"
+        "build obj/bar/bar.o: stamp obj/bar/Bar.swiftmodule"
+        " || obj/foo/foo.stamp\n"
+        "\n"
+        "build obj/bar/bar.stamp: stamp obj/bar/bar.o "
+        "|| obj/bar/group.stamp obj/foo/foo.stamp\n";
+
+    const std::string out_str = out.str();
+    EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
+  }
+
+  // C target links with module.
+  {
+    Target bar_target(setup.settings(), Label(SourceDir("//bar/"), "bar"));
+    bar_target.set_output_type(Target::EXECUTABLE);
+    bar_target.visibility().SetPublic();
+    bar_target.private_deps().push_back(LabelTargetPair(&foo_target));
+    bar_target.SetToolchain(setup.toolchain());
+    ASSERT_TRUE(bar_target.OnResolved(&err));
+
+    std::ostringstream out;
+    NinjaCBinaryTargetWriter writer(&bar_target, out);
+    writer.Run();
+
+    const char expected[] =
+        "defines =\n"
+        "include_dirs =\n"
+        "root_out_dir = .\n"
+        "target_out_dir = obj/bar\n"
+        "target_output_name = bar\n"
+        "\n"
+        "\n"
+        "build ./bar: link obj/foo/file1.o obj/foo/file2.o "
+        "| obj/foo/Foo.swiftmodule "
+        "|| obj/foo/foo.stamp\n"
+        "  ldflags =\n"
+        "  libs =\n"
+        "  frameworks =\n"
+        "  swiftmodules = obj/foo/Foo.swiftmodule\n"
+        "  output_extension = \n"
+        "  output_dir = \n";
+
+    const std::string out_str = out.str();
     EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
   }
 }

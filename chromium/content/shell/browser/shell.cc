@@ -37,9 +37,7 @@
 #include "content/shell/browser/shell_content_browser_client.h"
 #include "content/shell/browser/shell_devtools_frontend.h"
 #include "content/shell/browser/shell_javascript_dialog_manager.h"
-#include "content/shell/browser/web_test/web_test_control_host.h"
 #include "content/shell/common/shell_switches.h"
-#include "content/shell/common/web_test/web_test_switches.h"
 #include "media/media_buildflags.h"
 #include "third_party/blink/public/common/peerconnection/webrtc_ip_handling_policy.h"
 #include "third_party/blink/public/mojom/renderer_preferences.mojom.h"
@@ -82,10 +80,7 @@ Shell::Shell(std::unique_ptr<WebContents> web_contents,
   if (should_set_delegate)
     web_contents_->SetDelegate(this);
 
-  if (switches::IsRunWebTestsSwitchPresent()) {
-    headless_ = !base::CommandLine::ForCurrentProcess()->HasSwitch(
-        switches::kDisableHeadlessMode);
-  } else {
+  if (!switches::IsRunWebTestsSwitchPresent()) {
     UpdateFontRendererPreferencesFromSystemSettings(
         web_contents_->GetMutableRendererPrefs());
   }
@@ -131,7 +126,6 @@ Shell* Shell::CreateShell(std::unique_ptr<WebContents> web_contents,
   WebContents* raw_web_contents = web_contents.get();
   Shell* shell = new Shell(std::move(web_contents), should_set_delegate);
   g_platform->CreatePlatformWindow(shell, initial_size);
-  g_platform->SetContents(shell);
 
   // Note: Do not make RenderFrameHost or RenderViewHost specific state changes
   // here, because they will be forgotten after a cross-process navigation. Use
@@ -148,9 +142,8 @@ Shell* Shell::CreateShell(std::unique_ptr<WebContents> web_contents,
             switches::kForceWebRtcIPHandlingPolicy);
   }
 
-  WebTestControlHost* web_test_control_host = WebTestControlHost::Get();
-  if (web_test_control_host)
-    web_test_control_host->DidOpenNewWindowOrTab(shell->web_contents());
+  g_platform->SetContents(shell);
+  g_platform->DidCreateOrAttachWebContents(shell, raw_web_contents);
 
   return shell;
 }
@@ -367,7 +360,7 @@ gfx::NativeWindow Shell::window() {
 }
 #endif
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 void Shell::ActionPerformed(int control) {
   switch (control) {
     case IDC_NAV_BACK:
@@ -532,23 +525,17 @@ void Shell::NavigationStateChanged(WebContents* source,
 
 JavaScriptDialogManager* Shell::GetJavaScriptDialogManager(
     WebContents* source) {
-  if (!dialog_manager_) {
-    WebTestControlHost* web_test_control_host = WebTestControlHost::Get();
-    if (web_test_control_host)
-      dialog_manager_ = web_test_control_host->CreateJavaScriptDialogManager();
-    else
-      dialog_manager_ = std::make_unique<ShellJavaScriptDialogManager>();
-  }
+  if (!dialog_manager_)
+    dialog_manager_ = g_platform->CreateJavaScriptDialogManager(this);
+  if (!dialog_manager_)
+    dialog_manager_ = std::make_unique<ShellJavaScriptDialogManager>();
   return dialog_manager_.get();
 }
 
 std::unique_ptr<BluetoothChooser> Shell::RunBluetoothChooser(
     RenderFrameHost* frame,
     const BluetoothChooser::EventHandler& event_handler) {
-  WebTestControlHost* web_test_control_host = WebTestControlHost::Get();
-  if (web_test_control_host)
-    return web_test_control_host->RunBluetoothChooser(frame, event_handler);
-  return nullptr;
+  return g_platform->RunBluetoothChooser(this, frame, event_handler);
 }
 
 class AlwaysAllowBluetoothScanning : public BluetoothScanningPrompt {
@@ -564,7 +551,11 @@ std::unique_ptr<BluetoothScanningPrompt> Shell::ShowBluetoothScanningPrompt(
   return std::make_unique<AlwaysAllowBluetoothScanning>(event_handler);
 }
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
+void Shell::DidNavigateMainFramePostCommit(WebContents* contents) {
+  g_platform->DidNavigateMainFramePostCommit(this, contents);
+}
+
 bool Shell::HandleKeyboardEvent(WebContents* source,
                                 const NativeWebKeyboardEvent& event) {
   return g_platform->HandleKeyboardEvent(this, source, event);
@@ -580,22 +571,19 @@ bool Shell::DidAddMessageToConsole(WebContents* source,
 }
 
 void Shell::PortalWebContentsCreated(WebContents* portal_web_contents) {
-  WebTestControlHost* web_test_control_host = WebTestControlHost::Get();
-  if (web_test_control_host)
-    web_test_control_host->DidOpenNewWindowOrTab(portal_web_contents);
+  g_platform->DidCreateOrAttachWebContents(this, portal_web_contents);
 }
 
 void Shell::RendererUnresponsive(
     WebContents* source,
     RenderWidgetHost* render_widget_host,
     base::RepeatingClosure hang_monitor_restarter) {
-  WebTestControlHost* web_test_control_host = WebTestControlHost::Get();
-  if (web_test_control_host)
-    web_test_control_host->RendererUnresponsive();
+  LOG(WARNING) << "renderer unresponsive";
 }
 
 void Shell::ActivateContents(WebContents* contents) {
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
+  // TODO(danakj): Move this to ShellPlatformDelegate.
   contents->Focus();
 #else
   // Mac headless mode is quite different than other platforms. Normally
@@ -612,11 +600,6 @@ std::unique_ptr<WebContents> Shell::ActivatePortalWebContents(
   DCHECK_EQ(predecessor_contents, web_contents_.get());
   portal_contents->SetDelegate(this);
   web_contents_->SetDelegate(nullptr);
-  for (auto* shell_devtools_bindings :
-       ShellDevToolsBindings::GetInstancesForWebContents(
-           predecessor_contents)) {
-    shell_devtools_bindings->UpdateInspectedWebContents(portal_contents.get());
-  }
   std::swap(web_contents_, portal_contents);
   g_platform->SetContents(this);
   g_platform->SetAddressBarURL(this, web_contents_->GetVisibleURL());
@@ -624,19 +607,42 @@ std::unique_ptr<WebContents> Shell::ActivatePortalWebContents(
   return portal_contents;
 }
 
+namespace {
+class PendingCallback : public base::RefCounted<PendingCallback> {
+ public:
+  explicit PendingCallback(base::OnceCallback<void()> cb)
+      : callback_(std::move(cb)) {}
+
+ private:
+  friend class base::RefCounted<PendingCallback>;
+  ~PendingCallback() { std::move(callback_).Run(); }
+  base::OnceCallback<void()> callback_;
+};
+}  // namespace
+
+void Shell::UpdateInspectedWebContentsIfNecessary(
+    content::WebContents* old_contents,
+    content::WebContents* new_contents,
+    base::OnceCallback<void()> callback) {
+  scoped_refptr<PendingCallback> pending_callback =
+      base::MakeRefCounted<PendingCallback>(std::move(callback));
+  for (auto* shell_devtools_bindings :
+       ShellDevToolsBindings::GetInstancesForWebContents(old_contents)) {
+    shell_devtools_bindings->UpdateInspectedWebContents(
+        new_contents,
+        base::BindOnce(base::DoNothing::Once<scoped_refptr<PendingCallback>>(),
+                       pending_callback));
+  }
+}
+
 bool Shell::ShouldAllowRunningInsecureContent(WebContents* web_contents,
                                               bool allowed_per_prefs,
                                               const url::Origin& origin,
                                               const GURL& resource_url) {
-  bool allowed_by_test = false;
-  WebTestControlHost* web_test_control_host = WebTestControlHost::Get();
-  if (web_test_control_host) {
-    const base::DictionaryValue& test_flags =
-        web_test_control_host->accumulated_web_test_runtime_flags_changes();
-    test_flags.GetBoolean("running_insecure_content_allowed", &allowed_by_test);
-  }
+  if (allowed_per_prefs)
+    return true;
 
-  return allowed_per_prefs || allowed_by_test;
+  return g_platform->ShouldAllowRunningInsecureContent(this);
 }
 
 PictureInPictureResult Shell::EnterPictureInPicture(

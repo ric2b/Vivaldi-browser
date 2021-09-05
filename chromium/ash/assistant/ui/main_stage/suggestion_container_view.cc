@@ -18,9 +18,11 @@
 #include "ash/assistant/ui/main_stage/element_animator.h"
 #include "ash/assistant/util/animation_util.h"
 #include "ash/assistant/util/assistant_util.h"
+#include "ash/public/cpp/assistant/assistant_state.h"
 #include "ash/public/cpp/assistant/controller/assistant_suggestions_controller.h"
 #include "ash/public/cpp/assistant/controller/assistant_ui_controller.h"
 #include "base/bind.h"
+#include "base/metrics/histogram_functions.h"
 #include "ui/compositor/callback_layer_animation_observer.h"
 #include "ui/compositor/layer_animation_element.h"
 #include "ui/views/layout/box_layout.h"
@@ -54,13 +56,19 @@ class SuggestionChipAnimator : public ElementAnimator {
   ~SuggestionChipAnimator() override = default;
 
   void AnimateIn(ui::CallbackLayerAnimationObserver* observer) override {
-    StartLayerAnimationSequence(layer()->GetAnimator(),
-                                CreateAnimateInAnimation(), observer);
+    StartLayerAnimationSequence(
+        layer()->GetAnimator(), CreateAnimateInAnimation(), observer,
+        base::BindRepeating<void(const std::string&, int)>(
+            base::UmaHistogramPercentage,
+            assistant::ui::kAssistantSuggestionChipHistogram));
   }
 
   void AnimateOut(ui::CallbackLayerAnimationObserver* observer) override {
-    StartLayerAnimationSequence(layer()->GetAnimator(),
-                                CreateAnimateOutAnimation(), observer);
+    StartLayerAnimationSequence(
+        layer()->GetAnimator(), CreateAnimateOutAnimation(), observer,
+        base::BindRepeating<void(const std::string&, int)>(
+            base::UmaHistogramPercentage,
+            assistant::ui::kAssistantSuggestionChipHistogram));
   }
 
   void FadeOut(ui::CallbackLayerAnimationObserver* observer) override {
@@ -73,9 +81,8 @@ class SuggestionChipAnimator : public ElementAnimator {
   bool IsSelectedChip() const { return view() == parent_->selected_chip(); }
 
   ui::LayerAnimationSequence* CreateAnimateInAnimation() const {
-    return CreateLayerAnimationSequence(
-        CreateOpacityElement(1.f, kChipFadeInDuration,
-                             gfx::Tween::Type::FAST_OUT_SLOW_IN));
+    return CreateLayerAnimationSequence(CreateOpacityElement(
+        1.f, kChipFadeInDuration, gfx::Tween::Type::FAST_OUT_SLOW_IN));
   }
 
   ui::LayerAnimationSequence* CreateAnimateOutAnimation() const {
@@ -163,7 +170,7 @@ void SuggestionContainerView::OnConversationStartersChanged(
     const std::vector<AssistantSuggestion>& conversation_starters) {
   // We don't show conversation starters when showing onboarding since the
   // onboarding experience already provides the user w/ suggestions.
-  if (assistant::util::ShouldShowOnboarding())
+  if (delegate()->ShouldShowOnboarding())
     return;
 
   // If we've committed a query we should ignore changes to the cache of

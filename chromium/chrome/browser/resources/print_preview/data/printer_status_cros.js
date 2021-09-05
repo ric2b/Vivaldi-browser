@@ -8,23 +8,22 @@
  *  @enum {number}
  */
 export const PrinterStatusReason = {
-  CONNECTING_TO_DEVICE: 0,
-  DEVICE_ERROR: 1,
-  DOOR_OPEN: 2,
-  LOW_ON_INK: 3,
-  LOW_ON_PAPER: 4,
-  NO_ERROR: 5,
-  OUT_OF_INK: 6,
-  OUT_OF_PAPER: 7,
-  OUTPUT_ALMOST_FULL: 8,
-  OUTPUT_FULL: 9,
-  PAPER_JAM: 10,
-  PAUSED: 11,
-  PRINTER_QUEUE_FULL: 12,
-  PRINTER_UNREACHABLE: 13,
-  STOPPED: 14,
-  TRAY_MISSING: 15,
-  UNKNOWN_REASON: 16,
+  DEVICE_ERROR: 0,
+  DOOR_OPEN: 1,
+  LOW_ON_INK: 2,
+  LOW_ON_PAPER: 3,
+  NO_ERROR: 4,
+  OUT_OF_INK: 5,
+  OUT_OF_PAPER: 6,
+  OUTPUT_ALMOST_FULL: 7,
+  OUTPUT_FULL: 8,
+  PAPER_JAM: 9,
+  PAUSED: 10,
+  PRINTER_QUEUE_FULL: 11,
+  PRINTER_UNREACHABLE: 12,
+  STOPPED: 13,
+  TRAY_MISSING: 14,
+  UNKNOWN_REASON: 15,
 };
 
 /**
@@ -33,7 +32,7 @@ export const PrinterStatusReason = {
  *  @enum {number}
  */
 export const PrinterStatusSeverity = {
-  UNKOWN_SEVERITY: 0,
+  UNKNOWN_SEVERITY: 0,
   REPORT: 1,
   WARNING: 2,
   ERROR: 3,
@@ -54,3 +53,21 @@ export const PrinterStatusSeverity = {
  * }}
  */
 export let PrinterStatus;
+
+/** @const {!Map<!PrinterStatusReason, string>} */
+export const ERROR_STRING_KEY_MAP = new Map([
+  [PrinterStatusReason.DEVICE_ERROR, 'printerStatusDeviceError'],
+  [PrinterStatusReason.DOOR_OPEN, 'printerStatusDoorOpen'],
+  [PrinterStatusReason.LOW_ON_INK, 'printerStatusLowOnInk'],
+  [PrinterStatusReason.LOW_ON_PAPER, 'printerStatusLowOnPaper'],
+  [PrinterStatusReason.OUT_OF_INK, 'printerStatusOutOfInk'],
+  [PrinterStatusReason.OUT_OF_PAPER, 'printerStatusOutOfPaper'],
+  [PrinterStatusReason.OUTPUT_ALMOST_FULL, 'printerStatusOutputAlmostFull'],
+  [PrinterStatusReason.OUTPUT_FULL, 'printerStatusOutputFull'],
+  [PrinterStatusReason.PAPER_JAM, 'printerStatusPaperJam'],
+  [PrinterStatusReason.PAUSED, 'printerStatusPaused'],
+  [PrinterStatusReason.PRINTER_QUEUE_FULL, 'printerStatusPrinterQueueFull'],
+  [PrinterStatusReason.PRINTER_UNREACHABLE, 'printerStatusPrinterUnreachable'],
+  [PrinterStatusReason.STOPPED, 'printerStatusStopped'],
+  [PrinterStatusReason.TRAY_MISSING, 'printerStatusTrayMissing'],
+]);

@@ -18,7 +18,6 @@ import {DragManager, DragManagerDelegate} from './drag_manager.js';
 import {isTabElement, TabElement} from './tab.js';
 import {isTabGroupElement, TabGroupElement} from './tab_group.js';
 import {TabStripEmbedderProxy, TabStripEmbedderProxyImpl} from './tab_strip_embedder_proxy.js';
-import {tabStripOptions} from './tab_strip_options.js';
 import {TabData, TabGroupVisualData, TabsApiProxy, TabsApiProxyImpl} from './tabs_api_proxy.js';
 
 /**
@@ -244,16 +243,6 @@ export class TabListElement extends CustomElement {
 
     const dragManager = new DragManager(this);
     dragManager.startObserving();
-
-    if (loadTimeData.getBoolean('showDemoOptions')) {
-      this.$('#demoOptions').style.display = 'block';
-
-      const autoCloseCheckbox = this.$('#autoCloseCheckbox');
-      autoCloseCheckbox.checked = tabStripOptions.autoCloseEnabled;
-      autoCloseCheckbox.addEventListener('change', () => {
-        tabStripOptions.autoCloseEnabled = autoCloseCheckbox.checked;
-      });
-    }
   }
 
   /**
@@ -369,9 +358,6 @@ export class TabListElement extends CustomElement {
           'tab-group-visuals-changed',
           (groupId, visualData) =>
               this.onTabGroupVisualsChanged_(groupId, visualData));
-      this.addWebUIListener_(
-          'tab-group-id-replaced',
-          (oldId, newId) => this.onTabGroupIdReplaced_(oldId, newId));
     });
   }
 
@@ -598,18 +584,6 @@ export class TabListElement extends CustomElement {
       return;
     }
     this.placeTabGroupElement(tabGroupElement, index);
-  }
-
-  /**
-   * @param {string} oldId
-   * @param {string} newId
-   * @private
-   */
-  onTabGroupIdReplaced_(oldId, newId) {
-    const tabGroupElement = this.findTabGroupElement_(oldId);
-    if (tabGroupElement) {
-      tabGroupElement.dataset.groupId = newId;
-    }
   }
 
   /**

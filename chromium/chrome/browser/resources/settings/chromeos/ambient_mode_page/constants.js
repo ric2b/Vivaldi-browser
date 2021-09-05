@@ -13,12 +13,43 @@
   ART_GALLERY: 1,
 };
 
+/** @enum {string} */
+/* #export */ const AmbientModeTemperatureUnit = {
+  UNKNOWN: 'unknown',
+  FAHRENHEIT: 'fahrenheit',
+  CELSIUS: 'celsius',
+};
+
 /**
- * Settings containing topic source and the photos containers.
+ * Item of AmbientModeTopicSource.
  *
  * @typedef {{
+ *   topicSource: AmbientModeTopicSource,
+ *   hasGooglePhotosAlbums: boolean,
+ * }}
+ */
+/* #export */ let TopicSourceItem;
+
+/**
+ * Album metadata for UI.
+ *
+ * @typedef {{
+ *   topicSource: AmbientModeTopicSource,
+ *   albumId: string,
+ *   checked: boolean,
+ *   description: string,
+ *   title: string,
+ *   url: string,
+ * }}
+ */
+/* #export */ let AmbientModeAlbum;
+
+/**
+ * Settings containing topic source and the albums.
+ *
+ * @typedef {{
+ *   albums: !Array<!AmbientModeAlbum>,
  *   topicSource: !AmbientModeTopicSource,
- *   topicContainers: !Array,
  * }}
  */
 /* #export */ let AmbientModeSettings;

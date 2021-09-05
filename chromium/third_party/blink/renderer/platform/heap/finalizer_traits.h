@@ -44,7 +44,7 @@ struct FinalizerTraitImpl<T, true> {
 // destructor present, the object is always finalized through its leaf type. In
 // other words: there is no finalization through a base pointer.
 #pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdelete-non-abstract-non-virtual-dtor"
+#pragma GCC diagnostic ignored "-Wdelete-non-virtual-dtor"
       static_cast<T*>(obj)->~T();
 #pragma GCC diagnostic pop
     }

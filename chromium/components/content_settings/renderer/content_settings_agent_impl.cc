@@ -11,15 +11,12 @@
 #include "base/feature_list.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
-#include "components/client_hints/common/client_hints.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings.mojom.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/content_settings/core/common/content_settings_utils.h"
 #include "content/public/child/child_thread.h"
-#include "content/public/common/client_hints.mojom.h"
 #include "content/public/common/origin_util.h"
-#include "content/public/common/previews_state.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/renderer/document_state.h"
 #include "content/public/renderer/render_frame.h"
@@ -27,8 +24,8 @@
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_registry.h"
 #include "third_party/blink/public/common/browser_interface_broker_proxy.h"
+#include "third_party/blink/public/common/loader/previews_state.h"
 #include "third_party/blink/public/platform/url_conversion.h"
-#include "third_party/blink/public/platform/web_client_hints_type.h"
 #include "third_party/blink/public/platform/web_security_origin.h"
 #include "third_party/blink/public/platform/web_url.h"
 #include "third_party/blink/public/web/web_document.h"
@@ -64,7 +61,7 @@ GURL GetOriginOrURL(const WebFrame* frame) {
 }
 
 bool IsScriptDisabledForPreview(content::RenderFrame* render_frame) {
-  return render_frame->GetPreviewsState() & content::NOSCRIPT_ON;
+  return render_frame->GetPreviewsState() & blink::PreviewsTypes::NOSCRIPT_ON;
 }
 
 bool IsFrameWithOpaqueOrigin(WebFrame* frame) {
@@ -152,8 +149,6 @@ ContentSettingsAgentImpl::GetContentSettingsManager() {
 void ContentSettingsAgentImpl::SetContentSettingRules(
     const RendererContentSettingRules* content_setting_rules) {
   content_setting_rules_ = content_setting_rules;
-  UMA_HISTOGRAM_COUNTS_1M("ClientHints.CountRulesReceived",
-                          content_setting_rules_->client_hints_rules.size());
 }
 
 const RendererContentSettingRules*
@@ -434,65 +429,6 @@ void ContentSettingsAgentImpl::PassiveInsecureContentFound(
   delegate_->PassiveInsecureContentFound(resource_url);
 }
 
-void ContentSettingsAgentImpl::PersistClientHints(
-    const blink::WebEnabledClientHints& enabled_client_hints,
-    base::TimeDelta duration,
-    const blink::WebURL& url) {
-  if (duration <= base::TimeDelta())
-    return;
-
-  const GURL primary_url(url);
-  const url::Origin primary_origin = url::Origin::Create(primary_url);
-  if (!content::IsOriginSecure(primary_url))
-    return;
-
-  std::vector<::network::mojom::WebClientHintsType> client_hints;
-  static constexpr size_t kWebClientHintsCount =
-      static_cast<size_t>(network::mojom::WebClientHintsType::kMaxValue) + 1;
-  client_hints.reserve(kWebClientHintsCount);
-
-  for (size_t i = 0; i < kWebClientHintsCount; ++i) {
-    if (enabled_client_hints.IsEnabled(
-            static_cast<network::mojom::WebClientHintsType>(i))) {
-      client_hints.push_back(
-          static_cast<network::mojom::WebClientHintsType>(i));
-    }
-  }
-  size_t update_count = client_hints.size();
-
-  UMA_HISTOGRAM_CUSTOM_TIMES(
-      "ClientHints.PersistDuration", duration, base::TimeDelta::FromSeconds(1),
-      // TODO(crbug.com/949034): Rename and fix this histogram to have some
-      // intended max value. We throw away the 32 most-significant bits of the
-      // 64-bit time delta in milliseconds. Before it happened silently in
-      // histogram.cc, now it is explicit here. The previous value of 365 days
-      // effectively turns into roughly 17 days when getting cast to int.
-      base::TimeDelta::FromMilliseconds(
-          static_cast<int>(base::TimeDelta::FromDays(365).InMilliseconds())),
-      100);
-
-  UMA_HISTOGRAM_COUNTS_100("ClientHints.UpdateSize", update_count);
-
-  // Notify the embedder.
-  mojo::AssociatedRemote<client_hints::mojom::ClientHints> host_observer;
-  render_frame()->GetRemoteAssociatedInterfaces()->GetInterface(&host_observer);
-  host_observer->PersistClientHints(primary_origin, std::move(client_hints),
-                                    duration);
-}
-
-void ContentSettingsAgentImpl::GetAllowedClientHintsFromSource(
-    const blink::WebURL& url,
-    blink::WebEnabledClientHints* client_hints) const {
-  if (!content_setting_rules_)
-    return;
-
-  if (content_setting_rules_->client_hints_rules.empty())
-    return;
-
-  client_hints::GetAllowedClientHintsFromSource(
-      url, content_setting_rules_->client_hints_rules, client_hints);
-}
-
 bool ContentSettingsAgentImpl::ShouldAutoupgradeMixedContent() {
   if (mixed_content_autoupgrades_disabled_)
     return false;
@@ -535,7 +471,7 @@ bool ContentSettingsAgentImpl::IsWhitelistedForContentSettings() const {
   if (document_url.GetString() == content::kUnreachableWebDataURL)
     return true;
 
-  if (origin.IsOpaque())
+  if (origin.IsNull() || origin.IsOpaque())
     return false;  // Uninitialized document?
 
   blink::WebString protocol = origin.Protocol();

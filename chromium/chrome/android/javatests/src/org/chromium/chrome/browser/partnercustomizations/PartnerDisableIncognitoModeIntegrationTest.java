@@ -14,6 +14,7 @@ import android.widget.PopupMenu;
 
 import androidx.test.filters.MediumTest;
 
+import org.hamcrest.Matchers;
 import org.junit.Assert;
 import org.junit.Rule;
 import org.junit.Test;
@@ -77,17 +78,14 @@ public class PartnerDisableIncognitoModeIntegrationTest {
     }
 
     private void waitForParentalControlsEnabledState(final boolean parentalControlsEnabled) {
-        CriteriaHelper.pollUiThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                // areParentalControlsEnabled is updated on a background thread, so we
-                // also wait on the isIncognitoModeEnabled to ensure the updates on the
-                // UI thread have also triggered.
-                boolean retVal = parentalControlsEnabled
-                        == PartnerBrowserCustomizations.isIncognitoDisabled();
-                retVal &= parentalControlsEnabled != IncognitoUtils.isIncognitoModeEnabled();
-                return retVal;
-            }
+        CriteriaHelper.pollUiThread(() -> {
+            // areParentalControlsEnabled is updated on a background thread, so we
+            // also wait on the isIncognitoModeEnabled to ensure the updates on the
+            // UI thread have also triggered.
+            Criteria.checkThat(PartnerBrowserCustomizations.isIncognitoDisabled(),
+                    Matchers.is(parentalControlsEnabled));
+            Criteria.checkThat(
+                    IncognitoUtils.isIncognitoModeEnabled(), Matchers.not(parentalControlsEnabled));
         });
     }
 
@@ -151,8 +149,10 @@ public class PartnerDisableIncognitoModeIntegrationTest {
             toggleActivityForegroundState();
             waitForParentalControlsEnabledState(true);
 
-            CriteriaHelper.pollInstrumentationThread(
-                    Criteria.equals(0, () -> mActivityTestRule.tabsCount(true /* incognito */)));
+            CriteriaHelper.pollInstrumentationThread(() -> {
+                Criteria.checkThat(
+                        mActivityTestRule.tabsCount(true /* incognito */), Matchers.is(0));
+            });
         } finally {
             testServer.stopAndDestroyServer();
         }

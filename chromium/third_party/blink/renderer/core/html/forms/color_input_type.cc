@@ -202,18 +202,16 @@ void ColorInputType::ValueAttributeChanged() {
 }
 
 void ColorInputType::DidChooseColor(const Color& color) {
-  if (GetElement().IsDisabledFormControl() || color == ValueAsColor())
+  if (will_be_destroyed_ || GetElement().IsDisabledFormControl() ||
+      color == ValueAsColor())
     return;
   EventQueueScope scope;
   GetElement().SetValueFromRenderer(color.Serialized());
   GetElement().UpdateView();
-  if (!LayoutTheme::GetTheme().IsModalColorChooser())
-    GetElement().DispatchFormControlChangeEvent();
 }
 
 void ColorInputType::DidEndChooser() {
-  if (LayoutTheme::GetTheme().IsModalColorChooser())
-    GetElement().EnqueueChangeEvent();
+  GetElement().EnqueueChangeEvent();
   chooser_.Clear();
   if (::features::IsFormControlsRefreshEnabled() &&
       GetElement().GetLayoutObject()) {

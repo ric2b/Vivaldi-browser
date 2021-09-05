@@ -2,10 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// #import 'chrome://resources/mojo/mojo/public/js/mojo_bindings_lite.js'
+// #import 'chrome://resources/mojo/mojo/public/js/mojo_bindings_lite.js';
 // #import '../constants/routes.mojom-lite.js';
 
-// #import {OsSettingsRoutes} from './os_settings_routes.m.js'
+// #import {OsSettingsRoutes} from './os_settings_routes.m.js';
 // #import {Route, Router} from '../router.m.js';
 // #import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 
@@ -134,8 +134,6 @@ cr.define('settings', function() {
     r.EXTERNAL_STORAGE_PREFERENCES = createSubpage(
         r.STORAGE, mojom.EXTERNAL_STORAGE_SUBPAGE_PATH,
         Subpage.kExternalStorage);
-    r.DOWNLOADED_CONTENT =
-        createSubpage(r.STORAGE, mojom.DLC_SUBPAGE_PATH, Subpage.kStorage);
     r.POWER = createSubpage(r.DEVICE, mojom.POWER_SUBPAGE_PATH, Subpage.kPower);
 
     // Personalization section.
@@ -149,9 +147,12 @@ cr.define('settings', function() {
       r.AMBIENT_MODE = createSubpage(
           r.PERSONALIZATION, mojom.AMBIENT_MODE_SUBPAGE_PATH,
           Subpage.kAmbientMode);
+      // Note: AMBIENT_MODE_PHOTOS is a special case because it includes several
+      // subpages, one per topic source. Default to
+      // kAmbientModeGooglePhotosAlbum subpage.
       r.AMBIENT_MODE_PHOTOS = createSubpage(
-          r.AMBIENT_MODE, mojom.AMBIENT_MODE_PHOTOS_SUBPAGE_PATH,
-          Subpage.kAmbientModePhotos);
+          r.AMBIENT_MODE, 'ambientMode/photos',
+          Subpage.kAmbientModeGooglePhotosAlbum);
     }
 
     // Search and Assistant section.
@@ -223,17 +224,25 @@ cr.define('settings', function() {
     r.OS_LANGUAGES = createSection(
         r.ADVANCED, mojom.LANGUAGES_AND_INPUT_SECTION_PATH,
         Section.kLanguagesAndInput);
-    r.OS_LANGUAGES_DETAILS = createSubpage(
-        r.OS_LANGUAGES, mojom.LANGUAGES_AND_INPUT_DETAILS_SUBPAGE_PATH,
-        Subpage.kLanguagesAndInputDetails);
-    r.OS_LANGUAGES_INPUT_METHODS = createSubpage(
-        r.OS_LANGUAGES_DETAILS, mojom.MANAGE_INPUT_METHODS_SUBPAGE_PATH,
-        Subpage.kManageInputMethods);
+    if (loadTimeData.getBoolean('enableLanguageSettingsV2')) {
+      r.OS_LANGUAGES_LANGUAGES = createSubpage(
+          r.OS_LANGUAGES, mojom.LANGUAGES_SUBPAGE_PATH, Subpage.kLanguages);
+      r.OS_LANGUAGES_INPUT = createSubpage(
+          r.OS_LANGUAGES, mojom.INPUT_SUBPAGE_PATH, Subpage.kInput);
+    } else {
+      r.OS_LANGUAGES_DETAILS = createSubpage(
+          r.OS_LANGUAGES, mojom.LANGUAGES_AND_INPUT_DETAILS_SUBPAGE_PATH,
+          Subpage.kLanguagesAndInputDetails);
+      r.OS_LANGUAGES_INPUT_METHODS = createSubpage(
+          r.OS_LANGUAGES_DETAILS, mojom.MANAGE_INPUT_METHODS_SUBPAGE_PATH,
+          Subpage.kManageInputMethods);
+      r.OS_LANGUAGES_INPUT_METHOD_OPTIONS = createSubpage(
+          r.OS_LANGUAGES_DETAILS, mojom.INPUT_METHOD_OPTIONS_SUBPAGE_PATH,
+          Subpage.kInputMethodOptions);
+    }
     r.OS_LANGUAGES_SMART_INPUTS = createSubpage(
         r.OS_LANGUAGES, mojom.SMART_INPUTS_SUBPAGE_PATH, Subpage.kSmartInputs);
-    r.OS_LANGUAGES_INPUT_METHOD_OPTIONS = createSubpage(
-        r.OS_LANGUAGES_DETAILS, mojom.INPUT_METHOD_OPTIONS_SUBPAGE_PATH,
-        Subpage.kInputMethodOptions);
+
 
     // Files section.
     if (!loadTimeData.getBoolean('isGuest')) {

@@ -31,7 +31,6 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
-import org.chromium.base.test.util.DisabledTest;
 import org.chromium.chrome.autofill_assistant.R;
 import org.chromium.chrome.browser.autofill_assistant.proto.ActionProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.ChipProto;
@@ -44,6 +43,7 @@ import org.chromium.chrome.browser.autofill_assistant.proto.StopProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.SupportedScriptProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.SupportedScriptProto.PresentationProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.TellProto;
+import org.chromium.chrome.browser.autofill_assistant.proto.WaitForNavigationProto;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
@@ -123,9 +123,11 @@ public class AutofillAssistantNavigationIntegrationTest {
         onView(withId(org.chromium.chrome.R.id.url_bar))
                 .perform(click(), typeText(getURL(TEST_PAGE_B)), pressImeActionButton());
         waitUntilViewMatchesCondition(withText(containsString("Sorry")), isCompletelyDisplayed());
-        waitUntil(()
-                          -> mTestRule.getActivity().getActivityTab().getUrl().getSpec().equals(
-                                  getURL(TEST_PAGE_B)));
+        waitUntil(
+                ()
+                        -> ChromeTabUtils.getUrlOnUiThread(mTestRule.getActivity().getActivityTab())
+                                   .getSpec()
+                                   .equals(getURL(TEST_PAGE_B)));
     }
 
     @Test
@@ -157,9 +159,11 @@ public class AutofillAssistantNavigationIntegrationTest {
         startAutofillAssistantOnTab(TEST_PAGE_A);
 
         waitUntilViewMatchesCondition(withText("Prompt"), isCompletelyDisplayed());
-        waitUntil(()
-                          -> mTestRule.getActivity().getActivityTab().getUrl().getSpec().equals(
-                                  getURL(TEST_PAGE_B)));
+        waitUntil(
+                ()
+                        -> ChromeTabUtils.getUrlOnUiThread(mTestRule.getActivity().getActivityTab())
+                                   .getSpec()
+                                   .equals(getURL(TEST_PAGE_B)));
     }
 
     @Test
@@ -192,14 +196,15 @@ public class AutofillAssistantNavigationIntegrationTest {
         startAutofillAssistantOnTab(TEST_PAGE_A);
 
         waitUntilViewMatchesCondition(withText("Prompt"), isCompletelyDisplayed());
-        waitUntil(()
-                          -> mTestRule.getActivity().getActivityTab().getUrl().getSpec().equals(
-                                  getURL(TEST_PAGE_B)));
+        waitUntil(
+                ()
+                        -> ChromeTabUtils.getUrlOnUiThread(mTestRule.getActivity().getActivityTab())
+                                   .getSpec()
+                                   .equals(getURL(TEST_PAGE_B)));
     }
 
     @Test
     @MediumTest
-    @DisabledTest(message = "Flaky - https://crbug.com/1104900")
     public void navigateActionDoesNotCauseError() {
         // Push something to navigation stack so we can use back and forth.
         ChromeTabUtils.loadUrlOnUiThread(
@@ -207,23 +212,37 @@ public class AutofillAssistantNavigationIntegrationTest {
 
         ArrayList<ActionProto> list = new ArrayList<>();
         list.add((ActionProto) ActionProto.newBuilder()
+                         .setPrompt(PromptProto.newBuilder().setMessage("Page B").addChoices(
+                                 Choice.newBuilder().setChip(
+                                         ChipProto.newBuilder().setText("Navigate"))))
+                         .build());
+        list.add((ActionProto) ActionProto.newBuilder()
                          .setNavigate(NavigateProto.newBuilder().setUrl(getURL(TEST_PAGE_A)))
+                         .build());
+        list.add((ActionProto) ActionProto.newBuilder()
+                         .setWaitForNavigation(WaitForNavigationProto.newBuilder())
                          .build());
         list.add((ActionProto) ActionProto.newBuilder()
                          .setPrompt(PromptProto.newBuilder().setMessage("Page A").addChoices(
                                  Choice.newBuilder().setChip(
-                                         ChipProto.newBuilder().setText("Next"))))
+                                         ChipProto.newBuilder().setText("Go back"))))
                          .build());
         list.add((ActionProto) ActionProto.newBuilder()
                          .setNavigate(NavigateProto.newBuilder().setGoBackward(true))
                          .build());
         list.add((ActionProto) ActionProto.newBuilder()
+                         .setWaitForNavigation(WaitForNavigationProto.newBuilder())
+                         .build());
+        list.add((ActionProto) ActionProto.newBuilder()
                          .setPrompt(PromptProto.newBuilder().setMessage("Page B").addChoices(
                                  Choice.newBuilder().setChip(
-                                         ChipProto.newBuilder().setText("Next"))))
+                                         ChipProto.newBuilder().setText("Go forward"))))
                          .build());
         list.add((ActionProto) ActionProto.newBuilder()
                          .setNavigate(NavigateProto.newBuilder().setGoForward(true))
+                         .build());
+        list.add((ActionProto) ActionProto.newBuilder()
+                         .setWaitForNavigation(WaitForNavigationProto.newBuilder())
                          .build());
         list.add((ActionProto) ActionProto.newBuilder()
                          .setPrompt(PromptProto.newBuilder().setMessage("Page A").addChoices(
@@ -240,22 +259,32 @@ public class AutofillAssistantNavigationIntegrationTest {
         setupScripts(script);
         startAutofillAssistantOnTab(TEST_PAGE_B);
 
+        waitUntilViewMatchesCondition(withText("Page B"), isCompletelyDisplayed());
+        onView(withText("Navigate")).perform(click());
+
         waitUntilViewMatchesCondition(withText("Page A"), isCompletelyDisplayed());
-        waitUntil(()
-                          -> mTestRule.getActivity().getActivityTab().getUrl().getSpec().equals(
-                                  getURL(TEST_PAGE_A)));
-        onView(withText("Next")).perform(click());
+
+        waitUntil(
+                ()
+                        -> ChromeTabUtils.getUrlOnUiThread(mTestRule.getActivity().getActivityTab())
+                                   .getSpec()
+                                   .equals(getURL(TEST_PAGE_A)));
+        onView(withText("Go back")).perform(click());
 
         waitUntilViewMatchesCondition(withText("Page B"), isCompletelyDisplayed());
-        waitUntil(()
-                          -> mTestRule.getActivity().getActivityTab().getUrl().getSpec().equals(
-                                  getURL(TEST_PAGE_B)));
-        onView(withText("Next")).perform(click());
+        waitUntil(
+                ()
+                        -> ChromeTabUtils.getUrlOnUiThread(mTestRule.getActivity().getActivityTab())
+                                   .getSpec()
+                                   .equals(getURL(TEST_PAGE_B)));
+        onView(withText("Go forward")).perform(click());
 
         waitUntilViewMatchesCondition(withText("Page A"), isCompletelyDisplayed());
-        waitUntil(()
-                          -> mTestRule.getActivity().getActivityTab().getUrl().getSpec().equals(
-                                  getURL(TEST_PAGE_A)));
+        waitUntil(
+                ()
+                        -> ChromeTabUtils.getUrlOnUiThread(mTestRule.getActivity().getActivityTab())
+                                   .getSpec()
+                                   .equals(getURL(TEST_PAGE_A)));
     }
 
     @Test

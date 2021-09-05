@@ -2,7 +2,6 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="et">
 <translation id="1110994991967754504"><ph name="PERMISSION_NAME" /></translation>
-<translation id="1152921474424827756">Vaata aadressi <ph name="URL" /> <ph name="BEGIN_LINK" />puhverdatud koopiat<ph name="END_LINK" /></translation>
 <translation id="1158211211994409885">Host <ph name="HOST_NAME" /> sulges ootamatult ühenduse.</translation>
 <translation id="1161325031994447685">Loo WiFi-ühendus uuesti</translation>
 <translation id="1175364870820465910">Prindi...</translation>
@@ -14,9 +13,8 @@
 <translation id="1710259589646384581">OS</translation>
 <translation id="1728677426644403582">See on veebilehe lähtekood</translation>
 <translation id="1834321415901700177">See sait sisaldab kahjulikke programme</translation>
+<translation id="1916770123977586577">Muudetud seadete saidile rakendamiseks laadi lehekülg uuesti.</translation>
 <translation id="1919345977826869612">Reklaamid</translation>
-<translation id="194030505837763158">Ava <ph name="LINK" /></translation>
-<translation id="2030481566774242610">Kas mõtlesid aadressi <ph name="LINK" />?</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Kontrolli puhverserveri ja tulemüüri seadistust<ph name="END_LINK" /></translation>
 <translation id="2091887806945687916">Heli</translation>
 <translation id="2147827593068025794">Taustal sünkroonimine</translation>
@@ -47,6 +45,7 @@
     et veenduda, et puhverserver töötab. Kui sul oma teada pole vaja
     puhverserverit kasutada,
     <ph name="PLATFORM_TEXT" /></translation>
+<translation id="3226128629678568754">Lehe laadimiseks vajalike andmete taassaatmiseks vajuta uuestilaadimise nuppu.</translation>
 <translation id="3227137524299004712">Mikrofon</translation>
 <translation id="3422472998109090673">Hostiga <ph name="HOST_NAME" /> ei saa praegu ühendust.</translation>
 <translation id="3427092606871434483">Lubatud (vaikimisi)</translation>
@@ -86,7 +85,6 @@
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />Kontrolli puhverserveri aadressi<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64-bitine)</translation>
 <translation id="5287240709317226393">Näita küpsiseid</translation>
-<translation id="5431657950005405462">Faili ei leitud</translation>
 <translation id="5452270690849572955">Seda lehte saidilt <ph name="HOST_NAME" /> ei leita</translation>
 <translation id="5457113250005438886">Kehtetu</translation>
 <translation id="5492298309214877701">Sellel asutuse intranetis oleval saidil on sama URL nagu välisel veebisaidil.
@@ -138,7 +136,6 @@
 <translation id="7716147886133743102">Administraatori poolt blokeeritud</translation>
 <translation id="7716424297397655342">Seda saiti ei saa vahemälust laadida</translation>
 <translation id="7758069387465995638">Tulemüür või viirusetõrjetarkvara võis ühenduse blokeerida.</translation>
-<translation id="7802523362929240268">See on usaldusväärne sait</translation>
 <translation id="7878562273885520351">Sinu parool võib olla lekkinud</translation>
 <translation id="7951415247503192394">(32-bitine)</translation>
 <translation id="8025119109950072390">Selle saidi taga peituvad ründajad võivad üritada sind ära petta, et installiksid ohtlikku tarkvara või avaldaksid oma isiklikke andmeid (nt paroole, telefoninumbreid, krediitkaardi numbreid).</translation>

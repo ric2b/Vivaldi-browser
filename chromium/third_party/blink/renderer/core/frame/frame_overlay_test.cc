@@ -8,13 +8,14 @@
 
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/blink/public/web/web_device_emulation_params.h"
+#include "third_party/blink/public/common/widget/device_emulation_params.h"
 #include "third_party/blink/renderer/core/exported/web_view_impl.h"
 #include "third_party/blink/renderer/core/frame/frame_test_helpers.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/frame/visual_viewport.h"
 #include "third_party/blink/renderer/core/frame/web_local_frame_impl.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
+#include "third_party/blink/renderer/core/paint/compositing/paint_layer_compositor.h"
 #include "third_party/blink/renderer/platform/graphics/color.h"
 #include "third_party/blink/renderer/platform/graphics/graphics_context.h"
 #include "third_party/blink/renderer/platform/graphics/graphics_layer.h"
@@ -44,7 +45,8 @@ class SolidColorOverlay : public FrameOverlay::Delegate {
       return;
     FloatRect rect(0, 0, size.Width(), size.Height());
     DrawingRecorder recorder(graphics_context, frame_overlay,
-                             DisplayItem::kFrameOverlay);
+                             DisplayItem::kFrameOverlay,
+                             IntRect(IntPoint(), size));
     graphics_context.FillRect(rect, color_);
   }
 
@@ -107,7 +109,7 @@ TEST_P(FrameOverlayTest, AcceleratedCompositing) {
     builder.EndRecording()->Playback(&canvas);
   } else {
     auto* graphics_layer = frame_overlay->GetGraphicsLayer();
-    EXPECT_FALSE(graphics_layer->GetHitTestable());
+    EXPECT_FALSE(graphics_layer->IsHitTestable());
     EXPECT_EQ(PropertyTreeState::Root(),
               graphics_layer->GetPropertyTreeState());
     graphics_layer->Paint();
@@ -117,7 +119,7 @@ TEST_P(FrameOverlayTest, AcceleratedCompositing) {
 }
 
 TEST_P(FrameOverlayTest, DeviceEmulationScale) {
-  WebDeviceEmulationParams params;
+  DeviceEmulationParams params;
   params.scale = 1.5;
   GetWebView()->EnableDeviceEmulation(params);
   GetWebView()->MainFrameWidget()->UpdateAllLifecyclePhases(
@@ -142,11 +144,13 @@ TEST_P(FrameOverlayTest, DeviceEmulationScale) {
     EXPECT_THAT(
         paint_controller.GetDisplayItemList(),
         ElementsAre(IsSameId(frame_overlay.get(), DisplayItem::kFrameOverlay)));
+    EXPECT_EQ(IntRect(0, 0, 800, 600),
+              paint_controller.GetDisplayItemList()[0].VisualRect());
     EXPECT_THAT(
         paint_controller.PaintChunks(),
         ElementsAre(IsPaintChunk(
             0, 1, PaintChunk::Id(*frame_overlay, DisplayItem::kFrameOverlay),
-            state)));
+            state, nullptr, IntRect(0, 0, 800, 600))));
   };
 
   if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled()) {
@@ -158,7 +162,7 @@ TEST_P(FrameOverlayTest, DeviceEmulationScale) {
     check_paint_results(*paint_controller);
   } else {
     auto* graphics_layer = frame_overlay->GetGraphicsLayer();
-    EXPECT_FALSE(graphics_layer->GetHitTestable());
+    EXPECT_FALSE(graphics_layer->IsHitTestable());
     EXPECT_EQ(state, graphics_layer->GetPropertyTreeState());
     graphics_layer->Paint();
     check_paint_results(graphics_layer->GetPaintController());
@@ -198,15 +202,6 @@ TEST_P(FrameOverlayTest, LayerOrder) {
   EXPECT_EQ(parent_layer->Children()[2], frame_overlay1->GetGraphicsLayer());
   EXPECT_EQ(parent_layer, frame_overlay2->GetGraphicsLayer()->Parent());
   EXPECT_EQ(parent_layer->Children()[3], frame_overlay2->GetGraphicsLayer());
-}
-
-TEST_P(FrameOverlayTest, VisualRect) {
-  std::unique_ptr<FrameOverlay> frame_overlay = CreateSolidYellowOverlay();
-  frame_overlay->UpdatePrePaint();
-  GetWebView()->MainFrameWidget()->UpdateAllLifecyclePhases(
-      DocumentUpdateReason::kTest);
-  EXPECT_EQ(IntRect(0, 0, kViewportWidth, kViewportHeight),
-            frame_overlay->VisualRect());
 }
 
 }  // namespace

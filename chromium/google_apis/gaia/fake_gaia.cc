@@ -230,6 +230,14 @@ void FakeGaia::Initialize() {
   REGISTER_RESPONSE_HANDLER(gaia_urls->embedded_setup_chromeos_url(2),
                             HandleEmbeddedSetupChromeos);
 
+  // Handles /embedded/setup/kidsignup/chromeos GAIA call.
+  REGISTER_RESPONSE_HANDLER(gaia_urls->embedded_setup_chromeos_kid_signup_url(),
+                            HandleEmbeddedSetupChromeos);
+
+  // Handles /embedded/setup/kidsignin/chromeos GAIA call.
+  REGISTER_RESPONSE_HANDLER(gaia_urls->embedded_setup_chromeos_kid_signin_url(),
+                            HandleEmbeddedSetupChromeos);
+
   // Handles /OAuthLogin GAIA call.
   REGISTER_RESPONSE_HANDLER(
       gaia_urls->oauth1_login_url(), HandleOAuthLogin);
@@ -748,6 +756,7 @@ void FakeGaia::HandleIssueToken(const HttpRequest& request,
       response_dict.SetString("expiresIn",
                               base::NumberToString(token_info->expires_in));
       response_dict.SetString("token", token_info->token);
+      response_dict.SetString("grantedScopes", scope);
       response_dict.SetString("id_token", token_info->id_token);
       FormatOkJSONResponse(response_dict, http_response);
       return;

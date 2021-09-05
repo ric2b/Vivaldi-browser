@@ -57,21 +57,18 @@ void FakeServiceWorkerContext::CountExternalRequestsForTest(
 }
 bool FakeServiceWorkerContext::MaybeHasRegistrationForOrigin(
     const url::Origin& origin) {
-  NOTREACHED();
-  return false;
+  return registered_origins_.find(origin) != registered_origins_.end();
 }
-void FakeServiceWorkerContext::WaitForRegistrationsInitializedForTest() {
-  NOTREACHED();
-}
-void FakeServiceWorkerContext::AddRegistrationToRegisteredOriginsForTest(
-    const url::Origin& origin) {
+void FakeServiceWorkerContext::GetInstalledRegistrationOrigins(
+    base::Optional<std::string> host_filter,
+    GetInstalledRegistrationOriginsCallback callback) {
   NOTREACHED();
 }
 void FakeServiceWorkerContext::GetAllOriginsInfo(
     GetUsageInfoCallback callback) {
   NOTREACHED();
 }
-void FakeServiceWorkerContext::DeleteForOrigin(const GURL& origin,
+void FakeServiceWorkerContext::DeleteForOrigin(const url::Origin& origin,
                                                ResultCallback callback) {
   NOTREACHED();
 }
@@ -150,6 +147,11 @@ void FakeServiceWorkerContext::NotifyObserversOnNoControllees(
     const GURL& scope) {
   for (auto& observer : observers_)
     observer.OnNoControllees(version_id, scope);
+}
+
+void FakeServiceWorkerContext::AddRegistrationToRegisteredOrigins(
+    const url::Origin& origin) {
+  registered_origins_.insert(origin);
 }
 
 }  // namespace content

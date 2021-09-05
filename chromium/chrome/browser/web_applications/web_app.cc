@@ -43,6 +43,20 @@ WebApp::WebApp(const WebApp& web_app) = default;
 
 WebApp& WebApp::operator=(WebApp&& web_app) = default;
 
+const std::vector<SquareSizePx>& WebApp::downloaded_icon_sizes(
+    IconPurpose purpose) const {
+  switch (purpose) {
+    case IconPurpose::ANY:
+      return downloaded_icon_sizes_any_;
+    case IconPurpose::MONOCHROME:
+      // TODO (crbug.com/1114638): Download monochrome icons.
+      NOTREACHED();
+      return downloaded_icon_sizes_monochrome_;
+    case IconPurpose::MASKABLE:
+      return downloaded_icon_sizes_maskable_;
+  }
+}
+
 void WebApp::AddSource(Source::Type source) {
   sources_[source] = true;
 }
@@ -131,6 +145,10 @@ void WebApp::SetThemeColor(base::Optional<SkColor> theme_color) {
   theme_color_ = theme_color;
 }
 
+void WebApp::SetBackgroundColor(base::Optional<SkColor> background_color) {
+  background_color_ = background_color;
+}
+
 void WebApp::SetDisplayMode(DisplayMode display_mode) {
   DCHECK_NE(DisplayMode::kUndefined, display_mode);
   display_mode_ = display_mode;
@@ -150,6 +168,11 @@ void WebApp::SetUserDisplayMode(DisplayMode user_display_mode) {
       user_display_mode_ = DisplayMode::kStandalone;
       break;
   }
+}
+
+void WebApp::SetDisplayModeOverride(
+    std::vector<DisplayMode> display_mode_override) {
+  display_mode_override_ = std::move(display_mode_override);
 }
 
 void WebApp::SetUserPageOrdinal(syncer::StringOrdinal page_ordinal) {
@@ -177,9 +200,25 @@ void WebApp::SetIconInfos(std::vector<WebApplicationIconInfo> icon_infos) {
   icon_infos_ = std::move(icon_infos);
 }
 
-void WebApp::SetDownloadedIconSizes(std::vector<SquareSizePx> sizes) {
+void WebApp::SetDownloadedIconSizes(IconPurpose purpose,
+                                    std::vector<SquareSizePx> sizes) {
   std::sort(sizes.begin(), sizes.end());
-  downloaded_icon_sizes_ = std::move(sizes);
+  switch (purpose) {
+    case IconPurpose::ANY:
+      downloaded_icon_sizes_any_ = std::move(sizes);
+      break;
+    case IconPurpose::MONOCHROME:
+      // TODO (crbug.com/1114638): Add monochrome icons support.
+      NOTREACHED();
+      break;
+    case IconPurpose::MASKABLE:
+      downloaded_icon_sizes_maskable_ = std::move(sizes);
+      break;
+  }
+}
+
+void WebApp::SetIsGeneratedIcon(bool is_generated_icon) {
+  is_generated_icon_ = is_generated_icon;
 }
 
 void WebApp::SetFileHandlers(apps::FileHandlers file_handlers) {
@@ -191,9 +230,15 @@ void WebApp::SetAdditionalSearchTerms(
   additional_search_terms_ = std::move(additional_search_terms);
 }
 
-void WebApp::SetShortcutInfos(
-    std::vector<WebApplicationShortcutsMenuItemInfo> shortcut_infos) {
-  shortcut_infos_ = std::move(shortcut_infos);
+void WebApp::SetProtocolHandlers(
+    std::vector<apps::ProtocolHandlerInfo> handlers) {
+  protocol_handlers_ = std::move(handlers);
+}
+
+void WebApp::SetShortcutsMenuItemInfos(
+    std::vector<WebApplicationShortcutsMenuItemInfo>
+        shortcuts_menu_item_infos) {
+  shortcuts_menu_item_infos_ = std::move(shortcuts_menu_item_infos);
 }
 
 void WebApp::SetDownloadedShortcutsMenuIconsSizes(
@@ -207,6 +252,10 @@ void WebApp::SetLastLaunchTime(const base::Time& time) {
 
 void WebApp::SetInstallTime(const base::Time& time) {
   install_time_ = time;
+}
+
+void WebApp::SetRunOnOsLoginMode(RunOnOsLoginMode mode) {
+  run_on_os_login_mode_ = mode;
 }
 
 void WebApp::SetSyncFallbackData(SyncFallbackData sync_fallback_data) {
@@ -235,40 +284,50 @@ std::ostream& operator<<(std::ostream& out,
 }
 
 std::ostream& operator<<(std::ostream& out, const WebApp& app) {
-  const std::string display_mode =
-      blink::DisplayModeToString(app.display_mode_);
-  const std::string user_display_mode =
-      blink::DisplayModeToString(app.user_display_mode_);
-  const bool is_locally_installed = app.is_locally_installed_;
-  const bool is_in_sync_install = app.is_in_sync_install_;
-
   out << "app_id: " << app.app_id_ << std::endl
       << "  name: " << app.name_ << std::endl
       << "  launch_url: " << app.launch_url_ << std::endl
       << "  scope: " << app.scope_ << std::endl
       << "  theme_color: " << ColorToString(app.theme_color_) << std::endl
-      << "  display_mode: " << display_mode << std::endl
-      << "  user_display_mode: " << user_display_mode << std::endl
+      << "  background_color: " << ColorToString(app.background_color_)
+      << std::endl
+      << "  display_mode: " << blink::DisplayModeToString(app.display_mode_)
+      << std::endl
+      << "  display_override: " << app.display_mode_override_.size()
+      << std::endl;
+  for (const DisplayMode& mode : app.display_mode_override_)
+    out << "    " << blink::DisplayModeToString(mode) << std::endl;
+  out << "  user_display_mode: "
+      << blink::DisplayModeToString(app.user_display_mode_) << std::endl
       << "  user_page_ordinal: " << app.user_page_ordinal_.ToDebugString()
       << std::endl
-      << "  user_launch_ordinal_: " << app.user_launch_ordinal_.ToDebugString()
+      << "  user_launch_ordinal: " << app.user_launch_ordinal_.ToDebugString()
       << std::endl
       << "  sources: " << app.sources_.to_string() << std::endl
-      << "  is_locally_installed: " << is_locally_installed << std::endl
-      << "  is_in_sync_install: " << is_in_sync_install << std::endl
+      << "  is_locally_installed: " << app.is_locally_installed_ << std::endl
+      << "  is_in_sync_install: " << app.is_in_sync_install_ << std::endl
       << "  sync_fallback_data: " << std::endl
       << app.sync_fallback_data_ << "  description: " << app.description_
       << std::endl
       << "  last_launch_time: " << app.last_launch_time_ << std::endl
-      << "  install_time: " << app.install_time_ << std::endl;
+      << "  install_time: " << app.install_time_ << std::endl
+      << "  is_generated_icon: " << app.is_generated_icon_ << std::endl
+      << "  run_on_os_login_mode: "
+      << RunOnOsLoginModeToString(app.run_on_os_login_mode_) << std::endl;
   for (const WebApplicationIconInfo& icon : app.icon_infos_)
     out << "  icon_info: " << icon << std::endl;
-  for (SquareSizePx size : app.downloaded_icon_sizes_)
-    out << "  icon_size_on_disk: " << size << std::endl;
+  for (SquareSizePx size : app.downloaded_icon_sizes_any_)
+    out << "  downloaded_icon_sizes_any_: " << size << std::endl;
+  for (SquareSizePx size : app.downloaded_icon_sizes_maskable_)
+    out << "  downloaded_icon_sizes_maskable_: " << size << std::endl;
   for (const apps::FileHandler& file_handler : app.file_handlers_)
     out << "  file_handler: " << file_handler << std::endl;
   for (const std::string& additional_search_term : app.additional_search_terms_)
     out << "  additional_search_term: " << additional_search_term << std::endl;
+  for (const apps::ProtocolHandlerInfo& protocol_handler :
+       app.protocol_handlers_) {
+    out << "  protocol_handler: " << protocol_handler << std::endl;
+  }
 
   out << " chromeos_data: " << app.chromeos_data_.has_value() << std::endl;
   if (app.chromeos_data_.has_value())
@@ -293,22 +352,30 @@ bool operator!=(const WebApp::SyncFallbackData& sync_fallback_data1,
 bool operator==(const WebApp& app1, const WebApp& app2) {
   return std::tie(app1.app_id_, app1.sources_, app1.name_, app1.launch_url_,
                   app1.description_, app1.scope_, app1.theme_color_,
-                  app1.icon_infos_, app1.downloaded_icon_sizes_,
-                  app1.display_mode_, app1.user_display_mode_,
-                  app1.user_page_ordinal_, app1.user_launch_ordinal_,
-                  app1.chromeos_data_, app1.is_locally_installed_,
-                  app1.is_in_sync_install_, app1.file_handlers_,
-                  app1.additional_search_terms_, app1.sync_fallback_data_,
-                  app1.last_launch_time_, app1.install_time_) ==
+                  app1.background_color_, app1.icon_infos_,
+                  app1.downloaded_icon_sizes_any_,
+                  app1.downloaded_icon_sizes_maskable_, app1.is_generated_icon_,
+                  app1.display_mode_, app1.display_mode_override_,
+                  app1.user_display_mode_, app1.user_page_ordinal_,
+                  app1.user_launch_ordinal_, app1.chromeos_data_,
+                  app1.is_locally_installed_, app1.is_in_sync_install_,
+                  app1.file_handlers_, app1.additional_search_terms_,
+                  app1.protocol_handlers_, app1.sync_fallback_data_,
+                  app1.last_launch_time_, app1.install_time_,
+                  app1.run_on_os_login_mode_) ==
          std::tie(app2.app_id_, app2.sources_, app2.name_, app2.launch_url_,
                   app2.description_, app2.scope_, app2.theme_color_,
-                  app2.icon_infos_, app2.downloaded_icon_sizes_,
-                  app2.display_mode_, app2.user_display_mode_,
-                  app2.user_page_ordinal_, app2.user_launch_ordinal_,
-                  app2.chromeos_data_, app2.is_locally_installed_,
-                  app2.is_in_sync_install_, app2.file_handlers_,
-                  app2.additional_search_terms_, app2.sync_fallback_data_,
-                  app2.last_launch_time_, app2.install_time_);
+                  app2.background_color_, app2.icon_infos_,
+                  app2.downloaded_icon_sizes_any_,
+                  app2.downloaded_icon_sizes_maskable_, app2.is_generated_icon_,
+                  app2.display_mode_, app2.display_mode_override_,
+                  app2.user_display_mode_, app2.user_page_ordinal_,
+                  app2.user_launch_ordinal_, app2.chromeos_data_,
+                  app2.is_locally_installed_, app2.is_in_sync_install_,
+                  app2.file_handlers_, app2.additional_search_terms_,
+                  app2.protocol_handlers_, app2.sync_fallback_data_,
+                  app2.last_launch_time_, app2.install_time_,
+                  app2.run_on_os_login_mode_);
 }
 
 bool operator!=(const WebApp& app1, const WebApp& app2) {

@@ -32,6 +32,7 @@
 
 #include <algorithm>
 
+#include "third_party/blink/public/common/input/web_keyboard_event.h"
 #include "third_party/blink/public/strings/grit/blink_strings.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_image_bitmap_options.h"
 #include "third_party/blink/renderer/core/aom/accessible_node.h"
@@ -47,6 +48,7 @@
 #include "third_party/blink/renderer/core/editing/editing_utilities.h"
 #include "third_party/blink/renderer/core/editing/markers/document_marker_controller.h"
 #include "third_party/blink/renderer/core/editing/position.h"
+#include "third_party/blink/renderer/core/events/keyboard_event.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/html/canvas/html_canvas_element.h"
@@ -100,11 +102,15 @@
 #include "third_party/blink/renderer/modules/accessibility/ax_svg_root.h"
 #include "third_party/blink/renderer/modules/media_controls/elements/media_control_elements_helper.h"
 #include "third_party/blink/renderer/platform/graphics/image_data_buffer.h"
+#include "third_party/blink/renderer/platform/keyboard_codes.h"
 #include "third_party/blink/renderer/platform/text/platform_locale.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
+#include "ui/events/keycodes/dom/dom_code.h"
+#include "ui/events/keycodes/dom/keycode_converter.h"
 
 namespace {
+
 bool IsNeutralWithinTable(blink::AXObject* obj) {
   if (!obj)
     return false;
@@ -114,6 +120,38 @@ bool IsNeutralWithinTable(blink::AXObject* obj) {
          role == ax::mojom::blink::Role::kIgnored ||
          role == ax::mojom::blink::Role::kRowGroup;
 }
+
+enum class AXAction {
+  kActionIncrement = 0,
+  kActionDecrement,
+};
+
+blink::KeyboardEvent* CreateKeyboardEvent(
+    blink::LocalDOMWindow* local_dom_window,
+    blink::WebInputEvent::Type type,
+    AXAction action) {
+  blink::WebKeyboardEvent key(type,
+                              blink::WebInputEvent::Modifiers::kNoModifiers,
+                              base::TimeTicks::Now());
+
+  // TODO(crbug.com/1099069): Fire different arrow events depending on
+  // orientation and dir (RTL/LTR)
+  switch (action) {
+    case AXAction::kActionIncrement:
+      key.dom_key = ui::DomKey::ARROW_UP;
+      key.dom_code = static_cast<int>(ui::DomCode::ARROW_UP);
+      key.native_key_code = key.windows_key_code = blink::VKEY_UP;
+      break;
+    case AXAction::kActionDecrement:
+      key.dom_key = ui::DomKey::ARROW_DOWN;
+      key.dom_code = static_cast<int>(ui::DomCode::ARROW_DOWN);
+      key.native_key_code = key.windows_key_code = blink::VKEY_DOWN;
+      break;
+  }
+
+  return blink::KeyboardEvent::Create(key, local_dom_window, true);
+}
+
 }  // namespace
 
 namespace blink {
@@ -137,6 +175,8 @@ AXNodeObject::~AXNodeObject() {
 }
 
 void AXNodeObject::AlterSliderOrSpinButtonValue(bool increase) {
+  if (!GetNode())
+    return;
   if (!IsSlider() && !IsSpinButton())
     return;
 
@@ -150,15 +190,42 @@ void AXNodeObject::AlterSliderOrSpinButtonValue(bool increase) {
 
   value += increase ? step : -step;
 
-  OnNativeSetValueAction(String::Number(value));
+  // If this is a native element, set the value directly.
+  if (native_role_ == ax::mojom::blink::Role::kSlider ||
+      native_role_ == ax::mojom::blink::Role::kSpinButton) {
+    OnNativeSetValueAction(String::Number(value));
+    // Dispatching an event could result in changes to the document, like
+    // this AXObject becoming detached.
+    if (IsDetached())
+      return;
 
-  // Dispatching an event could result in changes to the document, like
-  // this AXObject becoming detached.
-  if (IsDetached())
+    AXObjectCache().HandleValueChanged(GetNode());
+    return;
+  }
+
+  // TODO(crbug.com/1099069): add a separate flag for keyboard event synthesis
+  if (!RuntimeEnabledFeatures::AccessibilityObjectModelEnabled())
     return;
 
-  AXObjectCache().PostNotification(GetNode(),
-                                   ax::mojom::blink::Event::kValueChanged);
+  // Otherwise, fire a keyboard event instead.
+  AXAction action =
+      increase ? AXAction::kActionIncrement : AXAction::kActionDecrement;
+  LocalDOMWindow* local_dom_window = GetDocument()->domWindow();
+
+  KeyboardEvent* keydown = CreateKeyboardEvent(
+      local_dom_window, WebInputEvent::Type::kRawKeyDown, action);
+  GetNode()->DispatchEvent(*keydown);
+
+  // TODO(crbug.com/1099069): add a brief pause between keydown and keyup?
+  // TODO(crbug.com/1099069): fire a "char" event depending on platform?
+
+  // The keydown handler may have caused the node to be removed.
+  if (!GetNode())
+    return;
+
+  KeyboardEvent* keyup = CreateKeyboardEvent(
+      local_dom_window, WebInputEvent::Type::kKeyUp, action);
+  GetNode()->DispatchEvent(*keyup);
 }
 
 AXObject* AXNodeObject::ActiveDescendant() {
@@ -1424,6 +1491,13 @@ AccessibilityExpanded AXNodeObject::IsExpanded() const {
   if (!SupportsARIAExpanded())
     return kExpandedUndefined;
 
+  if (RoleValue() == ax::mojom::blink::Role::kPopUpButton && GetNode() &&
+      IsA<HTMLSelectElement>(*GetNode())) {
+    return To<HTMLSelectElement>(GetNode())->PopupIsVisible()
+               ? kExpandedExpanded
+               : kExpandedCollapsed;
+  }
+
   if (GetNode() && IsA<HTMLSummaryElement>(*GetNode())) {
     if (GetNode()->parentNode() &&
         IsA<HTMLDetailsElement>(GetNode()->parentNode()))
@@ -1821,6 +1895,31 @@ String AXNodeObject::GetText() const {
   return element ? element->innerText() : String();
 }
 
+ax::mojom::blink::TextAlign AXNodeObject::GetTextAlign() const {
+  if (!GetLayoutObject())
+    return ax::mojom::blink::TextAlign::kNone;
+
+  const ComputedStyle* style = GetLayoutObject()->Style();
+  if (!style)
+    return ax::mojom::blink::TextAlign::kNone;
+
+  switch (style->GetTextAlign()) {
+    case ETextAlign::kLeft:
+    case ETextAlign::kWebkitLeft:
+    case ETextAlign::kStart:
+      return ax::mojom::blink::TextAlign::kLeft;
+    case ETextAlign::kRight:
+    case ETextAlign::kWebkitRight:
+    case ETextAlign::kEnd:
+      return ax::mojom::blink::TextAlign::kRight;
+    case ETextAlign::kCenter:
+    case ETextAlign::kWebkitCenter:
+      return ax::mojom::blink::TextAlign::kCenter;
+    case ETextAlign::kJustify:
+      return ax::mojom::blink::TextAlign::kJustify;
+  }
+}
+
 String AXNodeObject::ImageDataUrl(const IntSize& max_size) const {
   Node* node = GetNode();
   if (!node)
@@ -2067,6 +2166,12 @@ ax::mojom::blink::InvalidState AXNodeObject::GetInvalidState() const {
 }
 
 int AXNodeObject::PosInSet() const {
+  if (RoleValue() == ax::mojom::blink::Role::kPopUpButton && GetNode() &&
+      !AXObjectCache().UseAXMenuList()) {
+    if (auto* select_element = DynamicTo<HTMLSelectElement>(*GetNode()))
+      return 1 + select_element->selectedIndex();
+  }
+
   if (SupportsARIASetSizeAndPosInSet()) {
     uint32_t pos_in_set;
     if (HasAOMPropertyOrARIAAttribute(AOMUIntProperty::kPosInSet, pos_in_set))
@@ -2076,6 +2181,12 @@ int AXNodeObject::PosInSet() const {
 }
 
 int AXNodeObject::SetSize() const {
+  if (RoleValue() == ax::mojom::blink::Role::kPopUpButton && GetNode() &&
+      !AXObjectCache().UseAXMenuList()) {
+    if (auto* select_element = DynamicTo<HTMLSelectElement>(*GetNode()))
+      return static_cast<int>(select_element->length());
+  }
+
   if (SupportsARIASetSizeAndPosInSet()) {
     int32_t set_size;
     if (HasAOMPropertyOrARIAAttribute(AOMIntProperty::kSetSize, set_size))
@@ -2273,7 +2384,7 @@ AXObject* AXNodeObject::ChooserPopup() const {
     case ax::mojom::blink::Role::kColorWell:
     case ax::mojom::blink::Role::kDate:
     case ax::mojom::blink::Role::kDateTime: {
-      for (const auto& child : children_) {
+      for (const auto& child : ChildrenIncludingIgnored()) {
         if (child->IsWebArea())
           return child;
       }
@@ -2374,9 +2485,9 @@ bool AXNodeObject::SupportsARIAOwns() const {
   return !aria_owns.IsEmpty();
 }
 
-// TODO : Aria-dropeffect and aria-grabbed are deprecated in aria 1.1
-// Also those properties are expected to be replaced by a new feature in
-// a future version of WAI-ARIA. After that we will re-implement them
+// TODO(accessibility): Aria-dropeffect and aria-grabbed are deprecated in
+// aria 1.1 Also those properties are expected to be replaced by a new feature
+// in a future version of WAI-ARIA. After that we will re-implement them
 // following new spec.
 bool AXNodeObject::SupportsARIADragging() const {
   const AtomicString& grabbed = GetAttribute(html_names::kAriaGrabbedAttr);
@@ -2494,6 +2605,11 @@ ax::mojom::blink::HasPopup AXNodeObject::HasPopup() const {
   if (RoleValue() == ax::mojom::blink::Role::kComboBoxMenuButton ||
       RoleValue() == ax::mojom::blink::Role::kTextFieldWithComboBox)
     return ax::mojom::blink::HasPopup::kListbox;
+
+  if (AXObjectCache().GetAutofillState(AXObjectID()) !=
+      WebAXAutofillState::kNoSuggestions) {
+    return ax::mojom::blink::HasPopup::kMenu;
+  }
 
   return AXObject::HasPopup();
 }
@@ -3022,7 +3138,7 @@ void AXNodeObject::LoadInlineTextBoxes() {
     return;
   }
 
-  for (const auto& child : children_) {
+  for (const auto& child : ChildrenIncludingIgnored()) {
     child->LoadInlineTextBoxes();
   }
 }
@@ -3034,16 +3150,17 @@ void AXNodeObject::AddInlineTextBoxChildren(bool force) {
 
   Settings* settings = document->GetSettings();
   if (!force &&
-      (!settings || !settings->GetInlineTextBoxAccessibilityEnabled()))
+      (!settings || !settings->GetInlineTextBoxAccessibilityEnabled())) {
     return;
+  }
 
   if (!GetLayoutObject() || !GetLayoutObject()->IsText())
     return;
 
   if (GetLayoutObject()->NeedsLayout()) {
-    // If a LayoutText needs layout, its inline text boxes are either
-    // nonexistent or invalid, so defer until the layout happens and
-    // the layoutObject calls AXObjectCacheImpl::inlineTextBoxesUpdated.
+    // If a LayoutText or a LayoutBR needs layout, its inline text boxes are
+    // either nonexistent or invalid, so defer until the layout happens and the
+    // layoutObject calls AXObjectCacheImpl::inlineTextBoxesUpdated.
     return;
   }
 
@@ -3051,9 +3168,16 @@ void AXNodeObject::AddInlineTextBoxChildren(bool force) {
   for (scoped_refptr<AbstractInlineTextBox> box =
            layout_text->FirstAbstractInlineTextBox();
        box.get(); box = box->NextInlineTextBox()) {
-    AXObject* ax_object = AXObjectCache().GetOrCreate(box.get());
-    if (ax_object->AccessibilityIsIncludedInTree())
-      children_.push_back(ax_object);
+    AXObject* ax_box = AXObjectCache().GetOrCreate(box.get());
+    if (!ax_box || !ax_box->AccessibilityIsIncludedInTree())
+      continue;
+
+    children_.push_back(ax_box);
+    // If |force| is set to true, it means that we are forcing the children to
+    // be added without going through the normal tree building mechanism, which
+    // would have also set the parent of each child to |this|.
+    if (force)
+      ax_box->SetParent(this);
   }
 }
 
@@ -3133,17 +3257,26 @@ void AXNodeObject::AddImageMapChildren() {
     AXObject* obj = AXObjectCache().GetOrCreate(&area);
     if (obj) {
       auto* area_object = To<AXImageMapLink>(obj);
-      area_object->SetParent(this);
       DCHECK_NE(area_object->AXObjectID(), 0U);
-      if (area_object->AccessibilityIsIncludedInTree())
+      if (area_object->AccessibilityIsIncludedInTree()) {
         children_.push_back(area_object);
-      else
+      } else {
         AXObjectCache().Remove(area_object->AXObjectID());
+      }
     }
   }
 }
 
 void AXNodeObject::AddPopupChildren() {
+  if (!AXObjectCache().UseAXMenuList()) {
+    auto* html_select_element = DynamicTo<HTMLSelectElement>(GetNode());
+    if (!html_select_element || !html_select_element->UsesMenuList())
+      return;
+    if (AXObject* ax_popup = html_select_element->PopupRootAXObject())
+      children_.push_back(ax_popup);
+    return;
+  }
+
   auto* html_input_element = DynamicTo<HTMLInputElement>(GetNode());
   if (!html_input_element)
     return;
@@ -3162,8 +3295,6 @@ void AXNodeObject::AddRemoteSVGChildren() {
   AXSVGRoot* root = RemoteSVGRootElement();
   if (!root)
     return;
-
-  root->SetParent(this);
 
   if (!root->AccessibilityIsIncludedInTree()) {
     for (const auto& child : root->ChildrenIncludingIgnored())
@@ -3246,19 +3377,14 @@ void AXNodeObject::AddChildren() {
   for (const auto& owned_child : owned_children)
     AddChild(owned_child);
 
-  bool is_continuation =
-      GetLayoutObject() && GetLayoutObject()->IsElementContinuation();
   for (const auto& child : children_) {
-    if (!is_continuation && !child->CachedParentObject()) {
-      // Never set continuations as a parent object. The first layout object
-      // in the chain must be used instead.
+    if (!child->CachedParentObject())
       child->SetParent(this);
-    }
   }
 }
 
 void AXNodeObject::AddChild(AXObject* child) {
-  unsigned index = children_.size();
+  unsigned int index = children_.size();
   InsertChild(child, index);
 }
 
@@ -3267,19 +3393,20 @@ void AXNodeObject::InsertChild(AXObject* child, unsigned index) {
     return;
 
   // If the parent is asking for this child's children, then either it's the
-  // first time (and clearing is a no-op), or its visibility has changed. In the
-  // latter case, this child may have a stale child cached.  This can prevent
-  // aria-hidden changes from working correctly. Hence, whenever a parent is
-  // getting children, ensure data is not stale.
+  // first time (and clearing is a no-op), or its visibility has changed. In
+  // the latter case, this child may have a stale child cached.  This can
+  // prevent aria-hidden changes from working correctly. Hence, whenever a
+  // parent is getting children, ensure data is not stale.
   child->ClearChildren();
 
   if (!child->AccessibilityIsIncludedInTree()) {
+    // Re-computes child's children.
     const auto& children = child->ChildrenIncludingIgnored();
     wtf_size_t length = children.size();
     for (wtf_size_t i = 0; i < length; ++i)
       children_.insert(index + i, children[i]);
   } else if (!child->IsMenuListOption()) {
-    // MenuListOptions must only added in AXMenuListPopup::AddChildren
+    // MenuListOptions must only be added in AXMenuListPopup::AddChildren.
     children_.insert(index, child);
   }
 }
@@ -3578,14 +3705,16 @@ bool AXNodeObject::OnNativeFocusAction() {
 
 bool AXNodeObject::OnNativeIncrementAction() {
   LocalFrame* frame = GetDocument() ? GetDocument()->GetFrame() : nullptr;
-  LocalFrame::NotifyUserActivation(frame);
+  LocalFrame::NotifyUserActivation(
+      frame, mojom::blink::UserActivationNotificationType::kInteraction);
   AlterSliderOrSpinButtonValue(true);
   return true;
 }
 
 bool AXNodeObject::OnNativeDecrementAction() {
   LocalFrame* frame = GetDocument() ? GetDocument()->GetFrame() : nullptr;
-  LocalFrame::NotifyUserActivation(frame);
+  LocalFrame::NotifyUserActivation(
+      frame, mojom::blink::UserActivationNotificationType::kInteraction);
   AlterSliderOrSpinButtonValue(false);
   return true;
 }
@@ -3841,8 +3970,6 @@ String AXNodeObject::NativeTextAlternative(
   String text_alternative;
   AXRelatedObjectVector local_related_objects;
 
-  const auto* input_element = DynamicTo<HTMLInputElement>(GetNode());
-
   // 5.1/5.5 Text inputs, Other labelable Elements
   // If you change this logic, update AXNodeObject::nameFromLabelElement, too.
   auto* html_element = DynamicTo<HTMLElement>(GetNode());
@@ -3893,6 +4020,7 @@ String AXNodeObject::NativeTextAlternative(
   }
 
   // 5.2 input type="button", input type="submit" and input type="reset"
+  const auto* input_element = DynamicTo<HTMLInputElement>(GetNode());
   if (input_element && input_element->IsTextButton()) {
     // value attribute.
     name_from = ax::mojom::blink::NameFrom::kValue;
@@ -4035,6 +4163,31 @@ String AXNodeObject::NativeTextAlternative(
       } else {
         return text_alternative;
       }
+    }
+  }
+
+  // Input type=file. Not part of the spec, but Blink implements it
+  // as a single control that has both a button ("Choose file...") and
+  // some text showing the filename, and we need to concatenate both into
+  // the name of the button.
+  if (input_element && input_element->type() == input_type_names::kFile) {
+    name_from = ax::mojom::blink::NameFrom::kValue;
+
+    String displayed_file_path = StringValue();
+    String upload_button_text = input_element->UploadButton()->value();
+    if (!displayed_file_path.IsEmpty()) {
+      text_alternative = displayed_file_path + ", " + upload_button_text;
+    } else {
+      text_alternative = upload_button_text;
+    }
+    *found_text_alternative = true;
+
+    if (name_sources) {
+      name_sources->push_back(NameSource(true, kValueAttr));
+      name_sources->back().type = name_from;
+      name_sources->back().text = text_alternative;
+    } else {
+      return text_alternative;
     }
   }
 

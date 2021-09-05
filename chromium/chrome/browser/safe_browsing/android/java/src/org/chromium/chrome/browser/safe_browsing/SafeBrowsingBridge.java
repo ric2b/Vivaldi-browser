@@ -43,11 +43,47 @@ public final class SafeBrowsingBridge {
         return SafeBrowsingBridgeJni.get().getSafeBrowsingExtendedReportingManaged();
     }
 
+    /**
+     * @return The Safe Browsing state. It can be Enhanced Protection, Standard Protection, or No
+     *         Protection.
+     */
+    public static @SafeBrowsingState int getSafeBrowsingState() {
+        return SafeBrowsingBridgeJni.get().getSafeBrowsingState();
+    }
+
+    /**
+     * @param state Set the Safe Browsing state. It can be Enhanced Protection, Standard Protection,
+     *         or No Protection.
+     */
+    public static void setSafeBrowsingState(@SafeBrowsingState int state) {
+        SafeBrowsingBridgeJni.get().setSafeBrowsingState(state);
+    }
+
+    /**
+     * @return Whether the Safe Browsing preference is managed. It can be managed by either
+     * the SafeBrowsingEnabled policy(legacy) or the SafeBrowsingProtectionLevel policy(new).
+     */
+    public static boolean isSafeBrowsingManaged() {
+        return SafeBrowsingBridgeJni.get().isSafeBrowsingManaged();
+    }
+
+    /**
+     * @return Whether there is a Google account to use for the leak detection check.
+     */
+    public static boolean hasAccountForLeakCheckRequest() {
+        return SafeBrowsingBridgeJni.get().hasAccountForLeakCheckRequest();
+    }
+
     @NativeMethods
     interface Natives {
         int umaValueForFile(String path);
         boolean getSafeBrowsingExtendedReportingEnabled();
         void setSafeBrowsingExtendedReportingEnabled(boolean enabled);
         boolean getSafeBrowsingExtendedReportingManaged();
+        @SafeBrowsingState
+        int getSafeBrowsingState();
+        void setSafeBrowsingState(@SafeBrowsingState int state);
+        boolean hasAccountForLeakCheckRequest();
+        boolean isSafeBrowsingManaged();
     }
 }

@@ -17,7 +17,7 @@ extern const base::FilePath::CharType kSodaBinaryRelativePath[];
 
 // Location of the en_us SODA config file within the SODA installation
 // directory. Note: SODA is currently only available in English.
-extern const base::FilePath::CharType kSodaConfigFileRelativePath[];
+extern const base::FilePath::CharType kSodaEnUsConfigFileRelativePath[];
 
 // Get the absolute path of the SODA component directory.
 const base::FilePath GetSodaDirectory();
@@ -32,10 +32,6 @@ const base::FilePath GetLatestSodaDirectory();
 // Get the path to the SODA binary. Returns an empty path if SODA is not
 // installed.
 const base::FilePath GetSodaBinaryPath();
-
-// Get the path to the dictation.ascii_proto config file used by SODA. Returns
-// an empty path if SODA is not installed.
-const base::FilePath GetSodaConfigPath();
 
 }  // namespace speech
 

@@ -31,6 +31,7 @@
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/extensions/public_session_permission_helper.h"
+#include "extensions/common/permissions/api_permission_set.h"
 #endif
 
 using content::BrowserThread;
@@ -225,6 +226,11 @@ void PageCaptureSaveAsMHTMLFunction::TemporaryFileCreatedOnIO(bool success) {
              base::TaskShutdownBehavior::BLOCK_SHUTDOWN})
             .get());
   }
+
+  // Let the delegate know the reference has been created.
+  if (test_delegate_)
+    test_delegate_->OnTemporaryFileCreated(mhtml_file_);
+
   content::GetUIThreadTaskRunner({})->PostTask(
       FROM_HERE,
       base::BindOnce(&PageCaptureSaveAsMHTMLFunction::TemporaryFileCreatedOnUI,
@@ -237,9 +243,6 @@ void PageCaptureSaveAsMHTMLFunction::TemporaryFileCreatedOnUI(bool success) {
     ReturnFailure(kTemporaryFileError);
     return;
   }
-
-  if (test_delegate_)
-    test_delegate_->OnTemporaryFileCreated(mhtml_path_);
 
   WebContents* web_contents = GetWebContents();
   if (!web_contents) {

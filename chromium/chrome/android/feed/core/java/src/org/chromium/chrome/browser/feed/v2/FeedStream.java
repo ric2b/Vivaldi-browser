@@ -5,9 +5,11 @@
 package org.chromium.chrome.browser.feed.v2;
 
 import android.app.Activity;
+import android.util.TypedValue;
 import android.view.View;
 
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -16,11 +18,12 @@ import org.json.JSONObject;
 
 import org.chromium.base.Log;
 import org.chromium.base.ObserverList;
+import org.chromium.chrome.R;
 import org.chromium.chrome.browser.feed.shared.stream.Header;
 import org.chromium.chrome.browser.feed.shared.stream.Stream;
+import org.chromium.chrome.browser.help.HelpAndFeedback;
 import org.chromium.chrome.browser.native_page.NativePageNavigationDelegate;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
-import org.chromium.chrome.feed.R;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 
 import java.util.ArrayList;
@@ -32,18 +35,21 @@ import java.util.List;
  */
 public class FeedStream implements Stream {
     private static final String TAG = "FeedStream";
-    private static final String SCROLL_POSITION = "scroll_pos";
-    private static final String SCROLL_OFFSET = "scroll_off";
+
+    // How far the user has to scroll down in DP before attempting to load more content.
+    static final int LOAD_MORE_TRIGGER_SCROLL_DISTANCE_DP = 100;
 
     private final Activity mActivity;
-    private final FeedStreamSurface mFeedStreamSurface;
-    private final ObserverList<ScrollListener> mScrollListeners;
-
+    @VisibleForTesting
+    final FeedStreamSurface mFeedStreamSurface;
+    private final ObserverList<ScrollListener> mScrollListeners =
+            new ObserverList<ScrollListener>();
     private RecyclerView mRecyclerView;
-    // setStreamContentVisibility() is always called once after onCreate(). So we can assume the
-    // stream content is hidden initially and it can be made visible later when
-    // setStreamContentVisibility() is called.
-    private boolean mIsStreamContentVisible = false;
+    // For loading more content.
+    private int mAccumulatedDySinceLastLoadMore;
+
+    private String mScrollStateToRestore;
+    private RestoreScrollObserver mRestoreScrollObserver = new RestoreScrollObserver();
 
     public FeedStream(Activity activity, boolean isBackgroundDark, SnackbarManager snackbarManager,
             NativePageNavigationDelegate nativePageNavigationDelegate,
@@ -51,26 +57,32 @@ public class FeedStream implements Stream {
         // TODO(petewil): Use isBackgroundDark to turn on dark theme.
         this.mActivity = activity;
         this.mFeedStreamSurface = new FeedStreamSurface(activity, isBackgroundDark, snackbarManager,
-                nativePageNavigationDelegate, bottomSheetController);
-        this.mScrollListeners = new ObserverList<ScrollListener>();
+                nativePageNavigationDelegate, bottomSheetController, HelpAndFeedback.getInstance());
     }
 
     @Override
     public void onCreate(@Nullable String savedInstanceState) {
+        mScrollStateToRestore = savedInstanceState;
         setupRecyclerView();
-        if (savedInstanceState != null && !savedInstanceState.isEmpty()) {
-            restoreScrollState(savedInstanceState);
-        }
     }
 
     @Override
-    public void onShow() {}
+    public void onShow() {
+        mFeedStreamSurface.setStreamVisibility(true);
+    }
 
     @Override
-    public void onHide() {}
+    public void onHide() {
+        mScrollStateToRestore = null;
+        if (mFeedStreamSurface.isOpened()) {
+            mScrollStateToRestore = getSavedInstanceStateString();
+        }
+        mFeedStreamSurface.setStreamVisibility(false);
+    }
 
     @Override
     public void onDestroy() {
+        mScrollStateToRestore = null;
         mFeedStreamSurface.destroy();
     }
 
@@ -80,24 +92,19 @@ public class FeedStream implements Stream {
         if (layoutManager == null) {
             return "";
         }
-        int firstItemPosition = layoutManager.findFirstVisibleItemPosition();
-        if (firstItemPosition == RecyclerView.NO_POSITION) {
+        ScrollState state = new ScrollState();
+        state.position = layoutManager.findFirstVisibleItemPosition();
+        state.lastPosition = layoutManager.findLastVisibleItemPosition();
+        if (state.position == RecyclerView.NO_POSITION) {
             return "";
         }
-        View firstVisibleView = layoutManager.findViewByPosition(firstItemPosition);
+
+        View firstVisibleView = layoutManager.findViewByPosition(state.position);
         if (firstVisibleView == null) {
             return "";
         }
-        int firstVisibleTop = firstVisibleView.getTop();
-
-        JSONObject jsonSavedState = new JSONObject();
-        try {
-            jsonSavedState.put(SCROLL_POSITION, firstItemPosition);
-            jsonSavedState.put(SCROLL_OFFSET, firstVisibleTop);
-        } catch (JSONException e) {
-            Log.d(TAG, "Unable to write to a JSONObject.");
-        }
-        return jsonSavedState.toString();
+        state.offset = firstVisibleView.getTop();
+        return state.toJson();
     }
 
     @Override
@@ -116,16 +123,7 @@ public class FeedStream implements Stream {
 
     @Override
     public void setStreamContentVisibility(boolean visible) {
-        if (visible == mIsStreamContentVisible) {
-            return;
-        }
-        mIsStreamContentVisible = visible;
-
-        if (visible) {
-            mFeedStreamSurface.surfaceOpened();
-        } else {
-            mFeedStreamSurface.surfaceClosed();
-        }
+        mFeedStreamSurface.setStreamContentVisibility(visible);
     }
 
     @Override
@@ -186,44 +184,126 @@ public class FeedStream implements Stream {
 
     @Override
     public void addOnContentChangedListener(ContentChangedListener listener) {
-        // Not longer needed.
+        mFeedStreamSurface.addContentChangedListener(listener);
     }
 
     @Override
     public void removeOnContentChangedListener(ContentChangedListener listener) {
-        // Not longer needed.
+        mFeedStreamSurface.removeContentChangedListener(listener);
     }
 
     @Override
     public void triggerRefresh() {}
 
     private void setupRecyclerView() {
-        assert (!mIsStreamContentVisible);
-
         mRecyclerView = (RecyclerView) mFeedStreamSurface.getView();
         mRecyclerView.setId(R.id.feed_stream_recycler_view);
         mRecyclerView.setClipToPadding(false);
         mRecyclerView.addOnScrollListener(new RecyclerView.OnScrollListener() {
             @Override
-            public void onScrolled(RecyclerView v, int x, int y) {
+            public void onScrolled(RecyclerView v, int dx, int dy) {
+                super.onScrolled(v, dx, dy);
+                checkScrollingForLoadMore(dy);
+                mFeedStreamSurface.streamScrolled(dx, dy);
                 for (ScrollListener listener : mScrollListeners) {
-                    listener.onScrolled(x, y);
+                    listener.onScrolled(dx, dy);
+                }
+            }
+            @Override
+            public void onScrollStateChanged(RecyclerView v, int newState) {
+                for (ScrollListener listener : mScrollListeners) {
+                    listener.onScrollStateChanged(newState);
                 }
             }
         });
+        mRecyclerView.getAdapter().registerAdapterDataObserver(mRestoreScrollObserver);
     }
 
-    private void restoreScrollState(String savedInstanceState) {
-        try {
-            JSONObject jsonSavedState = new JSONObject(savedInstanceState);
-            LinearLayoutManager layoutManager =
-                    (LinearLayoutManager) mRecyclerView.getLayoutManager();
-            if (layoutManager != null) {
-                layoutManager.scrollToPositionWithOffset(jsonSavedState.getInt(SCROLL_POSITION),
-                        jsonSavedState.getInt(SCROLL_OFFSET));
-            }
-        } catch (JSONException e) {
-            Log.d(TAG, "Unable to parse a JSONObject from a string.");
+    @VisibleForTesting
+    void checkScrollingForLoadMore(int dy) {
+        if (!mFeedStreamSurface.isOpened()) return;
+
+        mAccumulatedDySinceLastLoadMore += dy;
+        if (mAccumulatedDySinceLastLoadMore < TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP,
+                    LOAD_MORE_TRIGGER_SCROLL_DISTANCE_DP,
+                    mRecyclerView.getResources().getDisplayMetrics())) {
+            return;
+        }
+
+        boolean canTrigger = mFeedStreamSurface.maybeLoadMore();
+        if (canTrigger) {
+            mAccumulatedDySinceLastLoadMore = 0;
         }
     }
+
+    /**
+     * Restores the scroll state serialized to |savedInstanceState|.
+     * @return true if the scroll state was restored, or if the state could never be restored.
+     * false if we need to wait until more items are added to the recycler view to make it
+     * scrollable.
+     */
+    private boolean restoreScrollState(String savedInstanceState) {
+        assert (mRecyclerView != null);
+        ScrollState state = ScrollState.fromJson(savedInstanceState);
+        if (state == null) return true;
+
+        // If too few items exist, defer scrolling until later.
+        if (mRecyclerView.getAdapter().getItemCount() <= state.lastPosition) return false;
+
+        LinearLayoutManager layoutManager = (LinearLayoutManager) mRecyclerView.getLayoutManager();
+        if (layoutManager != null) {
+            layoutManager.scrollToPositionWithOffset(state.position, state.offset);
+        }
+        return true;
+    }
+
+    static class ScrollState {
+        private static final String SCROLL_POSITION = "pos";
+        private static final String SCROLL_LAST_POSITION = "lpos";
+        private static final String SCROLL_OFFSET = "off";
+
+        public int position;
+        public int lastPosition;
+        public int offset;
+
+        String toJson() {
+            JSONObject jsonSavedState = new JSONObject();
+            try {
+                jsonSavedState.put(SCROLL_POSITION, position);
+                jsonSavedState.put(SCROLL_LAST_POSITION, lastPosition);
+                jsonSavedState.put(SCROLL_OFFSET, offset);
+                return jsonSavedState.toString();
+            } catch (JSONException e) {
+                Log.d(TAG, "Unable to write to a JSONObject.");
+                return "";
+            }
+        }
+        @Nullable
+        static ScrollState fromJson(String json) {
+            ScrollState result = new ScrollState();
+            try {
+                JSONObject jsonSavedState = new JSONObject(json);
+                result.position = jsonSavedState.getInt(SCROLL_POSITION);
+                result.lastPosition = jsonSavedState.getInt(SCROLL_LAST_POSITION);
+                result.offset = jsonSavedState.getInt(SCROLL_OFFSET);
+            } catch (JSONException e) {
+                Log.d(TAG, "Unable to parse a JSONObject from a string.");
+                return null;
+            }
+            return result;
+        }
+    }
+
+    // Scroll state can't be restored until enough items are added to the recycler view adapter.
+    // Attempts to restore scroll state every time new items are added to the adapter.
+    class RestoreScrollObserver extends RecyclerView.AdapterDataObserver {
+        @Override
+        public void onItemRangeInserted(int positionStart, int itemCount) {
+            if (mScrollStateToRestore != null) {
+                if (restoreScrollState(mScrollStateToRestore)) {
+                    mScrollStateToRestore = null;
+                }
+            }
+        }
+    };
 }

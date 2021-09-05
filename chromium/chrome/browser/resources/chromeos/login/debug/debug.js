@@ -311,34 +311,16 @@ cr.define('cr.ui.login.debug', function() {
       ],
     },
     {
+      id: 'user-creation',
+      kind: ScreenKind.NORMAL,
+    },
+    {
       id: 'enterprise-enrollment',
       kind: ScreenKind.NORMAL,
+      defaultState: 'step-signin',
+      handledSteps: 'error,ad-join',
       suffix: 'E',
       states: [
-        {
-          id: 'signin',
-          trigger: (screen) => {
-            screen.showStep('signin');
-          },
-        },
-        {
-          id: 'working',
-          trigger: (screen) => {
-            screen.showStep('working');
-          },
-        },
-        {
-          id: 'attributes',
-          trigger: (screen) => {
-            screen.showStep('attribute-prompt');
-          },
-        },
-        {
-          id: 'success',
-          trigger: (screen) => {
-            screen.showStep('success');
-          },
-        },
         {
           id: 'error',
           trigger: (screen) => {
@@ -360,6 +342,10 @@ cr.define('cr.ui.login.debug', function() {
           },
         },
       ],
+    },
+    {
+      id: 'family-link-notice',
+      kind: ScreenKind.NORMAL,
     },
     {
       id: 'packaged-license',
@@ -702,13 +688,13 @@ cr.define('cr.ui.login.debug', function() {
         {
           id: 'migration-failed',
           trigger: (screen) => {
-            screen.setUIState(2);
+            screen.setUIState(3);
           },
         },
         {
           id: 'not-enough-space',
           trigger: (screen) => {
-            screen.setUIState(3);
+            screen.setUIState(4);
             screen.setAvailableSpaceInString('1 GB');
             screen.setNecessarySpaceInString('2 GB');
           },

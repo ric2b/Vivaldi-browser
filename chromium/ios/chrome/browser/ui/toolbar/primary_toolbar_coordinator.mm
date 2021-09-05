@@ -148,6 +148,15 @@
                              animated:self.enableAnimationsForOmniboxFocus];
 }
 
+- (id<ViewRevealingAnimatee>)animatee {
+  return self.viewController;
+}
+
+- (void)setPanGestureHandler:
+    (ViewRevealingVerticalPanHandler*)panGestureHandler {
+  self.viewController.panGestureHandler = panGestureHandler;
+}
+
 #pragma mark - PrimaryToolbarViewControllerDelegate
 
 - (void)viewControllerTraitCollectionDidChange:
@@ -169,6 +178,12 @@
     FullscreenController::FromBrowserState(self.browser->GetBrowserState())
         ->ExitFullscreen();
   }
+}
+
+#pragma mark - NewTabPageControllerDelegate
+
+- (UIResponder<UITextInput>*)fakeboxScribbleForwardingTarget {
+  return self.locationBarCoordinator.omniboxScribbleForwardingTarget;
 }
 
 #pragma mark - FakeboxFocuser

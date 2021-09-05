@@ -76,10 +76,6 @@ void IPCDemuxerStream::Read(ReadCB read_cb) {
       base::Bind(&IPCDemuxerStream::DataReady, weak_ptr_factory_.GetWeakPtr()));
 }
 
-bool IPCDemuxerStream::IsReadPending() const {
-  return !read_cb_.is_null();
-}
-
 bool IPCDemuxerStream::enabled() const {
   return is_enabled_;
 }

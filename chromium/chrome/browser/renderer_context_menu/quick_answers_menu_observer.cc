@@ -28,6 +28,8 @@
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/models/image_model.h"
+#include "ui/base/models/simple_menu_model.h"
 #include "ui/gfx/text_constants.h"
 #include "ui/gfx/text_elider.h"
 
@@ -113,8 +115,10 @@ void QuickAnswersMenuObserver::InitMenu(
   // TODO(llin): Update the menu item after finalizing on the design.
   auto truncated_text = TruncateString(selected_text);
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
-  proxy_->AddMenuItemWithIcon(IDC_CONTENT_CONTEXT_QUICK_ANSWERS_INLINE_QUERY,
-                              truncated_text, kAssistantIcon);
+  proxy_->AddMenuItemWithIcon(
+      IDC_CONTENT_CONTEXT_QUICK_ANSWERS_INLINE_QUERY, truncated_text,
+      ui::ImageModel::FromVectorIcon(kAssistantIcon, /*color_id=*/-1,
+                                     ui::SimpleMenuModel::kDefaultIconSize));
 #else
   proxy_->AddMenuItem(IDC_CONTENT_CONTEXT_QUICK_ANSWERS_INLINE_QUERY,
                       truncated_text);
@@ -134,8 +138,6 @@ void QuickAnswersMenuObserver::InitMenu(
 void QuickAnswersMenuObserver::OnContextMenuShown(
     const content::ContextMenuParams& params,
     const gfx::Rect& bounds_in_screen) {
-  is_context_menu_showing_ = true;
-
   if (!IsRichUiEnabled())
     return;
 
@@ -154,6 +156,7 @@ void QuickAnswersMenuObserver::OnContextMenuShown(
   content::RenderFrameHost* focused_frame =
       proxy_->GetWebContents()->GetFocusedFrame();
   if (focused_frame) {
+    quick_answers_controller_->SetPendingShowQuickAnswers();
     focused_frame->RequestTextSurroundingSelection(
         base::BindOnce(
             &QuickAnswersMenuObserver::OnTextSurroundingSelectionAvailable,
@@ -165,14 +168,12 @@ void QuickAnswersMenuObserver::OnContextMenuShown(
 void QuickAnswersMenuObserver::OnContextMenuViewBoundsChanged(
     const gfx::Rect& bounds_in_screen) {
   bounds_in_screen_ = bounds_in_screen;
-  if (!quick_answers_controller_ || !is_context_menu_showing_)
+  if (!quick_answers_controller_)
     return;
   quick_answers_controller_->UpdateQuickAnswersAnchorBounds(bounds_in_screen);
 }
 
 void QuickAnswersMenuObserver::OnMenuClosed() {
-  is_context_menu_showing_ = false;
-
   if (!IsRichUiEnabled())
     return;
 
@@ -272,9 +273,6 @@ void QuickAnswersMenuObserver::OnTextSurroundingSelectionAvailable(
     const base::string16& surrounding_text,
     uint32_t start_offset,
     uint32_t end_offset) {
-  if (!is_context_menu_showing_)
-    return;
-
   Context context;
   context.surrounding_text = base::UTF16ToUTF8(surrounding_text);
   context.device_properties.language = GetDeviceLanguage();

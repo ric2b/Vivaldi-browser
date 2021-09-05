@@ -8,6 +8,7 @@
 
 #include "base/memory/singleton.h"
 #include "base/optional.h"
+#include "third_party/blink/renderer/platform/geometry/int_size.h"
 #include "third_party/blink/renderer/platform/graphics/darkmode/darkmode_classifier.h"
 #include "third_party/blink/renderer/platform/wtf/hash_set.h"
 #include "third_party/blink/renderer/platform/wtf/hash_traits.h"
@@ -36,37 +37,6 @@ bool IsColorTransparent(const SkColor& color) {
 const int kMaxSampledPixels = 1000;
 const int kMaxBlocks = 10;
 const float kMinOpaquePixelPercentageForForeground = 0.2;
-
-const int kMinImageSizeForClassification1D = 24;
-const int kMaxImageSizeForClassification1D = 100;
-
-class DarkModeBitmapImageClassifier : public DarkModeImageClassifier {
-  DarkModeClassification DoInitialClassification(const SkRect& dst) override {
-    if (dst.width() < kMinImageSizeForClassification1D ||
-        dst.height() < kMinImageSizeForClassification1D)
-      return DarkModeClassification::kApplyFilter;
-
-    if (dst.width() > kMaxImageSizeForClassification1D ||
-        dst.height() > kMaxImageSizeForClassification1D) {
-      return DarkModeClassification::kDoNotApplyFilter;
-    }
-
-    return DarkModeClassification::kNotClassified;
-  }
-};
-
-class DarkModeSVGImageClassifier : public DarkModeImageClassifier {
-  DarkModeClassification DoInitialClassification(const SkRect& dst) override {
-    return DarkModeClassification::kNotClassified;
-  }
-};
-
-class DarkModeGradientGeneratedImageClassifier
-    : public DarkModeImageClassifier {
-  DarkModeClassification DoInitialClassification(const SkRect& dst) override {
-    return DarkModeClassification::kApplyFilter;
-  }
-};
 
 // DarkModeImageClassificationCache - Implements classification caches for
 // different paint image ids. The classification result for the given |src|
@@ -137,25 +107,14 @@ DarkModeImageClassifier::DarkModeImageClassifier() = default;
 
 DarkModeImageClassifier::~DarkModeImageClassifier() = default;
 
-std::unique_ptr<DarkModeImageClassifier>
-DarkModeImageClassifier::MakeBitmapImageClassifier() {
-  return std::make_unique<DarkModeBitmapImageClassifier>();
-}
-
-std::unique_ptr<DarkModeImageClassifier>
-DarkModeImageClassifier::MakeSVGImageClassifier() {
-  return std::make_unique<DarkModeSVGImageClassifier>();
-}
-
-std::unique_ptr<DarkModeImageClassifier>
-DarkModeImageClassifier::MakeGradientGeneratedImageClassifier() {
-  return std::make_unique<DarkModeGradientGeneratedImageClassifier>();
-}
-
 DarkModeClassification DarkModeImageClassifier::Classify(
     const PaintImage& paint_image,
     const SkRect& src,
     const SkRect& dst) {
+  // Empty paint image cannot be classified.
+  if (!paint_image)
+    return DarkModeClassification::kDoNotApplyFilter;
+
   DarkModeImageClassificationCache* cache =
       DarkModeImageClassificationCache::GetInstance();
   PaintImage::Id image_id = paint_image.stable_id();
@@ -163,7 +122,6 @@ DarkModeClassification DarkModeImageClassifier::Classify(
   if (result != DarkModeClassification::kNotClassified)
     return result;
 
-  result = DoInitialClassification(dst);
   if (result != DarkModeClassification::kNotClassified) {
     cache->Add(image_id, src, result);
     return result;
@@ -183,6 +141,8 @@ DarkModeClassification DarkModeImageClassifier::Classify(
 bool DarkModeImageClassifier::GetBitmap(const PaintImage& paint_image,
                                         const SkRect& src,
                                         SkBitmap* bitmap) {
+  DCHECK(paint_image);
+
   if (!src.width() || !src.height())
     return false;
 
@@ -232,14 +192,18 @@ void DarkModeImageClassifier::GetSamples(const PaintImage& paint_image,
   int num_blocks_x = kMaxBlocks;
   int num_blocks_y = kMaxBlocks;
 
-  if (num_sampled_pixels > src.width() * src.height())
-    num_sampled_pixels = src.width() * src.height();
+  // Crash reports indicate that the src can be less than 1, so make
+  // sure it goes to 1. We know it is not 0 because GetBitmap above
+  // will return false for zero-sized src.
+  IntSize rounded_src(ceil(src.width()), ceil(src.height()));
 
-  if (num_blocks_x > src.width())
-    num_blocks_x = floor(src.width());
+  if (num_sampled_pixels > rounded_src.Width() * rounded_src.Height())
+    num_sampled_pixels = rounded_src.Width() * rounded_src.Height();
 
-  if (num_blocks_y > src.height())
-    num_blocks_y = floor(src.height());
+  if (num_blocks_x > rounded_src.Width())
+    num_blocks_x = rounded_src.Width();
+  if (num_blocks_y > rounded_src.Height())
+    num_blocks_y = rounded_src.Height();
 
   int pixels_per_block = num_sampled_pixels / (num_blocks_x * num_blocks_y);
 

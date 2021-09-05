@@ -13,6 +13,7 @@
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/apps/app_service/menu_util.h"
 #include "chrome/browser/chromeos/arc/app_shortcuts/arc_app_shortcuts_menu_builder.h"
+#include "chrome/browser/chromeos/crosapi/browser_manager.h"
 #include "chrome/browser/chromeos/crostini/crostini_manager.h"
 #include "chrome/browser/chromeos/crostini/crostini_shelf_utils.h"
 #include "chrome/browser/chromeos/crostini/crostini_terminal.h"
@@ -32,6 +33,7 @@
 #include "chrome/browser/ui/app_list/arc/arc_app_list_prefs.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_utils.h"
 #include "chrome/browser/ui/app_list/extension_app_utils.h"
+#include "chrome/browser/ui/ash/launcher/arc_app_shelf_id.h"
 #include "chrome/browser/ui/ash/launcher/browser_shortcut_launcher_item_controller.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
 #include "chrome/browser/ui/browser_commands.h"
@@ -89,7 +91,6 @@ AppServiceShelfContextMenu::AppServiceShelfContextMenu(
     : ShelfContextMenu(controller, item, display_id) {
   apps::AppServiceProxy* proxy =
       apps::AppServiceProxyFactory::GetForProfile(controller->profile());
-  DCHECK(proxy);
 
   if (crostini::IsUnmatchedCrostiniShelfAppId(item->id.app_id)) {
     // For Crostini app_id with the prefix "crostini:", set app_type as Unknown
@@ -111,7 +112,6 @@ AppServiceShelfContextMenu::~AppServiceShelfContextMenu() = default;
 void AppServiceShelfContextMenu::GetMenuModel(GetMenuModelCallback callback) {
   apps::AppServiceProxy* proxy =
       apps::AppServiceProxyFactory::GetForProfile(controller()->profile());
-  DCHECK(proxy);
   proxy->GetMenuModel(
       item().id.app_id, apps::mojom::MenuType::kShelf, display_id(),
       base::BindOnce(&AppServiceShelfContextMenu::OnGetMenuModel,
@@ -133,9 +133,11 @@ void AppServiceShelfContextMenu::ExecuteCommand(int command_id,
     case ash::MENU_NEW_WINDOW:
       if (app_type_ == apps::mojom::AppType::kCrostini) {
         ShelfContextMenu::ExecuteCommand(ash::MENU_OPEN_NEW, event_flags);
-        return;
+      } else if (app_type_ == apps::mojom::AppType::kLacros) {
+        crosapi::BrowserManager::Get()->NewWindow();
+      } else {
+        ash::NewWindowDelegate::GetInstance()->NewWindow(/*incognito=*/false);
       }
-      ash::NewWindowDelegate::GetInstance()->NewWindow(/*incognito=*/false);
       break;
 
     case ash::MENU_NEW_INCOGNITO_WINDOW:
@@ -143,7 +145,7 @@ void AppServiceShelfContextMenu::ExecuteCommand(int command_id,
       break;
 
     case ash::SHUTDOWN_GUEST_OS:
-      if (item().id.app_id == crostini::GetTerminalId()) {
+      if (item().id.app_id == crostini::kCrostiniTerminalSystemAppId) {
         crostini::CrostiniManager::GetForProfile(controller()->profile())
             ->StopVm(crostini::kCrostiniDefaultVmName, base::DoNothing());
       } else if (item().id.app_id == plugin_vm::kPluginVmShelfAppId) {
@@ -187,7 +189,7 @@ void AppServiceShelfContextMenu::ExecuteCommand(int command_id,
     }
 
     case ash::SETTINGS:
-      if (item().id.app_id == crostini::GetTerminalId())
+      if (item().id.app_id == crostini::kCrostiniTerminalSystemAppId)
         crostini::LaunchTerminalSettings(controller()->profile(), display_id());
       return;
 
@@ -278,6 +280,15 @@ void AppServiceShelfContextMenu::OnGetMenuModel(
     index = 1;
   }
 
+  // The special rule to ensure that FilesManager's first menu item is "New
+  // window".
+  const bool build_extension_menu_before_pin =
+      (app_type_ == apps::mojom::AppType::kExtension &&
+       item().id.app_id == extension_misc::kFilesManagerAppId);
+
+  if (build_extension_menu_before_pin)
+    BuildExtensionAppShortcutsMenu(menu_model.get());
+
   if (ShouldAddPinMenu())
     AddPinMenu(menu_model.get());
 
@@ -309,7 +320,7 @@ void AppServiceShelfContextMenu::OnGetMenuModel(
     return;
   }
 
-  if (app_type_ == apps::mojom::AppType::kExtension)
+  if (!build_extension_menu_before_pin)
     BuildExtensionAppShortcutsMenu(menu_model.get());
 
   // When Crostini generates shelf id with the prefix "crostini:", AppService
@@ -507,7 +518,6 @@ bool AppServiceShelfContextMenu::ShouldAddPinMenu() {
       bool show_in_launcher = false;
       apps::AppServiceProxy* proxy =
           apps::AppServiceProxyFactory::GetForProfile(controller()->profile());
-      DCHECK(proxy);
       proxy->AppRegistryCache().ForOneApp(
           item().id.app_id, [&show_in_launcher](const apps::AppUpdate& update) {
             if (update.ShowInLauncher() == apps::mojom::OptionalBool::kTrue)
@@ -519,9 +529,16 @@ bool AppServiceShelfContextMenu::ShouldAddPinMenu() {
       FALLTHROUGH;
     case apps::mojom::AppType::kExtension:
       FALLTHROUGH;
+    case apps::mojom::AppType::kLacros:
+      FALLTHROUGH;
     case apps::mojom::AppType::kWeb:
       return true;
+    case apps::mojom::AppType::kUnknown:
+      FALLTHROUGH;
+    case apps::mojom::AppType::kMacNative:
+      return false;
     default:
+      NOTREACHED() << "All AppType must decide if pin menu should be added.";
       return false;
   }
 }

@@ -20,6 +20,7 @@ class DiscoverScreen : public BaseScreen {
   enum class Result { NEXT, NOT_APPLICABLE };
 
   static std::string GetResultString(Result result);
+  static bool ShouldSkip();
 
   using ScreenExitCallback = base::RepeatingCallback<void(Result result)>;
   DiscoverScreen(DiscoverScreenView* view,
@@ -36,7 +37,7 @@ class DiscoverScreen : public BaseScreen {
 
  protected:
   // BaseScreen:
-  bool MaybeSkip() override;
+  bool MaybeSkip(WizardContext* context) override;
   void ShowImpl() override;
   void HideImpl() override;
   void OnUserAction(const std::string& action_id) override;

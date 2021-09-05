@@ -20,6 +20,7 @@
 #include "base/strings/string_split.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
+#include "chrome/browser/chromeos/arc/session/arc_session_manager.h"
 #include "chrome/browser/chromeos/file_manager/path_util.h"
 #include "chrome/browser/chromeos/lock_screen_apps/state_controller.h"
 #include "chrome/browser/chromeos/note_taking_controller_client.h"
@@ -91,7 +92,7 @@ bool IsLockScreenEnabled(const extensions::Extension* app) {
 
 // Gets the set of apps (more specifically, their app IDs) that are allowed to
 // be launched on the lock screen, if the feature is whitelisted using
-// |prefs::kNoteTakingAppsLockScreenWhitelist| preference. If the pref is not
+// |prefs::kNoteTakingAppsLockScreenAllowlist| preference. If the pref is not
 // set, this method will return null (in which case the white-list should not be
 // checked).
 // Note that |prefs::kNoteTakingrAppsAllowedOnLockScreen| is currently only
@@ -99,7 +100,7 @@ bool IsLockScreenEnabled(const extensions::Extension* app) {
 std::unique_ptr<std::set<std::string>> GetAllowedLockScreenApps(
     PrefService* prefs) {
   const PrefService::Preference* allowed_lock_screen_apps_pref =
-      prefs->FindPreference(prefs::kNoteTakingAppsLockScreenWhitelist);
+      prefs->FindPreference(prefs::kNoteTakingAppsLockScreenAllowlist);
   if (!allowed_lock_screen_apps_pref ||
       allowed_lock_screen_apps_pref->IsDefaultValue()) {
     return nullptr;
@@ -354,7 +355,7 @@ void NoteTakingHelper::SetProfileWithEnabledLockScreenApps(Profile* profile) {
 
   pref_change_registrar_.Init(profile->GetPrefs());
   pref_change_registrar_.Add(
-      prefs::kNoteTakingAppsLockScreenWhitelist,
+      prefs::kNoteTakingAppsLockScreenAllowlist,
       base::Bind(&NoteTakingHelper::OnAllowedNoteTakingAppsChanged,
                  base::Unretained(this)));
   OnAllowedNoteTakingAppsChanged();

@@ -51,6 +51,7 @@ em::AppInfo::AppType ExtractAppType(const apps::mojom::AppType app_type) {
       return em::AppInfo::AppType::AppInfo_AppType_TYPE_WEB;
     case apps::mojom::AppType::kMacNative:
     case apps::mojom::AppType::kLacros:
+    case apps::mojom::AppType::kRemote:
     case apps::mojom::AppType::kUnknown:
       return em::AppInfo::AppType::AppInfo_AppType_TYPE_UNKNOWN;
   }
@@ -147,15 +148,14 @@ void AppInfoGenerator::OnWillReport() {
 }
 
 void AppInfoGenerator::OnAffiliatedLogin(Profile* profile) {
-  apps::AppServiceProxy* app_service_proxy =
-      apps::AppServiceProxyFactory::GetForProfile(profile);
-  if (app_service_proxy) {
-    provider_ = std::make_unique<AppInfoGenerator::AppInfoProvider>(profile);
-    provider_->activity_storage.PruneActivityPeriods(
-        clock_.Now(), max_stored_past_activity_interval_);
-  } else {
-    VLOG(1) << "Is incognito profile. Will not track usage.";
+  if (!apps::AppServiceProxyFactory::IsAppServiceAvailableForProfile(profile)) {
+    VLOG(1) << "No apps available. Will not track usage.";
+    return;
   }
+
+  provider_ = std::make_unique<AppInfoGenerator::AppInfoProvider>(profile);
+  provider_->activity_storage.PruneActivityPeriods(
+      clock_.Now(), max_stored_past_activity_interval_);
 
   if (should_report_) {
     provider_->app_service_proxy.InstanceRegistry().AddObserver(this);

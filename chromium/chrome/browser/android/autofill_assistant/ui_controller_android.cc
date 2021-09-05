@@ -29,7 +29,7 @@
 #include "chrome/android/features/autofill_assistant/jni_headers/AssistantModel_jni.h"
 #include "chrome/android/features/autofill_assistant/jni_headers/AssistantOverlayModel_jni.h"
 #include "chrome/android/features/autofill_assistant/jni_headers/AutofillAssistantUiController_jni.h"
-#include "chrome/browser/android/autofill_assistant/generic_ui_controller_android.h"
+#include "chrome/browser/android/autofill_assistant/generic_ui_root_controller_android.h"
 #include "chrome/browser/android/autofill_assistant/ui_controller_android_utils.h"
 #include "chrome/browser/autofill/android/personal_data_manager_android.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
@@ -40,6 +40,7 @@
 #include "chrome/common/channel_info.h"
 #include "components/autofill/core/browser/data_model/autofill_profile.h"
 #include "components/autofill/core/browser/data_model/credit_card.h"
+#include "components/autofill_assistant/browser/bottom_sheet_state.h"
 #include "components/autofill_assistant/browser/client_settings.h"
 #include "components/autofill_assistant/browser/controller.h"
 #include "components/autofill_assistant/browser/event_handler.h"
@@ -54,7 +55,6 @@
 #include "components/version_info/channel.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/web_contents.h"
 #include "google_apis/google_api_keys.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -284,7 +284,8 @@ UiControllerAndroid::UiControllerAndroid(
       header_delegate_(this),
       collect_user_data_delegate_(this),
       form_delegate_(this),
-      generic_ui_delegate_(this) {
+      generic_ui_delegate_(this),
+      bottom_bar_delegate_(this) {
   java_object_ = Java_AutofillAssistantUiController_create(
       env, jactivity,
       /* allowTabSwitching= */
@@ -304,6 +305,8 @@ UiControllerAndroid::UiControllerAndroid(
   Java_AssistantCollectUserDataModel_setDelegate(
       env, GetCollectUserDataModel(),
       collect_user_data_delegate_.GetJavaObject());
+  Java_AssistantModel_setBottomBarDelegate(
+      env, GetModel(), bottom_bar_delegate_.GetJavaObject());
 }
 
 void UiControllerAndroid::Attach(content::WebContents* web_contents,
@@ -315,87 +318,49 @@ void UiControllerAndroid::Attach(content::WebContents* web_contents,
 
   client_ = client;
 
-  // Remove the self destruction.
-  self_destruct_observer_.reset();
-
   // Detach from the current ui_delegate, if one was set previously.
-  if (ui_delegate_)
-    ui_delegate_->RemoveObserver(this);
+  Detach();
 
   // Attach to the new ui_delegate.
   ui_delegate_ = ui_delegate;
   ui_delegate_->AddObserver(this);
 
-  captured_debug_context_.clear();
   destroy_timer_.reset();
 
   JNIEnv* env = AttachCurrentThread();
   auto java_web_contents = web_contents->GetJavaWebContents();
   Java_AutofillAssistantUiController_setWebContents(env, java_object_,
                                                     java_web_contents);
-  Java_AssistantModel_setWebContents(env, GetModel(), java_web_contents);
   Java_AssistantCollectUserDataModel_setWebContents(
       env, GetCollectUserDataModel(), java_web_contents);
   OnClientSettingsChanged(ui_delegate_->GetClientSettings());
 
-  if (ui_delegate->GetState() != AutofillAssistantState::INACTIVE) {
+  if (ui_delegate->GetState() != AutofillAssistantState::INACTIVE &&
+      ui_delegate->IsTabSelected()) {
     // The UI was created for an existing Controller.
-    OnStatusMessageChanged(ui_delegate->GetStatusMessage());
-    OnBubbleMessageChanged(ui_delegate->GetBubbleMessage());
-    auto step_progress_bar_configuration =
-        ui_delegate->GetStepProgressBarConfiguration();
-    if (step_progress_bar_configuration.has_value()) {
-      OnStepProgressBarConfigurationChanged(*step_progress_bar_configuration);
-      if (step_progress_bar_configuration->use_step_progress_bar()) {
-        auto active_step = ui_delegate_->GetProgressActiveStep();
-        if (active_step.has_value()) {
-          OnProgressActiveStepChanged(*active_step);
-        }
-        OnProgressBarErrorStateChanged(ui_delegate->GetProgressBarErrorState());
-      }
-    } else {
-      OnStepProgressBarConfigurationChanged(
-          ShowProgressBarProto::StepProgressBarConfiguration());
-      OnProgressChanged(ui_delegate->GetProgress());
-    }
-    OnProgressVisibilityChanged(ui_delegate->GetProgressVisible());
-    OnInfoBoxChanged(ui_delegate_->GetInfoBox());
-    OnDetailsChanged(ui_delegate->GetDetails());
-    OnUserActionsChanged(ui_delegate_->GetUserActions());
-    OnCollectUserDataOptionsChanged(ui_delegate->GetCollectUserDataOptions());
-    OnUserDataChanged(ui_delegate->GetUserData(), UserData::FieldChange::ALL);
-    OnGenericUserInterfaceChanged(ui_delegate->GetGenericUiProto());
-
-    std::vector<RectF> area;
-    ui_delegate->GetTouchableArea(&area);
-    std::vector<RectF> restricted_area;
-    ui_delegate->GetRestrictedArea(&restricted_area);
-    RectF visual_viewport;
-    ui_delegate->GetVisualViewport(&visual_viewport);
-    OnTouchableAreaChanged(visual_viewport, area, restricted_area);
-    OnViewportModeChanged(ui_delegate->GetViewportMode());
-    OnPeekModeChanged(ui_delegate->GetPeekMode());
-    OnFormChanged(ui_delegate->GetForm(), ui_delegate->GetFormResult());
-    // TODO(b/145204744): Store the collapsed or expanded state from the bottom
-    // sheet when detaching the UI so that it can be restored appropriately
-    // here.
-
-    UiDelegate::OverlayColors colors;
-    ui_delegate->GetOverlayColors(&colors);
-    OnOverlayColorsChanged(colors);
-
-    OnStateChanged(ui_delegate->GetState());
+    RestoreUi();
+  } else if (ui_delegate->GetState() == AutofillAssistantState::INACTIVE) {
+    SetVisible(true);
   }
+  // The call to set the web contents will, for some edge cases, trigger a call
+  // from the Java side to the onTabSelected method.
+  // We want this to happen only after the AttachUI method was fully executed,
+  // as it would otherwise find that IsTabSelected() is true when deciding if
+  // restoring the UI.
+  Java_AssistantModel_setWebContents(env, GetModel(), java_web_contents);
+}
 
-  SetVisible(true);
+void UiControllerAndroid::Detach() {
+  if (ui_delegate_) {
+    ui_delegate_->RemoveObserver(this);
+  }
+  ui_delegate_ = nullptr;
 }
 
 UiControllerAndroid::~UiControllerAndroid() {
   Java_AutofillAssistantUiController_clearNativePtr(AttachCurrentThread(),
                                                     java_object_);
-
-  if (ui_delegate_)
-    ui_delegate_->RemoveObserver(this);
+  Detach();
 }
 
 base::android::ScopedJavaLocalRef<jobject> UiControllerAndroid::GetModel() {
@@ -442,7 +407,7 @@ void UiControllerAndroid::SetupForState() {
       SetOverlayState(OverlayState::HIDDEN);
       SetSpinPoodle(false);
 
-      if (should_prompt_action_expand_sheet)
+      if (should_prompt_action_expand_sheet && ui_delegate_->IsTabSelected())
         ShowContentAndExpandBottomSheet();
       return;
 
@@ -450,7 +415,7 @@ void UiControllerAndroid::SetupForState() {
       SetOverlayState(OverlayState::PARTIAL);
       SetSpinPoodle(false);
 
-      if (should_prompt_action_expand_sheet)
+      if (should_prompt_action_expand_sheet && ui_delegate_->IsTabSelected())
         ShowContentAndExpandBottomSheet();
       return;
 
@@ -469,8 +434,9 @@ void UiControllerAndroid::SetupForState() {
       SetSpinPoodle(false);
 
       // Make sure the user sees the error message.
-      ShowContentAndExpandBottomSheet();
-      Detach();
+      if (ui_delegate_->IsTabSelected())
+        ShowContentAndExpandBottomSheet();
+      ResetGenericUiControllers();
       return;
 
     case AutofillAssistantState::TRACKING:
@@ -595,7 +561,8 @@ void UiControllerAndroid::OnFeedbackButtonClicked() {
   JNIEnv* env = AttachCurrentThread();
   Java_AutofillAssistantUiController_showFeedback(
       env, java_object_,
-      base::android::ConvertUTF8ToJavaString(env, GetDebugContext()));
+      base::android::ConvertUTF8ToJavaString(env,
+                                             ui_delegate_->GetDebugContext()));
 }
 
 void UiControllerAndroid::OnViewEvent(const EventHandler::EventKey& key) {
@@ -649,15 +616,10 @@ void UiControllerAndroid::SnackbarResult(
   std::move(action).Run();
 }
 
-std::string UiControllerAndroid::GetDebugContext() {
-  if (captured_debug_context_.empty() && ui_delegate_) {
-    return ui_delegate_->GetDebugContext();
-  }
-  return captured_debug_context_;
-}
-
 void UiControllerAndroid::DestroySelf() {
-  self_destruct_observer_.reset();
+  if (ui_delegate_)
+    ui_delegate_->ShutdownIfNecessary();
+
   client_->DestroyUI();
 }
 
@@ -678,6 +640,81 @@ void UiControllerAndroid::SetVisible(bool visible) {
   }
 }
 
+void UiControllerAndroid::RestoreUi() {
+  if (ui_delegate_ == nullptr)
+    return;
+
+  OnStatusMessageChanged(ui_delegate_->GetStatusMessage());
+  OnBubbleMessageChanged(ui_delegate_->GetBubbleMessage());
+  auto step_progress_bar_configuration =
+      ui_delegate_->GetStepProgressBarConfiguration();
+  if (step_progress_bar_configuration.has_value()) {
+    OnStepProgressBarConfigurationChanged(*step_progress_bar_configuration);
+    if (step_progress_bar_configuration->use_step_progress_bar()) {
+      auto active_step = ui_delegate_->GetProgressActiveStep();
+      if (active_step.has_value()) {
+        OnProgressActiveStepChanged(*active_step);
+      }
+      OnProgressBarErrorStateChanged(ui_delegate_->GetProgressBarErrorState());
+    }
+  } else {
+    OnStepProgressBarConfigurationChanged(
+        ShowProgressBarProto::StepProgressBarConfiguration());
+    OnProgressChanged(ui_delegate_->GetProgress());
+  }
+  OnProgressVisibilityChanged(ui_delegate_->GetProgressVisible());
+  OnInfoBoxChanged(ui_delegate_->GetInfoBox());
+  OnDetailsChanged(ui_delegate_->GetDetails());
+  OnUserActionsChanged(ui_delegate_->GetUserActions());
+  OnCollectUserDataOptionsChanged(ui_delegate_->GetCollectUserDataOptions());
+  OnUserDataChanged(ui_delegate_->GetUserData(), UserData::FieldChange::ALL);
+  OnGenericUserInterfaceChanged(ui_delegate_->GetGenericUiProto());
+
+  std::vector<RectF> area;
+  ui_delegate_->GetTouchableArea(&area);
+  std::vector<RectF> restricted_area;
+  ui_delegate_->GetRestrictedArea(&restricted_area);
+  RectF visual_viewport;
+  ui_delegate_->GetVisualViewport(&visual_viewport);
+  OnTouchableAreaChanged(visual_viewport, area, restricted_area);
+  OnViewportModeChanged(ui_delegate_->GetViewportMode());
+  OnPeekModeChanged(ui_delegate_->GetPeekMode());
+  OnFormChanged(ui_delegate_->GetForm(), ui_delegate_->GetFormResult());
+  UiDelegate::OverlayColors colors;
+  ui_delegate_->GetOverlayColors(&colors);
+  OnOverlayColorsChanged(colors);
+  SetVisible(true);
+  Java_AutofillAssistantUiController_restoreBottomSheetState(
+      AttachCurrentThread(), java_object_,
+      ui_controller_android_utils::ToJavaBottomSheetState(
+          ui_delegate_->GetBottomSheetState()));
+}
+
+void UiControllerAndroid::OnTabSwitched(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& jcaller,
+    jint state) {
+  if (ui_delegate_ == nullptr) {
+    return;
+  }
+
+  ui_delegate_->SetBottomSheetState(
+      ui_controller_android_utils::ToNativeBottomSheetState(state));
+  ui_delegate_->SetTabSelected(false);
+}
+
+void UiControllerAndroid::OnTabSelected(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& jcaller) {
+  if (ui_delegate_ == nullptr) {
+    return;
+  }
+  if (!ui_delegate_->IsTabSelected()) {
+    RestoreUi();
+    ui_delegate_->SetTabSelected(true);
+  }
+}
+
 // Actions carousels related methods.
 
 void UiControllerAndroid::UpdateActions(
@@ -687,11 +724,13 @@ void UiControllerAndroid::UpdateActions(
   JNIEnv* env = AttachCurrentThread();
 
   bool has_close_or_cancel = false;
-  auto chips = Java_AutofillAssistantUiController_createChipList(env);
+  auto jchips = Java_AutofillAssistantUiController_createChipList(env);
+  auto jsticky_chips = Java_AutofillAssistantUiController_createChipList(env);
   int user_action_count = static_cast<int>(user_actions.size());
   for (int i = 0; i < user_action_count; i++) {
     const auto& action = user_actions[i];
     const Chip& chip = action.chip();
+    base::android::ScopedJavaLocalRef<jobject> jchip;
     switch (chip.type) {
       default:  // Ignore actions with other chip types or with no chips.
         break;
@@ -701,16 +740,17 @@ void UiControllerAndroid::UpdateActions(
         // can hide all the chips except for the cancel chip when the keyboard
         // is showing.
         // TODO(b/149543425): Find a better way to do this.
-        Java_AutofillAssistantUiController_addHighlightedActionButton(
-            env, java_object_, chips, chip.icon,
-            base::android::ConvertUTF8ToJavaString(env, chip.text), i,
-            !action.enabled(), chip.sticky,
-            base::android::ConvertUTF8ToJavaString(env, ""));
+        jchip =
+            Java_AutofillAssistantUiController_createHighlightedActionButton(
+                env, java_object_, chip.icon,
+                base::android::ConvertUTF8ToJavaString(env, chip.text), i,
+                !action.enabled(), chip.sticky,
+                base::android::ConvertUTF8ToJavaString(env, ""));
         break;
 
       case NORMAL_ACTION:
-        Java_AutofillAssistantUiController_addActionButton(
-            env, java_object_, chips, chip.icon,
+        jchip = Java_AutofillAssistantUiController_createActionButton(
+            env, java_object_, chip.icon,
             base::android::ConvertUTF8ToJavaString(env, chip.text), i,
             !action.enabled(), chip.sticky,
             base::android::ConvertUTF8ToJavaString(env, ""));
@@ -719,8 +759,8 @@ void UiControllerAndroid::UpdateActions(
       case CANCEL_ACTION:
         // A Cancel button sneaks in an UNDO snackbar before executing the
         // action, while a close button behaves like a normal button.
-        Java_AutofillAssistantUiController_addCancelButton(
-            env, java_object_, chips, chip.icon,
+        jchip = Java_AutofillAssistantUiController_createCancelButton(
+            env, java_object_, chip.icon,
             base::android::ConvertUTF8ToJavaString(env, chip.text), i,
             !action.enabled(), chip.sticky,
             base::android::ConvertUTF8ToJavaString(env, kCancelChipIdentifier));
@@ -728,8 +768,8 @@ void UiControllerAndroid::UpdateActions(
         break;
 
       case CLOSE_ACTION:
-        Java_AutofillAssistantUiController_addActionButton(
-            env, java_object_, chips, chip.icon,
+        jchip = Java_AutofillAssistantUiController_createActionButton(
+            env, java_object_, chip.icon,
             base::android::ConvertUTF8ToJavaString(env, chip.text), i,
             !action.enabled(), chip.sticky,
             base::android::ConvertUTF8ToJavaString(env, ""));
@@ -737,33 +777,50 @@ void UiControllerAndroid::UpdateActions(
         break;
 
       case DONE_ACTION:
-        Java_AutofillAssistantUiController_addHighlightedActionButton(
-            env, java_object_, chips, chip.icon,
-            base::android::ConvertUTF8ToJavaString(env, chip.text), i,
-            !action.enabled(), chip.sticky,
-            base::android::ConvertUTF8ToJavaString(env, ""));
+        jchip =
+            Java_AutofillAssistantUiController_createHighlightedActionButton(
+                env, java_object_, chip.icon,
+                base::android::ConvertUTF8ToJavaString(env, chip.text), i,
+                !action.enabled(), chip.sticky,
+                base::android::ConvertUTF8ToJavaString(env, ""));
         has_close_or_cancel = true;
         break;
+    }
+    if (jchip) {
+      Java_AutofillAssistantUiController_appendChipToList(env, jchips, jchip);
+      if (chip.sticky) {
+        Java_AutofillAssistantUiController_appendChipToList(env, jsticky_chips,
+                                                            jchip);
+      }
     }
   }
 
   if (!has_close_or_cancel) {
+    base::android::ScopedJavaLocalRef<jobject> jcancel_chip;
     if (ui_delegate_->GetState() == AutofillAssistantState::STOPPED) {
-      Java_AutofillAssistantUiController_addCloseButton(
-          env, java_object_, chips, ICON_CLEAR,
+      jcancel_chip = Java_AutofillAssistantUiController_createCloseButton(
+          env, java_object_, ICON_CLEAR,
           base::android::ConvertUTF8ToJavaString(env, ""),
           /* disabled= */ false, /* sticky= */ true,
           base::android::ConvertUTF8ToJavaString(env, ""));
     } else if (ui_delegate_->GetState() != AutofillAssistantState::INACTIVE) {
-      Java_AutofillAssistantUiController_addCancelButton(
-          env, java_object_, chips, ICON_CLEAR,
+      jcancel_chip = Java_AutofillAssistantUiController_createCancelButton(
+          env, java_object_, ICON_CLEAR,
           base::android::ConvertUTF8ToJavaString(env, ""), -1,
           /* disabled= */ false, /* sticky= */ true,
           base::android::ConvertUTF8ToJavaString(env, kCancelChipIdentifier));
     }
+    if (jcancel_chip) {
+      Java_AutofillAssistantUiController_appendChipToList(env, jchips,
+                                                          jcancel_chip);
+      Java_AutofillAssistantUiController_appendChipToList(env, jsticky_chips,
+                                                          jcancel_chip);
+    }
   }
 
-  Java_AutofillAssistantUiController_setActions(env, java_object_, chips);
+  Java_AutofillAssistantUiController_setActions(env, java_object_, jchips);
+  Java_AssistantHeaderModel_setChips(AttachCurrentThread(), GetHeaderModel(),
+                                     jsticky_chips);
 }
 
 void UiControllerAndroid::OnUserActionsChanged(
@@ -814,24 +871,51 @@ void UiControllerAndroid::OnKeyboardVisibilityChanged(
       !visible);
 }
 
-bool UiControllerAndroid::OnBackButtonClicked(
-    JNIEnv* env,
-    const base::android::JavaParamRef<jobject>& caller) {
+bool UiControllerAndroid::OnBackButtonClicked() {
   // If the keyboard is currently shown, clicking the back button should
   // hide the keyboard rather than close autofill assistant.
-  if (Java_AutofillAssistantUiController_isKeyboardShown(env, java_object_)) {
-    Java_AutofillAssistantUiController_hideKeyboard(env, java_object_);
+  if (Java_AutofillAssistantUiController_isKeyboardShown(AttachCurrentThread(),
+                                                         java_object_)) {
+    Java_AutofillAssistantUiController_hideKeyboard(AttachCurrentThread(),
+                                                    java_object_);
     return true;
   }
 
   // For BROWSE state the back button should react in its default way.
   if (ui_delegate_ != nullptr &&
-      ui_delegate_->GetState() == AutofillAssistantState::BROWSE) {
+      (ui_delegate_->GetState() == AutofillAssistantState::BROWSE)) {
     return false;
   }
 
-  CloseOrCancel(-1, TriggerContext::CreateEmpty(),
-                Metrics::DropOutReason::BACK_BUTTON_CLICKED);
+  if (ui_delegate_ == nullptr ||
+      ui_delegate_->GetState() == AutofillAssistantState::STOPPED ||
+      ui_delegate_->IsRunningLiteScript()) {
+    if (client_->GetWebContents() != nullptr &&
+        client_->GetWebContents()->GetController().CanGoBack()) {
+      client_->GetWebContents()->GetController().GoBack();
+    }
+
+    // Lite scripts should not shut down here. The navigation will be handled
+    // by the lite script coordinator.
+    if (!ui_delegate_ || !ui_delegate_->IsRunningLiteScript()) {
+      // Destroying UI here because Shutdown does not do so in all cases.
+      DestroySelf();
+      Shutdown(Metrics::DropOutReason::BACK_BUTTON_CLICKED);
+    }
+
+    return true;
+  }
+
+  // ui_delegate_ must never be nullptr here!
+  auto back_button_settings =
+      ui_delegate_->GetClientSettings().back_button_settings;
+  if (back_button_settings.has_value()) {
+    ui_delegate_->OnStop(back_button_settings->message(),
+                         back_button_settings->undo_label());
+  } else {
+    CloseOrCancel(-1, TriggerContext::CreateEmpty(),
+                  Metrics::DropOutReason::BACK_BUTTON_CLICKED);
+  }
   return true;
 }
 
@@ -895,11 +979,26 @@ void UiControllerAndroid::SetOverlayState(OverlayState state) {
       state = OverlayState::FULL;
     }
   }
+  overlay_state_ = state;
 
+  if (ui_delegate_ && ui_delegate_->ShouldShowOverlay()) {
+    ApplyOverlayState(state);
+  }
+}
+
+void UiControllerAndroid::ApplyOverlayState(OverlayState state) {
   Java_AssistantOverlayModel_setState(AttachCurrentThread(), GetOverlayModel(),
                                       state);
   Java_AssistantModel_setAllowTalkbackOnWebsite(
       AttachCurrentThread(), GetModel(), state != OverlayState::FULL);
+}
+
+void UiControllerAndroid::OnShouldShowOverlayChanged(bool should_show) {
+  if (should_show) {
+    ApplyOverlayState(overlay_state_);
+  } else {
+    ApplyOverlayState(OverlayState::HIDDEN);
+  }
 }
 
 void UiControllerAndroid::OnTouchableAreaChanged(
@@ -947,45 +1046,6 @@ void UiControllerAndroid::OnUserInteractionInsideTouchableArea() {
 void UiControllerAndroid::CloseCustomTab() {
   Java_AutofillAssistantUiController_scheduleCloseCustomTab(
       AttachCurrentThread(), java_object_);
-}
-
-UiControllerAndroid::SelfDestructObserver::SelfDestructObserver(
-    content::WebContents* web_contents,
-    UiControllerAndroid* ui_controller,
-    int64_t navigation_id_to_ignore)
-    : content::WebContentsObserver(web_contents),
-      ui_controller_(ui_controller),
-      navigation_id_to_ignore_(navigation_id_to_ignore) {}
-
-UiControllerAndroid::SelfDestructObserver::~SelfDestructObserver() {}
-
-void UiControllerAndroid::SelfDestructObserver::DidStartNavigation(
-    content::NavigationHandle* navigation_handle) {
-  if (!navigation_handle->IsInMainFrame() ||
-      navigation_handle->IsRendererInitiated() ||
-      navigation_handle->GetNavigationId() == navigation_id_to_ignore_) {
-    return;
-  }
-  ui_controller_->DestroySelf();
-}
-
-void UiControllerAndroid::Detach() {
-  if (!ui_delegate_)
-    return;
-
-  auto* web_contents = client_->GetWebContents();
-  if (web_contents != nullptr) {
-    self_destruct_observer_ = std::make_unique<SelfDestructObserver>(
-        web_contents, this, ui_delegate_->GetErrorCausingNavigationId());
-  }
-
-  ResetGenericUiControllers();
-
-  // Capture the debug context, for including into a feedback possibly sent
-  // later.
-  captured_debug_context_ = ui_delegate_->GetDebugContext();
-  ui_delegate_->RemoveObserver(this);
-  ui_delegate_ = nullptr;
 }
 
 // Collect user data related methods.
@@ -1782,15 +1842,14 @@ void UiControllerAndroid::ResetGenericUiControllers() {
   Java_AssistantGenericUiModel_setView(env, GetGenericUiModel(), nullptr);
 }
 
-std::unique_ptr<GenericUiControllerAndroid>
+std::unique_ptr<GenericUiRootControllerAndroid>
 UiControllerAndroid::CreateGenericUiControllerForProto(
     const GenericUserInterfaceProto& proto) {
   JNIEnv* env = AttachCurrentThread();
   auto jcontext =
       Java_AutofillAssistantUiController_getContext(env, java_object_);
-  return GenericUiControllerAndroid::CreateFromProto(
-      proto, /* context = */ {},
-      base::android::ScopedJavaGlobalRef<jobject>(jcontext),
+  return GenericUiRootControllerAndroid::CreateFromProto(
+      proto, base::android::ScopedJavaGlobalRef<jobject>(jcontext),
       generic_ui_delegate_.GetJavaObject(), ui_delegate_->GetEventHandler(),
       ui_delegate_->GetUserModel(), ui_delegate_->GetBasicInteractions());
 }

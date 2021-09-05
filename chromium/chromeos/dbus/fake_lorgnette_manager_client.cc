@@ -30,24 +30,38 @@ void FakeLorgnetteManagerClient::ScanImageToString(
     std::string device_name,
     const ScanProperties& properties,
     DBusMethodCallback<std::string> callback) {
-  auto it = scan_data_.find(
-      std::make_tuple(device_name, properties.mode, properties.resolution_dpi));
-  auto data =
-      it == scan_data_.end() ? base::nullopt : base::make_optional(it->second);
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::BindOnce(std::move(callback), std::move(data)));
+      FROM_HERE,
+      base::BindOnce(std::move(callback), std::move(scan_image_response_)));
 }
 
-void FakeLorgnetteManagerClient::AddScanData(const std::string& device_name,
-                                             const ScanProperties& properties,
-                                             const std::string& data) {
-  scan_data_[std::make_tuple(device_name, properties.mode,
-                             properties.resolution_dpi)] = data;
+void FakeLorgnetteManagerClient::StartScan(
+    std::string device_name,
+    const ScanProperties& properties,
+    DBusMethodCallback<std::string> completion_callback,
+    base::Optional<base::RepeatingCallback<void(int)>> progress_callback) {
+  // Simulate progress reporting for the scan job.
+  if (progress_callback.has_value()) {
+    base::RepeatingCallback<void(int)> callback = progress_callback.value();
+    for (int progress : {7, 22, 40, 42, 59, 74, 95}) {
+      callback.Run(progress);
+    }
+  }
+
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::BindOnce(std::move(completion_callback),
+                                std::move(scan_image_response_)));
 }
 
 void FakeLorgnetteManagerClient::SetListScannersResponse(
-    const lorgnette::ListScannersResponse& list_scanners_response) {
+    const base::Optional<lorgnette::ListScannersResponse>&
+        list_scanners_response) {
   list_scanners_response_ = list_scanners_response;
+}
+
+void FakeLorgnetteManagerClient::SetScanResponse(
+    const base::Optional<std::string>& scan_image_response) {
+  scan_image_response_ = scan_image_response;
 }
 
 }  // namespace chromeos

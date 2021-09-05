@@ -639,6 +639,352 @@ chrome.automation.Marker;
 /**
  * @constructor
  * @private
+ * @see https://developer.chrome.com/extensions/automation#type-AutomationPosition
+ */
+chrome.automation.AutomationPosition = function() {};
+
+/**
+ * @type {(!chrome.automation.AutomationNode|undefined)}
+ * @see https://developer.chrome.com/extensions/automation#type-node
+ */
+chrome.automation.AutomationPosition.prototype.node;
+
+/**
+ * @type {number}
+ * @see https://developer.chrome.com/extensions/automation#type-childIndex
+ */
+chrome.automation.AutomationPosition.prototype.childIndex;
+
+/**
+ * @type {number}
+ * @see https://developer.chrome.com/extensions/automation#type-textOffset
+ */
+chrome.automation.AutomationPosition.prototype.textOffset;
+
+/**
+ * @type {string}
+ * @see https://developer.chrome.com/extensions/automation#type-affinity
+ */
+chrome.automation.AutomationPosition.prototype.affinity;
+
+/**
+ * @return {boolean}
+ * @see https://developer.chrome.com/extensions/automation#method-isNullPosition
+ */
+chrome.automation.AutomationPosition.prototype.isNullPosition = function() {};
+
+/**
+ * @return {boolean}
+ * @see https://developer.chrome.com/extensions/automation#method-isTreePosition
+ */
+chrome.automation.AutomationPosition.prototype.isTreePosition = function() {};
+
+/**
+ * @return {boolean}
+ * @see https://developer.chrome.com/extensions/automation#method-isTextPosition
+ */
+chrome.automation.AutomationPosition.prototype.isTextPosition = function() {};
+
+/**
+ * @return {boolean}
+ * @see https://developer.chrome.com/extensions/automation#method-isLeafTextPosition
+ */
+chrome.automation.AutomationPosition.prototype.isLeafTextPosition = function() {};
+
+/**
+ * @return {boolean}
+ * @see https://developer.chrome.com/extensions/automation#method-atStartOfAnchor
+ */
+chrome.automation.AutomationPosition.prototype.atStartOfAnchor = function() {};
+
+/**
+ * @return {boolean}
+ * @see https://developer.chrome.com/extensions/automation#method-atEndOfAnchor
+ */
+chrome.automation.AutomationPosition.prototype.atEndOfAnchor = function() {};
+
+/**
+ * @return {boolean}
+ * @see https://developer.chrome.com/extensions/automation#method-atStartOfWord
+ */
+chrome.automation.AutomationPosition.prototype.atStartOfWord = function() {};
+
+/**
+ * @return {boolean}
+ * @see https://developer.chrome.com/extensions/automation#method-atEndOfWord
+ */
+chrome.automation.AutomationPosition.prototype.atEndOfWord = function() {};
+
+/**
+ * @return {boolean}
+ * @see https://developer.chrome.com/extensions/automation#method-atStartOfLine
+ */
+chrome.automation.AutomationPosition.prototype.atStartOfLine = function() {};
+
+/**
+ * @return {boolean}
+ * @see https://developer.chrome.com/extensions/automation#method-atEndOfLine
+ */
+chrome.automation.AutomationPosition.prototype.atEndOfLine = function() {};
+
+/**
+ * @return {boolean}
+ * @see https://developer.chrome.com/extensions/automation#method-atStartOfParagraph
+ */
+chrome.automation.AutomationPosition.prototype.atStartOfParagraph = function() {};
+
+/**
+ * @return {boolean}
+ * @see https://developer.chrome.com/extensions/automation#method-atEndOfParagraph
+ */
+chrome.automation.AutomationPosition.prototype.atEndOfParagraph = function() {};
+
+/**
+ * @return {boolean}
+ * @see https://developer.chrome.com/extensions/automation#method-atStartOfPage
+ */
+chrome.automation.AutomationPosition.prototype.atStartOfPage = function() {};
+
+/**
+ * @return {boolean}
+ * @see https://developer.chrome.com/extensions/automation#method-atEndOfPage
+ */
+chrome.automation.AutomationPosition.prototype.atEndOfPage = function() {};
+
+/**
+ * @return {boolean}
+ * @see https://developer.chrome.com/extensions/automation#method-atStartOfFormat
+ */
+chrome.automation.AutomationPosition.prototype.atStartOfFormat = function() {};
+
+/**
+ * @return {boolean}
+ * @see https://developer.chrome.com/extensions/automation#method-atEndOfFormat
+ */
+chrome.automation.AutomationPosition.prototype.atEndOfFormat = function() {};
+
+/**
+ * @return {boolean}
+ * @see https://developer.chrome.com/extensions/automation#method-atStartOfDocument
+ */
+chrome.automation.AutomationPosition.prototype.atStartOfDocument = function() {};
+
+/**
+ * @return {boolean}
+ * @see https://developer.chrome.com/extensions/automation#method-atEndOfDocument
+ */
+chrome.automation.AutomationPosition.prototype.atEndOfDocument = function() {};
+
+/**
+ * @see https://developer.chrome.com/extensions/automation#method-asTreePosition
+ */
+chrome.automation.AutomationPosition.prototype.asTreePosition = function() {};
+
+/**
+ * @see https://developer.chrome.com/extensions/automation#method-asTextPosition
+ */
+chrome.automation.AutomationPosition.prototype.asTextPosition = function() {};
+
+/**
+ * @see https://developer.chrome.com/extensions/automation#method-asLeafTextPosition
+ */
+chrome.automation.AutomationPosition.prototype.asLeafTextPosition = function() {};
+
+/**
+ * @see https://developer.chrome.com/extensions/automation#method-moveToPositionAtStartOfAnchor
+ */
+chrome.automation.AutomationPosition.prototype.moveToPositionAtStartOfAnchor = function() {};
+
+/**
+ * @see https://developer.chrome.com/extensions/automation#method-moveToPositionAtEndOfAnchor
+ */
+chrome.automation.AutomationPosition.prototype.moveToPositionAtEndOfAnchor = function() {};
+
+/**
+ * @see https://developer.chrome.com/extensions/automation#method-moveToPositionAtStartOfDocument
+ */
+chrome.automation.AutomationPosition.prototype.moveToPositionAtStartOfDocument = function() {};
+
+/**
+ * @see https://developer.chrome.com/extensions/automation#method-moveToPositionAtEndOfDocument
+ */
+chrome.automation.AutomationPosition.prototype.moveToPositionAtEndOfDocument = function() {};
+
+/**
+ * @see https://developer.chrome.com/extensions/automation#method-moveToParentPosition
+ */
+chrome.automation.AutomationPosition.prototype.moveToParentPosition = function() {};
+
+/**
+ * @see https://developer.chrome.com/extensions/automation#method-moveToNextLeafTreePosition
+ */
+chrome.automation.AutomationPosition.prototype.moveToNextLeafTreePosition = function() {};
+
+/**
+ * @see https://developer.chrome.com/extensions/automation#method-moveToPreviousLeafTreePosition
+ */
+chrome.automation.AutomationPosition.prototype.moveToPreviousLeafTreePosition = function() {};
+
+/**
+ * @see https://developer.chrome.com/extensions/automation#method-moveToNextLeafTextPosition
+ */
+chrome.automation.AutomationPosition.prototype.moveToNextLeafTextPosition = function() {};
+
+/**
+ * @see https://developer.chrome.com/extensions/automation#method-moveToPreviousLeafTextPosition
+ */
+chrome.automation.AutomationPosition.prototype.moveToPreviousLeafTextPosition = function() {};
+
+/**
+ * @see https://developer.chrome.com/extensions/automation#method-moveToNextCharacterPosition
+ */
+chrome.automation.AutomationPosition.prototype.moveToNextCharacterPosition = function() {};
+
+/**
+ * @see https://developer.chrome.com/extensions/automation#method-moveToPreviousCharacterPosition
+ */
+chrome.automation.AutomationPosition.prototype.moveToPreviousCharacterPosition = function() {};
+
+/**
+ * @see https://developer.chrome.com/extensions/automation#method-moveToNextWordStartPosition
+ */
+chrome.automation.AutomationPosition.prototype.moveToNextWordStartPosition = function() {};
+
+/**
+ * @see https://developer.chrome.com/extensions/automation#method-moveToPreviousWordStartPosition
+ */
+chrome.automation.AutomationPosition.prototype.moveToPreviousWordStartPosition = function() {};
+
+/**
+ * @see https://developer.chrome.com/extensions/automation#method-moveToNextWordEndPosition
+ */
+chrome.automation.AutomationPosition.prototype.moveToNextWordEndPosition = function() {};
+
+/**
+ * @see https://developer.chrome.com/extensions/automation#method-moveToPreviousWordEndPosition
+ */
+chrome.automation.AutomationPosition.prototype.moveToPreviousWordEndPosition = function() {};
+
+/**
+ * @see https://developer.chrome.com/extensions/automation#method-moveToNextLineStartPosition
+ */
+chrome.automation.AutomationPosition.prototype.moveToNextLineStartPosition = function() {};
+
+/**
+ * @see https://developer.chrome.com/extensions/automation#method-moveToPreviousLineStartPosition
+ */
+chrome.automation.AutomationPosition.prototype.moveToPreviousLineStartPosition = function() {};
+
+/**
+ * @see https://developer.chrome.com/extensions/automation#method-moveToNextLineEndPosition
+ */
+chrome.automation.AutomationPosition.prototype.moveToNextLineEndPosition = function() {};
+
+/**
+ * @see https://developer.chrome.com/extensions/automation#method-moveToPreviousLineEndPosition
+ */
+chrome.automation.AutomationPosition.prototype.moveToPreviousLineEndPosition = function() {};
+
+/**
+ * @see https://developer.chrome.com/extensions/automation#method-moveToPreviousFormatStartPosition
+ */
+chrome.automation.AutomationPosition.prototype.moveToPreviousFormatStartPosition = function() {};
+
+/**
+ * @see https://developer.chrome.com/extensions/automation#method-moveToNextFormatEndPosition
+ */
+chrome.automation.AutomationPosition.prototype.moveToNextFormatEndPosition = function() {};
+
+/**
+ * @see https://developer.chrome.com/extensions/automation#method-moveToNextParagraphStartPosition
+ */
+chrome.automation.AutomationPosition.prototype.moveToNextParagraphStartPosition = function() {};
+
+/**
+ * @see https://developer.chrome.com/extensions/automation#method-moveToPreviousParagraphStartPosition
+ */
+chrome.automation.AutomationPosition.prototype.moveToPreviousParagraphStartPosition = function() {};
+
+/**
+ * @see https://developer.chrome.com/extensions/automation#method-moveToNextParagraphEndPosition
+ */
+chrome.automation.AutomationPosition.prototype.moveToNextParagraphEndPosition = function() {};
+
+/**
+ * @see https://developer.chrome.com/extensions/automation#method-moveToPreviousParagraphEndPosition
+ */
+chrome.automation.AutomationPosition.prototype.moveToPreviousParagraphEndPosition = function() {};
+
+/**
+ * @see https://developer.chrome.com/extensions/automation#method-moveToNextPageStartPosition
+ */
+chrome.automation.AutomationPosition.prototype.moveToNextPageStartPosition = function() {};
+
+/**
+ * @see https://developer.chrome.com/extensions/automation#method-moveToPreviousPageStartPosition
+ */
+chrome.automation.AutomationPosition.prototype.moveToPreviousPageStartPosition = function() {};
+
+/**
+ * @see https://developer.chrome.com/extensions/automation#method-moveToNextPageEndPosition
+ */
+chrome.automation.AutomationPosition.prototype.moveToNextPageEndPosition = function() {};
+
+/**
+ * @see https://developer.chrome.com/extensions/automation#method-moveToPreviousPageEndPosition
+ */
+chrome.automation.AutomationPosition.prototype.moveToPreviousPageEndPosition = function() {};
+
+/**
+ * @see https://developer.chrome.com/extensions/automation#method-moveToNextAnchorPosition
+ */
+chrome.automation.AutomationPosition.prototype.moveToNextAnchorPosition = function() {};
+
+/**
+ * @see https://developer.chrome.com/extensions/automation#method-moveToPreviousAnchorPosition
+ */
+chrome.automation.AutomationPosition.prototype.moveToPreviousAnchorPosition = function() {};
+
+/**
+ * @return {number}
+ * @see https://developer.chrome.com/extensions/automation#method-maxTextOffset
+ */
+chrome.automation.AutomationPosition.prototype.maxTextOffset = function() {};
+
+/**
+ * @return {boolean}
+ * @see https://developer.chrome.com/extensions/automation#method-isInLineBreak
+ */
+chrome.automation.AutomationPosition.prototype.isInLineBreak = function() {};
+
+/**
+ * @return {boolean}
+ * @see https://developer.chrome.com/extensions/automation#method-isInTextObject
+ */
+chrome.automation.AutomationPosition.prototype.isInTextObject = function() {};
+
+/**
+ * @return {boolean}
+ * @see https://developer.chrome.com/extensions/automation#method-isInWhiteSpace
+ */
+chrome.automation.AutomationPosition.prototype.isInWhiteSpace = function() {};
+
+/**
+ * @return {boolean}
+ * @see https://developer.chrome.com/extensions/automation#method-isValid
+ */
+chrome.automation.AutomationPosition.prototype.isValid = function() {};
+
+/**
+ * @return {string}
+ * @see https://developer.chrome.com/extensions/automation#method-getText
+ */
+chrome.automation.AutomationPosition.prototype.getText = function() {};
+
+
+/**
+ * @constructor
+ * @private
  * @see https://developer.chrome.com/extensions/automation#type-AutomationNode
  */
 chrome.automation.AutomationNode = function() {};
@@ -682,13 +1028,26 @@ chrome.automation.AutomationNode.prototype.location;
  * Determines the location of the text within the node specified by |startIndex|
  * and |endIndex|, inclusively. Invokes |callback| with the bounding rectangle,
  * in screen coordinates. |callback| can be invoked either synchronously or
- * asynchronously.
+ * asynchronously. The bounds are clipped to ancestors.
  * @param {number} startIndex
  * @param {number} endIndex
  * @param {function(!chrome.automation.Rect): void} callback
  * @see https://developer.chrome.com/extensions/automation#method-boundsForRange
  */
 chrome.automation.AutomationNode.prototype.boundsForRange = function(startIndex, endIndex, callback) {};
+
+/**
+ * Determines the location of the text within the node specified by |startIndex|
+ * and |endIndex|, inclusively. Invokes |callback| with the bounding rectangle,
+ * in screen coordinates. |callback| can be invoked either synchronously or
+ * asynchronously. The bounds are not clipped to ancestors.
+ * @param {number} startIndex
+ * @param {number} endIndex
+ * @param {function(!chrome.automation.Rect): void} callback
+ * @see https://developer.chrome.com/extensions/automation#method-unclippedBoundsForRange
+ */
+chrome.automation.AutomationNode.prototype.unclippedBoundsForRange = function(
+    startIndex, endIndex, callback) {};
 
 /**
  * The location (as a bounding box) of this node in global screen coordinates without applying any clipping from ancestors.
@@ -1720,7 +2079,7 @@ chrome.automation.AutomationNode.prototype.suspendMedia = function() {};
 
 /**
  * Scrolls this scrollable container backward.
- * @param {function(boolean): void} callback Callback called for actions with a
+ * @param {function(boolean): void=} callback Callback called for actions with a
  *     response.
  * @see https://developer.chrome.com/extensions/automation#method-scrollBackward
  */
@@ -1728,7 +2087,7 @@ chrome.automation.AutomationNode.prototype.scrollBackward = function(callback) {
 
 /**
  * Scrolls this scrollable container forward.
- * @param {function(boolean): void} callback Callback called for actions with a
+ * @param {function(boolean): void=} callback Callback called for actions with a
  *     response.
  * @see https://developer.chrome.com/extensions/automation#method-scrollForward
  */
@@ -1736,7 +2095,7 @@ chrome.automation.AutomationNode.prototype.scrollForward = function(callback) {}
 
 /**
  * Scrolls this scrollable container up.
- * @param {function(boolean): void} callback Callback called for actions with a
+ * @param {function(boolean): void=} callback Callback called for actions with a
  *     response.
  * @see https://developer.chrome.com/extensions/automation#method-scrollUp
  */
@@ -1744,7 +2103,7 @@ chrome.automation.AutomationNode.prototype.scrollUp = function(callback) {};
 
 /**
  * Scrolls this scrollable container down.
- * @param {function(boolean): void} callback Callback called for actions with a
+ * @param {function(boolean): void=} callback Callback called for actions with a
  *     response.
  * @see https://developer.chrome.com/extensions/automation#method-scrollDown
  */
@@ -1752,7 +2111,7 @@ chrome.automation.AutomationNode.prototype.scrollDown = function(callback) {};
 
 /**
  * Scrolls this scrollable container left.
- * @param {function(boolean): void} callback Callback called for actions with a
+ * @param {function(boolean): void=} callback Callback called for actions with a
  *     response.
  * @see https://developer.chrome.com/extensions/automation#method-scrollLeft
  */
@@ -1760,11 +2119,27 @@ chrome.automation.AutomationNode.prototype.scrollLeft = function(callback) {};
 
 /**
  * Scrolls this scrollable container right.
- * @param {function(boolean): void} callback Callback called for actions with a
+ * @param {function(boolean): void=} callback Callback called for actions with a
  *     response.
  * @see https://developer.chrome.com/extensions/automation#method-scrollRight
  */
 chrome.automation.AutomationNode.prototype.scrollRight = function(callback) {};
+
+/**
+ * Scrolls this scrollable container to the given point.
+ * @param {number} x
+ * @param {number} y
+ * @see https://developer.chrome.com/extensions/automation#method-scrollToPoint
+ */
+chrome.automation.AutomationNode.prototype.scrollToPoint = function(x, y) {};
+
+/**
+ * Sets this scrollable container's scroll offset.
+ * @param {number} x
+ * @param {number} y
+ * @see https://developer.chrome.com/extensions/automation#method-setScrollOffset
+ */
+chrome.automation.AutomationNode.prototype.setScrollOffset = function(x, y) {};
 
 /**
  * Adds a listener for the given event type and event phase.
@@ -1850,6 +2225,15 @@ chrome.automation.AutomationNode.prototype.getNextTextMatch = function(searchStr
  * @see https://developer.chrome.com/extensions/automation#method-languageAnnotationForStringAttribute
  */
 chrome.automation.AutomationNode.prototype.languageAnnotationForStringAttribute = function(attribute) {};
+
+/**
+ * Creates a position object backed by Chrome's accessibility position support.
+ * @param {number} offset
+ * @param {boolean=} isUpstream
+ * @return {!chrome.automation.AutomationPosition}
+ * @see https://developer.chrome.com/extensions/automation#method-createPosition
+ */
+chrome.automation.AutomationNode.prototype.createPosition = function(offset, isUpstream) {};
 
 
 /**

@@ -210,6 +210,14 @@ suite('SafetyCheckPageUiTests', function() {
     // Ensure the browser proxy call is done.
     await safetyCheckBrowserProxy.whenCalled('runSafetyCheck');
 
+    // Mock all incoming messages that indicate safety check is running.
+    fireSafetyCheckUpdatesEvent(SafetyCheckUpdatesStatus.CHECKING);
+    fireSafetyCheckPasswordsEvent(SafetyCheckPasswordsStatus.CHECKING);
+    fireSafetyCheckSafeBrowsingEvent(SafetyCheckSafeBrowsingStatus.CHECKING);
+    fireSafetyCheckExtensionsEvent(SafetyCheckExtensionsStatus.CHECKING);
+    fireSafetyCheckChromeCleanerEvent(SafetyCheckChromeCleanerStatus.CHECKING);
+    fireSafetyCheckParentEvent(SafetyCheckParentStatus.CHECKING);
+
     flush();
     // Only the icon button is present.
     assertFalse(!!page.$$('#safetyCheckParentButton'));
@@ -224,8 +232,7 @@ suite('SafetyCheckPageUiTests', function() {
         SafetyCheckSafeBrowsingStatus.ENABLED_STANDARD);
     fireSafetyCheckExtensionsEvent(
         SafetyCheckExtensionsStatus.NO_BLOCKLISTED_EXTENSIONS);
-    fireSafetyCheckChromeCleanerEvent(
-        SafetyCheckChromeCleanerStatus.REPORTER_FOUND_NOTHING);
+    fireSafetyCheckChromeCleanerEvent(SafetyCheckChromeCleanerStatus.INFECTED);
     fireSafetyCheckParentEvent(SafetyCheckParentStatus.AFTER);
 
     flush();
@@ -632,6 +639,17 @@ suite('SafetyCheckSafeBrowsingChildUiTests', function() {
   test('safeBrowsingEnabledStandardUiTest', function() {
     fireSafetyCheckSafeBrowsingEvent(
         SafetyCheckSafeBrowsingStatus.ENABLED_STANDARD);
+    flush();
+    assertSafetyCheckChild({
+      page: page,
+      iconStatus: SafetyCheckIconStatus.SAFE,
+      label: 'Safe Browsing',
+    });
+  });
+
+  test('safeBrowsingEnabledStandardAvailableEnhancedUiTest', function() {
+    fireSafetyCheckSafeBrowsingEvent(
+        SafetyCheckSafeBrowsingStatus.ENABLED_STANDARD_AVAILABLE_ENHANCED);
     flush();
     assertSafetyCheckChild({
       page: page,

@@ -50,9 +50,6 @@ import java.util.concurrent.atomic.AtomicReference;
  * }
  * </code>
  * </pre>
- *
- * <p>
- * The Criteria variation is deprecated and should be avoided in favor of using a Runnable.
  */
 public class CriteriaHelper {
     /** The default maximum time to wait for a criteria to become valid. */
@@ -76,16 +73,12 @@ public class CriteriaHelper {
      */
     public static void pollInstrumentationThread(
             Runnable criteria, long maxTimeoutMs, long checkIntervalMs) {
-        Throwable throwable;
+        CriteriaNotSatisfiedException throwable;
         try {
             criteria.run();
             return;
         } catch (CriteriaNotSatisfiedException cnse) {
             throwable = cnse;
-        } catch (AssertionError ae) {
-            // TODO(tedchoc): Remove support for this once all clients move over to
-            //                CriteriaNotSatisfiedException.
-            throwable = ae;
         }
         TimeoutTimer timer = new TimeoutTimer(maxTimeoutMs);
         while (!timer.isTimedOut()) {
@@ -100,19 +93,9 @@ public class CriteriaHelper {
                 return;
             } catch (CriteriaNotSatisfiedException cnse) {
                 throwable = cnse;
-            } catch (AssertionError ae) {
-                // TODO(tedchoc): Remove support for this once all clients move over to
-                //                CriteriaNotSatisfiedException.
-                throwable = ae;
             }
         }
-        if (throwable instanceof CriteriaNotSatisfiedException) {
-            throw new AssertionError(throwable);
-        } else if (throwable instanceof AssertionError) {
-            throw(AssertionError) throwable;
-        }
-        assert false : "Invalid throwable";
-        throw new RuntimeException(throwable);
+        throw new AssertionError(throwable);
     }
 
     /**
@@ -127,21 +110,6 @@ public class CriteriaHelper {
      * @see #pollInstrumentationThread(Criteria, long, long)
      */
     public static void pollInstrumentationThread(Runnable criteria) {
-        pollInstrumentationThread(criteria, DEFAULT_MAX_TIME_TO_POLL, DEFAULT_POLLING_INTERVAL);
-    }
-
-    /**
-     * Deprecated, use {@link #pollInstrumentationThread(Runnable, long, long)}.
-     */
-    public static void pollInstrumentationThread(
-            Criteria criteria, long maxTimeoutMs, long checkIntervalMs) {
-        pollInstrumentationThread(toNotSatisfiedRunnable(criteria), maxTimeoutMs, checkIntervalMs);
-    }
-
-    /**
-     * Deprecated, use {@link #pollInstrumentationThread(Runnable)}.
-     */
-    public static void pollInstrumentationThread(Criteria criteria) {
         pollInstrumentationThread(criteria, DEFAULT_MAX_TIME_TO_POLL, DEFAULT_POLLING_INTERVAL);
     }
 
@@ -238,10 +206,6 @@ public class CriteriaHelper {
             if (throwable != null) {
                 if (throwable instanceof CriteriaNotSatisfiedException) {
                     throw new CriteriaNotSatisfiedException(throwable);
-                } else if (throwable instanceof AssertionError) {
-                    // TODO(tedchoc): Remove support for this once all clients move over to
-                    //                CriteriaNotSatisfiedException.
-                    throw new CriteriaNotSatisfiedException(throwable);
                 } else if (throwable instanceof RuntimeException) {
                     throw (RuntimeException) throwable;
                 } else {
@@ -259,21 +223,6 @@ public class CriteriaHelper {
      * @see #pollInstrumentationThread(Runnable)
      */
     public static void pollUiThread(final Runnable criteria) {
-        pollUiThread(criteria, DEFAULT_MAX_TIME_TO_POLL, DEFAULT_POLLING_INTERVAL);
-    }
-
-    /**
-     * Deprecated, use {@link #pollUiThread(Runnable, long, long)}.
-     */
-    public static void pollUiThread(
-            final Criteria criteria, long maxTimeoutMs, long checkIntervalMs) {
-        pollUiThread(toNotSatisfiedRunnable(criteria), maxTimeoutMs, checkIntervalMs);
-    }
-
-    /**
-     * Deprecated, use {@link #pollUiThread(Runnable)}.
-     */
-    public static void pollUiThread(final Criteria criteria) {
         pollUiThread(criteria, DEFAULT_MAX_TIME_TO_POLL, DEFAULT_POLLING_INTERVAL);
     }
 
@@ -346,13 +295,6 @@ public class CriteriaHelper {
                 throw new RuntimeException(e);
             }
             Criteria.checkThat(failureReason, isSatisfied, Matchers.is(true));
-        };
-    }
-
-    private static Runnable toNotSatisfiedRunnable(Criteria criteria) {
-        return () -> {
-            boolean satisfied = criteria.isSatisfied();
-            Criteria.checkThat(criteria.getFailureReason(), satisfied, Matchers.is(true));
         };
     }
 }

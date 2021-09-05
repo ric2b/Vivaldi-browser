@@ -45,7 +45,7 @@ void StubPasswordManagerClient::FocusedInputChanged(
 bool StubPasswordManagerClient::PromptUserToChooseCredentials(
     std::vector<std::unique_ptr<autofill::PasswordForm>> local_forms,
     const url::Origin& origin,
-    const CredentialsCallback& callback) {
+    CredentialsCallback callback) {
   return false;
 }
 
@@ -147,6 +147,11 @@ signin::IdentityManager* StubPasswordManagerClient::GetIdentityManager() {
 
 scoped_refptr<network::SharedURLLoaderFactory>
 StubPasswordManagerClient::GetURLLoaderFactory() {
+  return nullptr;
+}
+
+network::mojom::NetworkContext* StubPasswordManagerClient::GetNetworkContext()
+    const {
   return nullptr;
 }
 

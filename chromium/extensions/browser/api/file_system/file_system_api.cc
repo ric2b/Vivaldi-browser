@@ -57,10 +57,7 @@
 #include "ui/shell_dialogs/select_file_dialog.h"
 #include "url/origin.h"
 
-#include "app/vivaldi_apptools.h"
-#include "browser/vivaldi_browser_finder.h"
-
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include <CoreFoundation/CoreFoundation.h>
 #include "base/mac/foundation_util.h"
 #endif
@@ -68,6 +65,9 @@
 #if defined(OS_CHROMEOS)
 #include "extensions/browser/api/file_handlers/non_native_file_system_delegate.h"
 #endif
+
+#include "app/vivaldi_apptools.h"
+#include "browser/vivaldi_browser_finder.h"
 
 using storage::IsolatedContext;
 
@@ -180,18 +180,18 @@ const int kGraylistedPaths[] = {
 #endif
 };
 
-typedef base::Callback<void(std::unique_ptr<base::File::Info>)>
-    FileInfoOptCallback;
+using FileInfoOptCallback =
+    base::OnceCallback<void(std::unique_ptr<base::File::Info>)>;
 
 // Passes optional file info to the UI thread depending on |result| and |info|.
-void PassFileInfoToUIThread(const FileInfoOptCallback& callback,
+void PassFileInfoToUIThread(FileInfoOptCallback callback,
                             base::File::Error result,
                             const base::File::Info& info) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
   std::unique_ptr<base::File::Info> file_info(
       result == base::File::FILE_OK ? new base::File::Info(info) : NULL);
   content::GetUIThreadTaskRunner({})->PostTask(
-      FROM_HERE, base::BindOnce(callback, std::move(file_info)));
+      FROM_HERE, base::BindOnce(std::move(callback), std::move(file_info)));
 }
 
 // Gets a WebContents instance handle for a platform app hosted in
@@ -833,10 +833,10 @@ ExtensionFunction::ResponseAction FileSystemRetainEntryFunction::Run() {
         util::GetStoragePartitionForExtensionId(extension_id(),
                                                 browser_context())
             ->GetFileSystemContext();
-    const GURL origin =
-        util::GetSiteForExtensionId(extension_id(), browser_context());
+
     const storage::FileSystemURL url = context->CreateCrackedFileSystemURL(
-        url::Origin::Create(origin), storage::kFileSystemTypeIsolated,
+        url::Origin::Create(extension()->url()),
+        storage::kFileSystemTypeIsolated,
         storage::IsolatedContext::GetInstance()
             ->CreateVirtualRootPath(filesystem_id)
             .Append(base::FilePath::FromUTF8Unsafe(filesystem_path)));
@@ -850,10 +850,10 @@ ExtensionFunction::ResponseAction FileSystemRetainEntryFunction::Run() {
                 &storage::FileSystemOperationRunner::GetMetadata),
             base::Unretained(context->operation_runner()), url,
             storage::FileSystemOperation::GET_METADATA_FIELD_IS_DIRECTORY,
-            base::Bind(
+            base::BindOnce(
                 &PassFileInfoToUIThread,
-                base::Bind(&FileSystemRetainEntryFunction::RetainFileEntry,
-                           this, entry_id, path))));
+                base::BindOnce(&FileSystemRetainEntryFunction::RetainFileEntry,
+                               this, entry_id, path))));
     return RespondLater();
   }
 
@@ -969,8 +969,9 @@ ExtensionFunction::ResponseAction FileSystemRequestFileSystemFunction::Run() {
   delegate->RequestFileSystem(
       browser_context(), this, *extension(), params->options.volume_id,
       params->options.writable.get() && *params->options.writable.get(),
-      base::Bind(&FileSystemRequestFileSystemFunction::OnGotFileSystem, this),
-      base::Bind(&FileSystemRequestFileSystemFunction::OnError, this));
+      base::BindOnce(&FileSystemRequestFileSystemFunction::OnGotFileSystem,
+                     this),
+      base::BindOnce(&FileSystemRequestFileSystemFunction::OnError, this));
 
   return did_respond() ? AlreadyResponded() : RespondLater();
 }
@@ -1006,8 +1007,8 @@ ExtensionFunction::ResponseAction FileSystemGetVolumeListFunction::Run() {
 
   delegate->GetVolumeList(
       browser_context(), *extension(),
-      base::Bind(&FileSystemGetVolumeListFunction::OnGotVolumeList, this),
-      base::Bind(&FileSystemGetVolumeListFunction::OnError, this));
+      base::BindOnce(&FileSystemGetVolumeListFunction::OnGotVolumeList, this),
+      base::BindOnce(&FileSystemGetVolumeListFunction::OnError, this));
 
   return did_respond() ? AlreadyResponded() : RespondLater();
 }

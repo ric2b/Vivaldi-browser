@@ -120,7 +120,7 @@ std::unique_ptr<NGExclusionShapeData> CreateExclusionShapeData(
     case CSSBoxType::kContent:
       const NGConstraintSpace space =
           CreateConstraintSpaceForFloat(unpositioned_float);
-      NGBoxStrut strut = ComputeBorders(space, style);
+      NGBoxStrut strut = ComputeBorders(space, unpositioned_float.node);
       if (style.ShapeOutside()->CssBox() == CSSBoxType::kContent)
         strut += ComputePadding(space, style);
       shape_insets =
@@ -226,25 +226,36 @@ NGPositionedFloat PositionFloat(NGUnpositionedFloat* unpositioned_float,
     fragment_margins = ComputeMarginsFor(
         node.Style(), unpositioned_float->percentage_size.inline_size,
         parent_space.GetWritingMode(), parent_space.Direction());
-    AdjustForFragmentation(unpositioned_float->token.get(), &fragment_margins);
+    AdjustMarginsForFragmentation(unpositioned_float->token.get(),
+                                  &fragment_margins);
 
     // When fragmenting, we need to set the block-offset of the node before
     // laying it out. This is a float, and in order to calculate its offset, we
     // first need to know its inline-size.
 
-    // TODO(crbug.com/915929): In some cases the inline-size of the float is
-    // already known at this point, and then we should be able to set the
-    // correct layout opportunity right away, i.e. no need for optimistic
-    // placement. However, this only happens in inline formatting contexts, and
-    // we don't support fragmenting floats in inline formatting contexts yet.
-    bool optimistically_placed = true;
-
-    // We'll estimate the offset to be the one we'd get if the float isn't
-    // affected by any other floats in the block formatting context. If this
-    // turns out to be wrong, we'll need to lay out again.
-    LayoutUnit fragmentainer_delta =
-        unpositioned_float->origin_bfc_offset.block_offset +
-        fragment_margins.block_start;
+    LayoutUnit fragmentainer_delta;
+    bool optimistically_placed = false;
+    if (unpositioned_float->layout_result) {
+      // We have already laid out the float to find its inline-size.
+      NGFragment float_fragment(
+          parent_space.GetWritingMode(),
+          unpositioned_float->layout_result->PhysicalFragment());
+      // We can find a layout opportunity and set the fragmentainer offset right
+      // away.
+      opportunity = FindLayoutOpportunityForFloat(
+          *unpositioned_float, *exclusion_space, fragment_margins,
+          float_fragment.InlineSize());
+      fragmentainer_delta = opportunity.rect.start_offset.block_offset +
+                            fragment_margins.block_start;
+    } else {
+      // If we don't know the inline-size yet, we'll estimate the offset to be
+      // the one we'd get if the float isn't affected by any other floats in the
+      // block formatting context. If this turns out to be wrong, we'll need to
+      // lay out again.
+      fragmentainer_delta = unpositioned_float->origin_bfc_offset.block_offset +
+                            fragment_margins.block_start;
+      optimistically_placed = true;
+    }
 
     do {
       NGConstraintSpace space = CreateConstraintSpaceForFloat(

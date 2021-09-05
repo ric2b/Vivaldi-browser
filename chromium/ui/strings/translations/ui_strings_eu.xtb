@@ -37,9 +37,11 @@
 <translation id="1842960171412779397">hautatu</translation>
 <translation id="1859234291848436338">Idazketa-norabidea</translation>
 <translation id="1860796786778352021">Itxi jakinarazpena</translation>
+<translation id="186476001994626254">Sareko itsaste adimendunaren edukia</translation>
 <translation id="1871244248791675517">Txertatu</translation>
 <translation id="1884435127456172652">% <ph name="NUMBER" /></translation>
 <translation id="1901303067676059328">Hautatu &amp;guztiak</translation>
+<translation id="19085484004813472">Eginbide berri bat da hau</translation>
 <translation id="2006524834898217237">Ziurtatu gailua Internetera konektatuta dagoela.</translation>
 <translation id="208586643495776849">Saiatu berriro</translation>
 <translation id="2090963878406559571">Zenbaki bat <ph name="ORIGIN" /> helbidetik Android-eko telefonora bidaltzeko, joan ezarpenetara eta <ph name="TROUBLESHOOT_LINK" /> bi gailuetan.</translation>
@@ -67,6 +69,7 @@
 <translation id="2570734079541893434">Kudeatu ezarpenak</translation>
 <translation id="2573731672208488250">{HOURS,plural, =1{1 h barru}other{# h barru}}</translation>
 <translation id="2583543531130364912">Kalibratu ukipen-pantaila</translation>
+<translation id="2586657967955657006">Arbela</translation>
 <translation id="2666092431469916601">Goiko elementua</translation>
 <translation id="2701330563083355633"><ph name="DEVICE_NAME" /> gailutik partekatu da</translation>
 <translation id="271033894570825754">Berria</translation>
@@ -74,6 +77,7 @@
 <translation id="2749082172777216925"><ph name="APP_NAME_INFO" /> (<ph name="PRICE" />)</translation>
 <translation id="2803313416453193357">Ireki karpeta</translation>
 <translation id="2824719307700604149">{YEARS,plural, =1{Duela 1 urte}other{Duela # urte}}</translation>
+<translation id="2878511608894704031">Ezabatu dena</translation>
 <translation id="2907671656515444832">{DAYS,plural, =1{1 egun barru}other{# egun barru}}</translation>
 <translation id="2931838996092594335">egin klik</translation>
 <translation id="2981684127883932071">Iradokizunak daude ikusgai</translation>
@@ -114,6 +118,7 @@
 <translation id="4289300219472526559">Hasi hitz egiten</translation>
 <translation id="430191667033048642">Eraman da <ph name="MOVED_APP_NAME" /> aplikazioa <ph name="FOLDER_NAME" /> karpetara.</translation>
 <translation id="4316910396681052118">APLIKAZIO GUZTIAK</translation>
+<translation id="4491109536499578614">Irudia</translation>
 <translation id="4588090240171750605">Joan eskuinera</translation>
 <translation id="4631891353005174729"><ph name="APP_NAME_TYPE" /> aplikazioa. <ph name="RATING_SCORE" /> izarreko balorazioa dauka.</translation>
 <translation id="4648249871170053485">Gomendatutako aplikazioa (<ph name="APP_NAME" />)</translation>
@@ -147,6 +152,7 @@
 <translation id="5768079895599174203">{DAYS,plural, =1{1 egun eta }other{# egun eta }}</translation>
 <translation id="5789643057113097023">.</translation>
 <translation id="5866104238061687188">{YEARS,plural, =1{1 urte barru}other{# urte barru}}</translation>
+<translation id="588258955323874662">Pantaila osoa</translation>
 <translation id="5906667377645263094">{SECONDS,plural, =1{1 segundo gelditzen da}other{# segundo gelditzen dira}}</translation>
 <translation id="5941711191222866238">Minimizatu</translation>
 <translation id="5943826764092288734">{HOURS,plural, =1{1 ordu}other{# ordu}}</translation>
@@ -170,6 +176,7 @@
 <translation id="6417265370957905582">Google-ren Laguntzailea</translation>
 <translation id="6430678249303439055">Blokeatu aplikazio honen jakinarazpen guztiak</translation>
 <translation id="6483402905448010557">{SECONDS,plural, =1{Duela 1 segundo}other{Duela # segundo}}</translation>
+<translation id="6503257047630241175">RTF fitxategiko edukia</translation>
 <translation id="6539092367496845964">Arazoren bat izan da. Saiatu berriro geroago.</translation>
 <translation id="654149438358937226">Blokeatu jakinarazpen guztiak</translation>
 <translation id="6567071839949112727">egin klik aurreko bertsioan</translation>

@@ -9,7 +9,9 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_restrictions.h"
 #include "content/browser/native_file_system/file_system_chooser_test_helpers.h"
+#include "content/browser/native_file_system/fixed_native_file_system_permission_grant.h"
 #include "content/browser/native_file_system/mock_native_file_system_permission_context.h"
+#include "content/browser/native_file_system/mock_native_file_system_permission_grant.h"
 #include "content/browser/native_file_system/native_file_system_manager_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/browser_context.h"
@@ -64,7 +66,7 @@ class FileSystemChooserBrowserTest : public ContentBrowserTest {
 
   bool IsFullscreen() {
     WebContents* web_contents = shell()->web_contents();
-    return web_contents->IsFullscreenForCurrentTab();
+    return web_contents->IsFullscreen();
   }
 
   void EnterFullscreen() {
@@ -177,6 +179,34 @@ IN_PROC_BROWSER_TEST_F(FileSystemChooserBrowserTest, FullscreenOpenFile) {
   EXPECT_FALSE(IsFullscreen());
 }
 
+IN_PROC_BROWSER_TEST_F(FileSystemChooserBrowserTest,
+                       OpenFile_BlockedPermission) {
+  const base::FilePath test_file = CreateTestFile("Save File");
+  SelectFileDialogParams dialog_params;
+  ui::SelectFileDialog::SetFactory(
+      new FakeSelectFileDialogFactory({test_file}, &dialog_params));
+
+  testing::StrictMock<MockNativeFileSystemPermissionContext> permission_context;
+  static_cast<NativeFileSystemManagerImpl*>(
+      BrowserContext::GetStoragePartition(
+          shell()->web_contents()->GetBrowserContext(),
+          shell()->web_contents()->GetSiteInstance())
+          ->GetNativeFileSystemEntryFactory())
+      ->SetPermissionContextForTesting(&permission_context);
+
+  EXPECT_CALL(permission_context,
+              CanObtainReadPermission(url::Origin::Create(
+                  embedded_test_server()->GetURL("/title1.html"))))
+      .WillOnce(testing::Return(false));
+
+  ASSERT_TRUE(
+      NavigateToURL(shell(), embedded_test_server()->GetURL("/title1.html")));
+  auto result = EvalJs(shell(), "self.showOpenFilePicker()");
+  EXPECT_TRUE(result.error.find("not allowed") != std::string::npos)
+      << result.error;
+  EXPECT_EQ(ui::SelectFileDialog::SELECT_NONE, dialog_params.type);
+}
+
 IN_PROC_BROWSER_TEST_F(FileSystemChooserBrowserTest, SaveFile_NonExistingFile) {
   const std::string file_contents = "file contents to write";
   const base::FilePath test_file = CreateTestFile("");
@@ -184,7 +214,7 @@ IN_PROC_BROWSER_TEST_F(FileSystemChooserBrowserTest, SaveFile_NonExistingFile) {
     // Delete file, since SaveFile should be able to deal with non-existing
     // files.
     base::ScopedAllowBlockingForTesting allow_blocking;
-    ASSERT_TRUE(base::DeleteFile(test_file, false));
+    ASSERT_TRUE(base::DeleteFile(test_file));
   }
   SelectFileDialogParams dialog_params;
   ui::SelectFileDialog::SetFactory(
@@ -251,6 +281,10 @@ IN_PROC_BROWSER_TEST_F(FileSystemChooserBrowserTest,
           ->GetNativeFileSystemEntryFactory())
       ->SetPermissionContextForTesting(&permission_context);
 
+  EXPECT_CALL(permission_context,
+              CanObtainReadPermission(url::Origin::Create(
+                  embedded_test_server()->GetURL("/title1.html"))))
+      .WillOnce(testing::Return(true));
   EXPECT_CALL(permission_context,
               CanObtainWritePermission(url::Origin::Create(
                   embedded_test_server()->GetURL("/title1.html"))))
@@ -353,7 +387,8 @@ IN_PROC_BROWSER_TEST_F(FileSystemChooserBrowserTest, FullscreenOpenDirectory) {
   EXPECT_FALSE(IsFullscreen());
 }
 
-IN_PROC_BROWSER_TEST_F(FileSystemChooserBrowserTest, OpenDirectory_DenyAccess) {
+IN_PROC_BROWSER_TEST_F(FileSystemChooserBrowserTest,
+                       OpenDirectory_BlockedPermission) {
   base::FilePath test_dir = CreateTestDir();
   SelectFileDialogParams dialog_params;
   ui::SelectFileDialog::SetFactory(
@@ -368,20 +403,74 @@ IN_PROC_BROWSER_TEST_F(FileSystemChooserBrowserTest, OpenDirectory_DenyAccess) {
       ->SetPermissionContextForTesting(&permission_context);
 
   EXPECT_CALL(permission_context,
+              CanObtainReadPermission(url::Origin::Create(
+                  embedded_test_server()->GetURL("/title1.html"))))
+      .WillOnce(testing::Return(false));
+
+  ASSERT_TRUE(
+      NavigateToURL(shell(), embedded_test_server()->GetURL("/title1.html")));
+  auto result = EvalJs(shell(), "self.showDirectoryPicker()");
+  EXPECT_TRUE(result.error.find("not allowed") != std::string::npos)
+      << result.error;
+  EXPECT_EQ(ui::SelectFileDialog::SELECT_NONE, dialog_params.type);
+}
+
+IN_PROC_BROWSER_TEST_F(FileSystemChooserBrowserTest, OpenDirectory_DenyAccess) {
+  base::FilePath test_dir = CreateTestDir();
+  SelectFileDialogParams dialog_params;
+  ui::SelectFileDialog::SetFactory(
+      new FakeSelectFileDialogFactory({test_dir}, &dialog_params));
+
+  testing::StrictMock<MockNativeFileSystemPermissionContext> permission_context;
+  static_cast<NativeFileSystemManagerImpl*>(
+      BrowserContext::GetStoragePartition(
+          shell()->web_contents()->GetBrowserContext(),
+          shell()->web_contents()->GetSiteInstance())
+          ->GetNativeFileSystemEntryFactory())
+      ->SetPermissionContextForTesting(&permission_context);
+
+  auto read_grant = base::MakeRefCounted<
+      testing::StrictMock<MockNativeFileSystemPermissionGrant>>();
+  auto write_grant = base::MakeRefCounted<FixedNativeFileSystemPermissionGrant>(
+      PermissionStatus::ASK);
+
+  EXPECT_CALL(permission_context,
+              CanObtainReadPermission(url::Origin::Create(
+                  embedded_test_server()->GetURL("/title1.html"))))
+      .WillOnce(testing::Return(true));
+
+  EXPECT_CALL(permission_context,
               ConfirmSensitiveDirectoryAccess_(
                   testing::_, testing::_, testing::_, testing::_, testing::_))
       .WillOnce(RunOnceCallback<4>(SensitiveDirectoryResult::kAllowed));
 
+  auto origin =
+      url::Origin::Create(embedded_test_server()->GetURL("/title1.html"));
+  EXPECT_CALL(permission_context,
+              GetReadPermissionGrant(
+                  origin, test_dir,
+                  NativeFileSystemPermissionContext::HandleType::kDirectory,
+                  NativeFileSystemPermissionContext::UserAction::kOpen))
+      .WillOnce(testing::Return(read_grant));
+  EXPECT_CALL(permission_context,
+              GetWritePermissionGrant(
+                  origin, test_dir,
+                  NativeFileSystemPermissionContext::HandleType::kDirectory,
+                  NativeFileSystemPermissionContext::UserAction::kOpen))
+      .WillOnce(testing::Return(write_grant));
+
   EXPECT_CALL(
-      permission_context,
-      ConfirmDirectoryReadAccess_(
-          url::Origin::Create(embedded_test_server()->GetURL("/title1.html")),
-          test_dir,
+      *read_grant,
+      RequestPermission_(
           GlobalFrameRoutingId(
               shell()->web_contents()->GetMainFrame()->GetProcess()->GetID(),
               shell()->web_contents()->GetMainFrame()->GetRoutingID()),
+          NativeFileSystemPermissionGrant::UserActivationState::kNotRequired,
           testing::_))
-      .WillOnce(RunOnceCallback<3>(PermissionStatus::DENIED));
+      .WillOnce(RunOnceCallback<2>(NativeFileSystemPermissionGrant::
+                                       PermissionRequestOutcome::kUserDenied));
+  EXPECT_CALL(*read_grant, GetStatus())
+      .WillRepeatedly(testing::Return(PermissionStatus::ASK));
 
   ASSERT_TRUE(
       NavigateToURL(shell(), embedded_test_server()->GetURL("/title1.html")));
@@ -413,6 +502,10 @@ IN_PROC_BROWSER_TEST_F(FileSystemChooserBrowserTest,
       .WillOnce(RunOnceCallback<4>(SensitiveDirectoryResult::kAbort));
 
   EXPECT_CALL(permission_context,
+              CanObtainReadPermission(url::Origin::Create(
+                  embedded_test_server()->GetURL("/title1.html"))))
+      .WillOnce(testing::Return(true));
+  EXPECT_CALL(permission_context,
               CanObtainWritePermission(url::Origin::Create(
                   embedded_test_server()->GetURL("/title1.html"))))
       .WillOnce(testing::Return(true));
@@ -439,7 +532,7 @@ IN_PROC_BROWSER_TEST_F(FileSystemChooserBrowserTest,
     // Delete file, since SaveFile should be able to deal with non-existing
     // files.
     base::ScopedAllowBlockingForTesting allow_blocking;
-    ASSERT_TRUE(base::DeleteFile(test_file, false));
+    ASSERT_TRUE(base::DeleteFile(test_file));
   }
 
   SelectFileDialogParams dialog_params;
@@ -459,6 +552,10 @@ IN_PROC_BROWSER_TEST_F(FileSystemChooserBrowserTest,
                   testing::_, testing::_, testing::_, testing::_, testing::_))
       .WillOnce(RunOnceCallback<4>(SensitiveDirectoryResult::kAbort));
 
+  EXPECT_CALL(permission_context,
+              CanObtainReadPermission(url::Origin::Create(
+                  embedded_test_server()->GetURL("/title1.html"))))
+      .WillOnce(testing::Return(true));
   EXPECT_CALL(permission_context,
               CanObtainWritePermission(url::Origin::Create(
                   embedded_test_server()->GetURL("/title1.html"))))
@@ -486,26 +583,29 @@ IN_PROC_BROWSER_TEST_F(FileSystemChooserBrowserTest, AcceptsOptions) {
   auto result =
       EvalJs(shell(),
              "self.showOpenFilePicker({types: ["
-             "  {description: 'foo', accept: {'text/custom': ['txt', 'Js']}},"
-             "  {accept: {'image/jpeg': []}}"
+             "  {description: 'foo', accept: {'text/custom': ['.txt', '.Js']}},"
+             "  {accept: {'image/jpeg': []}},"
+             "  {accept: {'image/svg+xml': '.svg'}},"
              "]})");
   EXPECT_TRUE(result.error.find("aborted") != std::string::npos)
       << result.error;
 
   ASSERT_TRUE(dialog_params.file_types);
   EXPECT_TRUE(dialog_params.file_types->include_all_files);
-  ASSERT_EQ(2u, dialog_params.file_types->extensions.size());
+  ASSERT_EQ(3u, dialog_params.file_types->extensions.size());
   ASSERT_EQ(2u, dialog_params.file_types->extensions[0].size());
-  EXPECT_EQ(FILE_PATH_LITERAL("Js"),
-            dialog_params.file_types->extensions[0][0]);
   EXPECT_EQ(FILE_PATH_LITERAL("txt"),
+            dialog_params.file_types->extensions[0][0]);
+  EXPECT_EQ(FILE_PATH_LITERAL("Js"),
             dialog_params.file_types->extensions[0][1]);
   EXPECT_TRUE(base::Contains(dialog_params.file_types->extensions[1],
                              FILE_PATH_LITERAL("jpg")));
   EXPECT_TRUE(base::Contains(dialog_params.file_types->extensions[1],
                              FILE_PATH_LITERAL("jpeg")));
+  EXPECT_TRUE(base::Contains(dialog_params.file_types->extensions[2],
+                             FILE_PATH_LITERAL("svg")));
 
-  ASSERT_EQ(2u,
+  ASSERT_EQ(3u,
             dialog_params.file_types->extension_description_overrides.size());
   EXPECT_EQ(base::ASCIIToUTF16("foo"),
             dialog_params.file_types->extension_description_overrides[0]);

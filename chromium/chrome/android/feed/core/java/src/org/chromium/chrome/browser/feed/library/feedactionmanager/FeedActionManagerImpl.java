@@ -14,6 +14,7 @@ import androidx.annotation.Nullable;
 
 import org.chromium.base.Consumer;
 import org.chromium.base.Log;
+import org.chromium.chrome.R;
 import org.chromium.chrome.browser.feed.library.api.common.MutationContext;
 import org.chromium.chrome.browser.feed.library.api.host.logging.BasicLoggingApi;
 import org.chromium.chrome.browser.feed.library.api.host.logging.Task;
@@ -31,10 +32,10 @@ import org.chromium.chrome.browser.feed.library.common.concurrent.MainThreadRunn
 import org.chromium.chrome.browser.feed.library.common.concurrent.TaskQueue;
 import org.chromium.chrome.browser.feed.library.common.concurrent.TaskQueue.TaskType;
 import org.chromium.chrome.browser.feed.library.common.time.Clock;
+import org.chromium.chrome.browser.feed.shared.FeedFeatures;
 import org.chromium.chrome.browser.feed.shared.stream.Stream.ScrollListener;
 import org.chromium.chrome.browser.feed.shared.stream.Stream.ScrollListener.ScrollState;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
-import org.chromium.chrome.feed.R;
 import org.chromium.components.feed.core.proto.libraries.api.internal.StreamDataProto.StreamDataOperation;
 import org.chromium.components.feed.core.proto.libraries.api.internal.StreamDataProto.StreamUploadableAction;
 import org.chromium.components.feed.core.proto.wire.ActionPayloadProto.ActionPayload;
@@ -355,7 +356,7 @@ public class FeedActionManagerImpl implements ActionManager {
 
     private void reportViewActions(Runnable doneCallback) {
         Set<StreamUploadableAction> actions = new HashSet<>();
-        if (ChromeFeatureList.isEnabled(ChromeFeatureList.REPORT_FEED_USER_ACTIONS)) {
+        if (FeedFeatures.isReportingUserActions()) {
             Iterator<Map.Entry<String, ViewActionData>> entryIterator =
                     mContentData.entrySet().iterator();
 

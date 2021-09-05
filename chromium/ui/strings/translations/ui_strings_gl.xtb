@@ -37,9 +37,11 @@
 <translation id="1842960171412779397">seleccionar</translation>
 <translation id="1859234291848436338">Dirección de escritura</translation>
 <translation id="1860796786778352021">Peche da notificación</translation>
+<translation id="186476001994626254">Contido da función de pegado intelixente da Web</translation>
 <translation id="1871244248791675517">Ins</translation>
 <translation id="1884435127456172652"><ph name="NUMBER" /> %</translation>
 <translation id="1901303067676059328">Seleccion&amp;ar todo</translation>
+<translation id="19085484004813472">Esta é unha función nova</translation>
 <translation id="2006524834898217237">Asegúrate de que este dispositivo estea conectado a Internet.</translation>
 <translation id="208586643495776849">Téntao de novo</translation>
 <translation id="2090963878406559571">Para enviar un número desde <ph name="ORIGIN" /> ao teu teléfono Android, debes <ph name="TROUBLESHOOT_LINK" /> na configuración dos dous dispositivos.</translation>
@@ -67,6 +69,7 @@
 <translation id="2570734079541893434">Xestionar configuración</translation>
 <translation id="2573731672208488250">{HOURS,plural, =1{en 1 h}other{en # h}}</translation>
 <translation id="2583543531130364912">Calibra a pantalla táctil</translation>
+<translation id="2586657967955657006">Portapapeis</translation>
 <translation id="2666092431469916601">Parte superior</translation>
 <translation id="2701330563083355633">Contido compartido desde <ph name="DEVICE_NAME" /></translation>
 <translation id="271033894570825754">Novo</translation>
@@ -74,6 +77,7 @@
 <translation id="2749082172777216925"><ph name="APP_NAME_INFO" />, <ph name="PRICE" /></translation>
 <translation id="2803313416453193357">Abrir cartafol</translation>
 <translation id="2824719307700604149">{YEARS,plural, =1{Hai un ano}other{Hai # anos}}</translation>
+<translation id="2878511608894704031">Eliminar todo</translation>
 <translation id="2907671656515444832">{DAYS,plural, =1{en 1 d}other{en # d}}</translation>
 <translation id="2931838996092594335">facer clic</translation>
 <translation id="2981684127883932071">Mostrando suxestións</translation>
@@ -114,6 +118,7 @@
 <translation id="4289300219472526559">Comeza a falar</translation>
 <translation id="430191667033048642"><ph name="MOVED_APP_NAME" /> moveuse ao cartafol <ph name="FOLDER_NAME" />.</translation>
 <translation id="4316910396681052118">TODAS AS APLICACIÓNS</translation>
+<translation id="4491109536499578614">Imaxe</translation>
 <translation id="4588090240171750605">Desprazar cara á dereita</translation>
 <translation id="4631891353005174729"><ph name="APP_NAME_TYPE" />, valoración en estrelas: <ph name="RATING_SCORE" /></translation>
 <translation id="4648249871170053485"><ph name="APP_NAME" />, recomendación de aplicación</translation>
@@ -147,6 +152,7 @@
 <translation id="5768079895599174203">{DAYS,plural, =1{Un día e }other{# días e }}</translation>
 <translation id="5789643057113097023">.</translation>
 <translation id="5866104238061687188">{YEARS,plural, =1{en 1 a}other{en # a}}</translation>
+<translation id="588258955323874662">Pantalla completa</translation>
 <translation id="5906667377645263094">{SECONDS,plural, =1{Queda un segundo}other{Quedan # segundos}}</translation>
 <translation id="5941711191222866238">Minimizar</translation>
 <translation id="5943826764092288734">{HOURS,plural, =1{Unha hora}other{# horas}}</translation>
@@ -170,6 +176,7 @@
 <translation id="6417265370957905582">Asistente de Google</translation>
 <translation id="6430678249303439055">Bloquear todas as notificacións desta aplicación</translation>
 <translation id="6483402905448010557">{SECONDS,plural, =1{Hai un segundo}other{Hai # segundos}}</translation>
+<translation id="6503257047630241175">Contido en formato RTF</translation>
 <translation id="6539092367496845964">Produciuse un erro. Téntao de novo máis tarde.</translation>
 <translation id="654149438358937226">Bloquear todas as notificacións</translation>
 <translation id="6567071839949112727">fai clic no predecesor</translation>

@@ -23,11 +23,12 @@
 #include "mojo/public/cpp/system/data_pipe_drainer.h"
 #include "net/base/load_flags.h"
 #include "net/base/mime_sniffer.h"
-#include "net/cookies/cookie_inclusion_status.h"
+#include "net/cookies/cookie_access_result.h"
 #include "net/cookies/cookie_util.h"
 #include "net/http/http_util.h"
+#include "net/url_request/redirect_info.h"
 #include "net/url_request/redirect_util.h"
-#include "net/url_request/url_request.h"
+#include "net/url_request/referrer_policy.h"
 #include "services/network/public/cpp/cors/cors.h"
 #include "services/network/public/cpp/resource_request_body.h"
 #include "services/network/public/mojom/network_context.mojom.h"
@@ -80,7 +81,7 @@ DevToolsURLLoaderInterceptor::Modifications::Modifications(
 DevToolsURLLoaderInterceptor::Modifications::Modifications(
     protocol::Maybe<std::string> modified_url,
     protocol::Maybe<std::string> modified_method,
-    protocol::Maybe<std::string> modified_post_data,
+    protocol::Maybe<protocol::Binary> modified_post_data,
     std::unique_ptr<HeadersVector> modified_headers)
     : modified_url(std::move(modified_url)),
       modified_method(std::move(modified_method)),
@@ -94,7 +95,7 @@ DevToolsURLLoaderInterceptor::Modifications::Modifications(
     size_t body_offset,
     protocol::Maybe<std::string> modified_url,
     protocol::Maybe<std::string> modified_method,
-    protocol::Maybe<std::string> modified_post_data,
+    protocol::Maybe<protocol::Binary> modified_post_data,
     std::unique_ptr<HeadersVector> modified_headers,
     std::unique_ptr<AuthChallengeResponse> auth_challenge_response)
     : error_reason(std::move(error_reason)),
@@ -960,9 +961,9 @@ void InterceptionJob::ApplyModificationsToRequest(
     request->method = modifications->modified_method.fromJust();
 
   if (modifications->modified_post_data.isJust()) {
-    const std::string& post_data = modifications->modified_post_data.fromJust();
+    const auto& post_data = modifications->modified_post_data.fromJust();
     request->request_body = network::ResourceRequestBody::CreateFromBytes(
-        post_data.data(), post_data.size());
+        reinterpret_cast<const char*>(post_data.data()), post_data.size());
   }
 
   if (modifications->modified_headers) {
@@ -971,7 +972,7 @@ void InterceptionJob::ApplyModificationsToRequest(
       if (base::EqualsCaseInsensitiveASCII(entry.first,
                                            net::HttpRequestHeaders::kReferer)) {
         request->referrer = GURL(entry.second);
-        request->referrer_policy = net::URLRequest::NEVER_CLEAR_REFERRER;
+        request->referrer_policy = net::ReferrerPolicy::NEVER_CLEAR;
       } else {
         request->headers.SetHeader(entry.first, entry.second);
       }
@@ -1113,7 +1114,7 @@ void InterceptionJob::ProcessSetCookies(const net::HttpResponseHeaders& headers,
 
   // |this| might be deleted here if |cookies| is empty!
   auto on_cookie_set = base::BindRepeating(
-      [](base::RepeatingClosure closure, net::CookieInclusionStatus) {
+      [](base::RepeatingClosure closure, net::CookieAccessResult) {
         closure.Run();
       },
       base::BarrierClosure(cookies.size(), std::move(callback)));
@@ -1131,9 +1132,8 @@ void InterceptionJob::ProcessRedirectByClient(const GURL& redirect_url) {
 
   auto first_party_url_policy =
       request.update_first_party_url_on_redirect
-          ? net::URLRequest::FirstPartyURLPolicy::
-                UPDATE_FIRST_PARTY_URL_ON_REDIRECT
-          : net::URLRequest::FirstPartyURLPolicy::NEVER_CHANGE_FIRST_PARTY_URL;
+          ? net::RedirectInfo::FirstPartyURLPolicy::UPDATE_URL_ON_REDIRECT
+          : net::RedirectInfo::FirstPartyURLPolicy::NEVER_CHANGE_URL;
 
   response_metadata_->redirect_info = std::make_unique<net::RedirectInfo>(
       net::RedirectInfo::ComputeRedirectInfo(

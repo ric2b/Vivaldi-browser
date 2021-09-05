@@ -4,7 +4,7 @@
 
 GEN_INCLUDE([
   'common.js', '../../common/testing/assert_additions.js',
-  '../../common/testing/callback_helper.js'
+  '../../common/testing/e2e_test_base.js'
 ]);
 
 /**
@@ -12,12 +12,7 @@ GEN_INCLUDE([
  * These tests run against production ChromeVox inside of the extension's
  * background page context.
  */
-ChromeVoxE2ETest = class extends testing.Test {
-  constructor() {
-    super();
-    this.callbackHelper_ = new CallbackHelper(this);
-  }
-
+ChromeVoxE2ETest = class extends E2ETestBase {
   /** @override */
   testGenCppIncludes() {
     GEN(`
@@ -43,53 +38,4 @@ ChromeVoxE2ETest = class extends testing.Test {
     WaitForExtension(extension_misc::kChromeVoxExtensionId, load_cb);
       `);
   }
-
-  /**
-   * Launch a new tab, wait until tab status complete, then run callback.
-   * @param {function() : void} doc Snippet wrapped inside of a function.
-   * @param {function()} callback Called once the document is ready.
-   */
-  runWithLoadedTab(doc, callback) {
-    this.launchNewTabWithDoc(doc, function(tab) {
-      chrome.tabs.onUpdated.addListener(function(tabId, changeInfo) {
-        if (tabId == tab.id && changeInfo.status == 'complete') {
-          callback(tabId);
-        }
-      });
-    });
-  }
-
-  /**
-   * Launches the given document in a new tab.
-   * @param {function() : void} doc Snippet wrapped inside of a function.
-   * @param {function(url: string)} opt_callback Called once the
-   *     document is created.
-   */
-  runWithTab(doc, opt_callback) {
-    const url = TestUtils.createUrlForDoc(doc);
-    const createParams = {active: true, url};
-    chrome.tabs.create(createParams, function(tab) {
-      if (opt_callback) {
-        opt_callback(tab.url);
-      }
-    });
-  }
-
-  /**
-   * Creates a callback that optionally calls {@code opt_callback} when
-   * called.  If this method is called one or more times, then
-   * {@code testDone()} will be called when all callbacks have been called.
-   * @param {Function=} opt_callback Wrapped callback that will have its this
-   *        reference bound to the test fixture.
-   * @param {boolean=} opt_isAsync True if the callback is async.
-   * @return {Function}
-   */
-  newCallback(opt_callback, opt_isAsync) {
-    return this.callbackHelper_.wrap(opt_callback, opt_isAsync);
-  }
 };
-
-/** @override */
-ChromeVoxE2ETest.prototype.isAsync = true;
-/** @override */
-ChromeVoxE2ETest.prototype.runAccessibilityChecks = false;

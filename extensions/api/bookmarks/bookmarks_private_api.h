@@ -31,10 +31,6 @@ class VivaldiBookmarksAPI : public bookmarks::BookmarkModelObserver,
   static BrowserContextKeyedAPIFactory<VivaldiBookmarksAPI>*
   GetFactoryInstance();
 
-  static bool SetBookmarkThumbnail(content::BrowserContext* browser_context,
-                                   int64_t bookmark_id,
-                                   const std::string& url);
-
  private:
   // bookmarks::BookmarkModelObserver
   void BookmarkModelLoaded(BookmarkModel* model, bool ids_reassigned) override;

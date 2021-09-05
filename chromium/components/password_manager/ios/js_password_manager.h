@@ -63,9 +63,9 @@ std::unique_ptr<base::Value> SerializePasswordFormFillData(
 // |completionHandler| cannot be nil.
 - (void)fillPasswordForm:(std::unique_ptr<base::Value>)form
                  inFrame:(web::WebFrame*)frame
-            withUsername:(NSString*)username
-                password:(NSString*)password
-       completionHandler:(void (^)(NSString*))completionHandler;
+            withUsername:(std::string)username
+                password:(std::string)password
+       completionHandler:(void (^)(BOOL))completionHandler;
 
 // Fills new password field for (optional) |newPasswordIdentifier| and for
 // (optional) confirm password field |confirmPasswordIdentifier| in the form
@@ -77,7 +77,7 @@ std::unique_ptr<base::Value> SerializePasswordFormFillData(
     confirmPasswordIdentifier:
         (autofill::FieldRendererId)confirmPasswordIdentifier
             generatedPassword:(NSString*)generatedPassword
-            completionHandler:(void (^)(NSString*))completionHandler;
+            completionHandler:(void (^)(BOOL))completionHandler;
 
 // Sets up the next available unique ID value in a document.
 - (void)setUpForUniqueIDsWithInitialState:(uint32_t)nextAvailableID

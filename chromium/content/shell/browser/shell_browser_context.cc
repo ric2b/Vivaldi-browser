@@ -23,9 +23,9 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/common/content_switches.h"
+#include "content/shell/browser/shell_content_index_provider.h"
 #include "content/shell/browser/shell_download_manager_delegate.h"
 #include "content/shell/browser/shell_permission_manager.h"
-#include "content/shell/browser/web_test/web_test_content_index_provider.h"
 #include "content/shell/common/shell_switches.h"
 #include "content/test/mock_background_sync_controller.h"
 
@@ -33,7 +33,7 @@
 #include "base/base_paths_win.h"
 #elif defined(OS_LINUX)
 #include "base/nix/xdg_util.h"
-#elif defined(OS_MACOSX)
+#elif defined(OS_MAC)
 #include "base/base_paths_mac.h"
 #elif defined(OS_FUCHSIA)
 #include "base/base_paths_fuchsia.h"
@@ -113,7 +113,7 @@ void ShellBrowserContext::InitWhileIOAllowed() {
                                  base::nix::kXdgConfigHomeEnvVar,
                                  base::nix::kDotConfigDir));
   path_ = config_dir.Append("content_shell");
-#elif defined(OS_MACOSX)
+#elif defined(OS_MAC)
   CHECK(base::PathService::Get(base::DIR_APP_DATA, &path_));
   path_ = path_.Append("Chromium Content Shell");
 #elif defined(OS_ANDROID)
@@ -216,7 +216,7 @@ ShellBrowserContext::GetBrowsingDataRemoverDelegate() {
 
 ContentIndexProvider* ShellBrowserContext::GetContentIndexProvider() {
   if (!content_index_provider_)
-    content_index_provider_ = std::make_unique<WebTestContentIndexProvider>();
+    content_index_provider_ = std::make_unique<ShellContentIndexProvider>();
   return content_index_provider_.get();
 }
 

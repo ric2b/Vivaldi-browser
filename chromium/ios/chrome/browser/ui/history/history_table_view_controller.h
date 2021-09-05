@@ -8,18 +8,21 @@
 #import "ios/chrome/browser/ui/table_view/chrome_table_view_controller.h"
 
 #include "ios/chrome/browser/ui/history/history_consumer.h"
+#import "ios/chrome/browser/ui/history/history_entry_item_delegate.h"
 
 class Browser;
 enum class UrlLoadStrategy;
 
 @class ActionSheetCoordinator;
 @protocol TableViewFaviconDataSource;
+@protocol HistoryMenuProvider;
 @protocol HistoryUIDelegate;
 @protocol HistoryPresentationDelegate;
 
 // ChromeTableViewController for displaying history items.
 @interface HistoryTableViewController
     : ChromeTableViewController <HistoryConsumer,
+                                 HistoryEntryItemDelegate,
                                  UIAdaptivePresentationControllerDelegate>
 // The ViewController's Browser.
 @property(nonatomic, assign) Browser* browser;
@@ -36,6 +39,9 @@ enum class UrlLoadStrategy;
 @property(nonatomic, weak) id<TableViewFaviconDataSource> imageDataSource;
 // Coordinator for displaying a context menu for history entries.
 @property(nonatomic, strong) ActionSheetCoordinator* contextMenuCoordinator;
+// Provider of menu configurations for the history component.
+@property(nonatomic, weak) id<HistoryMenuProvider> menuProvider API_AVAILABLE(
+    ios(13.0));
 
 // Initializers.
 - (instancetype)init NS_DESIGNATED_INITIALIZER;

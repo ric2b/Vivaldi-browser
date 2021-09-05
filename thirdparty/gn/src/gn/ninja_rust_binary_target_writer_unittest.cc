@@ -64,7 +64,8 @@ TEST_F(NinjaRustBinaryTargetWriterTest, RustExecutable) {
         "build ./foo_bar: rust_bin ../../foo/main.rs | ../../foo/input3.rs "
         "../../foo/main.rs\n"
         "  externs =\n"
-        "  rustdeps =\n";
+        "  rustdeps =\n"
+        "  sources = ../../foo/input3.rs ../../foo/main.rs\n";
     std::string out_str = out.str();
     EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
   }
@@ -105,7 +106,8 @@ TEST_F(NinjaRustBinaryTargetWriterTest, RlibDeps) {
         "build obj/bar/libmylib.rlib: rust_rlib ../../bar/lib.rs | "
         "../../bar/mylib.rs ../../bar/lib.rs\n"
         "  externs =\n"
-        "  rustdeps =\n";
+        "  rustdeps =\n"
+        "  sources = ../../bar/mylib.rs ../../bar/lib.rs\n";
     std::string out_str = out.str();
     EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
   }
@@ -155,7 +157,8 @@ TEST_F(NinjaRustBinaryTargetWriterTest, RlibDeps) {
         "build ./foo_bar: rust_bin ../../foo/main.rs | ../../foo/source.rs "
         "../../foo/main.rs obj/foo/libdirect.rlib\n"
         "  externs = --extern direct=obj/foo/libdirect.rlib\n"
-        "  rustdeps = -Ldependency=obj/foo -Ldependency=obj/bar\n";
+        "  rustdeps = -Ldependency=obj/foo -Ldependency=obj/bar\n"
+        "  sources = ../../foo/source.rs ../../foo/main.rs\n";
     std::string out_str = out.str();
     EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
   }
@@ -197,7 +200,8 @@ TEST_F(NinjaRustBinaryTargetWriterTest, RlibDepsAcrossGroups) {
         "build obj/bar/libmymacro.so: rust_macro ../../bar/lib.rs | "
         "../../bar/mylib.rs ../../bar/lib.rs\n"
         "  externs =\n"
-        "  rustdeps =\n";
+        "  rustdeps =\n"
+        "  sources = ../../bar/mylib.rs ../../bar/lib.rs\n";
     std::string out_str = out.str();
     EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
   }
@@ -242,7 +246,8 @@ TEST_F(NinjaRustBinaryTargetWriterTest, RlibDepsAcrossGroups) {
         "../../bar/mylib.rs ../../bar/lib.rs obj/bar/libmymacro.so || "
         "obj/baz/group.stamp\n"
         "  externs = --extern mymacro=obj/bar/libmymacro.so\n"
-        "  rustdeps = -Ldependency=obj/bar\n";
+        "  rustdeps = -Ldependency=obj/bar\n"
+        "  sources = ../../bar/mylib.rs ../../bar/lib.rs\n";
     std::string out_str = out.str();
     EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
   }
@@ -279,7 +284,8 @@ TEST_F(NinjaRustBinaryTargetWriterTest, RlibDepsAcrossGroups) {
         "build ./foo_bar: rust_bin ../../foo/main.rs | "
         "../../foo/source.rs ../../foo/main.rs obj/bar/libmylib.rlib\n"
         "  externs = --extern mylib=obj/bar/libmylib.rlib\n"
-        "  rustdeps = -Ldependency=obj/bar\n";
+        "  rustdeps = -Ldependency=obj/bar\n"
+        "  sources = ../../foo/source.rs ../../foo/main.rs\n";
     std::string out_str = out.str();
     EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
   }
@@ -334,7 +340,8 @@ TEST_F(NinjaRustBinaryTargetWriterTest, RenamedDeps) {
         "build ./foo_bar: rust_bin ../../foo/main.rs | ../../foo/source.rs "
         "../../foo/main.rs obj/foo/libdirect.rlib\n"
         "  externs = --extern direct_renamed=obj/foo/libdirect.rlib\n"
-        "  rustdeps = -Ldependency=obj/foo\n";
+        "  rustdeps = -Ldependency=obj/foo\n"
+        "  sources = ../../foo/source.rs ../../foo/main.rs\n";
     std::string out_str = out.str();
     EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
   }
@@ -433,7 +440,8 @@ TEST_F(NinjaRustBinaryTargetWriterTest, NonRustDeps) {
         "  externs = --extern mylib=obj/bar/libmylib.rlib\n"
         "  rustdeps = -Ldependency=obj/bar -Lnative=obj/baz -Lnative=obj/foo "
         "-Lnative=. -Clink-arg=obj/baz/sourceset.csourceset.o -lstatic "
-        "-lshared -lshared_with_toc\n";
+        "-lshared -lshared_with_toc\n"
+        "  sources = ../../foo/source.rs ../../foo/main.rs\n";
     std::string out_str = out.str();
     EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
   }
@@ -469,7 +477,8 @@ TEST_F(NinjaRustBinaryTargetWriterTest, NonRustDeps) {
         "build ./foo_bar: rust_bin ../../foo/main.rs | ../../foo/source.rs "
         "../../foo/main.rs obj/foo/libstatic.a\n"
         "  externs =\n"
-        "  rustdeps = -Lnative=obj/foo -lstatic\n";
+        "  rustdeps = -Lnative=obj/foo -lstatic\n"
+        "  sources = ../../foo/source.rs ../../foo/main.rs\n";
     std::string out_str = out.str();
     EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
   }
@@ -512,7 +521,8 @@ TEST_F(NinjaRustBinaryTargetWriterTest, RustOutputExtensionAndDir) {
         "build ./foo_bar.exe: rust_bin ../../foo/main.rs | ../../foo/input3.rs "
         "../../foo/main.rs\n"
         "  externs =\n"
-        "  rustdeps =\n";
+        "  rustdeps =\n"
+        "  sources = ../../foo/input3.rs ../../foo/main.rs\n";
     std::string out_str = out.str();
     EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
   }
@@ -556,7 +566,8 @@ TEST_F(NinjaRustBinaryTargetWriterTest, LibsAndLibDirs) {
         "build ./foo_bar: rust_bin ../../foo/main.rs | ../../foo/input.rs "
         "../../foo/main.rs\n"
         "  externs =\n"
-        "  rustdeps = -Lnative=../../baz -lquux\n";
+        "  rustdeps = -Lnative=../../baz -lquux\n"
+        "  sources = ../../foo/input.rs ../../foo/main.rs\n";
     std::string out_str = out.str();
     EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
   }
@@ -614,7 +625,8 @@ TEST_F(NinjaRustBinaryTargetWriterTest, RustProcMacro) {
         "build obj/bar/libmymacro.so: rust_macro ../../bar/lib.rs | "
         "../../bar/mylib.rs ../../bar/lib.rs obj/baz/libmymacrodep.rlib\n"
         "  externs = --extern mymacrodep=obj/baz/libmymacrodep.rlib\n"
-        "  rustdeps = -Ldependency=obj/baz\n";
+        "  rustdeps = -Ldependency=obj/baz\n"
+        "  sources = ../../bar/mylib.rs ../../bar/lib.rs\n";
     std::string out_str = out.str();
     EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
   }
@@ -651,7 +663,8 @@ TEST_F(NinjaRustBinaryTargetWriterTest, RustProcMacro) {
         "build ./foo_bar: rust_bin ../../foo/main.rs | ../../foo/source.rs "
         "../../foo/main.rs obj/bar/libmymacro.so\n"
         "  externs = --extern mymacro=obj/bar/libmymacro.so\n"
-        "  rustdeps = -Ldependency=obj/bar\n";
+        "  rustdeps = -Ldependency=obj/bar\n"
+        "  sources = ../../foo/source.rs ../../foo/main.rs\n";
     std::string out_str = out.str();
     EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
   }
@@ -692,7 +705,8 @@ TEST_F(NinjaRustBinaryTargetWriterTest, GroupDeps) {
         "build obj/bar/libmylib.rlib: rust_rlib ../../bar/lib.rs | "
         "../../bar/mylib.rs ../../bar/lib.rs\n"
         "  externs =\n"
-        "  rustdeps =\n";
+        "  rustdeps =\n"
+        "  sources = ../../bar/mylib.rs ../../bar/lib.rs\n";
     std::string out_str = out.str();
     EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
   }
@@ -736,7 +750,8 @@ TEST_F(NinjaRustBinaryTargetWriterTest, GroupDeps) {
         "build ./foo_bar: rust_bin ../../foo/main.rs | ../../foo/source.rs "
         "../../foo/main.rs obj/bar/libmylib.rlib || obj/baz/group.stamp\n"
         "  externs = --extern mylib=obj/bar/libmylib.rlib\n"
-        "  rustdeps = -Ldependency=obj/bar\n";
+        "  rustdeps = -Ldependency=obj/bar\n"
+        "  sources = ../../foo/source.rs ../../foo/main.rs\n";
     std::string out_str = out.str();
     EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
   }
@@ -782,7 +797,55 @@ TEST_F(NinjaRustBinaryTargetWriterTest, Externs) {
         "../../foo/main.rs ../../foo/lib1.rlib\n"
         "  externs = --extern lib1=../../foo/lib1.rlib --extern "
         "lib2=lib2.rlib\n"
-        "  rustdeps =\n";
+        "  rustdeps =\n"
+        "  sources = ../../foo/source.rs ../../foo/main.rs\n";
+    std::string out_str = out.str();
+    EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
+  }
+}
+
+TEST_F(NinjaRustBinaryTargetWriterTest, Inputs) {
+  Err err;
+  TestWithScope setup;
+
+  Target target(setup.settings(), Label(SourceDir("//foo/"), "bar"));
+  target.set_output_type(Target::EXECUTABLE);
+  target.visibility().SetPublic();
+  SourceFile main("//foo/main.rs");
+  target.sources().push_back(SourceFile("//foo/source.rs"));
+  target.sources().push_back(main);
+  target.source_types_used().Set(SourceFile::SOURCE_RS);
+  target.rust_values().set_crate_root(main);
+  target.rust_values().crate_name() = "foo_bar";
+  target.config_values().inputs().push_back(SourceFile("//foo/config.json"));
+  target.config_values().inputs().push_back(SourceFile("//foo/template.h"));
+  target.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(target.OnResolved(&err));
+
+  {
+    std::ostringstream out;
+    NinjaRustBinaryTargetWriter writer(&target, out);
+    writer.Run();
+
+    const char expected[] =
+        "build obj/foo/bar.inputs.stamp: stamp ../../foo/config.json ../../foo/template.h\n"
+        "crate_name = foo_bar\n"
+        "crate_type = bin\n"
+        "output_extension = \n"
+        "output_dir = \n"
+        "rustflags =\n"
+        "rustenv =\n"
+        "root_out_dir = .\n"
+        "target_out_dir = obj/foo\n"
+        "target_output_name = bar\n"
+        "\n"
+        "build ./foo_bar: rust_bin ../../foo/main.rs | ../../foo/source.rs "
+        "../../foo/main.rs ../../foo/config.json ../../foo/template.h "
+        "|| obj/foo/bar.inputs.stamp\n"
+        "  externs =\n"
+        "  rustdeps =\n"
+        "  sources = ../../foo/source.rs ../../foo/main.rs "
+        "../../foo/config.json ../../foo/template.h\n";
     std::string out_str = out.str();
     EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
   }

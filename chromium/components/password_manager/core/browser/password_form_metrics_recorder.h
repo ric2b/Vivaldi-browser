@@ -204,6 +204,9 @@ class PasswordFormMetricsRecorder
   // credentials on page load but to wait for the user to confirm the credential
   // to be filled. This decision is only recorded for the first time, the
   // browser informs the renderer about credentials for a given form.
+  //
+  // Needs to stay in sync with PasswordManagerFirstWaitForUsernameReason in
+  // enums.xml.
   enum class WaitForUsernameReason {
     // Credentials may be filled on page load.
     kDontWait = 0,
@@ -221,7 +224,11 @@ class PasswordFormMetricsRecorder
     kTouchToFill = 5,
     // Show suggestion on account selection feature is enabled.
     kFoasFeature = 6,
-    kMaxValue = kFoasFeature,
+    // Re-authenticaion for filling passwords is required.
+    kReauthRequired = 7,
+    // Password is already filled
+    kPasswordPrefilled = 8,
+    kMaxValue = kPasswordPrefilled,
   };
 
   // This metric records the user experience with the passwords filling. The

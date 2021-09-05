@@ -37,9 +37,11 @@
 <translation id="1842960171412779397">ເລືອກ</translation>
 <translation id="1859234291848436338">ທິດທາງການຂຽນ</translation>
 <translation id="1860796786778352021">ປິດການແຈ້ງເຕືອນ</translation>
+<translation id="186476001994626254">ການວາງເນື້ອຫາອັດສະລິຍະໃນເວັບ</translation>
 <translation id="1871244248791675517">ແຊກເຂົ້າ</translation>
 <translation id="1884435127456172652"><ph name="NUMBER" /> %</translation>
 <translation id="1901303067676059328">ເລືອກ​ທັງ​ຫມົດ</translation>
+<translation id="19085484004813472">ນີ້ແມ່ນຄຸນສົມບັດໃໝ່</translation>
 <translation id="2006524834898217237">ກວດໃຫ້ແນ່ໃຈວ່າອຸປະກອນນີ້ເຊື່ອມຕໍ່ກັບອິນເຕີເນັດ.</translation>
 <translation id="208586643495776849">ກະລຸນາລອງໃໝ່</translation>
 <translation id="2090963878406559571">ບໍ່ສາມາດສົ່ງເບີຈາກ <ph name="ORIGIN" /> ຫາໂທລະສັບ Android ຂອງທ່ານໄດ້, <ph name="TROUBLESHOOT_LINK" /> ສຳລັບທັງສອງອຸປະກອນໃນການຕັ້ງຄ່າ.</translation>
@@ -67,6 +69,7 @@
 <translation id="2570734079541893434">ຈັດການການຕັ້ງຄ່າ</translation>
 <translation id="2573731672208488250">{HOURS,plural, =1{ໃນ 1 ຊມ}other{ໃນ # ຊມ}}</translation>
 <translation id="2583543531130364912">ປັບຕັ້ງຄ່າໜ້າຈໍສຳຜັດຂອງທ່ານ</translation>
+<translation id="2586657967955657006">ຄລິບບອດ</translation>
 <translation id="2666092431469916601">ດ້ານເທິງ</translation>
 <translation id="2701330563083355633">ແບ່ງປັນຈາກ <ph name="DEVICE_NAME" /></translation>
 <translation id="271033894570825754">ໃຫມ່</translation>
@@ -74,6 +77,7 @@
 <translation id="2749082172777216925"><ph name="APP_NAME_INFO" />, <ph name="PRICE" /></translation>
 <translation id="2803313416453193357">ເປີດ​ໂຟລເດີ</translation>
 <translation id="2824719307700604149">{YEARS,plural, =1{1 ປີກ່ອນນີ້}other{# ປີກ່ອນນີ້}}</translation>
+<translation id="2878511608894704031">ລຶບທັງໝົດ</translation>
 <translation id="2907671656515444832">{DAYS,plural, =1{ໃນ 1 ມື້}other{ໃນ # ມື້}}</translation>
 <translation id="2931838996092594335">ຄລິກ</translation>
 <translation id="2981684127883932071">ກຳລັງສະແດງການແນະນຳ</translation>
@@ -114,6 +118,7 @@
 <translation id="4289300219472526559">ເລີ່ມ​ຕົ້ນ​ເວົ້າ</translation>
 <translation id="430191667033048642">ຍ້າຍ <ph name="MOVED_APP_NAME" /> ໄປຫາໂຟນເດີ <ph name="FOLDER_NAME" /> ແລ້ວ.</translation>
 <translation id="4316910396681052118">ທຸກແອັບ</translation>
+<translation id="4491109536499578614">ຮູບ​</translation>
 <translation id="4588090240171750605">ເລື່ອນໄປທາງຂວາ</translation>
 <translation id="4631891353005174729"><ph name="APP_NAME_TYPE" />, ການໃຫ້ຄະແນນເປັນດາວ <ph name="RATING_SCORE" /></translation>
 <translation id="4648249871170053485"><ph name="APP_NAME" />, ການແນະນຳແອັບ</translation>
@@ -147,6 +152,7 @@
 <translation id="5768079895599174203">{DAYS,plural, =1{1 ວັນ​ ແລະ }other{# ວັນ ແລະ }}</translation>
 <translation id="5789643057113097023">.</translation>
 <translation id="5866104238061687188">{YEARS,plural, =1{ໃນ 1 ປີ}other{ໃນ # ປີ}}</translation>
+<translation id="588258955323874662">ເຕັມໜ້າຈໍ</translation>
 <translation id="5906667377645263094">{SECONDS,plural, =1{ຍັງ​ເຫຼືອ 1 ວິ​ນາ​ທີ}other{ຍັງ​ເຫຼືອ # ວິ​ນາ​ທີ}}</translation>
 <translation id="5941711191222866238">ຫຍໍ້ລົງ</translation>
 <translation id="5943826764092288734">{HOURS,plural, =1{1 ຊົ່ວ​ໂມງ}other{# ຊົ່ວ​ໂມງ}}</translation>
@@ -170,6 +176,7 @@
 <translation id="6417265370957905582">ຜູ້ຊ່ວຍ Google</translation>
 <translation id="6430678249303439055">ບລັອກທຸກການແຈ້ງເຕືອນຈາກແອັບນີ້</translation>
 <translation id="6483402905448010557">{SECONDS,plural, =1{1 ວິນາທີກ່ອນນີ້}other{# ວິນາທີກ່ອນນີ້}}</translation>
+<translation id="6503257047630241175">ເນື້ອຫາ RTF</translation>
 <translation id="6539092367496845964">ມີບາງຢ່າງຜິດພາດ. ລອງໃໝ່ໃນພາຍຫລັງ.</translation>
 <translation id="654149438358937226">ບລັອກທຸກການແຈ້ງເຕືອນ</translation>
 <translation id="6567071839949112727">ຄລິກອັນກ່ອນນີ້</translation>

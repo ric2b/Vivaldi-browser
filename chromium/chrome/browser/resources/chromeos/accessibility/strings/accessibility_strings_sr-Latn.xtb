@@ -6,6 +6,7 @@
 <translation id="1012173283529841972">Stavka liste</translation>
 <translation id="1013742170491673792">pretraga</translation>
 <translation id="1014370462248694370">Prevlačite nadesno pomoću dva prsta</translation>
+<translation id="1016393160682012902">Pritisnite taster na qwerty tastaturi, taster na tastaturi sa Brajevom azbukom koji može da se osveži ili obavite pokret dodira da biste saznali njegovu funkciju. Pritisnite control i w ili escape da biste izašli iz njega.</translation>
 <translation id="1022586497894531524">Da li prvi put koristite ChromeVox govorne povratne informacije? Ovaj kratki vodič objašnjava osnovne stvari potrebne za početne korake sa uslugom ChromeVox.</translation>
 <translation id="1025074108959230262">Lepljivi režim je onemogućen</translation>
 <translation id="1031961866430398710">i</translation>
@@ -504,7 +505,6 @@
 <translation id="489907760999452556">Interni link</translation>
 <translation id="4909019435900810068">Pomeri unazad za jednu reč</translation>
 <translation id="4911349081560453449">Nema prethodnog polja za potvrdu</translation>
-<translation id="4915087353619183190">Pokrećemo režim za učenje. Pritisnite taster na qwerty tastaturi, taster na Brajevoj tastaturi koji može da se osveži ili obavite pokret dodira da biste saznali njegovu funkciju. Pritisnite control i w ili escape da biste izašli iz njega.</translation>
 <translation id="492295894462528572">Predgovor</translation>
 <translation id="495046168593986294">Pomeri nagore</translation>
 <translation id="495170559598752135">Radnje</translation>
@@ -647,6 +647,7 @@
 <translation id="6017514345406065928">Zelena</translation>
 <translation id="602001110135236999">Pomeri nalevo</translation>
 <translation id="6034000775414344507">Svetlosiva</translation>
+<translation id="6036135911048686884">Istražite dodirom</translation>
 <translation id="6037602951055904232">Pomeranje unapred</translation>
 <translation id="6044160928851315051">Zatamni ekran</translation>
 <translation id="6082768461603900813">Osnovno kretanje</translation>
@@ -923,6 +924,7 @@
 <translation id="8345569862449483843">{COUNT,plural, =1{znak „taraba“}one{# znak „taraba“}few{# znaka „taraba“}other{# znakova „taraba“}}</translation>
 <translation id="8378855320830505539">Oblast</translation>
 <translation id="8382679411218029383">Automatsko dovršavanje umetnutog teksta i liste</translation>
+<translation id="8394908167088220973">Puštanje/pauziranje medija</translation>
 <translation id="8428213095426709021">Podešavanja</translation>
 <translation id="8428603554127842284"><ph name="DEPTH" />. nivo</translation>
 <translation id="8430049249787218991">traka menija</translation>
@@ -967,6 +969,7 @@
 <translation id="8770473310765924354">izađite iz strukturiranog sadržaja, poput tabela</translation>
 <translation id="8779057862865475116">Nema prethodnog linka</translation>
 <translation id="8796411681063377102">Sledeće zaglavlje 3. nivoa</translation>
+<translation id="8823311177246872527"><ph name="CURRENTPAGE" />. stranica od <ph name="TOTALPAGES" /></translation>
 <translation id="8825828890761629845">baner</translation>
 <translation id="8851136666856101339">main</translation>
 <translation id="8882002077197914455">Zaglavlje reda</translation>

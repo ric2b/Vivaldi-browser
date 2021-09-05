@@ -22,6 +22,7 @@
   /* Button */                                                                 \
   OP(kColorId_ButtonColor),                                                    \
   OP(kColorId_ButtonBorderColor),                                              \
+  OP(kColorId_DisabledButtonBorderColor),                                      \
   OP(kColorId_ButtonCheckedColor),                                             \
   OP(kColorId_ButtonUncheckedColor),                                           \
   OP(kColorId_ButtonEnabledColor),                                             \
@@ -91,7 +92,9 @@
   OP(kColorId_NotificationLargeImageBackground),                               \
   OP(kColorId_NotificationPlaceholderIconColor),                               \
   OP(kColorId_NotificationEmptyPlaceholderIconColor),                          \
+  OP(kColorId_NotificationEmptyPlaceholderTextColor),                          \
   OP(kColorId_NotificationDefaultAccentColor),                                 \
+  OP(kColorId_NotificationInkDropBase),                                        \
   /* Slider */                                                                 \
   OP(kColorId_SliderThumbDefault),                                             \
   OP(kColorId_SliderTroughDefault),                                            \
@@ -109,6 +112,7 @@
   OP(kColorId_TabBottomBorder),                                                \
   OP(kColorId_TabHighlightBackground),                                         \
   OP(kColorId_TabHighlightFocusedBackground),                                  \
+  OP(kColorId_TabSelectedBorderColor),                                         \
   /* Textfield */                                                              \
   OP(kColorId_TextfieldDefaultColor),                                          \
   OP(kColorId_TextfieldDefaultBackground),                                     \

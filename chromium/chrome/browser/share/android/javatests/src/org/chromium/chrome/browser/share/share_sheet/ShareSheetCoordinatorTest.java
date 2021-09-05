@@ -31,6 +31,7 @@ import org.chromium.chrome.test.ChromeBrowserTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
+import org.chromium.components.browser_ui.share.ShareParams;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.test.util.DummyUiActivity;
 
@@ -58,6 +59,9 @@ public final class ShareSheetCoordinatorTest {
     private ShareSheetPropertyModelBuilder mPropertyModelBuilder;
 
     @Mock
+    private ShareParams mParams;
+
+    @Mock
     private BottomSheetController mController;
 
     private ShareSheetCoordinator mShareSheetCoordinator;
@@ -69,23 +73,21 @@ public final class ShareSheetCoordinatorTest {
                                            .with(ShareSheetItemViewProperties.ICON, null)
                                            .with(ShareSheetItemViewProperties.LABEL, "testModel1")
                                            .with(ShareSheetItemViewProperties.CLICK_LISTENER, null)
-                                           .with(ShareSheetItemViewProperties.IS_FIRST_PARTY, false)
                                            .build();
         PropertyModel testModel2 = new PropertyModel.Builder(ShareSheetItemViewProperties.ALL_KEYS)
                                            .with(ShareSheetItemViewProperties.ICON, null)
                                            .with(ShareSheetItemViewProperties.LABEL, "testModel2")
                                            .with(ShareSheetItemViewProperties.CLICK_LISTENER, null)
-                                           .with(ShareSheetItemViewProperties.IS_FIRST_PARTY, false)
                                            .build();
 
         ArrayList<PropertyModel> thirdPartyPropertyModels =
                 new ArrayList<>(Arrays.asList(testModel1, testModel2));
         Mockito.when(mPropertyModelBuilder.selectThirdPartyApps(
-                             any(), anySet(), any(), anyBoolean(), anyLong()))
+                             any(), anySet(), any(), anyBoolean(), any(), anyLong()))
                 .thenReturn(thirdPartyPropertyModels);
 
         mShareSheetCoordinator =
-                new ShareSheetCoordinator(mController, null, mPropertyModelBuilder, null, null);
+                new ShareSheetCoordinator(mController, null, mPropertyModelBuilder, null);
     }
 
     @Test
@@ -94,10 +96,9 @@ public final class ShareSheetCoordinatorTest {
         mShareSheetCoordinator.disableFirstPartyFeaturesForTesting();
         Activity activity = mActivityTestRule.getActivity();
 
-        List<PropertyModel> propertyModels =
-                mShareSheetCoordinator.createTopRowPropertyModels(activity,
-                        /*shareParams=*/null, /*chromeShareExtras=*/null,
-                        ShareSheetPropertyModelBuilder.ALL_CONTENT_TYPES);
+        List<PropertyModel> propertyModels = mShareSheetCoordinator.createTopRowPropertyModels(
+                activity, mParams, /*chromeShareExtras=*/null,
+                ShareSheetPropertyModelBuilder.ALL_CONTENT_TYPES);
         assertEquals("Property model list should be empty.", 0, propertyModels.size());
     }
 
@@ -106,22 +107,16 @@ public final class ShareSheetCoordinatorTest {
     public void testCreateBottomRowPropertyModels() {
         Activity activity = mActivityTestRule.getActivity();
 
-        List<PropertyModel> propertyModels =
-                mShareSheetCoordinator.createBottomRowPropertyModels(activity, /*shareParams=*/null,
-                        ShareSheetPropertyModelBuilder.ALL_CONTENT_TYPES, /*saveLastUsed=*/false);
+        List<PropertyModel> propertyModels = mShareSheetCoordinator.createBottomRowPropertyModels(
+                activity, mParams, ShareSheetPropertyModelBuilder.ALL_CONTENT_TYPES,
+                /*saveLastUsed=*/false);
         assertEquals("Incorrect number of property models.", 3, propertyModels.size());
         assertEquals("First property model isn't testModel1.", "testModel1",
                 propertyModels.get(0).get(ShareSheetItemViewProperties.LABEL));
-        assertEquals("First property model is marked as first party.", false,
-                propertyModels.get(0).get(ShareSheetItemViewProperties.IS_FIRST_PARTY));
         assertEquals("Second property model isn't testModel2.", "testModel2",
                 propertyModels.get(1).get(ShareSheetItemViewProperties.LABEL));
-        assertEquals("Second property model is marked as first party.", false,
-                propertyModels.get(1).get(ShareSheetItemViewProperties.IS_FIRST_PARTY));
         assertEquals("Third property model isn't More.",
                 activity.getResources().getString(R.string.sharing_more_icon_label),
                 propertyModels.get(2).get(ShareSheetItemViewProperties.LABEL));
-        assertEquals("Third property model isn't marked as first party.", true,
-                propertyModels.get(2).get(ShareSheetItemViewProperties.IS_FIRST_PARTY));
     }
 }

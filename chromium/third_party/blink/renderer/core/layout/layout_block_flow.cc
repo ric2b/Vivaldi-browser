@@ -52,7 +52,6 @@
 #include "third_party/blink/renderer/core/layout/line/inline_text_box.h"
 #include "third_party/blink/renderer/core/layout/line/line_width.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_cursor.h"
-#include "third_party/blink/renderer/core/layout/ng/inline/ng_line_height_metrics.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_offset_mapping.h"
 #include "third_party/blink/renderer/core/layout/ng/layout_ng_block_flow.h"
 #include "third_party/blink/renderer/core/layout/ng/legacy_layout_tree_walking.h"
@@ -71,6 +70,7 @@
 #include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
+#include "third_party/blink/renderer/platform/wtf/size_assertions.h"
 
 namespace blink {
 
@@ -82,16 +82,9 @@ struct SameSizeAsLayoutBlockFlow : public LayoutBlock {
   Persistent<void*> persistent[1];
 };
 
-static_assert(sizeof(LayoutBlockFlow) == sizeof(SameSizeAsLayoutBlockFlow),
-              "LayoutBlockFlow should stay small");
+ASSERT_SIZE(LayoutBlockFlow, SameSizeAsLayoutBlockFlow);
 
-struct SameSizeAsMarginInfo {
-  uint16_t bitfields;
-  LayoutUnit margins[2];
-};
-
-static_assert(sizeof(LayoutBlockFlow::MarginValues) == sizeof(LayoutUnit[4]),
-              "MarginValues should stay small");
+ASSERT_SIZE(LayoutBlockFlow::MarginValues, LayoutUnit[4]);
 
 typedef HashMap<LayoutBlockFlow*, int> LayoutPassCountMap;
 static LayoutPassCountMap& GetLayoutPassCountMap() {
@@ -215,6 +208,13 @@ class MarginInfo {
   }
 };
 
+struct SameSizeAsMarginInfo {
+  uint16_t bitfields;
+  LayoutUnit margins[2];
+};
+
+ASSERT_SIZE(MarginInfo, SameSizeAsMarginInfo);
+
 // Some features, such as floats, margin collapsing and fragmentation, require
 // some knowledge about things that happened when laying out previous block
 // child siblings. Only looking at the object currently being laid out isn't
@@ -270,8 +270,6 @@ class BlockChildrenLayoutInfo {
 };
 
 LayoutBlockFlow::LayoutBlockFlow(ContainerNode* node) : LayoutBlock(node) {
-  static_assert(sizeof(MarginInfo) == sizeof(SameSizeAsMarginInfo),
-                "MarginInfo should stay small");
   SetChildrenInline(true);
 }
 
@@ -2407,7 +2405,7 @@ void LayoutBlockFlow::AddVisualOverflowFromFloats(
   DCHECK(!PrePaintBlockedByDisplayLock(DisplayLockLifecycleTarget::kChildren));
   DCHECK(fragment.HasFloatingDescendantsForPaint());
 
-  for (const NGLink& child : fragment.Children()) {
+  for (const NGLink& child : fragment.PostLayoutChildren()) {
     if (child->HasSelfPaintingLayer())
       continue;
 
@@ -2457,9 +2455,7 @@ void LayoutBlockFlow::ComputeVisualOverflow(
   LayoutRect previous_visual_overflow_rect = VisualOverflowRect();
   ClearVisualOverflow();
   AddVisualOverflowFromChildren();
-
   AddVisualEffectOverflow();
-  AddVisualOverflowFromTheme();
 
   if (!IsLayoutNGContainingBlock(this) &&
       (recompute_floats || CreatesNewFormattingContext() ||
@@ -2583,8 +2579,7 @@ LayoutUnit LayoutBlockFlow::FirstLineBoxBaseline() const {
       NGBoxFragment box_fragment(
           StyleRef().GetWritingMode(), StyleRef().Direction(),
           To<NGPhysicalBoxFragment>(paint_fragment->PhysicalFragment()));
-      base::Optional<LayoutUnit> baseline = box_fragment.Baseline();
-      if (baseline)
+      if (const base::Optional<LayoutUnit> baseline = box_fragment.Baseline())
         return *baseline;
     }
   }
@@ -4480,7 +4475,7 @@ void LayoutBlockFlow::SimplifiedNormalFlowInlineLayout() {
 bool LayoutBlockFlow::RecalcInlineChildrenLayoutOverflow() {
   DCHECK(ChildrenInline());
   bool children_layout_overflow_changed = false;
-  LinkedHashSet<RootInlineBox*> line_boxes;
+  HashSet<RootInlineBox*> line_boxes;
   for (InlineWalker walker(LineLayoutBlockFlow(this)); !walker.AtEnd();
        walker.Advance()) {
     LayoutObject* layout_object = walker.Current().GetLayoutObject();
@@ -4500,9 +4495,7 @@ bool LayoutBlockFlow::RecalcInlineChildrenLayoutOverflow() {
   // FIXME: Glyph overflow will get lost in this case, but not really a big
   // deal.
   GlyphOverflowAndFallbackFontsMap text_box_data_map;
-  for (LinkedHashSet<RootInlineBox*>::const_iterator it = line_boxes.begin();
-       it != line_boxes.end(); ++it) {
-    RootInlineBox* box = *it;
+  for (auto* box : line_boxes) {
     box->ClearKnownToHaveNoOverflow();
     box->ComputeOverflow(box->LineTop(), box->LineBottom(), text_box_data_map);
   }

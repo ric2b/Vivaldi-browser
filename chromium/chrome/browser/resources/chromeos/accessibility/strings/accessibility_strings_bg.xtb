@@ -6,6 +6,7 @@
 <translation id="1012173283529841972">Списъчен елемент</translation>
 <translation id="1013742170491673792">srched</translation>
 <translation id="1014370462248694370">Прекарайте два пръста надясно</translation>
+<translation id="1016393160682012902">Натиснете стандартен клавиш или клавиш от брайловия дисплей или изпълнете жест с докосване, за да научите функцията му. Натиснете Control + W или Escape, за да излезете.</translation>
 <translation id="1022586497894531524">За първи път ли използвате обратната връзка с говор на ChromeVox? В този кратък урок са обяснени основните положения за започване на работа с екранния четец.</translation>
 <translation id="1025074108959230262">Фиксираният режим е деактивиран</translation>
 <translation id="1031961866430398710">след това</translation>
@@ -504,7 +505,6 @@
 <translation id="489907760999452556">Вътрешна връзка</translation>
 <translation id="4909019435900810068">Преместване назад с една дума</translation>
 <translation id="4911349081560453449">Няма предишно квадратче за отметка</translation>
-<translation id="4915087353619183190">Режимът за изговаряне на клавишите стартира. Натиснете стандартен клавиш или клавиш от брайловия дисплей или изпълнете жест с докосване, за да научите функцията му. Натиснете Control и W или Escape, за да излезете.</translation>
 <translation id="492295894462528572">Предговор</translation>
 <translation id="495046168593986294">Превъртане нагоре</translation>
 <translation id="495170559598752135">Действия</translation>
@@ -647,6 +647,7 @@
 <translation id="6017514345406065928">зелено</translation>
 <translation id="602001110135236999">Превъртане наляво</translation>
 <translation id="6034000775414344507">светлосиво</translation>
+<translation id="6036135911048686884">Изследване с докосване</translation>
 <translation id="6037602951055904232">Панорамно придвижване напред</translation>
 <translation id="6044160928851315051">Потъмняване на екрана</translation>
 <translation id="6082768461603900813">Основна навигация</translation>
@@ -716,7 +717,7 @@
 <translation id="6696967141280706829">Предисловие</translation>
 <translation id="6697092096875747123">Предишният разгъващ се списък</translation>
 <translation id="6702609185760332517">{COUNT,plural, =1{удивителен знак}other{# удивителни знака}}</translation>
-<translation id="6710213216561001401">Предишна</translation>
+<translation id="6710213216561001401">Предишно</translation>
 <translation id="6714813999819678458">Предишното заглавие от второ ниво</translation>
 <translation id="6730312624811567147">Използвайте Търсене и стрелка за наляво или надясно за Home или End; Търсене, Control и стрелка за наляво или надясно за Control Home или Control End; Търсене и стрелка за нагоре или надолу за Page Up или Page Down</translation>
 <translation id="6736510033526053669">разделът е създаден</translation>
@@ -923,6 +924,7 @@
 <translation id="8345569862449483843">{COUNT,plural, =1{знак диез}other{# знака диез}}</translation>
 <translation id="8378855320830505539">Област</translation>
 <translation id="8382679411218029383">Автоматично довършване – вградено и в списък</translation>
+<translation id="8394908167088220973">Мултимедия, пускане/пауза</translation>
 <translation id="8428213095426709021">Настройки</translation>
 <translation id="8428603554127842284">ниво <ph name="DEPTH" /></translation>
 <translation id="8430049249787218991">mnubr</translation>
@@ -967,6 +969,7 @@
 <translation id="8770473310765924354">изход от структурирано съдържание, като например таблици</translation>
 <translation id="8779057862865475116">Няма предишна връзка</translation>
 <translation id="8796411681063377102">Следващото заглавие от трето ниво</translation>
+<translation id="8823311177246872527">Страница <ph name="CURRENTPAGE" /> от <ph name="TOTALPAGES" /></translation>
 <translation id="8825828890761629845">банер</translation>
 <translation id="8851136666856101339">основен елемент</translation>
 <translation id="8882002077197914455">Заглавка на ред</translation>

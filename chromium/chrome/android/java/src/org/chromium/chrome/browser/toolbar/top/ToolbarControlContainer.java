@@ -30,6 +30,7 @@ import org.chromium.ui.widget.OptimizedFrameLayout;
 
 import org.chromium.chrome.browser.ChromeApplication;
 import org.chromium.ui.base.DeviceFormFactor;
+import org.vivaldi.browser.common.VivaldiUtils;
 
 /**
  * Layout for the browser controls (omnibox, menu, tab strip, etc..).
@@ -109,6 +110,8 @@ public class ToolbarControlContainer extends OptimizedFrameLayout implements Con
         View toolbarView = findViewById(R.id.toolbar);
         assert toolbarView != null;
 
+        // Note(david@vivaldi.com): This looks ugly in Vivaldi. Skip it.
+        if (!ChromeApplication.isVivaldi())
         if (toolbarView instanceof ToolbarTablet) {
             // On tablet, draw a fake tab strip and toolbar until the compositor is
             // ready to draw the real tab strip. (On phone, the toolbar is made entirely
@@ -286,6 +289,9 @@ public class ToolbarControlContainer extends OptimizedFrameLayout implements Con
     }
 
     private boolean isOnTabStrip(MotionEvent e) {
+        // Note(david@vivaldi.com): Make sure we hit the tabs strip when toolbar is at the bottom.
+        if (!VivaldiUtils.isTopToolbarOn() && VivaldiUtils.isTabStripOn())
+            return e.getY() >= mTabStripHeight;
         return e.getY() <= mTabStripHeight;
     }
 

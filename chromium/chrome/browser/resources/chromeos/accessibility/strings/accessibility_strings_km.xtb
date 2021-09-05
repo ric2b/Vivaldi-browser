@@ -6,6 +6,7 @@
 <translation id="1012173283529841972">ធាុតបញ្ជី</translation>
 <translation id="1013742170491673792">srched</translation>
 <translation id="1014370462248694370">អូសម្រាមដៃពីរ​ទៅស្ដាំ</translation>
+<translation id="1016393160682012902">ចុច​គ្រាប់ចុច qwerty, គ្រាប់ចុចអក្សរស្ទាបដែលអាច​ផ្ទុកឡើងវិញ ឬចលនាប៉ះ ដើម្បីស្វែងយល់អំពីមុខងាររបស់វា។ ចុច control ជាមួយ w ឬ escape ដើម្បីចាកចេញ។</translation>
 <translation id="1022586497894531524">តើអ្នកកំពុងប្រើការអានអេក្រង់របស់ ChromeVox ជាលើកដំបូងមែនទេ? មេរៀនងាយយល់នេះពន្យល់អំពីសារៈប្រយោជន៍នៃការចាប់ផ្តើមប្រើ ChromeVox ។</translation>
 <translation id="1025074108959230262">របៀបស្អិតបានបិទដំណើរការ</translation>
 <translation id="1031961866430398710">បន្ទាប់មក</translation>
@@ -504,7 +505,6 @@
 <translation id="489907760999452556">តំណខាងក្នុង</translation>
 <translation id="4909019435900810068">ផ្លាស់ទីថយក្រោយ​មួយពាក្យ</translation>
 <translation id="4911349081560453449">គ្មានប្រអប់ធីកមុនទេ</translation>
-<translation id="4915087353619183190">កំពុងចាប់ផ្ដើម​មុខងារ​ស្វែងយល់។ សូមចុច​គ្រាប់ចុច qwerty, គ្រាប់ចុច​អក្សរស្ទាប​ដែលអាចផ្ទុក​ឡើងវិញបាន ឬចលនាប៉ះ ដើម្បី​ស្វែងយល់អំពី​មុខងារ​របស់វា។ សូមចុច​ control ជាមួយអក្សរ w ឬ escape ដើម្បីចាកចេញ។</translation>
 <translation id="492295894462528572">សេចក្ដី​ផ្ដើម</translation>
 <translation id="495046168593986294">រំកិលឡើងលើ</translation>
 <translation id="495170559598752135">សកម្មភាព</translation>
@@ -647,6 +647,7 @@
 <translation id="6017514345406065928">បៃតង</translation>
 <translation id="602001110135236999">រំកិលទៅ​ឆ្វេង</translation>
 <translation id="6034000775414344507">ប្រផេះ​ខ្ចី</translation>
+<translation id="6036135911048686884">រុករកដោយការចុច</translation>
 <translation id="6037602951055904232">អូសទៅមុខ</translation>
 <translation id="6044160928851315051">បន្ថយ​ពន្លឺអេក្រង់</translation>
 <translation id="6082768461603900813">ការរុករកមូលដ្ឋាន</translation>
@@ -923,6 +924,7 @@
 <translation id="8345569862449483843">{COUNT,plural, =1{ផោន}other{# សញ្ញាផោន}}</translation>
 <translation id="8378855320830505539">តំបន់</translation>
 <translation id="8382679411218029383">ការបំពេញស្វ័យប្រវត្តិក្នុងជួរ និងបញ្ជី</translation>
+<translation id="8394908167088220973">លេង/ផ្អាក កំសាន្ត</translation>
 <translation id="8428213095426709021">ការកំណត់</translation>
 <translation id="8428603554127842284">កម្រិត <ph name="DEPTH" /></translation>
 <translation id="8430049249787218991">mnubr</translation>
@@ -967,6 +969,7 @@
 <translation id="8770473310765924354">ចាកចេញពីមាតិការចនាសម្ព័ន្ធ ដូចជាតារាងជាដើម</translation>
 <translation id="8779057862865475116">គ្មានតំណមុនទេ</translation>
 <translation id="8796411681063377102">ផ្នែកក្បាលកម្រិត 3 បន្ទាប់</translation>
+<translation id="8823311177246872527">ទំព័រទី <ph name="CURRENTPAGE" /> នៃ <ph name="TOTALPAGES" /></translation>
 <translation id="8825828890761629845">bnr</translation>
 <translation id="8851136666856101339">ចម្បង</translation>
 <translation id="8882002077197914455">ផ្នែកក្បាលជួរដេក</translation>

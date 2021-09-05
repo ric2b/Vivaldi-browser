@@ -12,7 +12,6 @@
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/location.h"
-#include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
@@ -36,6 +35,7 @@
 #include "components/omnibox/browser/omnibox_field_trial.h"
 #include "components/omnibox/browser/url_prefix.h"
 #include "components/prefs/pref_service.h"
+#include "components/search_engines/omnibox_focus_type.h"
 #include "components/search_engines/search_terms_data.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/url_formatter/url_fixer.h"
@@ -284,6 +284,8 @@ class SearchTermsDataSnapshot : public SearchTermsData {
  public:
   explicit SearchTermsDataSnapshot(const SearchTermsData* search_terms_data);
   ~SearchTermsDataSnapshot() override;
+  SearchTermsDataSnapshot(const SearchTermsDataSnapshot&) = delete;
+  SearchTermsDataSnapshot& operator=(const SearchTermsDataSnapshot&) = delete;
 
   std::string GoogleBaseURLValue() const override;
   std::string GetApplicationLocale() const override;
@@ -301,8 +303,6 @@ class SearchTermsDataSnapshot : public SearchTermsData {
   base::string16 rlz_parameter_value_;
   std::string search_client_;
   std::string google_image_search_source_;
-
-  DISALLOW_COPY_AND_ASSIGN(SearchTermsDataSnapshot);
 };
 
 SearchTermsDataSnapshot::SearchTermsDataSnapshot(
@@ -376,6 +376,9 @@ class HistoryURLProvider::VisitClassifier {
                   const AutocompleteInput& input,
                   history::URLDatabase* db);
 
+  VisitClassifier(const VisitClassifier&) = delete;
+  VisitClassifier& operator=(const VisitClassifier&) = delete;
+
   // Returns the type of visit for the specified input.
   Type type() const { return type_; }
 
@@ -389,8 +392,6 @@ class HistoryURLProvider::VisitClassifier {
   history::URLDatabase* db_;
   Type type_;
   history::URLRow url_row_;
-
-  DISALLOW_COPY_AND_ASSIGN(VisitClassifier);
 };
 
 HistoryURLProvider::VisitClassifier::VisitClassifier(
@@ -507,7 +508,7 @@ void HistoryURLProvider::Start(const AutocompleteInput& input,
 
   matches_.clear();
 
-  if (input.from_omnibox_focus() ||
+  if (input.focus_type() != OmniboxFocusType::DEFAULT ||
       (input.type() == metrics::OmniboxInputType::EMPTY))
     return;
 

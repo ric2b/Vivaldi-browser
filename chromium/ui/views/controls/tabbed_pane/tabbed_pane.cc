@@ -76,7 +76,7 @@ void Tab::SetSelected(bool selected) {
   contents_->SetVisible(selected);
   contents_->parent()->InvalidateLayout();
   SetState(selected ? State::kActive : State::kInactive);
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
   SetFocusBehavior(selected ? FocusBehavior::ACCESSIBLE_ONLY
                             : FocusBehavior::NEVER);
 #else
@@ -471,10 +471,8 @@ void TabStrip::OnPaintBorder(gfx::Canvas* canvas) {
                    max_main_axis - min_main_axis, kSelectedBorderThickness);
   if (!is_horizontal)
     rect.Transpose();
-  canvas->FillRect(
-      rect, SkColorSetA(GetNativeTheme()->GetSystemColor(
-                            ui::NativeTheme::kColorId_FocusedBorderColor),
-                        SK_AlphaOPAQUE));
+  canvas->FillRect(rect, GetNativeTheme()->GetSystemColor(
+                             ui::NativeTheme::kColorId_TabSelectedBorderColor));
 }
 
 DEFINE_ENUM_CONVERTERS(TabbedPane::Orientation,

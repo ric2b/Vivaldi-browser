@@ -411,6 +411,17 @@ class HeapHashMap : public HashMap<KeyArg,
         WTF::IsTraceable<KeyArg>::value || WTF::IsTraceable<MappedArg>::value,
         "For hash maps without traceable elements, use HashMap<> "
         "instead of HeapHashMap<>.");
+    static_assert(internal::IsMemberOrWeakMemberType<KeyArg> ||
+                      !WTF::IsTraceable<KeyArg>::value,
+                  "HeapHashMap supports only Member, WeakMember and "
+                  "non-traceable types as keys.");
+    static_assert(internal::IsMemberOrWeakMemberType<MappedArg> ||
+                      !WTF::IsTraceable<MappedArg>::value ||
+                      WTF::IsSubclassOfTemplate<MappedArg,
+                                                TraceWrapperV8Reference>::value,
+                  "HeapHashMap supports only Member, WeakMember, "
+                  "TraceWrapperV8Reference and "
+                  "non-traceable types as values.");
   }
 
  public:
@@ -500,15 +511,15 @@ struct GCInfoTrait<HeapLinkedHashSet<T, U, V>>
     : public GCInfoTrait<LinkedHashSet<T, U, V, HeapAllocator>> {};
 
 // This class is still experimental. Do not use this class.
-template <typename ValueArg>
-class HeapNewLinkedHashSet : public NewLinkedHashSet<ValueArg, HeapAllocator> {
+template <typename ValueArg, typename TraitsArg = HashTraits<ValueArg>>
+class HeapNewLinkedHashSet
+    : public NewLinkedHashSet<ValueArg, TraitsArg, HeapAllocator> {
   IS_GARBAGE_COLLECTED_CONTAINER_TYPE();
   DISALLOW_NEW();
 
   static void CheckType() {
-    // TODO(keinakashima): support WeakMember<T>
-    static_assert(internal::IsMember<ValueArg>,
-                  "HeapNewLinkedHashSet supports only Member.");
+    static_assert(internal::IsMemberOrWeakMemberType<ValueArg>,
+                  "HeapNewLinkedHashSet supports only Member and WeakMember.");
     // If not trivially destructible, we have to add a destructor which will
     // hinder performance.
     static_assert(std::is_trivially_destructible<HeapNewLinkedHashSet>::value,
@@ -524,15 +535,18 @@ class HeapNewLinkedHashSet : public NewLinkedHashSet<ValueArg, HeapAllocator> {
  public:
   template <typename>
   static void* AllocateObject(size_t size) {
-    return ThreadHeap::Allocate<HeapNewLinkedHashSet<ValueArg>>(size);
+    return ThreadHeap::Allocate<HeapNewLinkedHashSet<ValueArg, TraitsArg>>(
+        size);
   }
 
-  HeapNewLinkedHashSet() { CheckType(); }
+  HeapNewLinkedHashSet() {
+    CheckType();
+  }
 };
 
-template <typename T>
-struct GCInfoTrait<HeapNewLinkedHashSet<T>>
-    : public GCInfoTrait<NewLinkedHashSet<T, HeapAllocator>> {};
+template <typename T, typename U>
+struct GCInfoTrait<HeapNewLinkedHashSet<T, U>>
+    : public GCInfoTrait<NewLinkedHashSet<T, U, HeapAllocator>> {};
 
 template <typename ValueArg,
           wtf_size_t inlineCapacity =
@@ -736,6 +750,22 @@ struct VectorTraits<blink::Member<T>> : VectorTraitsBase<blink::Member<T>> {
   static constexpr bool kCanTraceConcurrently = true;
 };
 
+// These traits are used in VectorBackedLinkedList to support WeakMember in
+// HeapNewLinkedHashSet though HeapVector<WeakMember> usage is still banned.
+// (See the discussion in https://crrev.com/c/2246014)
+template <typename T>
+struct VectorTraits<blink::WeakMember<T>>
+    : VectorTraitsBase<blink::WeakMember<T>> {
+  STATIC_ONLY(VectorTraits);
+  static const bool kNeedsDestruction = false;
+  static const bool kCanInitializeWithMemset = true;
+  static const bool kCanClearUnusedSlotsWithMemset = true;
+  static const bool kCanCopyWithMemcpy = true;
+  static const bool kCanMoveWithMemcpy = true;
+
+  static constexpr bool kCanTraceConcurrently = true;
+};
+
 template <typename T>
 struct VectorTraits<blink::UntracedMember<T>>
     : VectorTraitsBase<blink::UntracedMember<T>> {
@@ -876,8 +906,6 @@ struct HashTraits<blink::UntracedMember<T>>
   static PeekOutType Peek(const blink::UntracedMember<T>& value) {
     return value;
   }
-
-  static constexpr bool kCanTraceConcurrently = true;
 };
 
 template <typename T, wtf_size_t inlineCapacity>

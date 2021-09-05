@@ -27,7 +27,6 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_PAINT_COMPOSITING_COMPOSITED_LAYER_MAPPING_H_
 
 #include <memory>
-#include "base/macros.h"
 #include "third_party/blink/renderer/core/paint/compositing/graphics_layer_updater.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/core/paint/paint_layer_painting_info.h"
@@ -90,6 +89,8 @@ class CORE_EXPORT CompositedLayerMapping final : public GraphicsLayerClient {
 
  public:
   explicit CompositedLayerMapping(PaintLayer&);
+  CompositedLayerMapping(const CompositedLayerMapping&) = delete;
+  CompositedLayerMapping& operator=(const CompositedLayerMapping&) = delete;
   ~CompositedLayerMapping() override;
 
   PaintLayer& OwningLayer() const { return owning_layer_; }
@@ -102,8 +103,6 @@ class CORE_EXPORT CompositedLayerMapping final : public GraphicsLayerClient {
 
   // Update whether layer needs blending.
   void UpdateContentsOpaque();
-
-  void UpdateRasterizationPolicy();
 
   GraphicsLayer* MainGraphicsLayer() const { return graphics_layer_.get(); }
 
@@ -180,6 +179,7 @@ class CORE_EXPORT CompositedLayerMapping final : public GraphicsLayerClient {
                      const IntRect& interest_rect) const override;
   bool ShouldThrottleRendering() const override;
   bool IsUnderSVGHiddenContainer() const override;
+  bool IsSVGRoot() const override;
   bool IsTrackingRasterInvalidations() const override;
   void GraphicsLayersDidChange() override;
   bool PaintBlockedByDisplayLockIncludingAncestors(
@@ -209,10 +209,10 @@ class CORE_EXPORT CompositedLayerMapping final : public GraphicsLayerClient {
   // scrolling content.
   bool NeedsToReparentOverflowControls() const;
 
-  // Removes the overflow controls host layer from its parent and positions it
-  // so that it can be inserted as a sibling to this CLM without changing
-  // position.
-  GraphicsLayer* DetachLayerForOverflowControls();
+  // Move overflow control layers from its parent into the vector.
+  // Returns the number of layers moved.
+  wtf_size_t MoveOverflowControlLayersInto(GraphicsLayerVector&,
+                                           wtf_size_t position);
 
   void SetBlendMode(BlendMode);
 
@@ -311,9 +311,6 @@ class CORE_EXPORT CompositedLayerMapping final : public GraphicsLayerClient {
       Vector<GraphicsLayerPaintInfo>& layers,
       Vector<PaintLayer*>& layers_needing_paint_invalidation);
   void UpdateMainGraphicsLayerGeometry(const IntRect& local_compositing_bounds);
-  void UpdateOverflowControlsHostLayerGeometry(
-      const PaintLayer* compositing_container);
-  void UpdateChildTransformLayerGeometry();
   void UpdateMaskLayerGeometry();
   void UpdateForegroundLayerGeometry();
   void UpdateDecorationOutlineLayerGeometry(
@@ -373,8 +370,6 @@ class CORE_EXPORT CompositedLayerMapping final : public GraphicsLayerClient {
   // painting into the backing store.
   bool ContainsPaintedContent() const;
 
-  Color LayoutObjectBackgroundColor() const;
-  void UpdateBackgroundColor();
   void UpdateContentsRect();
   void UpdateCompositingReasons();
 
@@ -411,10 +406,9 @@ class CORE_EXPORT CompositedLayerMapping final : public GraphicsLayerClient {
   //
   //    + graphics_layer_
   //      + contents layers (or contents layers under scrolling_contents_layer_)
-  //      + overflow_controls_host_layer_ [OPTIONAL]
-  //      | + layer_for_vertical_scrollbar_ [OPTIONAL]
-  //      | + layer_for_horizontal_scrollbar_ [OPTIONAL]
-  //      | + layer_for_scroll_corner_ [OPTIONAL]
+  //      + layer_for_vertical_scrollbar_ [OPTIONAL]
+  //      + layer_for_horizontal_scrollbar_ [OPTIONAL]
+  //      + layer_for_scroll_corner_ [OPTIONAL]
   //      + decoration_outline_layer_ [OPTIONAL]
   //      + mask_layer_ [ OPTIONAL ]
   //      + non_scrolling_squashing_layer_ [ OPTIONAL ]
@@ -456,12 +450,6 @@ class CORE_EXPORT CompositedLayerMapping final : public GraphicsLayerClient {
   std::unique_ptr<GraphicsLayer> layer_for_vertical_scrollbar_;
   std::unique_ptr<GraphicsLayer> layer_for_scroll_corner_;
 
-  // This layer contains the scrollbar and scroll corner layers and clips them
-  // to the border box bounds of our LayoutObject. It is usually added to
-  // graphics_layer_, but may be reparented by GraphicsLayerTreeBuilder to
-  // ensure that scrollbars appear above scrolling content.
-  std::unique_ptr<GraphicsLayer> overflow_controls_host_layer_;
-
   // DecorationLayer which paints outline.
   std::unique_ptr<GraphicsLayer> decoration_outline_layer_;
 
@@ -488,7 +476,6 @@ class CORE_EXPORT CompositedLayerMapping final : public GraphicsLayerClient {
   bool draws_background_onto_content_layer_;
 
   friend class CompositedLayerMappingTest;
-  DISALLOW_COPY_AND_ASSIGN(CompositedLayerMapping);
 };
 
 }  // namespace blink

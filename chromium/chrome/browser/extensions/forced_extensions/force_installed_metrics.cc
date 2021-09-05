@@ -20,13 +20,14 @@
 #include "extensions/browser/updater/extension_downloader.h"
 
 #if defined(OS_CHROMEOS)
+#include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "components/arc/arc_prefs.h"
-#include "components/user_manager/user_manager.h"
 #endif  // defined(OS_CHROMEOS)
 
 namespace extensions {
 
 using ExtensionStatus = ForceInstalledTracker::ExtensionStatus;
+using FailureReason = InstallStageTracker::FailureReason;
 
 namespace {
 // Timeout to report UMA if not all force-installed extension were loaded.
@@ -34,34 +35,39 @@ constexpr base::TimeDelta kInstallationTimeout =
     base::TimeDelta::FromMinutes(5);
 
 #if defined(OS_CHROMEOS)
-
-ForceInstalledMetrics::SessionType GetSessionFromUserType(
-    user_manager::UserType user_type) {
-  switch (user_type) {
-    case user_manager::USER_TYPE_REGULAR:
-      return ForceInstalledMetrics::SessionType::SESSION_TYPE_REGULAR_EXISTING;
+// Helper method to convert user_manager::UserType to
+// InstallStageTracker::UserType for histogram purposes.
+ForceInstalledMetrics::UserType ConvertUserType(
+    InstallStageTracker::UserInfo user_info) {
+  switch (user_info.user_type) {
+    case user_manager::USER_TYPE_REGULAR: {
+      if (user_info.is_new_user)
+        return ForceInstalledMetrics::UserType::USER_TYPE_REGULAR_NEW;
+      return ForceInstalledMetrics::UserType::USER_TYPE_REGULAR_EXISTING;
+    }
     case user_manager::USER_TYPE_GUEST:
-      return ForceInstalledMetrics::SessionType::SESSION_TYPE_GUEST;
+      return ForceInstalledMetrics::UserType::USER_TYPE_GUEST;
     case user_manager::USER_TYPE_PUBLIC_ACCOUNT:
-      return ForceInstalledMetrics::SessionType::SESSION_TYPE_PUBLIC_ACCOUNT;
+      return ForceInstalledMetrics::UserType::USER_TYPE_PUBLIC_ACCOUNT;
     case user_manager::USER_TYPE_SUPERVISED:
-      return ForceInstalledMetrics::SessionType::SESSION_TYPE_SUPERVISED;
+      return ForceInstalledMetrics::UserType::USER_TYPE_SUPERVISED;
     case user_manager::USER_TYPE_KIOSK_APP:
-      return ForceInstalledMetrics::SessionType::SESSION_TYPE_KIOSK_APP;
+      return ForceInstalledMetrics::UserType::USER_TYPE_KIOSK_APP;
     case user_manager::USER_TYPE_CHILD:
-      return ForceInstalledMetrics::SessionType::SESSION_TYPE_CHILD;
+      return ForceInstalledMetrics::UserType::USER_TYPE_CHILD;
     case user_manager::USER_TYPE_ARC_KIOSK_APP:
-      return ForceInstalledMetrics::SessionType::SESSION_TYPE_ARC_KIOSK_APP;
+      return ForceInstalledMetrics::UserType::USER_TYPE_ARC_KIOSK_APP;
     case user_manager::USER_TYPE_ACTIVE_DIRECTORY:
-      return ForceInstalledMetrics::SessionType::SESSION_TYPE_ACTIVE_DIRECTORY;
+      return ForceInstalledMetrics::UserType::USER_TYPE_ACTIVE_DIRECTORY;
     case user_manager::USER_TYPE_WEB_KIOSK_APP:
-      return ForceInstalledMetrics::SessionType::SESSION_TYPE_WEB_KIOSK_APP;
+      return ForceInstalledMetrics::UserType::USER_TYPE_WEB_KIOSK_APP;
     default:
       NOTREACHED();
   }
-  return ForceInstalledMetrics::SessionType::kMaxValue;
+  return ForceInstalledMetrics::UserType::kMaxValue;
 }
 #endif  // defined(OS_CHROMEOS)
+
 }  // namespace
 
 ForceInstalledMetrics::ForceInstalledMetrics(
@@ -113,7 +119,8 @@ bool ForceInstalledMetrics::IsMisconfiguration(
     if (detail == CrxInstallErrorDetail::KIOSK_MODE_ONLY)
       return true;
 
-    if (detail == CrxInstallErrorDetail::DISALLOWED_BY_POLICY &&
+    if (installation_data.extension_type &&
+        detail == CrxInstallErrorDetail::DISALLOWED_BY_POLICY &&
         !management->IsAllowedManifestType(
             installation_data.extension_type.value(), id)) {
       return true;
@@ -124,31 +131,25 @@ bool ForceInstalledMetrics::IsMisconfiguration(
   // the device.
   if (profile_->GetPrefs()->IsManagedPreference(arc::prefs::kArcEnabled) &&
       profile_->GetPrefs()->GetBoolean(arc::prefs::kArcEnabled) &&
-      installation_data.failure_reason ==
-          InstallStageTracker::FailureReason::REPLACED_BY_ARC_APP)
+      installation_data.failure_reason == FailureReason::REPLACED_BY_ARC_APP) {
     return true;
+  }
 #endif  // defined(OS_CHROMEOS)
 
   if (installation_data.failure_reason ==
-      InstallStageTracker::FailureReason::NOT_PERFORMING_NEW_INSTALL)
+      FailureReason::NOT_PERFORMING_NEW_INSTALL) {
     return true;
+  }
+  if (installation_data.failure_reason == FailureReason::CRX_FETCH_URL_EMPTY) {
+    DCHECK(installation_data.no_updates_info);
+    if (installation_data.no_updates_info.value() ==
+        InstallStageTracker::NoUpdatesInfo::kEmpty) {
+      return true;
+    }
+  }
 
   return false;
 }
-
-#if defined(OS_CHROMEOS)
-// Returns the type of session in case extension fails to install.
-ForceInstalledMetrics::SessionType ForceInstalledMetrics::GetSessionType() {
-  SessionType current_session = GetSessionFromUserType(
-      user_manager::UserManager::Get()->GetActiveUser()->GetType());
-  // Check if it is regular user and if the user is a new one.
-  if (current_session == SessionType::SESSION_TYPE_REGULAR_EXISTING &&
-      user_manager::UserManager::Get()->IsCurrentUserNew())
-    return SessionType::SESSION_TYPE_REGULAR_NEW;
-
-  return current_session;
-}
-#endif  // defined(OS_CHROMEOS)
 
 void ForceInstalledMetrics::ReportDisableReason(
     const ExtensionId& extension_id) {
@@ -164,9 +165,72 @@ void ForceInstalledMetrics::ReportMetrics() {
   base::UmaHistogramCounts100("Extensions.ForceInstalledTotalCandidateCount",
                               tracker_->extensions().size());
   std::set<ExtensionId> missing_forced_extensions;
+  InstallStageTracker* install_stage_tracker =
+      InstallStageTracker::Get(profile_);
   for (const auto& extension : tracker_->extensions()) {
-    if (!IsStatusGood(extension.second.status))
+    if (!IsStatusGood(extension.second.status)) {
       missing_forced_extensions.insert(extension.first);
+    } else {
+      InstallStageTracker::InstallationData installation =
+          install_stage_tracker->Get(extension.first);
+      if (installation.download_manifest_finish_time &&
+          installation.download_manifest_started_time) {
+        base::UmaHistogramLongTimes(
+            "Extensions.ForceInstalledTime.DownloadingStartTo."
+            "ManifestDownloadComplete",
+            installation.download_manifest_finish_time.value() -
+                installation.download_manifest_started_time.value());
+      }
+      // Report the download time for CRX only when
+      // installation.download_CRX_started_time is set because in other case CRX
+      // is fetched from cache and the download was not started.
+      if (installation.download_CRX_finish_time &&
+          installation.download_CRX_started_time) {
+        base::UmaHistogramLongTimes(
+            "Extensions.ForceInstalledTime.ManifestDownloadCompleteTo."
+            "CRXDownloadComplete",
+            installation.download_CRX_finish_time.value() -
+                installation.download_CRX_started_time.value());
+      }
+      if (installation.copying_started_time) {
+        DCHECK(installation.verification_started_time);
+        base::UmaHistogramLongTimes(
+            "Extensions.ForceInstalledTime.VerificationStartTo.CopyingStart",
+            installation.copying_started_time.value() -
+                installation.verification_started_time.value());
+      }
+      if (installation.unpacking_started_time &&
+          installation.copying_started_time) {
+        base::UmaHistogramLongTimes(
+            "Extensions.ForceInstalledTime.CopyingStartTo.UnpackingStart",
+            installation.unpacking_started_time.value() -
+                installation.copying_started_time.value());
+      }
+      if (installation.checking_expectations_started_time &&
+          installation.unpacking_started_time) {
+        base::UmaHistogramLongTimes(
+            "Extensions.ForceInstalledTime.UnpackingStartTo."
+            "CheckingExpectationsStart",
+            installation.checking_expectations_started_time.value() -
+                installation.unpacking_started_time.value());
+      }
+      if (installation.finalizing_started_time &&
+          installation.checking_expectations_started_time) {
+        base::UmaHistogramLongTimes(
+            "Extensions.ForceInstalledTime.CheckingExpectationsStartTo."
+            "FinalizingStart",
+            installation.finalizing_started_time.value() -
+                installation.checking_expectations_started_time.value());
+      }
+      if (installation.installation_complete_time &&
+          installation.finalizing_started_time) {
+        base::UmaHistogramLongTimes(
+            "Extensions.ForceInstalledTime.FinalizingStartTo."
+            "CRXInstallComplete",
+            installation.installation_complete_time.value() -
+                installation.finalizing_started_time.value());
+      }
+    }
   }
   if (missing_forced_extensions.empty()) {
     base::UmaHistogramLongTimes("Extensions.ForceInstalledLoadTime",
@@ -176,19 +240,17 @@ void ForceInstalledMetrics::ReportMetrics() {
     VLOG(2) << "All forced extensions seems to be installed";
     return;
   }
-  InstallStageTracker* install_stage_tracker =
-      InstallStageTracker::Get(profile_);
   size_t enabled_missing_count = missing_forced_extensions.size();
-  size_t blacklisted_count = 0;
+  size_t blocklisted_count = 0;
   auto installed_extensions = registry_->GenerateInstalledExtensionsSet();
-  auto blacklisted_extensions = registry_->GenerateInstalledExtensionsSet(
-      ExtensionRegistry::IncludeFlag::BLACKLISTED);
+  auto blocklisted_extensions = registry_->GenerateInstalledExtensionsSet(
+      ExtensionRegistry::IncludeFlag::BLOCKLISTED);
   for (const auto& entry : *installed_extensions) {
     if (missing_forced_extensions.count(entry->id())) {
       missing_forced_extensions.erase(entry->id());
       ReportDisableReason(entry->id());
-      if (blacklisted_extensions->Contains(entry->id()))
-        blacklisted_count++;
+      if (blocklisted_extensions->Contains(entry->id()))
+        blocklisted_count++;
     }
   }
   size_t misconfigured_extensions = 0;
@@ -200,7 +262,7 @@ void ForceInstalledMetrics::ReportMetrics() {
       "Extensions.ForceInstalledTimedOutAndNotInstalledCount",
       installed_missing_count);
   base::UmaHistogramCounts100("Extensions.ForceInstalledAndBlackListed",
-                              blacklisted_count);
+                              blocklisted_count);
   VLOG(2) << "Failed to install " << installed_missing_count
           << " forced extensions.";
   for (const auto& extension_id : missing_forced_extensions) {
@@ -211,8 +273,7 @@ void ForceInstalledMetrics::ReportMetrics() {
         installation.downloading_cache_status.value_or(
             ExtensionDownloaderDelegate::CacheStatus::CACHE_UNKNOWN));
     if (!installation.failure_reason && installation.install_stage) {
-      installation.failure_reason =
-          InstallStageTracker::FailureReason::IN_PROGRESS;
+      installation.failure_reason = FailureReason::IN_PROGRESS;
       InstallStageTracker::Stage install_stage =
           installation.install_stage.value();
       base::UmaHistogramEnumeration("Extensions.ForceInstalledStage",
@@ -227,9 +288,8 @@ void ForceInstalledMetrics::ReportMetrics() {
     }
     if (IsMisconfiguration(installation, extension_id))
       misconfigured_extensions++;
-    InstallStageTracker::FailureReason failure_reason =
-        installation.failure_reason.value_or(
-            InstallStageTracker::FailureReason::UNKNOWN);
+    FailureReason failure_reason =
+        installation.failure_reason.value_or(FailureReason::UNKNOWN);
     base::UmaHistogramEnumeration("Extensions.ForceInstalledFailureReason3",
                                   failure_reason);
     if (tracker_->extensions().at(extension_id).is_from_store) {
@@ -242,8 +302,7 @@ void ForceInstalledMetrics::ReportMetrics() {
 
     // In case of CRX_FETCH_FAILURE, report the network error code, HTTP
     // error code and number of fetch tries made.
-    if (failure_reason ==
-        InstallStageTracker::FailureReason::CRX_FETCH_FAILED) {
+    if (failure_reason == FailureReason::CRX_FETCH_FAILED) {
       base::UmaHistogramSparse("Extensions.ForceInstalledNetworkErrorCode",
                                installation.network_error_code.value());
 
@@ -258,8 +317,7 @@ void ForceInstalledMetrics::ReportMetrics() {
 
     // In case of MANIFEST_FETCH_FAILURE, report the network error code,
     // HTTP error code and number of fetch tries made.
-    if (failure_reason ==
-        InstallStageTracker::FailureReason::MANIFEST_FETCH_FAILED) {
+    if (failure_reason == FailureReason::MANIFEST_FETCH_FAILED) {
       base::UmaHistogramSparse(
           "Extensions.ForceInstalledManifestFetchFailedNetworkErrorCode",
           installation.network_error_code.value());
@@ -274,13 +332,16 @@ void ForceInstalledMetrics::ReportMetrics() {
           installation.fetch_tries.value(), ExtensionDownloader::kMaxRetries);
     }
 #if defined(OS_CHROMEOS)
-    // Report type of session in case Force Installed Extensions fail to
-    // install only if there is an active user. There can be extensions on
-    // the login screen. There is no active user on the login screen and
-    // thus we would not report in that case.
-    if (user_manager::UserManager::Get()->GetActiveUser()) {
+    // Report type of user in case Force Installed Extensions fail to
+    // install only if there is a user corresponding to given profile. There can
+    // be extensions on the login screen. There is no user on the login screen
+    // and thus we would not report in that case.
+    if (chromeos::ProfileHelper::Get()->GetUserByProfile(profile_)) {
+      InstallStageTracker::UserInfo user_info =
+          InstallStageTracker::GetUserInfo(profile_);
       base::UmaHistogramEnumeration(
-          "Extensions.ForceInstalledFailureSessionType", GetSessionType());
+          "Extensions.ForceInstalledFailureSessionType",
+          ConvertUserType(user_info));
     }
 #endif  // defined(OS_CHROMEOS)
     VLOG(2) << "Forced extension " << extension_id
@@ -297,8 +358,7 @@ void ForceInstalledMetrics::ReportMetrics() {
           installation.unpacker_failure_reason.value(),
           SandboxedUnpackerFailureReason::NUM_FAILURE_REASONS);
     }
-    if (failure_reason ==
-        InstallStageTracker::FailureReason::CRX_FETCH_URL_EMPTY) {
+    if (failure_reason == FailureReason::CRX_FETCH_URL_EMPTY) {
       if (installation.update_check_status) {
         base::UmaHistogramEnumeration(
             "Extensions.ForceInstalledFailureUpdateCheckStatus",
@@ -312,11 +372,15 @@ void ForceInstalledMetrics::ReportMetrics() {
           installation.no_updates_info.value());
     }
     if (installation.manifest_invalid_error) {
-      DCHECK_EQ(failure_reason,
-                InstallStageTracker::FailureReason::MANIFEST_INVALID);
-      UMA_HISTOGRAM_ENUMERATION(
-          "Extensions.ForceInstalledFailureManifestInvalidErrorDetail",
+      DCHECK_EQ(failure_reason, FailureReason::MANIFEST_INVALID);
+      base::UmaHistogramEnumeration(
+          "Extensions.ForceInstalledFailureManifestInvalidErrorDetail2",
           installation.manifest_invalid_error.value());
+      if (installation.app_status_error) {
+        base::UmaHistogramEnumeration(
+            "Extensions.ForceInstalledFailureManifestInvalidAppStatusError",
+            installation.app_status_error.value());
+      }
     }
   }
   bool non_misconfigured_failure_occurred =

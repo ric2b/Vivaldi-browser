@@ -10,12 +10,15 @@
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "chrome/browser/ui/global_media_controls/media_notification_container_impl.h"
+#include "chrome/browser/ui/views/global_media_controls/media_notification_audio_device_selector_view_delegate.h"
 #include "chrome/browser/ui/views/global_media_controls/overlay_media_notification_view.h"
 #include "components/media_message_center/media_notification_container.h"
 #include "components/media_message_center/media_notification_view_impl.h"
+#include "media/audio/audio_device_description.h"
 #include "ui/views/animation/slide_out_controller_delegate.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/focus/focus_manager.h"
+#include "ui/views/widget/unique_widget_ptr.h"
 
 namespace media_message_center {
 class MediaNotificationItem;
@@ -26,7 +29,9 @@ class ImageButton;
 class SlideOutController;
 }  // namespace views
 
+class MediaNotificationAudioDeviceSelectorView;
 class MediaNotificationContainerObserver;
+class MediaNotificationService;
 
 // MediaNotificationContainerImplView holds a media notification for display
 // within the MediaDialogView. The media notification shows metadata for a media
@@ -35,13 +40,15 @@ class MediaNotificationContainerImplView
     : public views::Button,
       public media_message_center::MediaNotificationContainer,
       public MediaNotificationContainerImpl,
+      public MediaNotificationAudioDeviceSelectorViewDelegate,
       public views::SlideOutControllerDelegate,
       public views::ButtonListener,
       public views::FocusChangeListener {
  public:
   MediaNotificationContainerImplView(
       const std::string& id,
-      base::WeakPtr<media_message_center::MediaNotificationItem> item);
+      base::WeakPtr<media_message_center::MediaNotificationItem> item,
+      MediaNotificationService* service);
   ~MediaNotificationContainerImplView() override;
 
   // views::Button:
@@ -85,6 +92,11 @@ class MediaNotificationContainerImplView
   void AddObserver(MediaNotificationContainerObserver* observer) override;
   void RemoveObserver(MediaNotificationContainerObserver* observer) override;
 
+  // MediaNotificationAudioDeviceSelectorViewDelegate
+  // Called when an audio device has been selected for output.
+  void OnAudioSinkChosen(const std::string& sink_id) override;
+  void OnAudioDeviceSelectorViewSizeChanged() override;
+
   // Sets up the notification to be ready to display in an overlay instead of
   // the dialog.
   void PopOut();
@@ -101,6 +113,11 @@ class MediaNotificationContainerImplView
   }
 
   bool is_playing_for_testing() { return is_playing_; }
+  bool is_expanded_for_testing() { return is_expanded_; }
+
+  views::Widget* drag_image_widget_for_testing() {
+    return drag_image_widget_.get();
+  }
 
  private:
   class DismissButton;
@@ -113,6 +130,8 @@ class MediaNotificationContainerImplView
 
   void DismissNotification();
 
+  void CreateDragImageWidget();
+
   // Updates the forced expanded state of |view_|.
   void ForceExpandedState();
 
@@ -121,6 +140,8 @@ class MediaNotificationContainerImplView
 
   // True if we should handle the given mouse event for dragging purposes.
   bool ShouldHandleMouseEvent(const ui::MouseEvent& event, bool is_press);
+
+  void OnSizeChanged();
 
   const std::string id_;
   views::View* swipeable_container_ = nullptr;
@@ -138,6 +159,8 @@ class MediaNotificationContainerImplView
 
   DismissButton* dismiss_button_ = nullptr;
   media_message_center::MediaNotificationViewImpl* view_ = nullptr;
+  MediaNotificationAudioDeviceSelectorView* audio_device_selector_view_ =
+      nullptr;
 
   SkColor foreground_color_;
   SkColor background_color_;
@@ -164,12 +187,20 @@ class MediaNotificationContainerImplView
 
   bool is_playing_ = false;
 
+  bool is_expanded_ = false;
+
+  std::string audio_sink_id_ = media::AudioDeviceDescription::kDefaultDeviceId;
+
   base::ObserverList<MediaNotificationContainerObserver> observers_;
 
   // Handles gesture events for swiping to dismiss notifications.
   std::unique_ptr<views::SlideOutController> slide_out_controller_;
 
   OverlayMediaNotificationView* overlay_ = nullptr;
+
+  views::UniqueWidgetPtr drag_image_widget_;
+
+  MediaNotificationService* const service_;
 
   DISALLOW_COPY_AND_ASSIGN(MediaNotificationContainerImplView);
 };

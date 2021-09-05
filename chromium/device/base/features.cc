@@ -8,16 +8,21 @@
 
 namespace device {
 
-#if defined(OS_WIN)
+#if defined(OS_MAC) || defined(OS_WIN)
 const base::Feature kNewUsbBackend{"NewUsbBackend",
                                    base::FEATURE_DISABLED_BY_DEFAULT};
+#endif  // defined(OS_MAC) || defined(OS_WIN)
+
+#if defined(OS_WIN)
 const base::Feature kNewBLEWinImplementation{"NewBLEWinImplementation",
                                              base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Controls whether a more reliable GATT session handling
 // implementation is used on Windows 10 1709 (RS3) and beyond.
+//
+// Disabled due to crbug/1120338.
 const base::Feature kNewBLEGattSessionHandling{
-    "NewBLEGattSessionHandling", base::FEATURE_ENABLED_BY_DEFAULT};
+    "NewBLEGattSessionHandling", base::FEATURE_DISABLED_BY_DEFAULT};
 #endif  // defined(OS_WIN)
 
 #if BUILDFLAG(ENABLE_VR)

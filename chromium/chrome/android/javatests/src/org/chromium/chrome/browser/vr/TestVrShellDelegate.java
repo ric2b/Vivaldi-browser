@@ -9,7 +9,7 @@ import android.os.Build;
 
 import org.junit.runner.Description;
 
-import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.vr.rules.VrModuleNotInstalled;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 
@@ -66,10 +66,6 @@ public class TestVrShellDelegate extends VrShellDelegate {
 
     public void overrideDaydreamApiForTesting(VrDaydreamApi api) {
         super.overrideDaydreamApi(api);
-    }
-
-    public void overrideVrCoreVersionCheckerForTesting(VrCoreVersionChecker versionChecker) {
-        super.overrideVrCoreVersionChecker(versionChecker);
     }
 
     public void setFeedbackFrequencyForTesting(int frequency) {

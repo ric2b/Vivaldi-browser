@@ -4,6 +4,8 @@
 
 #include "ui/views/widget/desktop_aura/desktop_screen_x11.h"
 
+#include <set>
+#include <string>
 #include <vector>
 
 #include "base/command_line.h"
@@ -23,7 +25,7 @@
 #include "ui/gfx/switches.h"
 #include "ui/platform_window/x11/x11_topmost_window_finder.h"
 #include "ui/views/widget/desktop_aura/desktop_screen.h"
-#include "ui/views/widget/desktop_aura/desktop_window_tree_host_x11.h"
+#include "ui/views/widget/desktop_aura/desktop_window_tree_host_linux.h"
 
 namespace views {
 
@@ -66,7 +68,7 @@ gfx::NativeWindow DesktopScreenX11::GetWindowAtScreenPoint(
       gfx::ConvertPointToPixel(GetXDisplayScaleFactor(), point), {});
   return window != x11::Window::None
              ? views::DesktopWindowTreeHostPlatform::GetContentWindowForWidget(
-                   window)
+                   static_cast<gfx::AcceleratedWidget>(window))
              : nullptr;
 }
 
@@ -81,7 +83,7 @@ gfx::NativeWindow DesktopScreenX11::GetLocalProcessWindowAtPoint(
       ignore_widgets);
   return window != x11::Window::None
              ? views::DesktopWindowTreeHostPlatform::GetContentWindowForWidget(
-                   window)
+                   static_cast<gfx::AcceleratedWidget>(window))
              : nullptr;
 }
 
@@ -149,8 +151,7 @@ std::string DesktopScreenX11::GetCurrentWorkspace() {
 }
 
 bool DesktopScreenX11::DispatchXEvent(x11::Event* event) {
-  return x11_display_manager_->CanProcessEvent(*event) &&
-         x11_display_manager_->ProcessEvent(event);
+  return x11_display_manager_->ProcessEvent(event);
 }
 
 void DesktopScreenX11::OnDeviceScaleFactorChanged() {

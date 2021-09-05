@@ -31,6 +31,26 @@ class AutofillProfile;
 class AutofillTable;
 struct FormData;
 struct FormFieldData;
+struct FormDataPredictions;
+struct FormFieldDataPredictions;
+
+// Defined by pair-wise equality of all members.
+bool operator==(const FormFieldDataPredictions& a,
+                const FormFieldDataPredictions& b);
+
+inline bool operator!=(const FormFieldDataPredictions& a,
+                       const FormFieldDataPredictions& b) {
+  return !(a == b);
+}
+
+// Holds iff the underlying FormDatas sans field values are equal and the
+// remaining members are pairwise equal.
+bool operator==(const FormDataPredictions& a, const FormDataPredictions& b);
+
+inline bool operator!=(const FormDataPredictions& a,
+                       const FormDataPredictions& b) {
+  return !(a == b);
+}
 
 // Common utilities shared amongst Autofill tests.
 namespace test {
@@ -178,7 +198,8 @@ void SetProfileInfo(AutofillProfile* profile,
                     const char* state,
                     const char* zipcode,
                     const char* country,
-                    const char* phone);
+                    const char* phone,
+                    bool finalize = true);
 
 // This one doesn't require the |dependent_locality|.
 void SetProfileInfo(AutofillProfile* profile,
@@ -193,7 +214,8 @@ void SetProfileInfo(AutofillProfile* profile,
                     const char* state,
                     const char* zipcode,
                     const char* country,
-                    const char* phone);
+                    const char* phone,
+                    bool finalize = true);
 
 void SetProfileInfoWithGuid(AutofillProfile* profile,
                             const char* guid,
@@ -208,7 +230,8 @@ void SetProfileInfoWithGuid(AutofillProfile* profile,
                             const char* state,
                             const char* zipcode,
                             const char* country,
-                            const char* phone);
+                            const char* phone,
+                            bool finalize = true);
 
 // A unit testing utility that is common to a number of the Autofill unit
 // tests.  |SetCreditCardInfo| provides a quick way to populate a credit card

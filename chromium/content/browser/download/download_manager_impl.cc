@@ -66,8 +66,6 @@
 #include "content/public/browser/web_ui_url_loader_factory.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/origin_util.h"
-#include "content/public/common/previews_state.h"
-#include "content/public/common/referrer.h"
 #include "content/public/common/url_utils.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
@@ -81,6 +79,8 @@
 #include "services/network/public/cpp/features.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/cpp/wrapper_shared_url_loader_factory.h"
+#include "third_party/blink/public/common/loader/previews_state.h"
+#include "third_party/blink/public/common/loader/referrer_utils.h"
 #include "third_party/blink/public/common/loader/throttling_url_loader.h"
 
 #if defined(USE_X11)
@@ -540,8 +540,8 @@ bool DownloadManagerImpl::InterceptDownload(
       NavigationController::LoadURLParams params(url);
       params.has_user_gesture = info.has_user_gesture;
       params.referrer = Referrer(
-          info.referrer_url, Referrer::NetReferrerPolicyToBlinkReferrerPolicy(
-                                 info.referrer_policy));
+          info.referrer_url,
+          blink::ReferrerUtils::NetToMojoReferrerPolicy(info.referrer_policy));
       params.redirect_chain = url_chain;
       params.frame_tree_node_id =
           RenderFrameHost::GetFrameTreeNodeIdForRoutingId(
@@ -1369,16 +1369,12 @@ void DownloadManagerImpl::BeginResourceDownloadOnChecksComplete(
             BrowserContext::GetStoragePartitionForSite(browser_context_,
                                                        site_url));
 
-    auto storage_partition_config =
-        GetContentClient()->browser()->GetStoragePartitionConfigForSite(
-            browser_context_, site_url);
-
     pending_url_loader_factory =
         CreatePendingSharedURLLoaderFactoryFromURLLoaderFactory(
             CreateFileSystemURLLoaderFactory(
                 rfh->GetProcess()->GetID(), rfh->GetFrameTreeNodeId(),
                 storage_partition->GetFileSystemContext(),
-                storage_partition_config.partition_domain()));
+                storage_partition->GetPartitionDomain()));
   } else if (params->url().SchemeIs(url::kDataScheme)) {
     pending_url_loader_factory =
         CreatePendingSharedURLLoaderFactoryFromURLLoaderFactory(

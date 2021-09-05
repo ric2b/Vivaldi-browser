@@ -13,22 +13,27 @@
 namespace content {
 
 // On mac, the WebTestShellPlatformDelegate replaces behaviour in the base class
-// ShellPlatformDelegate when in headless mode. Otherwise it defers to
+// ShellPlatformDelegate when in headless mode. Otherwise it mostly defers to
 // the base class.
-// TODO(danakj): Maybe we should only instatiate a WebTestShellPlatformDelegate
-// when in headless mode? Depends on the needs of other platforms.
 
 struct WebTestShellPlatformDelegate::WebTestShellData {
   gfx::Size initial_size;
 };
 
+struct WebTestShellPlatformDelegate::WebTestPlatformData {};
+
 WebTestShellPlatformDelegate::WebTestShellPlatformDelegate() = default;
 WebTestShellPlatformDelegate::~WebTestShellPlatformDelegate() = default;
+
+void WebTestShellPlatformDelegate::Initialize(
+    const gfx::Size& default_window_size) {
+  ShellPlatformDelegate::Initialize(default_window_size);
+}
 
 void WebTestShellPlatformDelegate::CreatePlatformWindow(
     Shell* shell,
     const gfx::Size& initial_size) {
-  if (!shell->headless()) {
+  if (!IsHeadless()) {
     ShellPlatformDelegate::CreatePlatformWindow(shell, initial_size);
     return;
   }
@@ -40,7 +45,7 @@ void WebTestShellPlatformDelegate::CreatePlatformWindow(
 }
 
 gfx::NativeWindow WebTestShellPlatformDelegate::GetNativeWindow(Shell* shell) {
-  if (!shell->headless())
+  if (!IsHeadless())
     return ShellPlatformDelegate::GetNativeWindow(shell);
 
   NOTREACHED();
@@ -48,17 +53,19 @@ gfx::NativeWindow WebTestShellPlatformDelegate::GetNativeWindow(Shell* shell) {
 }
 
 void WebTestShellPlatformDelegate::CleanUp(Shell* shell) {
-  if (!shell->headless()) {
-    ShellPlatformDelegate::GetNativeWindow(shell);
+  if (!IsHeadless()) {
+    ShellPlatformDelegate::CleanUp(shell);
     return;
   }
 
   DCHECK(base::Contains(web_test_shell_data_map_, shell));
   web_test_shell_data_map_.erase(shell);
+  if (shell == activated_headless_shell_)
+    activated_headless_shell_ = nullptr;
 }
 
 void WebTestShellPlatformDelegate::SetContents(Shell* shell) {
-  if (!shell->headless()) {
+  if (!IsHeadless()) {
     ShellPlatformDelegate::SetContents(shell);
     return;
   }
@@ -67,7 +74,7 @@ void WebTestShellPlatformDelegate::SetContents(Shell* shell) {
 void WebTestShellPlatformDelegate::EnableUIControl(Shell* shell,
                                                    UIControl control,
                                                    bool is_enabled) {
-  if (!shell->headless()) {
+  if (!IsHeadless()) {
     ShellPlatformDelegate::EnableUIControl(shell, control, is_enabled);
     return;
   }
@@ -75,7 +82,7 @@ void WebTestShellPlatformDelegate::EnableUIControl(Shell* shell,
 
 void WebTestShellPlatformDelegate::SetAddressBarURL(Shell* shell,
                                                     const GURL& url) {
-  if (!shell->headless()) {
+  if (!IsHeadless()) {
     ShellPlatformDelegate::SetAddressBarURL(shell, url);
     return;
   }
@@ -83,14 +90,14 @@ void WebTestShellPlatformDelegate::SetAddressBarURL(Shell* shell,
 
 void WebTestShellPlatformDelegate::SetTitle(Shell* shell,
                                             const base::string16& title) {
-  if (!shell->headless()) {
+  if (!IsHeadless()) {
     ShellPlatformDelegate::SetTitle(shell, title);
     return;
   }
 }
 
 void WebTestShellPlatformDelegate::RenderViewReady(Shell* shell) {
-  if (!shell->headless()) {
+  if (!IsHeadless()) {
     ShellPlatformDelegate::RenderViewReady(shell);
     return;
   }
@@ -116,7 +123,7 @@ void WebTestShellPlatformDelegate::RenderViewReady(Shell* shell) {
 }
 
 bool WebTestShellPlatformDelegate::DestroyShell(Shell* shell) {
-  if (shell->headless())
+  if (IsHeadless())
     return false;  // Shell destroys itself.
   return ShellPlatformDelegate::DestroyShell(shell);
 }
@@ -124,7 +131,7 @@ bool WebTestShellPlatformDelegate::DestroyShell(Shell* shell) {
 void WebTestShellPlatformDelegate::ResizeWebContent(
     Shell* shell,
     const gfx::Size& content_size) {
-  if (!shell->headless()) {
+  if (!IsHeadless()) {
     ShellPlatformDelegate::ResizeWebContent(shell, content_size);
     return;
   }
@@ -137,15 +144,14 @@ void WebTestShellPlatformDelegate::ResizeWebContent(
   // the widget's screen rects, since the RenerWidgetHostView is not attached to
   // a window in headless mode. So this call causes them to be updated so they
   // are not left as 0x0.
-  auto* rwhv_mac = static_cast<RenderWidgetHostViewMac*>(
-      shell->web_contents()->GetMainFrame()->GetView());
+  auto* rwhv_mac = shell->web_contents()->GetMainFrame()->GetView();
   if (rwhv_mac)
-    rwhv_mac->OnWindowFrameInScreenChanged(gfx::Rect(content_size));
+    rwhv_mac->SetWindowFrameInScreen(gfx::Rect(content_size));
 }
 
 void WebTestShellPlatformDelegate::ActivateContents(Shell* shell,
                                                     WebContents* top_contents) {
-  if (!shell->headless()) {
+  if (!IsHeadless()) {
     ShellPlatformDelegate::ActivateContents(shell, top_contents);
     return;
   }
@@ -169,13 +175,31 @@ void WebTestShellPlatformDelegate::ActivateContents(Shell* shell,
       top_contents->GetMainFrame()->GetView()->GetRenderWidgetHost();
   main_widget->Focus();
   main_widget->SetActive(true);
+  activated_headless_shell_ = shell;
+}
+
+void WebTestShellPlatformDelegate::DidNavigateMainFramePostCommit(
+    Shell* shell,
+    WebContents* contents) {
+  if (!IsHeadless()) {
+    ShellPlatformDelegate::DidNavigateMainFramePostCommit(shell, contents);
+    return;
+  }
+
+  // Normally RenderFrameHostManager::CommitPending() transfers focus status to
+  // the new RenderWidgetHostView when a navigation creates a new view, but that
+  // doesn't work in Mac headless mode because RenderWidgetHostView depends on
+  // the native window (which doesn't exist in headless mode) to manage focus
+  // status. Instead we manually set focus status of the new RenderWidgetHost.
+  if (shell == activated_headless_shell_)
+    ActivateContents(shell, contents);
 }
 
 bool WebTestShellPlatformDelegate::HandleKeyboardEvent(
     Shell* shell,
     WebContents* source,
     const NativeWebKeyboardEvent& event) {
-  if (shell->headless())
+  if (IsHeadless())
     return false;
   return ShellPlatformDelegate::HandleKeyboardEvent(shell, source, event);
 }

@@ -23,6 +23,10 @@
 #include "third_party/pdfium/public/fpdf_text.h"
 #include "ui/gfx/geometry/point_f.h"
 
+namespace gfx {
+class Point;
+}  // namespace gfx
+
 namespace chrome_pdf {
 
 class PDFiumEngine;
@@ -31,6 +35,8 @@ class PDFiumEngine;
 class PDFiumPage {
  public:
   PDFiumPage(PDFiumEngine* engine, int i);
+  PDFiumPage(const PDFiumPage&) = delete;
+  PDFiumPage& operator=(const PDFiumPage&) = delete;
   PDFiumPage(PDFiumPage&& that);
   ~PDFiumPage();
 
@@ -116,7 +122,7 @@ class PDFiumPage {
   // index if it's near a character, and also the type of text.
   // Target is optional. It will be filled in for WEBLINK_AREA or
   // DOCLINK_AREA only.
-  Area GetCharIndex(const pp::Point& point,
+  Area GetCharIndex(const gfx::Point& point,
                     PageOrientation orientation,
                     int* char_index,
                     int* form_type,
@@ -143,7 +149,7 @@ class PDFiumPage {
                                      int* char_len);
 
   // Converts from page coordinates to screen coordinates.
-  pp::Rect PageToScreen(const pp::Point& offset,
+  pp::Rect PageToScreen(const gfx::Point& page_point,
                         double zoom,
                         double left,
                         double top,
@@ -179,6 +185,7 @@ class PDFiumPage {
   FRIEND_TEST_ALL_PREFIXES(PDFiumPageHighlightTest, TestPopulateHighlights);
   FRIEND_TEST_ALL_PREFIXES(PDFiumPageTextFieldTest, TestPopulateTextFields);
   FRIEND_TEST_ALL_PREFIXES(PDFiumPageChoiceFieldTest, TestPopulateChoiceFields);
+  FRIEND_TEST_ALL_PREFIXES(PDFiumPageButtonTest, TestPopulateButtons);
   FRIEND_TEST_ALL_PREFIXES(PDFiumPageOverlappingTest, CountPartialOverlaps);
   FRIEND_TEST_ALL_PREFIXES(PDFiumPageOverlappingTest, CountCompleteOverlaps);
 
@@ -277,6 +284,29 @@ class PDFiumPage {
     std::vector<ChoiceFieldOption> options;
   };
 
+  // Represents a button within the page.
+  struct Button : FormField {
+    Button();
+    Button(const Button& other);
+    ~Button();
+
+    std::string value;
+    // A button can be of type radio, checkbox or push button.
+    int type;
+    // Represents if the radio button or checkbox is checked.
+    bool is_checked = false;
+    // Represents count of controls in the control group. A group of
+    // interactive form annotations is collectively called a form control
+    // group. Here an interactive form annotation should be either a radio
+    // button or a checkbox.
+    uint32_t control_count = 0;
+    // Represents index of the control in the control group. A group of
+    // interactive form annotations is collectively called a form control
+    // group. Here an interactive form annotation should be either a radio
+    // button or a checkbox. Value of |control_index| is -1 for push button.
+    int control_index = -1;
+  };
+
   // Returns a link index if the given character index is over a link, or -1
   // otherwise.
   int GetLink(int char_index, LinkTarget* target);
@@ -296,7 +326,9 @@ class PDFiumPage {
   void PopulateTextField(FPDF_ANNOTATION annot);
   // Populate |choice_fields_| with |annot|.
   void PopulateChoiceField(FPDF_ANNOTATION annot);
-  // Populate form fields like text field and choice field on the page.
+  // Populate |buttons_| with |annot|.
+  void PopulateButton(FPDF_ANNOTATION annot);
+  // Populate form fields like text field, choice field and button on the page.
   void PopulateFormField(FPDF_ANNOTATION annot);
   // Returns link type and fills target associated with a destination. Returns
   // NONSELECTABLE_AREA if detection failed.
@@ -354,14 +386,13 @@ class PDFiumPage {
   std::vector<Highlight> highlights_;
   std::vector<TextField> text_fields_;
   std::vector<ChoiceField> choice_fields_;
+  std::vector<Button> buttons_;
   bool logged_overlapping_annotations_ = false;
   bool calculated_page_object_text_run_breaks_ = false;
   // The set of character indices on which text runs need to be broken for page
   // objects.
   std::set<int> page_object_text_run_breaks_;
   bool available_;
-
-  DISALLOW_COPY_AND_ASSIGN(PDFiumPage);
 };
 
 // Converts page orientations to the PDFium equivalents, as defined by

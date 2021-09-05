@@ -6,11 +6,13 @@
 
 #include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
+#include "base/feature_list.h"
 #include "chrome/android/chrome_jni_headers/PasswordChangeLauncher_jni.h"
-#include "chrome/android/chrome_jni_headers/PasswordCheckupLauncher_jni.h"
+#include "chrome/browser/password_manager/android/password_checkup_launcher_helper.h"
 #include "chrome/browser/ui/android/passwords/credential_leak_dialog_view_android.h"
 #include "chrome/common/url_constants.h"
 #include "components/password_manager/core/browser/leak_detection_dialog_utils.h"
+#include "components/password_manager/core/common/password_manager_features.h"
 #include "ui/android/window_android.h"
 
 using password_manager::metrics_util::LeakDialogDismissalReason;
@@ -18,10 +20,12 @@ using password_manager::metrics_util::LogLeakDialogTypeAndDismissalReason;
 
 CredentialLeakControllerAndroid::CredentialLeakControllerAndroid(
     password_manager::CredentialLeakType leak_type,
+    password_manager::CompromisedSitesCount saved_sites,
     const GURL& origin,
     const base::string16& username,
     ui::WindowAndroid* window_android)
     : leak_type_(leak_type),
+      saved_sites_(saved_sites),
       origin_(origin),
       username_(username),
       window_android_(window_android) {}
@@ -53,15 +57,20 @@ void CredentialLeakControllerAndroid::OnAcceptDialog() {
   }
 
   DCHECK(!(ShouldCheckPasswords() && ShouldShowChangePasswordButton()));
+  JNIEnv* env = base::android::AttachCurrentThread();
   if (ShouldCheckPasswords()) {
-    JNIEnv* env = base::android::AttachCurrentThread();
-    Java_PasswordCheckupLauncher_launchCheckup(
-        env,
-        base::android::ConvertUTF8ToJavaString(
-            env, password_manager::GetPasswordCheckupURL().spec()),
-        window_android_->GetJavaObject());
+    if (base::FeatureList::IsEnabled(
+            password_manager::features::kPasswordCheck)) {
+      PasswordCheckupLauncherHelper::LaunchLocalCheckup(
+          env, window_android_->GetJavaObject());
+    } else {
+      PasswordCheckupLauncherHelper::LaunchCheckupInAccountWithWindowAndroid(
+          env,
+          base::android::ConvertUTF8ToJavaString(
+              env, password_manager::GetPasswordCheckupURL().spec()),
+          window_android_->GetJavaObject());
+    }
   } else if (ShouldShowChangePasswordButton()) {
-    JNIEnv* env = base::android::AttachCurrentThread();
     Java_PasswordChangeLauncher_start(
         env, window_android_->GetJavaObject(),
         base::android::ConvertUTF8ToJavaString(env, origin_.spec()),
@@ -87,6 +96,11 @@ base::string16 CredentialLeakControllerAndroid::GetCancelButtonLabel() const {
 }
 
 base::string16 CredentialLeakControllerAndroid::GetDescription() const {
+  if (base::FeatureList::IsEnabled(
+          password_manager::features::kPasswordCheck)) {
+    return password_manager::GetDescriptionWithCount(leak_type_, origin_,
+                                                     saved_sites_);
+  }
   return password_manager::GetDescription(leak_type_, origin_);
 }
 

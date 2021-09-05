@@ -16,6 +16,9 @@
 #include "base/optional.h"
 #include "base/stl_util.h"
 #include "base/values.h"
+#include "chrome/browser/chromeos/platform_keys/key_permissions/key_permissions_manager.h"
+#include "chrome/browser/chromeos/platform_keys/key_permissions/key_permissions_manager_user_service.h"
+#include "chrome/browser/chromeos/platform_keys/platform_keys.h"
 #include "chrome/browser/chromeos/platform_keys/platform_keys_service.h"
 #include "chrome/browser/chromeos/platform_keys/platform_keys_service_factory.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
@@ -35,10 +38,6 @@ namespace chromeos {
 
 namespace {
 
-const char kErrorKeyNotAllowedForSigning[] =
-    "This key is not allowed for signing. Either it was used for signing "
-    "before or it was not correctly generated.";
-
 #if defined(OS_CHROMEOS)
 
 // Verify the allowlisted kKeyPermissionsInLoginScreen feature behaviors.
@@ -56,23 +55,6 @@ bool IsExtensionAllowlisted(const extensions::Extension* extension) {
       .is_available();
 }
 #endif  // defined(OS_CHROMEOS)
-
-// Converts |token_ids| (string-based token identifiers used in the
-// platformKeys API) to a vector of KeyPermissions::KeyLocation. Currently only
-// accepts |kTokenIdUser| and |kTokenIdSystem| as |token_ids| elements.
-std::vector<KeyPermissions::KeyLocation> TokenIdsToKeyLocations(
-    const std::vector<std::string>& token_ids) {
-  std::vector<KeyPermissions::KeyLocation> key_locations;
-  for (const auto& token_id : token_ids) {
-    if (token_id == platform_keys::kTokenIdUser)
-      key_locations.push_back(KeyPermissions::KeyLocation::kUserSlot);
-    else if (token_id == platform_keys::kTokenIdSystem)
-      key_locations.push_back(KeyPermissions::KeyLocation::kSystemSlot);
-    else
-      NOTREACHED() << "Unknown platformKeys API token id " << token_id;
-  }
-  return key_locations;
-}
 
 }  // namespace
 
@@ -96,15 +78,13 @@ class ExtensionPlatformKeysService::GenerateKeyTask : public Task {
     DONE,
   };
 
-  GenerateKeyTask(const std::string& token_id,
+  GenerateKeyTask(platform_keys::TokenId token_id,
                   const std::string& extension_id,
                   const GenerateKeyCallback& callback,
-                  KeyPermissions* key_permissions,
                   ExtensionPlatformKeysService* service)
       : token_id_(token_id),
         extension_id_(extension_id),
         callback_(callback),
-        key_permissions_(key_permissions),
         service_(service) {}
 
   ~GenerateKeyTask() override = default;
@@ -119,13 +99,12 @@ class ExtensionPlatformKeysService::GenerateKeyTask : public Task {
  protected:
   virtual void GenerateKey(GenerateKeyCallback callback) = 0;
 
-  const std::string token_id_;
+  platform_keys::TokenId token_id_;
   std::string public_key_spki_der_;
   const std::string extension_id_;
   GenerateKeyCallback callback_;
-  std::unique_ptr<KeyPermissions::PermissionsForExtension>
+  std::unique_ptr<platform_keys::KeyPermissionsManager::PermissionsForExtension>
       extension_permissions_;
-  KeyPermissions* const key_permissions_;
   ExtensionPlatformKeysService* const service_;
 
  private:
@@ -152,12 +131,12 @@ class ExtensionPlatformKeysService::GenerateKeyTask : public Task {
   }
 
   // Stores the generated key or in case of an error calls |callback_| with the
-  // error message.
+  // error status.
   void GeneratedKey(const std::string& public_key_spki_der,
-                    const std::string& error_message) {
-    if (!error_message.empty()) {
+                    platform_keys::Status status) {
+    if (status != platform_keys::Status::kSuccess) {
       next_step_ = Step::DONE;
-      callback_.Run(std::string() /* no public key */, error_message);
+      callback_.Run(std::string() /* no public key */, status);
       DoStep();
       return;
     }
@@ -167,23 +146,24 @@ class ExtensionPlatformKeysService::GenerateKeyTask : public Task {
 
   // Gets the permissions for the extension with id |extension_id|.
   void GetExtensionPermissions() {
-    key_permissions_->GetPermissionsForExtension(
+    service_->key_permissions_->GetPermissionsForExtension(
         extension_id_,
         base::Bind(&GenerateKeyTask::GotPermissions, base::Unretained(this)));
   }
 
   void UpdatePermissionsAndCallBack() {
-    std::vector<KeyPermissions::KeyLocation> key_locations =
-        TokenIdsToKeyLocations({token_id_});
+    std::vector<platform_keys::TokenId> key_locations = {token_id_};
     extension_permissions_->RegisterKeyForCorporateUsage(public_key_spki_der_,
                                                          key_locations);
-    callback_.Run(public_key_spki_der_, std::string() /* no error */);
+    callback_.Run(public_key_spki_der_, platform_keys::Status::kSuccess);
     DoStep();
     return;
   }
 
-  void GotPermissions(std::unique_ptr<KeyPermissions::PermissionsForExtension>
-                          extension_permissions) {
+  void GotPermissions(
+      std::unique_ptr<
+          platform_keys::KeyPermissionsManager::PermissionsForExtension>
+          extension_permissions) {
     extension_permissions_ = std::move(extension_permissions);
     DoStep();
   }
@@ -201,17 +181,12 @@ class ExtensionPlatformKeysService::GenerateRSAKeyTask
   // This key task generates an RSA key with the parameters |token_id| and
   // |modulus_length| and registers it for the extension with id |extension_id|.
   // The generated key will be passed to |callback|.
-  GenerateRSAKeyTask(const std::string& token_id,
+  GenerateRSAKeyTask(platform_keys::TokenId token_id,
                      unsigned int modulus_length,
                      const std::string& extension_id,
                      const GenerateKeyCallback& callback,
-                     KeyPermissions* key_permissions,
                      ExtensionPlatformKeysService* service)
-      : GenerateKeyTask(token_id,
-                        extension_id,
-                        callback,
-                        key_permissions,
-                        service),
+      : GenerateKeyTask(token_id, extension_id, callback, service),
         modulus_length_(modulus_length) {}
 
   ~GenerateRSAKeyTask() override {}
@@ -231,17 +206,12 @@ class ExtensionPlatformKeysService::GenerateECKeyTask : public GenerateKeyTask {
   // This Task generates an EC key with the parameters |token_id| and
   // |named_curve| and registers it for the extension with id |extension_id|.
   // The generated key will be passed to |callback|.
-  GenerateECKeyTask(const std::string& token_id,
+  GenerateECKeyTask(platform_keys::TokenId token_id,
                     const std::string& named_curve,
                     const std::string& extension_id,
                     const GenerateKeyCallback& callback,
-                    KeyPermissions* key_permissions,
                     ExtensionPlatformKeysService* service)
-      : GenerateKeyTask(token_id,
-                        extension_id,
-                        callback,
-                        key_permissions,
-                        service),
+      : GenerateKeyTask(token_id, extension_id, callback, service),
         named_curve_(named_curve) {}
 
   ~GenerateECKeyTask() override {}
@@ -271,8 +241,8 @@ class ExtensionPlatformKeysService::SignTask : public Task {
   // signature to |callback|. If the extension is not allowed to use the key
   // multiple times, also updates the permission to prevent any future signing
   // operation of that extension using that same key. If an error occurs, an
-  // error message is passed to |callback| instead.
-  SignTask(const std::string& token_id,
+  // error status is passed to |callback|.
+  SignTask(base::Optional<platform_keys::TokenId> token_id,
            const std::string& data,
            const std::string& public_key_spki_der,
            bool raw_pkcs1,
@@ -280,7 +250,6 @@ class ExtensionPlatformKeysService::SignTask : public Task {
            platform_keys::HashAlgorithm hash_algorithm,
            const std::string& extension_id,
            const SignCallback& callback,
-           KeyPermissions* key_permissions,
            ExtensionPlatformKeysService* service)
       : token_id_(token_id),
         data_(data),
@@ -290,7 +259,6 @@ class ExtensionPlatformKeysService::SignTask : public Task {
         hash_algorithm_(hash_algorithm),
         extension_id_(extension_id),
         callback_(callback),
-        key_permissions_(key_permissions),
         service_(service) {}
 
   ~SignTask() override {}
@@ -328,7 +296,7 @@ class ExtensionPlatformKeysService::SignTask : public Task {
           Sign();
         } else {
           callback_.Run(std::string() /* no signature */,
-                        kErrorKeyNotAllowedForSigning);
+                        platform_keys::Status::kErrorKeyNotAllowedForSigning);
           DoStep();
         }
         return;
@@ -341,13 +309,15 @@ class ExtensionPlatformKeysService::SignTask : public Task {
   }
 
   void GetExtensionPermissions() {
-    key_permissions_->GetPermissionsForExtension(
+    service_->key_permissions_->GetPermissionsForExtension(
         extension_id_,
         base::Bind(&SignTask::GotPermissions, base::Unretained(this)));
   }
 
-  void GotPermissions(std::unique_ptr<KeyPermissions::PermissionsForExtension>
-                          extension_permissions) {
+  void GotPermissions(
+      std::unique_ptr<
+          platform_keys::KeyPermissionsManager::PermissionsForExtension>
+          extension_permissions) {
     extension_permissions_ = std::move(extension_permissions);
     DoStep();
   }
@@ -358,16 +328,16 @@ class ExtensionPlatformKeysService::SignTask : public Task {
         base::BindRepeating(&SignTask::GotKeyLocation, base::Unretained(this)));
   }
 
-  void GotKeyLocation(const std::vector<std::string>& token_ids,
-                      const std::string& error_message) {
-    if (!error_message.empty()) {
+  void GotKeyLocation(const std::vector<platform_keys::TokenId>& token_ids,
+                      platform_keys::Status status) {
+    if (status != platform_keys::Status::kSuccess) {
       next_step_ = Step::DONE;
-      callback_.Run(std::string() /* no signature */, error_message);
+      callback_.Run(std::string() /* no signature */, status);
       DoStep();
       return;
     }
 
-    key_locations_ = TokenIdsToKeyLocations(token_ids);
+    key_locations_ = token_ids;
     DoStep();
   }
 
@@ -401,14 +371,14 @@ class ExtensionPlatformKeysService::SignTask : public Task {
     }
   }
 
-  void DidSign(const std::string& signature, const std::string& error_message) {
-    callback_.Run(signature, error_message);
+  void DidSign(const std::string& signature, platform_keys::Status status) {
+    callback_.Run(signature, status);
     DoStep();
   }
 
   Step next_step_ = Step::GET_EXTENSION_PERMISSIONS;
 
-  const std::string token_id_;
+  base::Optional<platform_keys::TokenId> token_id_;
   const std::string data_;
   const std::string public_key_spki_der_;
 
@@ -420,10 +390,9 @@ class ExtensionPlatformKeysService::SignTask : public Task {
   const platform_keys::HashAlgorithm hash_algorithm_;
   const std::string extension_id_;
   const SignCallback callback_;
-  std::unique_ptr<KeyPermissions::PermissionsForExtension>
+  std::unique_ptr<platform_keys::KeyPermissionsManager::PermissionsForExtension>
       extension_permissions_;
-  KeyPermissions* const key_permissions_;
-  std::vector<KeyPermissions::KeyLocation> key_locations_;
+  std::vector<platform_keys::TokenId> key_locations_;
   ExtensionPlatformKeysService* const service_;
   base::WeakPtrFactory<SignTask> weak_factory_{this};
 
@@ -456,7 +425,6 @@ class ExtensionPlatformKeysService::SelectTask : public Task {
              const std::string& extension_id,
              const SelectCertificatesCallback& callback,
              content::WebContents* web_contents,
-             KeyPermissions* key_permissions,
              ExtensionPlatformKeysService* service)
       : request_(request),
         input_client_certificates_(std::move(input_client_certificates)),
@@ -464,7 +432,6 @@ class ExtensionPlatformKeysService::SelectTask : public Task {
         extension_id_(extension_id),
         callback_(callback),
         web_contents_(web_contents),
-        key_permissions_(key_permissions),
         service_(service) {}
   ~SelectTask() override {}
 
@@ -519,13 +486,15 @@ class ExtensionPlatformKeysService::SelectTask : public Task {
   }
 
   void GetExtensionPermissions() {
-    key_permissions_->GetPermissionsForExtension(
+    service_->key_permissions_->GetPermissionsForExtension(
         extension_id_,
         base::Bind(&SelectTask::GotPermissions, base::Unretained(this)));
   }
 
-  void GotPermissions(std::unique_ptr<KeyPermissions::PermissionsForExtension>
-                          extension_permissions) {
+  void GotPermissions(
+      std::unique_ptr<
+          platform_keys::KeyPermissionsManager::PermissionsForExtension>
+          extension_permissions) {
     extension_permissions_ = std::move(extension_permissions);
     DoStep();
   }
@@ -539,16 +508,15 @@ class ExtensionPlatformKeysService::SelectTask : public Task {
   }
 
   // If the certificate request could be processed successfully, |matches| will
-  // contain the list of matching certificates (maybe empty) and |error_message|
-  // will be empty. If an error occurred, |matches| will be null and
-  // |error_message| contain an error message.
-  // Note that the order of |matches|, based on the expiration/issuance date, is
-  // relevant and must be preserved in any processing of the list.
+  // contain the list of matching certificates (maybe empty). If an error
+  // occurred, |matches| will be null. Note that the order of |matches|, based
+  // on the expiration/issuance date, is relevant and must be preserved in any
+  // processing of the list.
   void GotMatchingCerts(std::unique_ptr<net::CertificateList> matches,
-                        const std::string& error_message) {
-    if (!error_message.empty()) {
+                        platform_keys::Status status) {
+    if (status != platform_keys::Status::kSuccess) {
       next_step_ = Step::DONE;
-      callback_.Run(nullptr /* no certificates */, error_message);
+      callback_.Run(nullptr /* no certificates */, status);
       DoStep();
       return;
     }
@@ -580,8 +548,8 @@ class ExtensionPlatformKeysService::SelectTask : public Task {
   // |matches_pending_key_locations_|.  Each invocation processes the first
   // element and removes it from the deque. Each processed certificate is added
   // to |matches_| and |key_locations_for_matches_| if it is selectable
-  // according to KeyPermissions. When all certificates have been processed,
-  // advances the SignTask state machine to |next_step|.
+  // according to KeyPermissionsManager. When all certificates have been
+  // processed, advances the SignTask state machine to |next_step|.
   void GetKeyLocations(Step next_step) {
     if (matches_pending_key_locations_.empty()) {
       next_step_ = next_step;
@@ -602,11 +570,11 @@ class ExtensionPlatformKeysService::SelectTask : public Task {
   }
 
   void GotKeyLocations(const scoped_refptr<net::X509Certificate>& certificate,
-                       const std::vector<std::string>& token_ids,
-                       const std::string& error_message) {
-    if (!error_message.empty()) {
+                       const std::vector<platform_keys::TokenId>& token_ids,
+                       platform_keys::Status status) {
+    if (status != platform_keys::Status::kSuccess) {
       next_step_ = Step::DONE;
-      callback_.Run(nullptr /* no certificates */, error_message);
+      callback_.Run(nullptr /* no certificates */, status);
       DoStep();
       return;
     }
@@ -614,17 +582,14 @@ class ExtensionPlatformKeysService::SelectTask : public Task {
     const std::string public_key_spki_der(
         platform_keys::GetSubjectPublicKeyInfo(certificate));
 
-    std::vector<KeyPermissions::KeyLocation> key_locations =
-        TokenIdsToKeyLocations(token_ids);
-
     // Use this key if the user can use it for signing or can grant permission
     // for it.
-    if (key_permissions_->CanUserGrantPermissionFor(public_key_spki_der,
-                                                    key_locations) ||
+    if (service_->key_permissions_->CanUserGrantPermissionFor(
+            public_key_spki_der, token_ids) ||
         extension_permissions_->CanUseKeyForSigning(public_key_spki_der,
-                                                    key_locations)) {
+                                                    token_ids)) {
       matches_.push_back(certificate);
-      key_locations_for_matches_[public_key_spki_der] = key_locations;
+      key_locations_for_matches_[public_key_spki_der] = token_ids;
     }
     DoStep();
   }
@@ -719,7 +684,7 @@ class ExtensionPlatformKeysService::SelectTask : public Task {
     // necessary but this ensures that the permissions were updated correctly.
     CHECK(!selected_cert_ || (filtered_certs->size() == 1 &&
                               filtered_certs->front() == selected_cert_));
-    callback_.Run(std::move(filtered_certs), std::string() /* no error */);
+    callback_.Run(std::move(filtered_certs), platform_keys::Status::kSuccess);
     DoStep();
   }
 
@@ -728,9 +693,9 @@ class ExtensionPlatformKeysService::SelectTask : public Task {
   std::deque<scoped_refptr<net::X509Certificate>>
       matches_pending_key_locations_;
   net::CertificateList matches_;
-  // Mapping of DER-encoded Subject Public Key Info to the KeyLocations
-  // determined for the corresponding private key.
-  base::flat_map<std::string, std::vector<KeyPermissions::KeyLocation>>
+  // Mapping of DER-encoded Subject Public Key Info to the TokenIds determined
+  // for the corresponding private key.
+  base::flat_map<std::string, std::vector<platform_keys::TokenId>>
       key_locations_for_matches_;
   scoped_refptr<net::X509Certificate> selected_cert_;
   platform_keys::ClientCertificateRequest request_;
@@ -739,9 +704,8 @@ class ExtensionPlatformKeysService::SelectTask : public Task {
   const std::string extension_id_;
   const SelectCertificatesCallback callback_;
   content::WebContents* const web_contents_;
-  std::unique_ptr<KeyPermissions::PermissionsForExtension>
+  std::unique_ptr<platform_keys::KeyPermissionsManager::PermissionsForExtension>
       extension_permissions_;
-  KeyPermissions* const key_permissions_;
   ExtensionPlatformKeysService* const service_;
   base::WeakPtrFactory<SelectTask> weak_factory_{this};
 
@@ -762,11 +726,12 @@ ExtensionPlatformKeysService::ExtensionPlatformKeysService(
       platform_keys_service_(
           platform_keys::PlatformKeysServiceFactory::GetForBrowserContext(
               browser_context)),
-      key_permissions_(profile_is_managed,
-                       profile_prefs,
-                       profile_policies,
-                       state_store) {
+      key_permissions_(
+          chromeos::platform_keys::KeyPermissionsManagerUserServiceFactory::
+              GetForBrowserContext(browser_context)
+                  ->key_permissions_manager()) {
   DCHECK(platform_keys_service_);
+  DCHECK(key_permissions_);
   DCHECK(browser_context);
   DCHECK(state_store);
 }
@@ -779,24 +744,23 @@ void ExtensionPlatformKeysService::SetSelectDelegate(
 }
 
 void ExtensionPlatformKeysService::GenerateRSAKey(
-    const std::string& token_id,
+    platform_keys::TokenId token_id,
     unsigned int modulus_length,
     const std::string& extension_id,
     const GenerateKeyCallback& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   StartOrQueueTask(std::make_unique<GenerateRSAKeyTask>(
-      token_id, modulus_length, extension_id, callback, &key_permissions_,
-      this));
+      token_id, modulus_length, extension_id, callback, this));
 }
 
 void ExtensionPlatformKeysService::GenerateECKey(
-    const std::string& token_id,
+    platform_keys::TokenId token_id,
     const std::string& named_curve,
     const std::string& extension_id,
     const GenerateKeyCallback& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   StartOrQueueTask(std::make_unique<GenerateECKeyTask>(
-      token_id, named_curve, extension_id, callback, &key_permissions_, this));
+      token_id, named_curve, extension_id, callback, this));
 }
 
 bool ExtensionPlatformKeysService::IsUsingSigninProfile() {
@@ -805,7 +769,7 @@ bool ExtensionPlatformKeysService::IsUsingSigninProfile() {
 }
 
 void ExtensionPlatformKeysService::SignDigest(
-    const std::string& token_id,
+    base::Optional<platform_keys::TokenId> token_id,
     const std::string& data,
     const std::string& public_key_spki_der,
     platform_keys::KeyType key_type,
@@ -813,14 +777,14 @@ void ExtensionPlatformKeysService::SignDigest(
     const std::string& extension_id,
     const SignCallback& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  StartOrQueueTask(std::make_unique<SignTask>(
-      token_id, data, public_key_spki_der,
-      /*raw_pkcs1=*/false, key_type, hash_algorithm, extension_id, callback,
-      &key_permissions_, this));
+  StartOrQueueTask(
+      std::make_unique<SignTask>(token_id, data, public_key_spki_der,
+                                 /*raw_pkcs1=*/false, key_type, hash_algorithm,
+                                 extension_id, callback, this));
 }
 
 void ExtensionPlatformKeysService::SignRSAPKCS1Raw(
-    const std::string& token_id,
+    base::Optional<platform_keys::TokenId> token_id,
     const std::string& data,
     const std::string& public_key_spki_der,
     const std::string& extension_id,
@@ -829,8 +793,7 @@ void ExtensionPlatformKeysService::SignRSAPKCS1Raw(
   StartOrQueueTask(std::make_unique<SignTask>(
       token_id, data, public_key_spki_der,
       /*raw_pkcs1=*/true, /*key_type=*/platform_keys::KeyType::kRsassaPkcs1V15,
-      platform_keys::HASH_ALGORITHM_NONE, extension_id, callback,
-      &key_permissions_, this));
+      platform_keys::HASH_ALGORITHM_NONE, extension_id, callback, this));
 }
 
 void ExtensionPlatformKeysService::SelectClientCertificates(
@@ -843,7 +806,7 @@ void ExtensionPlatformKeysService::SelectClientCertificates(
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   StartOrQueueTask(std::make_unique<SelectTask>(
       request, std::move(client_certificates), interactive, extension_id,
-      callback, web_contents, &key_permissions_, this));
+      callback, web_contents, this));
 }
 
 void ExtensionPlatformKeysService::StartOrQueueTask(

@@ -264,7 +264,7 @@ void ErrorScreen::OnPasswordChangeDetected(const UserContext& user_context) {
   LOG(FATAL);
 }
 
-void ErrorScreen::WhiteListCheckFailed(const std::string& email) {
+void ErrorScreen::AllowlistCheckFailed(const std::string& email) {
   LOG(FATAL);
 }
 
@@ -303,7 +303,7 @@ void ErrorScreen::OnDiagnoseButtonClicked() {
 
   apps::AppServiceProxyFactory::GetForProfile(profile)
       ->BrowserAppLauncher()
-      .LaunchAppWithParams(apps::AppLaunchParams(
+      ->LaunchAppWithParams(apps::AppLaunchParams(
           extension_id, apps::mojom::LaunchContainer::kLaunchContainerWindow,
           WindowOpenDisposition::NEW_WINDOW,
           apps::mojom::AppLaunchSource::kSourceChromeInternal));

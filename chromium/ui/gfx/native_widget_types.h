@@ -12,7 +12,7 @@
 
 #if defined(OS_ANDROID)
 #include "base/android/scoped_java_ref.h"
-#elif defined(OS_MACOSX)
+#elif defined(OS_APPLE)
 #include <objc/objc.h>
 #elif defined(OS_WIN)
 #include "base/win/windows_types.h"
@@ -73,7 +73,7 @@ class UIView;
 class UIWindow;
 class UITextField;
 #endif  // __OBJC__
-#elif defined(OS_MACOSX)
+#elif defined(OS_MAC)
 struct CGContext;
 #ifdef __OBJC__
 @class NSCursor;
@@ -110,12 +110,6 @@ typedef struct _AtkObject AtkObject;
 }
 #endif
 
-#if defined(USE_X11)
-namespace x11 {
-enum class Window : uint32_t;
-}
-#endif
-
 namespace gfx {
 
 #if defined(USE_AURA)
@@ -132,7 +126,7 @@ typedef UIWindow* NativeWindow;
 typedef UIEvent* NativeEvent;
 constexpr NativeView kNullNativeView = nullptr;
 constexpr NativeWindow kNullNativeWindow = nullptr;
-#elif defined(OS_MACOSX)
+#elif defined(OS_MAC)
 typedef NSCursor* NativeCursor;
 typedef NSEvent* NativeEvent;
 // NativeViews and NativeWindows on macOS are not necessarily in the same
@@ -207,7 +201,7 @@ typedef IAccessible* NativeViewAccessible;
 #elif defined(OS_IOS)
 typedef UIFont* NativeFont;
 typedef id NativeViewAccessible;
-#elif defined(OS_MACOSX)
+#elif defined(OS_MAC)
 typedef NSFont* NativeFont;
 typedef id NativeViewAccessible;
 #elif defined(OS_LINUX) && !defined(OS_CHROMEOS)
@@ -239,21 +233,17 @@ typedef intptr_t NativeViewId;
 #if defined(OS_WIN)
 typedef HWND AcceleratedWidget;
 constexpr AcceleratedWidget kNullAcceleratedWidget = nullptr;
-#elif defined(USE_X11)
-typedef x11::Window AcceleratedWidget;
-constexpr AcceleratedWidget kNullAcceleratedWidget =
-    static_cast<x11::Window>(0);
 #elif defined(OS_IOS)
 typedef UIView* AcceleratedWidget;
 constexpr AcceleratedWidget kNullAcceleratedWidget = 0;
-#elif defined(OS_MACOSX)
+#elif defined(OS_MAC)
 typedef uint64_t AcceleratedWidget;
 constexpr AcceleratedWidget kNullAcceleratedWidget = 0;
 #elif defined(OS_ANDROID)
 typedef ANativeWindow* AcceleratedWidget;
 constexpr AcceleratedWidget kNullAcceleratedWidget = 0;
-#elif defined(USE_OZONE)
-typedef int32_t AcceleratedWidget;
+#elif defined(USE_OZONE) || defined(USE_X11)
+typedef uint32_t AcceleratedWidget;
 constexpr AcceleratedWidget kNullAcceleratedWidget = 0;
 #else
 #error unknown platform

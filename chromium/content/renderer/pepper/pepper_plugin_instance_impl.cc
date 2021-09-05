@@ -1281,7 +1281,9 @@ void PepperPluginInstanceImpl::ViewChanged(
   if (desired_fullscreen_state_ || view_data_.is_fullscreen) {
     bool is_fullscreen_element = container_->IsFullscreenElement();
     if (!view_data_.is_fullscreen && desired_fullscreen_state_ &&
-        render_frame()->GetLocalRootRenderWidget()->is_fullscreen_granted() &&
+        render_frame()
+            ->GetLocalRootRenderWidget()
+            ->IsFullscreenGrantedForFrame() &&
         is_fullscreen_element) {
       // Entered fullscreen. Only possible via SetFullscreen().
       view_data_.is_fullscreen = true;
@@ -2514,7 +2516,7 @@ PP_Var PepperPluginInstanceImpl::ExecuteScript(PP_Instance instance,
 uint32_t PepperPluginInstanceImpl::GetAudioHardwareOutputSampleRate(
     PP_Instance instance) {
   return render_frame() ? AudioDeviceFactory::GetOutputDeviceInfo(
-                              render_frame()->GetRoutingID(),
+                              render_frame()->GetWebFrame()->GetFrameToken(),
                               media::AudioSinkParameters())
                               .output_params()
                               .sample_rate()
@@ -2524,7 +2526,7 @@ uint32_t PepperPluginInstanceImpl::GetAudioHardwareOutputSampleRate(
 uint32_t PepperPluginInstanceImpl::GetAudioHardwareOutputBufferSize(
     PP_Instance instance) {
   return render_frame() ? AudioDeviceFactory::GetOutputDeviceInfo(
-                              render_frame()->GetRoutingID(),
+                              render_frame()->GetWebFrame()->GetFrameToken(),
                               media::AudioSinkParameters())
                               .output_params()
                               .frames_per_buffer()
@@ -2617,9 +2619,10 @@ PP_Bool PepperPluginInstanceImpl::GetScreenSize(PP_Instance instance,
     // All other cases: Report the screen size.
     if (!render_frame_)
       return PP_FALSE;
-    blink::WebScreenInfo info =
-        render_frame_->GetLocalRootRenderWidget()->GetScreenInfo();
-    *size = PP_MakeSize(info.rect.width, info.rect.height);
+    blink::ScreenInfo info = render_frame_->GetLocalRootRenderWidget()
+                                 ->GetWebWidget()
+                                 ->GetScreenInfo();
+    *size = PP_MakeSize(info.rect.width(), info.rect.height());
   }
   return PP_TRUE;
 }
@@ -3201,9 +3204,10 @@ void PepperPluginInstanceImpl::SetSizeAttributesForFullscreen() {
   // behavior, the width and height should probably be set to 100%, rather than
   // a fixed screen size.
 
-  blink::WebScreenInfo info =
-      render_frame_->GetLocalRootRenderWidget()->GetScreenInfo();
-  screen_size_for_fullscreen_ = gfx::Size(info.rect.width, info.rect.height);
+  blink::ScreenInfo info = render_frame_->GetLocalRootRenderWidget()
+                               ->GetWebWidget()
+                               ->GetScreenInfo();
+  screen_size_for_fullscreen_ = info.rect.size();
   std::string width = base::NumberToString(screen_size_for_fullscreen_.width());
   std::string height =
       base::NumberToString(screen_size_for_fullscreen_.height());

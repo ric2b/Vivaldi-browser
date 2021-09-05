@@ -28,7 +28,7 @@
 #include "util/file/file_io.h"
 #include "util/misc/capture_context.h"
 
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
 #include "base/mac/scoped_mach_port.h"
 #elif defined(OS_WIN)
 #include <windows.h>
@@ -107,6 +107,8 @@ class CrashpadClient {
   //!     a background thread. Optionally, WaitForHandlerStart() can be used at
   //!     a suitable time to retreive the result of background startup. This
   //!     option is only used on Windows.
+  //! \param[in] attachments Vector that stores file paths that should be
+  //!     captured with each report at the time of the crash.
   //!
   //! \return `true` on success, `false` on failure with a message logged.
   bool StartHandler(const base::FilePath& handler,
@@ -116,7 +118,8 @@ class CrashpadClient {
                     const std::map<std::string, std::string>& annotations,
                     const std::vector<std::string>& arguments,
                     bool restartable,
-                    bool asynchronous_start);
+                    bool asynchronous_start,
+                    const std::vector<base::FilePath>& attachments = {});
 
 #if defined(OS_ANDROID) || defined(OS_LINUX) || DOXYGEN
   //! \brief Retrieve the socket and process ID for the handler.
@@ -140,6 +143,29 @@ class CrashpadClient {
   //!     handler as this process' ptracer. -1 indicates that the handler's
   //!     process ID should be determined by communicating over the socket.
   bool SetHandlerSocket(ScopedFileHandle sock, pid_t pid);
+
+  //! \brief Uses `sigaltstack()` to allocate a signal stack for the calling
+  //!     thread.
+  //!
+  //! This method allocates an alternate stack to handle signals delivered to
+  //! the calling thread and should be called early in the lifetime of each
+  //! thread. Installing an alternate stack allows signals to be delivered in
+  //! the event that the call stack's stack pointer points to invalid memory,
+  //! as in the case of stack overflow.
+  //!
+  //! This method is called automatically by SetHandlerSocket() and
+  //! the various StartHandler() methods. It is harmless to call multiple times.
+  //! A new signal stack will be allocated only if there is no existing stack or
+  //! the existing stack is too small. The stack will be automatically freed
+  //! when the thread exits.
+  //!
+  //! An application might choose to diligently call this method from the start
+  //! routine for each thread, call it from a `pthread_create()` wrapper which
+  //! the application provides, or link the provided "client:pthread_create"
+  //! target.
+  //!
+  //! \return `true` on success. Otherwise `false` with a message logged.
+  static bool InitializeSignalStackForThread();
 #endif  // OS_ANDROID || OS_LINUX || DOXYGEN
 
 #if defined(OS_ANDROID) || DOXYGEN
@@ -340,7 +366,8 @@ class CrashpadClient {
       const base::FilePath& metrics_dir,
       const std::string& url,
       const std::map<std::string, std::string>& annotations,
-      const std::vector<std::string>& arguments);
+      const std::vector<std::string>& arguments,
+      const std::vector<base::FilePath>& attachments = {});
 
   //! \brief Starts a handler process with an initial client.
   //!
@@ -446,7 +473,7 @@ class CrashpadClient {
   static void DumpWithoutCrash(NativeCPUContext* context);
 #endif
 
-#if defined(OS_MACOSX) || DOXYGEN
+#if defined(OS_APPLE) || DOXYGEN
   //! \brief Sets the process’ crash handler to a Mach service registered with
   //!     the bootstrap server.
   //!
@@ -596,7 +623,7 @@ class CrashpadClient {
   };
 #endif
 
-#if defined(OS_MACOSX) || DOXYGEN
+#if defined(OS_APPLE) || DOXYGEN
   //! \brief Configures the process to direct its crashes to the default handler
   //!     for the operating system.
   //!
@@ -630,14 +657,14 @@ class CrashpadClient {
 #endif
 
  private:
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
   base::mac::ScopedMachSendRight exception_port_;
 #elif defined(OS_WIN)
   std::wstring ipc_pipe_;
   ScopedKernelHANDLE handler_start_thread_;
 #elif defined(OS_LINUX) || defined(OS_ANDROID)
   std::set<int> unhandled_signals_;
-#endif  // OS_MACOSX
+#endif  // OS_APPLE
 
   DISALLOW_COPY_AND_ASSIGN(CrashpadClient);
 };

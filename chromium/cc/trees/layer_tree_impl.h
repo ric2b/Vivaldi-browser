@@ -6,9 +6,11 @@
 #define CC_TREES_LAYER_TREE_IMPL_H_
 
 #include <map>
+#include <memory>
 #include <set>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "base/containers/flat_set.h"
@@ -156,6 +158,8 @@ class CC_EXPORT LayerTreeImpl {
           decoding_mode_map);
   int GetMSAASampleCountForRaster(
       const scoped_refptr<DisplayItemList>& display_list);
+  gfx::ColorSpace GetRasterColorSpace(
+      gfx::ContentColorUsage content_color_usage) const;
 
   // Tree specific methods exposed to layer-impl tree.
   // ---------------------------------------------------------------------------
@@ -394,7 +398,9 @@ class CC_EXPORT LayerTreeImpl {
   // internal (i.e. not external) device viewport.
   gfx::Rect internal_device_viewport() { return device_viewport_rect_; }
 
-  void SetRasterColorSpace(const gfx::ColorSpace& raster_color_space);
+  void SetDisplayColorSpaces(
+      const gfx::DisplayColorSpaces& display_color_spaces);
+
   // OOPIFs need to know the page scale factor used in the main frame, but it
   // is distributed differently (via VisualPropertiesSync), and used only to
   // set raster-scale (page_scale_factor has geometry implications that are
@@ -403,18 +409,20 @@ class CC_EXPORT LayerTreeImpl {
   float external_page_scale_factor() const {
     return external_page_scale_factor_;
   }
-  // A function to provide page scale information for scaling scroll
-  // deltas. In top-level frames we store this value in page_scale_factor_, but
-  // for cross-process subframes it's stored in external_page_scale_factor_, so
-  // that it only affects raster scale. These cases are mutually exclusive, so
-  // only one of the values should ever vary from 1.f.
+  // A function to provide page scale information for scaling scroll deltas. In
+  // top-level frames we store this value in page_scale_factor_, but for
+  // cross-process subframes it's stored in external_page_scale_factor_, so
+  // that it only affects raster scale. These cases are mutually exclusive,
+  // except for a page hosted in a <portal>, so only one of the values should
+  // ever vary from 1.f.
   float page_scale_factor_for_scroll() const {
     DCHECK(external_page_scale_factor_ == 1.f ||
-           current_page_scale_factor() == 1.f);
+           current_page_scale_factor() == 1.f ||
+           !settings().is_layer_tree_for_subframe);
     return external_page_scale_factor_ * current_page_scale_factor();
   }
-  const gfx::ColorSpace& raster_color_space() const {
-    return raster_color_space_;
+  const gfx::DisplayColorSpaces& display_color_spaces() const {
+    return display_color_spaces_;
   }
 
   SyncedElasticOverscroll* elastic_overscroll() {
@@ -448,7 +456,6 @@ class CC_EXPORT LayerTreeImpl {
   bool UpdateDrawProperties(
       bool update_image_animation_controller = true,
       LayerImplList* output_update_layer_list_for_testing = nullptr);
-  void UpdateCanUseLCDText();
 
   void set_needs_update_draw_properties() {
     needs_update_draw_properties_ = true;
@@ -590,6 +597,11 @@ class CC_EXPORT LayerTreeImpl {
   // Return all layers with a hit non-fast scrollable region.
   std::vector<const LayerImpl*> FindLayersHitByPointInNonFastScrollableRegion(
       const gfx::PointF& screen_space_point);
+  // Returns all layers up to the first scroller or scrollbar layer, inclusive.
+  // The returned vector is sorted in order of top most come first. The back of
+  // the vector will be the scrollable layer if one was hit.
+  std::vector<const LayerImpl*> FindAllLayersUpToAndIncludingFirstScrollable(
+      const gfx::PointF& screen_space_point);
   bool PointHitsNonFastScrollableRegion(const gfx::PointF& scree_space_point,
                                         const LayerImpl& layer) const;
 
@@ -632,6 +644,9 @@ class CC_EXPORT LayerTreeImpl {
   }
   float bottom_controls_min_height() const {
     return browser_controls_params_.bottom_controls_min_height;
+  }
+  bool only_expand_top_controls_at_page_top() const {
+    return browser_controls_params_.only_expand_top_controls_at_page_top;
   }
 
   void set_overscroll_behavior(const OverscrollBehavior& behavior);
@@ -723,6 +738,10 @@ class CC_EXPORT LayerTreeImpl {
     return std::move(delegated_ink_metadata_);
   }
 
+  size_t events_metrics_from_main_thread_count_for_testing() const {
+    return events_metrics_from_main_thread_.size();
+  }
+
  protected:
   float ClampPageScaleFactorToLimits(float page_scale_factor) const;
   void PushPageScaleFactorAndLimits(const float* page_scale_factor,
@@ -768,7 +787,7 @@ class CC_EXPORT LayerTreeImpl {
 
   float device_scale_factor_;
   float painted_device_scale_factor_;
-  gfx::ColorSpace raster_color_space_;
+  gfx::DisplayColorSpaces display_color_spaces_;
 
   viz::LocalSurfaceIdAllocation local_surface_id_allocation_from_parent_;
   bool new_local_surface_id_request_ = false;

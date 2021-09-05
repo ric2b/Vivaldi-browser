@@ -37,8 +37,6 @@ bool EquivalentData(const T& a, const T& b) {
 
 void CreateTestFieldDataPredictions(const std::string& signature,
                                     FormFieldDataPredictions* field_predict) {
-  test::CreateTestSelectField("TestLabel", "TestName", "TestValue", kOptions,
-                              kOptions, 4, &field_predict->field);
   field_predict->signature = signature;
   field_predict->heuristic_type = "TestSignature";
   field_predict->server_type = "TestServerType";
@@ -83,7 +81,6 @@ void CreateTestPasswordForm(PasswordForm* form) {
   form->affiliated_web_realm = "https://foo.com/";
   form->submit_element = base::ASCIIToUTF16("test_submit");
   form->username_element = base::ASCIIToUTF16("username");
-  form->username_marked_by_site = true;
   form->username_value = base::ASCIIToUTF16("test@gmail.com");
   form->all_possible_usernames.push_back(ValueElementPair(
       base::ASCIIToUTF16("Jerry_1"), base::ASCIIToUTF16("id1")));
@@ -98,11 +95,10 @@ void CreateTestPasswordForm(PasswordForm* form) {
   form->password_value = base::ASCIIToUTF16("test");
   form->new_password_element = base::ASCIIToUTF16("new_password");
   form->new_password_value = base::ASCIIToUTF16("new_password_value");
-  form->new_password_marked_by_site = false;
   form->new_password_element = base::ASCIIToUTF16("confirmation_password");
   form->date_created = AutofillClock::Now();
   form->date_synced = AutofillClock::Now();
-  form->blacklisted_by_user = false;
+  form->blocked_by_user = false;
   form->type = PasswordForm::Type::kGenerated;
   form->times_used = 999;
   test::CreateTestAddressFormData(&form->form_data);

@@ -11,26 +11,18 @@
 #include "third_party/blink/renderer/core/execution_context/security_context_init.h"
 #include "third_party/blink/renderer/core/frame/csp/content_security_policy.h"
 #include "third_party/blink/renderer/core/frame/dom_timer.h"
-#include "third_party/blink/renderer/core/origin_trials/origin_trial_context.h"
 #include "third_party/blink/renderer/platform/scheduler/public/dummy_schedulers.h"
 #include "third_party/blink/renderer/platform/scheduler/public/frame_scheduler.h"
 #include "third_party/blink/renderer/platform/scheduler/public/thread.h"
 
 namespace blink {
 
-NullExecutionContext::NullExecutionContext(
-    OriginTrialContext* origin_trial_context)
+NullExecutionContext::NullExecutionContext()
     : ExecutionContext(
           v8::Isolate::GetCurrent(),
           MakeGarbageCollected<Agent>(v8::Isolate::GetCurrent(),
                                       base::UnguessableToken::Null())),
-      security_context_(
-          SecurityContextInit(nullptr /* origin */, origin_trial_context),
-          SecurityContext::kWindow),
-      scheduler_(scheduler::CreateDummyFrameScheduler()) {
-  if (origin_trial_context)
-    origin_trial_context->BindExecutionContext(this);
-}
+      scheduler_(scheduler::CreateDummyFrameScheduler()) {}
 
 NullExecutionContext::~NullExecutionContext() {}
 
@@ -53,11 +45,6 @@ scoped_refptr<base::SingleThreadTaskRunner> NullExecutionContext::GetTaskRunner(
 
 BrowserInterfaceBrokerProxy& NullExecutionContext::GetBrowserInterfaceBroker() {
   return GetEmptyBrowserInterfaceBroker();
-}
-
-void NullExecutionContext::Trace(Visitor* visitor) const {
-  visitor->Trace(security_context_);
-  ExecutionContext::Trace(visitor);
 }
 
 }  // namespace blink

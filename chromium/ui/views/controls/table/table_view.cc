@@ -85,7 +85,7 @@ ui::NativeTheme::ColorId selected_text_color_id(bool has_focus) {
 
 // Whether the platform "command" key is down.
 bool IsCmdOrCtrl(const ui::Event& event) {
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
   return event.IsCommandDown();
 #else
   return event.IsControlDown();
@@ -462,7 +462,7 @@ bool TableView::OnKeyPressed(const ui::KeyEvent& event) {
       return true;
 
     case ui::VKEY_UP:
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
       if (event.IsAltDown()) {
         if (GetRowCount())
           SelectByViewIndex(0);
@@ -475,7 +475,7 @@ bool TableView::OnKeyPressed(const ui::KeyEvent& event) {
       return true;
 
     case ui::VKEY_DOWN:
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
       if (event.IsAltDown()) {
         if (GetRowCount())
           SelectByViewIndex(GetRowCount() - 1);
@@ -1234,7 +1234,7 @@ void TableView::UpdateVirtualAccessibilityChildren() {
       cell_data.AddIntAttribute(ax::mojom::IntAttribute::kTableCellColumnSpan,
                                 1);
       if (base::i18n::IsRTL())
-        cell_data.SetTextDirection(ax::mojom::TextDirection::kRtl);
+        cell_data.SetTextDirection(ax::mojom::WritingDirection::kRtl);
 
       auto sort_direction = ax::mojom::SortDirection::kUnsorted;
       if (column.sortable && primary_sorted_column_id.has_value() &&
@@ -1323,7 +1323,7 @@ void TableView::UpdateVirtualAccessibilityChildren() {
 
       cell_data.SetName(model_->GetText(model_index, column.id));
       if (base::i18n::IsRTL())
-        cell_data.SetTextDirection(ax::mojom::TextDirection::kRtl);
+        cell_data.SetTextDirection(ax::mojom::WritingDirection::kRtl);
 
       auto sort_direction = ax::mojom::SortDirection::kUnsorted;
       if (column.sortable && primary_sorted_column_id.has_value() &&

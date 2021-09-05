@@ -65,6 +65,10 @@
 #include "components/keep_alive_registry/keep_alive_registry.h"
 #endif
 
+#if defined(OS_CHROMEOS)
+#include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
+#endif
+
 // static
 TestingBrowserProcess* TestingBrowserProcess::GetGlobal() {
   return static_cast<TestingBrowserProcess*>(g_browser_process);
@@ -211,7 +215,7 @@ TestingBrowserProcess::browser_policy_connector() {
     EXPECT_FALSE(created_browser_policy_connector_);
     created_browser_policy_connector_ = true;
 
-#if defined(OS_POSIX) && !defined(OS_MACOSX)
+#if defined(OS_POSIX) && !defined(OS_MAC)
     // Make sure that the machine policy directory does not exist so that
     // machine-wide policies do not affect tests.
     // Note that passing false as last argument to OverrideAndCreateIfNeeded
@@ -223,7 +227,13 @@ TestingBrowserProcess::browser_policy_connector() {
         chrome::DIR_POLICY_FILES, local_policy_path, true, false));
 #endif
 
-    browser_policy_connector_ = platform_part_->CreateBrowserPolicyConnector();
+#if defined(OS_CHROMEOS)
+    browser_policy_connector_ =
+        std::make_unique<policy::BrowserPolicyConnectorChromeOS>();
+#else
+    browser_policy_connector_ =
+        std::make_unique<policy::ChromeBrowserPolicyConnector>();
+#endif  // defined(OS_CHROMEOS)
 
     // Note: creating the ChromeBrowserPolicyConnector invokes BrowserThread::
     // GetTaskRunnerForThread(), which initializes a base::LazyInstance of
@@ -483,6 +493,11 @@ void TestingBrowserProcess::ShutdownBrowserPolicyConnector() {
   if (browser_policy_connector_)
     browser_policy_connector_->Shutdown();
   browser_policy_connector_.reset();
+}
+
+TestingBrowserProcessPlatformPart*
+TestingBrowserProcess::GetTestPlatformPart() {
+  return platform_part_.get();
 }
 
 void TestingBrowserProcess::SetSafeBrowsingService(

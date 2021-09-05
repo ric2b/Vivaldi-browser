@@ -28,16 +28,15 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
-import org.chromium.chrome.browser.preferences.PrefServiceBridge;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
-import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
-import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
-import org.chromium.components.content_settings.ContentSettingsFeatureList;
 import org.chromium.components.content_settings.CookieControlsMode;
 import org.chromium.components.content_settings.PrefNames;
+import org.chromium.components.prefs.PrefService;
+import org.chromium.components.user_prefs.UserPrefs;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 
 /**
@@ -45,7 +44,6 @@ import org.chromium.content_public.browser.test.util.TestThreadUtils;
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
-@EnableFeatures(ContentSettingsFeatureList.IMPROVED_COOKIE_CONTROLS)
 public class IncognitoNewTabPageTest {
     @Rule
     public ChromeActivityTestRule<ChromeActivity> mActivityTestRule =
@@ -58,30 +56,19 @@ public class IncognitoNewTabPageTest {
 
     private void setCookieControlsMode(@CookieControlsMode int mode) {
         TestThreadUtils.runOnUiThreadBlocking(() -> {
-            PrefServiceBridge.getInstance().setInteger(PrefNames.COOKIE_CONTROLS_MODE, mode);
-            PrefServiceBridge.getInstance().setBoolean(PrefNames.BLOCK_THIRD_PARTY_COOKIES,
+            PrefService prefService = UserPrefs.get(Profile.getLastUsedRegularProfile());
+            prefService.setInteger(PrefNames.COOKIE_CONTROLS_MODE, mode);
+            prefService.setBoolean(PrefNames.BLOCK_THIRD_PARTY_COOKIES,
                     mode == CookieControlsMode.BLOCK_THIRD_PARTY);
         });
     }
 
     private void assertCookieControlsMode(@CookieControlsMode int mode) {
         TestThreadUtils.runOnUiThreadBlocking(() -> {
-            Assert.assertEquals(
-                    PrefServiceBridge.getInstance().getInteger(PrefNames.COOKIE_CONTROLS_MODE),
+            Assert.assertEquals(UserPrefs.get(Profile.getLastUsedRegularProfile())
+                                        .getInteger(PrefNames.COOKIE_CONTROLS_MODE),
                     mode);
         });
-    }
-
-    /**
-     * Test cookie controls card is GONE when cookie controls flag disabled.
-     */
-    @Test
-    @SmallTest
-    @DisableFeatures(ContentSettingsFeatureList.IMPROVED_COOKIE_CONTROLS)
-    public void testCookieControlsCardGONE() throws Exception {
-        mActivityTestRule.newIncognitoTabFromMenu();
-        onView(withId(R.id.cookie_controls_card))
-                .check(matches(withEffectiveVisibility(ViewMatchers.Visibility.GONE)));
     }
 
     /**

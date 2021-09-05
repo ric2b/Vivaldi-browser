@@ -4,7 +4,6 @@
 <translation id="1038842779957582377">невядомая назва</translation>
 <translation id="1089439967362294234">Змяніць пароль</translation>
 <translation id="1110994991967754504">Вылучы правы доступу для <ph name="PERMISSION_NAME" /></translation>
-<translation id="1152921474424827756">Адчыніць <ph name="BEGIN_LINK" /> версію з кэшу <ph name="END_LINK" /> старонкі <ph name="URL" /></translation>
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> нечакана скінуў падлучэнне.</translation>
 <translation id="1161325031994447685">Падлучыцеся да WI-FI яшчэ раз</translation>
 <translation id="1175364870820465910">&amp;Друк...</translation>
@@ -22,9 +21,7 @@
 <translation id="1834321415901700177">Гэты сайт змяшчае шкадлівую праграму</translation>
 <translation id="1916770123977586577">Для прыняцця навых наладаў, пераладуй старонку</translation>
 <translation id="1919345977826869612">Рэклама</translation>
-<translation id="194030505837763158">Перайсці <ph name="LINK" /></translation>
 <translation id="1974060860693918893">Падрабязней</translation>
-<translation id="2030481566774242610">Ты маў на ўвазе <ph name="LINK" />?</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Спраўдзіце налады проксі-сэрвэру і брандмаўара<ph name="END_LINK" /></translation>
 <translation id="2091887806945687916">Гук</translation>
 <translation id="2119505898009119320">Выданы (каму): <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
@@ -120,13 +117,12 @@
 <translation id="5287240709317226393">Паказаць cookie</translation>
 <translation id="5355557959165512791">Серціфікат сайту <ph name="SITE" /> адазваны. Адчыніць сайт нельга. Збой мог здарыцца з-за сеткавай памылкі або дзейнасцю злачынцаў. Хучэй за ўсе сайт безде працаваць праз некаторы час.</translation>
 <translation id="5386426401304769735">У цэпу серціфікатаў гэтага сайта ёсць серціфікат, падпісаны с дапамогай алгарытма SHA1.</translation>
-<translation id="5431657950005405462">Твае файлы не знойдзены</translation>
 <translation id="5452270690849572955">Гэтая <ph name="HOST_NAME" /> старонка не знойдзена на сэрвэры</translation>
 <translation id="5457113250005438886">Нядзейны</translation>
 <translation id="5492298309214877701">Гэты сайт у сетке арганизацыі або вывучальнай установы мае той жа URL як знешні WEB-сайт.
 …<ph name="LINE_BREAK" />
 …Паспрабуйце пагутарыць аб гэтым з кіраўніком сеткі.</translation>
-<translation id="5510766032865166053">Можа, ён быў перамешчаны або выдалены.</translation>
+<translation id="5510766032865166053">Яна , магчыма , перамешчана ці выдалена.</translation>
 <translation id="5556459405103347317">Перазагрузіць</translation>
 <translation id="5610142619324316209">Спраўдка падлучэння</translation>
 <translation id="5617949217645503996"><ph name="HOST_NAME" /> пераадрэсаваў Вас занадта многа разоў.</translation>
@@ -165,7 +161,6 @@
 <translation id="6897140037006041989">Агент (браўзэр) карыстальніка</translation>
 <translation id="7053983685419859001">Забароніць</translation>
 <translation id="7079718277001814089">Гэты сайт змяшчае шкадлівае ПЗ</translation>
-<translation id="7090678807593890770">Шукаць у Google па <ph name="LINK" /></translation>
 <translation id="7108819624672055576">Дазволена пашырэннем</translation>
 <translation id="7111012039238467737">(Дзейны)</translation>
 <translation id="7210863904660874423">Сэрвэр <ph name="HOST_NAME" /> не адпавядае стандартам бяспекі.</translation>
@@ -187,7 +182,6 @@
 <translation id="7716424297397655342">Гэты сайт не можа заладавацца з кэшу</translation>
 <translation id="7758069387465995638">Магчыма, падлучэнне блакуецца фаерволам ці анцівірусам.</translation>
 <translation id="7800304661137206267">Падлучэнне зашыфравана з дапамогай <ph name="CIPHER" />, для аўтэнціфікацыі паведамленнеў выкарыстуецца <ph name="MAC" />, для абмена ключамі выкарыстуецца <ph name="KX" />.</translation>
-<translation id="7802523362929240268">Сайт бяспечны</translation>
 <translation id="7834399512844817676">Звычайна сайт <ph name="SITE" /> выкарыстуе шыфраванне для абароны вашых дадзеных. Но зараз пад час падлучэння да <ph name="SITE" /> былі атрыманы няправільныя дадзеныя аўтарызацыі.Магчыма, злачынцы спрабавалі замаскіравацца пад сайт <ph name="SITE" /> або акно падлучэння WiFi парушыла падлучэнне. Вашыя дадзеныя застаюцца абароненымі - браўзэр разарваў падлучэнне да абмена дадзеными.</translation>
 <translation id="7878562273885520351">Злачынцы маглі даведацца твой пароль</translation>
 <translation id="7951415247503192394">(32-бітны)</translation>

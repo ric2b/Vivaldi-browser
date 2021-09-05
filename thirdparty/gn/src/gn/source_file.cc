@@ -35,6 +35,8 @@ SourceFile::Type GetSourceFileType(const std::string& file) {
     return SourceFile::SOURCE_M;
   if (extension == "mm")
     return SourceFile::SOURCE_MM;
+  if (extension == "modulemap")
+    return SourceFile::SOURCE_MODULEMAP;
   if (extension == "rc")
     return SourceFile::SOURCE_RC;
   if (extension == "S" || extension == "s" || extension == "asm")
@@ -47,6 +49,10 @@ SourceFile::Type GetSourceFileType(const std::string& file) {
     return SourceFile::SOURCE_RS;
   if (extension == "go")
     return SourceFile::SOURCE_GO;
+  if (extension == "swift")
+    return SourceFile::SOURCE_SWIFT;
+  if (extension == "swiftmodule")
+    return SourceFile::SOURCE_SWIFTMODULE;
 
   return SourceFile::SOURCE_UNKNOWN;
 }
@@ -114,7 +120,8 @@ SourceFileTypeSet::SourceFileTypeSet() : empty_(true) {
 }
 
 bool SourceFileTypeSet::CSourceUsed() const {
-  return empty_ || Get(SourceFile::SOURCE_CPP) || Get(SourceFile::SOURCE_H) ||
+  return empty_ || Get(SourceFile::SOURCE_CPP) ||
+         Get(SourceFile::SOURCE_MODULEMAP) || Get(SourceFile::SOURCE_H) ||
          Get(SourceFile::SOURCE_C) || Get(SourceFile::SOURCE_M) ||
          Get(SourceFile::SOURCE_MM) || Get(SourceFile::SOURCE_RC) ||
          Get(SourceFile::SOURCE_S) || Get(SourceFile::SOURCE_O) ||
@@ -129,8 +136,13 @@ bool SourceFileTypeSet::GoSourceUsed() const {
   return Get(SourceFile::SOURCE_GO);
 }
 
+bool SourceFileTypeSet::SwiftSourceUsed() const {
+  return Get(SourceFile::SOURCE_SWIFT);
+}
+
 bool SourceFileTypeSet::MixedSourceUsed() const {
   return (1 << static_cast<int>(CSourceUsed())
             << static_cast<int>(RustSourceUsed())
-            << static_cast<int>(GoSourceUsed())) > 2;
+            << static_cast<int>(GoSourceUsed())
+            << static_cast<int>(SwiftSourceUsed())) > 2;
 }

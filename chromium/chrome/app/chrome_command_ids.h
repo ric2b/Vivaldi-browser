@@ -208,6 +208,7 @@
 #define IDC_SHOW_SAVE_LOCAL_CARD_SIGN_IN_PROMO_IF_APPLICABLE 40257
 #define IDC_CLOSE_SIGN_IN_PROMO        40258
 #define IDC_SHOW_FULL_URLS             40259
+#define IDC_CARET_BROWSING_TOGGLE      40260
 
 // Spell-check
 // Insert any additional suggestions before _LAST; these have to be consecutive.
@@ -409,6 +410,9 @@
 #define IDC_CONTENT_CONTEXT_QUICK_ANSWERS_INLINE_ANSWER 52413
 #define IDC_CONTENT_CONTEXT_QUICK_ANSWERS_INLINE_QUERY 52414
 #endif
+
+// Tab Search
+#define IDC_TAB_SEARCH 52500
 
 // NOTE: The last valid command value is 57343 (0xDFFF)
 // See http://msdn.microsoft.com/en-us/library/t2zechd4(VS.71).aspx

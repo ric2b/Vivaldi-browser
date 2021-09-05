@@ -121,8 +121,6 @@ class BitmapImageTest : public testing::Test {
  public:
   class FakeImageObserver : public GarbageCollected<FakeImageObserver>,
                             public ImageObserver {
-    USING_GARBAGE_COLLECTED_MIXIN(FakeImageObserver);
-
    public:
     FakeImageObserver()
         : last_decoded_size_(0), last_decoded_size_changed_delta_(0) {}
@@ -848,7 +846,7 @@ const DecodedImageTypeHistogramTest::ParamType
         {"animated-10color.gif", BitmapImageMetrics::kImageGIF},
         {"webp-color-profile-lossy.webp", BitmapImageMetrics::kImageWebP},
         {"wrong-frame-dimensions.ico", BitmapImageMetrics::kImageICO},
-        {"lenna.bmp", BitmapImageMetrics::kImageBMP},
+        {"gracehopper.bmp", BitmapImageMetrics::kImageBMP},
 #if BUILDFLAG(ENABLE_AV1_DECODER)
         {"red-full-ranged-8bpc.avif", BitmapImageMetrics::kImageAVIF},
 #endif

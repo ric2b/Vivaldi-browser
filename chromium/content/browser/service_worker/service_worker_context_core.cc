@@ -538,7 +538,7 @@ void ServiceWorkerContextCore::UnregisterServiceWorker(
                      AsWeakPtr(), scope, std::move(callback)));
 }
 
-void ServiceWorkerContextCore::DeleteForOrigin(const GURL& origin,
+void ServiceWorkerContextCore::DeleteForOrigin(const url::Origin& origin,
                                                StatusCallback callback) {
   DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
   registry()->GetRegistrationsForOrigin(
@@ -551,11 +551,11 @@ void ServiceWorkerContextCore::DeleteForOrigin(const GURL& origin,
 void ServiceWorkerContextCore::PerformStorageCleanup(
     base::OnceClosure callback) {
   DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
-  storage()->PerformStorageCleanup(std::move(callback));
+  GetStorageControl()->PerformStorageCleanup(std::move(callback));
 }
 
 void ServiceWorkerContextCore::DidGetRegistrationsForDeleteForOrigin(
-    const GURL& origin,
+    const url::Origin& origin,
     base::OnceCallback<void(blink::ServiceWorkerStatusCode)> callback,
     blink::ServiceWorkerStatusCode status,
     const std::vector<scoped_refptr<ServiceWorkerRegistration>>&
@@ -959,7 +959,8 @@ void ServiceWorkerContextCore::OnRunningStateChanged(
       observer_list_->Notify(
           FROM_HERE, &ServiceWorkerContextCoreObserver::OnStarted,
           version->version_id(), version->scope(),
-          version->embedded_worker()->process_id(), version->script_url());
+          version->embedded_worker()->process_id(), version->script_url(),
+          version->embedded_worker()->token().value());
       break;
     case EmbeddedWorkerStatus::STOPPING:
       observer_list_->Notify(FROM_HERE,
@@ -998,9 +999,9 @@ void ServiceWorkerContextCore::OnErrorReported(
   DCHECK_EQ(this, version->context().get());
   observer_list_->Notify(
       FROM_HERE, &ServiceWorkerContextCoreObserver::OnErrorReported,
-      version->version_id(),
-      ServiceWorkerContextCoreObserver::ErrorInfo(error_message, line_number,
-                                                  column_number, source_url));
+      version->version_id(), version->scope(),
+      ServiceWorkerContextObserver::ErrorInfo(error_message, line_number,
+                                              column_number, source_url));
 }
 
 void ServiceWorkerContextCore::OnReportConsoleMessage(
@@ -1025,12 +1026,13 @@ void ServiceWorkerContextCore::OnReportConsoleMessage(
 
   observer_list_->Notify(
       FROM_HERE, &ServiceWorkerContextCoreObserver::OnReportConsoleMessage,
-      version->version_id(),
+      version->version_id(), version->scope(),
       ConsoleMessage(source, message_level, message, line_number, source_url));
 }
 
-ServiceWorkerStorage* ServiceWorkerContextCore::storage() const {
-  return registry_->storage();
+mojo::Remote<storage::mojom::ServiceWorkerStorageControl>&
+ServiceWorkerContextCore::GetStorageControl() {
+  return registry_->GetRemoteStorageControl();
 }
 
 ServiceWorkerProcessManager* ServiceWorkerContextCore::process_manager() {

@@ -90,7 +90,15 @@ bool NetworkState::PropertyChanged(const std::string& key,
   if (ManagedStatePropertyChanged(key, value))
     return true;
   if (key == shill::kSignalStrengthProperty) {
-    return GetIntegerValue(key, value, &signal_strength_);
+    int signal_strength = signal_strength_;
+    if (!GetIntegerValue(key, value, &signal_strength))
+      return false;
+    if (signal_strength_ > 0 && abs(signal_strength - signal_strength_) <
+                                    kSignalStrengthChangeThreshold) {
+      return false;
+    }
+    signal_strength_ = signal_strength;
+    return true;
   } else if (key == shill::kStateProperty) {
     std::string connection_state;
     if (!GetStringValue(key, value, &connection_state))
@@ -383,8 +391,8 @@ bool NetworkState::RequiresActivation() const {
 
 bool NetworkState::SecurityRequiresPassphraseOnly() const {
   return type() == shill::kTypeWifi &&
-         (security_class() == shill::kSecurityPsk ||
-          security_class() == shill::kSecurityWep);
+         (security_class_ == shill::kSecurityPsk ||
+          security_class_ == shill::kSecurityWep);
 }
 
 const std::string& NetworkState::GetError() const {
@@ -499,6 +507,10 @@ bool NetworkState::IsCaptivePortal() const {
   return is_captive_portal_ || is_chrome_captive_portal_;
 }
 
+bool NetworkState::IsSecure() const {
+  return !security_class_.empty() && security_class_ != shill::kSecurityNone;
+}
+
 std::string NetworkState::GetHexSsid() const {
   return base::HexEncode(raw_ssid().data(), raw_ssid().size());
 }
@@ -563,7 +575,7 @@ NetworkState::GetMojoActivationState() const {
 
 network_config::mojom::SecurityType NetworkState::GetMojoSecurity() const {
   using network_config::mojom::SecurityType;
-  if (security_class_.empty() || security_class_ == shill::kSecurityNone)
+  if (!IsSecure())
     return SecurityType::kNone;
   if (IsDynamicWep())
     return SecurityType::kWep8021x;

@@ -4,6 +4,7 @@
 
 #include "components/viz/service/display/overlay_processor_win.h"
 
+#include <utility>
 #include <vector>
 
 #include "base/trace_event/trace_event.h"
@@ -12,19 +13,27 @@
 #include "components/viz/service/display/display_resource_provider.h"
 #include "components/viz/service/display/output_surface.h"
 #include "ui/gfx/geometry/rect_conversions.h"
+#include "ui/gl/gl_utils.h"
 
 namespace viz {
+namespace {
+// Switching between enabling DC layers and not is expensive, so only
+// switch away after a large number of frames not needing DC layers have
+// been produced.
+constexpr int kNumberOfFramesBeforeDisablingDCLayers = 60;
+}  // anonymous namespace
 
 OverlayProcessorWin::OverlayProcessorWin(
-    bool enable_dc_overlay,
+    OutputSurface* output_surface,
     std::unique_ptr<DCLayerOverlayProcessor> dc_layer_overlay_processor)
-    : enable_dc_overlay_(enable_dc_overlay),
+    : output_surface_(output_surface),
+      supports_dc_layers_(output_surface->capabilities().supports_dc_layers),
       dc_layer_overlay_processor_(std::move(dc_layer_overlay_processor)) {}
 
 OverlayProcessorWin::~OverlayProcessorWin() = default;
 
 bool OverlayProcessorWin::IsOverlaySupported() const {
-  return enable_dc_overlay_;
+  return supports_dc_layers_;
 }
 
 gfx::Rect OverlayProcessorWin::GetPreviousFrameOverlaysBoundingRect() const {
@@ -62,17 +71,42 @@ void OverlayProcessorWin::ProcessForOverlays(
   }
 
   // Skip overlay processing if output colorspace is HDR.
-  // Since Overlay only supports NV12 and YUY2 now, HDR content (usually P010
-  // format) cannot output through overlay without format degrading.
-  if (root_render_pass->content_color_usage == gfx::ContentColorUsage::kHDR)
+  // Since most of overlay only supports NV12 and YUY2 now, HDR content (usually
+  // P010 format) cannot output through overlay without format degrading. In
+  // some Intel's platforms (Icelake or above), Overlay can play HDR content by
+  // supporting RGB10 format. Let overlay deal with HDR content in this
+  // situation.
+  bool supports_rgb10a2_overlay =
+      (gl::GetOverlaySupportFlags(DXGI_FORMAT_R10G10B10A2_UNORM) != 0 ||
+       output_surface_->capabilities().forces_rgb10a2_overlay_support_flags);
+  if (root_render_pass->content_color_usage == gfx::ContentColorUsage::kHDR &&
+      !supports_rgb10a2_overlay) {
     return;
+  }
 
-  if (!enable_dc_overlay_)
+  if (!supports_dc_layers_)
     return;
 
   dc_layer_overlay_processor_->Process(
       resource_provider, gfx::RectF(root_render_pass->output_rect),
       render_passes, damage_rect, candidates);
+
+  bool was_using_dc_layers = using_dc_layers_;
+  if (!candidates->empty()) {
+    using_dc_layers_ = true;
+    frames_since_using_dc_layers_ = 0;
+  } else if (++frames_since_using_dc_layers_ >=
+             kNumberOfFramesBeforeDisablingDCLayers) {
+    using_dc_layers_ = false;
+  }
+
+  if (was_using_dc_layers != using_dc_layers_) {
+    output_surface_->SetEnableDCLayers(using_dc_layers_);
+    // The entire surface has to be redrawn if switching from or to direct
+    // composition layers, because the previous contents are discarded and some
+    // contents would otherwise be undefined.
+    *damage_rect = root_render_pass->output_rect;
+  }
 }
 
 bool OverlayProcessorWin::NeedsSurfaceOccludingDamageRect() const {

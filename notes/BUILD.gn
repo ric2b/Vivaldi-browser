@@ -1,23 +1,28 @@
 # Copyright (c) 2015-2017 Vivaldi Technologies AS. All rights reserved
 
-import("//build/config/jumbo.gni")
 if (is_android) {
   import("//build/config/android/rules.gni")
 }
 
 static_library("notes") {
   sources = [
-    "note_attachment.cpp",
+    "note_attachment.cc",
     "note_attachment.h",
-    "notes_codec.cpp",
-    "notes_codec.h",
-    "notes_model.cpp",
-    "notes_model.h",
-    "notes_storage.cpp",
-    "notes_storage.h",
-    "note_node.cpp",
+    "note_constants.cc",
+    "note_constants.h",
+    "note_load_details.cc",
+    "note_load_details.h",
+    "note_model_loader.cc",
+    "note_model_loader.h",
+    "note_node.cc",
     "note_node.h",
-    "scoped_group_notes_actions.cpp",
+    "notes_codec.cc",
+    "notes_codec.h",
+    "notes_model.cc",
+    "notes_model.h",
+    "notes_storage.cc",
+    "notes_storage.h",
+    "scoped_group_notes_actions.cc",
     "scoped_group_notes_actions.h",
   ]
   if (is_android) {
@@ -57,9 +62,9 @@ static_library("notes") {
 
 static_library("browser") {
   sources = [
-    "notes_factory.cpp",
+    "notes_factory.cc",
     "notes_factory.h",
-    "notes_model_loaded_observer.cpp",
+    "notes_model_loaded_observer.cc",
     "notes_model_loaded_observer.h",
     "notes_model_observer.h",
   ]
@@ -119,7 +124,7 @@ static_library("browser") {
 source_set("unit_tests") {
   testonly = true
   sources = [
-    "notes_codec_unittest.cpp"
+    "notes_codec_unittest.cc"
   ]
   deps = [
     "//base",

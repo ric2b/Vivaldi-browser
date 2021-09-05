@@ -83,6 +83,88 @@
       }
     ],
     "events": [
+      {
+        "name": "onDidFindValidUpdate",
+        "type": "function",
+        "description": "Fired when a valid update is found.",
+        "parameters": [
+          {
+            "name": "windowId",
+            "type": "integer"
+          },
+          {
+            "name": "releaseNotesUrl",
+            "type": "string",
+            "description": "URL of the release notes of the update."
+          }
+        ]
+      },
+      {
+        "name": "onWillDownloadUpdate",
+        "type": "function",
+        "description": "Fired when an update will be downloaded.",
+        "parameters": [
+          {
+            "name": "windowId",
+            "type": "integer"
+          }
+        ]
+      },
+      {
+        "name": "onDidDownloadUpdate",
+        "type": "function",
+        "description": "Fired when an update has been downloaded.",
+        "parameters": [
+          {
+            "name": "windowId",
+            "type": "integer"
+          }
+        ]
+      },
+      {
+        "name": "onWillInstallUpdateOnQuit",
+        "type": "function",
+        "description": "Fired when an update will be installed on restart or quit.",
+        "parameters": [
+          {
+            "name": "windowId",
+            "type": "integer"
+          }
+        ]
+      },
+      {
+        "name": "onUpdaterWillRelaunchApplication",
+        "type": "function",
+        "description": "Fired just before the updater restarts the application.",
+        "parameters": [
+          {
+            "name": "windowId",
+            "type": "integer"
+          }
+        ]
+      },
+      {
+        "name": "onUpdaterDidRelaunchApplication",
+        "type": "function",
+        "description": "Fired when an application has been restarted due to an update.",
+        "parameters": [
+          {
+            "name": "windowId",
+            "type": "integer"
+          }
+        ]
+      },
+      {
+        "name": "onDidAbortWithError",
+        "type": "function",
+        "description": "Fired when an update fails.",
+        "parameters": [
+          {
+            "name": "windowId",
+            "type": "integer"
+          }
+        ]
+      }
     ]
   }
 ]

@@ -8,6 +8,7 @@
 #include "base/files/file.h"
 #include "third_party/blink/public/mojom/native_file_system/native_file_system_directory_handle.mojom-blink.h"
 #include "third_party/blink/public/mojom/native_file_system/native_file_system_error.mojom-blink.h"
+#include "third_party/blink/renderer/bindings/core/v8/active_script_wrappable.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context_lifecycle_observer.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
 #include "third_party/blink/renderer/platform/mojo/heap_mojo_receiver.h"
@@ -22,16 +23,23 @@ class ScriptState;
 
 class NativeFileSystemDirectoryIterator final
     : public ScriptWrappable,
+      public ActiveScriptWrappable<NativeFileSystemDirectoryIterator>,
       public ExecutionContextClient,
       public mojom::blink::NativeFileSystemDirectoryEntriesListener {
   DEFINE_WRAPPERTYPEINFO();
-  USING_GARBAGE_COLLECTED_MIXIN(NativeFileSystemDirectoryIterator);
 
  public:
+  // Should this iterator returns keys, values or both?
+  enum Mode { kKey, kValue, kKeyValue };
+
   NativeFileSystemDirectoryIterator(NativeFileSystemDirectoryHandle* directory,
+                                    Mode mode,
                                     ExecutionContext* execution_context);
 
   ScriptPromise next(ScriptState*);
+
+  // ScriptWrappable:
+  bool HasPendingActivity() const final;
 
   void Trace(Visitor*) const override;
 
@@ -40,6 +48,7 @@ class NativeFileSystemDirectoryIterator final
                         Vector<mojom::blink::NativeFileSystemEntryPtr> entries,
                         bool has_more_entries) override;
 
+  Mode mode_;
   mojom::blink::NativeFileSystemErrorPtr error_;
   bool waiting_for_more_entries_ = true;
   HeapDeque<Member<NativeFileSystemHandle>> entries_;

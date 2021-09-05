@@ -62,6 +62,12 @@ void ContextMenuController::Show() {
 
   InitModel();
   delegate_->OnOpened();
+  // We do not know if count is 0 until after InitModel, but let OnOpened and
+  // OnClosed be called as normal.
+  if (menu_model_->GetItemCount() == 0) {
+    MenuClosed(menu_model_);
+    return;
+  }
 
   // Mac needs the views version for certain origins as we can not place the
   // menu properly on mac/cocoa.
@@ -73,12 +79,14 @@ void ContextMenuController::Show() {
 }
 
 void ContextMenuController::InitModel() {
+  namespace context_menu = extensions::vivaldi::context_menu;
+
   menu_model_ = new ui::SimpleMenuModel(this);
   models_.push_back(base::WrapUnique(menu_model_));
 
   // Add items from JS
-  for (const MenuItem& item: params_->properties.items) {
-    PopulateModel(item, menu_model_);
+  for (const context_menu::Element& child: params_->properties.children) {
+    PopulateModel(child, menu_model_);
   }
 
   // Add developer tools items
@@ -87,53 +95,80 @@ void ContextMenuController::InitModel() {
   SanitizeModel(menu_model_);
 }
 
-void ContextMenuController::PopulateModel(const MenuItem& item,
+void ContextMenuController::PopulateModel(const Element& child,
                                           ui::SimpleMenuModel* menu_model) {
+  namespace context_menu = extensions::vivaldi::context_menu;
+  if (child.item) {
+    const Item& item = *child.item;
+    int id = item.id + IDC_EXTENSIONS_CONTEXT_CUSTOM_FIRST + 1;
+    const base::string16 label = base::UTF8ToUTF16(item.name);
 
-  int id = item.id + IDC_EXTENSIONS_CONTEXT_CUSTOM_FIRST + 1;
-  const base::string16 label = base::UTF8ToUTF16(item.name);
+    switch (item.type) {
+      case context_menu::ITEM_TYPE_COMMAND:
+        menu_model->AddItem(id, label);
+        break;
+      case context_menu::ITEM_TYPE_CHECKBOX:
+        menu_model->AddCheckItem(id, label);
+        id_to_checked_map_[id] = item.checked && *item.checked;
+        break;
+      case context_menu::ITEM_TYPE_RADIOBUTTON:
+        menu_model->AddRadioItem(id, label, *item.radiogroup.get());
+        id_to_checked_map_[id] = item.checked && *item.checked;
+        break;
+      case context_menu::ITEM_TYPE_FOLDER:
+        {
+          ui::SimpleMenuModel* child_menu_model = new ui::SimpleMenuModel(this);
+          models_.push_back(base::WrapUnique(child_menu_model));
 
-  if (item.name.find("---") == 0) {
-    menu_model->AddSeparator(ui::NORMAL_SEPARATOR);
-  } else if (item.items) {
-    ui::SimpleMenuModel* child_menu_model = new ui::SimpleMenuModel(this);
-    models_.push_back(base::WrapUnique(child_menu_model));
-
-    menu_model->AddSubMenu(id, label, child_menu_model);
-    for (const MenuItem& it: *item.items) {
-      PopulateModel(it, child_menu_model);
-    }
-    SanitizeModel(child_menu_model);
-  } else {
-    if (item.expand == extensions::vivaldi::context_menu::EXPAND_TYPE_PWA) {
-      pwa_controller_.reset(new PWAMenuController(web_contents_));
-      pwa_controller_->PopulateModel(menu_model);
-      return;
-    }
-    if (item.type.compare("checkbox") == 0) {
-      menu_model->AddCheckItem(id, label);
-      id_to_checked_map_[id] = item.checked && *item.checked;
-    } else if (item.type.compare("radiobutton") == 0) {
-      menu_model->AddRadioItem(id, label, *item.radiogroup.get());
-      id_to_checked_map_[id] = item.checked && *item.checked;
-    } else {
-      menu_model->AddItem(id, label);
-    }
-  }
-
-  if (item.icon.get() && item.icon->length() > 0) {
-    std::string png_data;
-    if (base::Base64Decode(*item.icon, &png_data)) {
-      gfx::Image img = gfx::Image::CreateFrom1xPNGBytes(
-          reinterpret_cast<const unsigned char*>(png_data.c_str()),
-          png_data.length());
-      menu_model->SetIcon(menu_model->GetIndexOfCommandId(id),
-                          ui::ImageModel::FromImage(img));
+          menu_model->AddSubMenu(id, label, child_menu_model);
+          for (const Element& it: *child.children) {
+            PopulateModel(it, child_menu_model);
+          }
+          SanitizeModel(child_menu_model);
+        }
+        break;
+      case context_menu::ITEM_TYPE_NONE:
+        return;
     }
     if (item.url.get() && item.url->length() > 0) {
+       // Set default document icon
+      SetIcon(id, params_->properties.icons.at(0), menu_model);
+      // Attempt loading a favicon that will replace the default.
       id_to_url_map_[id] = item.url.get();
       LoadFavicon(id, *item.url);
+    } else if (item.icons && item.icons->size() == 2) {
+      // Fixed for now. Using same format as main menus api.
+      bool dark_text_color = true;
+      SetIcon(id, item.icons->at(dark_text_color ? 0 : 1), menu_model);
     }
+  } else if (child.container) {
+    const Container& container = *child.container;
+    switch (container.content) {
+      case context_menu::CONTAINER_CONTENT_PWA:
+        pwa_controller_.reset(new PWAMenuController(web_contents_));
+        pwa_controller_->PopulateModel(GetContainerModel(container, menu_model));
+        break;
+      case context_menu::CONTAINER_CONTENT_NONE:
+        break;
+    }
+  } else if (child.separator) {
+    menu_model->AddSeparator(ui::NORMAL_SEPARATOR);
+  }
+}
+
+ui::SimpleMenuModel* ContextMenuController::GetContainerModel(
+    const Container& container, ui::SimpleMenuModel* menu_model) {
+  namespace context_menu = extensions::vivaldi::context_menu;
+
+  if (container.mode == context_menu::CONTAINER_MODE_FOLDER) {
+    int id = container.id + IDC_EXTENSIONS_CONTEXT_CUSTOM_FIRST + 1;
+    const base::string16 label = base::UTF8ToUTF16(container.name);
+    ui::SimpleMenuModel* child_menu_model = new ui::SimpleMenuModel(this);
+    models_.push_back(base::WrapUnique(child_menu_model));
+    menu_model->AddSubMenu(id, label, child_menu_model);
+    return child_menu_model;
+  } else {
+    return menu_model;
   }
 }
 
@@ -173,6 +208,20 @@ void ContextMenuController::SetPosition(gfx::Rect* menu_bounds,
 
   // Fallback code in chrome will ensure the menu is within the monitor area so
   // we do not test more than the last adjustment above.
+}
+
+void ContextMenuController::SetIcon(int command_id, const std::string& icon,
+                                    ui::SimpleMenuModel* menu_model) {
+  if (icon.length() > 0) {
+    std::string png_data;
+    if (base::Base64Decode(icon, &png_data)) {
+      gfx::Image img = gfx::Image::CreateFrom1xPNGBytes(
+          reinterpret_cast<const unsigned char*>(png_data.c_str()),
+          png_data.length());
+      menu_model->SetIcon(menu_model->GetIndexOfCommandId(command_id),
+                          ui::ImageModel::FromImage(img));
+    }
+  }
 }
 
 void ContextMenuController::LoadFavicon(int command_id,

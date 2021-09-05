@@ -489,8 +489,7 @@ INSTANTIATE_TEST_SUITE_P(
     All,
     ArcAuthServiceTest,
     ::testing::Values(EnabledFeatures{},
-                      EnabledFeatures{
-                          kEnableSecondaryAccountsForChildExperiment}));
+                      EnabledFeatures{kEnableSecondaryAccountsForChild}));
 
 IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest, GetPrimaryAccountForGaiaAccounts) {
   SetAccountAndProfile(user_manager::USER_TYPE_REGULAR);
@@ -837,9 +836,8 @@ IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest, AccountRemovalsArePropagated) {
   // be sent.
   EnableRemovalOfExtendedAccountInfo();
 
-  identity_manager->GetAccountsMutator()->RemoveAccount(
-      maybe_account_info.value().account_id,
-      signin_metrics::SourceForRefreshTokenOperation::kUnknown);
+  signin::RemoveRefreshTokenForAccount(identity_manager,
+                                       maybe_account_info.value().account_id);
   base::RunLoop().RunUntilIdle();
 
   EXPECT_EQ(1, auth_instance().num_account_removed_calls());

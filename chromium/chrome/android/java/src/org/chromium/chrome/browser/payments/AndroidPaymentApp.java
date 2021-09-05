@@ -17,15 +17,17 @@ import org.chromium.base.ContextUtils;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.task.PostTask;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.components.payments.ErrorStrings;
 import org.chromium.components.payments.PayerData;
 import org.chromium.components.payments.PaymentApp;
 import org.chromium.components.payments.PaymentAppType;
 import org.chromium.components.payments.PaymentDetailsUpdateServiceHelper;
+import org.chromium.components.payments.SupportedDelegations;
 import org.chromium.components.payments.intent.IsReadyToPayServiceHelper;
 import org.chromium.components.payments.intent.WebPaymentIntentHelper;
 import org.chromium.components.payments.intent.WebPaymentIntentHelperType;
+import org.chromium.components.payments.intent.WebPaymentIntentHelperTypeConverter;
 import org.chromium.components.url_formatter.SchemeDisplay;
 import org.chromium.components.url_formatter.UrlFormatter;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
@@ -65,6 +67,7 @@ public class AndroidPaymentApp
     private String mApplicationIdentifierToHide;
     private boolean mBypassIsReadyToPayServiceInTest;
     private final SupportedDelegations mSupportedDelegations;
+    private boolean mIsPreferred;
 
     // Set inside launchPaymentApp and used to validate the received response.
     @Nullable
@@ -220,6 +223,7 @@ public class AndroidPaymentApp
         mIsIncognito = isIncognito;
         mApplicationIdentifierToHide = appToHide;
         mSupportedDelegations = supportedDelegations;
+        mIsPreferred = false;
     }
 
     /**
@@ -427,6 +431,15 @@ public class AndroidPaymentApp
     @Override
     public @PaymentAppType int getPaymentAppType() {
         return PaymentAppType.NATIVE_MOBILE_APP;
+    }
+
+    @Override
+    public boolean isPreferred() {
+        return mIsPreferred;
+    }
+
+    public void setIsPreferred(boolean isPreferred) {
+        mIsPreferred = isPreferred;
     }
 
     /**

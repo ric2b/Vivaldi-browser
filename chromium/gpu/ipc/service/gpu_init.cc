@@ -35,16 +35,19 @@
 #include "ui/gl/gl_utils.h"
 #include "ui/gl/init/gl_factory.h"
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include <GLES2/gl2.h>
 #endif
 
 #if defined(USE_OZONE)
+#include "ui/base/ui_base_features.h"
 #include "ui/ozone/public/ozone_platform.h"
 #include "ui/ozone/public/surface_factory_ozone.h"
 #endif
 
 #if defined(OS_WIN)
+#include "gpu/config/gpu_driver_bug_workarounds.h"
+#include "ui/gl/direct_composition_surface_win.h"
 #include "ui/gl/gl_surface_egl.h"
 #endif
 
@@ -79,13 +82,18 @@ bool CollectGraphicsInfo(GPUInfo* gpu_info) {
   return success;
 }
 
-void InitializePlatformOverlaySettings(GPUInfo* gpu_info) {
+void InitializePlatformOverlaySettings(GPUInfo* gpu_info,
+                                       const GpuFeatureInfo& gpu_feature_info) {
 #if defined(OS_WIN)
   // This has to be called after a context is created, active GPU is identified,
   // and GPU driver bug workarounds are computed again. Otherwise the workaround
   // |disable_direct_composition| may not be correctly applied.
   // Also, this has to be called after falling back to SwiftShader decision is
   // finalized because this function depends on GL is ANGLE's GLES or not.
+  if (gpu_feature_info.IsWorkaroundEnabled(
+          gpu::ENABLE_BGRA8_OVERLAYS_WITH_YUV_OVERLAY_SUPPORT)) {
+    gl::DirectCompositionSurfaceWin::EnableBGRA8OverlaysWithYUVOverlaySupport();
+  }
   DCHECK(gpu_info);
   CollectHardwareOverlayInfo(&gpu_info->overlay_info);
 #elif defined(OS_ANDROID)
@@ -147,7 +155,7 @@ GpuInit::~GpuInit() {
 bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
                                         const GpuPreferences& gpu_preferences) {
   gpu_preferences_ = gpu_preferences;
-  // Blacklist decisions based on basic GPUInfo may not be final. It might
+  // Blocklist decisions based on basic GPUInfo may not be final. It might
   // need more context based GPUInfo. In such situations, switching to
   // SwiftShader needs to wait until creating a context.
   bool needs_more_info = true;
@@ -184,7 +192,7 @@ bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
     return false;
 #endif
   if (!PopGpuFeatureInfoCache(&gpu_feature_info_)) {
-    // Compute blacklist and driver bug workaround decisions based on basic GPU
+    // Compute blocklist and driver bug workaround decisions based on basic GPU
     // info.
     gpu_feature_info_ = ComputeGpuFeatureInfo(gpu_info_, gpu_preferences_,
                                               command_line, &needs_more_info);
@@ -230,7 +238,7 @@ bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
   delayed_watchdog_enable = true;
 #endif
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
   // PreSandbox is mainly for resource handling and not related to the GPU
   // driver, it doesn't need the GPU watchdog. The loadLibrary may take long
   // time that killing and restarting the GPU process will not help.
@@ -275,7 +283,7 @@ bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
   }
 
   bool attempted_startsandbox = false;
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
   // On Chrome OS ARM Mali, GPU driver userspace creates threads when
   // initializing a GL context, so start the sandbox early.
   // TODO(zmo): Need to collect OS version before this.
@@ -284,20 +292,25 @@ bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
         watchdog_thread_.get(), &gpu_info_, gpu_preferences_);
     attempted_startsandbox = true;
   }
-#endif  // defined(OS_LINUX)
+#endif  // defined(OS_LINUX) || defined(OS_CHROMEOS)
 
   base::TimeTicks before_initialize_one_off = base::TimeTicks::Now();
 
 #if defined(USE_OZONE)
   // Initialize Ozone GPU after the watchdog in case it hangs. The sandbox
   // may also have started at this point.
-  ui::OzonePlatform::InitParams params;
-  params.single_process = false;
-  ui::OzonePlatform::InitializeForGPU(params);
-  const std::vector<gfx::BufferFormat> supported_buffer_formats_for_texturing =
-      ui::OzonePlatform::GetInstance()
-          ->GetSurfaceFactoryOzone()
-          ->GetSupportedFormatsForTexturing();
+  std::vector<gfx::BufferFormat> supported_buffer_formats_for_texturing;
+  if (features::IsUsingOzonePlatform()) {
+    ui::OzonePlatform::InitParams params;
+    params.single_process = false;
+    ui::OzonePlatform::InitializeForGPU(params);
+    // We need to get supported formats before sandboxing to avoid an known
+    // issue which breaks the camera preview. (b/166850715)
+    supported_buffer_formats_for_texturing =
+        ui::OzonePlatform::GetInstance()
+            ->GetSurfaceFactoryOzone()
+            ->GetSupportedFormatsForTexturing();
+  }
 #endif
 
   if (!gl_use_swiftshader_) {
@@ -307,14 +320,14 @@ bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
   }
   if (gl_initialized && gl_use_swiftshader_ &&
       gl::GetGLImplementation() != gl::kGLImplementationSwiftShaderGL) {
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
     VLOG(1) << "Quit GPU process launch to fallback to SwiftShader cleanly "
             << "on Linux";
     return false;
 #else
     gl::init::ShutdownGL(true);
     gl_initialized = false;
-#endif  // OS_LINUX
+#endif  // defined(OS_LINUX) || defined(OS_CHROMEOS)
   }
 
   if (!gl_initialized) {
@@ -340,7 +353,7 @@ bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
     }
   }
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
   // The ContentSandboxHelper is currently the only one implementation of
   // GpuSandboxHelper and it has no dependency. Except on Linux where
   // VaapiWrapper checks the GL implementation to determine which display
@@ -361,20 +374,22 @@ bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
 
   // On MacOS, the default texture target for native GpuMemoryBuffers is
   // GL_TEXTURE_RECTANGLE_ARB. This is due to CGL's requirements for creating
-  // a GL surface. However, when ANGLE is used on top of SwiftShader, it's
-  // necessary to use GL_TEXTURE_2D instead.
+  // a GL surface. However, when ANGLE is used on top of SwiftShader or Metal,
+  // it's necessary to use GL_TEXTURE_2D instead.
   // TODO(crbug.com/1056312): The proper behavior is to check the config
   // parameter set by the EGL_ANGLE_iosurface_client_buffer extension
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   if (gl::GetGLImplementation() == gl::kGLImplementationEGLANGLE &&
-      gl::GetANGLEImplementation() == gl::ANGLEImplementation::kSwiftShader) {
+      (gl::GetANGLEImplementation() == gl::ANGLEImplementation::kSwiftShader ||
+       gl::GetANGLEImplementation() == gl::ANGLEImplementation::kMetal)) {
     SetMacOSSpecificTextureTarget(GL_TEXTURE_2D);
   }
-#endif  // defined(OS_MACOSX)
+#endif  // defined(OS_MAC)
 
   bool gl_disabled = gl::GetGLImplementation() == gl::kGLImplementationDisabled;
 
   // Compute passthrough decoder status before ComputeGpuFeatureInfo below.
+  // Do this after GL is initialized so extensions can be queried.
   gpu_info_.passthrough_cmd_decoder =
       gles2::UsePassthroughCommandDecoder(command_line) &&
       gles2::PassthroughCommandDecoderSupported();
@@ -392,7 +407,7 @@ bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
           command_line, gpu_feature_info_,
           gpu_preferences_.disable_software_rasterizer, false);
       if (gl_use_swiftshader_) {
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
         VLOG(1) << "Quit GPU process launch to fallback to SwiftShader cleanly "
                 << "on Linux";
         return false;
@@ -406,12 +421,12 @@ bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
               << "failed";
           return false;
         }
-#endif  // OS_LINUX
+#endif  // defined(OS_LINUX) || defined(OS_CHROMEOS)
       }
     } else {  // gl_use_swiftshader_ == true
       switch (gpu_preferences_.use_vulkan) {
         case VulkanImplementationName::kNative: {
-          // Collect GPU info, so we can use blacklist to disable vulkan if it
+          // Collect GPU info, so we can use blocklist to disable vulkan if it
           // is needed.
           GPUInfo gpu_info;
           if (!CollectGraphicsInfo(&gpu_info))
@@ -480,9 +495,9 @@ bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
     }
   }
 
-  InitializePlatformOverlaySettings(&gpu_info_);
+  InitializePlatformOverlaySettings(&gpu_info_, gpu_feature_info_);
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
   // Driver may create a compatibility profile context when collect graphics
   // information on Linux platform. Try to collect graphics information
   // based on core profile context after disabling platform extensions.
@@ -501,7 +516,7 @@ bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
       return false;
     }
   }
-#endif  // defined(OS_LINUX)
+#endif  // defined(OS_LINUX) || defined(OS_CHROMEOS)
 
   if (gl_use_swiftshader_) {
     AdjustInfoToSwiftShader();
@@ -558,16 +573,20 @@ bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
 
   init_successful_ = true;
 #if defined(USE_OZONE)
-  ui::OzonePlatform::GetInstance()->AfterSandboxEntry();
-#endif
-
-#if defined(USE_OZONE)
-  gpu_feature_info_.supported_buffer_formats_for_allocation_and_texturing =
-      std::move(supported_buffer_formats_for_texturing);
+  if (features::IsUsingOzonePlatform()) {
+    ui::OzonePlatform::GetInstance()->AfterSandboxEntry();
+    gpu_feature_info_.supported_buffer_formats_for_allocation_and_texturing =
+        std::move(supported_buffer_formats_for_texturing);
+  }
 #endif
 
   if (!watchdog_thread_)
     watchdog_init.SetGpuWatchdogPtr(nullptr);
+
+#if defined(OS_WIN)
+  if (gpu_feature_info_.IsWorkaroundEnabled(DISABLE_DECODE_SWAP_CHAIN))
+    gl::DirectCompositionSurfaceWin::DisableDecodeSwapChain();
+#endif
 
   return true;
 }
@@ -595,13 +614,11 @@ void GpuInit::InitializeInProcess(base::CommandLine* command_line,
   gpu_preferences_ = gpu_preferences;
   init_successful_ = true;
 #if defined(USE_OZONE)
-  ui::OzonePlatform::InitParams params;
-  params.single_process = true;
-  ui::OzonePlatform::InitializeForGPU(params);
-  const std::vector<gfx::BufferFormat> supported_buffer_formats_for_texturing =
-      ui::OzonePlatform::GetInstance()
-          ->GetSurfaceFactoryOzone()
-          ->GetSupportedFormatsForTexturing();
+  if (features::IsUsingOzonePlatform()) {
+    ui::OzonePlatform::InitParams params;
+    params.single_process = true;
+    ui::OzonePlatform::InitializeForGPU(params);
+  }
 #endif
   bool needs_more_info = true;
 #if !BUILDFLAG(IS_CHROMECAST)
@@ -665,9 +682,9 @@ void GpuInit::InitializeInProcess(base::CommandLine* command_line,
     }
   }
 
-  InitializePlatformOverlaySettings(&gpu_info_);
+  InitializePlatformOverlaySettings(&gpu_info_, gpu_feature_info_);
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
   // Driver may create a compatibility profile context when collect graphics
   // information on Linux platform. Try to collect graphics information
   // based on core profile context after disabling platform extensions.
@@ -687,18 +704,30 @@ void GpuInit::InitializeInProcess(base::CommandLine* command_line,
       }
     }
   }
-#endif  // defined(OS_LINUX)
+#endif  // defined(OS_LINUX) || defined(OS_CHROMEOS)
 
   if (gl_use_swiftshader_) {
     AdjustInfoToSwiftShader();
   }
 
 #if defined(USE_OZONE)
-  gpu_feature_info_.supported_buffer_formats_for_allocation_and_texturing =
-      std::move(supported_buffer_formats_for_texturing);
+  if (features::IsUsingOzonePlatform()) {
+    const std::vector<gfx::BufferFormat>
+        supported_buffer_formats_for_texturing =
+            ui::OzonePlatform::GetInstance()
+                ->GetSurfaceFactoryOzone()
+                ->GetSupportedFormatsForTexturing();
+    gpu_feature_info_.supported_buffer_formats_for_allocation_and_texturing =
+        std::move(supported_buffer_formats_for_texturing);
+  }
 #endif
 
   DisableInProcessGpuVulkan(&gpu_feature_info_, &gpu_preferences_);
+
+#if defined(OS_WIN)
+  if (gpu_feature_info_.IsWorkaroundEnabled(DISABLE_DECODE_SWAP_CHAIN))
+    gl::DirectCompositionSurfaceWin::DisableDecodeSwapChain();
+#endif
 
   UMA_HISTOGRAM_ENUMERATION("GPU.GLImplementation", gl::GetGLImplementation());
 }
@@ -710,6 +739,8 @@ void GpuInit::AdjustInfoToSwiftShader() {
   gpu_feature_info_for_hardware_gpu_ = gpu_feature_info_;
   gpu_feature_info_ = ComputeGpuFeatureInfoForSwiftShader();
   CollectContextGraphicsInfo(&gpu_info_);
+
+  DCHECK_EQ(gpu_info_.passthrough_cmd_decoder, false);
 }
 
 scoped_refptr<gl::GLSurface> GpuInit::TakeDefaultOffscreenSurface() {

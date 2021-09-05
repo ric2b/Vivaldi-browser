@@ -56,7 +56,7 @@ const base::Feature kDelayRequestsOnMultiplexedConnections{
 
 // When kRequestInitiatorSiteLock is enabled, then CORB, CORP and Sec-Fetch-Site
 // will validate network::ResourceRequest::request_initiator against
-// network::mojom::URLLoaderFactoryParams::request_initiator_site_lock.
+// network::mojom::URLLoaderFactoryParams::request_initiator_origin_lock.
 const base::Feature kRequestInitiatorSiteLock{"RequestInitiatorSiteLock",
                                               base::FEATURE_ENABLED_BY_DEFAULT};
 
@@ -84,17 +84,15 @@ const base::Feature kProactivelyThrottleLowPriorityRequests{
 
 // Enables Cross-Origin Opener Policy (COOP).
 // https://gist.github.com/annevk/6f2dd8c79c77123f39797f6bdac43f3e
-// Currently this feature is enabled for all platforms except WebView. It is not
-// possible to distinguish between Android and WebView here, so we enable the
-// feature on Android via finch.
-const base::Feature kCrossOriginOpenerPolicy {
-  "CrossOriginOpenerPolicy",
-#if defined(OS_ANDROID)
-      base::FEATURE_DISABLED_BY_DEFAULT
-#else
-      base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-};
+// Currently this feature is enabled for all platforms except WebView.
+const base::Feature kCrossOriginOpenerPolicy{"CrossOriginOpenerPolicy",
+                                             base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Enables Cross-Origin-Opener-Policy reporting API origin trial. It will be
+// used as a kill switch during the experiment.
+const base::Feature kCrossOriginOpenerPolicyReportingOriginTrial{
+    "CrossOriginOpenerPolicyReportingOriginTrial",
+    base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables Cross-Origin Opener Policy (COOP) reporting.
 // https://gist.github.com/annevk/6f2dd8c79c77123f39797f6bdac43f3e
@@ -104,8 +102,7 @@ const base::Feature kCrossOriginOpenerPolicyReporting{
 // Enables Cross-Origin Opener Policy (COOP) access reporting.
 // https://github.com/camillelamy/explainers/blob/master/coop_reporting.md#report-blocked-accesses-to-other-windows
 const base::Feature kCrossOriginOpenerPolicyAccessReporting{
-    "CrossOriginOpenerPolicyAccessReporting",
-    base::FEATURE_DISABLED_BY_DEFAULT};
+    "CrossOriginOpenerPolicyAccessReporting", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables Cross-Origin Embedder Policy (COEP).
 // https://github.com/mikewest/corpp
@@ -113,13 +110,18 @@ const base::Feature kCrossOriginOpenerPolicyAccessReporting{
 const base::Feature kCrossOriginEmbedderPolicy{
     "CrossOriginEmbedderPolicy", base::FEATURE_ENABLED_BY_DEFAULT};
 
-// When kBlockNonSecureExternalRequests is enabled, requests initiated from a
-// pubic network may only target a private network if the initiating context
-// is secure.
+// Enables the most recent developments on the crossOriginIsolated property.
+// https://developer.mozilla.org/en-US/docs/Web/API/WindowOrWorkerGlobalScope/crossOriginIsolated
+const base::Feature kCrossOriginIsolated{"CrossOriginIsolated",
+                                         base::FEATURE_DISABLED_BY_DEFAULT};
+
+// When kBlockInsecurePrivateNetworkRequests is enabled, requests initiated
+// from a less-private network may only target a more-private network if the
+// initiating context is secure.
 //
 // https://wicg.github.io/cors-rfc1918/#integration-fetch
-const base::Feature kBlockNonSecureExternalRequests{
-    "BlockNonSecureExternalRequests", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kBlockInsecurePrivateNetworkRequests{
+    "BlockInsecurePrivateNetworkRequests", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enables or defaults splittup up server (not proxy) entries in the
 // HttpAuthCache.
@@ -129,7 +131,7 @@ const base::Feature kSplitAuthCacheByNetworkIsolationKey{
 // Enable usage of hardcoded DoH upgrade mapping for use in automatic mode.
 const base::Feature kDnsOverHttpsUpgrade {
   "DnsOverHttpsUpgrade",
-#if defined(OS_CHROMEOS) || defined(OS_MACOSX) || defined(OS_ANDROID) || \
+#if defined(OS_CHROMEOS) || defined(OS_MAC) || defined(OS_ANDROID) || \
     defined(OS_WIN)
       base::FEATURE_ENABLED_BY_DEFAULT
 #else
@@ -183,7 +185,7 @@ const char kCorbAllowlistAlsoAppliesToOorCorsParamName[] =
     "AllowlistForCorbAndCors";
 
 // Controls whether a |request_initiator| that mismatches
-// |request_initiator_site_lock| leads to 1) failing the HTTP request and 2)
+// |request_initiator_origin_lock| leads to 1) failing the HTTP request and 2)
 // calling mojo::ReportBadMessage (on desktop platforms, where NetworkService
 // is hosted outside of the Browser process, this leads to DumpWithoutCrashing
 // and does *not* lead to a renderer kill).
@@ -191,11 +193,7 @@ const char kCorbAllowlistAlsoAppliesToOorCorsParamName[] =
 // See also https://crbug.com/920634
 const base::Feature kRequestInitiatorSiteLockEnfocement = {
     "RequestInitiatorSiteLockEnfocement",
-#if defined(OS_ANDROID)
     base::FEATURE_DISABLED_BY_DEFAULT};
-#else
-    base::FEATURE_ENABLED_BY_DEFAULT};
-#endif
 
 // The preflight parser should reject Access-Control-Allow-* headers which do
 // not conform to ABNF. But if the strict check is applied directly, some
@@ -256,6 +254,13 @@ bool ShouldEnableOutOfBlinkCorsForTesting() {
 
 const base::Feature kWebSocketReassembleShortMessages{
     "WebSocketReassembleShortMessages", base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Controls whether SCT audit reports are queued and the rate at which they
+// should be sampled.
+const base::Feature kSCTAuditing{"SCTAuditing",
+                                 base::FEATURE_DISABLED_BY_DEFAULT};
+constexpr base::FeatureParam<double> kSCTAuditingSamplingRate{
+    &kSCTAuditing, "sampling_rate", 0.0};
 
 }  // namespace features
 }  // namespace network

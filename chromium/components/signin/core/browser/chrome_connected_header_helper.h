@@ -40,12 +40,17 @@ class ChromeConnectedHeaderHelper : public SigninHeaderHelper {
   std::string BuildRequestHeader(bool is_header_request,
                                  const GURL& url,
                                  const std::string& gaia_id,
-                                 int profile_mode_mask);
+                                 int profile_mode_mask,
+                                 const std::string& source,
+                                 bool force_account_consistency);
 
   // SigninHeaderHelper implementation:
   bool ShouldBuildRequestHeader(
       const GURL& url,
       const content_settings::CookieSettings* cookie_settings) override;
+
+  // SigninHeaderHelper implementation:
+  bool IsUrlEligibleForRequestHeader(const GURL& url) override;
 
  private:
   // Whether mirror account consistency should be used.
@@ -56,9 +61,6 @@ class ChromeConnectedHeaderHelper : public SigninHeaderHelper {
 
   // Returns whether the URL has a Google Drive origin.
   bool IsDriveOrigin(const GURL& url);
-
-  // SigninHeaderHelper implementation:
-  bool IsUrlEligibleForRequestHeader(const GURL& url) override;
 };
 
 }  // namespace signin

@@ -17,23 +17,43 @@
 
 namespace gpu {
 
+class SharedImageBackingEglImage::TextureHolder
+    : public base::RefCounted<TextureHolder> {
+ public:
+  TextureHolder(gles2::Texture* texture) : texture_(texture) {}
+
+  void MarkContextLost() { context_lost_ = true; }
+
+  gles2::Texture* texture() { return texture_; }
+
+ private:
+  friend class base::RefCounted<TextureHolder>;
+
+  ~TextureHolder() { texture_->RemoveLightweightRef(!context_lost_); }
+
+  gles2::Texture* const texture_;
+  bool context_lost_ = false;
+};
+
 // Implementation of SharedImageRepresentationGLTexture which uses GL texture
 // which is an EGLImage sibling.
 class SharedImageRepresentationEglImageGLTexture
     : public SharedImageRepresentationGLTexture {
  public:
-  SharedImageRepresentationEglImageGLTexture(SharedImageManager* manager,
-                                             SharedImageBacking* backing,
-                                             MemoryTypeTracker* tracker,
-                                             gles2::Texture* texture)
+  using TextureHolder = SharedImageBackingEglImage::TextureHolder;
+  SharedImageRepresentationEglImageGLTexture(
+      SharedImageManager* manager,
+      SharedImageBacking* backing,
+      MemoryTypeTracker* tracker,
+      scoped_refptr<TextureHolder> texture_holder)
       : SharedImageRepresentationGLTexture(manager, backing, tracker),
-        texture_(texture) {}
+        texture_holder_(std::move(texture_holder)) {}
 
   ~SharedImageRepresentationEglImageGLTexture() override {
     EndAccess();
-
-    if (texture_)
-      texture_->RemoveLightweightRef(has_context());
+    if (!has_context())
+      texture_holder_->MarkContextLost();
+    texture_holder_.reset();
   }
 
   bool BeginAccess(GLenum mode) override {
@@ -67,7 +87,7 @@ class SharedImageRepresentationEglImageGLTexture
     mode_ = RepresentationAccessMode::kNone;
   }
 
-  gles2::Texture* GetTexture() override { return texture_; }
+  gles2::Texture* GetTexture() override { return texture_holder_->texture(); }
 
   bool SupportsMultipleConcurrentReadAccess() override { return true; }
 
@@ -76,7 +96,7 @@ class SharedImageRepresentationEglImageGLTexture
     return static_cast<SharedImageBackingEglImage*>(backing());
   }
 
-  gles2::Texture* texture_;
+  scoped_refptr<TextureHolder> texture_holder_;
   RepresentationAccessMode mode_ = RepresentationAccessMode::kNone;
   DISALLOW_COPY_AND_ASSIGN(SharedImageRepresentationEglImageGLTexture);
 };
@@ -86,6 +106,8 @@ SharedImageBackingEglImage::SharedImageBackingEglImage(
     viz::ResourceFormat format,
     const gfx::Size& size,
     const gfx::ColorSpace& color_space,
+    GrSurfaceOrigin surface_origin,
+    SkAlphaType alpha_type,
     uint32_t usage,
     size_t estimated_size,
     GLuint gl_format,
@@ -96,6 +118,8 @@ SharedImageBackingEglImage::SharedImageBackingEglImage(
                                       format,
                                       size,
                                       color_space,
+                                      surface_origin,
+                                      alpha_type,
                                       usage,
                                       estimated_size,
                                       true /*is_thread_safe*/),
@@ -103,20 +127,20 @@ SharedImageBackingEglImage::SharedImageBackingEglImage(
       gl_type_(gl_type),
       batch_access_manager_(batch_access_manager) {
   DCHECK(batch_access_manager_);
-#if DCHECK_IS_ON()
   created_on_context_ = gl::g_current_gl_context;
-#endif
   // On some GPUs (NVidia) keeping reference to egl image itself is not enough,
   // we must keep reference to at least one sibling.
   if (workarounds.dont_delete_source_texture_for_egl_image) {
-    source_texture_ = GenEGLImageSibling();
+    auto* texture = GenEGLImageSibling();
+    if (texture)
+      source_texture_holder_ = base::MakeRefCounted<TextureHolder>(texture);
   }
 }
 
 SharedImageBackingEglImage::~SharedImageBackingEglImage() {
   // Un-Register this backing from the |batch_access_manager_|.
   batch_access_manager_->UnregisterEglBacking(this);
-  DCHECK(!source_texture_);
+  DCHECK(!source_texture_holder_);
 }
 
 void SharedImageBackingEglImage::Update(
@@ -133,11 +157,24 @@ bool SharedImageBackingEglImage::ProduceLegacyMailbox(
 std::unique_ptr<SharedImageRepresentationGLTexture>
 SharedImageBackingEglImage::ProduceGLTexture(SharedImageManager* manager,
                                              MemoryTypeTracker* tracker) {
+  // On some GPUs (Mali, mostly Android 9, like J7) glTexSubImage fails on egl
+  // image sibling. So we use the original texture if we're on the same gl
+  // context. see https://crbug.com/1117370
+  // If we're on the same context we're on the same thread, so
+  // source_texture_holder_ is accessed only from thread we created it and
+  // doesn't need lock.
+  if (created_on_context_ == gl::g_current_gl_context &&
+      source_texture_holder_) {
+    return std::make_unique<SharedImageRepresentationEglImageGLTexture>(
+        manager, this, tracker, source_texture_holder_);
+  }
+
   auto* texture = GenEGLImageSibling();
   if (!texture)
     return nullptr;
+  auto texture_holder = base::MakeRefCounted<TextureHolder>(texture);
   return std::make_unique<SharedImageRepresentationEglImageGLTexture>(
-      manager, this, tracker, texture);
+      manager, this, tracker, std::move(texture_holder));
 }
 
 std::unique_ptr<SharedImageRepresentationSkia>
@@ -145,13 +182,9 @@ SharedImageBackingEglImage::ProduceSkia(
     SharedImageManager* manager,
     MemoryTypeTracker* tracker,
     scoped_refptr<SharedContextState> context_state) {
-  auto* texture = GenEGLImageSibling();
-  if (!texture)
+  auto gl_representation = ProduceGLTexture(manager, tracker);
+  if (!gl_representation)
     return nullptr;
-
-  auto gl_representation =
-      std::make_unique<SharedImageRepresentationEglImageGLTexture>(
-          manager, this, tracker, std::move(texture));
   return SharedImageRepresentationSkiaGL::Create(std::move(gl_representation),
                                                  std::move(context_state),
                                                  manager, this, tracker);
@@ -320,13 +353,11 @@ void SharedImageBackingEglImage::SetEndReadFence(
 
 void SharedImageBackingEglImage::MarkForDestruction() {
   AutoLock auto_lock(this);
-#if DCHECK_IS_ON()
   DCHECK(!have_context() || created_on_context_ == gl::g_current_gl_context);
-#endif
-  if (source_texture_) {
-    source_texture_->RemoveLightweightRef(have_context());
-    source_texture_ = nullptr;
-  }
+
+  if (!have_context())
+    source_texture_holder_->MarkContextLost();
+  source_texture_holder_.reset();
 }
 
 }  // namespace gpu

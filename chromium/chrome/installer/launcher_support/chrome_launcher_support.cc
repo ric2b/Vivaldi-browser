@@ -31,7 +31,7 @@ const wchar_t kInstallationRegKey[] = L"Software\\Chromium";
 #endif
 
 // Copied from util_constants.cc.
-const wchar_t kChromeExe[] = L"vivaldi.exe";
+const wchar_t kChromeExe[] = L"chrome.exe";
 const wchar_t kUninstallStringField[] = L"UninstallString";
 const wchar_t kVersionStringField[] = L"pv";
 

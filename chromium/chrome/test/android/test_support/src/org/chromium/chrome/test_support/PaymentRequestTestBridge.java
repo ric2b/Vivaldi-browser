@@ -7,15 +7,17 @@ package org.chromium.chrome.test_support;
 import android.os.Build;
 import android.text.TextUtils;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
-import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.payments.PaymentRequestFactory;
 import org.chromium.chrome.browser.payments.PaymentRequestImpl;
-import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.components.autofill.EditableOption;
+import org.chromium.components.payments.ComponentPaymentRequestImpl;
+import org.chromium.components.payments.ComponentPaymentRequestImpl.NativeObserverForTest;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.payments.mojom.PaymentItem;
 
@@ -36,31 +38,30 @@ public class PaymentRequestTestBridge {
         private final boolean mIsValidSsl;
         private final boolean mIsWebContentsActive;
         private final boolean mPrefsCanMakePayment;
-        private final boolean mSkipUiForBasicCard;
+        private final String mTwaPackageName;
 
         PaymentRequestDelegateForTest(boolean isOffTheRecord, boolean isValidSsl,
-                boolean isWebContentsActive, boolean prefsCanMakePayment,
-                boolean skipUiForBasicCard) {
+                boolean isWebContentsActive, boolean prefsCanMakePayment, String twaPackageName) {
             mIsOffTheRecord = isOffTheRecord;
             mIsValidSsl = isValidSsl;
             mIsWebContentsActive = isWebContentsActive;
             mPrefsCanMakePayment = prefsCanMakePayment;
-            mSkipUiForBasicCard = skipUiForBasicCard;
+            mTwaPackageName = twaPackageName;
         }
 
         @Override
-        public boolean isOffTheRecord(@Nullable ChromeActivity activity) {
+        public boolean isOffTheRecord(WebContents webContents) {
             return mIsOffTheRecord;
         }
 
         @Override
-        public String getInvalidSslCertificateErrorMessage(WebContents webContents) {
+        public String getInvalidSslCertificateErrorMessage() {
             if (mIsValidSsl) return null;
             return "Invalid SSL certificate";
         }
 
         @Override
-        public boolean isWebContentsActive(TabModel model, WebContents webContents) {
+        public boolean isWebContentsActive(@NonNull ChromeActivity activity) {
             return mIsWebContentsActive;
         }
 
@@ -73,6 +74,12 @@ public class PaymentRequestTestBridge {
         public boolean skipUiForBasicCard() {
             return false;
         }
+
+        @Override
+        @Nullable
+        public String getTwaPackageName(@Nullable ChromeActivity activity) {
+            return mTwaPackageName;
+        }
     }
 
     /**
@@ -81,12 +88,12 @@ public class PaymentRequestTestBridge {
      * methods are called.
      */
     private static class PaymentRequestNativeObserverBridgeToNativeForTest
-            implements PaymentRequestImpl.NativeObserverForTest {
+            implements NativeObserverForTest {
         private final long mOnCanMakePaymentCalledPtr;
         private final long mOnCanMakePaymentReturnedPtr;
         private final long mOnHasEnrolledInstrumentCalledPtr;
         private final long mOnHasEnrolledInstrumentReturnedPtr;
-        private final long mOnShowAppsReadyPtr;
+        private final long mOnAppListReadyPtr;
         private final long mSetAppDescriptionsPtr;
         private final long mOnNotSupportedErrorPtr;
         private final long mOnConnectionTerminatedPtr;
@@ -96,7 +103,7 @@ public class PaymentRequestTestBridge {
 
         PaymentRequestNativeObserverBridgeToNativeForTest(long onCanMakePaymentCalledPtr,
                 long onCanMakePaymentReturnedPtr, long onHasEnrolledInstrumentCalledPtr,
-                long onHasEnrolledInstrumentReturnedPtr, long onShowAppsReadyPtr,
+                long onHasEnrolledInstrumentReturnedPtr, long onAppListReadyPtr,
                 long setAppDescriptionPtr, long onNotSupportedErrorPtr,
                 long onConnectionTerminatedPtr, long onAbortCalledPtr, long onCompleteCalledPtr,
                 long onMinimalUIReadyPtr) {
@@ -104,7 +111,7 @@ public class PaymentRequestTestBridge {
             mOnCanMakePaymentReturnedPtr = onCanMakePaymentReturnedPtr;
             mOnHasEnrolledInstrumentCalledPtr = onHasEnrolledInstrumentCalledPtr;
             mOnHasEnrolledInstrumentReturnedPtr = onHasEnrolledInstrumentReturnedPtr;
-            mOnShowAppsReadyPtr = onShowAppsReadyPtr;
+            mOnAppListReadyPtr = onAppListReadyPtr;
             mSetAppDescriptionsPtr = setAppDescriptionPtr;
             mOnNotSupportedErrorPtr = onNotSupportedErrorPtr;
             mOnConnectionTerminatedPtr = onConnectionTerminatedPtr;
@@ -131,11 +138,11 @@ public class PaymentRequestTestBridge {
         }
 
         @Override
-        public void onShowAppsReady(@Nullable List<EditableOption> apps, PaymentItem total) {
+        public void onAppListReady(@Nullable List<EditableOption> apps, PaymentItem total) {
             if (apps == null) {
                 nativeSetAppDescriptions(
                         mSetAppDescriptionsPtr, new String[0], new String[0], new String[0]);
-                nativeResolvePaymentRequestObserverCallback(mOnShowAppsReadyPtr);
+                nativeResolvePaymentRequestObserverCallback(mOnAppListReadyPtr);
                 return;
             }
 
@@ -155,7 +162,7 @@ public class PaymentRequestTestBridge {
             }
 
             nativeSetAppDescriptions(mSetAppDescriptionsPtr, appLabels, appSublabels, appTotals);
-            nativeResolvePaymentRequestObserverCallback(mOnShowAppsReadyPtr);
+            nativeResolvePaymentRequestObserverCallback(mOnAppListReadyPtr);
         }
 
         private static String ensureNotNull(@Nullable String value) {
@@ -189,11 +196,11 @@ public class PaymentRequestTestBridge {
     @CalledByNative
     private static void setUseDelegateForTest(boolean useDelegate, boolean isOffTheRecord,
             boolean isValidSsl, boolean isWebContentsActive, boolean prefsCanMakePayment,
-            boolean skipUiForBasicCard) {
+            boolean skipUiForBasicCard, String twaPackageName) {
         if (useDelegate) {
             PaymentRequestFactory.sDelegateForTest =
                     new PaymentRequestDelegateForTest(isOffTheRecord, isValidSsl,
-                            isWebContentsActive, prefsCanMakePayment, skipUiForBasicCard);
+                            isWebContentsActive, prefsCanMakePayment, twaPackageName);
         } else {
             PaymentRequestFactory.sDelegateForTest = null;
         }
@@ -202,15 +209,15 @@ public class PaymentRequestTestBridge {
     @CalledByNative
     private static void setUseNativeObserverForTest(long onCanMakePaymentCalledPtr,
             long onCanMakePaymentReturnedPtr, long onHasEnrolledInstrumentCalledPtr,
-            long onHasEnrolledInstrumentReturnedPtr, long onShowAppsReadyPtr,
+            long onHasEnrolledInstrumentReturnedPtr, long onAppListReadyPtr,
             long setAppDescriptionPtr, long onNotSupportedErrorPtr, long onConnectionTerminatedPtr,
             long onAbortCalledPtr, long onCompleteCalledPtr, long onMinimalUIReadyPtr) {
-        PaymentRequestFactory.sNativeObserverForTest =
+        ComponentPaymentRequestImpl.setNativeObserverForTest(
                 new PaymentRequestNativeObserverBridgeToNativeForTest(onCanMakePaymentCalledPtr,
                         onCanMakePaymentReturnedPtr, onHasEnrolledInstrumentCalledPtr,
-                        onHasEnrolledInstrumentReturnedPtr, onShowAppsReadyPtr,
-                        setAppDescriptionPtr, onNotSupportedErrorPtr, onConnectionTerminatedPtr,
-                        onAbortCalledPtr, onCompleteCalledPtr, onMinimalUIReadyPtr);
+                        onHasEnrolledInstrumentReturnedPtr, onAppListReadyPtr, setAppDescriptionPtr,
+                        onNotSupportedErrorPtr, onConnectionTerminatedPtr, onAbortCalledPtr,
+                        onCompleteCalledPtr, onMinimalUIReadyPtr));
     }
 
     @CalledByNative

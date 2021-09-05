@@ -15,6 +15,7 @@
 #include "media/gpu/vaapi/vaapi_wrapper.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/base/ui_base_features.h"
 
 using base::test::RunClosure;
 using ::testing::_;
@@ -104,7 +105,7 @@ class MockVaapiPicture : public VaapiPicture {
   ~MockVaapiPicture() override = default;
 
   // VaapiPicture implementation.
-  bool Allocate(gfx::BufferFormat format) override { return true; }
+  Status Allocate(gfx::BufferFormat format) override { return OkStatus(); }
   bool ImportGpuMemoryBufferHandle(
       gfx::BufferFormat format,
       gfx::GpuMemoryBufferHandle gpu_memory_buffer_handle) override {
@@ -405,9 +406,11 @@ TEST_P(VaapiVideoDecodeAcceleratorTest, SupportedPlatforms) {
                 gl::kGLImplementationEGLGLES2));
 
 #if defined(USE_X11)
-  EXPECT_EQ(VaapiPictureFactory::kVaapiImplementationX11,
-            mock_vaapi_picture_factory_->GetVaapiImplementation(
-                gl::kGLImplementationDesktopGL));
+  if (!features::IsUsingOzonePlatform()) {
+    EXPECT_EQ(VaapiPictureFactory::kVaapiImplementationX11,
+              mock_vaapi_picture_factory_->GetVaapiImplementation(
+                  gl::kGLImplementationDesktopGL));
+  }
 #endif
 }
 

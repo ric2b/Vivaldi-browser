@@ -34,6 +34,7 @@
 #include "components/omnibox/browser/zero_suggest_provider.h"
 #include "components/open_from_clipboard/fake_clipboard_recent_content.h"
 #include "components/prefs/testing_pref_service.h"
+#include "components/search_engines/omnibox_focus_type.h"
 #include "components/search_engines/search_engines_switches.h"
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_service.h"
@@ -52,6 +53,8 @@ const char kTestTemplateURLKeyword[] = "t";
 class TestingSchemeClassifier : public AutocompleteSchemeClassifier {
  public:
   TestingSchemeClassifier() {}
+  TestingSchemeClassifier(const TestingSchemeClassifier&) = delete;
+  TestingSchemeClassifier& operator=(const TestingSchemeClassifier&) = delete;
 
   metrics::OmniboxInputType GetInputTypeForScheme(
       const std::string& scheme) const override {
@@ -60,9 +63,6 @@ class TestingSchemeClassifier : public AutocompleteSchemeClassifier {
                ? metrics::OmniboxInputType::URL
                : metrics::OmniboxInputType::EMPTY;
   }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(TestingSchemeClassifier);
 };
 
 // AutocompleteProviderClient implementation that calls the specified closure
@@ -71,6 +71,10 @@ class AutocompleteProviderClientWithClosure
     : public MockAutocompleteProviderClient {
  public:
   AutocompleteProviderClientWithClosure() = default;
+  AutocompleteProviderClientWithClosure(
+      const AutocompleteProviderClientWithClosure&) = delete;
+  AutocompleteProviderClientWithClosure& operator=(
+      const AutocompleteProviderClientWithClosure&) = delete;
 
   void set_closure(const base::RepeatingClosure& closure) {
     closure_ = closure;
@@ -86,8 +90,6 @@ class AutocompleteProviderClientWithClosure
   }
 
   base::RepeatingClosure closure_;
-
-  DISALLOW_COPY_AND_ASSIGN(AutocompleteProviderClientWithClosure);
 };
 
 }  // namespace
@@ -106,6 +108,8 @@ class TestProvider : public AutocompleteProvider {
         prefix_(prefix),
         match_keyword_(match_keyword),
         client_(client) {}
+  TestProvider(const TestProvider&) = delete;
+  TestProvider& operator=(const TestProvider&) = delete;
 
   void Start(const AutocompleteInput& input, bool minimal_changes) override;
 
@@ -130,8 +134,6 @@ class TestProvider : public AutocompleteProvider {
   const base::string16 prefix_;
   const base::string16 match_keyword_;
   AutocompleteProviderClient* client_;
-
-  DISALLOW_COPY_AND_ASSIGN(TestProvider);
 };
 
 void TestProvider::Start(const AutocompleteInput& input, bool minimal_changes) {
@@ -140,7 +142,7 @@ void TestProvider::Start(const AutocompleteInput& input, bool minimal_changes) {
 
   matches_.clear();
 
-  if (input.from_omnibox_focus())
+  if (input.focus_type() != OmniboxFocusType::DEFAULT)
     return;
 
   // Generate 4 results synchronously, the rest later.
@@ -238,6 +240,8 @@ class AutocompleteProviderTest : public testing::Test {
  public:
   AutocompleteProviderTest();
   ~AutocompleteProviderTest() override;
+  AutocompleteProviderTest(const AutocompleteProviderTest&) = delete;
+  AutocompleteProviderTest& operator=(const AutocompleteProviderTest&) = delete;
 
  protected:
   struct KeywordTestData {
@@ -254,7 +258,7 @@ class AutocompleteProviderTest : public testing::Test {
   struct AssistedQueryStatsTestData {
     const AutocompleteMatch::Type match_type;
     const std::string expected_aqs;
-    int subtype_identifier = 0;
+    base::flat_set<int> subtypes;
   };
 
   // Registers a test TemplateURL under the given keyword.
@@ -347,8 +351,6 @@ class AutocompleteProviderTest : public testing::Test {
   // Used to ensure that |client_| ownership has been passed to |controller_|
   // exactly once.
   bool client_owned_;
-
-  DISALLOW_COPY_AND_ASSIGN(AutocompleteProviderTest);
 };
 
 AutocompleteProviderTest::AutocompleteProviderTest()
@@ -565,7 +567,7 @@ void AutocompleteProviderTest::RunAssistedQueryStatsTest(
     match.keyword = base::ASCIIToUTF16(kTestTemplateURLKeyword);
     match.search_terms_args.reset(
         new TemplateURLRef::SearchTermsArgs(base::string16()));
-    match.subtype_identifier = aqs_test_data[i].subtype_identifier;
+    match.subtypes = aqs_test_data[i].subtypes;
     matches.push_back(match);
   }
   result_.Reset();
@@ -876,8 +878,80 @@ TEST_F(AutocompleteProviderTest, UpdateAssistedQueryStats) {
 
   {
     AssistedQueryStatsTestData test_data[] = {
-        {AutocompleteMatchType::SEARCH_SUGGEST_ENTITY, "chrome.0.46i131", 131}};
-    SCOPED_TRACE("One match with provider populated subtype_identifier");
+        {AutocompleteMatchType::SEARCH_SUGGEST_ENTITY,
+         "chrome.0.46i131",
+         {131}}};
+    SCOPED_TRACE("One match with provider populated subtypes");
+    RunAssistedQueryStatsTest(test_data, base::size(test_data));
+  }
+
+  {
+    // This test confirms that repetitive subtype information is being
+    // properly handled and reported as the same suggestion type.
+    AssistedQueryStatsTestData test_data[] = {
+        {AutocompleteMatchType::SEARCH_SUGGEST,
+         "chrome.0.0i13i22i99j46i27i31l2j46i27i31i42j46i27i31",
+         {22, 99, 13, 99}},
+        // The next two matches should be detected as the same type, despite
+        // repeated subtype match.
+        {AutocompleteMatchType::SEARCH_SUGGEST_ENTITY,
+         "chrome.1.0i13i22i99j46i27i31l2j46i27i31i42j46i27i31",
+         {27, 31}},
+        {AutocompleteMatchType::SEARCH_SUGGEST_ENTITY,
+         "chrome.2.0i13i22i99j46i27i31l2j46i27i31i42j46i27i31",
+         {27, 31, 27}},
+        // This match should not be bundled together with previous two, because
+        // it comes with additional subtype information (42).
+        {AutocompleteMatchType::SEARCH_SUGGEST_ENTITY,
+         "chrome.3.0i13i22i99j46i27i31l2j46i27i31i42j46i27i31",
+         {27, 31, 42}},
+        // This match should not be bundled together with the group before,
+        // because these items are not adjacent.
+        {AutocompleteMatchType::SEARCH_SUGGEST_ENTITY,
+         "chrome.4.0i13i22i99j46i27i31l2j46i27i31i42j46i27i31",
+         {27, 31}},
+    };
+    SCOPED_TRACE("Complex set of matches with repetitive subtypes");
+    RunAssistedQueryStatsTest(test_data, base::size(test_data));
+  }
+
+  {
+    // This test confirms that we record the count of ZeroSuggest matches that
+    // originate from the suggest server and are annotated with appropriate
+    // metadata. The number of these matches is reported via AQS as a
+    // NUM_ZERO_PREFIX_SHOWN.
+    AssistedQueryStatsTestData test_data[] = {
+        // Only the following subtypes should be counted:
+        // - SUBTYPE_ZERO_PREFIX (362)
+        // - SUBTYPE_ZERO_PREFIX_LOCAL_HISTORY (450)
+        // - SUBTYPE_ZERO_PREFIX_LOCAL_FREQUENT_URL (451)
+        {AutocompleteMatchType::SEARCH_SUGGEST,
+         "chrome.0.0i362j0i450j5i361j5i451j5j0i19i362j0i7i13i362i450i451...5",
+         {362}},
+        {AutocompleteMatchType::SEARCH_SUGGEST,
+         "chrome.1.0i362j0i450j5i361j5i451j5j0i19i362j0i7i13i362i450i451...5",
+         {450}},
+        // Ignored because of not matching subtypes.
+        {AutocompleteMatchType::NAVSUGGEST,
+         "chrome.2.0i362j0i450j5i361j5i451j5j0i19i362j0i7i13i362i450i451...5",
+         {361}},
+        // Local most visited URL.
+        {AutocompleteMatchType::NAVSUGGEST,
+         "chrome.3.0i362j0i450j5i361j5i451j5j0i19i362j0i7i13i362i450i451...5",
+         {451}},
+        // Ignored because of no reported subtypes.
+        {AutocompleteMatchType::NAVSUGGEST,
+         "chrome.4.0i362j0i450j5i361j5i451j5j0i19i362j0i7i13i362i450i451...5",
+         {}},
+        {AutocompleteMatchType::SEARCH_SUGGEST,
+         "chrome.5.0i362j0i450j5i361j5i451j5j0i19i362j0i7i13i362i450i451...5",
+         {19, 362}},
+        // Counted once, despite reporting all  subtypes.
+        {AutocompleteMatchType::SEARCH_SUGGEST,
+         "chrome.6.0i362j0i450j5i361j5i451j5j0i19i362j0i7i13i362i450i451...5",
+         {7, 13, 362, 450, 451}},
+    };
+    SCOPED_TRACE("Num Zero Suggest Shown reports");
     RunAssistedQueryStatsTest(test_data, base::size(test_data));
   }
 

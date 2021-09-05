@@ -23,8 +23,8 @@ import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.MinAndroidSdkLevel;
 import org.chromium.base.test.util.Restriction;
-import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.tab.TabLaunchType;
@@ -122,7 +122,6 @@ public class StatusBarColorControllerTest {
     @Test
     @LargeTest
     @Feature({"StatusBar"})
-    @MinAndroidSdkLevel(Build.VERSION_CODES.LOLLIPOP)
     @Restriction({UiRestriction.RESTRICTION_TYPE_PHONE}) // Status bar is always black on tablets
     public void testColorWithStatusIndicator() {
         final ChromeActivity activity = mActivityTestRule.getActivity();
@@ -157,8 +156,7 @@ public class StatusBarColorControllerTest {
 
         // Set scrim.
         TestThreadUtils.runOnUiThreadBlocking(
-                () -> statusBarColorController.getStatusBarScrimDelegate()
-                        .setStatusBarScrimFraction(.5f));
+                () -> statusBarColorController.setStatusBarScrimFraction(.5f));
 
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
             // If we're already darkening the color for Android L, scrim shouldn't be applied.
@@ -173,7 +171,7 @@ public class StatusBarColorControllerTest {
 
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             // Remove scrim.
-            statusBarColorController.getStatusBarScrimDelegate().setStatusBarScrimFraction(.0f);
+            statusBarColorController.setStatusBarScrimFraction(.0f);
             // Set the status indicator color to the default, i.e. transparent.
             statusBarColorController.onStatusIndicatorColorChanged(Color.TRANSPARENT);
         });

@@ -157,11 +157,12 @@ void BrowserAccessibilityStateImpl::UpdateHistogramsForTesting() {
   UpdateHistogramsOnOtherThread();
 }
 
+void BrowserAccessibilityStateImpl::SetCaretBrowsingState(bool enabled) {
+  caret_browsing_enabled_ = enabled;
+}
+
 bool BrowserAccessibilityStateImpl::IsCaretBrowsingEnabled() const {
-  // TODO(crbug.com/1018947): Refine this check once UX provided to toggle caret
-  // browsing mode.
-  return base::CommandLine::ForCurrentProcess()->HasSwitch(
-      switches::kEnableCaretBrowsing);
+  return caret_browsing_enabled_;
 }
 
 void BrowserAccessibilityStateImpl::UpdateHistogramsOnUIThread() {
@@ -199,7 +200,7 @@ ui::AXMode BrowserAccessibilityStateImpl::GetAccessibilityMode() {
   return accessibility_mode_;
 }
 
-#if !defined(OS_ANDROID) && !defined(OS_WIN) && !defined(OS_MACOSX)
+#if !defined(OS_ANDROID) && !defined(OS_WIN) && !defined(OS_MAC)
 void BrowserAccessibilityStateImpl::PlatformInitialize() {}
 
 void BrowserAccessibilityStateImpl::

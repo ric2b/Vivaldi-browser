@@ -341,7 +341,7 @@ bool InstallUtil::IsStartMenuShortcutWithActivatorGuidInstalled() {
 // static
 base::string16 InstallUtil::GetToastActivatorRegistryPath() {
   return STRING16_LITERAL("Software\\Classes\\CLSID\\") +
-         base::win::String16FromGUID(install_static::GetToastActivatorClsid());
+         base::win::WStringFromGUID(install_static::GetToastActivatorClsid());
 }
 
 // static
@@ -480,11 +480,17 @@ void InstallUtil::ComposeCommandLine(const base::string16& program,
       base::CommandLine::FromString(L"\"" + program + L"\" " + arguments);
 }
 
-void InstallUtil::AppendModeSwitch(base::CommandLine* command_line) {
+void InstallUtil::AppendModeAndChannelSwitches(
+    base::CommandLine* command_line) {
   const install_static::InstallDetails& install_details =
       install_static::InstallDetails::Get();
   if (*install_details.install_switch())
     command_line->AppendSwitch(install_details.install_switch());
+  if (install_details.channel_origin() ==
+      install_static::ChannelOrigin::kPolicy) {
+    command_line->AppendSwitchNative(installer::switches::kChannel,
+                                     install_details.channel());
+  }
 }
 
 // static
@@ -508,7 +514,7 @@ base::string16 InstallUtil::GetCurrentDate() {
 bool InstallUtil::ProgramCompare::OpenForInfo(const base::FilePath& path,
                                               base::File* file) {
   DCHECK(file);
-  file->Initialize(path, base::File::FLAG_OPEN);
+  file->Initialize(path, base::File::FLAG_OPEN | base::File::FLAG_SHARE_DELETE);
   return file->IsValid();
 }
 

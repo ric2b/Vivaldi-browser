@@ -65,7 +65,8 @@ void ScrollableView::Layout() {
 std::unique_ptr<views::LabelButton> CreateAuxiliaryButton(
     views::ButtonListener* listener,
     const base::string16& label) {
-  return label.empty() ? nullptr : views::MdTextButton::Create(listener, label);
+  return label.empty() ? nullptr
+                       : std::make_unique<views::MdTextButton>(listener, label);
 }
 
 }  // namespace
@@ -81,6 +82,8 @@ MediaGalleriesDialogViews::MediaGalleriesDialogViews(
   SetAcceptCallback(base::BindOnce(
       [](MediaGalleriesDialogViews* dialog) { dialog->accepted_ = true; },
       base::Unretained(this)));
+  SetShowCloseButton(false);
+  SetTitle(controller_->GetHeader());
 
   auxiliary_button_ = SetExtraView(
       CreateAuxiliaryButton(this, controller_->GetAuxiliaryButtonText()));
@@ -225,14 +228,6 @@ bool MediaGalleriesDialogViews::AddOrUpdateGallery(
   checkbox_map_[gallery.pref_info.pref_id] = gallery_view;
 
   return true;
-}
-
-base::string16 MediaGalleriesDialogViews::GetWindowTitle() const {
-  return controller_->GetHeader();
-}
-
-bool MediaGalleriesDialogViews::ShouldShowCloseButton() const {
-  return false;
 }
 
 void MediaGalleriesDialogViews::DeleteDelegate() {

@@ -24,7 +24,6 @@
 #include "content/public/test/test_browser_context.h"
 #include "content/public/test/test_utils.h"
 #include "content/test/fake_network_url_loader_factory.h"
-#include "content/test/not_implemented_network_url_loader_factory.h"
 #include "content/test/test_render_frame_host.h"
 #include "content/test/test_render_view_host.h"
 #include "content/test/test_web_contents.h"
@@ -42,6 +41,7 @@ using blink::MessagePortChannel;
 namespace content {
 
 namespace {
+const ukm::SourceId kClientUkmSourceId = 1;
 
 void ConnectToSharedWorker(
     mojo::Remote<blink::mojom::SharedWorkerConnector> connector,
@@ -67,7 +67,7 @@ void ConnectToSharedWorker(
 
   connector->Connect(std::move(info), std::move(client_proxy),
                      blink::mojom::SharedWorkerCreationContextType::kSecure,
-                     pipe.TakePort1(), mojo::NullRemote());
+                     pipe.TakePort1(), mojo::NullRemote(), kClientUkmSourceId);
 }
 
 // Helper to delete the given WebContents and shut down its process. This is
@@ -1272,31 +1272,33 @@ class TestSharedWorkerServiceObserver : public SharedWorkerService::Observer {
   ~TestSharedWorkerServiceObserver() override = default;
 
   // SharedWorkerService::Observer:
-  void OnWorkerCreated(SharedWorkerId shared_worker_id,
+  void OnWorkerCreated(const blink::SharedWorkerToken& shared_worker_token,
                        int worker_process_id,
                        const base::UnguessableToken& dev_tools_token) override {
-    EXPECT_TRUE(shared_workers_.insert({shared_worker_id, {}}).second);
+    EXPECT_TRUE(shared_workers_.insert({shared_worker_token, {}}).second);
   }
-  void OnBeforeWorkerDestroyed(SharedWorkerId shared_worker_id) override {
-    auto it = shared_workers_.find(shared_worker_id);
+  void OnBeforeWorkerDestroyed(
+      const blink::SharedWorkerToken& shared_worker_token) override {
+    auto it = shared_workers_.find(shared_worker_token);
     EXPECT_TRUE(it != shared_workers_.end());
     EXPECT_EQ(0u, it->second.size());
     shared_workers_.erase(it);
   }
-  void OnFinalResponseURLDetermined(SharedWorkerId shared_worker_id,
-                                    const GURL& url) override {}
+  void OnFinalResponseURLDetermined(
+      const blink::SharedWorkerToken& shared_worker_token,
+      const GURL& url) override {}
   void OnClientAdded(
-      SharedWorkerId shared_worker_id,
+      const blink::SharedWorkerToken& shared_worker_token,
       GlobalFrameRoutingId client_render_frame_host_id) override {
-    auto it = shared_workers_.find(shared_worker_id);
+    auto it = shared_workers_.find(shared_worker_token);
     EXPECT_TRUE(it != shared_workers_.end());
     std::set<GlobalFrameRoutingId>& clients = it->second;
     EXPECT_TRUE(clients.insert(client_render_frame_host_id).second);
   }
   void OnClientRemoved(
-      SharedWorkerId shared_worker_id,
+      const blink::SharedWorkerToken& shared_worker_token,
       GlobalFrameRoutingId client_render_frame_host_id) override {
-    auto it = shared_workers_.find(shared_worker_id);
+    auto it = shared_workers_.find(shared_worker_token);
     EXPECT_TRUE(it != shared_workers_.end());
     std::set<GlobalFrameRoutingId>& clients = it->second;
     EXPECT_EQ(1u, clients.erase(client_render_frame_host_id));
@@ -1312,7 +1314,7 @@ class TestSharedWorkerServiceObserver : public SharedWorkerService::Observer {
   }
 
  private:
-  base::flat_map<SharedWorkerId, std::set<GlobalFrameRoutingId>>
+  base::flat_map<blink::SharedWorkerToken, std::set<GlobalFrameRoutingId>>
       shared_workers_;
 
   DISALLOW_COPY_AND_ASSIGN(TestSharedWorkerServiceObserver);

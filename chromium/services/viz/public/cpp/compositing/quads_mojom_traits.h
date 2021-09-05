@@ -198,7 +198,7 @@ struct StructTraits<viz::mojom::DebugBorderQuadStateDataView, viz::DrawQuad> {
 
 template <>
 struct StructTraits<viz::mojom::RenderPassQuadStateDataView, viz::DrawQuad> {
-  static uint64_t render_pass_id(const viz::DrawQuad& input) {
+  static viz::RenderPassId render_pass_id(const viz::DrawQuad& input) {
     const viz::RenderPassDrawQuad* quad =
         viz::RenderPassDrawQuad::MaterialCast(&input);
     DCHECK(quad->render_pass_id);
@@ -407,6 +407,12 @@ struct StructTraits<viz::mojom::TextureQuadStateDataView, viz::DrawQuad> {
     const viz::TextureDrawQuad* quad =
         viz::TextureDrawQuad::MaterialCast(&input);
     return quad->secure_output_only;
+  }
+
+  static bool is_video_frame(const viz::DrawQuad& input) {
+    const viz::TextureDrawQuad* quad =
+        viz::TextureDrawQuad::MaterialCast(&input);
+    return quad->is_video_frame;
   }
 
   static gfx::ProtectedVideoType protected_video_type(

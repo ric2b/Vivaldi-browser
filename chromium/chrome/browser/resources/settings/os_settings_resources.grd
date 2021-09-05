@@ -93,6 +93,30 @@
       <structure name="IDR_OS_SETTINGS_AMBIENT_CONSTANTS_HTML"
                  file="chromeos/ambient_mode_page/constants.html"
                  compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_AMBIENT_TOPIC_SOURCE_ITEM_JS"
+                 file="chromeos/ambient_mode_page/topic_source_item.js"
+                 compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_AMBIENT_TOPIC_SOURCE_ITEM_HTML"
+                 file="chromeos/ambient_mode_page/topic_source_item.html"
+                 compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_AMBIENT_TOPIC_SOURCE_LIST_JS"
+                 file="chromeos/ambient_mode_page/topic_source_list.js"
+                 compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_AMBIENT_TOPIC_SOURCE_LIST_HTML"
+                 file="chromeos/ambient_mode_page/topic_source_list.html"
+                 compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_AMBIENT_ALBUM_ITEM_JS"
+                 file="chromeos/ambient_mode_page/album_item.js"
+                 compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_AMBIENT_ALBUM_ITEM_HTML"
+                 file="chromeos/ambient_mode_page/album_item.html"
+                 compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_AMBIENT_ALBUM_LIST_JS"
+                 file="chromeos/ambient_mode_page/album_list.js"
+                 compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_AMBIENT_ALBUM_LIST_HTML"
+                 file="chromeos/ambient_mode_page/album_list.html"
+                 compress="false" type="chrome_html" />
       <structure name="IDR_OS_SETTINGS_APPS_PAGE_JS"
                  file="chromeos/os_apps_page/os_apps_page.js"
                  compress="false" type="chrome_html" />
@@ -276,7 +300,13 @@
       <structure name="IDR_OS_SETTINGS_MANAGE_A11Y_PAGE_HTML"
                  file="chromeos/os_a11y_page/manage_a11y_page.html"
                  compress="false" type="chrome_html" />
-      <structure name="IDS_OS_SETTINGS_SWITCH_ACCESS_SUBPAGE_JS"
+      <structure name="IDR_OS_SETTINGS_SWITCH_ACCESS_CONSTANTS_JS"
+                 file="chromeos/os_a11y_page/switch_access_constants.js"
+                 compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_SWITCH_ACCESS_CONSTANTS_HTML"
+                 file="chromeos/os_a11y_page/switch_access_constants.html"
+                 compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_SWITCH_ACCESS_SUBPAGE_JS"
                  file="chromeos/os_a11y_page/switch_access_subpage.js"
                  compress="false" type="chrome_html" />
       <structure name="IDR_OS_SETTINGS_SWITCH_ACCESS_SUBPAGE_HTML"
@@ -344,7 +374,7 @@
                  file="chromeos/os_settings_page/os_settings_page.html"
                  compress="false" type="chrome_html" />
       <structure name="IDR_OS_SETTINGS_ENSURE_LAZY_LOADED_HTML"
-                 file="ensure_lazy_loaded.html"
+                 file="chromeos/ensure_lazy_loaded.html"
                  compress="false" type="chrome_html" />
       <structure name="IDR_OS_SETTINGS_EXTENSION_CONTROL_BROWSER_PROXY_JS"
                  file="extension_control_browser_proxy.js"
@@ -364,6 +394,12 @@
                  compress="false" type="chrome_html" />
       <structure name="IDR_OS_SETTINGS_SEARCH_SETTINGS_JS"
                  file="search_settings.js"
+                 compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_SETTING_ID_PARAM_UTIL_HTML"
+                 file="setting_id_param_util.html"
+                 compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_SETTING_ID_PARAM_UTIL_JS"
+                 file="setting_id_param_util.js"
                  compress="false" type="chrome_html" />
       <structure name="IDR_OS_SETTINGS_CR_OS_SETTINGS_MAIN_HTML"
                  file="chromeos/os_settings_main/os_settings_main.html"
@@ -394,10 +430,10 @@
                  file="settings_page_css.html"
                  compress="false" type="chrome_html" />
       <structure name="IDR_OS_SETTINGS_MAIN_PAGE_BEHAVIOR_HTML"
-                 file="settings_page/main_page_behavior.html"
+                 file="chromeos/os_settings_page/main_page_behavior.html"
                  compress="false" type="chrome_html" />
       <structure name="IDR_OS_SETTINGS_MAIN_PAGE_BEHAVIOR_JS"
-                 file="settings_page/main_page_behavior.js"
+                 file="chromeos/os_settings_page/main_page_behavior.js"
                  compress="false" type="chrome_html"
                  preprocess="true" />
       <structure name="IDR_OS_SETTINGS_SETTINGS_VARS_CSS_HTML"
@@ -468,12 +504,6 @@
       <structure name="IDR_OS_SETTINGS_CONTROLS_RADIO_GROUP_JS"
                  file="controls/settings_radio_group.js"
                  compress="false" type="chrome_html" />
-      <structure name="IDR_OS_SETTINGS_CONTROLS_SETTINGS_IDLE_LOAD_HTML"
-                 file="controls/settings_idle_load.html"
-                 compress="false" type="chrome_html" />
-      <structure name="IDR_OS_SETTINGS_CONTROLS_SETTINGS_IDLE_LOAD_JS"
-                 file="controls/settings_idle_load.js"
-                 compress="false" type="chrome_html" />
       <structure name="IDR_OS_SETTINGS_CONTROLS_SLIDER_HTML"
                  file="controls/settings_slider.html"
                  compress="false" type="chrome_html" />
@@ -491,6 +521,12 @@
                  compress="false" type="chrome_html" />
       <structure name="IDR_OS_SETTINGS_CONTROLS_TOGGLE_BUTTON_JS"
                  file="controls/settings_toggle_button.js"
+                 compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_DEEP_LINKING_BEHAVIOR_HTML"
+                 file="chromeos/deep_linking_behavior.html"
+                 compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_DEEP_LINKING_BEHAVIOR_JS"
+                 file="chromeos/deep_linking_behavior.js"
                  compress="false" type="chrome_html" />
       <structure name="IDR_OS_SETTINGS_DEVICE_BROWSER_PROXY_HTML"
                  file="chromeos/device_page/device_page_browser_proxy.html"
@@ -515,12 +551,6 @@
                  compress="false" type="chrome_html" />
       <structure name="IDR_OS_SETTINGS_DEVICE_DISPLAY_OVERSCAN_DIALOG_JS"
                  file="chromeos/device_page/display_overscan_dialog.js"
-                 compress="false" type="chrome_html" />
-      <structure name="IDR_OS_SETTINGS_DEVICE_DLC_SUBPAGE_HTML"
-                 file="chromeos/device_page/dlc_subpage.html"
-                 compress="false" type="chrome_html" />
-      <structure name="IDR_OS_SETTINGS_DEVICE_DLC_SUBPAGE_JS"
-                 file="chromeos/device_page/dlc_subpage.js"
                  compress="false" type="chrome_html" />
       <structure name="IDR_OS_SETTINGS_DEVICE_KEYBOARD_HTML"
                  file="chromeos/device_page/keyboard.html"
@@ -615,6 +645,12 @@
                  file="chromeos/os_settings_icons_css.html"
                  flattenhtml="true"
                  compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_OS_SETTINGS_PAGE_SETTINGS_IDLE_LOAD_HTML"
+                 file="chromeos/os_settings_page/settings_idle_load.html"
+                 compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_OS_SETTINGS_PAGE_SETTINGS_IDLE_LOAD_JS"
+                 file="chromeos/os_settings_page/settings_idle_load.js"
+                 compress="false" type="chrome_html" />
       <structure name="IDR_OS_SETTINGS_POWERWASH_DIALOG_HTML"
                  file="chromeos/os_reset_page/os_powerwash_dialog.html"
                  compress="false" type="chrome_html" />
@@ -653,11 +689,29 @@
       <structure name="IDR_OS_SETTINGS_LANGUAGES_ADD_LANGUAGES_DIALOG_JS"
                  file="chromeos/os_languages_page/os_add_languages_dialog.js"
                  compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_LANGUAGES_METRICS_PROXY_HTML"
+                 file="chromeos/os_languages_page/languages_metrics_proxy.html"
+                 compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_LANGUAGES_METRICS_PROXY_JS"
+                 file="chromeos/os_languages_page/languages_metrics_proxy.js"
+                 compress="false" type="chrome_html" />
       <structure name="IDR_OS_SETTINGS_LANGUAGES_PAGE_HTML"
                  file="chromeos/os_languages_page/os_languages_page.html"
                  compress="false" type="chrome_html" />
       <structure name="IDR_OS_SETTINGS_LANGUAGES_PAGE_JS"
                  file="chromeos/os_languages_page/os_languages_page.js"
+                 compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_LANGUAGES_PAGE_INPUT_PAGE_HTML"
+                 file="chromeos/os_languages_page/input_page.html"
+                 compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_LANGUAGES_PAGE_INPUT_PAGE_JS"
+                 file="chromeos/os_languages_page/input_page.js"
+                 compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_LANGUAGES_PAGE_OS_LANGUAGES_PAGE_V2_HTML"
+                 file="chromeos/os_languages_page/os_languages_page_v2.html"
+                 compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_LANGUAGES_PAGE_OS_LANGUAGES_PAGE_V2_JS"
+                 file="chromeos/os_languages_page/os_languages_page_v2.js"
                  compress="false" type="chrome_html" />
       <structure name="IDR_OS_SETTINGS_LANGUAGES_SECTION_HTML"
                  file="chromeos/os_languages_page/os_languages_section.html"
@@ -910,6 +964,12 @@
                  compress="false" type="chrome_html" />
       <structure name="IDR_OS_SETTINGS_OS_ROUTE_HTML"
                  file="chromeos/os_route.html"
+                 compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_OS__SETTINGS_ROUTES_HTML"
+                 file="chromeos/os_settings_routes.html"
+                 compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_OS__SETTINGS_ROUTES_JS"
+                 file="chromeos/os_settings_routes.js"
                  compress="false" type="chrome_html" />
       <structure name="IDR_OS_SETTINGS_OS_ROUTE_JS"
                  file="chromeos/os_route.js"
@@ -1238,6 +1298,24 @@
       <structure name="IDR_OS_SETTINGS_MULTIDEVICE_TETHER_ITEM_JS"
                  file="chromeos/multidevice_page/multidevice_tether_item.js"
                  compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_NEARBY_SHARE_DEVICE_NAME_DIALOG_HTML"
+                 file="nearby_share_page/nearby_share_device_name_dialog.html"
+                 compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_NEARBY_SHARE_DEVICE_NAME_DIALOG_JS"
+                 file="nearby_share_page/nearby_share_device_name_dialog.js"
+                 compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_NEARBY_SHARE_DATA_USAGE_DIALOG_HTML"
+                 file="nearby_share_page/nearby_share_data_usage_dialog.html"
+                 compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_NEARBY_SHARE_DATA_USAGE_DIALOG_JS"
+                 file="nearby_share_page/nearby_share_data_usage_dialog.js"
+                 compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_NEARBY_SHARE_TYPES_HTML"
+                 file="nearby_share_page/types.html"
+                 compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_NEARBY_SHARE_TYPES_JS"
+                 file="nearby_share_page/types.js"
+                 compress="false" type="chrome_html" />
       <structure name="IDR_OS_SETTINGS_NEARBY_SHARE_SUBPAGE_HTML"
                  file="nearby_share_page/nearby_share_subpage.html"
                  compress="false" type="chrome_html" />
@@ -1267,6 +1345,12 @@
                  compress="false" type="chrome_html" />
       <structure name="IDR_OS_SETTINGS_TETHER_CONNECTION_DIALOG_JS"
                  file="chromeos/internet_page/tether_connection_dialog.js"
+                 compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_CELLULAR_SETUP_DIALOG_HTML"
+                 file="chromeos/internet_page/cellular_setup_dialog.html"
+                 compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_CELLULAR_SETUP_DIALOG_JS"
+                 file="chromeos/internet_page/cellular_setup_dialog.js"
                  compress="false" type="chrome_html" />
       <structure name="IDR_OS_SETTINGS_PARENTAL_CONTROLS_BROWSER_PROXY_HTML"
                  file="chromeos/parental_controls_page/parental_controls_browser_proxy.html"
@@ -1345,6 +1429,12 @@
                  file="chromeos/os_people_page/lock_state_behavior.html"
                  compress="false" type="chrome_html"
                  preprocess="true" />
+      <structure name="IDR_OS_SETTINGS_PEOPLE_PIN_AUTOSUBMIT_DIALOG_JS"
+                 file="chromeos/os_people_page/pin_autosubmit_dialog.js"
+                 compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_PEOPLE_PIN_AUTOSUBMIT_DIALOG_HTML"
+                 file="chromeos/os_people_page/pin_autosubmit_dialog.html"
+                 compress="false" type="chrome_html" />
       <structure name="IDR_OS_SETTINGS_PEOPLE_SETUP_PIN_DIALOG_JS"
                  file="chromeos/os_people_page/setup_pin_dialog.js"
                  compress="false" type="chrome_html" />

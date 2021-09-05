@@ -21,6 +21,7 @@
 <translation id="1150565364351027703">Sunglasses</translation>
 <translation id="115443833402798225">Hangul Ahnmatae</translation>
 <translation id="1155759005174418845">Catalan</translation>
+<translation id="1172970565351728681">Humigit-kumulang <ph name="REMAINING_TIME" /> ang natitira</translation>
 <translation id="1173894706177603556">Pangalanang muli</translation>
 <translation id="117624967391683467">Kinokopya ang <ph name="FILE_NAME" />...</translation>
 <translation id="1178581264944972037">I-pause</translation>
@@ -106,7 +107,6 @@
 <translation id="2085470240340828803">Umiiral na ang isang file na may pangalang "<ph name="FILENAME" />". Ano ang gusto mong gawin?</translation>
 <translation id="2121825465123208577">Baguhin ang laki</translation>
 <translation id="2136953289241069843">Transliteration (namaste → नमस्कार)</translation>
-<translation id="2138867954865495510">Hindi mabuksan ang "<ph name="PATH" />": <ph name="ERROR_MESSAGE" /></translation>
 <translation id="2163152940313951844">Invalid na character: <ph name="CHARACTER_NAME" /></translation>
 <translation id="2164862903024139959">Vietnamese keyboard (TCVN)</translation>
 <translation id="2168214441502403371">Persian keyboard</translation>
@@ -198,6 +198,7 @@
 <translation id="3236289833370040187">Ililipat ang pagmamay-ari sa <ph name="DESTINATION_DOMAIN" />.</translation>
 <translation id="3241720467332021590">Irish</translation>
 <translation id="3245321423178950146">Hindi Kilalang Artist</translation>
+<translation id="3248185426436836442">Nakabinbin</translation>
 <translation id="3252266817569339921">Pranses</translation>
 <translation id="3254434849914415189">Piliin ang default na app para sa mga <ph name="FILE_TYPE" /> na file:</translation>
 <translation id="3264582393905923483">Konteksto</translation>
@@ -208,6 +209,7 @@
 <translation id="3335337277364016868">Taon kung kailan na-record</translation>
 <translation id="3338239663705455570">Slovenian na keyboard</translation>
 <translation id="3353984535370177728">Pumili ng folder na i-a-upload</translation>
+<translation id="3356580349448036450">Kumpleto na</translation>
 <translation id="3399597614303179694">Macedonian keyboard</translation>
 <translation id="3414856743105198592">Buburahin ng pag-format sa naaalis na media ang lahat ng data. Nais mo bang magpatuloy?</translation>
 <translation id="3437801641691368414">Oras ng pagkakagawa</translation>
@@ -243,6 +245,7 @@
 <translation id="3780536599611287598">Wala kang pahintulot na maglipat ng mga file sa '<ph name="FOLDER_NAME" />'.</translation>
 <translation id="3786301125658655746">Naka-offline ka</translation>
 <translation id="3789841737615482174">Mag-install</translation>
+<translation id="3793469551756281394">Humigit-kumulang <ph name="REMAINING_TIME_HOUR" /> <ph name="REMAINING_TIME_MINUTE" /> ang natitira</translation>
 <translation id="3798449238516105146">Bersyon</translation>
 <translation id="3801082500826908679">Faroese</translation>
 <translation id="3809272675881623365">Kuneho</translation>
@@ -299,6 +302,7 @@
 <translation id="4481711095103932593">Nakabahagi ang folder na ito sa Windows</translation>
 <translation id="4487088045714738411">Belgian na keyboard</translation>
 <translation id="4522570452068850558">Mga Detalye</translation>
+<translation id="4542387084127299777">Hindi mabuksan ang "<ph name="PATH" />"</translation>
 <translation id="4552678318981539154">Bumili ng higit pang storage</translation>
 <translation id="4559767610552730302">Bokeh</translation>
 <translation id="4572815280350369984"><ph name="FILE_TYPE" /> na file</translation>
@@ -511,7 +515,8 @@
 <translation id="6629841649550503054">Naka-back up na ang lahat sa <ph name="BEGIN_LINK" />Google Drive!<ph name="END_LINK" /></translation>
 <translation id="6643016212128521049">I-clear</translation>
 <translation id="6650726141019353908">Pink na paru-paro</translation>
-<translation id="6710213216561001401">Nakaraan</translation>
+<translation id="6657585470893396449">Password</translation>
+<translation id="6710213216561001401">Nauna</translation>
 <translation id="6718273304615422081">Nagzi-zip...</translation>
 <translation id="6751256176799620176">1 folder ang napili</translation>
 <translation id="6760765581316020278">Vietnamese keyboard (VNI)</translation>
@@ -551,7 +556,6 @@
 <translation id="7012943028104619157"><ph name="ROOT_TITLE" /> (<ph name="ROOT_SUMMARY" />)</translation>
 <translation id="7014174261166285193">Nabigo ang pag-install.</translation>
 <translation id="7040138676081995583">Buksan gamit ang...</translation>
-<translation id="7059566040011178088">Wala pang <ph name="REMAINING_TIME" /></translation>
 <translation id="7100897339030255923"><ph name="COUNT" /> (na) item ang pinili</translation>
 <translation id="7106346894903675391">Bumili ng higit pang storage...</translation>
 <translation id="7126604456862387217">'&lt;b&gt;<ph name="SEARCH_STRING" />&lt;/b&gt;' - &lt;em&gt;maghanap sa Drive&lt;/em&gt;</translation>
@@ -662,7 +666,6 @@
 <translation id="8193175696669055101">Modelo ng device</translation>
 <translation id="8208580316430297579">Artwork</translation>
 <translation id="8223479393428528563">Upang i-save ang mga file na ito para sa offline na paggamit, mag-online muli, i-right click ang mga file at piliin ang opsyong <ph name="OFFLINE_CHECKBOX_NAME" />.</translation>
-<translation id="8231972167769262174">Humigit-kumulang <ph name="REMAINING_TIME" /></translation>
 <translation id="8249296373107784235">I-abort</translation>
 <translation id="8261506727792406068">I-delete</translation>
 <translation id="8269755669432358899">I-collapse ang mga panel ng feedback ng mga file</translation>
@@ -725,6 +728,7 @@
 <translation id="9065203028668620118">I-edit</translation>
 <translation id="9099674669267916096">Bilang ng page</translation>
 <translation id="9110990317705400362">Patuloy kaming naghahanap ng mga paraan upang gawing mas ligtas ang iyong pagba-browse. Noong nakaraan, maaari kang i-prompt ng anumang website na magdagdag ng extension sa iyong browser. Sa mga pinakabagong bersyon ng Google Chrome, dapat na tahasan mong sabihin sa Chrome na gusto mong i-install ang mga extension na ito sa pamamagitan ng pagdaragdag sa mga ito sa page ng Mga Extension. <ph name="BEGIN_LINK" />Matuto pa<ph name="END_LINK" /></translation>
+<translation id="9111102763498581341">I-unlock</translation>
 <translation id="912419004897138677">Codec</translation>
 <translation id="9129931661813833980">I-pin ang folder</translation>
 <translation id="9130775360844693113">Magkakaroon ng access ang mga miyembro ng '<ph name="DESTINATION_NAME" />' sa mga item na ito.</translation>

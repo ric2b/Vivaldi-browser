@@ -43,6 +43,10 @@
 #include "third_party/blink/public/common/privacy_budget/identifiability_metric_builder.h"
 #include "third_party/blink/public/common/privacy_budget/identifiability_metrics.h"
 #include "third_party/blink/public/common/privacy_budget/identifiability_study_participation.h"
+#include "third_party/blink/public/common/privacy_budget/identifiable_surface.h"
+#include "third_party/blink/public/common/thread_safe_browser_interface_broker_proxy.h"
+#include "third_party/blink/public/mojom/gpu/gpu.mojom-blink.h"
+#include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/public/resources/grit/blink_image_resources.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_controller.h"
@@ -80,7 +84,6 @@
 #include "third_party/blink/renderer/core/page/chrome_client.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
-#include "third_party/blink/renderer/core/paint/paint_timing.h"
 #include "third_party/blink/renderer/core/probe/core_probes.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/graphics/canvas_resource_dispatcher.h"
@@ -90,6 +93,7 @@
 #include "third_party/blink/renderer/platform/graphics/paint/paint_canvas.h"
 #include "third_party/blink/renderer/platform/image-encoders/image_encoder_utils.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
+#include "third_party/blink/renderer/platform/privacy_budget/identifiability_digest_helpers.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "ui/base/resource/scale_factor.h"
 #include "v8/include/v8.h"
@@ -263,6 +267,49 @@ void HTMLCanvasElement::RecordIdentifiabilityMetric(
       .Record(GetDocument().UkmRecorder());
 }
 
+void HTMLCanvasElement::IdentifiabilityReportWithDigest(
+    IdentifiableToken canvas_contents_token) const {
+  if (IsUserInIdentifiabilityStudy()) {
+    const uint64_t context_digest =
+        context_ ? context_->IdentifiableTextToken().ToUkmMetricValue() : 0;
+    const IdentifiabilityPaintOpDigest* const identifiability_paintop_digest =
+        ResourceProvider()
+            ? &(ResourceProvider()->GetIdentifiablityPaintOpDigest())
+            : nullptr;
+    const uint64_t canvas_digest =
+        identifiability_paintop_digest
+            ? identifiability_paintop_digest->GetToken().ToUkmMetricValue()
+            : 0;
+    const uint64_t context_type =
+        context_ ? context_->GetContextType()
+                 : CanvasRenderingContext::kContextTypeUnknown;
+    const bool encountered_skipped_ops =
+        (context_ && context_->IdentifiabilityEncounteredSkippedOps()) ||
+        (identifiability_paintop_digest &&
+         identifiability_paintop_digest->encountered_skipped_ops());
+    const bool encountered_sensitive_ops =
+        context_ && context_->IdentifiabilityEncounteredSensitiveOps();
+    const bool encountered_partially_digested_image =
+        identifiability_paintop_digest &&
+        identifiability_paintop_digest->encountered_partially_digested_image();
+    // Bits [0-3] are the context type, bits [4-6] are skipped ops, sensitive
+    // ops, and partial image ops bits, respectively. The remaining bits are
+    // for the canvas digest.
+    uint64_t final_digest =
+        ((context_digest ^ canvas_digest) << 7) | context_type;
+    if (encountered_skipped_ops)
+      final_digest |= IdentifiableSurface::CanvasTaintBit::kSkipped;
+    if (encountered_sensitive_ops)
+      final_digest |= IdentifiableSurface::CanvasTaintBit::kSensitive;
+    if (encountered_partially_digested_image)
+      final_digest |= IdentifiableSurface::CanvasTaintBit::kPartiallyDigested;
+    RecordIdentifiabilityMetric(
+        blink::IdentifiableSurface::FromTypeAndInput(
+            blink::IdentifiableSurface::Type::kCanvasReadback, final_digest),
+        canvas_contents_token.ToUkmMetricValue());
+  }
+}
+
 CanvasRenderingContext* HTMLCanvasElement::GetCanvasRenderingContext(
     const String& type,
     const CanvasContextCreationAttributesCore& attributes) {
@@ -413,12 +460,11 @@ bool HTMLCanvasElement::IsWebGL2Enabled() const {
 
 bool HTMLCanvasElement::IsWebGLBlocked() const {
   Document& document = GetDocument();
-  LocalFrame* frame = document.GetFrame();
-  if (!frame)
-    return false;
-
   bool blocked = false;
-  frame->GetLocalFrameHostRemote().Are3DAPIsBlocked(&blocked);
+  mojo::Remote<mojom::blink::GpuDataManager> gpu_data_manager;
+  Platform::Current()->GetBrowserInterfaceBroker()->GetInterface(
+      gpu_data_manager.BindNewPipeAndPassReceiver());
+  gpu_data_manager->Are3DAPIsBlockedForUrl(document.Url(), &blocked);
   return blocked;
 }
 
@@ -769,9 +815,6 @@ void HTMLCanvasElement::Paint(GraphicsContext& context,
   if (!context_ && !OffscreenCanvasFrame())
     return;
 
-  if (HasResourceProvider() && !canvas_is_clear_)
-    PaintTiming::From(GetDocument()).MarkFirstContentfulPaint();
-
   // If the canvas is gpu composited, it has another way of getting to screen
   if (!PaintsIntoCanvasBuffer()) {
     // For click-and-drag or printing we still want to draw
@@ -958,22 +1001,7 @@ String HTMLCanvasElement::ToDataURLInternal(
       // Currently we only support three encoding types.
       NOTREACHED();
     }
-    if (IsUserInIdentifiabilityStudy()) {
-      const uint64_t context_digest =
-          context_ ? context_->IdentifiabilityTextDigest() : 0;
-      const uint64_t canvas_digest =
-          ResourceProvider() ? ResourceProvider()->GetIdentifiabilityDigest()
-                             : 0;
-      const uint64_t context_type =
-          context_ ? context_->GetContextType()
-                   : CanvasRenderingContext::kContextTypeUnknown;
-      const uint64_t final_digest =
-          ((context_digest ^ canvas_digest) << 4) | context_type;
-      RecordIdentifiabilityMetric(
-          blink::IdentifiableSurface::FromTypeAndInput(
-              blink::IdentifiableSurface::Type::kCanvasReadback, final_digest),
-          blink::IdentifiabilityDigestOfBytes(data_url.Span8()));
-    }
+    IdentifiabilityReportWithDigest(IdentifiabilityBenignStringToken(data_url));
     return data_url;
   }
 
@@ -1044,14 +1072,8 @@ void HTMLCanvasElement::toBlob(V8BlobCallback* callback,
             {GetDocument().UkmRecorder(), GetDocument().UkmSourceID()}));
   }
 
-  if (IsUserInIdentifiabilityStudy()) {
-    RecordIdentifiabilityMetric(
-        blink::IdentifiableSurface::FromTypeAndInput(
-            blink::IdentifiableSurface::Type::kCanvasReadback,
-            context_ ? context_->GetContextType()
-                     : CanvasRenderingContext::kContextTypeUnknown),
-        0);
-  }
+  // TODO(crbug.com/973801): Report real digest for toBlob().
+  IdentifiabilityReportWithDigest(IdentifiableToken(0));
 
   if (async_creator) {
     async_creator->ScheduleAsyncBlobCreation(quality);
@@ -1165,6 +1187,9 @@ void HTMLCanvasElement::SetCanvas2DLayerBridgeInternal(
     // use accelerated-GPU rendering.
     // If any of the two conditions fails, or if the creation of accelerated
     // resource provider fails, the canvas will fallback to CPU rendering.
+    UMA_HISTOGRAM_BOOLEAN("Blink.Canvas.WillReadFrequently",
+                          context_->CreationAttributes().will_read_frequently);
+
     if (ShouldAccelerate() &&
         !context_->CreationAttributes().will_read_frequently) {
       canvas2d_bridge_ = Create2DLayerBridge(RasterMode::kGPU);

@@ -37,9 +37,11 @@
 <translation id="1842960171412779397">chagua</translation>
 <translation id="1859234291848436338">Mwelekeo wa Maandishi</translation>
 <translation id="1860796786778352021">Funga arifa</translation>
+<translation id="186476001994626254">Maudhui ya Ubandikaji Mahiri wa Wavuti</translation>
 <translation id="1871244248791675517">Ins</translation>
 <translation id="1884435127456172652"><ph name="NUMBER" /> %</translation>
 <translation id="1901303067676059328">Chagua &amp;yote</translation>
+<translation id="19085484004813472">Hiki ni kipengele kipya</translation>
 <translation id="2006524834898217237">Hakikisha kwamba kifaa hiki kimeunganishwa kwenye intaneti.</translation>
 <translation id="208586643495776849">Tafadhali jaribu tena</translation>
 <translation id="2090963878406559571">Ili utume nambari kutoka <ph name="ORIGIN" /> kwenda kwenye simu yako ya Android, <ph name="TROUBLESHOOT_LINK" /> katika vifaa vyote viwili kwenye mipangilio.</translation>
@@ -67,6 +69,7 @@
 <translation id="2570734079541893434">Dhibiti mipangilio</translation>
 <translation id="2573731672208488250">{HOURS,plural, =1{saa 1}other{saa #}}</translation>
 <translation id="2583543531130364912">Rekebisha usahihi wa skrini yako ya kugusa</translation>
+<translation id="2586657967955657006">Ubao wa kunakili</translation>
 <translation id="2666092431469916601">Ya Juu</translation>
 <translation id="2701330563083355633">Umepokea kutoka <ph name="DEVICE_NAME" /></translation>
 <translation id="271033894570825754">Mpya</translation>
@@ -74,6 +77,7 @@
 <translation id="2749082172777216925"><ph name="APP_NAME_INFO" />, <ph name="PRICE" /></translation>
 <translation id="2803313416453193357">Fungua folda</translation>
 <translation id="2824719307700604149">{YEARS,plural, =1{Mwaka 1 uliopita}other{Miaka # iliyopita}}</translation>
+<translation id="2878511608894704031">Futa Vyote</translation>
 <translation id="2907671656515444832">{DAYS,plural, =1{siku 1}other{siku #}}</translation>
 <translation id="2931838996092594335">bofya</translation>
 <translation id="2981684127883932071">Inaonyesha mapendekezo</translation>
@@ -114,6 +118,7 @@
 <translation id="4289300219472526559">Anza Kuzungumza</translation>
 <translation id="430191667033048642"><ph name="MOVED_APP_NAME" /> imehamishiwa kwenye folda ya <ph name="FOLDER_NAME" />.</translation>
 <translation id="4316910396681052118">PROGRAMU ZOTE</translation>
+<translation id="4491109536499578614">Picha</translation>
 <translation id="4588090240171750605">Sogeza Kulia</translation>
 <translation id="4631891353005174729"><ph name="APP_NAME_TYPE" />, Ukadiriaji wa nyota <ph name="RATING_SCORE" /></translation>
 <translation id="4648249871170053485"><ph name="APP_NAME" />, Pendekezo la programu</translation>
@@ -147,6 +152,7 @@
 <translation id="5768079895599174203">{DAYS,plural, =1{Siku 1 na }other{Siku # na }}</translation>
 <translation id="5789643057113097023">.</translation>
 <translation id="5866104238061687188">{YEARS,plural, =1{mwaka 1}other{miaka #}}</translation>
+<translation id="588258955323874662">Skrini nzima</translation>
 <translation id="5906667377645263094">{SECONDS,plural, =1{Imesalia sekunde 1}other{Zimesalia  sekunde #}}</translation>
 <translation id="5941711191222866238">Punguza</translation>
 <translation id="5943826764092288734">{HOURS,plural, =1{Saa 1}other{Saa #}}</translation>
@@ -170,6 +176,7 @@
 <translation id="6417265370957905582">Mratibu wa Google</translation>
 <translation id="6430678249303439055">Zuia arifa zote kutoka programu hii</translation>
 <translation id="6483402905448010557">{SECONDS,plural, =1{Sekunde 1 iliyopita}other{Sekunde # zilizopita}}</translation>
+<translation id="6503257047630241175">Maudhui ya Muundo wa Maandishi Anuai (RTF)</translation>
 <translation id="6539092367496845964">Hitilafu fulani imetokea. Jaribu tena baadaye.</translation>
 <translation id="654149438358937226">Zuia arifa zote</translation>
 <translation id="6567071839949112727">bofya kipengee</translation>
@@ -178,7 +185,7 @@
 <translation id="6620110761915583480">Hifadhi Faili</translation>
 <translation id="6656912866303152668">Hakikisha kwamba umewasha kipengele cha usawazishaji katika <ph name="TARGET_DEVICE_NAME" /> kwenye Chrome kisha ujaribu kutuma tena.</translation>
 <translation id="6699343763173986273">Wimbo Unaofuata kwenye Media</translation>
-<translation id="6710213216561001401">Iliyotangulia</translation>
+<translation id="6710213216561001401">Iliyopita</translation>
 <translation id="6779314412797872738">Ili utume nambari kutoka hapa hadi kwenye simu yako ya Android, <ph name="TROUBLESHOOT_LINK" /> kwenye vifaa vyote viwili katika mipangilio.</translation>
 <translation id="6786750046913594791">Funga Folda</translation>
 <translation id="6808150112686056157">Simamisha Media</translation>

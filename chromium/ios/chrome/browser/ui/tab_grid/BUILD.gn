@@ -6,13 +6,11 @@ import("//ios/public/provider/chrome/browser/build_config.gni")
 
 source_set("tab_grid") {
   sources = [
-    "tab_grid_adaptor.h",
-    "tab_grid_adaptor.mm",
     "tab_grid_coordinator.h",
     "tab_grid_coordinator.mm",
+    "tab_grid_coordinator_delegate.h",
     "tab_grid_mediator.h",
     "tab_grid_mediator.mm",
-    "tab_switcher.h",
   ]
 
   configs += [ "//build/config/compiler:enable_arc" ]
@@ -33,6 +31,7 @@ source_set("tab_grid") {
     "//ios/chrome/browser/snapshots",
     "//ios/chrome/browser/tabs",
     "//ios/chrome/browser/ui:feature_flags",
+    "//ios/chrome/browser/ui/activity_services",
     "//ios/chrome/browser/ui/commands",
     "//ios/chrome/browser/ui/coordinators:chrome_coordinators",
     "//ios/chrome/browser/ui/history",
@@ -40,6 +39,7 @@ source_set("tab_grid") {
     "//ios/chrome/browser/ui/main",
     "//ios/chrome/browser/ui/recent_tabs",
     "//ios/chrome/browser/ui/recent_tabs:recent_tabs_ui",
+    "//ios/chrome/browser/ui/sharing",
     "//ios/chrome/browser/ui/tab_grid/transitions",
     "//ios/chrome/browser/ui/util",
     "//ios/chrome/browser/url_loading",
@@ -67,8 +67,6 @@ source_set("tab_grid_ui_constants") {
 
 source_set("tab_grid_ui") {
   sources = [
-    "legacy_tab_grid_transition_handler.h",
-    "legacy_tab_grid_transition_handler.mm",
     "tab_grid_bottom_toolbar.h",
     "tab_grid_bottom_toolbar.mm",
     "tab_grid_empty_state_view.h",
@@ -152,33 +150,6 @@ source_set("unit_tests") {
   ]
 }
 
-source_set("eg_tests") {
-  defines = [ "CHROME_EARL_GREY_1" ]
-  configs += [
-    "//build/config/compiler:enable_arc",
-    "//build/config/ios:xctest_config",
-  ]
-  testonly = true
-  sources = [
-    "tab_grid_egtest.mm",
-    "tab_grid_transition_egtest.mm",
-  ]
-
-  deps = [
-    ":tab_grid_ui_constants",
-    "//ios/chrome/app:app_internal",
-    "//ios/chrome/app/strings:ios_strings_grit",
-    "//ios/chrome/browser/tabs:tabs",
-    "//ios/chrome/browser/ui/tab_grid:tab_grid_ui",
-    "//ios/chrome/test/app:test_support",
-    "//ios/chrome/test/earl_grey:test_support",
-    "//ios/testing/earl_grey:earl_grey_support",
-    "//ios/web/public/test/http_server",
-    "//net:test_support",
-  ]
-  libs = [ "UIKit.framework" ]
-}
-
 source_set("eg2_tests") {
   defines = [ "CHROME_EARL_GREY_2" ]
   configs += [
@@ -201,5 +172,5 @@ source_set("eg2_tests") {
     "//ios/web/public/test/http_server",
     "//net:test_support",
   ]
-  libs = [ "UIKit.framework" ]
+  frameworks = [ "UIKit.framework" ]
 }

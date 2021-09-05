@@ -12,6 +12,7 @@
 #include "third_party/blink/renderer/core/dom/flat_tree_traversal.h"
 #include "third_party/blink/renderer/core/events/mouse_event.h"
 #include "third_party/blink/renderer/core/frame/event_handler_registry.h"
+#include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/html/canvas/html_canvas_element.h"
@@ -251,19 +252,20 @@ void PointerEventManager::SendBoundaryEvents(EventTarget* exited_target,
 void PointerEventManager::SetElementUnderPointer(PointerEvent* pointer_event,
                                                  Element* target) {
   if (element_under_pointer_.Contains(pointer_event->pointerId())) {
-    EventTargetAttributes node =
+    EventTargetAttributes* node =
         element_under_pointer_.at(pointer_event->pointerId());
     if (!target) {
       element_under_pointer_.erase(pointer_event->pointerId());
-    } else if (target !=
-               element_under_pointer_.at(pointer_event->pointerId()).target) {
-      element_under_pointer_.Set(pointer_event->pointerId(),
-                                 EventTargetAttributes(target));
+    } else if (target != node->target) {
+      element_under_pointer_.Set(
+          pointer_event->pointerId(),
+          MakeGarbageCollected<EventTargetAttributes>(target));
     }
-    SendBoundaryEvents(node.target, target, pointer_event);
+    SendBoundaryEvents(node->target, target, pointer_event);
   } else if (target) {
-    element_under_pointer_.insert(pointer_event->pointerId(),
-                                  EventTargetAttributes(target));
+    element_under_pointer_.insert(
+        pointer_event->pointerId(),
+        MakeGarbageCollected<EventTargetAttributes>(target));
     SendBoundaryEvents(nullptr, target, pointer_event);
   }
 }
@@ -302,9 +304,10 @@ void PointerEventManager::HandlePointerInterruption(
   for (auto pointer_event : canceled_pointer_events) {
     // If we are sending a pointercancel we have sent the pointerevent to some
     // target before.
-    DCHECK(element_under_pointer_.Contains(pointer_event->pointerId()));
-    Element* target =
-        element_under_pointer_.at(pointer_event->pointerId()).target;
+    Element* target = nullptr;
+    if (element_under_pointer_.Contains(pointer_event->pointerId())) {
+      target = element_under_pointer_.at(pointer_event->pointerId())->target;
+    }
 
     DispatchPointerEvent(
         GetEffectiveTargetForPointerEvent(target, pointer_event->pointerId()),
@@ -330,10 +333,6 @@ void PointerEventManager::HandlePointerInterruption(
 
 bool PointerEventManager::ShouldAdjustPointerEvent(
     const WebPointerEvent& pointer_event) const {
-  if (frame_->GetSettings() &&
-      !frame_->GetSettings()->GetTouchAdjustmentEnabled())
-    return false;
-
   return pointer_event.pointer_type ==
              WebPointerProperties::PointerType::kTouch &&
          pointer_event.GetType() == WebInputEvent::Type::kPointerDown &&
@@ -633,7 +632,9 @@ WebInputEventResult PointerEventManager::HandlePointerEvent(
   // associated with so just pick the pointer event that comes.
   if (event.GetType() == WebInputEvent::Type::kPointerUp &&
       !non_hovering_pointers_canceled_ && pointer_event_target.target_frame) {
-    LocalFrame::NotifyUserActivation(pointer_event_target.target_frame);
+    LocalFrame::NotifyUserActivation(
+        pointer_event_target.target_frame,
+        mojom::blink::UserActivationNotificationType::kInteraction);
   }
 
   WebInputEventResult result = DispatchTouchPointerEvent(
@@ -1051,7 +1052,7 @@ bool PointerEventManager::IsPointerIdActiveOnFrame(PointerId pointer_id,
                                                    LocalFrame* frame) const {
   Element* last_element_receiving_event =
       element_under_pointer_.Contains(pointer_id)
-          ? element_under_pointer_.at(pointer_id).target
+          ? element_under_pointer_.at(pointer_id)->target
           : nullptr;
   return last_element_receiving_event &&
          last_element_receiving_event->GetDocument().GetFrame() == frame;
@@ -1083,7 +1084,7 @@ void PointerEventManager::SetLastPointerPositionForFrameBoundary(
   PointerId pointer_id =
       pointer_event_factory_.GetPointerEventId(web_pointer_event);
   Element* last_target = element_under_pointer_.Contains(pointer_id)
-                             ? element_under_pointer_.at(pointer_id).target
+                             ? element_under_pointer_.at(pointer_id)->target
                              : nullptr;
   if (!new_target) {
     pointer_event_factory_.RemoveLastPosition(pointer_id);

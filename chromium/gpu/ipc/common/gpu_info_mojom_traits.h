@@ -344,11 +344,11 @@ struct StructTraits<gpu::mojom::GpuInfoDataView, gpu::GPUInfo> {
     return input.can_support_threaded_texture_mailbox;
   }
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   static uint32_t macos_specific_texture_target(const gpu::GPUInfo& input) {
     return input.macos_specific_texture_target;
   }
-#endif  // OS_MACOSX
+#endif  // OS_MAC
 
 #if defined(OS_WIN)
   static const gpu::DxDiagNode& dx_diagnostics(const gpu::GPUInfo& input) {

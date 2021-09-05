@@ -62,33 +62,12 @@
     }
   }
 
-  #dialog .promo {
+  #invitationPromo {
     align-items: center;
     color: var(--cr-primary-text-color);
     display: flex;
-    padding: 16px 20px;
-  }
-
-  #cloudprintPromo .promo-text {
-    flex: 1;
-  }
-
-  #cloudprintPromo iron-icon {
-    margin-inline-end: 16px;
-    width: 20px;
-  }
-
-  #cloudPrintClose {
-    --cr-icon-button-size: 20px;
-    --cr-icon-button-icon-size: 16px;
-    margin-inline-start: 16px;
-    min-height: 14px;
-    min-width: 14px;
-    padding: 0;
-  }
-
-  #invitationPromo {
     flex-direction: column;
+    padding: 16px 20px;
     text-align: center;
   }
 
@@ -112,6 +91,24 @@
     font-size: calc(10 / 13 * 1em);
     font-weight: 500;
   }
+
+  .destinations-status {
+    align-items: center;
+    display: flex;
+    margin-bottom: 16px;
+  }
+
+  iron-icon {
+    --google-orange-600: rgb(232, 113, 10);  /* e8710a */
+    fill: var(--google-orange-600);
+    flex-shrink: 0;
+    padding-inline-end: 8px;
+    padding-inline-start: 4px;
+  }
+
+  #warning-message {
+    color: var(--cr-primary-text-color);
+  }
 </style>
 <cr-dialog id="dialog" on-close="onCloseOrCancel_">
   <div slot="title" id="header">$i18n{destinationSearchTitle}</div>
@@ -125,6 +122,13 @@
         </template>
         <option value="">$i18n{addAccountTitle}</option>
       </select>
+    </div>
+    <div class="destinations-status" hidden$="[[!showCloudPrintWarning_]]">
+      <iron-icon icon="cr:warning" aria-label="$i18n{warningIconAriaLabel}">
+      </iron-icon>
+      <span id="warning-message">
+        $i18nRaw{cloudPrintingNotSupportedWarning}
+      </span>
     </div>
     <print-preview-search-box id="searchBox"
         label="$i18n{searchBoxPlaceholder}" search-query="{{searchQuery_}}"
@@ -148,16 +152,8 @@
       $i18n{cancel}
     </cr-button>
   </div>
-  <div id="promos" slot="footer" hidden="[[!shouldShowFooter_(
-      shouldShowCloudPrintPromo_, invitation_)]]">
-    <div class="promo" id="cloudprintPromo"
-        hidden$="[[!shouldShowCloudPrintPromo_]]">
-      <iron-icon icon="print-preview:cloud-queue" alt=""></iron-icon>
-      <div class="promo-text"></div>
-      <cr-icon-button id="cloudPrintClose" class="icon-clear"
-          on-click="onCloudPrintPromoDismissed_"></cr-icon-button>
-    </div>
-    <div class="promo" id="invitationPromo" hidden="[[!invitation_]]">
+  <div id="promos" slot="footer" hidden="[[!invitation_]]">
+    <div id="invitationPromo">
       <div inner-h-t-m-l="[[getInvitationText_(invitation_)]]"></div>
       <div class="invitation-buttons">
         <cr-button on-click="onInvitationAcceptClick_">

@@ -9,11 +9,10 @@
 
 #include "media/capture/video_capturer_source.h"
 #include "third_party/blink/public/platform/modules/mediastream/web_media_stream_sink.h"
-#include "third_party/blink/public/platform/web_media_stream.h"
-#include "third_party/blink/public/platform/web_media_stream_source.h"
+#include "third_party/blink/public/platform/modules/mediastream/web_media_stream_track.h"
 #include "third_party/blink/public/web/modules/mediastream/media_stream_video_source.h"
-#include "third_party/blink/public/web/modules/mediastream/media_stream_video_track.h"
 #include "third_party/blink/renderer/modules/mediastream/media_stream_constraints_util.h"
+#include "third_party/blink/renderer/modules/mediastream/media_stream_video_track.h"
 
 namespace blink {
 
@@ -42,6 +41,14 @@ void RemoveSinkFromMediaStreamTrack(const WebMediaStreamTrack& track,
       MediaStreamVideoTrack::GetVideoTrack(track);
   if (video_track)
     video_track->RemoveSink(sink);
+}
+
+WebMediaStreamTrack CreateWebMediaStreamVideoTrack(
+    MediaStreamVideoSource* source,
+    MediaStreamVideoSource::ConstraintsOnceCallback callback,
+    bool enabled) {
+  return MediaStreamVideoTrack::CreateVideoTrack(source, std::move(callback),
+                                                 enabled);
 }
 
 }  // namespace blink

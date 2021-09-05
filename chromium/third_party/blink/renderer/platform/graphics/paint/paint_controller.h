@@ -67,6 +67,10 @@ class PLATFORM_EXPORT PaintController {
   explicit PaintController(Usage = kMultiplePaints);
   ~PaintController();
 
+#if DCHECK_IS_ON()
+  Usage GetUsage() const { return usage_; }
+#endif
+
   // For pre-PaintAfterPaint only.
   void InvalidateAll();
   bool CacheIsAllInvalid() const;
@@ -77,8 +81,8 @@ class PLATFORM_EXPORT PaintController {
   // items. If id is nullptr, the id of the first display item will be used as
   // the id of the paint chunk if needed.
   void UpdateCurrentPaintChunkProperties(const PaintChunk::Id*,
-                                         const PropertyTreeState&);
-  const PropertyTreeState& CurrentPaintChunkProperties() const {
+                                         const PropertyTreeStateOrAlias&);
+  const PropertyTreeStateOrAlias& CurrentPaintChunkProperties() const {
     return new_paint_chunks_.CurrentPaintChunkProperties();
   }
   // See PaintChunker for documentation of the following methods.
@@ -110,6 +114,14 @@ class PLATFORM_EXPORT PaintController {
     PaintChunk::Id id(client, type, current_fragment_);
     CheckDuplicatePaintChunkId(id);
     new_paint_chunks_.CreateScrollHitTestChunk(id, scroll_translation, rect);
+  }
+
+  void SetPossibleBackgroundColor(const DisplayItemClient& client,
+                                  Color color,
+                                  uint64_t area) {
+    PaintChunk::Id id = {client, DisplayItem::kBoxDecorationBackground,
+                         current_fragment_};
+    new_paint_chunks_.ProcessBackgroundColorCandidate(id, color, area);
   }
 
   template <typename DisplayItemClass, typename... Args>
@@ -179,7 +191,7 @@ class PLATFORM_EXPORT PaintController {
   // controller is transient with and this function provides a hook for clearing
   // the property tree changed state after paint.
   // TODO(pdr): Remove this when CompositeAfterPaint ships.
-  void ClearPropertyTreeChangedStateTo(const PropertyTreeState&);
+  void ClearPropertyTreeChangedStateTo(const PropertyTreeStateOrAlias&);
 
   // Returns the approximate memory usage, excluding memory likely to be
   // shared with the embedder after copying to WebPaintController.
@@ -220,7 +232,7 @@ class PLATFORM_EXPORT PaintController {
   DisplayItemList& NewDisplayItemList() { return new_display_item_list_; }
 
   void AppendDebugDrawingAfterCommit(sk_sp<const PaintRecord>,
-                                     const PropertyTreeState&);
+                                     const PropertyTreeStateOrAlias&);
 
 #if DCHECK_IS_ON()
   void ShowCompactDebugData() const;

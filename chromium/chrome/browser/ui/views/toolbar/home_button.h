@@ -17,7 +17,6 @@ class HomeButton : public ToolbarButton {
   HomeButton& operator=(const HomeButton&) = delete;
   ~HomeButton() override;
 
- private:
   // ToolbarButton:
   const char* GetClassName() const override;
   bool GetDropFormats(int* formats,
@@ -25,7 +24,9 @@ class HomeButton : public ToolbarButton {
   bool CanDrop(const OSExchangeData& data) override;
   int OnDragUpdated(const ui::DropTargetEvent& event) override;
   int OnPerformDrop(const ui::DropTargetEvent& event) override;
+  void UpdateIcon() override;
 
+ private:
   Browser* const browser_;
 };
 

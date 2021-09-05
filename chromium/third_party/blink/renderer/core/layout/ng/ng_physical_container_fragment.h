@@ -25,9 +25,10 @@ enum class NGOutlineType;
 
 class CORE_EXPORT NGPhysicalContainerFragment : public NGPhysicalFragment {
  public:
-  // Same as |base::span<const NGLink>|, except that each |NGLink| has the
-  // latest generation of post-layout. See
-  // |NGPhysicalFragment::UpdatedFragment()| for more details.
+  // Same as |base::span<const NGLink>|, except that:
+  // * Each |NGLink| has the latest generation of post-layout. See
+  //   |NGPhysicalFragment::UpdatedFragment()| for more details.
+  // * The iterator skips fragments for destroyed or moved |LayoutObject|.
   class PostLayoutChildLinkList {
    public:
     PostLayoutChildLinkList(wtf_size_t count, const NGLink* buffer)
@@ -44,13 +45,17 @@ class CORE_EXPORT NGPhysicalContainerFragment : public NGPhysicalFragment {
       using pointer = value_type*;
       using reference = value_type&;
 
-      ConstIterator(const NGLink* current) : current_(current) {}
+      ConstIterator(const NGLink* current, wtf_size_t size)
+          : current_(current), end_(current + size) {
+        SkipInvalidAndSetPostLayout();
+      }
 
-      const NGLink& operator*() const { return *PostLayoutOrCurrent(); }
-      const NGLink* operator->() const { return PostLayoutOrCurrent(); }
+      const NGLink& operator*() const { return post_layout_; }
+      const NGLink* operator->() const { return &post_layout_; }
 
       ConstIterator& operator++() {
         ++current_;
+        SkipInvalidAndSetPostLayout();
         return *this;
       }
       bool operator==(const ConstIterator& other) const {
@@ -61,28 +66,27 @@ class CORE_EXPORT NGPhysicalContainerFragment : public NGPhysicalFragment {
       }
 
      private:
-      const NGLink* PostLayoutOrCurrent() const {
-        post_layout_.fragment = current_->fragment->PostLayout();
-        if (!post_layout_.fragment)
-          return current_;
-        post_layout_.offset = current_->offset;
-        return &post_layout_;
+      void SkipInvalidAndSetPostLayout() {
+        for (; current_ != end_; ++current_) {
+          const NGPhysicalFragment* fragment = current_->fragment;
+          if (UNLIKELY(fragment->IsLayoutObjectDestroyedOrMoved()))
+            continue;
+          if (const NGPhysicalFragment* post_layout = fragment->PostLayout()) {
+            post_layout_.fragment = post_layout;
+            post_layout_.offset = current_->offset;
+            return;
+          }
+        }
       }
 
       const NGLink* current_;
-      mutable NGLink post_layout_;
+      const NGLink* end_;
+      NGLink post_layout_;
     };
     using const_iterator = ConstIterator;
 
-    const_iterator begin() const { return const_iterator(buffer_); }
-    const_iterator end() const { return const_iterator(buffer_ + count_); }
-
-    const NGLink operator[](wtf_size_t idx) const {
-      CHECK_LT(idx, count_);
-      return buffer_[idx].PostLayout();
-    }
-    const NGLink front() const { return (*this)[0]; }
-    const NGLink back() const { return (*this)[count_ - 1]; }
+    const_iterator begin() const { return const_iterator(buffer_, count_); }
+    const_iterator end() const { return const_iterator(buffer_ + count_, 0); }
 
     wtf_size_t size() const { return count_; }
     bool empty() const { return count_ == 0; }
@@ -123,15 +127,6 @@ class CORE_EXPORT NGPhysicalContainerFragment : public NGPhysicalFragment {
     return has_adjoining_object_descendants_;
   }
 
-  // TODO(ikilpatrick): Remove this flag as its not used anymore.
-  bool HasOrthogonalFlowRoots() const { return has_orthogonal_flow_roots_; }
-
-  // Returns true if we have a descendant within this formatting context, which
-  // is potentially above our block-start edge.
-  bool MayHaveDescendantAboveBlockStart() const {
-    return may_have_descendant_above_block_start_;
-  }
-
   // Returns true if we aren't able to re-use this fragment if the
   // |NGConstraintSpace::PercentageResolutionBlockSize| changes.
   bool DependsOnPercentageBlockSize() const {
@@ -166,6 +161,7 @@ class CORE_EXPORT NGPhysicalContainerFragment : public NGPhysicalFragment {
       const NGFragmentItem& line,
       bool has_hanging,
       const NGInlineCursor& cursor,
+      TextHeightType height_type,
       PhysicalRect* overflow) const;
 
   static void AdjustScrollableOverflowForHanging(

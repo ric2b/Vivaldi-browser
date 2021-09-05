@@ -442,8 +442,8 @@ class Git(object):
       url = url.replace('https://aomedia.googlesource.com',
                          self.base_url+"/aomedia",1)
     elif re.search(r'^https://\w+.googlesource.com/', url):
-      url = re.sub('^https://\w+.googlesource.com',
-                         self.base_url+"/googlesource",1)
+      url = re.sub(r'^https://(\w+).googlesource.com',
+                         self.base_url+r"/\1", url, 1)
 
     if not url.startswith(self.base_url):
       raise BaseException(
@@ -580,6 +580,9 @@ class Git(object):
     if not os.access(os.path.join(self.root, ".gitmodules"), os.F_OK):
       return {}
 
+    if mod and not isinstance(mod, (list, tuple)):
+      mod = [mod]
+
     content = self.GitCommand("submodule", ["status", "--"] + (mod or []))
     def gitid(x):
       if x and x[0] in "+-":
@@ -594,7 +597,7 @@ class Git(object):
     if recursive:
       for mod in list(modules.keys()):
         subgit = Git(inherit=self, submodule=mod)
-        submod = subgit.GetSubmoduleInfo(True)
+        submod = subgit.GetSubmoduleInfo(recursive=True)
         for k, d in submod.items():
           parent = d.get("submodule_of", None)
           d["submodule_of"]= (mod + "/" + parent) if parent else mod

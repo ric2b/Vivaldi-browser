@@ -20,14 +20,14 @@ import androidx.annotation.Nullable;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.thinwebview.ThinWebView;
-import org.chromium.chrome.browser.thinwebview.ThinWebViewConstraints;
-import org.chromium.chrome.browser.thinwebview.ThinWebViewFactory;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetContent;
 import org.chromium.components.browser_ui.widget.FadingShadow;
 import org.chromium.components.browser_ui.widget.FadingShadowView;
 import org.chromium.components.embedder_support.delegate.WebContentsDelegateAndroid;
 import org.chromium.components.embedder_support.view.ContentView;
+import org.chromium.components.thinwebview.ThinWebView;
+import org.chromium.components.thinwebview.ThinWebViewConstraints;
+import org.chromium.components.thinwebview.ThinWebViewFactory;
 import org.chromium.components.url_formatter.SchemeDisplay;
 import org.chromium.components.url_formatter.UrlFormatter;
 import org.chromium.content_public.browser.RenderCoordinates;
@@ -157,8 +157,8 @@ public class EphemeralTabSheetContent implements BottomSheetContent {
         // TODO(shaktisahu): Find out if there is a better way for this animation.
         Drawable presentedDrawable = favicon;
         if (mCurrentFavicon != null && !(mCurrentFavicon instanceof TransitionDrawable)) {
-            TransitionDrawable transitionDrawable = ApiCompatibilityUtils.createTransitionDrawable(
-                    new Drawable[] {mCurrentFavicon, favicon});
+            TransitionDrawable transitionDrawable =
+                    new TransitionDrawable(new Drawable[] {mCurrentFavicon, favicon});
             transitionDrawable.setCrossFadeEnabled(true);
             transitionDrawable.startTransition(BASE_ANIMATION_DURATION_MS);
             presentedDrawable = transitionDrawable;

@@ -3,6 +3,12 @@
 #ifndef EXTENSIONS_API_GUEST_VIEW_VIVALDI_WEB_VIEW_CONSTANTS_H_
 #define EXTENSIONS_API_GUEST_VIEW_VIVALDI_WEB_VIEW_CONSTANTS_H_
 
+//std::string
+#include <string>
+
+//WindowOpenDisposition
+#include "ui/base/window_open_disposition.h"
+
 namespace webview {
 
 extern const char kEventSSLStateChanged[];
@@ -15,7 +21,7 @@ extern const char kEventOnFullscreen[];
 extern const char kEventContentAllowed[];
 extern const char kEventContentBlocked[];
 extern const char kEventWebContentsCreated[];
-
+extern const char kEventWindowBlocked[];
 extern const char kNewSearchName[];
 extern const char kNewSearchUrl[];
 extern const char kClipBoardText[];

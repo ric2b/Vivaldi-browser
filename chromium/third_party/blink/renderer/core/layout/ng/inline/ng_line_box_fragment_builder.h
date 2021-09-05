@@ -8,13 +8,13 @@
 #include "third_party/blink/renderer/core/layout/geometry/logical_rect.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_break_token.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_node.h"
-#include "third_party/blink/renderer/core/layout/ng/inline/ng_line_height_metrics.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_physical_line_box_fragment.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_physical_text_fragment.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_container_fragment_builder.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_layout_result.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_physical_container_fragment.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_positioned_float.h"
+#include "third_party/blink/renderer/platform/fonts/font_height.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
 
 namespace blink {
@@ -40,6 +40,8 @@ class CORE_EXPORT NGLineBoxFragmentBuilder final
             {writing_direction.GetWritingMode(), TextDirection::kLtr}),
         line_box_type_(NGPhysicalLineBoxFragment::kNormalLineBox),
         base_direction_(TextDirection::kLtr) {}
+  NGLineBoxFragmentBuilder(const NGLineBoxFragmentBuilder&) = delete;
+  NGLineBoxFragmentBuilder& operator=(const NGLineBoxFragmentBuilder&) = delete;
 
   void Reset();
 
@@ -58,8 +60,8 @@ class CORE_EXPORT NGLineBoxFragmentBuilder final
   // Mark this line box is an "empty" line box. See NGLineBoxType.
   void SetIsEmptyLineBox();
 
-  const NGLineHeightMetrics& Metrics() const { return metrics_; }
-  void SetMetrics(const NGLineHeightMetrics& metrics) { metrics_ = metrics; }
+  const FontHeight& Metrics() const { return metrics_; }
+  void SetMetrics(const FontHeight& metrics) { metrics_ = metrics; }
 
   void SetBaseDirection(TextDirection direction) {
     base_direction_ = direction;
@@ -70,6 +72,13 @@ class CORE_EXPORT NGLineBoxFragmentBuilder final
   void SetBreakToken(scoped_refptr<NGInlineBreakToken> break_token) {
     break_token_ = std::move(break_token);
   }
+
+  void AddChild(scoped_refptr<const NGPhysicalTextFragment> child,
+                const LogicalOffset& offset) {
+    AddChildInternal(child, offset);
+  }
+
+  void AddChild(const NGPhysicalContainerFragment&, const LogicalOffset&);
 
   // Add all items in ChildList. Skips null Child if any.
   void AddChildren(NGLogicalLineItems&);
@@ -83,15 +92,13 @@ class CORE_EXPORT NGLineBoxFragmentBuilder final
   scoped_refptr<const NGLayoutResult> ToLineBoxFragment();
 
  private:
-  NGLineHeightMetrics metrics_;
+  FontHeight metrics_ = FontHeight::Empty();
   LayoutUnit hang_inline_size_;
   NGPhysicalLineBoxFragment::NGLineBoxType line_box_type_;
   TextDirection base_direction_;
 
   friend class NGLayoutResult;
   friend class NGPhysicalLineBoxFragment;
-
-  DISALLOW_COPY_AND_ASSIGN(NGLineBoxFragmentBuilder);
 };
 
 }  // namespace blink

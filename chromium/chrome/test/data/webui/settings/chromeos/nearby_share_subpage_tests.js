@@ -25,6 +25,12 @@ suite('NearbyShare', function() {
       'nearby_sharing': {
         'enabled': {
           value: true,
+        },
+        'data_usage': {
+          value: 3,
+        },
+        'device_name': {
+          value: '',
         }
       }
     };
@@ -63,5 +69,32 @@ suite('NearbyShare', function() {
     assertEquals(false, featureToggleButton.checked);
     assertEquals(false, subpage.prefs.nearby_sharing.enabled.value);
     assertEquals('Off', onOffText.textContent.trim());
+  });
+
+  test('update device name preference', function() {
+    assertEquals('', subpage.prefs.nearby_sharing.device_name.value);
+
+    subpage.$$('#editDeviceNameButton').click();
+    Polymer.dom.flush();
+
+    const dialog = subpage.$$('nearby-share-device-name-dialog');
+    const newName = 'NEW NAME';
+    dialog.$$('cr-input').value = newName;
+    dialog.$$('.action-button').click();
+
+    assertEquals(newName, subpage.prefs.nearby_sharing.device_name.value);
+  });
+
+  test('update data usage preference', function() {
+    assertEquals(3, subpage.prefs.nearby_sharing.data_usage.value);
+
+    subpage.$$('#editDataUsageButton').click();
+    Polymer.dom.flush();
+
+    const dialog = subpage.$$('nearby-share-data-usage-dialog');
+    dialog.$$('#dataUsageDataButton').click();
+    dialog.$$('.action-button').click();
+
+    assertEquals(2, subpage.prefs.nearby_sharing.data_usage.value);
   });
 });

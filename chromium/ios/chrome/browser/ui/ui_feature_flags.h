@@ -29,10 +29,6 @@ extern const base::Feature kVoiceOverUnstackedTabstrip;
 // Feature flag to always force an unstacked tabstrip.
 extern const base::Feature kForceUnstackedTabstrip;
 
-// Feature flag to have the Browser contained by the TabGrid instead of being
-// presented.
-extern const base::Feature kContainedBVC;
-
 // Test-only: Feature flag used to verify that EG2 can trigger flags. Must be
 // always disabled by default, because it is used to verify that enabling
 // features in tests works.
@@ -40,9 +36,6 @@ extern const base::Feature kTestFeature;
 
 // Verify if the crash in https://crbug.com/816427 is fixed on iOS 12.
 extern const base::Feature kFirstResponderSendAction;
-
-// Feature flag to enable QR code generation for a URL.
-extern const base::Feature kQRCodeGeneration;
 
 // Feature flag that enables the native UI Context Menus (not for Web content).
 extern const base::Feature kEnableNativeContextMenus;
@@ -65,8 +58,23 @@ extern const base::Feature kSafetyCheckIOS;
 // Feature flag to enable new illustrations and UI on empty states.
 extern const base::Feature kIllustratedEmptyStates;
 
-// Feature flag to enable Shared Highlighting (Text Fragments/scroll-to-text
-// and Link to Text features).
+// Feature flag to enable Shared Highlighting (Link to Text). Also enable
+// kScrollToTextIOS to successfully open these links.
 extern const base::Feature kSharedHighlightingIOS;
+
+// Feature flag that enables taking fullpage screenshots of a webpage.
+extern const base::Feature kEnableFullPageScreenshot;
+
+// Feature flag that enables reauth for filling passwords;
+extern const base::Feature kEnableAutofillPasswordReauthIOS;
+
+// Feature flag that enables showing a fullscreen modal promo informing users
+// about the default browser feature that also provides a button to send the
+// users in the Settings.app to update the default browser.
+extern const base::Feature kDefaultBrowserFullscreenPromo;
+
+// Feature flag that enables the button in the settings to send the users in the
+// Settings.app to update the default browser.
+extern const base::Feature kDefaultBrowserSettings;
 
 #endif  // IOS_CHROME_BROWSER_UI_UI_FEATURE_FLAGS_H_

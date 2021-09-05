@@ -10,7 +10,7 @@
 #include "base/vivaldi_switches.h"
 #include "url/gurl.h"
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include <iostream>
 #include "browser/mac/sparkle_util.h"
 #endif
@@ -70,11 +70,11 @@ void WinSparkleCheckForUpdates(base::Callback<bool()> should_check_update_cb,
 
 // #define _DEBUG_AUTOUPDATE
 
-#if defined(OS_WIN) || defined(OS_MACOSX)
+#if defined(OS_WIN) || defined(OS_MAC)
 const char kVivaldiAppCastUrl[] =
 #if defined(_DEBUG) && defined(_DEBUG_AUTOUPDATE)
 // This is for debugging/testing in debug builds
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
     "http://mirror.viv.osl/~jarle/sparkle/mac_appcast.xml";
 #elif defined(_WIN64)
     "http://mirror.viv.osl/~jarle/sparkle/appcast.x64.xml";
@@ -84,7 +84,7 @@ const char kVivaldiAppCastUrl[] =
 #elif defined(OFFICIAL_BUILD) && \
     (UPDATE_SOURCE_WIN(VIVALDI_RELEASE) == UPDATE_PREVIEW_SOURCE_WINDOWS)
 // This is the public TP/Beta/Final release channel
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
     "https://update.vivaldi.com/update/1.0/public/mac/appcast.xml";
 #elif defined(_WIN64)
     "https://update.vivaldi.com/update/1.0/public/appcast.x64.xml";
@@ -93,7 +93,7 @@ const char kVivaldiAppCastUrl[] =
 #endif
 #elif defined(OFFICIAL_BUILD)
 // This is the public snapshot release channel
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
     "https://update.vivaldi.com/update/1.0/snapshot/mac/appcast.xml";
 #elif defined(_WIN64)
     "https://update.vivaldi.com/update/1.0/win/appcast.x64.xml";
@@ -102,7 +102,7 @@ const char kVivaldiAppCastUrl[] =
 #endif
 #else
 // This is the internal sopranos release channel
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
     "https://update.vivaldi.com/update/1.0/sopranos_new/mac/appcast.xml";
 #elif defined(_WIN64)
     "https://update.vivaldi.com/update/1.0/sopranos_new/appcast.x64.xml";
@@ -115,7 +115,7 @@ const char kVivaldiAppCastUrl[] =
 
 void InitializeSparkle(const base::CommandLine& command_line,
                        base::Callback<bool()> should_check_update_callback) {
-#if defined(OS_WIN) || defined(OS_MACOSX)
+#if defined(OS_WIN) || defined(OS_MAC)
   static bool vivaldi_updater_initialized = false;
   if (!vivaldi_updater_initialized) {
     GURL appcast_url(kVivaldiAppCastUrl);
@@ -168,7 +168,7 @@ void InitializeSparkle(const base::CommandLine& command_line,
                      force_update_on_init),
           base::TimeDelta::FromSeconds(kWinSparkleInitDelaySecs));
     }
-#elif defined(OS_MACOSX)
+#elif defined(OS_MAC)
     SparkleUtil::SetFeedURL(appcast_url.spec().c_str());
     if (show_vuu) {
       std::string feed_url = SparkleUtil::GetFeedURL();

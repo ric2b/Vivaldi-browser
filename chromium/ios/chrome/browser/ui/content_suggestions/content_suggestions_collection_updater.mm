@@ -16,6 +16,7 @@
 #import "ios/chrome/browser/ui/collection_view/collection_view_model.h"
 #import "ios/chrome/browser/ui/commands/snackbar_commands.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_articles_header_item.h"
+#import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_discover_header_item.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_footer_item.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_header_item.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_text_item.h"
@@ -83,6 +84,8 @@ ContentSuggestionType ContentSuggestionTypeForItemType(NSInteger type) {
     return ContentSuggestionTypePromo;
   if (type == ItemTypeLearnMore)
     return ContentSuggestionTypeLearnMore;
+  if (type == ItemTypeDiscover)
+    return ContentSuggestionTypeDiscover;
   // Add new type here
 
   // Default type.
@@ -156,6 +159,10 @@ NSString* const kContentSuggestionsCollectionUpdaterSnackbarCategory =
 // All SectionIdentifier from ContentSuggestions.
 @property(nonatomic, strong)
     NSMutableSet<NSNumber*>* sectionIdentifiersFromContentSuggestions;
+// Discover feed header to prevent it from being recreated each time view is
+// reloaded.
+@property(nonatomic, strong)
+    ContentSuggestionsDiscoverHeaderItem* discoverFeedHeader;
 
 @end
 
@@ -196,6 +203,15 @@ NSString* const kContentSuggestionsCollectionUpdaterSnackbarCategory =
 
   if (self.collectionViewController)
     [self reloadAllData];
+}
+
+- (ContentSuggestionsDiscoverHeaderItem*)discoverFeedHeader {
+  if (!_discoverFeedHeader) {
+    _discoverFeedHeader = [[ContentSuggestionsDiscoverHeaderItem alloc]
+               initWithType:ItemTypeHeader
+        discoverFeedVisible:self.discoverFeedVisible];
+  }
+  return _discoverFeedHeader;
 }
 
 #pragma mark - ContentSuggestionsDataSink
@@ -569,6 +585,11 @@ addSuggestionsToModel:(NSArray<CSCollectionViewItem*>*)suggestions
              sectionIdentifierForSection:section] == SectionIdentifierLogo;
 }
 
+- (BOOL)isDiscoverSection:(NSInteger)section {
+  return [self.collectionViewController.collectionViewModel
+             sectionIdentifierForSection:section] == SectionIdentifierDiscover;
+}
+
 - (BOOL)isPromoSection:(NSInteger)section {
   return [self.collectionViewController.collectionViewModel
              sectionIdentifierForSection:section] == SectionIdentifierPromo;
@@ -631,6 +652,13 @@ addSuggestionsToModel:(NSArray<CSCollectionViewItem*>*)suggestions
   CSCollectionViewModel* model =
       self.collectionViewController.collectionViewModel;
 
+  NSInteger section = [model sectionForSectionIdentifier:sectionIdentifier];
+  if ([self isDiscoverSection:section]) {
+    [model setHeader:[self headerForSectionInfo:sectionInfo]
+        forSectionWithIdentifier:sectionIdentifier];
+    return;
+  }
+
   if (![model headerForSectionWithIdentifier:sectionIdentifier] &&
       sectionInfo.title) {
     DCHECK(IsFromContentSuggestionsService(sectionIdentifier));
@@ -648,6 +676,10 @@ addSuggestionsToModel:(NSArray<CSCollectionViewItem*>*)suggestions
 // Returns the header for this |sectionInfo|.
 - (CollectionViewItem*)headerForSectionInfo:
     (ContentSuggestionsSectionInformation*)sectionInfo {
+  if (SectionIdentifierForInfo(sectionInfo) == SectionIdentifierDiscover) {
+    self.discoverFeedHeader.title = sectionInfo.title;
+    return self.discoverFeedHeader;
+  }
   DCHECK(SectionIdentifierForInfo(sectionInfo) == SectionIdentifierArticles);
   __weak ContentSuggestionsCollectionUpdater* weakSelf = self;
   ContentSuggestionsArticlesHeaderItem* header =
@@ -806,6 +838,13 @@ addSuggestionsToModel:(NSArray<CSCollectionViewItem*>*)suggestions
   [model addItem:item toSectionWithIdentifier:sectionIdentifier];
 
   return [NSIndexPath indexPathForItem:itemNumber inSection:section];
+}
+
+#pragma mark - DiscoverFeedHeaderChanging
+
+- (void)changeDiscoverFeedHeaderVisibility:(BOOL)visible {
+  self.discoverFeedVisible = visible;
+  self.discoverFeedHeader.discoverFeedVisible = visible;
 }
 
 @end

@@ -37,8 +37,8 @@ class VivaldiUIWebContentsDelegate : public content::WebContentsDelegate,
     SkColor color,
     const std::vector<blink::mojom::ColorSuggestionPtr>& suggestions) override;
   void RunFileChooser(content::RenderFrameHost* render_frame_host,
-    std::unique_ptr<content::FileSelectListener> listener,
-    const blink::mojom::FileChooserParams& params) override;
+                      scoped_refptr<content::FileSelectListener> listener,
+                      const blink::mojom::FileChooserParams& params) override;
   void NavigationStateChanged(content::WebContents* source,
     content::InvalidateTypes changed_flags) override;
   void RequestMediaAccessPermission(
@@ -59,6 +59,8 @@ class VivaldiUIWebContentsDelegate : public content::WebContentsDelegate,
     int document_cookie,
     content::RenderFrameHost* subframe_host) const override;
   void ActivateContents(content::WebContents* contents) override;
+
+  void DidStartNavigation(content::NavigationHandle* navigation_handle) override;
 
  private:
   // content::WebContentsObserver

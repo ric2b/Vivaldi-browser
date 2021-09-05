@@ -37,9 +37,11 @@
 <translation id="1842960171412779397">seleziona</translation>
 <translation id="1859234291848436338">Direzione di scrittura</translation>
 <translation id="1860796786778352021">Chiusura notifica</translation>
+<translation id="186476001994626254">Contenuti di Web Smart Paste</translation>
 <translation id="1871244248791675517">Ins</translation>
 <translation id="1884435127456172652"><ph name="NUMBER" />%</translation>
 <translation id="1901303067676059328">Seleziona &amp;tutto</translation>
+<translation id="19085484004813472">Questa funzionalità è nuova</translation>
 <translation id="2006524834898217237">Assicurati che questo dispositivo sia connesso a Internet.</translation>
 <translation id="208586643495776849">Riprova</translation>
 <translation id="2090963878406559571">Per inviare un numero da <ph name="ORIGIN" /> al tuo telefono Android, <ph name="TROUBLESHOOT_LINK" /> per entrambi i dispositivi nelle impostazioni.</translation>
@@ -67,6 +69,7 @@
 <translation id="2570734079541893434">Gestisci impostazioni</translation>
 <translation id="2573731672208488250">{HOURS,plural, =1{tra 1 h}other{tra # h}}</translation>
 <translation id="2583543531130364912">Calibra il touchscreen</translation>
+<translation id="2586657967955657006">Appunti</translation>
 <translation id="2666092431469916601">In alto</translation>
 <translation id="2701330563083355633">Condivisione da <ph name="DEVICE_NAME" /></translation>
 <translation id="271033894570825754">Nuovo</translation>
@@ -74,6 +77,7 @@
 <translation id="2749082172777216925"><ph name="APP_NAME_INFO" />, <ph name="PRICE" /></translation>
 <translation id="2803313416453193357">Apri cartella</translation>
 <translation id="2824719307700604149">{YEARS,plural, =1{1 anno fa}other{# anni fa}}</translation>
+<translation id="2878511608894704031">Elimina tutto</translation>
 <translation id="2907671656515444832">{DAYS,plural, =1{tra 1 g}other{tra # g}}</translation>
 <translation id="2931838996092594335">fai clic</translation>
 <translation id="2981684127883932071">Visualizzazione dei suggerimenti</translation>
@@ -114,6 +118,7 @@
 <translation id="4289300219472526559">Avvia comandi vocali</translation>
 <translation id="430191667033048642"><ph name="MOVED_APP_NAME" /> spostata nella cartella <ph name="FOLDER_NAME" />.</translation>
 <translation id="4316910396681052118">TUTTE LE APP</translation>
+<translation id="4491109536499578614">Immagine</translation>
 <translation id="4588090240171750605">Scorri a destra</translation>
 <translation id="4631891353005174729"><ph name="APP_NAME_TYPE" />, valutazione a stelle <ph name="RATING_SCORE" /></translation>
 <translation id="4648249871170053485"><ph name="APP_NAME" />, consiglio applicazione</translation>
@@ -147,6 +152,7 @@
 <translation id="5768079895599174203">{DAYS,plural, =1{1 giorno e }other{# giorni e }}</translation>
 <translation id="5789643057113097023">.</translation>
 <translation id="5866104238061687188">{YEARS,plural, =1{tra 1 a}other{tra # a}}</translation>
+<translation id="588258955323874662">Schermo intero</translation>
 <translation id="5906667377645263094">{SECONDS,plural, =1{1 secondo rimanente}other{# secondi rimanenti}}</translation>
 <translation id="5941711191222866238">Riduci a icona</translation>
 <translation id="5943826764092288734">{HOURS,plural, =1{1 ora}other{# ore}}</translation>
@@ -170,6 +176,7 @@
 <translation id="6417265370957905582">Assistente Google</translation>
 <translation id="6430678249303439055">Blocca tutte le notifiche da questa app</translation>
 <translation id="6483402905448010557">{SECONDS,plural, =1{1 secondo fa}other{# secondi fa}}</translation>
+<translation id="6503257047630241175">Contenuti RTF</translation>
 <translation id="6539092367496845964">Si è verificato un problema. Riprova più tardi.</translation>
 <translation id="654149438358937226">Blocca tutte le notifiche</translation>
 <translation id="6567071839949112727">fai clic su predecessore</translation>
@@ -178,7 +185,7 @@
 <translation id="6620110761915583480">Salva file</translation>
 <translation id="6656912866303152668">Assicurati che in Chrome sia attiva la sincronizzazione di <ph name="TARGET_DEVICE_NAME" />, quindi riprova a inviare.</translation>
 <translation id="6699343763173986273">Traccia successiva contenuti multimediali</translation>
-<translation id="6710213216561001401">Indietro</translation>
+<translation id="6710213216561001401">Precedente</translation>
 <translation id="6779314412797872738">Per inviare un numero da qui al tuo telefono Android, <ph name="TROUBLESHOOT_LINK" /> per entrambi i dispositivi nelle impostazioni.</translation>
 <translation id="6786750046913594791">Chiudi cartella</translation>
 <translation id="6808150112686056157">Interrompi contenuti multimediali</translation>

@@ -11,7 +11,6 @@
 #include "build/build_config.h"
 #include "gpu/command_buffer/common/discardable_handle.h"
 #include "gpu/command_buffer/service/decoder_client.h"
-#include "gpu/command_buffer/service/gl_stream_texture_image.h"
 #include "gpu/command_buffer/service/gpu_fence_manager.h"
 #include "gpu/command_buffer/service/gpu_tracer.h"
 #include "gpu/command_buffer/service/image_factory.h"
@@ -41,7 +40,7 @@ class GLES2DecoderPassthroughImpl::
       const ScopedEnableTextureRectangleInShaderCompiler&) = delete;
 
   // This class is a no-op except on macOS.
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
   explicit ScopedEnableTextureRectangleInShaderCompiler(
       GLES2DecoderPassthroughImpl* decoder) {}
 
@@ -5100,59 +5099,6 @@ error::Error GLES2DecoderPassthroughImpl::DoGetFragDataIndexEXT(
     GLint* index) {
   *index = api()->glGetFragDataIndexFn(GetProgramServiceID(program, resources_),
                                        name);
-  return error::kNoError;
-}
-
-error::Error
-GLES2DecoderPassthroughImpl::DoUniformMatrix4fvStreamTextureMatrixCHROMIUM(
-    GLint location,
-    GLboolean transpose,
-    const volatile GLfloat* transform) {
-  constexpr GLenum kTextureTarget = GL_TEXTURE_EXTERNAL_OES;
-  scoped_refptr<TexturePassthrough> bound_texture =
-      bound_textures_[static_cast<size_t>(
-          GLenumToTextureTarget(kTextureTarget))][active_texture_unit_]
-          .texture;
-  if (!bound_texture) {
-    InsertError(GL_INVALID_OPERATION, "no texture bound");
-    return error::kNoError;
-  }
-
-  api()->glUniformMatrix4fvFn(location, 1, transpose,
-                              const_cast<const GLfloat*>(transform));
-
-  return error::kNoError;
-}
-
-error::Error GLES2DecoderPassthroughImpl::DoOverlayPromotionHintCHROMIUM(
-    GLuint texture,
-    GLboolean promotion_hint,
-    GLint display_x,
-    GLint display_y,
-    GLint display_width,
-    GLint display_height) {
-  if (texture == 0) {
-    return error::kNoError;
-  }
-
-  scoped_refptr<TexturePassthrough> passthrough_texture = nullptr;
-  if (!resources_->texture_object_map.GetServiceID(texture,
-                                                   &passthrough_texture) ||
-      passthrough_texture == nullptr) {
-    InsertError(GL_INVALID_VALUE, "invalid texture id");
-    return error::kNoError;
-  }
-
-  GLStreamTextureImage* image =
-      passthrough_texture->GetStreamLevelImage(GL_TEXTURE_EXTERNAL_OES, 0);
-  if (!image) {
-    InsertError(GL_INVALID_OPERATION, "texture has no StreamTextureImage");
-    return error::kNoError;
-  }
-
-  image->NotifyPromotionHint(promotion_hint != GL_FALSE, display_x, display_y,
-                             display_width, display_height);
-
   return error::kNoError;
 }
 

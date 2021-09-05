@@ -5,6 +5,7 @@
 #include "ui/views/bubble/info_bubble.h"
 
 #include <memory>
+#include <utility>
 
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
@@ -58,10 +59,9 @@ InfoBubble::InfoBubble(View* anchor, const base::string16& message)
   SetCanActivate(false);
 
   SetLayoutManager(std::make_unique<FillLayout>());
-  Label* label = new Label(message);
-  label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-  label->SetMultiLine(true);
-  AddChildView(label);
+  label_ = AddChildView(std::make_unique<Label>(message));
+  label_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+  label_->SetMultiLine(true);
 }
 
 InfoBubble::~InfoBubble() = default;
@@ -78,13 +78,15 @@ void InfoBubble::Hide() {
     widget->Close();
 }
 
-NonClientFrameView* InfoBubble::CreateNonClientFrameView(Widget* widget) {
+std::unique_ptr<NonClientFrameView> InfoBubble::CreateNonClientFrameView(
+    Widget* widget) {
   DCHECK(!frame_);
-  frame_ = new InfoBubbleFrame(margins());
-  frame_->set_available_bounds(anchor_widget()->GetWindowBoundsInScreen());
-  frame_->SetBubbleBorder(
+  auto frame = std::make_unique<InfoBubbleFrame>(margins());
+  frame->set_available_bounds(anchor_widget()->GetWindowBoundsInScreen());
+  frame->SetBubbleBorder(
       std::make_unique<BubbleBorder>(arrow(), GetShadow(), color()));
-  return frame_;
+  frame_ = frame.get();
+  return frame;
 }
 
 gfx::Size InfoBubble::CalculatePreferredSize() const {

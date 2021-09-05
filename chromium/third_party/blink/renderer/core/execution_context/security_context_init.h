@@ -5,9 +5,13 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_EXECUTION_CONTEXT_SECURITY_CONTEXT_INIT_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_EXECUTION_CONTEXT_SECURITY_CONTEXT_INIT_H_
 
-#include "services/network/public/mojom/web_sandbox_flags.mojom-blink.h"
+#include "third_party/blink/public/common/feature_policy/document_policy.h"
 #include "third_party/blink/public/common/feature_policy/feature_policy.h"
+#include "third_party/blink/public/common/frame/frame_policy.h"
+#include "third_party/blink/public/mojom/feature_policy/feature_policy.mojom-blink.h"
 #include "third_party/blink/public/mojom/feature_policy/feature_policy_feature.mojom-blink.h"
+#include "third_party/blink/public/mojom/security_context/insecure_request_policy.mojom-blink-forward.h"
+#include "third_party/blink/public/web/web_origin_policy.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/feature_policy/policy_helper.h"
 #include "third_party/blink/renderer/core/frame/web_feature.h"
@@ -16,81 +20,30 @@
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 
 namespace blink {
-class ContentSecurityPolicy;
-class Document;
-class DocumentInit;
-class Frame;
 class LocalFrame;
-class OriginTrialContext;
-class SecurityOrigin;
+class ResourceResponse;
 
-class CORE_EXPORT SecurityContextInit : public FeaturePolicyParserDelegate {
+class CORE_EXPORT SecurityContextInit {
   STACK_ALLOCATED();
 
  public:
-  SecurityContextInit();
-  SecurityContextInit(scoped_refptr<SecurityOrigin>, OriginTrialContext*);
-  explicit SecurityContextInit(const DocumentInit&);
+  explicit SecurityContextInit(ExecutionContext*);
 
-  const scoped_refptr<SecurityOrigin>& GetSecurityOrigin() const {
-    return security_origin_;
-  }
-
-  network::mojom::blink::WebSandboxFlags GetSandboxFlags() const {
-    return sandbox_flags_;
-  }
-
-  ContentSecurityPolicy* GetCSP() const { return csp_; }
-
-  // Returns nullptr if SecurityContext is used for non-Document contexts(i.e.,
-  // workers and tests).
-  std::unique_ptr<FeaturePolicy> CreateFeaturePolicy() const;
-  // Returns nullptr if SecurityContext is used for non-Document contexts(i.e.,
-  // workers and tests).
-  // Returns nullptr if there is no 'Feature-Policy-Report-Only' header present
-  // in http response.
-  std::unique_ptr<FeaturePolicy> CreateReportOnlyFeaturePolicy() const;
-
-  std::unique_ptr<DocumentPolicy> CreateDocumentPolicy() const;
-  std::unique_ptr<DocumentPolicy> CreateReportOnlyDocumentPolicy() const;
+  void ApplyFeaturePolicy(LocalFrame* frame,
+                          const ResourceResponse& response,
+                          const base::Optional<WebOriginPolicy>& origin_policy,
+                          const FramePolicy& frame_policy);
+  void ApplyDocumentPolicy(
+      DocumentPolicy::ParsedDocumentPolicy& document_policy,
+      const String& report_only_document_policy_header);
 
   const ParsedFeaturePolicy& FeaturePolicyHeader() const {
     return feature_policy_header_;
   }
 
-  OriginTrialContext* GetOriginTrialContext() const { return origin_trials_; }
-
-  SecureContextMode GetSecureContextMode() const {
-    DCHECK(secure_context_mode_.has_value());
-    return secure_context_mode_.value();
-  }
-
-  void CountFeaturePolicyUsage(mojom::blink::WebFeature feature) override;
-  bool FeaturePolicyFeatureObserved(
-      mojom::blink::FeaturePolicyFeature) override;
-  bool FeatureEnabled(OriginTrialFeature feature) const override;
-
  private:
-  void InitializeDocumentPolicy(const DocumentInit&);
-  void InitializeFeaturePolicy(const DocumentInit&);
-  void InitializeSecureContextMode(const DocumentInit&);
-  void InitializeOriginTrials(const DocumentInit&);
-
   ExecutionContext* execution_context_ = nullptr;
-  ContentSecurityPolicy* csp_ = nullptr;
-  network::mojom::blink::WebSandboxFlags sandbox_flags_ =
-      network::mojom::blink::WebSandboxFlags::kNone;
-  scoped_refptr<SecurityOrigin> security_origin_;
-  DocumentPolicy::ParsedDocumentPolicy document_policy_;
-  DocumentPolicy::ParsedDocumentPolicy report_only_document_policy_;
-  bool initialized_feature_policy_state_ = false;
   ParsedFeaturePolicy feature_policy_header_;
-  ParsedFeaturePolicy report_only_feature_policy_header_;
-  LocalFrame* frame_for_opener_feature_state_ = nullptr;
-  Frame* parent_frame_ = nullptr;
-  ParsedFeaturePolicy container_policy_;
-  OriginTrialContext* origin_trials_ = nullptr;
-  base::Optional<SecureContextMode> secure_context_mode_;
 };
 
 }  // namespace blink

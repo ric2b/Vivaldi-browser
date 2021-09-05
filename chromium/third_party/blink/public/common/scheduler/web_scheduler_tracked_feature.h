@@ -22,6 +22,8 @@ enum class WebSchedulerTrackedFeature {
   kWebSocket = 0,
   kWebRTC = 1,
 
+  // TODO(rakina): Move tracking of cache-control usage from
+  // WebSchedulerTrackedFeature to RenderFrameHost.
   kMainResourceHasCacheControlNoCache = 2,
   kMainResourceHasCacheControlNoStore = 3,
   kSubresourceHasCacheControlNoCache = 4,
@@ -43,9 +45,8 @@ enum class WebSchedulerTrackedFeature {
   // specific context types down below.
   kOutstandingNetworkRequestOthers = 15,
 
-  // TODO(altimin): This doesn't include service worker-controlled origins.
-  // We need to track them too.
-  kServiceWorkerControlledPage = 16,
+  // kServiceWorkerControlledPage = 16. Removed after implementing ServiceWorker
+  // support.
 
   kOutstandingIndexedDBTransaction = 17,
 
@@ -94,9 +95,10 @@ enum class WebSchedulerTrackedFeature {
   kPaymentManager = 49,
   kSpeechSynthesis = 50,
   kKeyboardLock = 51,
+  kSmsService = 52,
 
   // NB: This enum is used in a bitmask, so kMaxValue must be less than 64.
-  kMaxValue = kKeyboardLock
+  kMaxValue = kSmsService
 };
 
 static_assert(static_cast<uint32_t>(WebSchedulerTrackedFeature::kMaxValue) < 64,

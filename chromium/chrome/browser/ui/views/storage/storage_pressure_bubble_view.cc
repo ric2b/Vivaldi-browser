@@ -18,6 +18,10 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/views/layout/box_layout.h"
 
+#include "app/vivaldi_apptools.h"
+#include "ui/vivaldi_browser_window.h"
+#include "ui/vivaldi_ui_utils.h"
+
 namespace {
 
 const char kAllSitesContentSettingsUrl[] =
@@ -51,12 +55,24 @@ void StoragePressureBubbleView::ShowBubble(const url::Origin origin) {
   Browser* browser = BrowserList::GetInstance()->GetLastActive();
   if (!browser || !base::FeatureList::IsEnabled(features::kStoragePressureUI))
     return;
+  views::View* vivaldi_anchor_view = nullptr;
+  if (vivaldi::IsVivaldiRunning()) {
+    VivaldiBrowserWindow* window = vivaldi::ui_tools::GetLastActiveMainWindow();
+    if (!window)
+      return;
+    vivaldi_anchor_view = window->GetBubbleDialogAnchor();
+  }
 
   StoragePressureBubbleView* bubble = new StoragePressureBubbleView(
+      vivaldi_anchor_view ? vivaldi_anchor_view :
       BrowserView::GetBrowserViewForBrowser(browser)
           ->toolbar_button_provider()
           ->GetAppMenuButton(),
       browser, std::move(origin));
+  if (vivaldi_anchor_view) {
+    // Center the bubble view.
+    bubble->SetArrow(views::BubbleBorder::Arrow::FLOAT);
+  }
   views::BubbleDialogDelegateView::CreateBubble(bubble)->Show();
 
   RecordBubbleHistogramValue(StoragePressureBubbleHistogramValue::kShown);

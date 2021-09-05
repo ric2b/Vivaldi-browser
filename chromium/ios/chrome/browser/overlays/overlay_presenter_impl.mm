@@ -131,7 +131,10 @@ void OverlayPresenterImpl::SetActiveWebState(
   if (active_web_state_ == web_state)
     return;
 
-  OverlayRequest* previously_active_request = GetActiveRequest();
+  OverlayRequest* previously_active_request =
+      removed_request_awaiting_dismissal_ != nullptr
+          ? removed_request_awaiting_dismissal_.get()
+          : GetActiveRequest();
 
   // The UI should be cancelled instead of hidden if the presenter does not
   // expect to show any more overlay UI for previously active WebState in the UI
@@ -152,6 +155,13 @@ void OverlayPresenterImpl::SetActiveWebState(
   // If not already presenting, immediately show the next overlay.
   if (!presenting_) {
     PresentOverlayForActiveRequest();
+    return;
+  }
+ 
+  // If presenting_ is true and there is no previously active request, this
+  // is likely because the presenting overlay is still in the process of being
+  // dismissed and multiple tabs have been opened in the process.
+  if (!previously_active_request) {
     return;
   }
 
@@ -195,8 +205,6 @@ OverlayRequest* OverlayPresenterImpl::GetActiveRequest() const {
 #pragma mark UI Presentation and Dismissal helpers
 
 void OverlayPresenterImpl::PresentOverlayForActiveRequest() {
-  // Overlays cannot be presented if one is already presented.
-  DCHECK(!presenting_);
 
   // Overlays cannot be shown without a presentation context or if the
   // presentation context is already showing overlay UI.
@@ -215,6 +223,9 @@ void OverlayPresenterImpl::PresentOverlayForActiveRequest() {
     return;
   }
 
+  // If an overlay is already presented, the Presentation Context should be
+  // marked as showing an Overlay.
+  DCHECK(!presenting_);
   presenting_ = true;
   presented_request_ = request;
 

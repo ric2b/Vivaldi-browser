@@ -49,7 +49,8 @@ class PLATFORM_EXPORT MainThreadTaskQueue
 
     // 3 was used for default timer task runner but this was deprecated.
 
-    kUnthrottled = 4,
+    // 4: kUnthrottled, obsolete.
+
     kFrameLoading = 5,
     // 6 : kFrameThrottleable, replaced with FRAME_THROTTLEABLE.
     // 7 : kFramePausable, replaced with kFramePausable
@@ -62,7 +63,7 @@ class PLATFORM_EXPORT MainThreadTaskQueue
     kFramePausable = 14,
     kFrameUnpausable = 15,
     kV8 = 16,
-    kIPC = 17,
+    // 17 : kIPC, obsolete
     kInput = 18,
 
     // Detached is used in histograms for tasks which are run after frame
@@ -70,8 +71,7 @@ class PLATFORM_EXPORT MainThreadTaskQueue
     // TODO(altimin): Move to the top when histogram is renumbered.
     kDetached = 19,
 
-    kCleanup = 20,
-
+    // 20 : kCleanup, obsolete.
     // 21 : kWebSchedulingUserInteraction, obsolete.
     // 22 : kWebSchedulingBestEffort, obsolete.
 
@@ -131,8 +131,10 @@ class PLATFORM_EXPORT MainThreadTaskQueue
       kFindInPage = 5,
       kExperimentalDatabase = 6,
       kJavaScriptTimer = 7,
+      kHighPriorityLocalFrame = 8,
+      kCompositor = 9,  // Main-thread only.
 
-      kCount = 8
+      kCount = 10
     };
 
     // kPrioritisationTypeWidthBits is the number of bits required
@@ -141,10 +143,10 @@ class PLATFORM_EXPORT MainThreadTaskQueue
     // We need to update it whenever there is a change in
     // PrioritisationType::kCount.
     // TODO(sreejakshetty) make the number of bits calculation automated.
-    static constexpr int kPrioritisationTypeWidthBits = 3;
+    static constexpr int kPrioritisationTypeWidthBits = 4;
     static_assert(static_cast<int>(PrioritisationType::kCount) <=
-                    (1 << kPrioritisationTypeWidthBits),
-                    "Wrong Instanstiation for kPrioritisationTypeWidthBits");
+                      (1 << kPrioritisationTypeWidthBits),
+                  "Wrong Instanstiation for kPrioritisationTypeWidthBits");
 
     QueueTraits(const QueueTraits&) = default;
 
@@ -189,7 +191,8 @@ class PLATFORM_EXPORT MainThreadTaskQueue
              can_be_paused == other.can_be_paused &&
              can_be_frozen == other.can_be_frozen &&
              can_run_in_background == other.can_run_in_background &&
-             can_run_when_virtual_time_paused == other.can_run_when_virtual_time_paused &&
+             can_run_when_virtual_time_paused ==
+                 other.can_run_when_virtual_time_paused &&
              prioritisation_type == other.prioritisation_type;
     }
 
@@ -282,6 +285,13 @@ class PLATFORM_EXPORT MainThreadTaskQueue
       return *this;
     }
 
+    QueueCreationParams SetPrioritisationType(
+        QueueTraits::PrioritisationType type) {
+      queue_traits = queue_traits.SetPrioritisationType(type);
+      ApplyQueueTraitsToSpec();
+      return *this;
+    }
+
     QueueCreationParams SetQueueTraits(QueueTraits value) {
       queue_traits = value;
       ApplyQueueTraitsToSpec();
@@ -357,7 +367,8 @@ class PLATFORM_EXPORT MainThreadTaskQueue
   QueueTraits GetQueueTraits() const { return queue_traits_; }
 
   QueueTraits::PrioritisationType GetPrioritisationType() const {
-      return queue_traits_.prioritisation_type;}
+    return queue_traits_.prioritisation_type;
+  }
 
   void OnTaskReady(const void* frame_scheduler,
                    const base::sequence_manager::Task& task,
@@ -371,6 +382,11 @@ class PLATFORM_EXPORT MainThreadTaskQueue
       const base::sequence_manager::Task& task,
       base::sequence_manager::TaskQueue::TaskTiming* task_timing,
       base::sequence_manager::LazyNow* lazy_now);
+
+  void SetOnIPCTaskPosted(
+      base::RepeatingCallback<void(const base::sequence_manager::Task&)>
+          on_ipc_task_posted_callback);
+  void DetachOnIPCTaskPostedWhileInBackForwardCache();
 
   void DetachFromMainThreadScheduler();
 

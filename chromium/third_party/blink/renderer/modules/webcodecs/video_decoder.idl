@@ -18,10 +18,10 @@
   // |init| includes an |output| callback for emitting VideoFrames and an
   // |error| callback for emitting decode errors.
   //
-  // When in an error state, methods other than reset() will fail.
+  // When in an closed state, all methods will fail.
   //
   // TODO(sandersd): Consider adding a state or last error attribute.
-  [CallWith=ScriptState, RaisesException] constructor(VideoDecoderInit init);
+  [CallWith=ScriptState, RaisesException, MeasureAs=WebCodecsVideoDecoder] constructor(VideoDecoderInit init);
 
   // The number of pending decode requests. This does not include requests that
   // have been sent to the underlying codec.
@@ -39,7 +39,7 @@
   // The next decode request must be for a keyframe.
   //
   // TODO(sandersd): Move the keyframe rule into the bytestream registry.
-  [RaisesException] void configure(EncodedVideoConfig config);
+  [RaisesException] void configure(VideoDecoderConfig config);
 
   // Request decoding of an input chunk.
   //
@@ -67,4 +67,13 @@
   // resolved but before it is fulfilled. In that case the flush() promise will
   // be fulfilled successfully even though reset() was called.
   [RaisesException] void reset();
+
+  // Immediately shut down the decoder and free its resources. All pending
+  // decode requests are aborted.
+  //
+  // Not recoverable: make a new VideoDecoder if needed.
+  [RaisesException] void close();
+
+  // Which state the decoder is in, indicating which methods can be called.
+  readonly attribute CodecState state;
 };

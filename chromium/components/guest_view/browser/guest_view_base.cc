@@ -198,10 +198,6 @@ GuestViewBase::GuestViewBase(WebContents* owner_web_contents)
 }
 
 GuestViewBase::~GuestViewBase() {
-  // TODO(igor@vivaldi.com): Wrap this into IsVivaldiRunning().
-  if (delegate_to_browser_plugin_) {
-    delegate_to_browser_plugin_->set_delegate(nullptr);
-  }
   // Make sure destroy is called so the guestview manager is updated.
   // This can happen when the guest is automatically deleted via webcontents
   // being destroyed when attached to a widget. (I.e. an AppWindow.)
@@ -589,10 +585,6 @@ void GuestViewBase::SetOpener(GuestViewBase* guest) {
 }
 
 void GuestViewBase::SetGuestHost(content::GuestHost* guest_host) {
-  if (guest_host) {
-    delegate_to_browser_plugin_ =
-        static_cast<content::BrowserPluginGuest*>(guest_host);
-  }
   guest_host_ = guest_host;
 }
 
@@ -628,6 +620,8 @@ void GuestViewBase::WillAttach(WebContents* embedder_web_contents,
   is_full_page_plugin_ = is_full_page_plugin;
 
   WillAttachToEmbedder();
+
+  web_contents()->ResumeLoadingCreatedWebContents();
 
   owner_web_contents_->AttachInnerWebContents(
       base::WrapUnique<WebContents>(web_contents()), outer_contents_frame,
@@ -761,7 +755,7 @@ void GuestViewBase::ResizeDueToAutoResize(WebContents* web_contents,
 
 void GuestViewBase::RunFileChooser(
     content::RenderFrameHost* render_frame_host,
-    std::unique_ptr<content::FileSelectListener> listener,
+    scoped_refptr<content::FileSelectListener> listener,
     const blink::mojom::FileChooserParams& params) {
   if (!attached() || !embedder_web_contents()->GetDelegate()) {
     listener->FileSelectionCanceled();
@@ -817,6 +811,9 @@ void GuestViewBase::UpdateTargetURL(WebContents* source, const GURL& url) {
 }
 
 bool GuestViewBase::ShouldResumeRequestsForCreatedWindow() {
+  // Delay so that the embedder page has a chance to call APIs such as
+  // webRequest in time to be applied to the initial navigation in the new guest
+  // contents. We resume during WillAttach.
   return false;
 }
 
@@ -923,14 +920,6 @@ void GuestViewBase::CompleteInit(
     delete this;
     std::move(callback).Run(nullptr);
     return;
-  }
-
-  // web_contents() will not be set in some cases (like when we avctivate an
-  // non-loaded pdf-tab). We can deal with an unset delegate_to_browser_plugin_.
-  if (vivaldi::IsVivaldiRunning() && guest_web_contents) {
-    delegate_to_browser_plugin_ =
-      static_cast<content::WebContentsImpl*>(guest_web_contents)
-      ->GetBrowserPluginGuest();
   }
 
   InitWithWebContents(*create_params, guest_web_contents);

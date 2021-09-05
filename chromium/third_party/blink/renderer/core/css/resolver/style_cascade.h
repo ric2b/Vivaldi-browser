@@ -19,6 +19,7 @@
 #include "third_party/blink/renderer/core/css/resolver/cascade_origin.h"
 #include "third_party/blink/renderer/core/css/resolver/cascade_priority.h"
 #include "third_party/blink/renderer/core/css/resolver/match_result.h"
+#include "third_party/blink/renderer/core/frame/web_feature_forward.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/wtf/text/text_encoding.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
@@ -63,6 +64,8 @@ class CORE_EXPORT StyleCascade {
 
  public:
   StyleCascade(StyleResolverState& state) : state_(state) {}
+  StyleCascade(const StyleCascade&) = delete;
+  StyleCascade& operator=(const StyleCascade&) = delete;
 
   const MatchResult& GetMatchResult() { return match_result_; }
 
@@ -114,14 +117,29 @@ class CORE_EXPORT StyleCascade {
                           CascadeOrigin,
                           CascadeResolver&);
 
- private:
-  friend class TestCascade;
+  // Returns the cascaded values [1].
+  //
+  // This is intended for use by the Inspector Agent.
+  //
+  // Calling this requires a call to Apply to have taken place first. This is
+  // because some of the cascaded values depend on computed value of other
+  // properties (see ApplyCascadeAffecting).
+  //
+  // Note that this function currently returns cascaded values from
+  // CascadeOrigin::kUserAgent, kUser and kAuthor only.
+  //
+  // [1] https://drafts.csswg.org/css-cascade/#cascaded
+  HeapHashMap<CSSPropertyName, Member<const CSSValue>> GetCascadedValues()
+      const;
 
   // The maximum number of tokens that may be produced by a var()
   // reference.
   //
   // https://drafts.csswg.org/css-variables/#long-variables
-  static const size_t kMaxSubstitutionTokens = 16384;
+  static const size_t kMaxSubstitutionTokens = 65536;
+
+ private:
+  friend class TestCascade;
 
   // Before we can Apply the cascade, the MatchResult and CascadeInterpolations
   // must be Analyzed. This means going through all the declarations, and
@@ -271,6 +289,7 @@ class CORE_EXPORT StyleCascade {
                                              const CSSPendingSubstitutionValue&,
                                              CascadeResolver&);
   const CSSValue* ResolveRevert(const CSSProperty&,
+                                const CSSValue&,
                                 CascadeOrigin,
                                 CascadeResolver&);
 
@@ -323,6 +342,11 @@ class CORE_EXPORT StyleCascade {
 
   bool ShouldRevert(const CSSProperty&, const CSSValue&, CascadeOrigin);
 
+  void CountUse(WebFeature);
+  void MaybeUseCountRevert(const CSSValue&);
+  void MaybeUseCountSummaryDisplayBlock();
+  void MaybeUseCountInvalidVariableUnset(const CustomProperty&);
+
   StyleResolverState& state_;
   MatchResult match_result_;
   CascadeInterpolations interpolations_;
@@ -372,8 +396,6 @@ class CORE_EXPORT StyleCascade {
   // computed value of the property affects how e.g. margin-inline-start
   // (and other css-logical properties) cascade.
   bool depends_on_cascade_affecting_property_ = false;
-
-  DISALLOW_COPY_AND_ASSIGN(StyleCascade);
 };
 
 }  // namespace blink

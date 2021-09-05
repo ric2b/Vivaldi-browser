@@ -103,6 +103,7 @@ public class CrashInfoTest {
     public void testSerializeToJson() throws Throwable {
         final String jsonObjectString =
                 "{'crash-local-id':'123456abc','crash-capture-time':1234567890,"
+                + "'crash-is-hidden':false,"
                 + "'crash-keys':{'app-package-name':'org.test.package'}}";
         JSONObject expectedJsonObject = new JSONObject(jsonObjectString);
 
@@ -121,22 +122,6 @@ public class CrashInfoTest {
                 + "'crash-keys':{'app-package-name':'org.test.package'}}";
 
         CrashInfo parsed = CrashInfo.readFromJsonString(jsonObjectString);
-        CrashInfo expected =
-                createCrashInfo("123456abc", 1234567890, null, -1, "org.test.package", null);
-        Assert.assertThat(parsed, equalsTo(expected));
-    }
-
-    /**
-     * Test compitability with old JSON format.
-     */
-    @Test
-    @SmallTest
-    public void testReadFromJsonString_oldJsonFormat() throws Throwable {
-        final String oldJsonObjectString =
-                "{'crash-local-id':'123456abc','crash-capture-time':1234567890,"
-                + "'app-package-name':'org.test.package'}";
-
-        CrashInfo parsed = CrashInfo.readFromJsonString(oldJsonObjectString);
         CrashInfo expected =
                 createCrashInfo("123456abc", 1234567890, null, -1, "org.test.package", null);
         Assert.assertThat(parsed, equalsTo(expected));

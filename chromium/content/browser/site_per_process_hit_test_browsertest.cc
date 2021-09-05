@@ -9,6 +9,7 @@
 #include "base/command_line.h"
 #include "base/json/json_reader.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/stl_util.h"
 #include "base/task/post_task.h"
 #include "base/test/bind_test_util.h"
@@ -34,7 +35,6 @@
 #include "content/public/browser/context_menu_params.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
-#include "content/public/common/screen_info.h"
 #include "content/public/common/use_zoom_for_dsf_policy.h"
 #include "content/public/common/web_preferences.h"
 #include "content/public/test/browser_test.h"
@@ -65,7 +65,7 @@
 #include "ui/events/event_rewriter.h"
 #endif
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include "ui/base/test/scoped_preferred_scroller_style_mac.h"
 #endif
 
@@ -669,8 +669,8 @@ enum class HitTestType {
   kSurfaceLayer,
 };
 
-#if !defined(OS_MACOSX) && !defined(OS_ANDROID)
-bool IsScreenTooSmallForPopup(const ScreenInfo& screen_info) {
+#if !defined(OS_MAC) && !defined(OS_ANDROID)
+bool IsScreenTooSmallForPopup(const blink::ScreenInfo& screen_info) {
   // Small display size will cause popup positions to be adjusted,
   // causing test failures.
   //
@@ -1137,10 +1137,10 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest,
       render_frame_submission_observer.LastRenderFrameMetadata()
           .page_scale_factor;
   gfx::Point position_in_widget(
-      gfx::ToCeiledInt((bounds.x() - root_view->GetViewBounds().x() + 5) *
-                       scale_factor),
-      gfx::ToCeiledInt((bounds.y() - root_view->GetViewBounds().y() + 5) *
-                       scale_factor));
+      base::ClampCeil((bounds.x() - root_view->GetViewBounds().x() + 5) *
+                      scale_factor),
+      base::ClampCeil((bounds.y() - root_view->GetViewBounds().y() + 5) *
+                      scale_factor));
   SetWebEventPositions(&scroll_event, position_in_widget, root_view);
   scroll_event.delta_units = ui::ScrollGranularity::kScrollByPrecisePixel;
   scroll_event.delta_x = 0.0f;
@@ -1180,7 +1180,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest,
 // subframe.
 // https://crbug.com/959848: Flaky on Linux MSAN bots
 // https://crbug.com/959924: Flaky on Android MSAN bots
-#if defined(OS_LINUX) || defined(OS_ANDROID)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_ANDROID)
 #define MAYBE_TouchAndGestureEventPositionChange \
   DISABLED_TouchAndGestureEventPositionChange
 #else
@@ -1659,8 +1659,8 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest,
   // Due to the CSS scaling of the iframe, the position in the child view's
   // coordinates is (96, 96) and not (48, 48) (or approximately these values
   // if there's rounding due to the scale factor).
-  const gfx::Point position_in_root(gfx::ToCeiledInt(150 * scale_factor),
-                                    gfx::ToCeiledInt(150 * scale_factor));
+  const gfx::Point position_in_root(base::ClampCeil(150 * scale_factor),
+                                    base::ClampCeil(150 * scale_factor));
 
   auto expect_gsb_with_position =
       base::BindRepeating([](const gfx::Point& expected_position,
@@ -3385,7 +3385,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest,
 // This test verifies that MouseEnter and MouseLeave events fire correctly
 // when the mouse cursor moves between processes.
 // Flaky (timeout): https://crbug.com/1006635.
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
 #define MAYBE_CrossProcessMouseEnterAndLeaveTest \
   DISABLED_CrossProcessMouseEnterAndLeaveTest
 #else
@@ -3459,11 +3459,11 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest,
 
   gfx::Point point_in_a_frame(2, 2);
   gfx::Point point_in_b_frame(
-      gfx::ToCeiledInt((b_bounds.x() - a_bounds.x() + 25) * scale_factor),
-      gfx::ToCeiledInt((b_bounds.y() - a_bounds.y() + 25) * scale_factor));
+      base::ClampCeil((b_bounds.x() - a_bounds.x() + 25) * scale_factor),
+      base::ClampCeil((b_bounds.y() - a_bounds.y() + 25) * scale_factor));
   gfx::Point point_in_d_frame(
-      gfx::ToCeiledInt((d_bounds.x() - a_bounds.x() + 25) * scale_factor),
-      gfx::ToCeiledInt((d_bounds.y() - a_bounds.y() + 25) * scale_factor));
+      base::ClampCeil((d_bounds.x() - a_bounds.x() + 25) * scale_factor),
+      base::ClampCeil((d_bounds.y() - a_bounds.y() + 25) * scale_factor));
 
   blink::WebMouseEvent mouse_event(
       blink::WebInputEvent::Type::kMouseMove,
@@ -3716,9 +3716,9 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest,
   // relative offset of its direct parent within the root frame, for use in
   // targeting the input event.
   gfx::Rect bounds = rwhv_child->GetViewBounds();
-  int child_frame_target_x = gfx::ToCeiledInt(
+  int child_frame_target_x = base::ClampCeil(
       (bounds.x() - root_view->GetViewBounds().x() + 5) * scale_factor);
-  int child_frame_target_y = gfx::ToCeiledInt(
+  int child_frame_target_y = base::ClampCeil(
       (bounds.y() - root_view->GetViewBounds().y() + 5) * scale_factor);
 
   scoped_refptr<SetMouseCaptureInterceptor> child_interceptor =
@@ -3823,7 +3823,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest,
   base::RunLoop().RunUntilIdle();
 
 // Targeting a scrollbar with a click doesn't work on Mac or Android.
-#if !defined(OS_MACOSX) && !defined(OS_ANDROID)
+#if !defined(OS_MAC) && !defined(OS_ANDROID)
   scoped_refptr<SetMouseCaptureInterceptor> root_interceptor =
       new SetMouseCaptureInterceptor(static_cast<RenderWidgetHostImpl*>(
           root->current_frame_host()->GetRenderWidgetHost()));
@@ -3871,7 +3871,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest,
 
   root_interceptor->Wait();
   EXPECT_FALSE(root_interceptor->Capturing());
-#endif  // !defined(OS_MACOSX) && !defined(OS_ANDROID)
+#endif  // !defined(OS_MAC) && !defined(OS_ANDROID)
 }
 
 IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest,
@@ -4158,9 +4158,9 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest,
       render_frame_submission_observer.LastRenderFrameMetadata()
           .page_scale_factor;
   gfx::Rect bounds = child_view->GetViewBounds();
-  int child_frame_target_x = gfx::ToCeiledInt(
+  int child_frame_target_x = base::ClampCeil(
       (bounds.x() - root_view->GetViewBounds().x() + 5) * scale_factor);
-  int child_frame_target_y = gfx::ToCeiledInt(
+  int child_frame_target_y = base::ClampCeil(
       (bounds.y() - root_view->GetViewBounds().y() + 5) * scale_factor);
   mouse_event.SetType(blink::WebInputEvent::Type::kMouseMove);
   mouse_event.SetModifiers(blink::WebInputEvent::kLeftButtonDown);
@@ -4225,14 +4225,18 @@ class SetCursorInterceptor
 
   void SetCursor(const ui::Cursor& cursor) override {
     GetForwardingInterface()->SetCursor(cursor);
+    cursor_ = cursor;
     run_loop_.Quit();
   }
 
   void Wait() { run_loop_.Run(); }
 
+  base::Optional<ui::Cursor> cursor() const { return cursor_; }
+
  private:
   base::RunLoop run_loop_;
   RenderWidgetHostImpl* render_widget_host_;
+  base::Optional<ui::Cursor> cursor_;
 };
 
 // Verify that we receive a mouse cursor update message when we mouse over
@@ -4330,6 +4334,82 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHighDPIHitTestBrowserTest,
                        CursorUpdateReceivedFromCrossSiteIframe) {
   CursorUpdateReceivedFromCrossSiteIframeHelper(shell(),
                                                 embedded_test_server());
+}
+
+// Regression test for https://crbug.com/1099276. An OOPIF at a negative offset
+// from the main document should not allow large cursors to intersect browser
+// UI.
+IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest,
+                       LargeCursorRemovedInOffsetOOPIF) {
+  GURL url(R"(data:text/html,
+    <iframe id='iframe'
+            style ='position:absolute; top: -100px'
+            width=1000px height=1000px>
+    </iframe>)");
+  EXPECT_TRUE(NavigateToURL(shell(), url));
+
+  // The large-cursor.html document has a custom cursor that is 120x120 with a
+  // hotspot on the bottom right corner.
+  NavigateIframeToURL(shell()->web_contents(), "iframe",
+                      embedded_test_server()->GetURL("/large-cursor.html"));
+
+  auto* web_contents = static_cast<WebContentsImpl*>(shell()->web_contents());
+  FrameTreeNode* root = web_contents->GetFrameTree()->root();
+
+  FrameTreeNode* child_node = root->child_at(0);
+  EXPECT_NE(shell()->web_contents()->GetSiteInstance(),
+            child_node->current_frame_host()->GetSiteInstance());
+
+  WaitForHitTestData(child_node->current_frame_host());
+
+  RenderWidgetHostViewBase* root_view = static_cast<RenderWidgetHostViewBase*>(
+      root->current_frame_host()->GetRenderWidgetHost()->GetView());
+  RenderWidgetHostImpl* rwh_child =
+      root->child_at(0)->current_frame_host()->GetRenderWidgetHost();
+  RenderWidgetHostViewBase* child_view =
+      static_cast<RenderWidgetHostViewBase*>(rwh_child->GetView());
+
+  auto* router = web_contents->GetInputEventRouter();
+  RenderWidgetHostMouseEventMonitor child_monitor(
+      child_view->GetRenderWidgetHost());
+  RenderWidgetHostMouseEventMonitor root_monitor(
+      root_view->GetRenderWidgetHost());
+
+  // A cursor with enough room in the root view to fully display without
+  // blocking native UI should be shown.
+  {
+    blink::WebMouseEvent mouse_event(
+        blink::WebInputEvent::Type::kMouseMove,
+        blink::WebInputEvent::kNoModifiers,
+        blink::WebInputEvent::GetStaticTimeStampForTests());
+    SetWebEventPositions(&mouse_event, gfx::Point(300, 300), root_view);
+    auto set_cursor_interceptor =
+        std::make_unique<SetCursorInterceptor>(rwh_child);
+    RouteMouseEventAndWaitUntilDispatch(router, root_view, child_view,
+                                        &mouse_event);
+    set_cursor_interceptor->Wait();
+    EXPECT_TRUE(set_cursor_interceptor->cursor().has_value());
+    EXPECT_EQ(120, set_cursor_interceptor->cursor()->custom_bitmap().width());
+    EXPECT_EQ(120, set_cursor_interceptor->cursor()->custom_bitmap().height());
+  }
+  // A cursor without enough room to be fully enclosed within the root view
+  // should not be shown, even if the iframe is at an offset.
+  {
+    blink::WebMouseEvent mouse_event(
+        blink::WebInputEvent::Type::kMouseMove,
+        blink::WebInputEvent::kNoModifiers,
+        blink::WebInputEvent::GetStaticTimeStampForTests());
+    SetWebEventPositions(&mouse_event, gfx::Point(300, 115), root_view);
+    auto set_cursor_interceptor =
+        std::make_unique<SetCursorInterceptor>(rwh_child);
+    RouteMouseEventAndWaitUntilDispatch(router, root_view, child_view,
+                                        &mouse_event);
+    // We should see a new cursor come in that replaces the large one.
+    set_cursor_interceptor->Wait();
+    EXPECT_TRUE(set_cursor_interceptor->cursor().has_value());
+    EXPECT_NE(120, set_cursor_interceptor->cursor()->custom_bitmap().width());
+    EXPECT_NE(120, set_cursor_interceptor->cursor()->custom_bitmap().height());
+  }
 }
 #endif  // !defined(OS_ANDROID)
 
@@ -4570,7 +4650,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessMouseWheelHitTestBrowserTest,
   EXPECT_EQ(nullptr, router->wheel_target_);
 }
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
 #define MAYBE_MouseWheelEventPositionChange \
   DISABLED_MouseWheelEventPositionChange
 #else
@@ -5375,7 +5455,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest,
 // Test that performing a touchpad pinch over an OOPIF offers the synthetic
 // wheel events to the child and causes the page scale factor to change for
 // the main frame (given that the child did not consume the wheel).
-#if defined(OS_LINUX) || defined(OS_WIN)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_WIN)
 // Flaky on Windows: https://crbug.com/947193
 #define MAYBE_TouchpadPinchOverOOPIF DISABLED_TouchpadPinchOverOOPIF
 #else
@@ -5412,8 +5492,8 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest,
   const float scale_factor =
       render_frame_submission_observer.LastRenderFrameMetadata()
           .page_scale_factor;
-  const gfx::Point point_in_child(gfx::ToCeiledInt(100 * scale_factor),
-                                  gfx::ToCeiledInt(100 * scale_factor));
+  const gfx::Point point_in_child(base::ClampCeil(100 * scale_factor),
+                                  base::ClampCeil(100 * scale_factor));
 
   content::TestPageScaleObserver scale_observer(shell()->web_contents());
   SendTouchpadPinchSequenceWithExpectedTarget(rwhv_parent, point_in_child,
@@ -5486,8 +5566,8 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest,
 
 // Tests that performing a touchpad double-tap zoom over an OOPIF offers the
 // synthetic wheel event to the child.
-#if defined(OS_MACOSX) || defined(OS_LINUX) || defined(OS_WIN) || \
-    defined(OS_ANDROID)
+#if defined(OS_MAC) || defined(OS_LINUX) || defined(OS_CHROMEOS) || \
+    defined(OS_WIN) || defined(OS_ANDROID)
 // Flaky on mac, linux and win. crbug.com/947193
 #define MAYBE_TouchpadDoubleTapZoomOverOOPIF \
   DISABLED_TouchpadDoubleTapZoomOverOOPIF
@@ -5502,9 +5582,9 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest,
 
   WebContentsImpl* contents = web_contents();
 
-  WebPreferences prefs = contents->GetRenderViewHost()->GetWebkitPreferences();
+  WebPreferences prefs = contents->GetOrCreateWebPreferences();
   prefs.double_tap_to_zoom_enabled = true;
-  contents->GetRenderViewHost()->UpdateWebkitPreferences(prefs);
+  contents->SetWebPreferences(prefs);
 
   RenderFrameSubmissionObserver render_frame_submission_observer(
       shell()->web_contents());
@@ -5654,8 +5734,8 @@ void CreateContextMenuTestHelper(
   gfx::Rect bounds = rwhv_child->GetViewBounds();
 
   gfx::Point point(
-      gfx::ToCeiledInt((bounds.x() - root_bounds.x() + 5) * scale_factor),
-      gfx::ToCeiledInt((bounds.y() - root_bounds.y() + 5) * scale_factor));
+      base::ClampCeil((bounds.x() - root_bounds.x() + 5) * scale_factor),
+      base::ClampCeil((bounds.y() - root_bounds.y() + 5) * scale_factor));
 
   // Target right-click event to child frame.
   blink::WebMouseEvent click_event(
@@ -5702,9 +5782,16 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHighDPIHitTestBrowserTest,
   CreateContextMenuTestHelper(shell(), embedded_test_server());
 }
 
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
+// The Popup menu test often times out on linux. https://crbug.com/1111402
+#define MAYBE_PopupMenuTest DISABLED_PopupMenuTest
+#else
+#define MAYBE_PopupMenuTest PopupMenuTest
+#endif
+
 // Test that clicking a select element in an out-of-process iframe creates
 // a popup menu in the correct position.
-IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest, PopupMenuTest) {
+IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest, MAYBE_PopupMenuTest) {
   GURL main_url(
       embedded_test_server()->GetURL("/cross_site_iframe_factory.html?a(a)"));
   EXPECT_TRUE(NavigateToURL(shell(), main_url));
@@ -5749,7 +5836,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest, PopupMenuTest) {
   SetWebEventPositions(&click_event, gfx::Point(1, 1), rwhv_root);
   rwhv_child->ProcessMouseEvent(click_event, ui::LatencyInfo());
 
-  ScreenInfo screen_info;
+  blink::ScreenInfo screen_info;
   shell()->web_contents()->GetRenderWidgetHostView()->GetScreenInfo(
       &screen_info);
 
@@ -5759,7 +5846,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest, PopupMenuTest) {
     popup_rect = gfx::ScaleToRoundedRect(popup_rect,
                                          1 / screen_info.device_scale_factor);
   }
-#if defined(OS_MACOSX) || defined(OS_ANDROID)
+#if defined(OS_MAC) || defined(OS_ANDROID)
   // On Mac and Android we receive the coordinates before they are transformed,
   // so they are still relative to the out-of-process iframe origin.
   EXPECT_EQ(popup_rect.x(), 9);
@@ -5771,7 +5858,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest, PopupMenuTest) {
   }
 #endif
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
   // Verify click-and-drag selection of popups still works on Linux with
   // OOPIFs enabled. This is only necessary to test on Aura because Mac and
   // Android use native widgets. Windows does not support this as UI
@@ -5820,22 +5907,18 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest, PopupMenuTest) {
   // This verifies that the popup actually received the event, and it wasn't
   // diverted to a different RenderWidgetHostView due to mouse capture.
   EXPECT_TRUE(popup_monitor.EventWasReceived());
-#endif  // defined(OS_LINUX)
+#endif  // defined(OS_LINUX) || defined(OS_CHROMEOS)
 }
 
 // Test that clicking a select element in a nested out-of-process iframe creates
 // a popup menu in the correct position, even if the top-level page repositions
 // its out-of-process iframe. This verifies that screen positioning information
 // is propagating down the frame tree correctly.
-#if defined(OS_ANDROID)
 // On Android the reported menu coordinates are relative to the OOPIF, and its
 // screen position is computed later, so this test isn't relevant.
-#define MAYBE_NestedPopupMenuTest DISABLED_NestedPopupMenuTest
-#else
-#define MAYBE_NestedPopupMenuTest NestedPopupMenuTest
-#endif
+// Flaky on all other platforms: https://crbug.com/1074248
 IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest,
-                       MAYBE_NestedPopupMenuTest) {
+                       DISABLED_NestedPopupMenuTest) {
   GURL main_url(embedded_test_server()->GetURL(
       "/cross_site_iframe_factory.html?a(b(c))"));
   EXPECT_TRUE(NavigateToURL(shell(), main_url));
@@ -5892,11 +5975,11 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest,
 
   gfx::Rect popup_rect = filter->last_initial_rect();
 
-#if defined(OS_MACOSX) || defined(OS_ANDROID)
+#if defined(OS_MAC) || defined(OS_ANDROID)
   EXPECT_EQ(popup_rect.x(), 9);
   EXPECT_EQ(popup_rect.y(), 9);
 #else
-  ScreenInfo screen_info;
+  blink::ScreenInfo screen_info;
   shell()->web_contents()->GetRenderWidgetHostView()->GetScreenInfo(
       &screen_info);
   if (!IsScreenTooSmallForPopup(screen_info)) {
@@ -5944,7 +6027,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest,
 
   popup_rect = filter->last_initial_rect();
 
-#if defined(OS_MACOSX) || defined(OS_ANDROID)
+#if defined(OS_MAC) || defined(OS_ANDROID)
   EXPECT_EQ(popup_rect.x(), 9);
   EXPECT_EQ(popup_rect.y(), 9);
 #else
@@ -5961,7 +6044,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest,
 // On Mac and Android, the reported menu coordinates are relative to the
 // OOPIF, and its screen position is computed later, so this test isn't
 // relevant on those platforms.
-#if !defined(OS_ANDROID) && !defined(OS_MACOSX)
+#if !defined(OS_ANDROID) && !defined(OS_MAC)
 IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest,
                        ScrolledNestedPopupMenuTest) {
   GURL main_url(embedded_test_server()->GetURL(
@@ -6768,7 +6851,8 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessUserActivationHitTestBrowserTest,
 
   // Clear the activation state.
   root->UpdateUserActivationState(
-      blink::mojom::UserActivationUpdateType::kClearActivation);
+      blink::mojom::UserActivationUpdateType::kClearActivation,
+      blink::mojom::UserActivationNotificationType::kTest);
 
   // Send a mouse down to child frame.
   mouse_event.SetType(blink::WebInputEvent::Type::kMouseDown);
@@ -6937,7 +7021,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestDataGenerationBrowserTest,
   DCHECK(hit_test_data.size() >= 3);
   EXPECT_TRUE(expected_transformed_region.ApproximatelyEqual(
       AxisAlignedLayoutRectFromHitTest(hit_test_data[2]),
-      gfx::ToRoundedInt(device_scale_factor) + 2));
+      base::ClampRound(device_scale_factor) + 2));
   EXPECT_TRUE(
       expected_transform.ApproximatelyEqual(hit_test_data[2].transform()));
   EXPECT_EQ(expected_flags, hit_test_data[2].flags);

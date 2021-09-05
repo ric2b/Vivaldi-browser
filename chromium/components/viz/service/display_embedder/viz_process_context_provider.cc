@@ -36,7 +36,7 @@
 #include "gpu/skia_bindings/grcontext_for_gles2_interface.h"
 #include "third_party/khronos/GLES2/gl2.h"
 #include "third_party/khronos/GLES2/gl2ext.h"
-#include "third_party/skia/include/gpu/GrContext.h"
+#include "third_party/skia/include/gpu/GrDirectContext.h"
 #include "third_party/skia/include/gpu/gl/GrGLInterface.h"
 
 namespace viz {
@@ -167,7 +167,7 @@ gpu::ContextSupport* VizProcessContextProvider::ContextSupport() {
   return gles2_implementation_.get();
 }
 
-class GrContext* VizProcessContextProvider::GrContext() {
+class GrDirectContext* VizProcessContextProvider::GrContext() {
   if (gr_context_)
     return gr_context_->get();
 
@@ -345,6 +345,10 @@ gpu::SharedImageManager* VizProcessContextProvider::GetSharedImageManager() {
 
 gpu::MemoryTracker* VizProcessContextProvider::GetMemoryTracker() {
   return command_buffer_->GetMemoryTracker();
+}
+
+void VizProcessContextProvider::SetNeedsMeasureNextDrawLatency() {
+  return command_buffer_->SetNeedsMeasureNextDrawLatency();
 }
 
 }  // namespace viz

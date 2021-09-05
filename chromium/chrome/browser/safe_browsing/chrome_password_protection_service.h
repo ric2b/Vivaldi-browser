@@ -250,6 +250,8 @@ class ChromePasswordProtectionService : public PasswordProtectionService {
   // |NOT_SIGNED_IN|.
   LoginReputationClientRequest::PasswordReuseEvent::SyncAccountType
   GetSyncAccountType() const override;
+  safe_browsing::LoginReputationClientRequest::UrlDisplayExperiment
+  GetUrlDisplayExperiment() const override;
 
   // Stores |verdict| in the cache based on its |trigger_type|, |url|,
   // reused |password_type|, |verdict| and |receive_time|.
@@ -299,6 +301,8 @@ class ChromePasswordProtectionService : public PasswordProtectionService {
 
   bool IsIncognito() override;
 
+  bool IsUserMBBOptedIn() override;
+
   bool IsInPasswordAlertMode(ReusedPasswordAccountType password_type) override;
 
   // Checks if pinging should be enabled based on the |trigger_type|,
@@ -332,6 +336,9 @@ class ChromePasswordProtectionService : public PasswordProtectionService {
   // If user is under advanced protection.
   bool IsUnderAdvancedProtection() override;
 #endif
+
+  // If Safe browsing endpoint is not enabled in the country.
+  bool IsInExcludedCountry() override;
 
 #if defined(SYNC_PASSWORD_REUSE_WARNING_ENABLED)
   void MaybeLogPasswordReuseDetectedEvent(
@@ -441,6 +448,8 @@ class ChromePasswordProtectionService : public PasswordProtectionService {
                            OnEnterpriseTriggerOff);
   FRIEND_TEST_ALL_PREFIXES(ChromePasswordProtectionServiceBrowserTest,
                            OnEnterpriseTriggerOffGSuite);
+  FRIEND_TEST_ALL_PREFIXES(ChromePasswordProtectionServiceBrowserTest,
+                           VerifyIsInExcludedCountry);
 
  private:
   friend class MockChromePasswordProtectionService;

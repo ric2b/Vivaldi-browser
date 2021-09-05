@@ -461,7 +461,7 @@ class DownloadExtensionTest : public ExtensionApiTest {
   }
   DownloadManager* GetOffRecordManager() {
     return BrowserContext::GetDownloadManager(
-        browser()->profile()->GetOffTheRecordProfile());
+        browser()->profile()->GetPrimaryOTRProfile());
   }
   DownloadManager* GetCurrentManager() {
     return (current_browser_ == incognito_browser_) ?
@@ -875,6 +875,8 @@ downloads::InterruptReason InterruptReasonContentToExtension(
 }  // namespace
 
 IN_PROC_BROWSER_TEST_F(DownloadExtensionTest, DownloadExtensionTest_Open) {
+  platform_util::internal::DisableShellOperationsForTesting();
+
   LoadExtension("downloads_split");
   DownloadsOpenFunction* open_function = new DownloadsOpenFunction();
   open_function->set_user_gesture(true);
@@ -1200,6 +1202,7 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest, FileExistenceCheckAfterSearch) {
 #if !defined(OS_CHROMEOS)
 IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
                        DownloadsShowFunction) {
+  platform_util::internal::DisableShellOperationsForTesting();
   ScopedCancellingItem item(CreateFirstSlowTestDownload());
   ASSERT_TRUE(item.get());
 
@@ -2637,7 +2640,7 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
 }
 
 // flaky on mac: crbug.com/392288
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #define MAYBE_DownloadExtensionTest_Download_FileSystemURL \
         DISABLED_DownloadExtensionTest_Download_FileSystemURL
 #else
@@ -3818,7 +3821,7 @@ IN_PROC_BROWSER_TEST_F(
 
 // TODO test precedence rules: install_time
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #define MAYBE_DownloadExtensionTest_OnDeterminingFilename_RemoveFilenameDeterminer \
   DISABLED_DownloadExtensionTest_OnDeterminingFilename_RemoveFilenameDeterminer
 #else
@@ -3876,9 +3879,17 @@ IN_PROC_BROWSER_TEST_F(
                           result_id)));
 }
 
+// This test is flaky on Linux ASan LSan Tests bot. https://crbug.com/1114226
+#if (defined(OS_LINUX) || defined(OS_CHROMEOS)) && defined(ADDRESS_SANITIZER)
+#define MAYBE_DownloadExtensionTest_OnDeterminingFilename_IncognitoSplit \
+  DISABLED_DownloadExtensionTest_OnDeterminingFilename_IncognitoSplit
+#else
+#define MAYBE_DownloadExtensionTest_OnDeterminingFilename_IncognitoSplit \
+  DownloadExtensionTest_OnDeterminingFilename_IncognitoSplit
+#endif
 IN_PROC_BROWSER_TEST_F(
     DownloadExtensionTest,
-    DownloadExtensionTest_OnDeterminingFilename_IncognitoSplit) {
+    MAYBE_DownloadExtensionTest_OnDeterminingFilename_IncognitoSplit) {
   LoadExtension("downloads_split");
   ASSERT_TRUE(StartEmbeddedTestServer());
   std::string download_url = embedded_test_server()->GetURL("/slow?0").spec();
@@ -4325,7 +4336,7 @@ void OnDangerPromptCreated(DownloadDangerPrompt* prompt) {
   prompt->InvokeActionForTesting(DownloadDangerPrompt::ACCEPT);
 }
 
-#if defined(OS_MACOSX) && !defined(NDEBUG)
+#if defined(OS_MAC) && !defined(NDEBUG)
 // Flaky on Mac debug, failing with a timeout.
 // http://crbug.com/180759
 #define MAYBE_DownloadExtensionTest_AcceptDanger \

@@ -21,8 +21,6 @@
 #include "gin/dictionary.h"
 #include "third_party/blink/public/web/web_local_frame.h"
 
-#include "app/vivaldi_apptools.h"
-
 namespace extensions {
 namespace messaging_util {
 

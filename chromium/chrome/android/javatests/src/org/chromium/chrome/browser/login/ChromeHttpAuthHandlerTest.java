@@ -8,6 +8,7 @@ import android.support.test.InstrumentationRegistry;
 
 import androidx.test.filters.MediumTest;
 
+import org.hamcrest.Matchers;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -18,8 +19,8 @@ import org.chromium.base.Callback;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Restriction;
-import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.customtabs.CustomTabActivityTestRule;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.tab.SadTab;
@@ -141,6 +142,6 @@ public class ChromeHttpAuthHandlerTest {
 
     private void verifyAuthDialogVisibility(ChromeHttpAuthHandler handler, boolean isVisible) {
         CriteriaHelper.pollUiThread(
-                Criteria.equals(isVisible, () -> handler.isShowingAuthDialog()));
+                () -> Criteria.checkThat(handler.isShowingAuthDialog(), Matchers.is(isVisible)));
     }
 }

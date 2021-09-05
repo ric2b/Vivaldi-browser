@@ -172,12 +172,10 @@ class WebViewPlugin : public blink::WebPlugin,
     bool AcceptsLoadDrops() override;
     bool CanHandleGestureEvent() override;
     bool CanUpdateLayout() override;
-    blink::WebScreenInfo GetScreenInfo() override;
     void DidInvalidateRect(const blink::WebRect&) override;
 
     // WebWidgetClient methods:
-    void StartDragging(network::mojom::ReferrerPolicy,
-                       const blink::WebDragData&,
+    void StartDragging(const blink::WebDragData&,
                        blink::WebDragOperationsMask,
                        const SkBitmap&,
                        const gfx::Point&) override;
@@ -187,7 +185,7 @@ class WebViewPlugin : public blink::WebPlugin,
     // WebLocalFrameClient methods:
     void BindToFrame(blink::WebNavigationControl* frame) override;
     void DidClearWindowObject() override;
-    void FrameDetached(DetachType) override;
+    void FrameDetached() override;
     std::unique_ptr<blink::WebURLLoaderFactory> CreateURLLoaderFactory()
         override;
 

@@ -42,7 +42,7 @@
 #include "chromeos/dbus/debug_daemon/debug_daemon_client.h"
 #endif
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
 #include "components/crash/core/app/crashpad.h"
 #endif
 
@@ -157,7 +157,11 @@ void CrashesDOMHandler::HandleRequestUploads(const base::ListValue* args) {
       chromeos::DBusThreadManager::Get()->GetDebugDaemonClient();
   DCHECK(debugd_client);
 
-  debugd_client->UploadCrashes();
+  debugd_client->UploadCrashes(base::BindOnce([](bool success) {
+    if (!success) {
+      LOG(WARNING) << "crash_sender failed or timed out";
+    }
+  }));
 }
 #endif
 
@@ -178,7 +182,7 @@ void CrashesDOMHandler::UpdateUI() {
 #endif
 
   bool using_crashpad = false;
-#if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_ANDROID)
+#if defined(OS_WIN) || defined(OS_MAC) || defined(OS_ANDROID)
   using_crashpad = true;
 #elif defined(OS_LINUX) && !defined(OS_CHROMEOS)
   // ChromeOS uses crash_sender instead of Crashpad for uploads even when

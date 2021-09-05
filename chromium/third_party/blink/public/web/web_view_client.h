@@ -34,7 +34,7 @@
 #include "base/strings/string_piece.h"
 #include "services/network/public/mojom/web_sandbox_flags.mojom-shared.h"
 #include "third_party/blink/public/common/dom_storage/session_storage_namespace_id.h"
-#include "third_party/blink/public/common/feature_policy/feature_policy.h"
+#include "third_party/blink/public/common/feature_policy/feature_policy_features.h"
 #include "third_party/blink/public/mojom/page/page_visibility_state.mojom-forward.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/web/web_ax_enums.h"
@@ -70,7 +70,7 @@ class WebViewClient {
       const WebString& name,
       WebNavigationPolicy policy,
       network::mojom::WebSandboxFlags,
-      const FeaturePolicy::FeatureState&,
+      const FeaturePolicyFeatureState&,
       const SessionStorageNamespaceId& session_storage_namespace_id) {
     return nullptr;
   }
@@ -85,11 +85,6 @@ class WebViewClient {
 
   // Misc ----------------------------------------------------------------
 
-  // Called when the window for this WebView should be closed. The WebView
-  // and its frame tree will be closed asynchronously as a result of this
-  // request.
-  virtual void CloseWindowSoon() {}
-
   // Called when a region of the WebView needs to be re-painted. This is only
   // for non-composited WebViews that exist to contribute to a "parent" WebView
   // painting. Otherwise invalidations are transmitted to the compositor through
@@ -103,6 +98,8 @@ class WebViewClient {
   virtual void PrintPage(WebLocalFrame*) {}
 
   virtual void OnPageVisibilityChanged(mojom::PageVisibilityState visibility) {}
+
+  virtual void OnPageFrozenChanged(bool frozen) {}
 
   // UI ------------------------------------------------------------------
 
@@ -148,6 +145,9 @@ class WebViewClient {
   // Called when the View acquires focus.
   virtual void DidFocus() {}
 
+  // Called when the View's zoom has changed.
+  virtual void ZoomLevelChanged() {}
+
   // Session history -----------------------------------------------------
 
   // Returns the number of history items before/after the current
@@ -171,6 +171,10 @@ class WebViewClient {
   // Policies -------------------------------------------------------------
 
   virtual bool AllowPopupsDuringPageUnload() { return false; }
+
+  // History -------------------------------------------------------------
+  virtual void OnSetHistoryOffsetAndLength(int history_offset,
+                                           int history_length) {}
 };
 
 }  // namespace blink

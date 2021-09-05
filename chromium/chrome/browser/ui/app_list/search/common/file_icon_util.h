@@ -40,13 +40,16 @@ enum class IconType {
   WORD,
 };
 
+IconType GetIconTypeFromString(const std::string& icon_type_string);
 IconType GetIconTypeForPath(const base::FilePath& filepath);
-int GetResourceIdForIconType(IconType icon);
+gfx::ImageSkia GetVectorIconFromIconType(IconType icon,
+                                         bool is_chip_icon = false);
 int GetChipResourceIdForIconType(IconType icon);
 }  // namespace internal
 
 gfx::ImageSkia GetIconForPath(const base::FilePath& filepath);
 gfx::ImageSkia GetChipIconForPath(const base::FilePath& filepath);
+gfx::ImageSkia GetIconFromType(const std::string& icon_type);
 
 }  // namespace app_list
 

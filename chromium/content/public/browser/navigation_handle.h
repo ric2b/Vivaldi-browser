@@ -15,7 +15,6 @@
 #include "content/public/browser/restore_type.h"
 #include "content/public/common/impression.h"
 #include "content/public/common/referrer.h"
-#include "content/public/common/transferrable_url_loader.mojom.h"
 #include "net/base/auth.h"
 #include "net/base/ip_endpoint.h"
 #include "net/base/isolation_info.h"
@@ -23,7 +22,8 @@
 #include "net/dns/public/resolve_error_info.h"
 #include "net/http/http_response_info.h"
 #include "services/network/public/cpp/resource_request_body.h"
-#include "third_party/blink/public/mojom/referrer.mojom.h"
+#include "third_party/blink/public/mojom/loader/referrer.mojom.h"
+#include "third_party/blink/public/mojom/loader/transferrable_url_loader.mojom.h"
 #include "ui/base/page_transition_types.h"
 
 class GURL;
@@ -137,9 +137,7 @@ class CONTENT_EXPORT NavigationHandle {
   virtual const GURL& GetSearchableFormURL() = 0;
   virtual const std::string& GetSearchableFormEncoding() = 0;
 
-  // Returns the reload type for this navigation. Note that renderer-initiated
-  // reloads (via location.reload()) won't count as a reload and do return
-  // ReloadType::NONE.
+  // Returns the reload type for this navigation.
   virtual ReloadType GetReloadType() = 0;
 
   // Returns the restore type for this navigation. RestoreType::NONE is returned
@@ -255,7 +253,9 @@ class CONTENT_EXPORT NavigationHandle {
   virtual bool DidReplaceEntry() = 0;
 
   // Returns true if the browser history should be updated. Otherwise only
-  // the session history will be updated. E.g., on unreachable urls.
+  // the session history will be updated. E.g., on unreachable urls or other
+  // navigations that the users may not think of as navigations (such as
+  // happens with 'history.replaceState()').
   virtual bool ShouldUpdateHistory() = 0;
 
   // The previous main frame URL that the user was on. This may be empty if
@@ -391,7 +391,7 @@ class CONTENT_EXPORT NavigationHandle {
   virtual int GetNavigationEntryOffset() = 0;
 
   virtual void RegisterSubresourceOverride(
-      mojom::TransferrableURLLoaderPtr transferrable_loader) = 0;
+      blink::mojom::TransferrableURLLoaderPtr transferrable_loader) = 0;
 
   // Force enables the given origin trials for this navigation. This needs to
   // be called from WebContents::ReadyToCommitNavigation or earlier to have an

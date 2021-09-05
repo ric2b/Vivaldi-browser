@@ -8,7 +8,9 @@
 #include <utility>
 
 #include "base/auto_reset.h"
+#include "base/bind.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/optional.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "base/task_runner.h"
@@ -16,9 +18,10 @@
 #include "base/trace_event/common/trace_event_common.h"
 #include "cc/paint/paint_record.h"
 #include "cc/paint/paint_recorder.h"
+#include "components/paint_preview/common/paint_preview_tracker.h"
+#include "components/paint_preview/common/serialized_recording.h"
 #include "components/paint_preview/renderer/paint_preview_recorder_utils.h"
 #include "content/public/renderer/render_frame.h"
-#include "mojo/public/cpp/base/shared_memory_utils.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_registry.h"
 #include "third_party/blink/public/web/web_local_frame.h"
 
@@ -46,8 +49,9 @@ FinishedRecording FinishRecording(
     sk_sp<const cc::PaintRecord> recording,
     const gfx::Rect& bounds,
     std::unique_ptr<PaintPreviewTracker> tracker,
+    RecordingPersistence persistence,
     base::File skp_file,
-    size_t max_capture_size,
+    base::Optional<size_t> max_capture_size,
     mojom::PaintPreviewCaptureResponsePtr response) {
   TRACE_EVENT0("paint_preview", "FinishRecording");
   FinishedRecording out(mojom::PaintPreviewStatus::kOk, std::move(response));
@@ -57,13 +61,34 @@ FinishedRecording FinishRecording(
     return out;
   }
 
-  TRACE_EVENT_BEGIN0("paint_preview", "ParseGlyphs");
-  ParseGlyphs(recording.get(), tracker.get());
-  TRACE_EVENT_END0("paint_preview", "ParseGlyphs");
+  TRACE_EVENT_BEGIN0("paint_preview", "ParseGlyphsAndLinks");
+  ParseGlyphsAndLinks(recording.get(), tracker.get());
+  TRACE_EVENT_END0("paint_preview", "ParseGlyphsAndLinks");
   size_t serialized_size = 0;
-  if (!SerializeAsSkPicture(recording, tracker.get(), bounds,
-                            std::move(skp_file), max_capture_size,
-                            &serialized_size)) {
+
+  TRACE_EVENT0("paint_preview", "SerializeAsSkPicture");
+
+  auto skp = PaintRecordToSkPicture(recording, tracker.get(), bounds);
+  if (!skp) {
+    out.status = mojom::PaintPreviewStatus::kCaptureFailed;
+    return out;
+  }
+
+  bool success = false;
+  switch (persistence) {
+    case RecordingPersistence::kFileSystem:
+      success = RecordToFile(std::move(skp_file), skp, tracker.get(),
+                             max_capture_size, &serialized_size);
+      break;
+    case RecordingPersistence::kMemoryBuffer:
+      base::Optional<mojo_base::BigBuffer> buffer = RecordToBuffer(
+          skp, tracker.get(), max_capture_size, &serialized_size);
+      success = buffer.has_value();
+      out.response->skp.emplace(std::move(buffer.value()));
+      break;
+  }
+
+  if (!success) {
     out.status = mojom::PaintPreviewStatus::kCaptureFailed;
     return out;
   }
@@ -134,25 +159,29 @@ void PaintPreviewRecorderImpl::CapturePaintPreviewInternal(
   }
 
   // Warm up paint for an out-of-lifecycle paint phase.
-  frame->DispatchBeforePrintEvent();
+  frame->DispatchBeforePrintEvent(/*print_client=*/nullptr);
 
   DCHECK_EQ(is_main_frame_, params->is_main_frame);
-  gfx::Rect bounds;
-  if (is_main_frame_ || params->clip_rect == gfx::Rect(0, 0, 0, 0)) {
+  // Default to using the clip rect.
+  gfx::Rect bounds = gfx::Rect(params->clip_rect.size());
+  if (bounds.IsEmpty() || params->clip_rect_is_hint) {
+    // If the clip rect is empty or only a hint try to use the document size.
     auto size = frame->DocumentSize();
+    gfx::Rect document_rect = gfx::Rect(0, 0, size.width, size.height);
+    if (!document_rect.IsEmpty())
+      bounds = document_rect;
 
-    // |size| may be 0 if a tab is captured prior to layout finishing. This
-    // shouldn't occur often, if at all, in normal usage. However, this may
-    // occur during tests. Capturing prior to layout is non-sensical as the
-    // canvas size cannot be deremined so just abort.
-    if (size.height == 0 || size.width == 0) {
+    if (bounds.IsEmpty()) {
+      // |bounds| may be empty if a capture is triggered prior to geometry
+      // being finalized and no clip rect was provided. If this happens there
+      // are no valid dimensions for the canvas and an abort is needed.
+      //
+      // This should only happen in tests or if a capture is triggered
+      // immediately after a navigation finished.
       std::move(callback).Run(mojom::PaintPreviewStatus::kCaptureFailed,
                               std::move(response));
       return;
     }
-    bounds = gfx::Rect(0, 0, size.width, size.height);
-  } else {
-    bounds = gfx::Rect(params->clip_rect.size());
   }
 
   auto tracker = std::make_unique<PaintPreviewTracker>(
@@ -174,7 +203,7 @@ void PaintPreviewRecorderImpl::CapturePaintPreviewInternal(
   base::TimeTicks start_time = base::TimeTicks::Now();
   TRACE_EVENT_BEGIN0("paint_preview", "WebLocalFrame::CapturePaintPreview");
   bool success = frame->CapturePaintPreview(
-      bounds, canvas, /*include_linked_destinations=*/true);
+      bounds, canvas, /*include_linked_destinations=*/params->capture_links);
   TRACE_EVENT_END0("paint_preview", "WebLocalFrame::CapturePaintPreview");
   base::TimeDelta capture_time = base::TimeTicks::Now() - start_time;
   response->blink_recording_time = capture_time;
@@ -207,11 +236,20 @@ void PaintPreviewRecorderImpl::CapturePaintPreviewInternal(
     return;
   }
 
+  // Convert the special value |0| to |base::nullopt|.
+  base::Optional<size_t> max_capture_size;
+  if (params->max_capture_size == 0) {
+    max_capture_size = base::nullopt;
+  } else {
+    max_capture_size = params->max_capture_size;
+  }
+
   // This cannot be done async if the recording contains a GPU accelerated
   // image.
   FinishedRecording recording = FinishRecording(
       recorder.finishRecordingAsPicture(), bounds, std::move(tracker),
-      std::move(params->file), params->max_capture_size, std::move(response));
+      params->persistence, std::move(params->file), max_capture_size,
+      std::move(response));
   std::move(callback).Run(recording.status, std::move(recording.response));
 }
 

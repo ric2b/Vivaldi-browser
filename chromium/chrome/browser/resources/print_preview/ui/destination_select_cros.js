@@ -21,31 +21,12 @@ import {I18nBehavior} from 'chrome://resources/js/i18n_behavior.m.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 import {Base, html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {CloudOrigins, Destination, DestinationOrigin, PDF_DESTINATION_KEY, RecentDestination} from '../data/destination.js';
-import {PrinterStatus, PrinterStatusReason, PrinterStatusSeverity} from '../data/printer_status_cros.js';
+import {CloudOrigins, Destination, DestinationOrigin, PDF_DESTINATION_KEY, RecentDestination, SAVE_TO_DRIVE_CROS_DESTINATION_KEY} from '../data/destination.js';
+import {ERROR_STRING_KEY_MAP, PrinterStatus, PrinterStatusReason, PrinterStatusSeverity} from '../data/printer_status_cros.js';
 import {NativeLayer, NativeLayerImpl} from '../native_layer.js';
 import {getSelectDropdownBackground} from '../print_preview_utils.js';
 
 import {SelectBehavior} from './select_behavior.js';
-
-/** @const {!Map<!PrinterStatusReason, string>} */
-const ERROR_STRING_KEY_MAP = new Map([
-  [PrinterStatusReason.CONNECTING_TO_DEVICE, 'printerStatusConnectingToDevice'],
-  [PrinterStatusReason.DEVICE_ERROR, 'printerStatusDeviceError'],
-  [PrinterStatusReason.DOOR_OPEN, 'printerStatusDoorOpen'],
-  [PrinterStatusReason.LOW_ON_INK, 'printerStatusLowOnInk'],
-  [PrinterStatusReason.LOW_ON_PAPER, 'printerStatusLowOnPaper'],
-  [PrinterStatusReason.OUT_OF_INK, 'printerStatusOutOfInk'],
-  [PrinterStatusReason.OUT_OF_PAPER, 'printerStatusOutOfPaper'],
-  [PrinterStatusReason.OUTPUT_ALMOST_FULL, 'printerStatusOutputAlmostFull'],
-  [PrinterStatusReason.OUTPUT_FULL, 'printerStatusOutputFull'],
-  [PrinterStatusReason.PAPER_JAM, 'printerStatusPaperJam'],
-  [PrinterStatusReason.PAUSED, 'printerStatusPaused'],
-  [PrinterStatusReason.PRINTER_QUEUE_FULL, 'printerStatusPrinterQueueFull'],
-  [PrinterStatusReason.PRINTER_UNREACHABLE, 'printerStatusPrinterUnreachable'],
-  [PrinterStatusReason.STOPPED, 'printerStatusStopped'],
-  [PrinterStatusReason.TRAY_MISSING, 'printerStatusTrayMissing'],
-]);
 
 Polymer({
   is: 'print-preview-destination-select-cros',
@@ -60,11 +41,7 @@ Polymer({
     dark: Boolean,
 
     /** @type {!Destination} */
-    destination: {
-      type: Object,
-      observer: 'updateStatusText_',
-    },
-
+    destination: Object,
 
     disabled: Boolean,
 
@@ -88,8 +65,13 @@ Polymer({
       value: PDF_DESTINATION_KEY,
     },
 
-    /** @private */
-    statusText_: String,
+    /** @private {string} */
+    statusText_: {
+      type: String,
+      computed:
+          'computeStatusText_(destination, destination.printerStatusReason)',
+      observer: 'onStatusTextSet_',
+    },
 
     /** @private {string} */
     backgroundImages_: {
@@ -121,6 +103,29 @@ Polymer({
      * @private {!Map<string, string>}
      */
     statusRequestedMap_: Map,
+
+    /** @private */
+    isCurrentDestinationCrosLocal_: {
+      type: Boolean,
+      computed: 'computeIsCurrentDestinationCrosLocal_(destination)',
+      reflectToAttribute: true,
+    },
+
+    /** @private */
+    saveToDriveFlagEnabled_: {
+      type: Boolean,
+      value() {
+        return loadTimeData.getBoolean('printSaveToDrive');
+      },
+      readOnly: true,
+    },
+
+    /** @private */
+    driveDestinationKeyCros_: {
+      type: String,
+      computed:
+          'computeDriveDestinationKeyCros_(driveDestinationKey, saveToDriveFlagEnabled_)',
+    },
   },
 
   /** @private {!IronMetaElement} */
@@ -137,7 +142,11 @@ Polymer({
   },
 
   focus() {
-    this.$$('#dropdown').focus();
+    if (this.printerStatusFlagEnabled_) {
+      this.$$('#dropdown').$$('#destination-dropdown').focus();
+      return;
+    }
+    this.$$('.md-select').focus();
   },
 
   /** Sets the select to the current value of |destination|. */
@@ -284,10 +293,11 @@ Polymer({
     // dropdown printer status icons to recalculate their badge color.
     this.notifyPath(`recentDestinationList.${indexFound}.printerStatusReason`);
 
-    // Update the status text if this printer status is for the
-    // currently selected printer.
+    // If |printerStatus| is for the currently selected printer, use notifyPath
+    // to trigger the destination printer status icon to recalculate its badge
+    // color and the destination error status text.
     if (this.destination && this.destination.key === destinationKey) {
-      this.updateStatusText_();
+      this.notifyPath(`destination.printerStatusReason`);
     }
   },
 
@@ -330,41 +340,51 @@ Polymer({
   },
 
   /**
-   * Check the current destination for an error status then set |statusText_|
-   * appropriately. If no error status exists, unset |statusText_|.
+   * @return {string}  An error status for the current destination. If no error
+   *     status exists, an empty string.
    * @private
    */
-  updateStatusText_: function() {
+  computeStatusText_: function() {
     // |destination| can be either undefined, or null here.
     if (!this.destination) {
-      this.statusText_ = '';
-      return;
+      return '';
     }
 
     // Cloudprint destinations contain their own status text.
     if (CloudOrigins.some(origin => origin === this.destination.origin)) {
-      this.statusText_ = this.destination.shouldShowInvalidCertificateError ?
-          this.i18n('noLongerSupportedFragment') :
-          this.destination.connectionStatusText;
-      return;
+      if (this.destination.shouldShowInvalidCertificateError) {
+        return this.i18n('noLongerSupportedFragment');
+      }
+      if (this.destination.connectionStatusText) {
+        return this.destination.connectionStatusText;
+      }
+    }
+
+    if (this.destination.origin !== DestinationOrigin.CROS) {
+      return this.destination.shouldShowDeprecatedPrinterWarning ?
+          this.i18nAdvanced('printerNotSupportedWarning') :
+          '';
     }
 
     // Only when the flag is enabled do we need to fetch a local printer status
     // error string.
     if (!this.printerStatusFlagEnabled_) {
-      this.statusText_ = '';
-      return;
+      return '';
     }
 
     const printerStatusReason = this.destination.printerStatusReason;
     if (!printerStatusReason ||
         printerStatusReason === PrinterStatusReason.NO_ERROR ||
         printerStatusReason === PrinterStatusReason.UNKNOWN_REASON) {
-      this.statusText_ = '';
-      return;
+      return '';
     }
 
-    this.statusText_ = this.getErrorString_(printerStatusReason);
+    return this.getErrorString_(printerStatusReason);
+  },
+
+  /** @private */
+  onStatusTextSet_() {
+    this.$$('#statusText').innerHTML = this.statusText_;
   },
 
   /**
@@ -373,17 +393,37 @@ Polymer({
    * @private
    */
   getErrorString_: function(printerStatusReason) {
-    const errorTextKey = ERROR_STRING_KEY_MAP.get(printerStatusReason);
-    return errorTextKey ?
-        this.i18n(errorTextKey, this.destination.displayName) :
-        '';
+    const errorStringKey = ERROR_STRING_KEY_MAP.get(printerStatusReason);
+    return errorStringKey ? this.i18n(errorStringKey) : '';
   },
 
   /**
-   * @return {!boolean}
+   * True when the currently selected destination is a CrOS local printer.
+   * @return {boolean}
    * @private
    */
-  shouldShowStatus_: function() {
-    return !!this.statusText_;
+  computeIsCurrentDestinationCrosLocal_: function() {
+    return this.destination &&
+        this.destination.origin === DestinationOrigin.CROS;
   },
+
+  /**
+   * Return the options currently visible to the user for testing purposes.
+   * @return {!Array<!Element>}
+   */
+  getVisibleItemsForTest: function() {
+    return this.printerStatusFlagEnabled_ ?
+        this.$$('#dropdown')
+            .shadowRoot.querySelectorAll('.list-item:not([hidden])') :
+        this.shadowRoot.querySelectorAll('option:not([hidden])');
+  },
+
+  /**
+   * @return {string}
+   * @private
+   */
+  computeDriveDestinationKeyCros_: function() {
+    return this.saveToDriveFlagEnabled_ ? SAVE_TO_DRIVE_CROS_DESTINATION_KEY :
+                                          this.driveDestinationKey;
+  }
 });

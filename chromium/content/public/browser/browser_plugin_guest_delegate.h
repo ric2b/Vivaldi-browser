@@ -20,7 +20,6 @@ class GuestHost;
 class RenderFrameHost;
 class RenderWidgetHost;
 class SiteInstance;
-class BrowserPluginGuest;
 
 // Objects implement this interface to get notified about changes in the guest
 // WebContents and to provide necessary functionality.
@@ -74,11 +73,6 @@ class CONTENT_EXPORT BrowserPluginGuestDelegate {
 
   // Returns the embedder frame for this guest.
   virtual RenderFrameHost* GetEmbedderFrame();
-
-  // It is always set for tab and inspected webviews that might move between
-  // embedders. Used to reset guest_host_ in between hand-overs.
-  BrowserPluginGuest* delegate_to_browser_plugin_ = nullptr;
-
 };
 
 }  // namespace content

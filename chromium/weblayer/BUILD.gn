@@ -20,8 +20,8 @@ if (is_android) {
   import("//build/config/android/config.gni")
   import("//build/config/android/rules.gni")
 } else if (is_mac) {
+  import("//build/apple/tweak_info_plist.gni")
   import("//build/config/mac/rules.gni")
-  import("//build/mac/tweak_info_plist.gni")
   import("//content/public/app/mac_helpers.gni")
   import("//third_party/icu/config.gni")
   import("//ui/gl/features.gni")
@@ -124,7 +124,10 @@ if (is_android) {
 mojom("common_mojom") {
   disable_variants = true
 
-  sources = [ "common/renderer_configuration.mojom" ]
+  sources = [
+    "common/error_page_helper.mojom",
+    "common/renderer_configuration.mojom",
+  ]
   deps = [ "//components/content_settings/core/common:mojo_bindings" ]
 }
 
@@ -152,8 +155,6 @@ source_set("weblayer_lib_base") {
     "browser/browsing_data_remover_delegate_factory.h",
     "browser/client_hints_factory.cc",
     "browser/client_hints_factory.h",
-    "browser/confirm_infobar_android.cc",
-    "browser/confirm_infobar_android.h",
     "browser/content_browser_client_impl.cc",
     "browser/content_browser_client_impl.h",
     "browser/content_browser_client_impl_receiver_bindings.cc",
@@ -164,10 +165,23 @@ source_set("weblayer_lib_base") {
     "browser/cookie_manager_impl.h",
     "browser/cookie_settings_factory.cc",
     "browser/cookie_settings_factory.h",
+    "browser/default_search_engine.cc",
+    "browser/default_search_engine.h",
     "browser/download_impl.cc",
     "browser/download_impl.h",
     "browser/download_manager_delegate_impl.cc",
     "browser/download_manager_delegate_impl.h",
+    "browser/favicon/favicon_backend_wrapper.cc",
+    "browser/favicon/favicon_backend_wrapper.h",
+    "browser/favicon/favicon_fetcher_impl.cc",
+    "browser/favicon/favicon_fetcher_impl.h",
+    "browser/favicon/favicon_service_impl.cc",
+    "browser/favicon/favicon_service_impl.h",
+    "browser/favicon/favicon_service_impl_factory.cc",
+    "browser/favicon/favicon_service_impl_factory.h",
+    "browser/favicon/favicon_service_impl_observer.h",
+    "browser/favicon/favicon_tab_helper.cc",
+    "browser/favicon/favicon_tab_helper.h",
     "browser/feature_list_creator.cc",
     "browser/feature_list_creator.h",
     "browser/file_select_helper.cc",
@@ -178,20 +192,38 @@ source_set("weblayer_lib_base") {
     "browser/http_auth_handler_impl.h",
     "browser/i18n_util.cc",
     "browser/i18n_util.h",
-    "browser/infobar_android.cc",
-    "browser/infobar_android.h",
     "browser/infobar_container_android.cc",
     "browser/infobar_container_android.h",
+    "browser/insecure_form_controller_client.cc",
+    "browser/insecure_form_controller_client.h",
     "browser/javascript_tab_modal_dialog_manager_delegate_android.cc",
     "browser/javascript_tab_modal_dialog_manager_delegate_android.h",
     "browser/js_communication/web_message_host_factory_wrapper.cc",
     "browser/js_communication/web_message_host_factory_wrapper.h",
     "browser/navigation_controller_impl.cc",
     "browser/navigation_controller_impl.h",
+    "browser/navigation_error_navigation_throttle.cc",
+    "browser/navigation_error_navigation_throttle.h",
     "browser/navigation_impl.cc",
     "browser/navigation_impl.h",
+    "browser/navigation_ui_data_impl.cc",
+    "browser/navigation_ui_data_impl.h",
+    "browser/no_state_prefetch/prerender_link_manager_factory.cc",
+    "browser/no_state_prefetch/prerender_link_manager_factory.h",
+    "browser/no_state_prefetch/prerender_manager_delegate_impl.cc",
+    "browser/no_state_prefetch/prerender_manager_delegate_impl.h",
+    "browser/no_state_prefetch/prerender_manager_factory.cc",
+    "browser/no_state_prefetch/prerender_manager_factory.h",
+    "browser/no_state_prefetch/prerender_processor_impl_delegate_impl.cc",
+    "browser/no_state_prefetch/prerender_processor_impl_delegate_impl.h",
+    "browser/no_state_prefetch/prerender_tab_helper.cc",
+    "browser/no_state_prefetch/prerender_tab_helper.h",
+    "browser/no_state_prefetch/prerender_utils.cc",
+    "browser/no_state_prefetch/prerender_utils.h",
     "browser/page_load_metrics_initialize.cc",
     "browser/page_load_metrics_initialize.h",
+    "browser/page_specific_content_settings_delegate.cc",
+    "browser/page_specific_content_settings_delegate.h",
     "browser/password_manager_driver_factory.cc",
     "browser/password_manager_driver_factory.h",
     "browser/permissions/geolocation_permission_context_delegate.cc",
@@ -216,6 +248,8 @@ source_set("weblayer_lib_base") {
     "browser/profile_disk_operations.h",
     "browser/profile_impl.cc",
     "browser/profile_impl.h",
+    "browser/signin_url_loader_throttle.cc",
+    "browser/signin_url_loader_throttle.h",
     "browser/ssl_error_controller_client.cc",
     "browser/ssl_error_controller_client.h",
     "browser/stateful_ssl_host_state_delegate_factory.cc",
@@ -224,14 +258,14 @@ source_set("weblayer_lib_base") {
     "browser/system_network_context_manager.h",
     "browser/tab_impl.cc",
     "browser/tab_impl.h",
-    "browser/tab_specific_content_settings_delegate.cc",
-    "browser/tab_specific_content_settings_delegate.h",
     "browser/translate_accept_languages_factory.cc",
     "browser/translate_accept_languages_factory.h",
     "browser/translate_client_impl.cc",
     "browser/translate_client_impl.h",
     "browser/translate_ranker_factory.cc",
     "browser/translate_ranker_factory.h",
+    "browser/ukm_page_load_metrics_observer.cc",
+    "browser/ukm_page_load_metrics_observer.h",
     "browser/url_bar/autocomplete_scheme_classifier_impl.cc",
     "browser/url_bar/autocomplete_scheme_classifier_impl.h",
     "browser/url_bar/page_info_delegate_impl.cc",
@@ -244,8 +278,6 @@ source_set("weblayer_lib_base") {
     "browser/web_contents_view_delegate_impl.h",
     "browser/weblayer_browser_interface_binders.cc",
     "browser/weblayer_browser_interface_binders.h",
-    "browser/weblayer_content_browser_overlay_manifest.cc",
-    "browser/weblayer_content_browser_overlay_manifest.h",
     "browser/weblayer_features.cc",
     "browser/weblayer_features.h",
     "browser/weblayer_field_trials.cc",
@@ -275,8 +307,12 @@ source_set("weblayer_lib_base") {
     "public/cookie_manager.h",
     "public/download.h",
     "public/download_delegate.h",
+    "public/error_page.h",
     "public/error_page_delegate.h",
+    "public/favicon_fetcher.h",
+    "public/favicon_fetcher_delegate.h",
     "public/fullscreen_delegate.h",
+    "public/google_accounts_delegate.h",
     "public/js_communication/web_message.cc",
     "public/js_communication/web_message.h",
     "public/js_communication/web_message_host.h",
@@ -295,6 +331,8 @@ source_set("weblayer_lib_base") {
     "renderer/content_renderer_client_impl.h",
     "renderer/error_page_helper.cc",
     "renderer/error_page_helper.h",
+    "renderer/url_loader_throttle_provider.cc",
+    "renderer/url_loader_throttle_provider.h",
     "renderer/weblayer_render_frame_observer.cc",
     "renderer/weblayer_render_frame_observer.h",
     "renderer/weblayer_render_thread_observer.cc",
@@ -338,6 +376,11 @@ source_set("weblayer_lib_base") {
     "//components/embedder_support",
     "//components/embedder_support/origin_trials",
     "//components/error_page/common",
+    "//components/error_page/content/browser",
+    "//components/favicon/content",
+    "//components/favicon/core",
+    "//components/favicon/core:database",
+    "//components/favicon_base",
     "//components/find_in_page",
     "//components/infobars/core",
     "//components/js_injection/browser",
@@ -345,8 +388,9 @@ source_set("weblayer_lib_base") {
     "//components/keyed_service/content",
     "//components/language/core/browser",
     "//components/metrics",
+    "//components/metrics:content",
     "//components/network_time",
-    "//components/omnibox/browser",
+    "//components/omnibox/browser:location_bar",
     "//components/page_info",
     "//components/page_load_metrics/browser",
     "//components/page_load_metrics/renderer",
@@ -355,6 +399,12 @@ source_set("weblayer_lib_base") {
     "//components/policy/core/browser",
     "//components/pref_registry:pref_registry",
     "//components/prefs",
+    "//components/prerender/browser",
+    "//components/prerender/common",
+    "//components/prerender/common:mojo_bindings",
+    "//components/prerender/renderer",
+    "//components/safe_browsing/content/common:interfaces",
+    "//components/safe_browsing/content/renderer:throttles",
     "//components/safe_browsing/core:features",
     "//components/security_interstitials/content:security_interstitial_page",
     "//components/security_interstitials/content/renderer:security_interstitial_page_controller",
@@ -362,6 +412,7 @@ source_set("weblayer_lib_base") {
     "//components/security_state/content",
     "//components/services/storage/public/mojom",
     "//components/sessions",
+    "//components/signin/core/browser",
     "//components/site_isolation",
     "//components/spellcheck:buildflags",
     "//components/ssl_errors",
@@ -389,7 +440,6 @@ source_set("weblayer_lib_base") {
     "//content/public/browser",
     "//content/public/child",
     "//content/public/common",
-    "//content/public/common:client_hints_mojom",
     "//content/public/common:service_names",
     "//content/public/renderer",
     "//content/public/utility",
@@ -471,8 +521,12 @@ source_set("weblayer_lib_base") {
       "browser/download_callback_proxy.h",
       "browser/error_page_callback_proxy.cc",
       "browser/error_page_callback_proxy.h",
+      "browser/favicon/favicon_callback_proxy.cc",
+      "browser/favicon/favicon_callback_proxy.h",
       "browser/fullscreen_callback_proxy.cc",
       "browser/fullscreen_callback_proxy.h",
+      "browser/google_accounts_callback_proxy.cc",
+      "browser/google_accounts_callback_proxy.h",
       "browser/infobar_service.cc",
       "browser/infobar_service.h",
       "browser/js_communication/web_message_host_factory_proxy.cc",
@@ -499,8 +553,8 @@ source_set("weblayer_lib_base") {
       "browser/tab_callback_proxy.h",
       "browser/translate_compact_infobar.cc",
       "browser/translate_compact_infobar.h",
-      "browser/translate_utils.cc",
-      "browser/translate_utils.h",
+      "browser/tts_environment_android_impl.cc",
+      "browser/tts_environment_android_impl.h",
       "browser/url_bar/page_info_client_impl.cc",
       "browser/url_bar/page_info_client_impl.h",
       "browser/verdict_cache_manager_factory.cc",
@@ -515,8 +569,6 @@ source_set("weblayer_lib_base") {
       "common/crash_reporter/crash_keys.h",
       "common/crash_reporter/crash_reporter_client.cc",
       "common/crash_reporter/crash_reporter_client.h",
-      "renderer/url_loader_throttle_provider.cc",
-      "renderer/url_loader_throttle_provider.h",
     ]
     deps += [
       "//android_webview:generate_aw_resources",
@@ -525,6 +577,7 @@ source_set("weblayer_lib_base") {
       "//components/autofill/android/provider",
       "//components/browser_ui/client_certificate/android",
       "//components/browser_ui/site_settings/android",
+      "//components/browser_ui/sms/android",
       "//components/cdm/browser",
       "//components/content_settings/android",
       "//components/crash/android:crash_android",
@@ -535,6 +588,7 @@ source_set("weblayer_lib_base") {
       "//components/embedder_support/android:web_contents_delegate",
       "//components/embedder_support/android/metrics",
       "//components/external_intents/android",
+      "//components/infobars/android",
       "//components/infobars/content",
       "//components/javascript_dialogs",
       "//components/location/android:settings",
@@ -548,8 +602,6 @@ source_set("weblayer_lib_base") {
       "//components/safe_browsing/android:safe_browsing_api_handler",
       "//components/safe_browsing/content",
       "//components/safe_browsing/content/browser",
-      "//components/safe_browsing/content/common:interfaces",
-      "//components/safe_browsing/content/renderer:throttles",
       "//components/safe_browsing/core:ping_manager",
       "//components/safe_browsing/core:verdict_cache_manager",
       "//components/safe_browsing/core/browser",
@@ -562,6 +614,7 @@ source_set("weblayer_lib_base") {
       "//components/security_interstitials/core:unsafe_resource",
       "//components/security_interstitials/core/",
       "//components/security_state/content/android",
+      "//components/translate/content/android",
       "//components/version_info/android:channel_getter",
       "//services/resource_coordinator/public/cpp/memory_instrumentation:browser",
       "//ui/android",
@@ -585,7 +638,7 @@ source_set("weblayer_lib_base") {
     }
   }
 
-  if (is_linux) {
+  if (is_linux || is_chromeos) {
     deps += [
       "//build/config/freetype",
       "//third_party/fontconfig",
@@ -617,9 +670,11 @@ if (is_android) {
     deps = [
       ":weblayer_lib_base",
       "//base",
+      "//components/infobars/android",
       "//components/infobars/core",
       "//components/translate/core/browser",
       "//content/public/browser",
+      "//content/public/test/android:content_native_test_support",
       "//content/test:test_support",
       "//testing/gtest",
       "//weblayer/browser/java:test_jni",
@@ -692,11 +747,15 @@ if (is_android) {
 
   shared_library("libweblayer_test") {
     testonly = true
-    sources = [ "app/entry_point.cc" ]
+    sources = [
+      "$target_gen_dir/browser/java/test_weblayer_jni_registration.h",
+      "app/entry_point.cc",
+    ]
     deps = [
       ":weblayer_lib_webview_test",
       "//base",
       "//content/public/app",
+      "//weblayer/browser/java:test_weblayer_jni_registration",
     ]
     configs -= [ "//build/config/android:hide_all_but_jni_onload" ]
     configs += [ "//build/config/android:hide_all_but_jni" ]

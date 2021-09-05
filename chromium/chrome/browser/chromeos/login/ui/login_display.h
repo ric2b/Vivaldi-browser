@@ -37,30 +37,17 @@ class LoginDisplay {
     // Returns true if sign in is in progress.
     virtual bool IsSigninInProgress() const = 0;
 
-    // Sign out the currently signed in user.
-    // Used when the lock screen is being displayed.
-    virtual void Signout() = 0;
-
     // Notify the delegate when the sign-in UI is finished loading.
     virtual void OnSigninScreenReady() = 0;
 
     // Called when the user requests enterprise enrollment.
     virtual void OnStartEnterpriseEnrollment() = 0;
 
-    // Called when the user requests enable developer features screen.
-    virtual void OnStartEnableDebuggingScreen() = 0;
-
     // Called when the user requests kiosk enable screen.
     virtual void OnStartKioskEnableScreen() = 0;
 
     // Called when the owner permission for kiosk app auto launch is requested.
     virtual void OnStartKioskAutolaunchScreen() = 0;
-
-    // Shows update required screen.
-    virtual void ShowUpdateRequiredScreen() = 0;
-
-    // Shows wrong HWID screen.
-    virtual void ShowWrongHWIDScreen() = 0;
 
     // Returns name of the currently connected network, for error message,
     virtual base::string16 GetConnectedNetworkName() = 0;
@@ -114,18 +101,12 @@ class LoginDisplay {
   Delegate* delegate() { return delegate_; }
   void set_delegate(Delegate* delegate) { delegate_ = delegate; }
 
-  gfx::NativeWindow parent_window() const { return parent_window_; }
-  void set_parent_window(gfx::NativeWindow window) { parent_window_ = window; }
-
   bool is_signin_completed() const { return is_signin_completed_; }
   void set_signin_completed(bool value) { is_signin_completed_ = value; }
 
  protected:
   // Login UI delegate (controller).
   Delegate* delegate_ = nullptr;
-
-  // Parent window, might be used to create dialog windows.
-  gfx::NativeWindow parent_window_ = nullptr;
 
   // True if signin for user has completed.
   // TODO(nkostylev): Find a better place to store this state

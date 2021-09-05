@@ -9,6 +9,7 @@
 
 #include "base/metrics/field_trial_params.h"
 #include "base/strings/string_split.h"
+#include "base/strings/string_util.h"
 #include "build/build_config.h"
 #include "content/browser/frame_host/frame_tree_node.h"
 #include "content/browser/frame_host/render_frame_host_delegate.h"
@@ -72,14 +73,6 @@ const base::FeatureParam<ChildProcessImportance> kChildProcessImportanceParam{
     ChildProcessImportance::MODERATE, &child_process_importance_options};
 #endif
 
-bool IsServiceWorkerSupported() {
-  if (!DeviceHasEnoughMemoryForBackForwardCache())
-    return false;
-  static constexpr base::FeatureParam<bool> service_worker_supported(
-      &features::kBackForwardCache, "service_worker_supported", false);
-  return service_worker_supported.Get();
-}
-
 bool IsGeolocationSupported() {
   if (!DeviceHasEnoughMemoryForBackForwardCache())
     return false;
@@ -121,52 +114,47 @@ uint64_t GetDisallowedFeatures(RenderFrameHostImpl* rfh) {
   // TODO(https://crbug.com/1015784): Finalize disallowed feature list, and test
   // for each disallowed feature.
   constexpr uint64_t kAlwaysDisallowedFeatures =
-      FeatureToBit(WebSchedulerTrackedFeature::kWebSocket) |
-      FeatureToBit(WebSchedulerTrackedFeature::kWebRTC) |
+      FeatureToBit(WebSchedulerTrackedFeature::kAppBanner) |
+      FeatureToBit(WebSchedulerTrackedFeature::kBroadcastChannel) |
       FeatureToBit(WebSchedulerTrackedFeature::kContainsPlugins) |
       FeatureToBit(WebSchedulerTrackedFeature::kDedicatedWorkerOrWorklet) |
+      FeatureToBit(WebSchedulerTrackedFeature::kIdleManager) |
+      FeatureToBit(WebSchedulerTrackedFeature::kIndexedDBConnection) |
+      FeatureToBit(WebSchedulerTrackedFeature::kKeyboardLock) |
       FeatureToBit(
           WebSchedulerTrackedFeature::kOutstandingIndexedDBTransaction) |
-      FeatureToBit(
-          WebSchedulerTrackedFeature::kRequestedNotificationsPermission) |
-      FeatureToBit(WebSchedulerTrackedFeature::kRequestedMIDIPermission) |
+      FeatureToBit(WebSchedulerTrackedFeature::kPaymentManager) |
+      FeatureToBit(WebSchedulerTrackedFeature::kPictureInPicture) |
+      FeatureToBit(WebSchedulerTrackedFeature::kPortal) |
+      FeatureToBit(WebSchedulerTrackedFeature::kPrinting) |
       FeatureToBit(
           WebSchedulerTrackedFeature::kRequestedAudioCapturePermission) |
-      FeatureToBit(
-          WebSchedulerTrackedFeature::kRequestedVideoCapturePermission) |
       FeatureToBit(WebSchedulerTrackedFeature::
                        kRequestedBackForwardCacheBlockedSensors) |
       FeatureToBit(
           WebSchedulerTrackedFeature::kRequestedBackgroundWorkPermission) |
-      FeatureToBit(WebSchedulerTrackedFeature::kBroadcastChannel) |
-      FeatureToBit(WebSchedulerTrackedFeature::kIndexedDBConnection) |
-      FeatureToBit(WebSchedulerTrackedFeature::kWebGL) |
-      FeatureToBit(WebSchedulerTrackedFeature::kWebVR) |
-      FeatureToBit(WebSchedulerTrackedFeature::kWebXR) |
+      FeatureToBit(WebSchedulerTrackedFeature::kRequestedMIDIPermission) |
+      FeatureToBit(
+          WebSchedulerTrackedFeature::kRequestedNotificationsPermission) |
+      FeatureToBit(
+          WebSchedulerTrackedFeature::kRequestedVideoCapturePermission) |
       FeatureToBit(WebSchedulerTrackedFeature::kSharedWorker) |
-      FeatureToBit(WebSchedulerTrackedFeature::kWebXR) |
-      FeatureToBit(WebSchedulerTrackedFeature::kWebLocks) |
-      FeatureToBit(WebSchedulerTrackedFeature::kWebHID) |
-      FeatureToBit(WebSchedulerTrackedFeature::kWakeLock) |
-      FeatureToBit(WebSchedulerTrackedFeature::kWebShare) |
-      FeatureToBit(WebSchedulerTrackedFeature::kWebFileSystem) |
-      FeatureToBit(WebSchedulerTrackedFeature::kAppBanner) |
-      FeatureToBit(WebSchedulerTrackedFeature::kPrinting) |
-      FeatureToBit(WebSchedulerTrackedFeature::kWebDatabase) |
-      FeatureToBit(WebSchedulerTrackedFeature::kPictureInPicture) |
-      FeatureToBit(WebSchedulerTrackedFeature::kPortal) |
+      FeatureToBit(WebSchedulerTrackedFeature::kSmsService) |
       FeatureToBit(WebSchedulerTrackedFeature::kSpeechRecognizer) |
-      FeatureToBit(WebSchedulerTrackedFeature::kIdleManager) |
-      FeatureToBit(WebSchedulerTrackedFeature::kPaymentManager) |
       FeatureToBit(WebSchedulerTrackedFeature::kSpeechSynthesis) |
-      FeatureToBit(WebSchedulerTrackedFeature::kKeyboardLock);
+      FeatureToBit(WebSchedulerTrackedFeature::kWakeLock) |
+      FeatureToBit(WebSchedulerTrackedFeature::kWebDatabase) |
+      FeatureToBit(WebSchedulerTrackedFeature::kWebFileSystem) |
+      FeatureToBit(WebSchedulerTrackedFeature::kWebGL) |
+      FeatureToBit(WebSchedulerTrackedFeature::kWebHID) |
+      FeatureToBit(WebSchedulerTrackedFeature::kWebLocks) |
+      FeatureToBit(WebSchedulerTrackedFeature::kWebRTC) |
+      FeatureToBit(WebSchedulerTrackedFeature::kWebShare) |
+      FeatureToBit(WebSchedulerTrackedFeature::kWebSocket) |
+      FeatureToBit(WebSchedulerTrackedFeature::kWebVR) |
+      FeatureToBit(WebSchedulerTrackedFeature::kWebXR);
 
   uint64_t result = kAlwaysDisallowedFeatures;
-
-  if (!IsServiceWorkerSupported()) {
-    result |=
-        FeatureToBit(WebSchedulerTrackedFeature::kServiceWorkerControlledPage);
-  }
 
   if (!IsGeolocationSupported()) {
     result |= FeatureToBit(
@@ -180,13 +168,6 @@ uint64_t GetDisallowedFeatures(RenderFrameHostImpl* rfh) {
         FeatureToBit(
             WebSchedulerTrackedFeature::kOutstandingNetworkRequestFetch) |
         FeatureToBit(WebSchedulerTrackedFeature::kOutstandingNetworkRequestXHR);
-  }
-
-  // We do not cache documents which have cache-control: no-store header on
-  // their main resource.
-  if (!rfh->GetParent()) {
-    result |= FeatureToBit(
-        WebSchedulerTrackedFeature::kMainResourceHasCacheControlNoStore);
   }
 
   return result;
@@ -263,6 +244,34 @@ void RequestRecordTimeToVisible(RenderFrameHostImpl* rfh,
 
 }  // namespace
 
+// static
+BackForwardCacheImpl::MessageHandlingPolicyWhenCached
+BackForwardCacheImpl::GetChannelAssociatedMessageHandlingPolicy() {
+  // Avoid activating BackForwardCache trial for checking the parameters
+  // associated with it.
+  if (!IsBackForwardCacheEnabled())
+    return kMessagePolicyNone;
+
+  static constexpr char kFieldTrialParam[] = "message_handling_when_cached";
+  auto param = base::GetFieldTrialParamValueByFeature(
+      features::kBackForwardCache, kFieldTrialParam);
+  if (param.empty() || param == "log") {
+    return kMessagePolicyLog;
+  } else if (param == "none") {
+    return kMessagePolicyNone;
+  } else if (param == "dump") {
+    return kMessagePolicyDump;
+  } else if (param == "kill") {
+    return kMessagePolicyKill;
+  } else {
+    DLOG(WARNING) << "Failed to parse field trial param " << kFieldTrialParam
+                  << " with string value " << param
+                  << " under feature kBackForwardCache"
+                  << features::kBackForwardCache.name;
+    return kMessagePolicyLog;
+  }
+}
+
 BackForwardCacheImpl::Entry::Entry(
     std::unique_ptr<RenderFrameHostImpl> rfh,
     RenderFrameProxyHostMap proxies,
@@ -303,8 +312,19 @@ base::TimeDelta BackForwardCacheImpl::GetTimeToLiveInBackForwardCache() {
       kDefaultTimeToLiveInBackForwardCacheInSeconds));
 }
 
-BackForwardCacheCanStoreDocumentResult BackForwardCacheImpl::CanStoreDocument(
+BackForwardCacheCanStoreDocumentResult BackForwardCacheImpl::CanStorePageNow(
     RenderFrameHostImpl* rfh) {
+  BackForwardCacheCanStoreDocumentResult result =
+      CanPotentiallyStorePageLater(rfh);
+  CheckDynamicStatesOnSubtree(&result, rfh);
+
+  DVLOG(1) << "CanStorePageNow: " << rfh->GetLastCommittedURL() << " : "
+           << result.ToString();
+  return result;
+}
+
+BackForwardCacheCanStoreDocumentResult
+BackForwardCacheImpl::CanPotentiallyStorePageLater(RenderFrameHostImpl* rfh) {
   BackForwardCacheCanStoreDocumentResult result;
 
   // Use the BackForwardCache only for the main frame.
@@ -314,18 +334,42 @@ BackForwardCacheCanStoreDocumentResult BackForwardCacheImpl::CanStoreDocument(
   if (!IsBackForwardCacheEnabled() || is_disabled_for_testing_) {
     result.No(
         BackForwardCacheMetrics::NotRestoredReason::kBackForwardCacheDisabled);
+
+    // In addition to the general "BackForwardCacheDisabled" reason above, also
+    // track more specific reasons on why BackForwardCache is disabled.
+    if (IsBackForwardCacheDisabledByCommandLine()) {
+      result.No(BackForwardCacheMetrics::NotRestoredReason::
+                    kBackForwardCacheDisabledByCommandLine);
+    }
+
+    if (!DeviceHasEnoughMemoryForBackForwardCache()) {
+      result.No(BackForwardCacheMetrics::NotRestoredReason::
+                    kBackForwardCacheDisabledByLowMemory);
+    }
   }
+
+  // If this function is called after we navigated to a new RenderFrameHost,
+  // then |rfh| must already be replaced by the new RenderFrameHost. If this
+  // function is called before we navigated, then |rfh| must be a current
+  // RenderFrameHost.
+  bool is_current_rfh = rfh->IsCurrent();
 
   // Two pages in the same BrowsingInstance can script each other. When a page
   // can be scripted from outside, it can't enter the BackForwardCache.
   //
-  // The "RelatedActiveContentsCount" below is compared against 0, not 1. This
-  // is because the |rfh| is not a "current" RenderFrameHost anymore. It is not
-  // "active" itself.
+  // If the |rfh| is not a "current" RenderFrameHost anymore, the
+  // "RelatedActiveContentsCount" below is compared against 0, not 1. This is
+  // because |rfh| is not "active" itself.
   //
   // This check makes sure the old and new document aren't sharing the same
-  // BrowsingInstance.
-  if (rfh->GetSiteInstance()->GetRelatedActiveContentsCount() != 0) {
+  // BrowsingInstance. Note that the existence of related active contents might
+  // change in the future, but we are checking this in
+  // CanPotentiallyStorePageLater instead of CanStorePageNow because it's needed
+  // to determine whether to do a proactive BrowsingInstance swap or not, which
+  // should not be done if the page has related active contents.
+  unsigned expected_related_active_contents_count = is_current_rfh ? 1 : 0;
+  if (rfh->GetSiteInstance()->GetRelatedActiveContentsCount() !=
+      expected_related_active_contents_count) {
     result.NoDueToRelatedActiveContents(
         rfh->browsing_instance_not_swapped_reason());
   }
@@ -346,25 +390,36 @@ BackForwardCacheCanStoreDocumentResult BackForwardCacheImpl::CanStoreDocument(
         BackForwardCacheMetrics::NotRestoredReason::kSchemeNotHTTPOrHTTPS);
   }
 
+  // We should not cache pages with Cache-control: no-store. Note that
+  // even though this is categorized as a "feature", we will check this within
+  // CanPotentiallyStorePageLater as it's not possible to change the HTTP
+  // headers, so if it's not possible to cache this page now due to this, it's
+  // impossible to cache this page later.
+  // TODO(rakina): Once we move cache-control tracking to RenderFrameHostImpl,
+  // change this part to use the information stored in RenderFrameHostImpl
+  // instead.
+  uint64_t cache_control_no_store_feature = FeatureToBit(
+      WebSchedulerTrackedFeature::kMainResourceHasCacheControlNoStore);
+  if (rfh->scheduler_tracked_features() & cache_control_no_store_feature) {
+    result.NoDueToFeatures(cache_control_no_store_feature);
+  }
+
   // Only store documents that have URLs allowed through experiment.
   if (!IsAllowed(rfh->GetLastCommittedURL()))
     result.No(BackForwardCacheMetrics::NotRestoredReason::kDomainNotAllowed);
 
-  CanStoreRenderFrameHost(&result, rfh);
+  CanStoreRenderFrameHostLater(&result, rfh);
 
-  DVLOG(1) << "CanStoreDocument: " << rfh->GetLastCommittedURL() << " : "
-           << result.ToString();
+  DVLOG(1) << "CanPotentiallyStorePageLater: " << rfh->GetLastCommittedURL()
+           << " : " << result.ToString();
   return result;
 }
 
 // Recursively checks whether this RenderFrameHost and all child frames
-// can be cached.
-void BackForwardCacheImpl::CanStoreRenderFrameHost(
+// can be cached later.
+void BackForwardCacheImpl::CanStoreRenderFrameHostLater(
     BackForwardCacheCanStoreDocumentResult* result,
     RenderFrameHostImpl* rfh) {
-  if (!rfh->IsDOMContentLoaded())
-    result->No(BackForwardCacheMetrics::NotRestoredReason::kLoading);
-
   // If the rfh has ever granted media access, prevent it from entering cache.
   // TODO(crbug.com/989379): Consider only blocking when there's an active
   //                         media stream.
@@ -378,7 +433,23 @@ void BackForwardCacheImpl::CanStoreRenderFrameHost(
         rfh->back_forward_cache_disabled_reasons());
   }
 
-  // Don't cache the page if it uses any disallowed features.
+  // Do not store documents if they have inner WebContents.
+  if (rfh->IsOuterDelegateFrame())
+    result->No(BackForwardCacheMetrics::NotRestoredReason::kHaveInnerContents);
+
+  for (size_t i = 0; i < rfh->child_count(); i++)
+    CanStoreRenderFrameHostLater(result,
+                                 rfh->child_at(i)->current_frame_host());
+}
+
+// Recursively checks dynamic states that might affect whether this
+// RenderFrameHost and all child frames can be cached right now.
+void BackForwardCacheImpl::CheckDynamicStatesOnSubtree(
+    BackForwardCacheCanStoreDocumentResult* result,
+    RenderFrameHostImpl* rfh) {
+  if (!rfh->IsDOMContentLoaded())
+    result->No(BackForwardCacheMetrics::NotRestoredReason::kLoading);
+
   // TODO(altimin): At the moment only the first detected failure is reported.
   // For reporting purposes it's a good idea to also collect this information
   // from children.
@@ -397,18 +468,14 @@ void BackForwardCacheImpl::CanStoreRenderFrameHost(
         BackForwardCacheMetrics::NotRestoredReason::kSubframeIsNavigating);
   }
 
-  // Do not store documents if they have inner WebContents.
-  if (rfh->IsOuterDelegateFrame())
-    result->No(BackForwardCacheMetrics::NotRestoredReason::kHaveInnerContents);
-
   for (size_t i = 0; i < rfh->child_count(); i++)
-    CanStoreRenderFrameHost(result, rfh->child_at(i)->current_frame_host());
+    CheckDynamicStatesOnSubtree(result, rfh->child_at(i)->current_frame_host());
 }
 
 void BackForwardCacheImpl::StoreEntry(
     std::unique_ptr<BackForwardCacheImpl::Entry> entry) {
   TRACE_EVENT0("navigation", "BackForwardCache::StoreEntry");
-  DCHECK(CanStoreDocument(entry->render_frame_host.get()));
+  DCHECK(CanStorePageNow(entry->render_frame_host.get()));
 
 #if defined(OS_ANDROID)
   if (!IsProcessBindingEnabled()) {
@@ -446,7 +513,7 @@ void BackForwardCacheImpl::StoreEntry(
 
 std::unique_ptr<BackForwardCacheImpl::Entry> BackForwardCacheImpl::RestoreEntry(
     int navigation_entry_id,
-    base::TimeTicks navigation_start) {
+    blink::mojom::PageRestoreParamsPtr page_restore_params) {
   TRACE_EVENT0("navigation", "BackForwardCache::RestoreEntry");
   // Select the RenderFrameHostImpl matching the navigation entry.
   auto matching_entry = std::find_if(
@@ -464,12 +531,11 @@ std::unique_ptr<BackForwardCacheImpl::Entry> BackForwardCacheImpl::RestoreEntry(
           ->render_frame_host->is_evicted_from_back_forward_cache())
     return nullptr;
 
-  // Capture the navigation start timestamp to dispatch to the page when the
-  // entry is restored.
-  (*matching_entry)->restore_navigation_start = navigation_start;
   std::unique_ptr<Entry> entry = std::move(*matching_entry);
   entries_.erase(matching_entry);
-  RequestRecordTimeToVisible(entry->render_frame_host.get(), navigation_start);
+  entry->page_restore_params = std::move(page_restore_params);
+  RequestRecordTimeToVisible(entry->render_frame_host.get(),
+                             entry->page_restore_params->navigation_start);
   entry->render_frame_host->WillLeaveBackForwardCache();
 
   RestoreBrowserControlsState(entry->render_frame_host.get());
@@ -526,27 +592,12 @@ void BackForwardCache::DisableForRenderFrameHost(GlobalFrameRoutingId id,
     rfh->DisableBackForwardCache(reason);
 }
 
-// static
-bool BackForwardCache::EvictIfCached(GlobalFrameRoutingId id,
-                                     base::StringPiece reason) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  auto* rfh = RenderFrameHostImpl::FromID(id);
-  if (rfh && rfh->IsInBackForwardCache()) {
-    BackForwardCacheCanStoreDocumentResult can_store;
-    can_store.NoDueToDisableForRenderFrameHostCalled({reason.as_string()});
-    rfh->EvictFromBackForwardCacheWithReasons(can_store);
-    return true;
-  }
-  return false;
-}
-
 void BackForwardCacheImpl::DisableForTesting(DisableForTestingReason reason) {
   is_disabled_for_testing_ = true;
 
-  // This could happen if a test populated some entries in the cache, then
-  // called DisableForTesting(). This is not something we currently expect tests
-  // to do.
-  DCHECK(entries_.empty());
+  // Flush all the entries to make sure there are no entries in the cache after
+  // DisableForTesting() is called.
+  Flush();
 }
 
 const std::list<std::unique_ptr<BackForwardCacheImpl::Entry>>&
@@ -596,7 +647,7 @@ bool BackForwardCacheImpl::IsAllowed(const GURL& current_url) {
   const auto& entry = allowed_urls_.find(current_url.host());
   if (entry != allowed_urls_.end()) {
     for (auto allowed_path : entry->second) {
-      if (current_url.path_piece().starts_with(allowed_path))
+      if (base::StartsWith(current_url.path_piece(), allowed_path))
         return true;
     }
   }

@@ -19,15 +19,18 @@ class NotesSpecifics;
 class EntitySpecifics;
 }  // namespace sync_pb
 
+namespace syncer {
+struct EntityData;
+}  // namespace syncer
+
 namespace sync_notes {
 
 // Canonicalize |node_title| similar to legacy client's implementation by
 // truncating and the appending ' ' in some cases.
 std::string FullTitleToLegacyCanonicalizedTitle(const std::string& node_title);
 
-// Used to decide if entity needs to be reuploaded for each remote change which
-// is true if the proto field for the full title is missing.
-bool IsFullTitleReuploadNeeded(const sync_pb::NotesSpecifics& specifics);
+// Used to decide if entity needs to be reuploaded for each remote change.
+bool IsNoteEntityReuploadNeeded(const syncer::EntityData& remote_entity_data);
 
 // TODO(crbug.com/978430): Remove argument |include_guid| once the client tag
 // hash is required to be populated during sync metadata validation upon

@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 #include <memory>
+#include <vector>
 
 #include "base/bind.h"
 #include "base/files/file_util.h"
@@ -21,6 +22,7 @@
 #include "storage/browser/test/test_file_system_context.h"
 #include "storage/common/file_system/file_system_types.h"
 #include "storage/common/file_system/file_system_util.h"
+#include "testing/gmock/include/gmock/gmock-matchers.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/mojom/quota/quota_types.mojom.h"
 #include "url/gurl.h"
@@ -43,9 +45,8 @@ const StorageType kPersistent = StorageType::kPersistent;
 
 class FileSystemQuotaClientTest : public testing::Test {
  public:
-  FileSystemQuotaClientTest()
-      : additional_callback_count_(0),
-        deletion_status_(blink::mojom::QuotaStatusCode::kUnknown) {}
+  FileSystemQuotaClientTest() = default;
+  ~FileSystemQuotaClientTest() override = default;
 
   void SetUp() override {
     ASSERT_TRUE(data_dir_.CreateUniqueTempDir());
@@ -84,7 +85,7 @@ class FileSystemQuotaClientTest : public testing::Test {
     return usage_;
   }
 
-  const std::set<url::Origin>& GetOriginsForType(
+  const std::vector<url::Origin>& GetOriginsForType(
       FileSystemQuotaClient* quota_client,
       StorageType type) {
     origins_.clear();
@@ -95,7 +96,7 @@ class FileSystemQuotaClientTest : public testing::Test {
     return origins_;
   }
 
-  const std::set<url::Origin>& GetOriginsForHost(
+  const std::vector<url::Origin>& GetOriginsForHost(
       FileSystemQuotaClient* quota_client,
       StorageType type,
       const std::string& host) {
@@ -215,7 +216,7 @@ class FileSystemQuotaClientTest : public testing::Test {
  private:
   void OnGetUsage(int64_t usage) { usage_ = usage; }
 
-  void OnGetOrigins(const std::set<url::Origin>& origins) {
+  void OnGetOrigins(const std::vector<url::Origin>& origins) {
     origins_ = origins;
   }
 
@@ -230,13 +231,12 @@ class FileSystemQuotaClientTest : public testing::Test {
   base::ScopedTempDir data_dir_;
   base::test::TaskEnvironment task_environment_;
   scoped_refptr<FileSystemContext> file_system_context_;
-  int64_t usage_;
-  int additional_callback_count_;
-  std::set<url::Origin> origins_;
-  blink::mojom::QuotaStatusCode deletion_status_;
+  int64_t usage_ = 0;
+  int additional_callback_count_ = 0;
+  std::vector<url::Origin> origins_;
+  blink::mojom::QuotaStatusCode deletion_status_ =
+      blink::mojom::QuotaStatusCode::kUnknown;
   base::WeakPtrFactory<FileSystemQuotaClientTest> weak_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(FileSystemQuotaClientTest);
 };
 
 TEST_F(FileSystemQuotaClientTest, NoFileSystemTest) {
@@ -439,15 +439,16 @@ TEST_F(FileSystemQuotaClientTest, GetOriginsForType) {
   };
   InitializeOriginFiles(quota_client.get(), kFiles, base::size(kFiles));
 
-  std::set<url::Origin> origins =
+  std::vector<url::Origin> origins =
       GetOriginsForType(quota_client.get(), kTemporary);
   EXPECT_EQ(2U, origins.size());
-  EXPECT_TRUE(origins.find(url::Origin::Create(GURL(kDummyURL1))) !=
-              origins.end());
-  EXPECT_TRUE(origins.find(url::Origin::Create(GURL(kDummyURL2))) !=
-              origins.end());
-  EXPECT_TRUE(origins.find(url::Origin::Create(GURL(kDummyURL3))) ==
-              origins.end());
+  EXPECT_THAT(origins,
+              testing::Contains(url::Origin::Create(GURL(kDummyURL1))));
+  EXPECT_THAT(origins,
+              testing::Contains(url::Origin::Create(GURL(kDummyURL2))));
+  EXPECT_THAT(
+      origins,
+      testing::Not(testing::Contains(url::Origin::Create(GURL(kDummyURL3)))));
 }
 
 TEST_F(FileSystemQuotaClientTest, GetOriginsForHost) {
@@ -466,16 +467,16 @@ TEST_F(FileSystemQuotaClientTest, GetOriginsForHost) {
   };
   InitializeOriginFiles(quota_client.get(), kFiles, base::size(kFiles));
 
-  std::set<url::Origin> origins =
+  std::vector<url::Origin> origins =
       GetOriginsForHost(quota_client.get(), kTemporary, "foo.com");
   EXPECT_EQ(3U, origins.size());
-  EXPECT_TRUE(origins.find(url::Origin::Create(GURL(kURL1))) != origins.end());
-  EXPECT_TRUE(origins.find(url::Origin::Create(GURL(kURL2))) != origins.end());
-  EXPECT_TRUE(origins.find(url::Origin::Create(GURL(kURL3))) != origins.end());
-  EXPECT_TRUE(origins.find(url::Origin::Create(GURL(kURL4))) ==
-              origins.end());  // Different host.
-  EXPECT_TRUE(origins.find(url::Origin::Create(GURL(kURL5))) ==
-              origins.end());  // Different type.
+  EXPECT_THAT(origins, testing::Contains(url::Origin::Create(GURL(kURL1))));
+  EXPECT_THAT(origins, testing::Contains(url::Origin::Create(GURL(kURL2))));
+  EXPECT_THAT(origins, testing::Contains(url::Origin::Create(GURL(kURL3))));
+  EXPECT_THAT(origins, testing::Not(testing::Contains(url::Origin::Create(
+                           GURL(kURL4)))));  // Different host.
+  EXPECT_THAT(origins, testing::Not(testing::Contains(url::Origin::Create(
+                           GURL(kURL5)))));  // Different type.
 }
 
 TEST_F(FileSystemQuotaClientTest, DeleteOriginTest) {

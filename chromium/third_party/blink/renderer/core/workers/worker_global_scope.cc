@@ -29,6 +29,8 @@
 
 #include "base/memory/scoped_refptr.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
+#include "services/metrics/public/cpp/mojo_ukm_recorder.h"
+#include "third_party/blink/public/common/thread_safe_browser_interface_broker_proxy.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/web_url_request.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_source_code.h"
@@ -301,7 +303,8 @@ void WorkerGlobalScope::ImportScriptsInternal(const Vector<String>& urls,
                                                 std::move(cached_meta_data)));
     ReportingProxy().WillEvaluateImportedClassicScript(
         source_code.length(), handler ? handler->GetCodeCacheSize() : 0);
-    ScriptController()->Evaluate(
+    ScriptState::Scope scope(ScriptController()->GetScriptState());
+    ScriptController()->EvaluateAndReturnValue(
         ScriptSourceCode(source_code, ScriptSourceLocationType::kUnknown,
                          handler,
                          ScriptSourceCode::UsePostRedirectURL() ? response_url
@@ -441,9 +444,23 @@ void WorkerGlobalScope::RunWorkerScript() {
   if (debugger && stack_id_)
     debugger->ExternalAsyncTaskStarted(*stack_id_);
 
+  switch (worker_script_->GetScriptType()) {
+    case mojom::blink::ScriptType::kClassic: {
+      auto sizes = worker_script_->GetClassicScriptSizes();
+      ReportingProxy().WillEvaluateClassicScript(sizes.first, sizes.second);
+      break;
+    }
+    case mojom::blink::ScriptType::kModule:
+      ReportingProxy().WillEvaluateModuleScript();
+      break;
+  }
+
   // Step 24. If script is a classic script, then run the classic script script.
   // Otherwise, it is a module script; run the module script script. [spec text]
-  std::move(worker_script_)->RunScriptOnWorker(*this);
+  bool is_success =
+      std::move(worker_script_)->RunScriptOnWorkerOrWorklet(*this);
+
+  ReportingProxy().DidEvaluateTopLevelScript(is_success);
 
   if (debugger && stack_id_)
     debugger->ExternalAsyncTaskFinished(*stack_id_);
@@ -474,7 +491,8 @@ void WorkerGlobalScope::ReceiveMessage(BlinkTransferableMessage message) {
 WorkerGlobalScope::WorkerGlobalScope(
     std::unique_ptr<GlobalScopeCreationParams> creation_params,
     WorkerThread* thread,
-    base::TimeTicks time_origin)
+    base::TimeTicks time_origin,
+    ukm::SourceId ukm_source_id)
     : WorkerOrWorkletGlobalScope(
           thread->GetIsolate(),
           CreateSecurityOrigin(creation_params.get(), GetExecutionContext()),
@@ -496,7 +514,8 @@ WorkerGlobalScope::WorkerGlobalScope(
       thread_(thread),
       time_origin_(time_origin),
       font_selector_(MakeGarbageCollected<OffscreenFontSelector>(this)),
-      script_eval_state_(ScriptEvalState::kPauseAfterFetch) {
+      script_eval_state_(ScriptEvalState::kPauseAfterFetch),
+      ukm_source_id_(ukm_source_id) {
   InstanceCounters::IncrementCounter(
       InstanceCounters::kWorkerGlobalScopeCounter);
 
@@ -546,10 +565,25 @@ NOINLINE void WorkerGlobalScope::InitializeURL(const KURL& url) {
   DCHECK(url.IsValid());
   if (GetSecurityOrigin()->IsOpaque()) {
     DCHECK(SecurityOrigin::Create(url)->IsOpaque());
+  } else if (GetSecurityOrigin()->IsLocal()) {
+    // SecurityOrigin::CanRequest called from CanReadContent has a special logic
+    // for local origins, and the logic doesn't work here, so we have this
+    // DCHECK instead.
+    auto origin = SecurityOrigin::Create(url);
+    DCHECK(origin->IsOpaque() || origin->IsLocal());
   } else {
     DCHECK(GetSecurityOrigin()->CanReadContent(url));
   }
   url_ = url;
+}
+
+void WorkerGlobalScope::SetWorkerMainScriptLoadingParametersForModules(
+    std::unique_ptr<WorkerMainScriptLoadParameters>
+        worker_main_script_load_params_for_modules) {
+  DCHECK(worker_main_script_load_params_for_modules);
+  DCHECK(!worker_main_script_load_params_for_modules_);
+  worker_main_script_load_params_for_modules_ =
+      std::move(worker_main_script_load_params_for_modules);
 }
 
 void WorkerGlobalScope::queueMicrotask(V8VoidFunction* callback) {
@@ -572,6 +606,23 @@ TrustedTypePolicyFactory* WorkerGlobalScope::GetTrustedTypes() const {
         MakeGarbageCollected<TrustedTypePolicyFactory>(GetExecutionContext());
   }
   return trusted_types_.Get();
+}
+
+ukm::UkmRecorder* WorkerGlobalScope::UkmRecorder() {
+  if (ukm_recorder_)
+    return ukm_recorder_.get();
+
+  mojo::PendingRemote<ukm::mojom::UkmRecorderInterface> recorder;
+  GetBrowserInterfaceBroker().GetInterface(
+      recorder.InitWithNewPipeAndPassReceiver());
+  ukm_recorder_ = std::make_unique<ukm::MojoUkmRecorder>(std::move(recorder));
+
+  return ukm_recorder_.get();
+}
+
+std::unique_ptr<WorkerMainScriptLoadParameters>
+WorkerGlobalScope::TakeWorkerMainScriptLoadingParametersForModules() {
+  return std::move(worker_main_script_load_params_for_modules_);
 }
 
 void WorkerGlobalScope::Trace(Visitor* visitor) const {

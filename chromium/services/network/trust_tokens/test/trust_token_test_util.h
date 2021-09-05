@@ -10,15 +10,17 @@
 
 #include "base/callback_forward.h"
 #include "base/component_export.h"
+#include "base/containers/flat_map.h"
 #include "base/json/json_string_value_serializer.h"
+#include "base/strings/string_piece.h"
 #include "base/test/task_environment.h"
 #include "base/values.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "net/url_request/url_request_test_util.h"
-#include "services/network/public/mojom/trust_tokens.mojom-shared.h"
 #include "services/network/public/mojom/trust_tokens.mojom.h"
 #include "services/network/trust_tokens/trust_token_request_helper.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "url/origin.h"
 
 namespace net {
 class URLRequest;
@@ -108,7 +110,7 @@ struct TrustTokenTestParameters final {
       base::Optional<mojom::TrustTokenRefreshPolicy> refresh_policy,
       base::Optional<mojom::TrustTokenSignRequestData> sign_request_data,
       base::Optional<bool> include_timestamp_header,
-      base::Optional<std::string> issuer_spec,
+      base::Optional<std::vector<std::string>> issuer_specs,
       base::Optional<std::vector<std::string>> additional_signed_headers,
       base::Optional<std::string> possibly_unsafe_additional_signing_data);
 
@@ -122,9 +124,9 @@ struct TrustTokenTestParameters final {
   base::Optional<mojom::TrustTokenSignRequestData> sign_request_data;
   base::Optional<bool> include_timestamp_header;
   // Because static initialization of GURLs/Origins isn't allowed in tests, use
-  // the string representation of the issuer origin and convert it to an Origin
+  // the string representation of the issuer origins and convert them to Origins
   // in the test.
-  base::Optional<std::string> issuer_spec;
+  base::Optional<std::vector<std::string>> issuer_specs;
   base::Optional<std::vector<std::string>> additional_signed_headers;
   base::Optional<std::string> possibly_unsafe_additional_signing_data;
 };
@@ -203,42 +205,48 @@ const TrustTokenTestParameters kRedemptionTrustTokenTestParameters[]{
                              base::nullopt)};
 
 const TrustTokenTestParameters kSigningTrustTokenTestParameters[]{
-    // Signing's inputs are issuer, signRequestData, additionalSignedHeaders,
-    // includeTimestampHeader, and additionalSigningData; "issuer" has no
-    // default and must always be a secure origin.
+    // Signing's inputs are issuers, signRequestData, additionalSignedHeaders,
+    // includeTimestampHeader, and additionalSigningData; "issuers" must be
+    // nonempty and must only contain secure origins.
     TrustTokenTestParameters(
         mojom::TrustTokenOperationType::kSigning,
         base::nullopt,
         mojom::TrustTokenSignRequestData::kOmit,
         /*include_timestamp_header=*/true,
-        "https://issuer.example",
+        std::vector<std::string>{"https://issuer.example"},
         std::vector<std::string>{"one additional header's name",
                                  "another additional header's name"},
         "some additional data to sign"),
-    TrustTokenTestParameters(mojom::TrustTokenOperationType::kSigning,
-                             base::nullopt,
-                             mojom::TrustTokenSignRequestData::kHeadersOnly,
-                             /*include_timestamp_header=*/false,
-                             "https://issuer.example",
-                             base::nullopt,
-                             base::nullopt),
-    TrustTokenTestParameters(mojom::TrustTokenOperationType::kSigning,
-                             base::nullopt,
-                             mojom::TrustTokenSignRequestData::kInclude,
-                             /*include_timestamp_header=*/base::nullopt,
-                             "https://issuer.example",
-                             base::nullopt,
-                             base::nullopt),
+    TrustTokenTestParameters(
+        mojom::TrustTokenOperationType::kSigning,
+        base::nullopt,
+        mojom::TrustTokenSignRequestData::kHeadersOnly,
+        /*include_timestamp_header=*/false,
+        std::vector<std::string>{"https://issuer.example",
+                                 "https://another-issuer.example"},
+        base::nullopt,
+        base::nullopt),
+    TrustTokenTestParameters(
+        mojom::TrustTokenOperationType::kSigning,
+        base::nullopt,
+        mojom::TrustTokenSignRequestData::kInclude,
+        /*include_timestamp_header=*/base::nullopt,
+        std::vector<std::string>{"https://issuer.example",
+                                 "https://another-issuer.example"},
+        base::nullopt,
+        base::nullopt),
 };
 
 // Given a well-formed key commitment record JSON and an issuer origin, returns
 // a serialized one-item dictionary mapping the commitment to the issuer.
 //
 // Example:
-//   WrapKeyCommitmentForIssuer("https://issuer.com", R"( {"srrkey": "abcd"} )")
+//   WrapKeyCommitmentForIssuers({{
+//      "https://issuer.com", R"( {"srrkey": "abcd"} )"
+//      }})
 //   =  R"( { "https://issuer.com": { "srrkey": "abcd" } } )"
-std::string WrapKeyCommitmentForIssuer(const url::Origin& issuer,
-                                       base::StringPiece commitment);
+std::string WrapKeyCommitmentsForIssuers(
+    base::flat_map<url::Origin, base::StringPiece> issuers_and_commitments);
 
 }  // namespace network
 

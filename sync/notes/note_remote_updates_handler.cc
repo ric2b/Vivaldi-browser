@@ -4,6 +4,7 @@
 
 #include "sync/notes/note_remote_updates_handler.h"
 
+#include <algorithm>
 #include <memory>
 #include <set>
 #include <string>
@@ -19,10 +20,10 @@
 #include "components/sync/base/unique_position.h"
 #include "components/sync/model/conflict_resolution.h"
 #include "components/sync/protocol/unique_position.pb.h"
+#include "components/sync_bookmarks/switches.h"
 #include "notes/note_node.h"
 #include "notes/notes_model.h"
 #include "sync/notes/note_specifics_conversions.h"
-#include "components/sync_bookmarks/switches.h"
 
 namespace sync_notes {
 
@@ -53,24 +54,40 @@ void TraverseAndAppendChildren(
   }
 }
 
+syncer::UniquePosition ComputeUniquePositionForTrackedNoteNode(
+    const SyncedNoteTracker* note_tracker,
+    const vivaldi::NoteNode* note_node) {
+  DCHECK(note_tracker);
+
+  const SyncedNoteTracker::Entity* child_entity =
+      note_tracker->GetEntityForNoteNode(note_node);
+  DCHECK(child_entity);
+  // TODO(crbug.com/1113139): precompute UniquePosition to prevent its
+  // calculation on each remote update.
+  return syncer::UniquePosition::FromProto(
+      child_entity->metadata()->unique_position());
+}
+
 size_t ComputeChildNodeIndex(const vivaldi::NoteNode* parent,
                              const sync_pb::UniquePosition& unique_position,
                              const SyncedNoteTracker* note_tracker) {
+  DCHECK(parent);
+  DCHECK(note_tracker);
+
   const syncer::UniquePosition position =
       syncer::UniquePosition::FromProto(unique_position);
-  for (size_t i = 0; i < parent->children().size(); ++i) {
-    const vivaldi::NoteNode* child = parent->children()[i].get();
-    const SyncedNoteTracker::Entity* child_entity =
-        note_tracker->GetEntityForNoteNode(child);
-    DCHECK(child_entity);
-    const syncer::UniquePosition child_position =
-        syncer::UniquePosition::FromProto(
-            child_entity->metadata()->unique_position());
-    if (position.LessThan(child_position)) {
-      return i;
-    }
-  }
-  return parent->children().size();
+
+  auto iter = std::partition_point(
+      parent->children().begin(), parent->children().end(),
+      [note_tracker,
+       position](const std::unique_ptr<vivaldi::NoteNode>& child) {
+        // Return true for all |parent|'s children whose position is less than
+        // |position|.
+        return !position.LessThan(
+            ComputeUniquePositionForTrackedNoteNode(note_tracker, child.get()));
+      });
+
+  return iter - parent->children().begin();
 }
 
 void ApplyRemoteUpdate(
@@ -217,7 +234,12 @@ void NoteRemoteUpdatesHandler::Process(
         tracked_entity->metadata()->server_version() >=
             update->response_version &&
         !local_guid_needs_update) {
-      // Seen this update before; just ignore it.
+      // Seen this update before. This update may be a reflection and may have
+      // missing the final GUID in specifics. Next reupload will populate GUID
+      // in specifics and this codepath will not repeat indefinitely. This logic
+      // is needed for the case when there is only one device and hence the GUID
+      // will not be set by other devices.
+      ReuploadEntityIfNeeded(update_entity, tracked_entity);
       continue;
     }
 
@@ -285,7 +307,9 @@ void NoteRemoteUpdatesHandler::Process(
 
     if (tracked_entity && tracked_entity->IsUnsynced()) {
       ProcessConflict(*update, tracked_entity);
-      if (!note_tracker_->GetEntityForSyncId(update_entity.id)) {
+      // |tracked_entity| might be deleted during processing conflict.
+      tracked_entity = note_tracker_->GetEntityForSyncId(update_entity.id);
+      if (!tracked_entity) {
         // During conflict resolution, the entity could be dropped in case of
         // a conflict between local and remote deletions. We shouldn't worry
         // about changes to the encryption in that case.
@@ -362,6 +386,14 @@ std::vector<const syncer::UpdateResponseData*>
 NoteRemoteUpdatesHandler::ReorderUpdatesForTest(
     const syncer::UpdateResponseDataList* updates) {
   return ReorderUpdates(updates);
+}
+
+// static
+size_t NoteRemoteUpdatesHandler::ComputeChildNodeIndexForTest(
+    const vivaldi::NoteNode* parent,
+    const sync_pb::UniquePosition& unique_position,
+    const SyncedNoteTracker* notetracker) {
+  return ComputeChildNodeIndex(parent, unique_position, notetracker);
 }
 
 // static
@@ -482,7 +514,7 @@ const SyncedNoteTracker::Entity* NoteRemoteUpdatesHandler::ProcessCreate(
       note_node, update_entity.id, update.response_version,
       update_entity.creation_time, update_entity.unique_position,
       update_entity.specifics);
-  ReuploadEntityIfNeeded(update_entity.specifics.notes(), entity);
+  ReuploadEntityIfNeeded(update_entity, entity);
   return entity;
 }
 
@@ -535,7 +567,7 @@ void NoteRemoteUpdatesHandler::ProcessUpdate(
   }
   ApplyRemoteUpdate(update, tracked_entity, new_parent_entity, notes_model_,
                     note_tracker_);
-  ReuploadEntityIfNeeded(update_entity.specifics.notes(), tracked_entity);
+  ReuploadEntityIfNeeded(update_entity, tracked_entity);
 }
 
 void NoteRemoteUpdatesHandler::ProcessDelete(
@@ -654,7 +686,7 @@ void NoteRemoteUpdatesHandler::ProcessConflict(
     ApplyRemoteUpdate(update, tracked_entity, new_parent_entity, notes_model_,
                       note_tracker_);
   }
-  ReuploadEntityIfNeeded(update_entity.specifics.notes(), tracked_entity);
+  ReuploadEntityIfNeeded(update_entity, tracked_entity);
 }
 
 void NoteRemoteUpdatesHandler::RemoveEntityAndChildrenFromTracker(
@@ -679,12 +711,17 @@ const vivaldi::NoteNode* NoteRemoteUpdatesHandler::GetParentNode(
 }
 
 void NoteRemoteUpdatesHandler::ReuploadEntityIfNeeded(
-    const sync_pb::NotesSpecifics& specifics,
+    const syncer::EntityData& entity_data,
     const SyncedNoteTracker::Entity* tracked_entity) {
-  if (!IsFullTitleReuploadNeeded(specifics)) {
-    return;
+  DCHECK(tracked_entity);
+  DCHECK_EQ(tracked_entity->metadata()->server_id(), entity_data.id);
+  // Do not initiate reupload if the local entity is a tombstone or a permanent
+  // node.
+  if (tracked_entity->note_node() &&
+      !tracked_entity->note_node()->is_permanent_node() &&
+      IsNoteEntityReuploadNeeded(entity_data)) {
+    note_tracker_->IncrementSequenceNumber(tracked_entity);
   }
-  note_tracker_->IncrementSequenceNumber(tracked_entity);
 }
 
 }  // namespace sync_notes

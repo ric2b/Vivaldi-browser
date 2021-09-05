@@ -8,8 +8,10 @@
 
 #import "base/test/ios/wait_util.h"
 #import "ios/chrome/browser/main/test_browser.h"
+#import "ios/chrome/browser/snapshots/snapshot_browser_agent.h"
+#import "ios/chrome/browser/ui/commands/application_commands.h"
 #import "ios/chrome/browser/ui/commands/browsing_data_commands.h"
-#import "ios/chrome/browser/ui/tab_grid/tab_switcher.h"
+#include "ios/chrome/browser/ui/tab_grid/tab_grid_coordinator_delegate.h"
 #import "ios/chrome/test/block_cleanup_test.h"
 #include "ios/web/public/test/web_task_environment.h"
 #include "testing/gtest_mac.h"
@@ -19,19 +21,20 @@
 #error "This file requires ARC support."
 #endif
 
-@interface TestTabSwitcherDelegate : NSObject<TabSwitcherDelegate>
+@interface TestTabGridCoordinatorDelegate
+    : NSObject <TabGridCoordinatorDelegate>
 @property(nonatomic) BOOL didEndCalled;
 @end
 
-@implementation TestTabSwitcherDelegate
+@implementation TestTabGridCoordinatorDelegate
 @synthesize didEndCalled = _didEndCalled;
-- (void)tabSwitcher:(id<TabSwitcher>)tabSwitcher
+- (void)tabGrid:(TabGridCoordinator*)tabGrid
     shouldFinishWithBrowser:(Browser*)browser
                focusOmnibox:(BOOL)focusOmnibox {
   // No-op.
 }
 
-- (void)tabSwitcherDismissTransitionDidEnd:(id<TabSwitcher>)tabSwitcher {
+- (void)tabGridDismissTransitionDidEnd:(TabGridCoordinator*)tabGrid {
   self.didEndCalled = YES;
 }
 @end
@@ -42,15 +45,17 @@ class TabGridCoordinatorTest : public BlockCleanupTest {
  public:
   TabGridCoordinatorTest() {
     browser_ = std::make_unique<TestBrowser>();
+    SnapshotBrowserAgent::CreateForBrowser(browser_.get());
     UIWindow* window = [UIApplication sharedApplication].keyWindow;
     coordinator_ = [[TabGridCoordinator alloc]
                      initWithWindow:window
          applicationCommandEndpoint:OCMProtocolMock(
                                         @protocol(ApplicationCommands))
         browsingDataCommandEndpoint:OCMProtocolMock(
-                                        @protocol(BrowsingDataCommands))];
+                                        @protocol(BrowsingDataCommands))
+                     regularBrowser:browser_.get()
+                   incognitoBrowser:nil];
     coordinator_.animationsDisabledForTesting = YES;
-    coordinator_.regularBrowser = browser_.get();
     // TabGirdCoordinator will make its view controller the root, so stash the
     // original root view controller before starting |coordinator_|.
     original_root_view_controller_ =
@@ -58,8 +63,8 @@ class TabGridCoordinatorTest : public BlockCleanupTest {
 
     [coordinator_ start];
 
-    delegate_ = [[TestTabSwitcherDelegate alloc] init];
-    coordinator_.tabSwitcher.delegate = delegate_;
+    delegate_ = [[TestTabGridCoordinatorDelegate alloc] init];
+    coordinator_.delegate = delegate_;
 
     normal_tab_view_controller_ = [[UIViewController alloc] init];
     normal_tab_view_controller_.view.frame = CGRectMake(20, 20, 10, 10);
@@ -89,7 +94,7 @@ class TabGridCoordinatorTest : public BlockCleanupTest {
   TabGridCoordinator* coordinator_;
 
   // Delegate for the coordinator's TabSwitcher interface.
-  TestTabSwitcherDelegate* delegate_;
+  TestTabGridCoordinatorDelegate* delegate_;
 
   // The key window's original root view controller, which must be restored at
   // the end of the test.
@@ -115,10 +120,10 @@ TEST_F(TabGridCoordinatorTest, TabViewControllerBeforeTabSwitcher) {
   EXPECT_EQ(normal_tab_view_controller_, coordinator_.activeViewController);
 
   // Now setting a TabSwitcher will make the switcher active.
-  [coordinator_ showTabSwitcher:coordinator_.tabSwitcher];
+  [coordinator_ showTabGrid];
   bool tab_switcher_active = base::test::ios::WaitUntilConditionOrTimeout(
       base::test::ios::kWaitForUIElementTimeout, ^bool {
-        return [coordinator_.tabSwitcher viewController] ==
+        return coordinator_.baseViewController ==
                coordinator_.activeViewController;
       });
   EXPECT_TRUE(tab_switcher_active);
@@ -127,19 +132,18 @@ TEST_F(TabGridCoordinatorTest, TabViewControllerBeforeTabSwitcher) {
 // Tests that it is possible to set a TabViewController after setting a
 // TabSwitcher.
 TEST_F(TabGridCoordinatorTest, TabViewControllerAfterTabSwitcher) {
-  [coordinator_ showTabSwitcher:coordinator_.tabSwitcher];
-  EXPECT_EQ([coordinator_.tabSwitcher viewController],
-            coordinator_.activeViewController);
+  [coordinator_ showTabGrid];
+  EXPECT_EQ(coordinator_.baseViewController, coordinator_.activeViewController);
 
   [coordinator_ showTabViewController:normal_tab_view_controller_
                            completion:nil];
   EXPECT_EQ(normal_tab_view_controller_, coordinator_.activeViewController);
 
   // Showing the TabSwitcher again will make it active.
-  [coordinator_ showTabSwitcher:coordinator_.tabSwitcher];
+  [coordinator_ showTabGrid];
   bool tab_switcher_active = base::test::ios::WaitUntilConditionOrTimeout(
       base::test::ios::kWaitForUIElementTimeout, ^bool {
-        return [coordinator_.tabSwitcher viewController] ==
+        return coordinator_.baseViewController ==
                coordinator_.activeViewController;
       });
   EXPECT_TRUE(tab_switcher_active);
@@ -158,13 +162,11 @@ TEST_F(TabGridCoordinatorTest, SwapTabViewControllers) {
 
 // Tests calling showTabSwitcher twice in a row with the same VC.
 TEST_F(TabGridCoordinatorTest, ShowTabSwitcherTwice) {
-  [coordinator_ showTabSwitcher:coordinator_.tabSwitcher];
-  EXPECT_EQ([coordinator_.tabSwitcher viewController],
-            coordinator_.activeViewController);
+  [coordinator_ showTabGrid];
+  EXPECT_EQ(coordinator_.baseViewController, coordinator_.activeViewController);
 
-  [coordinator_ showTabSwitcher:coordinator_.tabSwitcher];
-  EXPECT_EQ([coordinator_.tabSwitcher viewController],
-            coordinator_.activeViewController);
+  [coordinator_ showTabGrid];
+  EXPECT_EQ(coordinator_.baseViewController, coordinator_.activeViewController);
 }
 
 // Tests calling showTabViewController twice in a row with the same VC.
@@ -182,7 +184,7 @@ TEST_F(TabGridCoordinatorTest, ShowTabViewControllerTwice) {
 // handlers are called properly after the new view controller is made active.
 TEST_F(TabGridCoordinatorTest, CompletionHandlers) {
   // Setup: show the switcher.
-  [coordinator_ showTabSwitcher:coordinator_.tabSwitcher];
+  [coordinator_ showTabGrid];
 
   // Tests that the completion handler is called when showing a tab view
   // controller. Tests that the delegate 'didEnd' method is also called.

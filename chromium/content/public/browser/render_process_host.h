@@ -70,6 +70,7 @@ namespace content {
 class BrowserContext;
 class BrowserMessageFilter;
 class IsolationContext;
+class ProcessLock;
 class RenderProcessHostObserver;
 class StoragePartition;
 #if defined(OS_ANDROID)
@@ -212,6 +213,9 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
   // RenderProcessExited may never be called.
   virtual bool Shutdown(int exit_code) = 0;
 
+  // Returns true if shutdown was started by calling |Shutdown()|.
+  virtual bool ShutdownRequested() = 0;
+
   // Try to shut down the associated renderer process as fast as possible.
   // If a non-zero |page_count| value is provided, then a fast shutdown will
   // only happen if the count matches the active view count. If
@@ -280,9 +284,10 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
   virtual void SetBlocked(bool blocked) = 0;
   virtual bool IsBlocked() = 0;
 
-  virtual std::unique_ptr<base::CallbackList<void(bool)>::Subscription>
-  RegisterBlockStateChangedCallback(
-      const base::RepeatingCallback<void(bool)>& cb) = 0;
+  using BlockStateChangedCallbackList = base::RepeatingCallbackList<void(bool)>;
+  using BlockStateChangedCallback = BlockStateChangedCallbackList::CallbackType;
+  virtual std::unique_ptr<BlockStateChangedCallbackList::Subscription>
+  RegisterBlockStateChangedCallback(const BlockStateChangedCallback& cb) = 0;
 
   // Schedules the host for deletion and removes it from the all_hosts list.
   virtual void Cleanup() = 0;
@@ -460,17 +465,16 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
   // crbug.com/738634.
   virtual bool HostHasNotBeenUsed() = 0;
 
-  // Locks this RenderProcessHost to the 'origin' |lock_url|. This method is
-  // public so that it can be called from SiteInstanceImpl, and used by
-  // MockRenderProcessHost. It isn't meant to be called outside of content.
-  // TODO(creis): Rename LockToOrigin to LockToPrincipal. See
-  // https://crbug.com/846155.
-  virtual void LockToOrigin(const IsolationContext& isolation_context,
-                            const GURL& lock_url) = 0;
+  // Locks this RenderProcessHost to documents compatible with |process_lock|.
+  // This method is public so that it can be called from SiteInstanceImpl, and
+  // used by MockRenderProcessHost. It isn't meant to be called outside of
+  // content.
+  virtual void SetProcessLock(const IsolationContext& isolation_context,
+                              const ProcessLock& process_lock) = 0;
 
-  // Returns true if this process is locked to a particular 'origin'.  See the
-  // LockToOrigin() call above.
-  virtual bool IsLockedToOriginForTesting() = 0;
+  // Returns true if this process is locked to a particular ProcessLock.  See
+  // the SetProcessLock() call above.
+  virtual bool IsProcessLockedForTesting() = 0;
 
   // The following several methods are for internal use only, and are only
   // exposed here to support MockRenderProcessHost usage in tests.
@@ -544,6 +548,11 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
   // than RenderProcessHostImpl (from underneath
   // RenderProcessHostImpl::AddCorbExceptionForPlugin).
   virtual void CleanupNetworkServicePluginExceptionsUponDestruction() = 0;
+
+  // Returns a string that contains information useful for debugging
+  // crashes related to RenderProcessHost objects staying alive longer than
+  // the BrowserContext they are associated with.
+  virtual std::string GetInfoForBrowserContextDestructionCrashReporting() = 0;
 
 #if BUILDFLAG(CLANG_PROFILING_INSIDE_SANDBOX)
   // Ask the renderer process to dump its profiling data to disk. Invokes

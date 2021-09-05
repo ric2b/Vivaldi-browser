@@ -37,9 +37,11 @@
 <translation id="1842960171412779397">chọn</translation>
 <translation id="1859234291848436338">Hướng Ghi</translation>
 <translation id="1860796786778352021">Đóng thông báo</translation>
+<translation id="186476001994626254">Nội dung dán thông minh trên web</translation>
 <translation id="1871244248791675517">Ins</translation>
 <translation id="1884435127456172652"><ph name="NUMBER" /> %</translation>
 <translation id="1901303067676059328">Chọn &amp;tất cả</translation>
+<translation id="19085484004813472">Đây là tính năng mới</translation>
 <translation id="2006524834898217237">Hãy đảm bảo thiết bị này có kết nối Internet.</translation>
 <translation id="208586643495776849">Vui lòng thử lại</translation>
 <translation id="2090963878406559571">Để gửi một số điện thoại từ <ph name="ORIGIN" /> sang điện thoại Android, hãy <ph name="TROUBLESHOOT_LINK" /> cho cả hai thiết bị trong phần cài đặt.</translation>
@@ -67,6 +69,7 @@
 <translation id="2570734079541893434">Quản lý các tùy chọn cài đặt</translation>
 <translation id="2573731672208488250">{HOURS,plural, =1{trong 1 giờ}other{trong # giờ}}</translation>
 <translation id="2583543531130364912">Hiệu chỉnh màn hình cảm ứng</translation>
+<translation id="2586657967955657006">Khay nhớ tạm</translation>
 <translation id="2666092431469916601">Hàng đầu</translation>
 <translation id="2701330563083355633">Chia sẻ từ <ph name="DEVICE_NAME" /></translation>
 <translation id="271033894570825754">Mới</translation>
@@ -74,6 +77,7 @@
 <translation id="2749082172777216925"><ph name="APP_NAME_INFO" />, <ph name="PRICE" /></translation>
 <translation id="2803313416453193357">Mở thư mục</translation>
 <translation id="2824719307700604149">{YEARS,plural, =1{1 năm trước}other{# năm trước}}</translation>
+<translation id="2878511608894704031">Xóa tất cả</translation>
 <translation id="2907671656515444832">{DAYS,plural, =1{trong 1 ngày}other{trong # ngày}}</translation>
 <translation id="2931838996092594335">nhấp vào</translation>
 <translation id="2981684127883932071">Đang hiển thị mục đề xuất</translation>
@@ -114,6 +118,7 @@
 <translation id="4289300219472526559">Bắt đầu nói</translation>
 <translation id="430191667033048642">Đã chuyển <ph name="MOVED_APP_NAME" /> vào thư mục <ph name="FOLDER_NAME" />.</translation>
 <translation id="4316910396681052118">TẤT CẢ ỨNG DỤNG</translation>
+<translation id="4491109536499578614">Hình ảnh</translation>
 <translation id="4588090240171750605">Cuộn qua Phải</translation>
 <translation id="4631891353005174729"><ph name="APP_NAME_TYPE" />, Xếp hạng theo sao <ph name="RATING_SCORE" /></translation>
 <translation id="4648249871170053485"><ph name="APP_NAME" />, Ứng dụng đề xuất</translation>
@@ -147,6 +152,7 @@
 <translation id="5768079895599174203">{DAYS,plural, =1{1 ngày và }other{# ngày và }}</translation>
 <translation id="5789643057113097023">.</translation>
 <translation id="5866104238061687188">{YEARS,plural, =1{trong 1 năm}other{trong # năm}}</translation>
+<translation id="588258955323874662">Toàn màn hình</translation>
 <translation id="5906667377645263094">{SECONDS,plural, =1{Còn 1 giây}other{Còn # giây}}</translation>
 <translation id="5941711191222866238">Thu nhỏ</translation>
 <translation id="5943826764092288734">{HOURS,plural, =1{1 giờ}other{# giờ}}</translation>
@@ -170,6 +176,7 @@
 <translation id="6417265370957905582">Trợ lý Google</translation>
 <translation id="6430678249303439055">Chặn tất cả thông báo từ ứng dụng này</translation>
 <translation id="6483402905448010557">{SECONDS,plural, =1{1 giây trước}other{# giây trước}}</translation>
+<translation id="6503257047630241175">Nội dung ở định dạng văn bản giàu tính chất (RTF)</translation>
 <translation id="6539092367496845964">Đã xảy ra lỗi. Hãy thử lại sau.</translation>
 <translation id="654149438358937226">Chặn tất cả thông báo</translation>
 <translation id="6567071839949112727">nhấp vào đối tượng cấp trên</translation>
@@ -178,7 +185,7 @@
 <translation id="6620110761915583480">Lưu Tệp</translation>
 <translation id="6656912866303152668">Đảm bảo bạn đã bật tính năng đồng bộ hóa của <ph name="TARGET_DEVICE_NAME" /> trong Chrome, rồi thử gửi lại.</translation>
 <translation id="6699343763173986273">Bản nhạc tiếp theo của trình phát phương tiện</translation>
-<translation id="6710213216561001401">Trước đó</translation>
+<translation id="6710213216561001401">Trước</translation>
 <translation id="6779314412797872738">Để chuyển một số điện thoại từ đây sang điện thoại Android, hãy <ph name="TROUBLESHOOT_LINK" /> cho cả hai thiết bị trong phần cài đặt.</translation>
 <translation id="6786750046913594791">Đóng thư mục</translation>
 <translation id="6808150112686056157">Dừng trình phát phương tiện</translation>

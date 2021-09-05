@@ -21,8 +21,8 @@
 #include "content/public/test/test_browser_context.h"
 #include "mojo/public/cpp/test_support/test_utils.h"
 #include "net/base/features.h"
+#include "net/cookies/cookie_access_result.h"
 #include "net/cookies/cookie_constants.h"
-#include "net/cookies/cookie_inclusion_status.h"
 #include "net/cookies/cookie_util.h"
 #include "services/network/public/cpp/features.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -287,11 +287,10 @@ class CookieStoreManagerTest
     cookie_manager_->SetCanonicalCookie(
         cookie, net::cookie_util::SimulatedCookieSource(cookie, "https"),
         net::CookieOptions::MakeAllInclusive(),
-        base::BindLambdaForTesting(
-            [&](net::CookieInclusionStatus service_status) {
-              success = service_status.IsInclude();
-              run_loop.Quit();
-            }));
+        base::BindLambdaForTesting([&](net::CookieAccessResult result) {
+          success = result.status.IsInclude();
+          run_loop.Quit();
+        }));
     run_loop.Run();
     return success;
   }
@@ -1230,7 +1229,7 @@ TEST_P(CookieStoreManagerTest, OneCookieChange) {
   // example.com does not have a custom access semantics setting, so it defaults
   // to NONLEGACY, because the FeatureList has SameSiteByDefaultCookies enabled.
   EXPECT_EQ(net::CookieAccessSemantics::NONLEGACY,
-            worker_test_helper_->changes()[0].access_semantics);
+            worker_test_helper_->changes()[0].access_result.access_semantics);
 }
 
 // Same as above except this tests that the LEGACY access semantics for
@@ -1270,7 +1269,7 @@ TEST_P(CookieStoreManagerTest, OneCookieChangeLegacy) {
             worker_test_helper_->changes()[0].cause);
   // legacy.com has a custom Legacy setting.
   EXPECT_EQ(net::CookieAccessSemantics::LEGACY,
-            worker_test_helper_->changes()[0].access_semantics);
+            worker_test_helper_->changes()[0].access_result.access_semantics);
 }
 
 TEST_P(CookieStoreManagerTest, CookieChangeNameStartsWith) {
@@ -1315,7 +1314,7 @@ TEST_P(CookieStoreManagerTest, CookieChangeNameStartsWith) {
   // example.com does not have a custom access semantics setting, so it defaults
   // to NONLEGACY, because the FeatureList has SameSiteByDefaultCookies enabled.
   EXPECT_EQ(net::CookieAccessSemantics::NONLEGACY,
-            worker_test_helper_->changes()[0].access_semantics);
+            worker_test_helper_->changes()[0].access_result.access_semantics);
 
   worker_test_helper_->changes().clear();
   ASSERT_TRUE(SetSessionCookie("cookie-name-22", "cookie-value-22",
@@ -1333,7 +1332,7 @@ TEST_P(CookieStoreManagerTest, CookieChangeNameStartsWith) {
   // example.com does not have a custom access semantics setting, so it defaults
   // to NONLEGACY, because the FeatureList has SameSiteByDefaultCookies enabled.
   EXPECT_EQ(net::CookieAccessSemantics::NONLEGACY,
-            worker_test_helper_->changes()[0].access_semantics);
+            worker_test_helper_->changes()[0].access_result.access_semantics);
 }
 
 // Same as above except this tests that the LEGACY access semantics for
@@ -1379,7 +1378,7 @@ TEST_P(CookieStoreManagerTest, CookieChangeNameStartsWithLegacy) {
             worker_test_helper_->changes()[0].cause);
   // legacy.com has a custom Legacy setting.
   EXPECT_EQ(net::CookieAccessSemantics::LEGACY,
-            worker_test_helper_->changes()[0].access_semantics);
+            worker_test_helper_->changes()[0].access_result.access_semantics);
 
   worker_test_helper_->changes().clear();
   ASSERT_TRUE(
@@ -1396,7 +1395,7 @@ TEST_P(CookieStoreManagerTest, CookieChangeNameStartsWithLegacy) {
             worker_test_helper_->changes()[0].cause);
   // legacy.com has a custom Legacy setting.
   EXPECT_EQ(net::CookieAccessSemantics::LEGACY,
-            worker_test_helper_->changes()[0].access_semantics);
+            worker_test_helper_->changes()[0].access_result.access_semantics);
 }
 
 TEST_P(CookieStoreManagerTest, CookieChangeUrl) {
@@ -1447,7 +1446,7 @@ TEST_P(CookieStoreManagerTest, CookieChangeUrl) {
   // example.com does not have a custom access semantics setting, so it defaults
   // to NONLEGACY, because the FeatureList has SameSiteByDefaultCookies enabled.
   EXPECT_EQ(net::CookieAccessSemantics::NONLEGACY,
-            worker_test_helper_->changes()[0].access_semantics);
+            worker_test_helper_->changes()[0].access_result.access_semantics);
 
   worker_test_helper_->changes().clear();
   ASSERT_TRUE(
@@ -1464,7 +1463,7 @@ TEST_P(CookieStoreManagerTest, CookieChangeUrl) {
   // example.com does not have a custom access semantics setting, so it defaults
   // to NONLEGACY, because the FeatureList has SameSiteByDefaultCookies enabled.
   EXPECT_EQ(net::CookieAccessSemantics::NONLEGACY,
-            worker_test_helper_->changes()[0].access_semantics);
+            worker_test_helper_->changes()[0].access_result.access_semantics);
 }
 
 // Same as above except this tests that the LEGACY access semantics for
@@ -1516,7 +1515,7 @@ TEST_P(CookieStoreManagerTest, CookieChangeUrlLegacy) {
             worker_test_helper_->changes()[0].cause);
   // legacy.com has a custom Legacy setting.
   EXPECT_EQ(net::CookieAccessSemantics::LEGACY,
-            worker_test_helper_->changes()[0].access_semantics);
+            worker_test_helper_->changes()[0].access_result.access_semantics);
 
   worker_test_helper_->changes().clear();
   ASSERT_TRUE(
@@ -1532,7 +1531,7 @@ TEST_P(CookieStoreManagerTest, CookieChangeUrlLegacy) {
             worker_test_helper_->changes()[0].cause);
   // legacy.com has a custom Legacy setting.
   EXPECT_EQ(net::CookieAccessSemantics::LEGACY,
-            worker_test_helper_->changes()[0].access_semantics);
+            worker_test_helper_->changes()[0].access_result.access_semantics);
 }
 
 TEST_P(CookieStoreManagerTest, HttpOnlyCookieChange) {
@@ -1585,7 +1584,7 @@ TEST_P(CookieStoreManagerTest, HttpOnlyCookieChange) {
   // example.com does not have a custom access semantics setting, so it defaults
   // to NONLEGACY, because the FeatureList has SameSiteByDefaultCookies enabled.
   EXPECT_EQ(net::CookieAccessSemantics::NONLEGACY,
-            worker_test_helper_->changes()[0].access_semantics);
+            worker_test_helper_->changes()[0].access_result.access_semantics);
 }
 
 // Same as above except this tests that the LEGACY access semantics for
@@ -1639,7 +1638,7 @@ TEST_P(CookieStoreManagerTest, HttpOnlyCookieChangeLegacy) {
             worker_test_helper_->changes()[0].cause);
   // legacy.com has a custom Legacy setting.
   EXPECT_EQ(net::CookieAccessSemantics::LEGACY,
-            worker_test_helper_->changes()[0].access_semantics);
+            worker_test_helper_->changes()[0].access_result.access_semantics);
 }
 
 TEST_P(CookieStoreManagerTest, CookieChangeForDeletion) {

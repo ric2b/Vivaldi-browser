@@ -71,15 +71,16 @@ import androidx.test.espresso.Espresso;
 import androidx.test.espresso.intent.Intents;
 import androidx.test.espresso.intent.rule.IntentsTestRule;
 import androidx.test.espresso.matcher.BoundedMatcher;
+import androidx.test.filters.MediumTest;
 import androidx.test.filters.SmallTest;
 
 import org.hamcrest.Description;
 import org.hamcrest.Matcher;
 import org.junit.After;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.TestRule;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
@@ -87,7 +88,7 @@ import org.mockito.MockitoAnnotations;
 import org.chromium.base.Callback;
 import org.chromium.base.CollectionUtil;
 import org.chromium.base.IntStringCallback;
-import org.chromium.base.test.BaseJUnit4ClassRunner;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.ScalableTimeout;
 import org.chromium.chrome.R;
@@ -95,20 +96,27 @@ import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.history.HistoryActivity;
 import org.chromium.chrome.browser.history.HistoryManager;
 import org.chromium.chrome.browser.history.StubbedHistoryProvider;
+import org.chromium.chrome.browser.password_check.PasswordCheck;
+import org.chromium.chrome.browser.password_check.PasswordCheckFactory;
+import org.chromium.chrome.browser.password_check.PasswordCheckPreference;
+import org.chromium.chrome.browser.password_manager.ManagePasswordsReferrer;
+import org.chromium.chrome.browser.password_manager.PasswordManagerHelper;
 import org.chromium.chrome.browser.preferences.Pref;
-import org.chromium.chrome.browser.preferences.PrefServiceBridge;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.settings.SettingsActivity;
 import org.chromium.chrome.browser.settings.SettingsActivityTestRule;
 import org.chromium.chrome.browser.settings.SettingsLauncher;
 import org.chromium.chrome.browser.settings.SettingsLauncherImpl;
 import org.chromium.chrome.browser.sync.ProfileSyncService;
 import org.chromium.chrome.test.ChromeBrowserTestRule;
-import org.chromium.chrome.test.util.browser.Features;
+import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
 import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.components.browser_ui.settings.ChromeBaseCheckBoxPreference;
 import org.chromium.components.browser_ui.settings.ChromeSwitchPreference;
+import org.chromium.components.prefs.PrefService;
 import org.chromium.components.sync.ModelType;
+import org.chromium.components.user_prefs.UserPrefs;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 
@@ -125,7 +133,7 @@ import java.util.concurrent.atomic.AtomicReference;
 /**
  * Tests for the "Save Passwords" settings screen.
  */
-@RunWith(BaseJUnit4ClassRunner.class)
+@RunWith(ChromeJUnit4ClassRunner.class)
 public class PasswordSettingsTest {
     private static final long UI_UPDATING_TIMEOUT_MS = 3000;
     @Mock
@@ -133,9 +141,6 @@ public class PasswordSettingsTest {
 
     @Rule
     public final ChromeBrowserTestRule mBrowserTestRule = new ChromeBrowserTestRule();
-
-    @Rule
-    public TestRule mProcessor = new Features.InstrumentationProcessor();
 
     @Rule
     public IntentsTestRule<HistoryActivity> mHistoryActivityTestRule =
@@ -148,6 +153,8 @@ public class PasswordSettingsTest {
     @Rule
     public SettingsActivityTestRule<PasswordEntryEditor> mEditorActivityTestRule =
             new SettingsActivityTestRule<>(PasswordEntryEditor.class);
+    @Mock
+    private PasswordCheck mPasswordCheck;
 
     private static final class FakePasswordManagerHandler implements PasswordManagerHandler {
         // This class has exactly one observer, set on construction and expected to last at least as
@@ -281,13 +288,15 @@ public class PasswordSettingsTest {
     FakePasswordManagerHandler mHandler;
 
     /**
-     * Delayer controling hiding the progress bar during exporting passwords. This replaces a time
+     * Delayer controlling hiding the progress bar during exporting passwords. This replaces a time
      * delay used in production.
      */
     private final ManualCallbackDelayer mManualDelayer = new ManualCallbackDelayer();
 
-    public PasswordSettingsTest() {
+    @Before
+    public void setUp() {
         MockitoAnnotations.initMocks(this);
+        PasswordCheckFactory.setPasswordCheckForTesting(mPasswordCheck);
     }
 
     private void overrideProfileSyncService(
@@ -537,6 +546,22 @@ public class PasswordSettingsTest {
         return File.createTempFile("test", ".csv", passwordsDir);
     }
 
+    private SettingsActivity startPasswordSettingsFromMainSettings() {
+        Bundle fragmentArgs = new Bundle();
+        fragmentArgs.putInt(PasswordManagerHelper.MANAGE_PASSWORDS_REFERRER,
+                ManagePasswordsReferrer.CHROME_SETTINGS);
+        return mSettingsActivityTestRule.startSettingsActivity(fragmentArgs);
+    }
+
+    private SettingsActivity startPasswordSettingsDirectly() {
+        Bundle fragmentArgs = new Bundle();
+        // The passwords accessory sheet is one of the places that can launch password settings
+        // directly (without passing through main settings).
+        fragmentArgs.putInt(PasswordManagerHelper.MANAGE_PASSWORDS_REFERRER,
+                ManagePasswordsReferrer.PASSWORDS_ACCESSORY_SHEET);
+        return mSettingsActivityTestRule.startSettingsActivity(fragmentArgs);
+    }
+
     /**
      * Ensure that resetting of empty passwords list works.
      */
@@ -545,7 +570,7 @@ public class PasswordSettingsTest {
     @Feature({"Preferences"})
     public void testResetListEmpty() {
         // Load the preferences, they should show the empty list.
-        mSettingsActivityTestRule.startSettingsActivity();
+        startPasswordSettingsFromMainSettings();
 
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             PasswordSettings savePasswordPreferences = mSettingsActivityTestRule.getFragment();
@@ -562,11 +587,10 @@ public class PasswordSettingsTest {
     @SmallTest
     @Feature({"Preferences"})
     public void testSavePasswordsSwitch() {
-        TestThreadUtils.runOnUiThreadBlocking(() -> {
-            PrefServiceBridge.getInstance().setBoolean(Pref.CREDENTIALS_ENABLE_SERVICE, true);
-        });
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> { getPrefService().setBoolean(Pref.CREDENTIALS_ENABLE_SERVICE, true); });
 
-        final SettingsActivity settingsActivity = mSettingsActivityTestRule.startSettingsActivity();
+        final SettingsActivity settingsActivity = startPasswordSettingsFromMainSettings();
 
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             PasswordSettings savedPasswordPrefs = mSettingsActivityTestRule.getFragment();
@@ -576,18 +600,16 @@ public class PasswordSettingsTest {
             Assert.assertTrue(onOffSwitch.isChecked());
 
             onOffSwitch.performClick();
-            Assert.assertFalse(
-                    PrefServiceBridge.getInstance().getBoolean(Pref.CREDENTIALS_ENABLE_SERVICE));
+            Assert.assertFalse(getPrefService().getBoolean(Pref.CREDENTIALS_ENABLE_SERVICE));
             onOffSwitch.performClick();
-            Assert.assertTrue(
-                    PrefServiceBridge.getInstance().getBoolean(Pref.CREDENTIALS_ENABLE_SERVICE));
+            Assert.assertTrue(getPrefService().getBoolean(Pref.CREDENTIALS_ENABLE_SERVICE));
 
             settingsActivity.finish();
 
-            PrefServiceBridge.getInstance().setBoolean(Pref.CREDENTIALS_ENABLE_SERVICE, false);
+            getPrefService().setBoolean(Pref.CREDENTIALS_ENABLE_SERVICE, false);
         });
 
-        mSettingsActivityTestRule.startSettingsActivity();
+        startPasswordSettingsFromMainSettings();
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             PasswordSettings savedPasswordPrefs = mSettingsActivityTestRule.getFragment();
             ChromeSwitchPreference onOffSwitch =
@@ -608,7 +630,7 @@ public class PasswordSettingsTest {
         // Add a password entry, because the link is only displayed if the password list is not
         // empty.
         setPasswordSource(new SavedPasswordEntry("https://example.com", "test user", "password"));
-        mSettingsActivityTestRule.startSettingsActivity();
+        startPasswordSettingsFromMainSettings();
         PasswordSettings savedPasswordPrefs = mSettingsActivityTestRule.getFragment();
         Assert.assertNull(
                 savedPasswordPrefs.findPreference(PasswordSettings.PREF_KEY_MANAGE_ACCOUNT_LINK));
@@ -628,7 +650,7 @@ public class PasswordSettingsTest {
         overrideProfileSyncService(false, false);
         mBrowserTestRule.addAndSignInTestAccount();
 
-        mSettingsActivityTestRule.startSettingsActivity();
+        startPasswordSettingsFromMainSettings();
         PasswordSettings savedPasswordPrefs = mSettingsActivityTestRule.getFragment();
 
         Assert.assertNull(
@@ -649,7 +671,7 @@ public class PasswordSettingsTest {
         overrideProfileSyncService(false, true);
         mBrowserTestRule.addAndSignInTestAccount();
 
-        mSettingsActivityTestRule.startSettingsActivity();
+        startPasswordSettingsFromMainSettings();
         PasswordSettings savedPasswordPrefs = mSettingsActivityTestRule.getFragment();
 
         Assert.assertNotNull(
@@ -670,7 +692,7 @@ public class PasswordSettingsTest {
         overrideProfileSyncService(true, true);
         mBrowserTestRule.addAndSignInTestAccount();
 
-        mSettingsActivityTestRule.startSettingsActivity();
+        startPasswordSettingsFromMainSettings();
         PasswordSettings savedPasswordPrefs = mSettingsActivityTestRule.getFragment();
 
         Assert.assertNull(
@@ -685,11 +707,10 @@ public class PasswordSettingsTest {
     @SmallTest
     @Feature({"Preferences"})
     public void testAutoSignInCheckbox() {
-        TestThreadUtils.runOnUiThreadBlocking(() -> {
-            PrefServiceBridge.getInstance().setBoolean(Pref.CREDENTIALS_ENABLE_AUTOSIGNIN, true);
-        });
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> { getPrefService().setBoolean(Pref.CREDENTIALS_ENABLE_AUTOSIGNIN, true); });
 
-        final SettingsActivity settingsActivity = mSettingsActivityTestRule.startSettingsActivity();
+        final SettingsActivity settingsActivity = startPasswordSettingsFromMainSettings();
 
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             PasswordSettings passwordPrefs = mSettingsActivityTestRule.getFragment();
@@ -699,18 +720,16 @@ public class PasswordSettingsTest {
             Assert.assertTrue(onOffSwitch.isChecked());
 
             onOffSwitch.performClick();
-            Assert.assertFalse(
-                    PrefServiceBridge.getInstance().getBoolean(Pref.CREDENTIALS_ENABLE_AUTOSIGNIN));
+            Assert.assertFalse(getPrefService().getBoolean(Pref.CREDENTIALS_ENABLE_AUTOSIGNIN));
             onOffSwitch.performClick();
-            Assert.assertTrue(
-                    PrefServiceBridge.getInstance().getBoolean(Pref.CREDENTIALS_ENABLE_AUTOSIGNIN));
+            Assert.assertTrue(getPrefService().getBoolean(Pref.CREDENTIALS_ENABLE_AUTOSIGNIN));
 
             settingsActivity.finish();
 
-            PrefServiceBridge.getInstance().setBoolean(Pref.CREDENTIALS_ENABLE_AUTOSIGNIN, false);
+            getPrefService().setBoolean(Pref.CREDENTIALS_ENABLE_AUTOSIGNIN, false);
         });
 
-        mSettingsActivityTestRule.startSettingsActivity();
+        startPasswordSettingsFromMainSettings();
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             PasswordSettings passwordPrefs = mSettingsActivityTestRule.getFragment();
             ChromeBaseCheckBoxPreference onOffSwitch =
@@ -728,13 +747,80 @@ public class PasswordSettingsTest {
     @Feature({"Preferences"})
     @EnableFeatures(ChromeFeatureList.PASSWORD_CHECK)
     public void testCheckPasswordsEnabled() {
-        final SettingsActivity settingsActivity = mSettingsActivityTestRule.startSettingsActivity();
-
+        startPasswordSettingsFromMainSettings();
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             PasswordSettings passwordPrefs = mSettingsActivityTestRule.getFragment();
             Assert.assertNotNull(
                     passwordPrefs.findPreference(PasswordSettings.PREF_CHECK_PASSWORDS));
         });
+    }
+
+    /**
+     * Check that Pref.SETTINGS_LAUNCHED_PASSWORD_CHECKS is being correctly incremented when
+     * the Check passwords preference is clicked.
+     */
+    @Test
+    @SmallTest
+    @Feature({"Preferences"})
+    @EnableFeatures(ChromeFeatureList.PASSWORD_CHECK)
+    public void testCheckPasswordsPrefIncremented() {
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> { getPrefService().setInteger(Pref.SETTINGS_LAUNCHED_PASSWORD_CHECKS, 0); });
+
+        startPasswordSettingsDirectly();
+        PasswordSettings passwordPrefs = mSettingsActivityTestRule.getFragment();
+        PasswordCheckPreference passwordCheck =
+                passwordPrefs.findPreference(PasswordSettings.PREF_CHECK_PASSWORDS);
+        Assert.assertNotNull(passwordCheck);
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            passwordCheck.performClick();
+            Assert.assertEquals(
+                    getPrefService().getInteger(Pref.SETTINGS_LAUNCHED_PASSWORD_CHECKS), 1);
+        });
+    }
+
+    /**
+     * Check that the image above the Check passwords preference is shown if the value of
+     * Pref.SETTINGS_LAUNCHED_PASSWORD_CHECKS is less than 3.
+     */
+    @Test
+    @SmallTest
+    @Feature({"Preferences"})
+    @EnableFeatures(ChromeFeatureList.PASSWORD_CHECK)
+    public void testCheckPasswordsImageShown() {
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> { getPrefService().setInteger(Pref.SETTINGS_LAUNCHED_PASSWORD_CHECKS, 2); });
+
+        startPasswordSettingsDirectly();
+        PasswordSettings passwordPrefs = mSettingsActivityTestRule.getFragment();
+        PasswordCheckPreference passwordCheck =
+                passwordPrefs.findPreference(PasswordSettings.PREF_CHECK_PASSWORDS);
+        Assert.assertNotNull(passwordCheck);
+        int promoImageVisibility =
+                passwordCheck.getPromoImageView(passwordPrefs.getActivity()).getVisibility();
+        Assert.assertEquals(promoImageVisibility, View.VISIBLE);
+    }
+
+    /**
+     * Check that the image above the Check passwords preference is not shown if the value of
+     * Pref.SETTINGS_LAUNCHED_PASSWORD_CHECKS is greater than or equal to 3.
+     */
+    @Test
+    @SmallTest
+    @Feature({"Preferences"})
+    @EnableFeatures(ChromeFeatureList.PASSWORD_CHECK)
+    public void testCheckPasswordsImageNotShown() {
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> { getPrefService().setInteger(Pref.SETTINGS_LAUNCHED_PASSWORD_CHECKS, 3); });
+
+        startPasswordSettingsDirectly();
+        PasswordSettings passwordPrefs = mSettingsActivityTestRule.getFragment();
+        PasswordCheckPreference passwordCheck =
+                passwordPrefs.findPreference(PasswordSettings.PREF_CHECK_PASSWORDS);
+        Assert.assertNotNull(passwordCheck);
+        int promoImageVisibility =
+                passwordCheck.getPromoImageView(passwordPrefs.getActivity()).getVisibility();
+        Assert.assertEquals(promoImageVisibility, View.GONE);
     }
 
     /**
@@ -746,7 +832,8 @@ public class PasswordSettingsTest {
     @Feature({"Preferences"})
     @DisableFeatures(ChromeFeatureList.PASSWORD_CHECK)
     public void testCheckPasswordsDisabled() {
-        final SettingsActivity settingsActivity = mSettingsActivityTestRule.startSettingsActivity();
+        mBrowserTestRule.addAndSignInTestAccount();
+        final SettingsActivity settingsActivity = startPasswordSettingsFromMainSettings();
 
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             PasswordSettings passwordPrefs = mSettingsActivityTestRule.getFragment();
@@ -770,7 +857,7 @@ public class PasswordSettingsTest {
                                                   "example user", "example password"),
                         new SavedPasswordEntry("https://test.com", "test user", "test password")});
 
-        mSettingsActivityTestRule.startSettingsActivity();
+        startPasswordSettingsFromMainSettings();
 
         Espresso.onView(withText(containsString("test user"))).perform(click());
 
@@ -813,7 +900,7 @@ public class PasswordSettingsTest {
                 mMockPasswordEditingDelegate);
         setPasswordSource(new SavedPasswordEntry("https://example.com", "test user", "password"));
 
-        mSettingsActivityTestRule.startSettingsActivity();
+        startPasswordSettingsFromMainSettings();
 
         Espresso.onView(withText(containsString("test user"))).perform(click());
 
@@ -842,7 +929,7 @@ public class PasswordSettingsTest {
                 mMockPasswordEditingDelegate);
         setPasswordSource(new SavedPasswordEntry("https://example.com", "test user", "password"));
 
-        mSettingsActivityTestRule.startSettingsActivity();
+        startPasswordSettingsFromMainSettings();
 
         Espresso.onView(withText(containsString("test user"))).perform(click());
 
@@ -907,7 +994,7 @@ public class PasswordSettingsTest {
 
         ReauthenticationManager.setApiOverride(ReauthenticationManager.OverrideState.AVAILABLE);
 
-        mSettingsActivityTestRule.startSettingsActivity();
+        startPasswordSettingsFromMainSettings();
 
         checkExportMenuItemState(MenuItemState.DISABLED);
     }
@@ -923,7 +1010,7 @@ public class PasswordSettingsTest {
 
         ReauthenticationManager.setApiOverride(ReauthenticationManager.OverrideState.AVAILABLE);
 
-        mSettingsActivityTestRule.startSettingsActivity();
+        startPasswordSettingsFromMainSettings();
 
         checkExportMenuItemState(MenuItemState.ENABLED);
     }
@@ -941,7 +1028,7 @@ public class PasswordSettingsTest {
         ReauthenticationManager.setScreenLockSetUpOverride(
                 ReauthenticationManager.OverrideState.AVAILABLE);
 
-        mSettingsActivityTestRule.startSettingsActivity();
+        startPasswordSettingsFromMainSettings();
 
         openActionBarOverflowOrOptionsMenu(
                 InstrumentationRegistry.getInstrumentation().getTargetContext());
@@ -969,7 +1056,7 @@ public class PasswordSettingsTest {
         ReauthenticationManager.setScreenLockSetUpOverride(
                 ReauthenticationManager.OverrideState.AVAILABLE);
 
-        final SettingsActivity settingsActivity = mSettingsActivityTestRule.startSettingsActivity();
+        final SettingsActivity settingsActivity = startPasswordSettingsFromMainSettings();
 
         reauthenticateAndRequestExport(settingsActivity);
 
@@ -992,7 +1079,7 @@ public class PasswordSettingsTest {
         ReauthenticationManager.setScreenLockSetUpOverride(
                 ReauthenticationManager.OverrideState.AVAILABLE);
 
-        final SettingsActivity settingsActivity = mSettingsActivityTestRule.startSettingsActivity();
+        final SettingsActivity settingsActivity = startPasswordSettingsFromMainSettings();
 
         reauthenticateAndRequestExport(settingsActivity);
 
@@ -1039,7 +1126,7 @@ public class PasswordSettingsTest {
         ReauthenticationManager.setScreenLockSetUpOverride(
                 ReauthenticationManager.OverrideState.UNAVAILABLE);
 
-        final SettingsActivity settingsActivity = mSettingsActivityTestRule.startSettingsActivity();
+        final SettingsActivity settingsActivity = startPasswordSettingsFromMainSettings();
 
         View mainDecorView = settingsActivity.getWindow().getDecorView();
         openActionBarOverflowOrOptionsMenu(
@@ -1064,7 +1151,7 @@ public class PasswordSettingsTest {
         ReauthenticationManager.setScreenLockSetUpOverride(
                 ReauthenticationManager.OverrideState.UNAVAILABLE);
 
-        mSettingsActivityTestRule.startSettingsActivity();
+        startPasswordSettingsFromMainSettings();
 
         // Trigger exporting and let it fail on the unavailable lock.
         openActionBarOverflowOrOptionsMenu(
@@ -1088,7 +1175,7 @@ public class PasswordSettingsTest {
         ReauthenticationManager.setApiOverride(ReauthenticationManager.OverrideState.AVAILABLE);
         ReauthenticationManager.setSkipSystemReauth(true);
 
-        final SettingsActivity settingsActivity = mSettingsActivityTestRule.startSettingsActivity();
+        final SettingsActivity settingsActivity = startPasswordSettingsFromMainSettings();
 
         openActionBarOverflowOrOptionsMenu(
                 InstrumentationRegistry.getInstrumentation().getTargetContext());
@@ -1114,7 +1201,7 @@ public class PasswordSettingsTest {
         ReauthenticationManager.setScreenLockSetUpOverride(
                 ReauthenticationManager.OverrideState.AVAILABLE);
 
-        mSettingsActivityTestRule.startSettingsActivity();
+        startPasswordSettingsFromMainSettings();
 
         // Ensure that the last reauthentication time stamp is recent enough.
         ReauthenticationManager.recordLastReauth(
@@ -1150,7 +1237,7 @@ public class PasswordSettingsTest {
         ReauthenticationManager.setScreenLockSetUpOverride(
                 ReauthenticationManager.OverrideState.AVAILABLE);
 
-        final SettingsActivity settingsActivity = mSettingsActivityTestRule.startSettingsActivity();
+        final SettingsActivity settingsActivity = startPasswordSettingsFromMainSettings();
 
         Intents.init();
 
@@ -1190,7 +1277,7 @@ public class PasswordSettingsTest {
         ReauthenticationManager.setScreenLockSetUpOverride(
                 ReauthenticationManager.OverrideState.AVAILABLE);
 
-        final SettingsActivity settingsActivity = mSettingsActivityTestRule.startSettingsActivity();
+        final SettingsActivity settingsActivity = startPasswordSettingsFromMainSettings();
 
         Intents.init();
 
@@ -1236,7 +1323,7 @@ public class PasswordSettingsTest {
         ReauthenticationManager.setScreenLockSetUpOverride(
                 ReauthenticationManager.OverrideState.AVAILABLE);
 
-        final SettingsActivity settingsActivity = mSettingsActivityTestRule.startSettingsActivity();
+        final SettingsActivity settingsActivity = startPasswordSettingsFromMainSettings();
 
         reauthenticateAndRequestExport(settingsActivity);
 
@@ -1261,7 +1348,7 @@ public class PasswordSettingsTest {
         ReauthenticationManager.setScreenLockSetUpOverride(
                 ReauthenticationManager.OverrideState.AVAILABLE);
 
-        final SettingsActivity settingsActivity = mSettingsActivityTestRule.startSettingsActivity();
+        final SettingsActivity settingsActivity = startPasswordSettingsFromMainSettings();
 
         reauthenticateAndRequestExport(settingsActivity);
 
@@ -1295,7 +1382,7 @@ public class PasswordSettingsTest {
         ReauthenticationManager.setScreenLockSetUpOverride(
                 ReauthenticationManager.OverrideState.AVAILABLE);
 
-        final SettingsActivity settingsActivity = mSettingsActivityTestRule.startSettingsActivity();
+        final SettingsActivity settingsActivity = startPasswordSettingsFromMainSettings();
 
         openActionBarOverflowOrOptionsMenu(
                 InstrumentationRegistry.getInstrumentation().getTargetContext());
@@ -1335,7 +1422,7 @@ public class PasswordSettingsTest {
         ReauthenticationManager.setScreenLockSetUpOverride(
                 ReauthenticationManager.OverrideState.AVAILABLE);
 
-        final SettingsActivity settingsActivity = mSettingsActivityTestRule.startSettingsActivity();
+        final SettingsActivity settingsActivity = startPasswordSettingsFromMainSettings();
 
         reauthenticateAndRequestExport(settingsActivity);
 
@@ -1363,7 +1450,7 @@ public class PasswordSettingsTest {
         ReauthenticationManager.setScreenLockSetUpOverride(
                 ReauthenticationManager.OverrideState.AVAILABLE);
 
-        final SettingsActivity settingsActivity = mSettingsActivityTestRule.startSettingsActivity();
+        final SettingsActivity settingsActivity = startPasswordSettingsFromMainSettings();
 
         Intents.init();
 
@@ -1421,7 +1508,7 @@ public class PasswordSettingsTest {
         ReauthenticationManager.setScreenLockSetUpOverride(
                 ReauthenticationManager.OverrideState.AVAILABLE);
 
-        final SettingsActivity settingsActivity = mSettingsActivityTestRule.startSettingsActivity();
+        final SettingsActivity settingsActivity = startPasswordSettingsFromMainSettings();
 
         Intents.init();
 
@@ -1473,7 +1560,7 @@ public class PasswordSettingsTest {
         ReauthenticationManager.setScreenLockSetUpOverride(
                 ReauthenticationManager.OverrideState.AVAILABLE);
 
-        final SettingsActivity settingsActivity = mSettingsActivityTestRule.startSettingsActivity();
+        final SettingsActivity settingsActivity = startPasswordSettingsFromMainSettings();
 
         reauthenticateAndRequestExport(settingsActivity);
 
@@ -1509,7 +1596,7 @@ public class PasswordSettingsTest {
         ReauthenticationManager.setScreenLockSetUpOverride(
                 ReauthenticationManager.OverrideState.AVAILABLE);
 
-        final SettingsActivity settingsActivity = mSettingsActivityTestRule.startSettingsActivity();
+        final SettingsActivity settingsActivity = startPasswordSettingsFromMainSettings();
 
         reauthenticateAndRequestExport(settingsActivity);
 
@@ -1547,7 +1634,7 @@ public class PasswordSettingsTest {
         ReauthenticationManager.setScreenLockSetUpOverride(
                 ReauthenticationManager.OverrideState.AVAILABLE);
 
-        final SettingsActivity settingsActivity = mSettingsActivityTestRule.startSettingsActivity();
+        final SettingsActivity settingsActivity = startPasswordSettingsFromMainSettings();
 
         reauthenticateAndRequestExport(settingsActivity);
 
@@ -1581,7 +1668,7 @@ public class PasswordSettingsTest {
         ReauthenticationManager.setScreenLockSetUpOverride(
                 ReauthenticationManager.OverrideState.AVAILABLE);
 
-        final SettingsActivity settingsActivity = mSettingsActivityTestRule.startSettingsActivity();
+        final SettingsActivity settingsActivity = startPasswordSettingsFromMainSettings();
 
         reauthenticateAndRequestExport(settingsActivity);
 
@@ -1626,7 +1713,7 @@ public class PasswordSettingsTest {
         ReauthenticationManager.setScreenLockSetUpOverride(
                 ReauthenticationManager.OverrideState.AVAILABLE);
 
-        final SettingsActivity settingsActivity = mSettingsActivityTestRule.startSettingsActivity();
+        final SettingsActivity settingsActivity = startPasswordSettingsFromMainSettings();
 
         reauthenticateAndRequestExport(settingsActivity);
 
@@ -1664,7 +1751,7 @@ public class PasswordSettingsTest {
         ReauthenticationManager.setScreenLockSetUpOverride(
                 ReauthenticationManager.OverrideState.UNAVAILABLE);
 
-        final SettingsActivity settingsActivity = mSettingsActivityTestRule.startSettingsActivity();
+        final SettingsActivity settingsActivity = startPasswordSettingsFromMainSettings();
 
         View mainDecorView = settingsActivity.getWindow().getDecorView();
         Espresso.onView(withText(containsString("test user"))).perform(click());
@@ -1689,7 +1776,7 @@ public class PasswordSettingsTest {
         ReauthenticationManager.setScreenLockSetUpOverride(
                 ReauthenticationManager.OverrideState.AVAILABLE);
 
-        mSettingsActivityTestRule.startSettingsActivity();
+        startPasswordSettingsFromMainSettings();
 
         Espresso.onView(withText(containsString("test user"))).perform(click());
 
@@ -1711,7 +1798,7 @@ public class PasswordSettingsTest {
     @SuppressWarnings("AlwaysShowAction") // We need to ensure the icon is in the action bar.
     public void testSearchIconVisibleInActionBarWithFeature() {
         setPasswordSource(null); // Initialize empty preferences.
-        mSettingsActivityTestRule.startSettingsActivity();
+        startPasswordSettingsFromMainSettings();
         PasswordSettings f = mSettingsActivityTestRule.getFragment();
 
         // Force the search option into the action bar.
@@ -1735,7 +1822,7 @@ public class PasswordSettingsTest {
         setPasswordSource( // Initialize preferences
                 new SavedPasswordEntry("https://example.com", "test user", "test password"));
 
-        mSettingsActivityTestRule.startSettingsActivity();
+        startPasswordSettingsFromMainSettings();
 
         Espresso.onView(withText(containsString("test user"))).perform(click());
 
@@ -1750,7 +1837,7 @@ public class PasswordSettingsTest {
     @Feature({"Preferences"})
     public void testSearchTextInOverflowMenuVisibleWithFeature() {
         setPasswordSource(null); // Initialize empty preferences.mSettingsActivityTestRule
-        mSettingsActivityTestRule.startSettingsActivity();
+        startPasswordSettingsFromMainSettings();
         PasswordSettings f = mSettingsActivityTestRule.getFragment();
 
         // Force the search option into the overflow menu.
@@ -1776,7 +1863,7 @@ public class PasswordSettingsTest {
     @Feature({"Preferences"})
     public void testTriggeringSearchRestoresHelpIcon() {
         setPasswordSource(null);
-        mSettingsActivityTestRule.startSettingsActivity();
+        startPasswordSettingsFromMainSettings();
         onViewWaiting(withText(R.string.password_settings_title));
 
         // Retrieve the initial status and ensure that the help option is there at all.
@@ -1820,7 +1907,7 @@ public class PasswordSettingsTest {
     @Feature({"Preferences"})
     public void testSearchFiltersByUserName() {
         setPasswordSourceWithMultipleEntries(GREEK_GODS);
-        mSettingsActivityTestRule.startSettingsActivity();
+        startPasswordSettingsFromMainSettings();
 
         // Search for a string matching multiple user names. Case doesn't need to match.
         Espresso.onView(withSearchMenuIdOrText()).perform(click());
@@ -1842,7 +1929,7 @@ public class PasswordSettingsTest {
     @Feature({"Preferences"})
     public void testSearchFiltersByUrl() {
         setPasswordSourceWithMultipleEntries(GREEK_GODS);
-        mSettingsActivityTestRule.startSettingsActivity();
+        startPasswordSettingsFromMainSettings();
 
         // Search for a string that matches multiple URLs. Case doesn't need to match.
         Espresso.onView(withSearchMenuIdOrText()).perform(click());
@@ -1864,7 +1951,7 @@ public class PasswordSettingsTest {
     @Feature({"Preferences"})
     public void testSearchDisplaysNoResultMessageIfSearchTurnsUpEmpty() {
         setPasswordSourceWithMultipleEntries(GREEK_GODS);
-        mSettingsActivityTestRule.startSettingsActivity();
+        startPasswordSettingsFromMainSettings();
 
         // Open the search which should hide the Account link.
         Espresso.onView(withSearchMenuIdOrText()).perform(click());
@@ -1896,7 +1983,7 @@ public class PasswordSettingsTest {
     @Feature({"Preferences"})
     public void testSearchIconClickedHidesExceptionsTemporarily() {
         setPasswordExceptions(new String[] {"http://exclu.de", "http://not-inclu.de"});
-        mSettingsActivityTestRule.startSettingsActivity();
+        startPasswordSettingsFromMainSettings();
 
         Espresso.onView(withText(R.string.section_saved_passwords_exceptions))
                 .check(matches(isDisplayed()));
@@ -1923,7 +2010,7 @@ public class PasswordSettingsTest {
     @Feature({"Preferences"})
     public void testSearchIconClickedHidesGeneralPrefs() {
         setPasswordSource(ZEUS_ON_EARTH);
-        mSettingsActivityTestRule.startSettingsActivity();
+        startPasswordSettingsFromMainSettings();
         final PasswordSettings prefs = mSettingsActivityTestRule.getFragment();
         final AtomicReference<Boolean> menuInitiallyVisible = new AtomicReference<>();
         TestThreadUtils.runOnUiThreadBlocking(
@@ -1962,7 +2049,7 @@ public class PasswordSettingsTest {
     @Feature({"Preferences"})
     public void testSearchBarBackButtonRestoresGeneralPrefs() {
         setPasswordSourceWithMultipleEntries(GREEK_GODS);
-        mSettingsActivityTestRule.startSettingsActivity();
+        startPasswordSettingsFromMainSettings();
 
         Espresso.onView(withSearchMenuIdOrText()).perform(click());
         Espresso.onView(withId(R.id.search_src_text))
@@ -1987,7 +2074,7 @@ public class PasswordSettingsTest {
     @Feature({"Preferences"})
     public void testSearchViewCloseIconExistsOnlyToClearQueries() {
         setPasswordSourceWithMultipleEntries(GREEK_GODS);
-        mSettingsActivityTestRule.startSettingsActivity();
+        startPasswordSettingsFromMainSettings();
 
         // Trigger search which shouldn't have the button yet.
         Espresso.onView(withSearchMenuIdOrText()).perform(click());
@@ -2016,7 +2103,7 @@ public class PasswordSettingsTest {
     @Feature({"Preferences"})
     public void testSearchIconColorAffectsOnlyLocalSearchDrawable() {
         // Open the password preferences and remember the applied color filter.
-        mSettingsActivityTestRule.startSettingsActivity();
+        startPasswordSettingsFromMainSettings();
         final PasswordSettings f = mSettingsActivityTestRule.getFragment();
         Espresso.onView(withId(R.id.search_button)).check(matches(isDisplayed()));
         final AtomicReference<ColorFilter> passwordSearchFilter = new AtomicReference<>();
@@ -2066,7 +2153,7 @@ public class PasswordSettingsTest {
         ReauthenticationManager.setApiOverride(ReauthenticationManager.OverrideState.AVAILABLE);
         ReauthenticationManager.setScreenLockSetUpOverride(
                 ReauthenticationManager.OverrideState.AVAILABLE);
-        mSettingsActivityTestRule.startSettingsActivity();
+        startPasswordSettingsFromMainSettings();
 
         // Open the search and filter all but "Zeus".
         Espresso.onView(withSearchMenuIdOrText()).perform(click());
@@ -2112,8 +2199,39 @@ public class PasswordSettingsTest {
         Espresso.onView(withId(R.id.search_src_text)).check(matches(withText("Zeu")));
     }
 
+    @Test
+    @MediumTest
+    @Feature({"Preferences"})
+    @EnableFeatures({ChromeFeatureList.PASSWORD_CHECK})
+    @DisabledTest(message = "crbug.com/1110965")
+    public void testDestroysPasswordCheckIfFirstInSettingsStack() {
+        mBrowserTestRule.addAndSignInTestAccount();
+        SettingsActivity activity = startPasswordSettingsDirectly();
+        activity.finish();
+        CriteriaHelper.pollInstrumentationThread(() -> activity.isDestroyed());
+        Assert.assertNull(PasswordCheckFactory.getPasswordCheckInstance());
+    }
+
+    @Test
+    @MediumTest
+    @Feature({"Preferences"})
+    @EnableFeatures({ChromeFeatureList.PASSWORD_CHECK})
+    public void testDoesNotDestroyPasswordCheckIfNotFirstInSettingsStack() {
+        mBrowserTestRule.addAndSignInTestAccount();
+        SettingsActivity activity = startPasswordSettingsFromMainSettings();
+        activity.finish();
+        CriteriaHelper.pollInstrumentationThread(() -> activity.isDestroyed());
+        Assert.assertNotNull(PasswordCheckFactory.getPasswordCheckInstance());
+        // Clean up the password check component.
+        PasswordCheckFactory.destroy();
+    }
+
     PasswordEditingDelegate waitForEvent() {
         return verify(mMockPasswordEditingDelegate,
                 timeout(ScalableTimeout.scaleTimeout(CriteriaHelper.DEFAULT_MAX_TIME_TO_POLL)));
+    }
+
+    PrefService getPrefService() {
+        return UserPrefs.get(Profile.getLastUsedRegularProfile());
     }
 }

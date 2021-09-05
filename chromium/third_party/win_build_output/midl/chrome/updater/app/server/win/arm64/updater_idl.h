@@ -6,7 +6,7 @@
  /* File created by MIDL compiler version 8.xx.xxxx */
 /* at a redacted point in time
  */
-/* Compiler settings for ../../chrome/updater/app/server/win/updater_idl.idl:
+/* Compiler settings for gen/chrome/updater/app/server/win/updater_idl.idl:
     Oicf, W1, Zp8, env=Win64 (32b run), target_arch=ARM64 8.01.0622 
     protocol : dce , ms_ext, c_ext, robust
     error checks: allocation ref bounds_check enum stub_data 
@@ -94,11 +94,37 @@ typedef interface IUpdater IUpdater;
 #endif 	/* __IUpdater_FWD_DEFINED__ */
 
 
+#ifndef __IUpdaterControl_FWD_DEFINED__
+#define __IUpdaterControl_FWD_DEFINED__
+typedef interface IUpdaterControl IUpdaterControl;
+
+#endif 	/* __IUpdaterControl_FWD_DEFINED__ */
+
+
+#ifndef __UpdaterClass_FWD_DEFINED__
+#define __UpdaterClass_FWD_DEFINED__
+
+#ifdef __cplusplus
+typedef class UpdaterClass UpdaterClass;
+#else
+typedef struct UpdaterClass UpdaterClass;
+#endif /* __cplusplus */
+
+#endif 	/* __UpdaterClass_FWD_DEFINED__ */
+
+
 #ifndef __IUpdater_FWD_DEFINED__
 #define __IUpdater_FWD_DEFINED__
 typedef interface IUpdater IUpdater;
 
 #endif 	/* __IUpdater_FWD_DEFINED__ */
+
+
+#ifndef __IUpdaterControl_FWD_DEFINED__
+#define __IUpdaterControl_FWD_DEFINED__
+typedef interface IUpdaterControl IUpdaterControl;
+
+#endif 	/* __IUpdaterControl_FWD_DEFINED__ */
 
 
 #ifndef __ICurrentState_FWD_DEFINED__
@@ -127,42 +153,6 @@ typedef interface IAppBundleWeb IAppBundleWeb;
 typedef interface IAppWeb IAppWeb;
 
 #endif 	/* __IAppWeb_FWD_DEFINED__ */
-
-
-#ifndef __UpdaterClass_FWD_DEFINED__
-#define __UpdaterClass_FWD_DEFINED__
-
-#ifdef __cplusplus
-typedef class UpdaterClass UpdaterClass;
-#else
-typedef struct UpdaterClass UpdaterClass;
-#endif /* __cplusplus */
-
-#endif 	/* __UpdaterClass_FWD_DEFINED__ */
-
-
-#ifndef __UpdaterServiceClass_FWD_DEFINED__
-#define __UpdaterServiceClass_FWD_DEFINED__
-
-#ifdef __cplusplus
-typedef class UpdaterServiceClass UpdaterServiceClass;
-#else
-typedef struct UpdaterServiceClass UpdaterServiceClass;
-#endif /* __cplusplus */
-
-#endif 	/* __UpdaterServiceClass_FWD_DEFINED__ */
-
-
-#ifndef __GoogleUpdate3WebUserClass_FWD_DEFINED__
-#define __GoogleUpdate3WebUserClass_FWD_DEFINED__
-
-#ifdef __cplusplus
-typedef class GoogleUpdate3WebUserClass GoogleUpdate3WebUserClass;
-#else
-typedef struct GoogleUpdate3WebUserClass GoogleUpdate3WebUserClass;
-#endif /* __cplusplus */
-
-#endif 	/* __GoogleUpdate3WebUserClass_FWD_DEFINED__ */
 
 
 /* header files for imported files */
@@ -1414,6 +1404,86 @@ EXTERN_C const IID IID_IUpdater;
 #endif 	/* __IUpdater_INTERFACE_DEFINED__ */
 
 
+#ifndef __IUpdaterControl_INTERFACE_DEFINED__
+#define __IUpdaterControl_INTERFACE_DEFINED__
+
+/* interface IUpdaterControl */
+/* [unique][helpstring][uuid][dual][object] */ 
+
+
+EXTERN_C const IID IID_IUpdaterControl;
+
+#if defined(__cplusplus) && !defined(CINTERFACE)
+    
+    MIDL_INTERFACE("526DA036-9BD3-4697-865A-DA12D37DFFCA")
+    IUpdaterControl : public IUnknown
+    {
+    public:
+        virtual HRESULT STDMETHODCALLTYPE Run( 
+            /* [in] */ IUpdaterObserver *observer) = 0;
+        
+    };
+    
+    
+#else 	/* C style interface */
+
+    typedef struct IUpdaterControlVtbl
+    {
+        BEGIN_INTERFACE
+        
+        HRESULT ( STDMETHODCALLTYPE *QueryInterface )( 
+            IUpdaterControl * This,
+            /* [in] */ REFIID riid,
+            /* [annotation][iid_is][out] */ 
+            _COM_Outptr_  void **ppvObject);
+        
+        ULONG ( STDMETHODCALLTYPE *AddRef )( 
+            IUpdaterControl * This);
+        
+        ULONG ( STDMETHODCALLTYPE *Release )( 
+            IUpdaterControl * This);
+        
+        HRESULT ( STDMETHODCALLTYPE *Run )( 
+            IUpdaterControl * This,
+            /* [in] */ IUpdaterObserver *observer);
+        
+        END_INTERFACE
+    } IUpdaterControlVtbl;
+
+    interface IUpdaterControl
+    {
+        CONST_VTBL struct IUpdaterControlVtbl *lpVtbl;
+    };
+
+    
+
+#ifdef COBJMACROS
+
+
+#define IUpdaterControl_QueryInterface(This,riid,ppvObject)	\
+    ( (This)->lpVtbl -> QueryInterface(This,riid,ppvObject) ) 
+
+#define IUpdaterControl_AddRef(This)	\
+    ( (This)->lpVtbl -> AddRef(This) ) 
+
+#define IUpdaterControl_Release(This)	\
+    ( (This)->lpVtbl -> Release(This) ) 
+
+
+#define IUpdaterControl_Run(This,observer)	\
+    ( (This)->lpVtbl -> Run(This,observer) ) 
+
+#endif /* COBJMACROS */
+
+
+#endif 	/* C style interface */
+
+
+
+
+#endif 	/* __IUpdaterControl_INTERFACE_DEFINED__ */
+
+
 
 #ifndef __UpdaterLib_LIBRARY_DEFINED__
 #define __UpdaterLib_LIBRARY_DEFINED__
@@ -1427,30 +1497,15 @@ EXTERN_C const IID IID_IUpdater;
 
 
 
+
 EXTERN_C const IID LIBID_UpdaterLib;
 
 EXTERN_C const CLSID CLSID_UpdaterClass;
 
 #ifdef __cplusplus
 
-class DECLSPEC_UUID("158428A4-6014-4978-83BA-9FAD0DABE791")
+class DECLSPEC_UUID("158428a4-6014-4978-83ba-9fad0dabe791")
 UpdaterClass;
-#endif
-
-EXTERN_C const CLSID CLSID_UpdaterServiceClass;
-
-#ifdef __cplusplus
-
-class DECLSPEC_UUID("415FD747-D79E-42D7-93AC-1BA6E5FD4E93")
-UpdaterServiceClass;
-#endif
-
-EXTERN_C const CLSID CLSID_GoogleUpdate3WebUserClass;
-
-#ifdef __cplusplus
-
-class DECLSPEC_UUID("22181302-A8A6-4f84-A541-E5CBFC70CC43")
-GoogleUpdate3WebUserClass;
 #endif
 #endif /* __UpdaterLib_LIBRARY_DEFINED__ */
 

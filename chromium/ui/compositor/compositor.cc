@@ -172,7 +172,7 @@ Compositor::Compositor(const viz::FrameSinkId& frame_sink_id,
   settings.use_rgba_4444 =
       command_line->HasSwitch(switches::kUIEnableRGBA4444Textures);
 
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
   // Using CoreAnimation to composite requires using GpuMemoryBuffers, which
   // require zero copy.
   settings.resource_settings.use_gpu_memory_buffer_resources =
@@ -451,7 +451,8 @@ void Compositor::SetDisplayColorSpaces(
     return;
   display_color_spaces_ = display_color_spaces;
 
-  host_->SetRasterColorSpace(display_color_spaces_.GetRasterColorSpace());
+  host_->SetDisplayColorSpaces(display_color_spaces_);
+
   // Always force the ui::Compositor to re-draw all layers, because damage
   // tracking bugs result in black flashes.
   // https://crbug.com/804430
@@ -698,8 +699,7 @@ void Compositor::DidSubmitCompositorFrame() {
 }
 
 void Compositor::FrameIntervalUpdated(base::TimeDelta interval) {
-  refresh_rate_ =
-      base::Time::kMicrosecondsPerSecond / interval.InMicrosecondsF();
+  refresh_rate_ = interval.ToHz();
 }
 
 void Compositor::OnFirstSurfaceActivation(
@@ -767,6 +767,12 @@ void Compositor::ReportThroughputForTracker(
 
   std::move(it->second).Run(std::move(throughput));
   throughput_tracker_map_.erase(it);
+}
+
+void Compositor::SetDelegatedInkPointRenderer(
+    mojo::PendingReceiver<viz::mojom::DelegatedInkPointRenderer> receiver) {
+  if (display_private_)
+    display_private_->SetDelegatedInkPointRenderer(std::move(receiver));
 }
 
 }  // namespace ui

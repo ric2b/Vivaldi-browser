@@ -26,7 +26,6 @@
 #include "net/base/load_flags.h"
 #include "net/http/http_cache.h"
 #include "net/http/http_status_code.h"
-#include "net/url_request/url_fetcher.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/cpp/simple_url_loader.h"
 
@@ -70,7 +69,7 @@ PPAPIDownloadRequest::PPAPIDownloadRequest(
         service->navigation_observer_manager()->HasUserGesture(web_contents);
     if (has_user_gesture_) {
       service->navigation_observer_manager()->OnUserGestureConsumed(
-          web_contents, base::Time::Now());
+          web_contents);
     }
   }
 }

@@ -263,6 +263,7 @@ WebViewPlugin::WebViewHelper::WebViewHelper(WebViewPlugin* plugin,
   web_view_ =
       WebView::Create(/*client=*/this,
                       /*is_hidden=*/false,
+                      /*is_inside_portal=*/false,
                       /*compositing_enabled=*/false,
                       /*opener=*/nullptr, mojo::NullAssociatedReceiver());
   // ApplyWebPreferences before making a WebLocalFrame so that the frame sees a
@@ -305,12 +306,6 @@ bool WebViewPlugin::WebViewHelper::CanUpdateLayout() {
   return true;
 }
 
-blink::WebScreenInfo WebViewPlugin::WebViewHelper::GetScreenInfo() {
-  // TODO(danakj): This should probably return the screen info for the
-  // RenderView.
-  return blink::WebScreenInfo();
-}
-
 void WebViewPlugin::WebViewHelper::SetToolTipText(
     const base::string16& tooltip_text,
     base::i18n::TextDirection hint) {
@@ -320,8 +315,7 @@ void WebViewPlugin::WebViewHelper::SetToolTipText(
   }
 }
 
-void WebViewPlugin::WebViewHelper::StartDragging(network::mojom::ReferrerPolicy,
-                                                 const WebDragData&,
+void WebViewPlugin::WebViewHelper::StartDragging(const WebDragData&,
                                                  WebDragOperationsMask,
                                                  const SkBitmap&,
                                                  const gfx::Point&) {
@@ -387,7 +381,7 @@ void WebViewPlugin::WebViewHelper::DidClearWindowObject() {
       .Check();
 }
 
-void WebViewPlugin::WebViewHelper::FrameDetached(DetachType type) {
+void WebViewPlugin::WebViewHelper::FrameDetached() {
   frame_->FrameWidget()->Close();
   frame_->Close();
   frame_ = nullptr;

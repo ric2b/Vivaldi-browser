@@ -36,7 +36,11 @@ class COMPONENT_EXPORT(UI_BASE_IME_WIN) TSFBridge {
 
   // Sets the thread local instance. Must be called before any calls to
   // GetInstance().
-  static void Initialize();
+  static HRESULT Initialize();
+
+  // Sets the thread local instance for testing only. Must be called before
+  // any calls to GetInstance().
+  static void InitializeForTesting();
 
   // Injects an alternative TSFBridge such as MockTSFBridge for testing. The
   // injected object should be released by the caller. This function returns

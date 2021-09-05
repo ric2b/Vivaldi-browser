@@ -119,6 +119,36 @@ class SyncSetEncryptionPasswordFunction : public ExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(SyncSetEncryptionPasswordFunction);
 };
 
+class SyncBackupEncryptionTokenFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("sync.backupEncryptionToken",
+                             SYNC_BACKUP_ENCRYPTION_TOKEN)
+  SyncBackupEncryptionTokenFunction() = default;
+
+ private:
+  ~SyncBackupEncryptionTokenFunction() override = default;
+  // ExtensionFunction:
+  ResponseAction Run() override;
+  void OnBackupDone(bool result);
+
+  DISALLOW_COPY_AND_ASSIGN(SyncBackupEncryptionTokenFunction);
+};
+
+class SyncRestoreEncryptionTokenFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("sync.restoreEncryptionToken",
+                             SYNC_RESTORE_ENCRYPTION_TOKEN)
+  SyncRestoreEncryptionTokenFunction() = default;
+
+ private:
+  ~SyncRestoreEncryptionTokenFunction() override = default;
+  // ExtensionFunction:
+  ResponseAction Run() override;
+  void OnRestoreDone(bool result);
+
+  DISALLOW_COPY_AND_ASSIGN(SyncRestoreEncryptionTokenFunction);
+};
+
 class SyncGetDefaultSessionNameFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("sync.getDefaultSessionName",

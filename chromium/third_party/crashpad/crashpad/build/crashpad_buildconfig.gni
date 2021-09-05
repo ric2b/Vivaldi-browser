@@ -38,7 +38,7 @@ if (crashpad_is_in_chromium) {
   crashpad_is_mac = is_mac
   crashpad_is_ios = is_ios
   crashpad_is_win = is_win
-  crashpad_is_linux = is_linux
+  crashpad_is_linux = is_linux || is_chromeos
   crashpad_is_android = is_android
   crashpad_is_fuchsia = is_fuchsia
 
@@ -51,8 +51,8 @@ if (crashpad_is_in_chromium) {
     import("../../../mini_chromium/mini_chromium/build/compiler.gni")
     import("../../../mini_chromium/mini_chromium/build/platform.gni")
   } else {
-    # Both standalone and in Fuchsia tree use mini_chromium, and it's mapped into
-    # the same location in both cases.
+    # Both standalone and in Fuchsia tree use mini_chromium, and it's mapped
+    # into the same location in both cases.
     import("../third_party/mini_chromium/mini_chromium/build/compiler.gni")
     import("../third_party/mini_chromium/mini_chromium/build/platform.gni")
   }

@@ -6,6 +6,7 @@
 #include "ash/assistant/model/assistant_ui_model.h"
 #include "ash/assistant/test/assistant_ash_test_base.h"
 #include "ash/assistant/ui/assistant_ui_constants.h"
+#include "ash/assistant/ui/main_stage/assistant_onboarding_suggestion_view.h"
 #include "ash/assistant/ui/main_stage/suggestion_chip_view.h"
 #include "ash/public/cpp/app_list/app_list_types.h"
 #include "base/run_loop.h"
@@ -26,6 +27,10 @@ namespace {
 
 using chromeos::assistant::AssistantInteractionMetadata;
 using chromeos::assistant::AssistantInteractionType;
+
+// The min/max height of the embedded Assistant.
+constexpr int kMaxHeightDip = 440;
+constexpr int kMinHeightDip = 180;
 
 #define EXPECT_INTERACTION_OF_TYPE(type_)                      \
   ({                                                           \
@@ -169,7 +174,7 @@ class AssistantPageViewTest : public AssistantAshTestBase {
   gfx::Point GetPointInAppListOutsideAssistantUi() {
     gfx::Point result = GetPointOutside(page_view());
 
-    // Sanity check
+    // Validity check
     EXPECT_TRUE(app_list_view()->bounds().Contains(result));
     EXPECT_FALSE(page_view()->bounds().Contains(result));
 
@@ -247,21 +252,12 @@ TEST_F(AssistantPageViewTest, ShouldStartInPeekingState) {
   EXPECT_EQ(AppListViewState::kPeeking, app_list_view()->app_list_state());
 }
 
-// Tests the |AssistantPageView| with better onboarding enabled.
-class AssistantPageViewBetterOnboardingTest : public AssistantPageViewTest {
- public:
-  AssistantPageViewBetterOnboardingTest() {
-    feature_list_.InitAndEnableFeature(
-        chromeos::assistant::features::kAssistantBetterOnboarding);
-  }
+TEST_F(AssistantPageViewTest, ShouldStartInHalfState) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(
+      chromeos::assistant::features::kAssistantBetterOnboarding);
+  SetOnboardingMode(AssistantOnboardingMode::kEducation);
 
-  ~AssistantPageViewBetterOnboardingTest() override = default;
-
- private:
-  base::test::ScopedFeatureList feature_list_;
-};
-
-TEST_F(AssistantPageViewBetterOnboardingTest, ShouldStartInHalfState) {
   ShowAssistantUi();
 
   EXPECT_EQ(AppListViewState::kHalf, app_list_view()->app_list_state());
@@ -271,7 +267,7 @@ TEST_F(AssistantPageViewTest, ShouldStartAtMinimumHeight) {
   ShowAssistantUi();
 
   base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(kMinHeightEmbeddedDip, main_view()->size().height());
+  EXPECT_EQ(kMinHeightDip, main_view()->size().height());
 }
 
 TEST_F(AssistantPageViewTest,
@@ -281,7 +277,7 @@ TEST_F(AssistantPageViewTest,
   MockTextInteraction().WithTextResponse("Short one-liner");
 
   base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(kMinHeightEmbeddedDip, main_view()->size().height());
+  EXPECT_EQ(kMinHeightDip, main_view()->size().height());
 }
 
 TEST_F(AssistantPageViewTest, ShouldGetBiggerWithMultilineText) {
@@ -291,7 +287,7 @@ TEST_F(AssistantPageViewTest, ShouldGetBiggerWithMultilineText) {
       "This\ntext\nhas\na\nlot\nof\nlinebreaks.");
 
   base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(kMaxHeightEmbeddedDip, main_view()->size().height());
+  EXPECT_EQ(kMaxHeightDip, main_view()->size().height());
 }
 
 TEST_F(AssistantPageViewTest, ShouldGetBiggerWhenWrappingTextLine) {
@@ -303,7 +299,7 @@ TEST_F(AssistantPageViewTest, ShouldGetBiggerWhenWrappingTextLine) {
       "If it doesn't, this looks really bad. This is what caused b/134963994.");
 
   base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(kMaxHeightEmbeddedDip, main_view()->size().height());
+  EXPECT_EQ(kMaxHeightDip, main_view()->size().height());
 }
 
 TEST_F(AssistantPageViewTest, ShouldNotRequestFocusWhenOtherAppWindowOpens) {
@@ -376,10 +372,51 @@ TEST_F(AssistantPageViewTest, FocusShouldRemainInAssistantViewWhenPressingTab) {
         << "Focus advanced to view '" << focused_view->GetClassName()
         << "' which is not a part of the Assistant UI";
 
-    // Sanity check to ensure we do not loop forever
+    // Validity check to ensure we do not loop forever
     num_views++;
     ASSERT_LT(num_views, kMaxIterations);
   } while (focused_view != initial_focused_view);
+}
+
+TEST_F(AssistantPageViewTest,
+       FocusShouldCycleThroughOnboardingSuggestionsWhenPressingTab) {
+  constexpr int kMaxIterations = 100;
+
+  // Enable the |kAssistantBetterOnboarding| feature and change onboarding mode
+  // to force suggestion generation. We have to force suggestion generation in
+  // this way since the feature wasn't enabled prior to controller creation.
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      chromeos::assistant::features::kAssistantBetterOnboarding);
+  SetOnboardingMode(AssistantOnboardingMode::kEducation);
+
+  // Show Assistant UI and verify onboarding suggestions exist.
+  ShowAssistantUi();
+  auto onboarding_suggestions = GetOnboardingSuggestionViews();
+  ASSERT_FALSE(onboarding_suggestions.empty());
+
+  // Cache the first focused view.
+  auto* first_focused_view = GetFocusedView();
+
+  // Advance focus to the first onboarding suggestion.
+  int num_iterations = 0;
+  while (GetFocusedView() != onboarding_suggestions.at(0)) {
+    PressKeyAndWait(ui::VKEY_TAB);
+    ASSERT_LE(++num_iterations, kMaxIterations);  // Validity check.
+  }
+
+  // Verify we can cycle through them.
+  for (size_t i = 0; i < onboarding_suggestions.size(); ++i) {
+    ASSERT_EQ(GetFocusedView(), onboarding_suggestions.at(i));
+    PressKeyAndWait(ui::VKEY_TAB);
+  }
+
+  // Confirm that we eventually get back to our first focused view.
+  num_iterations = 0;
+  while (GetFocusedView() != first_focused_view) {
+    PressKeyAndWait(ui::VKEY_TAB);
+    ASSERT_LE(++num_iterations, kMaxIterations);  // Validity check.
+  }
 }
 
 TEST_F(AssistantPageViewTest, ShouldFocusMicWhenOpeningWithHotword) {
@@ -455,25 +492,6 @@ TEST_F(AssistantPageViewTest, ShouldShowGreetingLabelAgainAfterReopening) {
   EXPECT_EQ(nullptr, onboarding_view());
 }
 
-TEST_F(AssistantPageViewTest, ShouldShowOnboardingAgainAfterReopening) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(
-      chromeos::assistant::features::kAssistantBetterOnboarding);
-
-  ShowAssistantUi();
-
-  // Cause the label to be hidden.
-  MockTextInteraction().WithTextResponse("The response");
-  ASSERT_FALSE(onboarding_view()->IsDrawn());
-
-  // Close and reopen the Assistant UI.
-  CloseAssistantUi();
-  ShowAssistantUi();
-
-  EXPECT_TRUE(onboarding_view()->IsDrawn());
-  EXPECT_FALSE(greeting_label()->IsDrawn());
-}
-
 TEST_F(AssistantPageViewTest,
        ShouldNotShowGreetingLabelWhenOpeningFromSearchResult) {
   base::test::ScopedFeatureList scoped_feature_list;
@@ -496,6 +514,107 @@ TEST_F(AssistantPageViewTest,
 
   EXPECT_FALSE(onboarding_view()->IsDrawn());
   EXPECT_FALSE(greeting_label()->IsDrawn());
+}
+
+TEST_F(AssistantPageViewTest, ShouldShowOnboardingForNewUsers) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      chromeos::assistant::features::kAssistantBetterOnboarding);
+
+  // A user is considered new if they haven't had an Assistant interaction in
+  // the past 28 days.
+  const base::Time new_user_cutoff =
+      base::Time::Now() - base::TimeDelta::FromDays(28);
+
+  SetTimeOfLastInteraction(new_user_cutoff + base::TimeDelta::FromMinutes(1));
+  ShowAssistantUi();
+
+  // This user *has* interacted with Assistant more recently than 28 days ago so
+  // they are *not* considered new. Therefore, onboarding should *not* be shown.
+  EXPECT_FALSE(onboarding_view()->IsDrawn());
+
+  SetTimeOfLastInteraction(new_user_cutoff);
+
+  CloseAssistantUi();
+  ShowAssistantUi();
+
+  // This user has *not* interacted with Assistant more recently than 28 days
+  // ago so they *are* considered new. Therefore, onboarding *should* be shown.
+  EXPECT_TRUE(onboarding_view()->IsDrawn());
+}
+
+TEST_F(AssistantPageViewTest, ShouldShowOnboardingUntilInteractionOccurs) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      chromeos::assistant::features::kAssistantBetterOnboarding);
+
+  SetTimeOfLastInteraction(base::Time::Now() - base::TimeDelta::FromDays(28));
+  ShowAssistantUi();
+
+  // This user has *not* interacted with Assistant more recently than 28 days
+  // ago so they *are* considered new. Therefore, onboarding *should* be shown.
+  EXPECT_TRUE(onboarding_view()->IsDrawn());
+
+  CloseAssistantUi();
+  ShowAssistantUi();
+
+  // The user has *not* yet interacted with Assistant in this user session, so
+  // we should continue to show onboarding.
+  EXPECT_TRUE(onboarding_view()->IsDrawn());
+
+  MockTextInteraction().WithQuery("Any Query").WithTextResponse("Any Response");
+
+  CloseAssistantUi();
+  ShowAssistantUi();
+
+  // The user *has* had an interaction with Assistant in this user session, so
+  // we should *not* show onboarding anymore.
+  EXPECT_FALSE(onboarding_view()->IsDrawn());
+}
+
+TEST_F(AssistantPageViewTest,
+       ShouldShowOnboardingToExistingUsersIfShownPreviouslyInDifferentSession) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      chromeos::assistant::features::kAssistantBetterOnboarding);
+
+  SetTimeOfLastInteraction(base::Time::Now());
+  SetNumberOfSessionsWhereOnboardingShown(1);
+
+  ShowAssistantUi();
+
+  // This user *has* interacted with Assistant more recently than 28 days ago so
+  // so they are *not* considered new. Onboarding would not normally be shown
+  // but, since it *was* shown in a previous user session, we *do* show it.
+  EXPECT_TRUE(onboarding_view()->IsDrawn());
+
+  MockTextInteraction().WithQuery("Any Query").WithTextResponse("Any Response");
+
+  CloseAssistantUi();
+  ShowAssistantUi();
+
+  // But once the user has had an interaction with Assistant in this user
+  // session, we still expect onboarding to no longer show.
+  EXPECT_FALSE(onboarding_view()->IsDrawn());
+}
+
+TEST_F(AssistantPageViewTest,
+       ShouldNotShowOnboardingToExistingUsersIfShownPreviouslyInMaxSessions) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      chromeos::assistant::features::kAssistantBetterOnboarding);
+
+  SetTimeOfLastInteraction(base::Time::Now());
+  SetNumberOfSessionsWhereOnboardingShown(
+      assistant::ui::kOnboardingMaxSessionsShown);
+
+  ShowAssistantUi();
+
+  // This user has *not* interacted with Assistant more recently than 28 days
+  // ago so they *are* considered new. Onboarding would normally be shown but,
+  // since it was shown already in the max number of previous user sessions, we
+  // do *not* show it.
+  EXPECT_FALSE(onboarding_view()->IsDrawn());
 }
 
 TEST_F(AssistantPageViewTest, ShouldFocusMicViewWhenPressingVoiceInputToggle) {

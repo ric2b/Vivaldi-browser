@@ -8,8 +8,11 @@ import java.util.List;
 
 import org.chromium.weblayer_private.interfaces.IDownloadCallbackClient;
 import org.chromium.weblayer_private.interfaces.IErrorPageCallbackClient;
+import org.chromium.weblayer_private.interfaces.IFaviconFetcher;
+import org.chromium.weblayer_private.interfaces.IFaviconFetcherClient;
 import org.chromium.weblayer_private.interfaces.IFindInPageCallbackClient;
 import org.chromium.weblayer_private.interfaces.IFullscreenCallbackClient;
+import org.chromium.weblayer_private.interfaces.IGoogleAccountsCallbackClient;
 import org.chromium.weblayer_private.interfaces.IMediaCaptureCallbackClient;
 import org.chromium.weblayer_private.interfaces.INavigationController;
 import org.chromium.weblayer_private.interfaces.INavigationControllerClient;
@@ -57,8 +60,6 @@ interface ITab {
 
   // Added in 85
   boolean setData(in Map data) = 17;
-
-  // Added in 85
   Map getData() = 18;
   void registerWebMessageCallback(in String jsObjectName,
                                   in List<String> allowedOrigins,
@@ -66,4 +67,9 @@ interface ITab {
   void unregisterWebMessageCallback(in String jsObjectName) = 20;
   boolean canTranslate() = 21;
   void showTranslateUi() = 22;
+
+  // Added in 86
+  void setGoogleAccountsCallbackClient(IGoogleAccountsCallbackClient client) = 23;
+  IFaviconFetcher createFaviconFetcher(IFaviconFetcherClient client) = 24;
+  void setTranslateTargetLanguage(in String targetLanguage) = 25;
 }

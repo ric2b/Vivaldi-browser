@@ -5,6 +5,7 @@
 
 from __future__ import print_function
 
+import argparse
 import collections
 import glob
 import json
@@ -39,7 +40,7 @@ def _HostIsWindows():
   """Returns True if running on a Windows host (including under cygwin)."""
   return sys.platform in ('win32', 'cygwin')
 
-def SetEnvironmentAndGetRuntimeDllDirs():
+def SetEnvironmentAndGetRuntimeDllDirs(options=None):
   """Sets up os.environ to use the depot_tools VS toolchain with gyp, and
   returns the location of the VC runtime DLLs so they can be copied into
   the output directory after gyp generation.
@@ -49,17 +50,17 @@ def SetEnvironmentAndGetRuntimeDllDirs():
   runtime.
   """
   vs_runtime_dll_dirs = None
-  depot_tools_win_toolchain = \
-      bool(int(os.environ.get('DEPOT_TOOLS_WIN_TOOLCHAIN', '1')))
+  depot_tools_win_toolchain = (options.use_managed_toolchain if options
+      else bool(int(os.environ.get('DEPOT_TOOLS_WIN_TOOLCHAIN', '1'))))
   # When running on a non-Windows host, only do this if the SDK has explicitly
   # been downloaded before (in which case json_data_file will exist).
   if ((_HostIsWindows() or os.path.exists(json_data_file))
       and depot_tools_win_toolchain):
-    if ShouldUpdateToolchain():
-      if len(sys.argv) > 1 and sys.argv[1] == 'update':
-        update_result = Update()
+    if ShouldUpdateToolchain(options=options):
+      if options and getattr(options, "command", "") == 'update':
+        update_result = Update(options=options)
       else:
-        update_result = Update(no_download=True)
+        update_result = Update(no_download=True, options=options)
       if update_result != 0:
         raise Exception('Failed to update, error code %d.' % update_result)
     with open(json_data_file, 'r') as tempf:
@@ -90,7 +91,7 @@ def SetEnvironmentAndGetRuntimeDllDirs():
     os.environ['PATH'] = runtime_path + os.path.pathsep + os.environ['PATH']
   elif sys.platform == 'win32' and not depot_tools_win_toolchain:
     if not 'GYP_MSVS_OVERRIDE_PATH' in os.environ:
-      os.environ['GYP_MSVS_OVERRIDE_PATH'] = DetectVisualStudioPath()
+      os.environ['GYP_MSVS_OVERRIDE_PATH'] = DetectVisualStudioPath(options=options)
 
     # When using an installed toolchain these files aren't needed in the output
     # directory in order to run binaries locally, but they are needed in order
@@ -137,13 +138,14 @@ def _RegistryGetValue(key, value):
     raise Exception('The python library _winreg not found.')
 
 
-def GetVisualStudioVersion():
+def GetVisualStudioVersion(options=None):
   """Return best available version of Visual Studio.
   """
   supported_versions = list(MSVS_VERSIONS.keys())
 
   # VS installed in depot_tools for Googlers
-  if bool(int(os.environ.get('DEPOT_TOOLS_WIN_TOOLCHAIN', '1'))):
+  if options.use_managed_toolchain if options else \
+      bool(int(os.environ.get('DEPOT_TOOLS_WIN_TOOLCHAIN', '1'))):
     return supported_versions[0]
 
   # VS installed in system for external developers
@@ -175,13 +177,13 @@ def GetVisualStudioVersion():
   return available_versions[0]
 
 
-def DetectVisualStudioPath():
+def DetectVisualStudioPath(options=None):
   """Return path to the installed Visual Studio.
   """
 
   # Note that this code is used from
   # build/toolchain/win/setup_toolchain.py as well.
-  version_as_year = GetVisualStudioVersion()
+  version_as_year = GetVisualStudioVersion(options=options)
 
   # The VC++ >=2017 install location needs to be located using COM instead of
   # the registry. For details see:
@@ -250,26 +252,26 @@ def _SortByHighestVersionNumberFirst(list_of_str_versions):
   list_of_str_versions.sort(key=to_number_sequence, reverse=True)
 
 
-def _CopyUCRTRuntime(target_dir, source_dir, target_cpu, suffix):
+def _CopyUCRTRuntime(target_dir, source_dir, target_cpu, suffix, options=None):
   """Copy both the msvcp and vccorlib runtime DLLs, only if the target doesn't
   exist, but the target directory does exist."""
   if target_cpu == 'arm64':
     # Windows ARM64 VCRuntime is located at {toolchain_root}/VC/Redist/MSVC/
     # {x.y.z}/[debug_nonredist/]arm64/Microsoft.VC14x.CRT/.
     # Select VC toolset directory based on Visual Studio version
-    vc_redist_root = FindVCRedistRoot()
+    vc_redist_root = FindVCRedistRoot(options=options)
     if suffix.startswith('.'):
       vc_toolset_dir = 'Microsoft.{}.CRT' \
-         .format(MSVC_TOOLSET_VERSION[GetVisualStudioVersion()])
+         .format(MSVC_TOOLSET_VERSION[GetVisualStudioVersion(options=options)])
       source_dir = os.path.join(vc_redist_root,
                                 'arm64', vc_toolset_dir)
     else:
       vc_toolset_dir = 'Microsoft.{}.DebugCRT' \
-         .format(MSVC_TOOLSET_VERSION[GetVisualStudioVersion()])
+         .format(MSVC_TOOLSET_VERSION[GetVisualStudioVersion(options=options)])
       source_dir = os.path.join(vc_redist_root, 'debug_nonredist',
                                 'arm64', vc_toolset_dir)
   file_parts = ('msvcp140', 'vccorlib140', 'vcruntime140')
-  if target_cpu == 'x64' and GetVisualStudioVersion() != '2017':
+  if target_cpu == 'x64' and GetVisualStudioVersion(options=options) != '2017':
     file_parts = file_parts + ('vcruntime140_1', )
   for file_part in file_parts:
     dll = file_part + suffix
@@ -307,29 +309,28 @@ def _CopyUCRTRuntime(target_dir, source_dir, target_cpu, suffix):
     if not suffix.startswith('.'):
       # ucrtbased.dll is located at {win_sdk_dir}/bin/{a.b.c.d}/{target_cpu}/
       # ucrt/.
-      sdk_redist_root = os.path.join(win_sdk_dir, 'bin')
-      sdk_bin_sub_dirs = os.listdir(sdk_redist_root)
+      sdk_bin_root = os.path.join(win_sdk_dir, 'bin')
+      sdk_bin_sub_dirs = glob.glob(os.path.join(sdk_bin_root, '10.*'))
       # Select the most recent SDK if there are multiple versions installed.
       _SortByHighestVersionNumberFirst(sdk_bin_sub_dirs)
       for directory in sdk_bin_sub_dirs:
-        sdk_redist_root_version = os.path.join(sdk_redist_root, directory)
+        sdk_redist_root_version = os.path.join(sdk_bin_root, directory)
         if not os.path.isdir(sdk_redist_root_version):
           continue
-        if re.match(r'10\.\d+\.\d+\.\d+', directory):
-          source_dir = os.path.join(sdk_redist_root_version, target_cpu, 'ucrt')
-          break
+        source_dir = os.path.join(sdk_redist_root_version, target_cpu, 'ucrt')
+        break
     _CopyRuntimeImpl(os.path.join(target_dir, 'ucrtbase' + suffix),
                      os.path.join(source_dir, 'ucrtbase' + suffix))
 
 
-def FindVCComponentRoot(component):
+def FindVCComponentRoot(component, options=None):
   """Find the most recent Tools or Redist or other directory in an MSVC install.
   Typical results are {toolchain_root}/VC/{component}/MSVC/{x.y.z}. The {x.y.z}
   version number part changes frequently so the highest version number found is
   used.
   """
 
-  SetEnvironmentAndGetRuntimeDllDirs()
+  SetEnvironmentAndGetRuntimeDllDirs(options=options)
   assert ('GYP_MSVS_OVERRIDE_PATH' in os.environ)
   vc_component_msvc_root = os.path.join(os.environ['GYP_MSVS_OVERRIDE_PATH'],
       'VC', component, 'MSVC')
@@ -344,24 +345,24 @@ def FindVCComponentRoot(component):
   raise Exception('Unable to find the VC %s directory.' % component)
 
 
-def FindVCRedistRoot():
+def FindVCRedistRoot(options=None):
   """In >=VS2017, Redist binaries are located in
   {toolchain_root}/VC/Redist/MSVC/{x.y.z}/{target_cpu}/.
 
   This returns the '{toolchain_root}/VC/Redist/MSVC/{x.y.z}/' path.
   """
-  return FindVCComponentRoot('Redist')
+  return FindVCComponentRoot('Redist', options=options)
 
 
-def _CopyRuntime(target_dir, source_dir, target_cpu, debug):
+def _CopyRuntime(target_dir, source_dir, target_cpu, debug, options=None):
   """Copy the VS runtime DLLs, only if the target doesn't exist, but the target
   directory does exist. Handles VS 2015, 2017 and 2019."""
   suffix = 'd.dll' if debug else '.dll'
   # VS 2015, 2017 and 2019 use the same CRT DLLs.
-  _CopyUCRTRuntime(target_dir, source_dir, target_cpu, suffix)
+  _CopyUCRTRuntime(target_dir, source_dir, target_cpu, suffix, options=options)
 
 
-def CopyDlls(target_dir, configuration, target_cpu):
+def CopyDlls(args, options=None):
   """Copy the VS runtime DLLs into the requested directory as needed.
 
   configuration is one of 'Debug' or 'Release'.
@@ -370,7 +371,8 @@ def CopyDlls(target_dir, configuration, target_cpu):
   The debug configuration gets both the debug and release DLLs; the
   release config only the latter.
   """
-  vs_runtime_dll_dirs = SetEnvironmentAndGetRuntimeDllDirs()
+  target_dir, configuration, target_cpu = args
+  vs_runtime_dll_dirs = SetEnvironmentAndGetRuntimeDllDirs(options=options)
   if not vs_runtime_dll_dirs:
     return
 
@@ -383,13 +385,13 @@ def CopyDlls(target_dir, configuration, target_cpu):
     runtime_dir = arm64_runtime
   else:
     raise Exception('Unknown target_cpu: ' + target_cpu)
-  _CopyRuntime(target_dir, runtime_dir, target_cpu, debug=False)
+  _CopyRuntime(target_dir, runtime_dir, target_cpu, debug=False, options=options)
   if configuration == 'Debug':
-    _CopyRuntime(target_dir, runtime_dir, target_cpu, debug=True)
-  _CopyDebugger(target_dir, target_cpu)
+    _CopyRuntime(target_dir, runtime_dir, target_cpu, debug=True, options=options)
+  _CopyDebugger(target_dir, target_cpu, options=options)
 
 
-def _CopyDebugger(target_dir, target_cpu):
+def _CopyDebugger(target_dir, target_cpu, options=None):
   """Copy dbghelp.dll and dbgcore.dll into the requested directory as needed.
 
   target_cpu is one of 'x86', 'x64' or 'arm64'.
@@ -402,7 +404,7 @@ def _CopyDebugger(target_dir, target_cpu):
   dbgcore.dll is needed when using some functions from dbghelp.dll (like
   MinidumpWriteDump).
   """
-  win_sdk_dir = SetEnvironmentAndGetSDKDir()
+  win_sdk_dir = SetEnvironmentAndGetSDKDir(options=options)
   if not win_sdk_dir:
     return
 
@@ -419,10 +421,10 @@ def _CopyDebugger(target_dir, target_cpu):
       if is_optional:
         continue
       else:
-        raise Exception('%s not found in "%s"\r\nYou must install the '
-                        '"Debugging Tools for Windows" feature from the Windows'
-                        ' 10 SDK, the 10.0.19041.0 version.'
-                        % (debug_file, full_path))
+        raise Exception('%s not found in "%s"\r\nYou must install'
+                        'Windows 10 SDK version 10.0.19041.0 including the '
+                        '"Debugging Tools for Windows" feature.' %
+                        (debug_file, full_path))
     target_path = os.path.join(target_dir, debug_file)
     _CopyRuntimeImpl(target_path, full_path)
 
@@ -452,34 +454,39 @@ def _GetDesiredVsToolchainHashes():
   return [os.environ.get(toolchain_hash_mapping_key, toolchain_hash)]
 
 
-def ShouldUpdateToolchain():
+def ShouldUpdateToolchain(options=None):
   """Check if the toolchain should be upgraded."""
   if not os.path.exists(json_data_file):
     return True
   with open(json_data_file, 'r') as tempf:
     toolchain_data = json.load(tempf)
   version = toolchain_data['version']
-  env_version = GetVisualStudioVersion()
+  env_version = GetVisualStudioVersion(options=options)
   # If there's a mismatch between the version set in the environment and the one
   # in the json file then the toolchain should be updated.
   return version != env_version
 
 
-def Update(force=False, no_download=False):
+def Update(args=None, force=False, no_download=False, options=None):
   """Requests an update of the toolchain to the specific hashes we have at
   this revision. The update outputs a .json of the various configuration
   information required to pass to gyp which we use in |GetToolchainDir()|.
   If no_download is true then the toolchain will be configured if present but
   will not be downloaded.
   """
+  if args:
+    force = force or args[0]
+    if len(args) > 1:
+      no_download = no_download or args[1]
   if force != False and force != '--force':
     print('Unknown parameter "%s"' % force, file=sys.stderr)
     return 1
   if force == '--force' or os.path.exists(json_data_file):
     force = True
 
-  depot_tools_win_toolchain = \
-      bool(int(os.environ.get('DEPOT_TOOLS_WIN_TOOLCHAIN', '1')))
+  depot_tools_win_toolchain = (options.use_managed_toolchain
+                              if options
+      else bool(int(os.environ.get('DEPOT_TOOLS_WIN_TOOLCHAIN', '1'))))
   if (_HostIsWindows() or force) and depot_tools_win_toolchain:
     import find_depot_tools
     depot_tools_path = find_depot_tools.add_depot_tools_to_path()
@@ -508,13 +515,23 @@ def Update(force=False, no_download=False):
       subprocess.check_call([
           ciopfs, '-o', 'use_ino', toolchain_dir + '.ciopfs', toolchain_dir])
 
+    toolchain_hash = None
+    if options and options.toolchain_hash:
+      toolchain_hash = [options.toolchain_hash]
+      if options.toolchain_url:
+        os.environ["DEPOT_TOOLS_WIN_TOOLCHAIN_BASE_URL"] = \
+                  options.toolchain_url
+      else:
+        assert no_download, "Downloading a managed toolchain with a specified" \
+              "toolchain hash requires that the download URL is specified, too"
+
     get_toolchain_args = [
         sys.executable,
         os.path.join(depot_tools_path,
                     'win_toolchain',
                     'get_toolchain_if_necessary.py'),
         '--output-json', json_data_file,
-      ] + _GetDesiredVsToolchainHashes()
+      ] + (toolchain_hash or _GetDesiredVsToolchainHashes())
     if force:
       get_toolchain_args.append('--force')
     if no_download:
@@ -530,10 +547,10 @@ def NormalizePath(path):
   return path
 
 
-def SetEnvironmentAndGetSDKDir():
+def SetEnvironmentAndGetSDKDir(options=None):
   """Gets location information about the current sdk (must have been
   previously updated by 'update'). This is used for the GN build."""
-  SetEnvironmentAndGetRuntimeDllDirs()
+  SetEnvironmentAndGetRuntimeDllDirs(options=options)
 
   # If WINDOWSSDKDIR is not set, search the default SDK path and set it.
   if not 'WINDOWSSDKDIR' in os.environ:
@@ -545,11 +562,11 @@ def SetEnvironmentAndGetSDKDir():
   return NormalizePath(os.environ['WINDOWSSDKDIR'])
 
 
-def GetToolchainDir():
+def GetToolchainDir(args=None, options=None):
   """Gets location information about the current toolchain (must have been
   previously updated by 'update'). This is used for the GN build."""
-  runtime_dll_dirs = SetEnvironmentAndGetRuntimeDllDirs()
-  win_sdk_dir = SetEnvironmentAndGetSDKDir()
+  runtime_dll_dirs = SetEnvironmentAndGetRuntimeDllDirs(options=options)
+  win_sdk_dir = SetEnvironmentAndGetSDKDir(options=options)
 
   print('''vs_path = %s
 sdk_path = %s
@@ -557,7 +574,7 @@ vs_version = %s
 wdk_dir = %s
 runtime_dirs = %s
 ''' % (ToGNString(NormalizePath(os.environ['GYP_MSVS_OVERRIDE_PATH'])),
-       ToGNString(win_sdk_dir), ToGNString(GetVisualStudioVersion()),
+       ToGNString(win_sdk_dir), ToGNString(GetVisualStudioVersion(options=options)),
        ToGNString(NormalizePath(os.environ.get('WDK_DIR', ''))),
        ToGNString(os.path.pathsep.join(runtime_dll_dirs or ['None']))))
 
@@ -568,10 +585,33 @@ def main():
       'get_toolchain_dir': GetToolchainDir,
       'copy_dlls': CopyDlls,
   }
-  if len(sys.argv) < 2 or sys.argv[1] not in commands:
-    print('Expected one of: %s' % ', '.join(commands), file=sys.stderr)
-    return 1
-  return commands[sys.argv[1]](*sys.argv[2:])
+
+  parser = argparse.ArgumentParser("Visual Studio Toolchain operations")
+  parser.add_argument("--toolchain-json",
+                      type=argparse.FileType("r"),
+                      help="Path to JSON file specifying the hash and URL of "
+                           "the managed toolchain to use")
+
+  parser.add_argument("command", choices=list(commands.keys()),
+                     help="Command to run")
+  parser.add_argument("arguments", nargs=argparse.REMAINDER,
+                     help="Arguments to the command")
+
+  options = parser.parse_args()
+  options.toolchain_hash = None
+  options.toolchain_url = None
+
+  if options.toolchain_json:
+    toolchain_data = json.load(options.toolchain_json)
+    options.toolchain_hash = toolchain_data.get("hash", None)
+    options.toolchain_url = toolchain_data.get("url", None)
+    assert (options.toolchain_hash and options.toolchain_url), \
+            "Managed toolchain hash name and/or URL missing"
+
+  options.use_managed_toolchain = (options.toolchain_hash or
+                    bool(int(os.environ.get('DEPOT_TOOLS_WIN_TOOLCHAIN', 1))))
+
+  return commands[options.command](args=options.arguments, options=options)
 
 
 if __name__ == '__main__':

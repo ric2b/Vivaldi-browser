@@ -21,6 +21,7 @@
 <translation id="1150565364351027703">Kacamata Hitam</translation>
 <translation id="115443833402798225">Hangul Ahnmatae</translation>
 <translation id="1155759005174418845">Catalan</translation>
+<translation id="1172970565351728681">Sekitar <ph name="REMAINING_TIME" /> lagi</translation>
 <translation id="1173894706177603556">Ganti nama</translation>
 <translation id="117624967391683467">Menyalin <ph name="FILE_NAME" />...</translation>
 <translation id="1178581264944972037">Jeda</translation>
@@ -106,7 +107,6 @@
 <translation id="2085470240340828803">File bernama "<ph name="FILENAME" />" sudah ada. Apa yang ingin Anda lakukan?</translation>
 <translation id="2121825465123208577">Ubah ukuran</translation>
 <translation id="2136953289241069843">Transliterasi (namaste → नमस्कार)</translation>
-<translation id="2138867954865495510">Tidak dapat membuka "<ph name="PATH" />": <ph name="ERROR_MESSAGE" /></translation>
 <translation id="2163152940313951844">Karakter tidak valid: <ph name="CHARACTER_NAME" /></translation>
 <translation id="2164862903024139959">Keyboard Vietnam (TCVN)</translation>
 <translation id="2168214441502403371">Keyboard Persia</translation>
@@ -198,6 +198,7 @@
 <translation id="3236289833370040187">Kepemilikan akan ditransfer ke <ph name="DESTINATION_DOMAIN" />.</translation>
 <translation id="3241720467332021590">Irlandia</translation>
 <translation id="3245321423178950146">Artis Tidak Dikenal</translation>
+<translation id="3248185426436836442">Tertunda</translation>
 <translation id="3252266817569339921">Prancis</translation>
 <translation id="3254434849914415189">Pilih aplikasi default untuk file <ph name="FILE_TYPE" />:</translation>
 <translation id="3264582393905923483">Konteks</translation>
@@ -208,6 +209,7 @@
 <translation id="3335337277364016868">Tahun perekaman</translation>
 <translation id="3338239663705455570">Keyboard untuk bahasa Slovenia</translation>
 <translation id="3353984535370177728">Pilih folder untuk diunggah</translation>
+<translation id="3356580349448036450">Selesai</translation>
 <translation id="3399597614303179694">Keyboard Makedonia</translation>
 <translation id="3414856743105198592">Memformat media yang dapat dilepas akan menghapus semua data. Apakah Anda ingin melanjutkan?</translation>
 <translation id="3437801641691368414">Waktu pembuatan</translation>
@@ -243,6 +245,7 @@
 <translation id="3780536599611287598">Anda tidak memiliki izin untuk memindahkan file ke '<ph name="FOLDER_NAME" />'.</translation>
 <translation id="3786301125658655746">Anda sedang offline</translation>
 <translation id="3789841737615482174">Instal</translation>
+<translation id="3793469551756281394">Sekitar <ph name="REMAINING_TIME_HOUR" /> <ph name="REMAINING_TIME_MINUTE" /> lagi</translation>
 <translation id="3798449238516105146">Versi</translation>
 <translation id="3801082500826908679">Faeroe</translation>
 <translation id="3809272675881623365">Kelinci</translation>
@@ -299,6 +302,7 @@
 <translation id="4481711095103932593">Folder ini dibagikan ke Windows</translation>
 <translation id="4487088045714738411">Keyboard untuk bahasa Belgia</translation>
 <translation id="4522570452068850558">Detail</translation>
+<translation id="4542387084127299777">Tidak dapat membuka "<ph name="PATH" />"</translation>
 <translation id="4552678318981539154">Beli penyimpanan lagi</translation>
 <translation id="4559767610552730302">Efek Bokeh</translation>
 <translation id="4572815280350369984">File <ph name="FILE_TYPE" /></translation>
@@ -511,6 +515,7 @@
 <translation id="6629841649550503054">Semua dicadangkan ke <ph name="BEGIN_LINK" />Google Drive!<ph name="END_LINK" /></translation>
 <translation id="6643016212128521049">Hapus</translation>
 <translation id="6650726141019353908">Kupu-kupu merah muda</translation>
+<translation id="6657585470893396449">Sandi</translation>
 <translation id="6710213216561001401">Sebelumnya</translation>
 <translation id="6718273304615422081">Membuat file zip...</translation>
 <translation id="6751256176799620176">1 folder dipilih</translation>
@@ -551,7 +556,6 @@
 <translation id="7012943028104619157"><ph name="ROOT_TITLE" /> (<ph name="ROOT_SUMMARY" />)</translation>
 <translation id="7014174261166285193">Pemasangan gagal.</translation>
 <translation id="7040138676081995583">Buka dengan...</translation>
-<translation id="7059566040011178088">Kurang dari <ph name="REMAINING_TIME" /></translation>
 <translation id="7100897339030255923"><ph name="COUNT" /> item dipilih</translation>
 <translation id="7106346894903675391">Beli penyimpanan lagi...</translation>
 <translation id="7126604456862387217">'&lt;b&gt;<ph name="SEARCH_STRING" />&lt;/b&gt;' - &lt;em&gt;telusuri Drive&lt;/em&gt;</translation>
@@ -646,7 +650,7 @@
 <translation id="8052887694493382350">File ini didesain untuk PC yang menggunakan software Windows. Ini tidak kompatibel dengan perangkat Anda yang menjalankan Chrome OS. <ph name="BEGIN_LINK_HELP" />Pelajari Lebih Lanjut<ph name="END_LINK_HELP" /></translation>
 <translation id="8066773524873206594">Semua pengeditan akan disimpan ke <ph name="DOWNLOADS_FOLDER" />.</translation>
 <translation id="8079530767338315840">Ulangi</translation>
-<translation id="8106045200081704138">Dibagikan dengan saya</translation>
+<translation id="8106045200081704138">Dibagikan kepada saya</translation>
 <translation id="8116072619078571545">Air es</translation>
 <translation id="8117957376775388318">Metode masukan Dayi</translation>
 <translation id="8137331602592933310">"<ph name="FILENAME" />" telah dibagikan dengan Anda. Namun Anda tidak dapat menghapusnya karena bukan milik Anda.</translation>
@@ -662,7 +666,6 @@
 <translation id="8193175696669055101">Model perangkat</translation>
 <translation id="8208580316430297579">Karya Seni</translation>
 <translation id="8223479393428528563">Untuk menyimpan file ini agar dapat digunakan saat offline, sambungkan ke internet, klik kanan pada file, dan pilih opsi <ph name="OFFLINE_CHECKBOX_NAME" />.</translation>
-<translation id="8231972167769262174">Sekitar <ph name="REMAINING_TIME" /></translation>
 <translation id="8249296373107784235">Batalkan</translation>
 <translation id="8261506727792406068">Hapus</translation>
 <translation id="8269755669432358899">Ciutkan panel masukan file</translation>
@@ -725,6 +728,7 @@
 <translation id="9065203028668620118">Edit</translation>
 <translation id="9099674669267916096">Hitungan halaman</translation>
 <translation id="9110990317705400362">Kami terus mencari cara agar penjelajahan Anda lebih aman. Sebelumnya, situs web apa pun dapat meminta Anda untuk menambahkan ekstensi ke browser. Pada versi terbaru Google Chrome, Anda harus memberitahukan dengan jelas kepada Chrome bahwa Anda ingin memasang ekstensi ini dengan menambahkannya melalui halaman Ekstensi. <ph name="BEGIN_LINK" />Pelajari lebih lanjut<ph name="END_LINK" /></translation>
+<translation id="9111102763498581341">Buka kunci</translation>
 <translation id="912419004897138677">Codec</translation>
 <translation id="9129931661813833980">Pasang pin pada folder</translation>
 <translation id="9130775360844693113">Anggota '<ph name="DESTINATION_NAME" />' akan mendapatkan akses ke item berikut.</translation>

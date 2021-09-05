@@ -106,6 +106,8 @@ void HttpRequestHeaders::Clear() {
 
 void HttpRequestHeaders::SetHeader(const base::StringPiece& key,
                                    const base::StringPiece& value) {
+  // Invalid header names or values could mean clients can attach
+  // browser-internal headers.
   DCHECK(HttpUtil::IsValidHeaderName(key)) << key;
   DCHECK(HttpUtil::IsValidHeaderValue(value)) << key << ":" << value;
   SetHeaderInternal(key, value);
@@ -113,6 +115,8 @@ void HttpRequestHeaders::SetHeader(const base::StringPiece& key,
 
 void HttpRequestHeaders::SetHeaderIfMissing(const base::StringPiece& key,
                                             const base::StringPiece& value) {
+  // Invalid header names or values could mean clients can attach
+  // browser-internal headers.
   DCHECK(HttpUtil::IsValidHeaderName(key));
   DCHECK(HttpUtil::IsValidHeaderValue(value));
   auto it = FindHeader(key);

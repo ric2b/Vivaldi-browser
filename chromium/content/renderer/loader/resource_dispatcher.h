@@ -19,7 +19,6 @@
 #include "base/single_thread_task_runner.h"
 #include "base/time/time.h"
 #include "content/common/content_export.h"
-#include "content/public/common/previews_state.h"
 #include "mojo/public/cpp/system/data_pipe.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/net_errors.h"
@@ -29,6 +28,7 @@
 #include "services/network/public/mojom/fetch_api.mojom-forward.h"
 #include "services/network/public/mojom/url_loader.mojom-forward.h"
 #include "services/network/public/mojom/url_response_head.mojom-forward.h"
+#include "third_party/blink/public/common/loader/previews_state.h"
 #include "third_party/blink/public/common/loader/url_loader_throttle.h"
 #include "third_party/blink/public/mojom/blob/blob_registry.mojom-forward.h"
 #include "third_party/blink/public/mojom/loader/resource_load_info.mojom-shared.h"
@@ -57,7 +57,6 @@ class URLLoaderFactory;
 }
 
 namespace content {
-struct NavigationResponseOverrideParameters;
 class RequestPeer;
 class ResourceDispatcherDelegate;
 struct SyncLoadResponse;
@@ -123,9 +122,7 @@ class CONTENT_EXPORT ResourceDispatcher {
       uint32_t loader_options,
       std::unique_ptr<RequestPeer> peer,
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
-      std::vector<std::unique_ptr<blink::URLLoaderThrottle>> throttles,
-      std::unique_ptr<NavigationResponseOverrideParameters>
-          response_override_params);
+      std::vector<std::unique_ptr<blink::URLLoaderThrottle>> throttles);
 
   // Removes a request from the |pending_requests_| list, returning true if the
   // request was found and removed.
@@ -183,9 +180,7 @@ class CONTENT_EXPORT ResourceDispatcher {
     PendingRequestInfo(std::unique_ptr<RequestPeer> peer,
                        network::mojom::RequestDestination request_destination,
                        int render_frame_id,
-                       const GURL& request_url,
-                       std::unique_ptr<NavigationResponseOverrideParameters>
-                           response_override_params);
+                       const GURL& request_url);
 
     ~PendingRequestInfo();
 
@@ -203,15 +198,14 @@ class CONTENT_EXPORT ResourceDispatcher {
     base::TimeTicks local_response_start;
     base::TimeTicks remote_request_start;
     net::LoadTimingInfo load_timing_info;
-    std::unique_ptr<NavigationResponseOverrideParameters>
-        navigation_response_override;
     bool should_follow_redirect = true;
     bool redirect_requires_loader_restart = false;
     // Network error code the request completed with, or net::ERR_IO_PENDING if
     // it's not completed. Used both to distinguish completion from
     // cancellation, and to log histograms.
     int net_error = net::ERR_IO_PENDING;
-    PreviewsState previews_state = PreviewsTypes::PREVIEWS_UNSPECIFIED;
+    blink::PreviewsState previews_state =
+        blink::PreviewsTypes::PREVIEWS_UNSPECIFIED;
 
     // These stats will be sent to the browser process.
     blink::mojom::ResourceLoadInfoPtr resource_load_info;
@@ -249,8 +243,6 @@ class CONTENT_EXPORT ResourceDispatcher {
   void ToLocalURLResponseHead(
       const PendingRequestInfo& request_info,
       network::mojom::URLResponseHead& response_head) const;
-
-  void ContinueForNavigation(int request_id);
 
   // All pending requests issued to the host
   PendingRequestMap pending_requests_;

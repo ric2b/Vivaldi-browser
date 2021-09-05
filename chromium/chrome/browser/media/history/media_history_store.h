@@ -21,6 +21,7 @@
 #include "content/public/browser/media_player_watch_time.h"
 #include "sql/init_status.h"
 #include "sql/meta_table.h"
+#include "url/origin.h"
 
 namespace media_session {
 struct MediaImage;
@@ -58,6 +59,7 @@ class MediaHistoryStore : public base::RefCountedThreadSafe<MediaHistoryStore> {
                                    const base::TimeDelta& position)>;
 
   static const char kInitResultHistogramName[];
+  static const char kInitResultAfterDeleteHistogramName[];
   static const char kPlaybackWriteResultHistogramName[];
   static const char kSessionWriteResultHistogramName[];
   static const char kDatabaseSizeKbHistogramName[];
@@ -136,6 +138,9 @@ class MediaHistoryStore : public base::RefCountedThreadSafe<MediaHistoryStore> {
 
   std::vector<media_feeds::mojom::MediaFeedPtr> GetMediaFeeds(
       const MediaHistoryKeyedService::GetMediaFeedsRequest& request);
+
+  std::vector<url::Origin> GetHighWatchTimeOrigins(
+      const base::TimeDelta& audio_video_watchtime_min);
 
   void SavePlaybackSession(
       const GURL& url,

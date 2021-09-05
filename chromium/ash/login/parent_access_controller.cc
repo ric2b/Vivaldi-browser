@@ -32,6 +32,10 @@ base::string16 GetTitle(ParentAccessRequestReason reason) {
     case ParentAccessRequestReason::kChangeTimezone:
       title_id = IDS_ASH_LOGIN_PARENT_ACCESS_TITLE_CHANGE_TIMEZONE;
       break;
+    case ParentAccessRequestReason::kAddUser:
+    case ParentAccessRequestReason::kReauth:
+      title_id = IDS_ASH_LOGIN_PARENT_ACCESS_GENERIC_TITLE;
+      break;
   }
   return l10n_util::GetStringUTF16(title_id);
 }
@@ -45,6 +49,12 @@ base::string16 GetDescription(ParentAccessRequestReason reason) {
     case ParentAccessRequestReason::kChangeTime:
     case ParentAccessRequestReason::kChangeTimezone:
       description_id = IDS_ASH_LOGIN_PARENT_ACCESS_GENERIC_DESCRIPTION;
+      break;
+    case ParentAccessRequestReason::kAddUser:
+      description_id = IDS_ASH_LOGIN_PARENT_ACCESS_DESCRIPTION_ADD_USER;
+      break;
+    case ParentAccessRequestReason::kReauth:
+      description_id = IDS_ASH_LOGIN_PARENT_ACCESS_DESCRIPTION_REAUTH;
       break;
   }
   return l10n_util::GetStringUTF16(description_id);
@@ -71,7 +81,8 @@ void RecordParentAccessAction(ParentAccessController::UMAAction action) {
                             action);
 }
 
-void RecordParentAccessUsage(ParentAccessRequestReason reason) {
+void RecordParentAccessUsage(const AccountId& child_account_id,
+                             ParentAccessRequestReason reason) {
   switch (reason) {
     case ParentAccessRequestReason::kUnlockTimeLimits: {
       UMA_HISTOGRAM_ENUMERATION(
@@ -94,6 +105,16 @@ void RecordParentAccessUsage(ParentAccessRequestReason reason) {
           ParentAccessController::UMAUsage::kTimezoneChange);
       return;
     }
+    case ParentAccessRequestReason::kAddUser:
+      UMA_HISTOGRAM_ENUMERATION(
+          ParentAccessController::kUMAParentAccessCodeUsage,
+          ParentAccessController::UMAUsage::kAddUserLoginScreen);
+      return;
+    case ParentAccessRequestReason::kReauth:
+      UMA_HISTOGRAM_ENUMERATION(
+          ParentAccessController::kUMAParentAccessCodeUsage,
+          ParentAccessController::UMAUsage::kReauhLoginScreen);
+      return;
   }
   NOTREACHED() << "Unknown ParentAccessRequestReason";
 }
@@ -160,7 +181,7 @@ bool ParentAccessController::ShowWidget(
   request.description = GetDescription(reason);
   request.accessible_title = GetAccessibleTitle();
   PinRequestWidget::Show(std::move(request), this);
-  RecordParentAccessUsage(reason);
+  RecordParentAccessUsage(account_id_, reason);
   return true;
 }
 

@@ -9,6 +9,7 @@ import android.content.pm.PackageManager;
 import android.os.RemoteException;
 import android.webkit.ValueCallback;
 
+import org.chromium.base.ThreadUtils;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
@@ -64,7 +65,7 @@ public final class DownloadCallbackProxy {
 
         String[] requestPermissions = new String[] {permission.WRITE_EXTERNAL_STORAGE};
         window.requestPermissions(requestPermissions, (permissions, grantResults) -> {
-            if (grantResults[0] == PackageManager.PERMISSION_DENIED) {
+            if (grantResults.length == 0 || grantResults[0] == PackageManager.PERMISSION_DENIED) {
                 DownloadCallbackProxyJni.get().allowDownload(callbackId, false);
                 return;
             }
@@ -91,6 +92,7 @@ public final class DownloadCallbackProxy {
         ValueCallback<Boolean> callback = new ValueCallback<Boolean>() {
             @Override
             public void onReceiveValue(Boolean result) {
+                ThreadUtils.assertOnUiThread();
                 if (mNativeDownloadCallbackProxy == 0) {
                     throw new IllegalStateException("Called after destroy()");
                 }

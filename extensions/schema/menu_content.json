@@ -15,7 +15,7 @@
         "id": "Role",
         "type": "string",
         "description": "Defines menu type.",
-        "enum": [ "horizontal", "vertical", "mac"]
+        "enum": [ "horizontal", "vertical", "mac", "context"]
       },
       {
         "id": "ContainerMode",
@@ -70,6 +70,11 @@
             "$ref": "ContainerEdge",
             "optional": true,
             "description": "Mandatory for container elements."
+          },
+          "parameter": {
+            "type": "string",
+            "optional": true,
+            "description": "Free form parameter. Format varies with action."
           },
           "children": {
             "type": "array",
@@ -231,6 +236,10 @@
             "name": "changes",
             "properties": {
               "title": {
+                "type": "string",
+                "optional": true
+              },
+              "parameter": {
                 "type": "string",
                 "optional": true
               },

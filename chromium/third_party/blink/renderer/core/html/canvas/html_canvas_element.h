@@ -33,6 +33,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/single_thread_task_runner.h"
 #include "third_party/blink/public/common/privacy_budget/identifiable_surface.h"
+#include "third_party/blink/public/common/privacy_budget/identifiable_token.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_value.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_blob_callback.h"
 #include "third_party/blink/renderer/core/core_export.h"
@@ -105,7 +106,6 @@ class CORE_EXPORT HTMLCanvasElement final
       public ImageBitmapSource,
       public OffscreenCanvasPlaceholder {
   DEFINE_WRAPPERTYPEINFO();
-  USING_GARBAGE_COLLECTED_MIXIN(HTMLCanvasElement);
   USING_PRE_FINALIZER(HTMLCanvasElement, Dispose);
 
  public:
@@ -310,6 +310,8 @@ class CORE_EXPORT HTMLCanvasElement final
   // returned.
   RespectImageOrientationEnum RespectImageOrientation() const;
 
+  bool IsCanvasClear() { return canvas_is_clear_; }
+
  protected:
   void DidMoveToNewDocument(Document& old_document) override;
 
@@ -318,6 +320,13 @@ class CORE_EXPORT HTMLCanvasElement final
 
   void RecordIdentifiabilityMetric(const blink::IdentifiableSurface& surface,
                                    int64_t value) const;
+
+  // If the user is enrolled in the identifiability study, report the canvas
+  // type, and if applicable, canvas digest, taint bits, and
+  // |canvas_contents_token|, which represents the current bitmap displayed by
+  // this canvas.
+  void IdentifiabilityReportWithDigest(
+      IdentifiableToken canvas_contents_token) const;
 
   void PaintInternal(GraphicsContext&, const PhysicalRect&);
   void UpdateFilterQuality(SkFilterQuality filter_quality);

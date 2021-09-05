@@ -27,6 +27,7 @@ if (is_android) {
       "../shell/android/browsertests_apk/src/org/chromium/weblayer_browsertests_apk/WebLayerBrowserTestsActivity.java",
       "../shell/android/browsertests_apk/src/org/chromium/weblayer_browsertests_apk/WebLayerBrowserTestsApplication.java",
       "../shell/android/browsertests_apk/src/org/chromium/weblayer_private/MetricsTestHelper.java",
+      "../shell/android/browsertests_apk/src/org/chromium/weblayer_private/TranslateTestBridge.java",
     ]
     deps = [
       ":weblayer_browsertests_jni",
@@ -36,6 +37,7 @@ if (is_android) {
       "//base:jni_java",
       "//components/embedder_support/android:application_java",
       "//components/safe_browsing/android:safe_browsing_java",
+      "//components/translate/content/android:java",
       "//content/public/android:content_java",
       "//content/public/test/android:content_java_test_support",
       "//testing/android/native_test:native_test_java",
@@ -45,13 +47,17 @@ if (is_android) {
       "//weblayer/browser/java",
       "//weblayer/browser/java:gms_bridge_java",
       "//weblayer/public/java",
+      "//weblayer/public/javatestutil:test_java",
     ]
 
     annotation_processor_deps = [ "//base/android/jni_generator:jni_processor" ]
   }
 
   generate_jni("weblayer_browsertests_jni") {
-    sources = [ "../shell/android/browsertests_apk/src/org/chromium/weblayer_private/MetricsTestHelper.java" ]
+    sources = [
+      "../shell/android/browsertests_apk/src/org/chromium/weblayer_private/MetricsTestHelper.java",
+      "../shell/android/browsertests_apk/src/org/chromium/weblayer_private/TranslateTestBridge.java",
+    ]
   }
 
   android_assets("weblayer_test_assets") {
@@ -76,6 +82,7 @@ test("weblayer_browsertests") {
   ]
 
   data_deps = [
+    "//testing/buildbot/filters:weblayer_browsertests_filters",
     "//third_party/mesa_headers",
     "//weblayer/shell:pak",
   ]
@@ -90,25 +97,32 @@ test("weblayer_browsertests") {
     "//components/autofill/core/common",
     "//components/blocked_content",
     "//components/content_settings/core/browser",
+    "//components/error_page/content/browser",
+    "//components/favicon/content",
     "//components/network_session_configurator/common",
     "//components/network_time",
     "//components/page_load_metrics/browser:browser",
     "//components/prefs",
+    "//components/prerender/browser",
     "//components/security_interstitials/content:security_interstitial_page",
     "//components/sessions:test_support",
+    "//components/signin/core/browser",
     "//components/site_isolation",
     "//components/strings",
     "//components/translate/content/browser",
     "//components/translate/content/browser:test_support",
+    "//components/ukm:test_support",
     "//components/ukm:ukm_test_helper",
     "//components/user_prefs",
     "//components/variations",
     "//components/variations/net",
     "//content/public/browser",
     "//content/test:test_support",
+    "//google_apis",
     "//net:test_support",
     "//testing/gtest",
     "//ui/base",
+    "//ui/gfx:test_support",
     "//weblayer/shell:weblayer_shell_lib",
   ]
 
@@ -119,8 +133,14 @@ test("weblayer_browsertests") {
     "../browser/cookie_manager_browsertest.cc",
     "../browser/download_browsertest.cc",
     "../browser/errorpage_browsertest.cc",
+    "../browser/favicon/favicon_fetcher_browsertest.cc",
+    "../browser/favicon/test_favicon_fetcher_delegate.cc",
+    "../browser/favicon/test_favicon_fetcher_delegate.h",
+    "../browser/google_accounts_browsertest.cc",
     "../browser/js_communication/web_message_browsertest.cc",
     "../browser/navigation_browsertest.cc",
+    "../browser/navigation_error_navigation_throttle_browsertest.cc",
+    "../browser/no_state_prefetch/no_state_prefetch_browsertest.cc",
     "../browser/page_load_metrics_browsertest.cc",
     "../browser/popup_blocker_browsertest.cc",
     "../browser/prefetch_browsertest.cc",
@@ -151,12 +171,14 @@ test("weblayer_browsertests") {
 
   if (is_android) {
     sources += [
+      "../browser/android/metrics/metrics_browsertest.cc",
+      "../browser/android/metrics/metrics_test_helper.cc",
+      "../browser/android/metrics/metrics_test_helper.h",
+      "../browser/android/metrics/ukm_browsertest.cc",
       "../browser/safe_browsing/safe_browsing_browsertest.cc",
-      "../browser/ukm_browsertest.cc",
       "../browser/url_bar/page_info_browsertest.cc",
-      "../shell/android/browsertests_apk/metrics_browsertest.cc",
-      "../shell/android/browsertests_apk/metrics_test_helper.cc",
-      "../shell/android/browsertests_apk/metrics_test_helper.h",
+      "../shell/android/browsertests_apk/translate_test_bridge.cc",
+      "../shell/android/browsertests_apk/translate_test_bridge.h",
       "../shell/android/browsertests_apk/weblayer_browser_tests_jni_onload.cc",
     ]
     deps += [
@@ -177,6 +199,7 @@ test("weblayer_browsertests") {
       "//content/public/test/android:android_test_message_pump_support_java",
       "//content/test:android_test_message_pump_support",
       "//content/test:android_test_message_pump_support",
+      "//services/metrics/public/cpp:ukm_builders",
       "//services/tracing:test_utils",
       "//testing/android/native_test:native_test_support",
       "//third_party/metrics_proto",
@@ -221,12 +244,14 @@ source_set("run_all_unittests") {
 test("weblayer_unittests") {
   deps = [
     ":run_all_unittests",
+    "//components/favicon/core:database",
     "//components/site_isolation",
   ]
   if (is_android) {
     deps += [ ":weblayer_test_assets" ]
   }
   sources = [
+    "../browser/favicon/favicon_backend_wrapper_unittest.cc",
     "../browser/profile_disk_operations_unittests.cc",
     "../browser/site_isolation_policy_unittest.cc",
   ]

@@ -135,8 +135,7 @@ void LineBoxListPainter::Paint(const LayoutBoxModelObject& layout_object,
                 const_cast<LayoutBoxModelObject*>(&layout_object)),
             curr, paint_info.GetCullRect(), paint_offset)) {
       RootInlineBox& root = curr->Root();
-      curr->Paint(paint_info, paint_offset.ToLayoutPoint(), root.LineTop(),
-                  root.LineBottom());
+      curr->Paint(paint_info, paint_offset, root.LineTop(), root.LineBottom());
     }
   }
 }
@@ -150,10 +149,12 @@ void LineBoxListPainter::PaintBackplate(
   if (!ShouldPaint(layout_object, paint_info, paint_offset))
     return;
 
-  // Only paint backplates behind text when forced-color-adjust is auto.
+  // Only paint backplates behind text when forced-color-adjust is auto and the
+  // element is visible.
   const ComputedStyle& style =
       line_box_list_.First()->GetLineLayoutItem().StyleRef();
-  if (style.ForcedColorAdjust() == EForcedColorAdjust::kNone)
+  if (style.ForcedColorAdjust() == EForcedColorAdjust::kNone ||
+      style.Visibility() != EVisibility::kVisible)
     return;
 
   if (DrawingRecorder::UseCachedDrawingIfPossible(
@@ -161,11 +162,13 @@ void LineBoxListPainter::PaintBackplate(
           DisplayItem::kForcedColorsModeBackplate))
     return;
 
+  const auto& backplates = GetBackplates(paint_offset);
+  IntRect visual_rect = EnclosingIntRect(UnionRect(backplates));
   DrawingRecorder recorder(paint_info.context, layout_object,
-                           DisplayItem::kForcedColorsModeBackplate);
+                           DisplayItem::kForcedColorsModeBackplate,
+                           visual_rect);
   Color backplate_color =
       layout_object.GetDocument().GetStyleEngine().ForcedBackgroundColor();
-  const auto& backplates = GetBackplates(paint_offset);
   for (const auto backplate : backplates)
     paint_info.context.FillRect(FloatRect(backplate), backplate_color);
 }

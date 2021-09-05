@@ -97,8 +97,7 @@ void NotesModelObserverImpl::NotesNodeAdded(vivaldi::NotesModel* model,
   const SyncedNoteTracker::Entity* entity =
       note_tracker_->GetTombstoneEntityForGuid(node->guid());
   const base::Time creation_time = base::Time::Now();
-  if (entity && base::FeatureList::IsEnabled(
-                    switches::kSyncProcessBookmarkRestoreAfterDeletion)) {
+  if (entity) {
     note_tracker_->UndeleteTombstoneForNoteNode(entity, node);
     note_tracker_->Update(entity, entity->metadata()->server_version(),
                           creation_time, unique_position, specifics);

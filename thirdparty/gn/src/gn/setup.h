@@ -106,6 +106,14 @@ class Setup {
     return check_patterns_.get();
   }
 
+  // Read from the .gn file, these are the targets *not* to check. If the .gn
+  // file does not specify anything, this will be null. If the .gn file
+  // specifies the empty list, this will be non-null but empty. At least one of
+  // check_patterns() and no_check_patterns() will be null.
+  const std::vector<LabelPattern>* no_check_patterns() const {
+    return no_check_patterns_.get();
+  }
+
   BuildSettings& build_settings() { return build_settings_; }
   Builder& builder() { return builder_; }
   LoaderImpl* loader() { return loader_.get(); }
@@ -167,6 +175,7 @@ class Setup {
 
   // See getter for info.
   std::unique_ptr<std::vector<LabelPattern>> check_patterns_;
+  std::unique_ptr<std::vector<LabelPattern>> no_check_patterns_;
 
   Scheduler scheduler_;
 

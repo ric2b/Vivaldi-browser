@@ -44,8 +44,7 @@ class FeedNetworkImpl : public FeedNetwork {
                   const std::string& api_key,
                   scoped_refptr<network::SharedURLLoaderFactory> loader_factory,
                   const base::TickClock* tick_clock,
-                  PrefService* pref_service,
-                  version_info::Channel chrome_channel);
+                  PrefService* pref_service);
   ~FeedNetworkImpl() override;
   FeedNetworkImpl(const FeedNetworkImpl&) = delete;
   FeedNetworkImpl& operator=(FeedNetworkImpl&) = delete;
@@ -54,10 +53,11 @@ class FeedNetworkImpl : public FeedNetwork {
 
   void SendQueryRequest(
       const feedwire::Request& request,
+      bool force_signed_out_request,
       base::OnceCallback<void(QueryRequestResult)> callback) override;
 
   void SendActionRequest(
-      const feedwire::ActionRequest& request,
+      const feedwire::UploadActionsRequest& request,
       base::OnceCallback<void(ActionRequestResult)> callback) override;
 
   // Cancels all pending requests immediately. This could be used, for example,
@@ -72,6 +72,8 @@ class FeedNetworkImpl : public FeedNetwork {
   void Send(const GURL& url,
             const std::string& request_type,
             std::string request_body,
+            bool force_signed_out_request,
+            bool host_overridden,
             base::OnceCallback<void(FeedNetworkImpl::RawResponse)> callback);
 
   void SendComplete(NetworkFetch* fetch,
@@ -81,7 +83,6 @@ class FeedNetworkImpl : public FeedNetwork {
   Delegate* delegate_;
   signin::IdentityManager* identity_manager_;
   const std::string api_key_;
-  const version_info::Channel chrome_channel_;
   scoped_refptr<network::SharedURLLoaderFactory> loader_factory_;
   const base::TickClock* tick_clock_;
   PrefService* pref_service_;

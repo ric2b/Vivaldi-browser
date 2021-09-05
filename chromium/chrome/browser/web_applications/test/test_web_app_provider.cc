@@ -16,11 +16,11 @@
 #include "chrome/browser/web_applications/components/policy/web_app_policy_manager.h"
 #include "chrome/browser/web_applications/components/web_app_ui_manager.h"
 #include "chrome/browser/web_applications/components/web_app_utils.h"
+#include "chrome/browser/web_applications/os_integration_manager.h"
 #include "chrome/browser/web_applications/system_web_app_manager.h"
 #include "chrome/browser/web_applications/test/test_system_web_app_manager.h"
 #include "chrome/browser/web_applications/web_app_install_manager.h"
 #include "chrome/browser/web_applications/web_app_provider_factory.h"
-#include "components/keyed_service/content/browser_context_dependency_manager.h"
 
 namespace web_app {
 
@@ -122,6 +122,12 @@ void TestWebAppProvider::SetShortcutManager(
   shortcut_manager_ = std::move(shortcut_manager);
 }
 
+void TestWebAppProvider::SetOsIntegrationManager(
+    std::unique_ptr<OsIntegrationManager> os_integration_manager) {
+  CheckNotStarted();
+  os_integration_manager_ = std::move(os_integration_manager);
+}
+
 void TestWebAppProvider::CheckNotStarted() const {
   CHECK(!started_) << "Attempted to set a WebAppProvider subsystem after "
                       "Start() was called.";
@@ -137,12 +143,11 @@ void TestWebAppProvider::StartImpl() {
 TestWebAppProviderCreator::TestWebAppProviderCreator(
     CreateWebAppProviderCallback callback)
     : callback_(std::move(callback)) {
-  will_create_browser_context_services_subscription_ =
+  create_services_subscription_ =
       BrowserContextDependencyManager::GetInstance()
-          ->RegisterWillCreateBrowserContextServicesCallbackForTesting(
-              base::BindRepeating(&TestWebAppProviderCreator::
-                                      OnWillCreateBrowserContextServices,
-                                  base::Unretained(this)));
+          ->RegisterCreateServicesCallbackForTesting(base::BindRepeating(
+              &TestWebAppProviderCreator::OnWillCreateBrowserContextServices,
+              base::Unretained(this)));
 }
 
 TestWebAppProviderCreator::~TestWebAppProviderCreator() = default;

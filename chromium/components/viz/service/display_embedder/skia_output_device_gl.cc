@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "base/bind_helpers.h"
+#include "build/build_config.h"
 #include "components/viz/common/gpu/context_lost_reason.h"
 #include "components/viz/service/display/dc_layer_overlay.h"
 #include "gpu/command_buffer/common/swap_buffers_complete_params.h"
@@ -38,7 +39,8 @@ SkiaOutputDeviceGL::SkiaOutputDeviceGL(
     scoped_refptr<gpu::gles2::FeatureInfo> feature_info,
     gpu::MemoryTracker* memory_tracker,
     DidSwapBufferCompleteCallback did_swap_buffer_complete_callback)
-    : SkiaOutputDevice(memory_tracker,
+    : SkiaOutputDevice(context_state->gr_context(),
+                       memory_tracker,
                        std::move(did_swap_buffer_complete_callback)),
       mailbox_manager_(mailbox_manager),
       context_state_(context_state),
@@ -47,9 +49,21 @@ SkiaOutputDeviceGL::SkiaOutputDeviceGL(
   capabilities_.uses_default_gl_framebuffer = true;
   capabilities_.output_surface_origin = gl_surface_->GetOrigin();
   capabilities_.supports_post_sub_buffer = gl_surface_->SupportsPostSubBuffer();
+#if defined(OS_WIN)
+  if (gl_surface_->SupportsDCLayers() &&
+      gl::ShouldForceDirectCompositionRootSurfaceFullDamage()) {
+    // We need to set this bit to allow viz to track the previous damage rect
+    // of a backbuffer in a multiple backbuffer system, so backbuffers always
+    // have valid pixels, even outside the current damage rect.
+    capabilities_.preserve_buffer_content = true;
+  }
+#endif  // OS_WIN
   if (feature_info->workarounds()
           .disable_post_sub_buffers_for_onscreen_surfaces) {
     capabilities_.supports_post_sub_buffer = false;
+  }
+  if (feature_info->workarounds().force_rgb10a2_overlay_support_flags) {
+    capabilities_.forces_rgb10a2_overlay_support_flags = true;
   }
   capabilities_.max_frames_pending = gl_surface_->GetBufferCount() - 1;
   capabilities_.supports_commit_overlay_planes =
@@ -75,11 +89,12 @@ SkiaOutputDeviceGL::SkiaOutputDeviceGL(
     context_state_->MakeCurrent(gl_surface_.get());
   }
 
+  GrContext* gr_context = context_state_->gr_context();
   gl::CurrentGL* current_gl = context_state_->context()->GetCurrentGL();
 
   // Get alpha bits from the default frame buffer.
   glBindFramebufferEXT(GL_FRAMEBUFFER, 0);
-  context_state_->gr_context()->resetContext(kRenderTarget_GrGLBackendState);
+  gr_context->resetContext(kRenderTarget_GrGLBackendState);
   const auto* version = current_gl->Version;
   GLint alpha_bits = 0;
   if (version->is_desktop_core_profile) {
@@ -94,13 +109,11 @@ SkiaOutputDeviceGL::SkiaOutputDeviceGL(
 
   capabilities_.sk_color_type =
       supports_alpha_ ? kRGBA_8888_SkColorType : kRGB_888x_SkColorType;
-  capabilities_.gr_backend_format =
-      context_state_->gr_context()->defaultBackendFormat(
-          capabilities_.sk_color_type, GrRenderable::kYes);
+  capabilities_.gr_backend_format = gr_context->defaultBackendFormat(
+      capabilities_.sk_color_type, GrRenderable::kYes);
   capabilities_.sk_color_type_for_hdr = kRGBA_F16_SkColorType;
-  capabilities_.gr_backend_format_for_hdr =
-      context_state_->gr_context()->defaultBackendFormat(
-          capabilities_.sk_color_type_for_hdr, GrRenderable::kYes);
+  capabilities_.gr_backend_format_for_hdr = gr_context->defaultBackendFormat(
+      capabilities_.sk_color_type_for_hdr, GrRenderable::kYes);
 }
 
 SkiaOutputDeviceGL::~SkiaOutputDeviceGL() {
@@ -262,13 +275,13 @@ void SkiaOutputDeviceGL::SetGpuVSyncEnabled(bool enabled) {
   gl_surface_->SetGpuVSyncEnabled(enabled);
 }
 
-#if defined(OS_WIN)
 void SkiaOutputDeviceGL::SetEnableDCLayers(bool enable) {
   gl_surface_->SetEnableDCLayers(enable);
 }
 
 void SkiaOutputDeviceGL::ScheduleOverlays(
     SkiaOutputSurface::OverlayList overlays) {
+#if defined(OS_WIN)
   for (auto& dc_layer : overlays) {
     ui::DCRendererLayerParams params;
 
@@ -306,8 +319,8 @@ void SkiaOutputDeviceGL::ScheduleOverlays(
     if (!gl_surface_->ScheduleDCLayer(params))
       DLOG(ERROR) << "ScheduleDCLayer failed";
   }
+#endif  // OS_WIN
 }
-#endif
 
 void SkiaOutputDeviceGL::EnsureBackbuffer() {
   gl_surface_->SetBackbufferAllocation(true);

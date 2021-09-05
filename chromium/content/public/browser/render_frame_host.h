@@ -48,6 +48,10 @@ enum class FeaturePolicyFeature;
 }  // namespace blink
 
 namespace base {
+namespace trace_event {
+class TracedValue;
+}  // namespace trace_event
+
 class UnguessableToken;
 class Value;
 }  // namespace base
@@ -104,13 +108,14 @@ class CONTENT_EXPORT RenderFrameHost : public IPC::Listener,
   // frame that is currently rendered in a different process than |process_id|.
   static int GetFrameTreeNodeIdForRoutingId(int process_id, int routing_id);
 
-  // Returns the RenderFrameHost corresponding to the |placeholder_routing_id|
-  // in the given |render_process_id|. The returned RenderFrameHost will always
-  // be in a different process.  It may be null if the placeholder is not found
-  // in the given process, which may happen if the frame was recently deleted
-  // or swapped to |render_process_id| itself.
-  static RenderFrameHost* FromPlaceholderId(int render_process_id,
-                                            int placeholder_routing_id);
+  // Returns the RenderFrameHost corresponding to the
+  // |placeholder_frame_token| in the given |render_process_id|. The returned
+  // RenderFrameHost will always be in a different process.  It may be null if
+  // the placeholder is not found in the given process, which may happen if the
+  // frame was recently deleted or swapped to |render_process_id| itself.
+  static RenderFrameHost* FromPlaceholderToken(
+      int render_process_id,
+      const base::UnguessableToken& placeholder_frame_token);
 
 #if defined(OS_ANDROID)
   // Returns the RenderFrameHost object associated with a Java native pointer.
@@ -303,7 +308,7 @@ class CONTENT_EXPORT RenderFrameHost : public IPC::Listener,
   // changes to the contents resulting from operations executed prior to this
   // call are visible on screen. The call completes asynchronously by running
   // the supplied |callback| with a value of true upon successful completion and
-  // false otherwise (when the frame is destroyed, detached, etc..).
+  // false otherwise when the widget is destroyed.
   using VisualStateCallback = base::OnceCallback<void(bool)>;
   virtual void InsertVisualStateCallback(VisualStateCallback callback) = 0;
 
@@ -360,6 +365,27 @@ class CONTENT_EXPORT RenderFrameHost : public IPC::Listener,
   // In both cases, IsCurrent() becomes false for this frame and all its
   // children.
   virtual bool IsCurrent() = 0;
+
+  // Returns true iff the RenderFrameHost is inactive i.e., when the
+  // RenderFrameHost is either in BackForwardCache or pending deletion. This
+  // function should be used when we are unsure if inactive RenderFrameHosts can
+  // be properly handled and their processing shouldn't be deferred until the
+  // RenderFrameHost becomes active again. Callers that only want to check
+  // whether a RenderFrameHost is current or not should use IsCurrent() instead.
+  //
+  // This method additionally has a side effect for back-forward cache: it
+  // disallows reactivating by evicting the document from the cache and
+  // triggering deletion. This avoids reactivating the frame as restoring would
+  // be unsafe after dropping an event, which means that the frame will never be
+  // shown to the user again and the event can be safely ignored.
+  //
+  // Note that if |IsInactiveAndDisallowReactivation()| returns false, then
+  // IsCurrent() returns false as well.
+  // This should not be called for speculative RenderFrameHosts as disallowing
+  // reactivation before the document became active for the first time is not
+  // supported. In that case |IsInactiveAndDisallowReactivation()|
+  // returns false along with terminating the renderer process.
+  virtual bool IsInactiveAndDisallowReactivation() = 0;
 
   // Get the number of proxies to this frame, in all processes. Exposed for
   // use by resource metrics.
@@ -518,9 +544,10 @@ class CONTENT_EXPORT RenderFrameHost : public IPC::Listener,
                                           BrowserControlsState current,
                                           bool animate) = 0;
 
-  // Reloads the frame if it is live. It initiates a reload but doesn't wait for
-  // it to finish.
-  virtual void Reload() = 0;
+  // Reloads the frame. It initiates a reload but doesn't wait for it to finish.
+  // In some rare cases, there is no history related to the frame, nothing
+  // happens and this returns false.
+  virtual bool Reload() = 0;
 
   // Returns true if this frame has fired DOMContentLoaded.
   virtual bool IsDOMContentLoaded() = 0;
@@ -579,6 +606,16 @@ class CONTENT_EXPORT RenderFrameHost : public IPC::Listener,
   virtual void ReportHeavyAdIssue(
       blink::mojom::HeavyAdResolutionStatus resolution,
       blink::mojom::HeavyAdReason reason) = 0;
+
+  // Returns whether a document uses WebOTP. Returns true if an SmsService is
+  // created on the document.
+  virtual bool DocumentUsedWebOTP() = 0;
+
+  // Write a description of this RenderFrameHost into provided |traced_value|.
+  // The caller is responsible for ensuring that key-value pairs can be written
+  // into |traced_value| — either by creating a new TracedValue or calling
+  // BeginDictionary() before calling this method.
+  virtual void AsValueInto(base::trace_event::TracedValue* traced_value) = 0;
 
  private:
   // This interface should only be implemented inside content.

@@ -7,6 +7,7 @@ package org.chromium.components.paintpreview.player.frame;
 import android.graphics.Bitmap;
 import android.graphics.Matrix;
 import android.graphics.Rect;
+import android.util.Size;
 import android.view.View;
 
 import org.chromium.ui.modelutil.PropertyKey;
@@ -22,7 +23,7 @@ class PlayerFrameProperties {
     static final PropertyModel.WritableObjectPropertyKey<Bitmap[][]> BITMAP_MATRIX =
             new PropertyModel.WritableObjectPropertyKey<>(true);
     /** The dimensions of each bitmap tile in the current bitmap matrix. */
-    static final PropertyModel.WritableObjectPropertyKey<int[]> TILE_DIMENSIONS =
+    static final PropertyModel.WritableObjectPropertyKey<Size> TILE_DIMENSIONS =
             new PropertyModel.WritableObjectPropertyKey<>();
     /**
      * Contains the current user-visible content window. The view should use this to draw the
@@ -31,12 +32,12 @@ class PlayerFrameProperties {
     static final PropertyModel.WritableObjectPropertyKey<Rect> VIEWPORT =
             new PropertyModel.WritableObjectPropertyKey<>(true);
     /**
-     * List of currently visible sub-frame {@link View}s.
+     * List of sub-frame {@link View}s.
      */
     static final PropertyModel.WritableObjectPropertyKey<List<View>> SUBFRAME_VIEWS =
             new PropertyModel.WritableObjectPropertyKey<>();
     /**
-     * List of currently visible sub-frame clip rects.
+     * List of sub-frame clip rects.
      */
     static final PropertyModel.WritableObjectPropertyKey<List<Rect>> SUBFRAME_RECTS =
             new PropertyModel.WritableObjectPropertyKey<>();

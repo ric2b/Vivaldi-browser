@@ -28,7 +28,7 @@ import {loadTimeData} from '../i18n_setup.js';
 import {BlockingRequestManager} from './blocking_request_manager.js';
 // </if>
 import {PasswordMoreActionsClickedEvent} from './password_list_item.js';
-import {PasswordManagerImpl} from './password_manager_proxy.js';
+import {PasswordManagerImpl, PasswordManagerProxy} from './password_manager_proxy.js';
 import {PasswordRemoveDialogPasswordsRemovedEvent} from './password_remove_dialog.js';
 
 Polymer({
@@ -80,6 +80,24 @@ Polymer({
     },
 
     /** @private */
+    editPasswordsInSettings_: {
+      type: Boolean,
+      value() {
+        return loadTimeData.getBoolean('editPasswordsInSettings');
+      }
+    },
+
+    /**
+     * Check if editPasswordsInSettings flag is true and entry isn't federation
+     * credential.
+     * @private
+     * */
+    isEditDialog_: {
+      type: Boolean,
+      computed: 'computeIsEditDialog_(editPasswordsInSettings_, activePassword)'
+    },
+
+    /** @private */
     showPasswordEditDialog_: {type: Boolean, value: false},
 
     /** @private */
@@ -94,7 +112,6 @@ Polymer({
      * @private {?HTMLElement}
      */
     activeDialogAnchor_: {type: Object, value: null},
-
 
     /**
      * The message displayed in the toast following a password removal.
@@ -115,11 +132,30 @@ Polymer({
         'onPasswordRemoveDialogPasswordsRemoved_',
   },
 
+  /** @private {?PasswordManagerProxy} */
+  passwordManager_: null,
+
+  /** @override */
+  attached() {
+    this.passwordManager_ = PasswordManagerImpl.getInstance();
+  },
+
   /** @override */
   detached() {
     if (this.$.toast.open) {
       this.$.toast.hide();
     }
+  },
+
+  /**
+   * Helper function that checks if editPasswordsInSettings flag is true and
+   * entry isn't federation credential.
+   * @return {boolean}
+   * @private
+   * */
+  computeIsEditDialog_() {
+    return this.editPasswordsInSettings_ &&
+        (!this.activePassword || !this.activePassword.entry.federationText);
   },
 
   /**
@@ -143,14 +179,48 @@ Polymer({
   },
 
   /**
-   * Shows the edit password dialog.
-   * @param {!Event} e
+   * Requests the plaintext password for the current active password.
+   * @param {!chrome.passwordsPrivate.PlaintextReason} reason The reason why the
+   *     plaintext password is requested.
+   * @param {function(string): void} callback The callback that gets invoked
+   *     with the retrieved password.
    * @private
    */
-  onMenuEditPasswordTap_(e) {
-    e.preventDefault();
+  requestActivePlaintextPassword_(reason, callback) {
+    this.passwordManager_
+        .requestPlaintextPassword(this.activePassword.entry.getAnyId(), reason)
+        .then(callback, error => {
+          // <if expr="chromeos">
+          // If no password was found, refresh auth token and retry.
+          this.tokenRequestManager.request(() => {
+            this.requestActivePlaintextPassword_(reason, callback);
+          });
+          // </if>
+        });
+  },
+
+  /** @private */
+  onMenuEditPasswordTap_() {
+    if (this.isEditDialog_) {
+      this.requestActivePlaintextPassword_(
+          chrome.passwordsPrivate.PlaintextReason.EDIT, password => {
+            this.set('activePassword.entry.password', password);
+            this.showPasswordEditDialog_ = true;
+          });
+    } else {
+      this.showPasswordEditDialog_ = true;
+    }
     this.$.menu.close();
-    this.showPasswordEditDialog_ = true;
+    this.activePassword.hide();
+  },
+
+  /**
+   * @return {string}
+   * @private
+   */
+  getMenuEditPasswordName_() {
+    return this.isEditDialog_ ? this.i18n('editPassword') :
+                                this.i18n('passwordViewDetails');
   },
 
   /** @private */
@@ -158,6 +228,7 @@ Polymer({
     this.showPasswordEditDialog_ = false;
     focusWithoutInk(assert(this.activeDialogAnchor_));
     this.activeDialogAnchor_ = null;
+    this.activePassword.hide();
     this.activePassword = null;
   },
 
@@ -176,20 +247,11 @@ Polymer({
   onMenuCopyPasswordButtonTap_() {
     // Copy to clipboard occurs inside C++ and we don't expect getting
     // result back to javascript.
-    PasswordManagerImpl.getInstance()
-        .requestPlaintextPassword(
-            this.activePassword.entry.getAnyId(),
-            chrome.passwordsPrivate.PlaintextReason.COPY)
-        .then(_ => {
+    this.requestActivePlaintextPassword_(
+        chrome.passwordsPrivate.PlaintextReason.COPY, _ => {
           this.activePassword = null;
-        })
-        .catch(error => {
-          // <if expr="chromeos">
-          // If no password was found, refresh auth token and retry.
-          this.tokenRequestManager.request(
-              this.onMenuCopyPasswordButtonTap_.bind(this));
-          // </if>});
         });
+
     this.$.menu.close();
   },
 
@@ -211,7 +273,7 @@ Polymer({
     const idToRemove = this.activePassword.entry.isPresentInAccount() ?
         this.activePassword.entry.accountId :
         this.activePassword.entry.deviceId;
-    PasswordManagerImpl.getInstance().removeSavedPassword(idToRemove);
+    this.passwordManager_.removeSavedPassword(idToRemove);
     this.displayRemovalNotification_(
         this.activePassword.entry.isPresentInAccount(),
         this.activePassword.entry.isPresentOnDevice());
@@ -254,17 +316,15 @@ Polymer({
    * @private
    */
   onUndoButtonClick_() {
-    PasswordManagerImpl.getInstance().undoRemoveSavedPasswordOrException();
+    this.passwordManager_.undoRemoveSavedPasswordOrException();
     this.onSavedPasswordOrExceptionRemoved();
   },
 
   /**
    * Should only be called when |activePassword| has a device copy.
-   * @param {!Event} event
    * @private
    */
-  onMenuMovePasswordToAccountTap_(event) {
-    event.preventDefault();
+  onMenuMovePasswordToAccountTap_() {
     this.$.menu.close();
     this.showPasswordMoveToAccountDialog_ = true;
   },

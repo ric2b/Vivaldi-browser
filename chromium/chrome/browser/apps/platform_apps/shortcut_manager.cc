@@ -28,7 +28,7 @@
 #include "extensions/browser/extension_system.h"
 #include "extensions/common/extension_set.h"
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include "chrome/common/mac/app_mode_common.h"
 #endif
 
@@ -39,7 +39,7 @@ namespace {
 // This version number is stored in local prefs to check whether app shortcuts
 // need to be recreated. This might happen when we change various aspects of app
 // shortcuts like command-line flags or associated icons, binaries, etc.
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 const int kCurrentAppShortcutsVersion = APP_SHIM_VERSION_NUMBER;
 #else
 const int kCurrentAppShortcutsVersion = 0;
@@ -60,7 +60,15 @@ void CreateShortcutsForApp(Profile* profile, const Extension* app) {
                            creation_locations, profile, app, base::DoNothing());
 }
 
+// Used to disable shortcut syscalls to prevent tests from flaking.
+bool g_suppress_shortcuts_for_testing = false;
+
 }  // namespace
+
+// static
+void AppShortcutManager::SuppressShortcutsForTesting() {
+  g_suppress_shortcuts_for_testing = true;
+}
 
 // static
 void AppShortcutManager::RegisterProfilePrefs(
@@ -111,8 +119,10 @@ void AppShortcutManager::OnExtensionWillBeInstalled(
   // Bookmark apps are handled in
   // web_app::AppShortcutManager::OnWebAppInstalled() and
   // web_app::AppShortcutManager::OnWebAppManifestUpdated().
-  if (!extension->is_app() || extension->from_bookmark())
+  if (!extension->is_app() || extension->from_bookmark() ||
+      g_suppress_shortcuts_for_testing) {
     return;
+  }
 
   // If the app is being updated, update any existing shortcuts but do not
   // create new ones. If it is being installed, automatically create a
@@ -131,14 +141,16 @@ void AppShortcutManager::OnExtensionUninstalled(
     extensions::UninstallReason reason) {
   // Bookmark apps are handled in
   // web_app::AppShortcutManager::OnWebAppUninstalled()
-  if (!extension->from_bookmark())
+  if (!extension->from_bookmark() && !g_suppress_shortcuts_for_testing)
     web_app::DeleteAllShortcuts(profile_, extension);
 }
 
 void AppShortcutManager::OnProfileWillBeRemoved(
     const base::FilePath& profile_path) {
-  if (profile_path != profile_->GetPath())
+  if (profile_path != profile_->GetPath() || g_suppress_shortcuts_for_testing) {
     return;
+  }
+
   web_app::internals::GetShortcutIOTaskRunner()->PostTask(
       FROM_HERE,
       base::BindOnce(&web_app::internals::DeleteAllShortcutsForProfile,
@@ -146,10 +158,12 @@ void AppShortcutManager::OnProfileWillBeRemoved(
 }
 
 void AppShortcutManager::UpdateShortcutsForAllAppsNow() {
-  web_app::UpdateShortcutsForAllApps(
-      profile_,
-      base::BindOnce(&AppShortcutManager::SetCurrentAppShortcutsVersion,
-                     weak_ptr_factory_.GetWeakPtr()));
+  if (!g_suppress_shortcuts_for_testing) {
+    web_app::UpdateShortcutsForAllApps(
+        profile_,
+        base::BindOnce(&AppShortcutManager::SetCurrentAppShortcutsVersion,
+                       weak_ptr_factory_.GetWeakPtr()));
+  }
 }
 
 void AppShortcutManager::SetCurrentAppShortcutsVersion() {

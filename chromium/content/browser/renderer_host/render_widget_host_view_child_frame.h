@@ -52,7 +52,9 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
       public TouchSelectionControllerClientManager::Observer,
       public viz::HostFrameSinkClient {
  public:
-  static RenderWidgetHostViewChildFrame* Create(RenderWidgetHost* widget);
+  static RenderWidgetHostViewChildFrame* Create(
+      RenderWidgetHost* widget,
+      const blink::ScreenInfo& screen_info);
   ~RenderWidgetHostViewChildFrame() override;
 
   void SetFrameConnectorDelegate(FrameConnectorDelegate* frame_connector);
@@ -142,19 +144,20 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
 
   void WillSendScreenRects() override;
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   // RenderWidgetHostView implementation.
   void SetActive(bool active) override;
   void ShowDefinitionForSelection() override;
   void SpeakSelection() override;
-#endif  // defined(OS_MACOSX)
+  void SetWindowFrameInScreen(const gfx::Rect& rect) override;
+#endif  // defined(OS_MAC)
 
   blink::mojom::InputEventResultState FilterInputEvent(
       const blink::WebInputEvent& input_event) override;
   BrowserAccessibilityManager* CreateBrowserAccessibilityManager(
       BrowserAccessibilityDelegate* delegate,
       bool for_root_frame) override;
-  void GetScreenInfo(ScreenInfo* screen_info) override;
+  void GetScreenInfo(blink::ScreenInfo* screen_info) override;
   void EnableAutoResize(const gfx::Size& min_size,
                         const gfx::Size& max_size) override;
   void DisableAutoResize(const gfx::Size& new_size) override;
@@ -196,7 +199,8 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
   FRIEND_TEST_ALL_PREFIXES(RenderWidgetHostViewChildFrameTest,
                            ForwardsBeginFrameAcks);
 
-  explicit RenderWidgetHostViewChildFrame(RenderWidgetHost* widget);
+  explicit RenderWidgetHostViewChildFrame(RenderWidgetHost* widget,
+                                          const blink::ScreenInfo& screen_info);
   void Init();
 
   // Sets |parent_frame_sink_id_| and registers frame sink hierarchy. If the
@@ -273,6 +277,12 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
 
   // True if there is currently a scroll sequence being bubbled to our parent.
   bool is_scroll_sequence_bubbling_ = false;
+
+  // The ScreenInfo information from the parent at the time this class is
+  // created, to be used before this view is connected to its FrameDelegate.
+  // This is kept up to date anytime GetScreenInfo() is called and we have
+  // a FrameDelegate.
+  blink::ScreenInfo screen_info_;
 
   base::WeakPtrFactory<RenderWidgetHostViewChildFrame> weak_factory_{this};
   DISALLOW_COPY_AND_ASSIGN(RenderWidgetHostViewChildFrame);

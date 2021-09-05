@@ -15,6 +15,7 @@
 #include "third_party/blink/renderer/core/layout/ng/ng_length_utils.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_out_of_flow_layout_part.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_physical_box_fragment.h"
+#include "third_party/blink/renderer/core/layout/ng/ng_relative_utils.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_space_utils.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
 
@@ -33,11 +34,10 @@ NGSimplifiedLayoutAlgorithm::NGSimplifiedLayoutAlgorithm(
   const NGPhysicalBoxFragment& physical_fragment =
       To<NGPhysicalBoxFragment>(result.PhysicalFragment());
 
-  container_builder_.SetInitialFragmentGeometry(params.fragment_geometry);
   container_builder_.SetIsNewFormattingContext(
       physical_fragment.IsFormattingContextRoot());
 
-  if (is_block_flow) {
+  if (is_block_flow && !physical_fragment.IsFieldsetContainer()) {
     container_builder_.SetIsInlineFormattingContext(
         Node().IsInlineFormattingContextRoot());
     container_builder_.SetStyleVariant(physical_fragment.StyleVariant());
@@ -198,11 +198,7 @@ scoped_refptr<const NGLayoutResult> NGSimplifiedLayoutAlgorithm::Layout() {
     }
   }
 
-  NGOutOfFlowLayoutPart(
-      Node(), ConstraintSpace(),
-      container_builder_.Borders() + container_builder_.Scrollbar(),
-      &container_builder_)
-      .Run();
+  NGOutOfFlowLayoutPart(Node(), ConstraintSpace(), &container_builder_).Run();
 
   // The block size may have been changed. This may affect the inline block
   // baseline if it is from the logical bottom margin edge.
@@ -236,6 +232,15 @@ void NGSimplifiedLayoutAlgorithm::AddChildFragment(
       WritingModeConverter(writing_direction_,
                            previous_physical_container_size_)
           .ToLogical(old_fragment.Offset(), new_fragment.Size());
+
+  // Un-apply the relative position offset.
+  if (const auto* box_child = DynamicTo<NGPhysicalBoxFragment>(*old_fragment)) {
+    if (box_child->Style().GetPosition() == EPosition::kRelative) {
+      child_offset -= ComputeRelativeOffsetForBoxFragment(
+          *box_child, ConstraintSpace().GetWritingDirection(),
+          container_builder_.ChildAvailableSize());
+    }
+  }
 
   // Add the new fragment to the builder.
   container_builder_.AddChild(new_fragment, child_offset);

@@ -126,6 +126,9 @@ class CONTENT_EXPORT DevToolsAgentHost
   // embedder or |client| itself may prevent attaching.
   virtual bool AttachClient(DevToolsAgentHostClient* client) = 0;
 
+  // Same as the above, but does not acquire the WakeLock.
+  virtual bool AttachClientWithoutWakeLock(DevToolsAgentHostClient* client) = 0;
+
   // Already attached client detaches from this agent host to stop debugging it.
   // Returns true iff detach succeeded.
   virtual bool DetachClient(DevToolsAgentHostClient* client) = 0;
@@ -149,6 +152,10 @@ class CONTENT_EXPORT DevToolsAgentHost
 
   // Returns the id of the opener host, or empty string if no opener.
   virtual std::string GetOpenerId() = 0;
+
+  // Returns whether the opened window has access to its opener (can be false
+  // when using 'noopener' or with enabled COOP).
+  virtual bool CanAccessOpener() = 0;
 
   // Returns web contents instance for this host if any.
   virtual WebContents* GetWebContents() = 0;

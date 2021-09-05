@@ -13,9 +13,9 @@ import org.chromium.base.IntentUtils;
 import org.chromium.base.SysUtils;
 import org.chromium.base.TraceEvent;
 import org.chromium.base.supplier.Supplier;
-import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.ServiceTabLauncher;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.app.tab_activity_glue.ReparentingDelegateFactory;
 import org.chromium.chrome.browser.app.tab_activity_glue.ReparentingTask;
 import org.chromium.chrome.browser.init.StartupTabPreloader;
@@ -42,7 +42,7 @@ import org.chromium.url.GURL;
 /**
  * This class creates various kinds of new tabs and adds them to the right {@link TabModel}.
  */
-public class ChromeTabCreator extends TabCreatorManager.TabCreator {
+public class ChromeTabCreator extends TabCreator {
     /**Interface to handle showing overview instead of NTP if needed. */
     public interface OverviewNTPCreator {
         /**
@@ -65,18 +65,20 @@ public class ChromeTabCreator extends TabCreatorManager.TabCreator {
     private TabModelOrderController mOrderController;
     private Supplier<TabDelegateFactory> mTabDelegateFactorySupplier;
     @Nullable
-    private OverviewNTPCreator mOverviewNTPCreator;
+    private final OverviewNTPCreator mOverviewNTPCreator;
+    private final AsyncTabParamsManager mAsyncTabParamsManager;
 
     public ChromeTabCreator(ChromeActivity activity, WindowAndroid nativeWindow,
             StartupTabPreloader startupTabPreloader,
             Supplier<TabDelegateFactory> tabDelegateFactory, boolean incognito,
-            OverviewNTPCreator overviewNTPCreator) {
+            OverviewNTPCreator overviewNTPCreator, AsyncTabParamsManager asyncTabParamsManager) {
         mActivity = activity;
         mStartupTabPreloader = startupTabPreloader;
         mNativeWindow = nativeWindow;
         mTabDelegateFactorySupplier = tabDelegateFactory;
         mIncognito = incognito;
         mOverviewNTPCreator = overviewNTPCreator;
+        mAsyncTabParamsManager = asyncTabParamsManager;
     }
 
     @Override
@@ -143,8 +145,7 @@ public class ChromeTabCreator extends TabCreatorManager.TabCreator {
             // Check if the tab is being created asynchronously.
             int assignedTabId = intent == null ? Tab.INVALID_TAB_ID : IntentUtils.safeGetIntExtra(
                     intent, IntentHandler.EXTRA_TAB_ID, Tab.INVALID_TAB_ID);
-            AsyncTabParams asyncParams =
-                    AsyncTabParamsManager.remove(assignedTabId);
+            AsyncTabParams asyncParams = mAsyncTabParamsManager.remove(assignedTabId);
 
             boolean openInForeground = mOrderController.willOpenInForeground(type, mIncognito);
             TabDelegateFactory delegateFactory =
@@ -370,12 +371,13 @@ public class ChromeTabCreator extends TabCreatorManager.TabCreator {
     }
 
     @Override
-    public Tab createFrozenTab(TabState state, int id, int index) {
+    public Tab createFrozenTab(
+            TabState state, byte[] serializedCriticalPersistedTabData, int id, int index) {
         TabModelSelector selector = mActivity.getTabModelSelector();
         Tab parent = selector != null ? selector.getTabById(state.parentId) : null;
         boolean selectTab = mOrderController.willOpenInForeground(
                 TabLaunchType.FROM_RESTORE, state.isIncognito());
-        AsyncTabParams asyncParams = AsyncTabParamsManager.remove(id);
+        AsyncTabParams asyncParams = mAsyncTabParamsManager.remove(id);
         Tab tab = null;
         @TabLaunchType
         int launchType = TabLaunchType.FROM_RESTORE;
@@ -410,6 +412,7 @@ public class ChromeTabCreator extends TabCreatorManager.TabCreator {
                           .setDelegateFactory(createDefaultTabDelegateFactory())
                           .setInitiallyHidden(!selectTab)
                           .setTabState(state)
+                          .setSerializedCriticalPersistedTabData(serializedCriticalPersistedTabData)
                           .build();
         }
 

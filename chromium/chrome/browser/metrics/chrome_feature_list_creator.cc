@@ -61,7 +61,7 @@ void ChromeFeatureListCreator::CreateFeatureList() {
   CreatePrefService();
   ConvertFlagsToSwitches();
   CreateMetricsServices();
-  SetupMasterPrefs();
+  SetupInitialPrefs();
   SetupFieldTrials();
 }
 
@@ -97,9 +97,9 @@ ChromeFeatureListCreator::TakeChromeBrowserPolicyConnector() {
 }
 
 #if !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
-std::unique_ptr<installer::MasterPreferences>
-ChromeFeatureListCreator::TakeMasterPrefs() {
-  return std::move(installer_master_prefs_);
+std::unique_ptr<installer::InitialPreferences>
+ChromeFeatureListCreator::TakeInitialPrefs() {
+  return std::move(installer_initial_prefs_);
 }
 #endif
 
@@ -206,7 +206,7 @@ void ChromeFeatureListCreator::CreateMetricsServices() {
           std::move(client));
 }
 
-void ChromeFeatureListCreator::SetupMasterPrefs() {
+void ChromeFeatureListCreator::SetupInitialPrefs() {
 // Android does first run in Java instead of native.
 // Chrome OS has its own out-of-box-experience code.
 #if !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
@@ -216,8 +216,8 @@ void ChromeFeatureListCreator::SetupMasterPrefs() {
   if (!first_run::IsChromeFirstRun())
     return;
 
-  installer_master_prefs_ = first_run::LoadMasterPrefs();
-  if (!installer_master_prefs_)
+  installer_initial_prefs_ = first_run::LoadInitialPrefs();
+  if (!installer_initial_prefs_)
     return;
 
   // Store the initial VariationsService seed in local state, if it exists
@@ -225,9 +225,9 @@ void ChromeFeatureListCreator::SetupMasterPrefs() {
   // master prefs, which is why both the seed and signature are retrieved here
   // and not within the ifs below.
   std::string compressed_variations_seed =
-      installer_master_prefs_->GetCompressedVariationsSeed();
+      installer_initial_prefs_->GetCompressedVariationsSeed();
   std::string variations_seed_signature =
-      installer_master_prefs_->GetVariationsSeedSignature();
+      installer_initial_prefs_->GetVariationsSeedSignature();
 
   if (!compressed_variations_seed.empty()) {
     local_state_->SetString(variations::prefs::kVariationsCompressedSeed,

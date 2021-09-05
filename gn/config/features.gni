@@ -1,5 +1,4 @@
 import("//build/config/features.gni")
-import("//build/toolchain/cc_wrapper.gni")
 
 declare_args() {
   # Opera media extensions

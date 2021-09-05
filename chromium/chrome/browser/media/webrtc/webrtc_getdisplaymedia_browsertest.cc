@@ -14,7 +14,7 @@
 #include "content/public/test/browser_test_utils.h"
 #include "media/base/media_switches.h"
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include "base/mac/mac_util.h"
 #endif
 
@@ -45,7 +45,7 @@ class WebRtcGetDisplayMediaBrowserTest : public WebRtcTestBase {
         tab->GetMainFrame(),
         base::StringPrintf("runGetDisplayMedia(%s);", constraints.c_str()),
         &result));
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
     // Starting from macOS 10.15, screen capture requires system permissions
     // that are disabled by default. The permission is reported as granted
     // if the fake UI is used.
@@ -90,10 +90,11 @@ IN_PROC_BROWSER_TEST_F(WebRtcGetDisplayMediaBrowserTestWithPicker,
 #if defined(OS_CHROMEOS) || defined(OS_WIN)
 #define MAYBE_GetDisplayMediaVideoAndAudio DISABLED_GetDisplayMediaVideoAndAudio
 // On linux debug bots, it's flaky as well.
-#elif (defined(OS_LINUX) && !defined(NDEBUG))
+#elif ((defined(OS_LINUX) || defined(OS_CHROMEOS)) && !defined(NDEBUG))
 #define MAYBE_GetDisplayMediaVideoAndAudio DISABLED_GetDisplayMediaVideoAndAudio
 // On linux asan bots, it's flaky as well - msan and other rel bot are fine.
-#elif (defined(OS_LINUX) && defined(ADDRESS_SANITIZER))
+#elif ((defined(OS_LINUX) || defined(OS_CHROMEOS)) && \
+       defined(ADDRESS_SANITIZER))
 #define MAYBE_GetDisplayMediaVideoAndAudio DISABLED_GetDisplayMediaVideoAndAudio
 #else
 #define MAYBE_GetDisplayMediaVideoAndAudio GetDisplayMediaVideoAndAudio

@@ -30,6 +30,10 @@ namespace views {
 class Button;
 }  // namespace views
 
+namespace ui {
+class ImageModel;
+}  // namespace ui
+
 // This class provides the UI for different menus that are created by user
 // clicking the avatar button.
 class ProfileMenuViewBase : public content::WebContentsDelegate,
@@ -59,7 +63,8 @@ class ProfileMenuViewBase : public content::WebContentsDelegate,
     kAddNewProfileButton = 15,
     kSyncSettingsButton = 16,
     kEditProfileButton = 17,
-    kMaxValue = kEditProfileButton,
+    kCreateIncognitoShortcutButton = 18,
+    kMaxValue = kCreateIncognitoShortcutButton,
   };
 
   enum class SyncInfoContainerBackgroundState {
@@ -68,6 +73,29 @@ class ProfileMenuViewBase : public content::WebContentsDelegate,
     kError,
     kNoPrimaryAccount,
   };
+
+  struct SyncInfo {
+    int description_string_id;
+    int button_string_id;
+    SyncInfoContainerBackgroundState background_state;
+  };
+
+  struct EditButtonParams {
+    EditButtonParams(const gfx::VectorIcon* edit_icon,
+                     const base::string16& edit_tooltip_text,
+                     base::RepeatingClosure edit_action);
+    EditButtonParams(const EditButtonParams&);
+    ~EditButtonParams();
+
+    const gfx::VectorIcon* edit_icon;
+    base::string16 edit_tooltip_text;
+    base::RepeatingClosure edit_action;
+  };
+
+  // Size of the large identity image in the menu.
+  static constexpr int kIdentityImageSize = 64;
+  // Size of the small identity images for other selectable profiles.
+  static constexpr int kSelectableProfileImageSize = 20;
 
   // Shows the bubble if one is not already showing.  This allows us to easily
   // make a button toggle the bubble on and off when clicked: we unconditionally
@@ -95,22 +123,17 @@ class ProfileMenuViewBase : public content::WebContentsDelegate,
   // Override to supply a sync icon for the profile menu.
   virtual gfx::ImageSkia GetSyncIcon() const;
 
-  // API to build the profile menu.
-  void SetHeading(const base::string16& heading,
-                  const base::string16& tooltip_text,
-                  base::RepeatingClosure action);
-  // If |image| is empty |icon| will be used instead.
-  void SetIdentityInfo(const gfx::ImageSkia& image,
-                       const base::string16& title,
-                       const base::string16& subtitle = base::string16(),
-                       const gfx::VectorIcon& icon = kUserAccountAvatarIcon,
-                       ui::NativeTheme::ColorId color_id =
-                           ui::NativeTheme::kColorId_MenuIconColor);
-  void SetSyncInfo(const base::string16& description,
-                   const base::string16& clickable_text,
-                   SyncInfoContainerBackgroundState background_state,
-                   base::RepeatingClosure action,
-                   bool show_badge = true);
+  // If |profile_name| is empty, no heading will be displayed.
+  void SetProfileIdentityInfo(
+      const base::string16& profile_name,
+      SkColor profile_background_color,
+      base::Optional<EditButtonParams> edit_button_params,
+      const ui::ImageModel& image_model,
+      const base::string16& title,
+      const base::string16& subtitle = base::string16());
+  void SetSyncInfo(const SyncInfo& sync_info,
+                   const base::RepeatingClosure& action,
+                   bool show_badge);
   void AddShortcutFeatureButton(const gfx::VectorIcon& icon,
                                 const base::string16& text,
                                 base::RepeatingClosure action);
@@ -119,7 +142,7 @@ class ProfileMenuViewBase : public content::WebContentsDelegate,
                         const gfx::VectorIcon& icon = gfx::kNoneIcon,
                         float icon_to_image_ratio = 1.0f);
   void SetProfileManagementHeading(const base::string16& heading);
-  void AddSelectableProfile(const gfx::ImageSkia& image,
+  void AddSelectableProfile(const ui::ImageModel& image_model,
                             const base::string16& name,
                             bool is_guest,
                             base::RepeatingClosure action);

@@ -22,6 +22,7 @@ import androidx.test.filters.MediumTest;
 
 import org.hamcrest.Description;
 import org.hamcrest.Matcher;
+import org.hamcrest.Matchers;
 import org.hamcrest.TypeSafeMatcher;
 import org.junit.After;
 import org.junit.Assert;
@@ -32,6 +33,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
@@ -75,7 +77,7 @@ public class StatusIndicatorTest {
     private StatusIndicatorCoordinator mStatusIndicatorCoordinator;
     private StatusIndicatorSceneLayer mStatusIndicatorSceneLayer;
     private View mStatusIndicatorContainer;
-    private ViewGroup.MarginLayoutParams mControlContainerLayoutParams;
+    private View mControlContainer;
     private BrowserControlsStateProvider mBrowserControlsStateProvider;
 
     @Before
@@ -88,11 +90,8 @@ public class StatusIndicatorTest {
         mStatusIndicatorSceneLayer = mStatusIndicatorCoordinator.getSceneLayer();
         mStatusIndicatorContainer =
                 mActivityTestRule.getActivity().findViewById(R.id.status_indicator);
-        final View controlContainer =
-                mActivityTestRule.getActivity().findViewById(R.id.control_container);
-        mControlContainerLayoutParams =
-                (ViewGroup.MarginLayoutParams) controlContainer.getLayoutParams();
-        mBrowserControlsStateProvider = mActivityTestRule.getActivity().getFullscreenManager();
+        mControlContainer = mActivityTestRule.getActivity().findViewById(R.id.control_container);
+        mBrowserControlsStateProvider = mActivityTestRule.getActivity().getBrowserControlsManager();
     }
 
     @After
@@ -103,8 +102,6 @@ public class StatusIndicatorTest {
     @Test
     @MediumTest
     public void testShowAndHide() {
-        final BrowserControlsStateProvider browserControlsStateProvider =
-                mActivityTestRule.getActivity().getFullscreenManager();
         InstrumentationRegistry.getInstrumentation().waitForIdleSync();
 
         Assert.assertEquals("Wrong initial Android view visibility.", View.GONE,
@@ -112,7 +109,7 @@ public class StatusIndicatorTest {
         Assert.assertFalse("Wrong initial composited view visibility.",
                 mStatusIndicatorSceneLayer.isSceneOverlayTreeShowing());
         Assert.assertEquals("Wrong initial control container top margin.", 0,
-                mControlContainerLayoutParams.topMargin);
+                getTopMarginOf(mControlContainer));
 
         TestThreadUtils.runOnUiThreadBlocking(() -> mStatusIndicatorCoordinator.show(
         "Status", null, Color.BLACK, Color.WHITE, Color.WHITE));
@@ -122,8 +119,10 @@ public class StatusIndicatorTest {
         // 0 for testing.
 
         // Wait until the status indicator finishes animating, or becomes fully visible.
-        CriteriaHelper.pollUiThread(Criteria.equals(mStatusIndicatorContainer.getHeight(),
-                browserControlsStateProvider::getTopControlsMinHeightOffset));
+        CriteriaHelper.pollUiThread(() -> {
+            Criteria.checkThat(mBrowserControlsStateProvider.getTopControlsMinHeightOffset(),
+                    Matchers.is(mStatusIndicatorContainer.getHeight()));
+        });
 
         // Now, the Android view should be visible.
         Assert.assertEquals("Wrong Android view visibility.", View.VISIBLE,
@@ -145,8 +144,10 @@ public class StatusIndicatorTest {
         InstrumentationRegistry.getInstrumentation().waitForIdleSync();
 
         // Wait until the status indicator finishes animating, or becomes fully hidden.
-        CriteriaHelper.pollUiThread(
-                Criteria.equals(0, browserControlsStateProvider::getTopControlsMinHeightOffset));
+        CriteriaHelper.pollUiThread(() -> {
+            Criteria.checkThat(
+                    mBrowserControlsStateProvider.getTopControlsMinHeightOffset(), Matchers.is(0));
+        });
 
         // The Android view visibility should be {@link View.GONE} after #hide().
         Assert.assertEquals("Wrong Android view visibility.", View.GONE,
@@ -158,10 +159,13 @@ public class StatusIndicatorTest {
 
     @Test
     @MediumTest
+    // clang-format off
+    @Restriction(Restriction.RESTRICTION_TYPE_NON_LOW_END_DEVICE)
     @CommandLineFlags.Add({"enable-features=" + ChromeFeatureList.START_SURFACE_ANDROID + "<Study",
             "force-fieldtrials=Study/Group",
             "force-fieldtrial-params=Study.Group:start_surface_variation/single"})
     public void testShowAndHideOnStartSurface() {
+        // clang-format on
         TabUiTestHelper.enterTabSwitcher(mActivityTestRule.getActivity());
 
         onView(withId(org.chromium.chrome.start_surface.R.id.secondary_tasks_surface_view))
@@ -178,8 +182,8 @@ public class StatusIndicatorTest {
         onView(withId(R.id.status_indicator)).check(matches(withEffectiveVisibility(VISIBLE)));
 
         CriteriaHelper.pollUiThread(() -> {
-            Criteria.equals(mStatusIndicatorContainer.getHeight(),
-                    mBrowserControlsStateProvider::getTopControlsMinHeightOffset);
+            Criteria.checkThat(mBrowserControlsStateProvider.getTopControlsMinHeightOffset(),
+                    Matchers.is(mStatusIndicatorContainer.getHeight()));
         });
 
         onView(withId(R.id.control_container))
@@ -203,7 +207,7 @@ public class StatusIndicatorTest {
         TestThreadUtils.runOnUiThreadBlocking(() -> mStatusIndicatorCoordinator.hide());
 
         CriteriaHelper.pollUiThread(() -> {
-            Criteria.equals(0, mBrowserControlsStateProvider::getTopControlsMinHeightOffset);
+            Criteria.checkThat(mStatusIndicatorContainer.getVisibility(), Matchers.is(View.GONE));
         });
 
         onView(withId(R.id.status_indicator)).check(matches(withEffectiveVisibility(GONE)));
@@ -215,6 +219,7 @@ public class StatusIndicatorTest {
 
     @Test
     @MediumTest
+    @DisabledTest(message = "https://crbug.com/1109965")
     public void testShowAndHideOnNTP() {
         mActivityTestRule.loadUrl(UrlConstants.NTP_URL);
         Tab tab = mActivityTestRule.getActivity().getActivityTab();
@@ -257,6 +262,7 @@ public class StatusIndicatorTest {
 
     @Test
     @MediumTest
+    @DisabledTest(message = "https://crbug.com/1109965")
     public void testShowAndHideOnRecentTabsPage() {
         mActivityTestRule.loadUrl(UrlConstants.RECENT_TABS_URL);
         final Tab tab = mActivityTestRule.getActivity().getActivityTab();
@@ -306,7 +312,7 @@ public class StatusIndicatorTest {
             private int mActual;
             @Override
             public boolean matchesSafely(final View view) {
-                mActual = ((ViewGroup.MarginLayoutParams) view.getLayoutParams()).topMargin;
+                mActual = getTopMarginOf(view);
                 return mActual == expected;
             }
             @Override
@@ -319,5 +325,11 @@ public class StatusIndicatorTest {
                         .appendText("but actually has " + mActual);
             }
         };
+    }
+
+    private static int getTopMarginOf(View view) {
+        final ViewGroup.MarginLayoutParams layoutParams =
+                (ViewGroup.MarginLayoutParams) view.getLayoutParams();
+        return layoutParams.topMargin;
     }
 }

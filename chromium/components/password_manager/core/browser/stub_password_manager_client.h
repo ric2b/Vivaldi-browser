@@ -45,7 +45,7 @@ class StubPasswordManagerClient : public PasswordManagerClient {
   bool PromptUserToChooseCredentials(
       std::vector<std::unique_ptr<autofill::PasswordForm>> local_forms,
       const url::Origin& origin,
-      const CredentialsCallback& callback) override;
+      CredentialsCallback callback) override;
   void NotifyUserAutoSignin(
       std::vector<std::unique_ptr<autofill::PasswordForm>> local_forms,
       const url::Origin& origin) override;
@@ -93,6 +93,7 @@ class StubPasswordManagerClient : public PasswordManagerClient {
   PasswordManagerMetricsRecorder* GetMetricsRecorder() override;
   signin::IdentityManager* GetIdentityManager() override;
   scoped_refptr<network::SharedURLLoaderFactory> GetURLLoaderFactory() override;
+  network::mojom::NetworkContext* GetNetworkContext() const override;
   bool IsIsolationForPasswordSitesEnabled() const override;
   bool IsNewTabPage() const override;
   FieldInfoManager* GetFieldInfoManager() const override;

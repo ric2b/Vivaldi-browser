@@ -1015,6 +1015,23 @@ TEST_F(AcceleratorControllerTest, DontRepeatToggleFullscreen) {
   EXPECT_FALSE(window_state->IsFullscreen());
 }
 
+TEST_F(AcceleratorControllerTest, DontToggleFullscreenWhenOverviewStarts) {
+  std::unique_ptr<views::Widget> widget(CreateTestWidget(
+      nullptr, desks_util::GetActiveDeskContainerId(), gfx::Rect(400, 400)));
+
+  ui::test::EventGenerator* generator = GetEventGenerator();
+
+  // Toggle overview and fullscreen immediately after.
+  generator->PressKey(ui::VKEY_MEDIA_LAUNCH_APP1, ui::EF_NONE);
+  generator->PressKey(ui::VKEY_MEDIA_LAUNCH_APP2, ui::EF_NONE);
+  EXPECT_FALSE(WindowState::Get(widget->GetNativeWindow())->IsFullscreen());
+  EXPECT_TRUE(Shell::Get()->overview_controller()->InOverviewSession());
+  EXPECT_TRUE(Shell::Get()
+                  ->overview_controller()
+                  ->overview_session()
+                  ->IsWindowInOverview(widget->GetNativeWindow()));
+}
+
 // TODO(oshima): Fix this test to use EventGenerator.
 TEST_F(AcceleratorControllerTest, ProcessOnce) {
   // The IME event filter interferes with the basic key event propagation we
@@ -1426,7 +1443,7 @@ TEST_F(AcceleratorControllerTest, SideVolumeButtonLocation) {
             test_api_->side_volume_button_location().region);
   EXPECT_EQ(AcceleratorControllerImpl::kVolumeButtonSideLeft,
             test_api_->side_volume_button_location().side);
-  base::DeleteFile(file_path, false);
+  base::DeleteFile(file_path);
 }
 
 // Tests the histogram of volume adjustment in tablet mode.
@@ -1882,7 +1899,9 @@ TEST_F(AcceleratorControllerTest, DisallowedAtModalWindow) {
   //  when a modal window is open
   //
   // Screenshot
-  {
+  // TODO(sammiequon): Add some basic tests once capture mode is more fleshed
+  // out.
+  if (!features::IsCaptureModeEnabled()) {
     TestScreenshotDelegate* delegate = GetScreenshotDelegate();
     delegate->set_can_take_screenshot(false);
     EXPECT_TRUE(ProcessInController(

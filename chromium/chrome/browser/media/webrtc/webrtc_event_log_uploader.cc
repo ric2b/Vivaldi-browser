@@ -34,7 +34,7 @@ constexpr size_t kExpectedMimeOverheadBytes = 1000;  // Intentional overshot.
 // TODO(crbug.com/817495): Eliminate the duplication with other uploaders.
 #if defined(OS_WIN)
 const char kProduct[] = "Chrome";
-#elif defined(OS_MACOSX)
+#elif defined(OS_MAC)
 const char kProduct[] = "Chrome_Mac";
 #elif defined(OS_LINUX)
 const char kProduct[] = "Chrome_Linux";
@@ -345,6 +345,13 @@ void WebRtcEventLogUploaderImpl::OnURLLoadComplete(
 void WebRtcEventLogUploaderImpl::ReportResult(bool upload_successful,
                                               bool delete_history_file) {
   DCHECK(task_runner_->RunsTasksInCurrentSequence());
+
+  if (!callback_) {
+    // ReportResult called twice. Can happen for example if an upload terminates
+    // but is cancelled while the callback from |url_loader_| is still pending
+    // in the queue.
+    return;
+  }
 
   // * If the upload was successful, the file is no longer needed.
   // * If the upload failed, we don't want to retry, because we run the risk of

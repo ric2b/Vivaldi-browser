@@ -182,31 +182,10 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   }
 }
 
-- (void)viewWillAppear:(BOOL)animated {
-  if (!base::FeatureList::IsEnabled(kContainedBVC)) {
-    [self contentWillAppearAnimated:animated];
-  }
-  [super viewWillAppear:animated];
-}
-
-- (void)viewDidAppear:(BOOL)animated {
-  [super viewDidAppear:animated];
-  if (!base::FeatureList::IsEnabled(kContainedBVC)) {
-    [self contentDidAppear];
-  }
-}
-
 - (void)viewDidLayoutSubviews {
   [super viewDidLayoutSubviews];
   // Modify Incognito and Regular Tabs Insets
   [self setInsetForGridViews];
-}
-
-- (void)viewWillDisappear:(BOOL)animated {
-  if (!base::FeatureList::IsEnabled(kContainedBVC)) {
-    [self contentWillDisappearAnimated:animated];
-  }
-  [super viewWillDisappear:animated];
 }
 
 - (void)viewWillTransitionToSize:(CGSize)size
@@ -220,6 +199,7 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
     [self scrollToPage:_currentPage animated:NO];
     [self configureViewControllerForCurrentSizeClassesAndPage];
     [self setInsetForRemoteTabs];
+    [self setInsetForGridViews];
   };
   [coordinator animateAlongsideTransition:animate completion:nil];
 }
@@ -376,11 +356,9 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   }
   [self broadcastIncognitoContentVisibility];
 
-  if (base::FeatureList::IsEnabled(kContainedBVC)) {
-    [self.incognitoTabsViewController contentWillAppearAnimated:animated];
-    [self.regularTabsViewController contentWillAppearAnimated:animated];
-    self.remoteTabsViewController.preventUpdates = NO;
-  }
+  [self.incognitoTabsViewController contentWillAppearAnimated:animated];
+  [self.regularTabsViewController contentWillAppearAnimated:animated];
+  self.remoteTabsViewController.preventUpdates = NO;
 }
 
 - (void)contentDidAppear {
@@ -404,11 +382,9 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   }
   self.viewVisible = NO;
 
-  if (base::FeatureList::IsEnabled(kContainedBVC)) {
-    [self.incognitoTabsViewController contentWillDisappear];
-    [self.regularTabsViewController contentWillDisappear];
-    self.remoteTabsViewController.preventUpdates = YES;
-  }
+  [self.incognitoTabsViewController contentWillDisappear];
+  [self.regularTabsViewController contentWillDisappear];
+  self.remoteTabsViewController.preventUpdates = YES;
 }
 
 #pragma mark - Public Properties
@@ -1309,23 +1285,23 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
 
 - (NSArray*)keyCommands {
   UIKeyCommand* newWindowShortcut = [UIKeyCommand
-       keyCommandWithInput:@"n"
-             modifierFlags:UIKeyModifierCommand
-                    action:@selector(openNewRegularTabForKeyboardCommand)
-      discoverabilityTitle:l10n_util::GetNSStringWithFixup(
-                               IDS_IOS_TOOLS_MENU_NEW_TAB)];
+      keyCommandWithInput:@"n"
+            modifierFlags:UIKeyModifierCommand
+                   action:@selector(openNewRegularTabForKeyboardCommand)];
+  newWindowShortcut.discoverabilityTitle =
+      l10n_util::GetNSStringWithFixup(IDS_IOS_TOOLS_MENU_NEW_TAB);
   UIKeyCommand* newIncognitoWindowShortcut = [UIKeyCommand
-       keyCommandWithInput:@"n"
-             modifierFlags:UIKeyModifierCommand | UIKeyModifierShift
-                    action:@selector(openNewIncognitoTabForKeyboardCommand)
-      discoverabilityTitle:l10n_util::GetNSStringWithFixup(
-                               IDS_IOS_TOOLS_MENU_NEW_INCOGNITO_TAB)];
+      keyCommandWithInput:@"n"
+            modifierFlags:UIKeyModifierCommand | UIKeyModifierShift
+                   action:@selector(openNewIncognitoTabForKeyboardCommand)];
+  newIncognitoWindowShortcut.discoverabilityTitle =
+      l10n_util::GetNSStringWithFixup(IDS_IOS_TOOLS_MENU_NEW_INCOGNITO_TAB);
   UIKeyCommand* newTabShortcut = [UIKeyCommand
-       keyCommandWithInput:@"t"
-             modifierFlags:UIKeyModifierCommand
-                    action:@selector(openNewTabInCurrentPageForKeyboardCommand)
-      discoverabilityTitle:l10n_util::GetNSStringWithFixup(
-                               IDS_IOS_TOOLS_MENU_NEW_TAB)];
+      keyCommandWithInput:@"t"
+            modifierFlags:UIKeyModifierCommand
+                   action:@selector(openNewTabInCurrentPageForKeyboardCommand)];
+  newTabShortcut.discoverabilityTitle =
+      l10n_util::GetNSStringWithFixup(IDS_IOS_TOOLS_MENU_NEW_TAB);
   return @[ newWindowShortcut, newIncognitoWindowShortcut, newTabShortcut ];
 }
 

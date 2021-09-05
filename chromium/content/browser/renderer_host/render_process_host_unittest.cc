@@ -41,19 +41,17 @@ class RenderProcessHostUnitTest : public RenderViewHostImplTestHarness {};
 TEST_F(RenderProcessHostUnitTest, GuestsAreNotSuitableHosts) {
   GURL test_url("http://foo.com");
 
-  MockRenderProcessHost guest_host(browser_context());
-  guest_host.set_is_for_guests_only(true);
+  MockRenderProcessHost guest_host(browser_context(),
+                                   /*is_for_guest_only=*/true);
 
   scoped_refptr<SiteInstanceImpl> site_instance =
       SiteInstanceImpl::CreateForURL(browser_context(), test_url);
   EXPECT_FALSE(RenderProcessHostImpl::IsSuitableHost(
       &guest_host, site_instance->GetIsolationContext(),
-      site_instance->GetSiteURL(), site_instance->lock_url(),
-      site_instance->IsGuest()));
+      site_instance->GetSiteInfo(), site_instance->IsGuest()));
   EXPECT_TRUE(RenderProcessHostImpl::IsSuitableHost(
       process(), site_instance->GetIsolationContext(),
-      site_instance->GetSiteURL(), site_instance->lock_url(),
-      site_instance->IsGuest()));
+      site_instance->GetSiteInfo(), site_instance->IsGuest()));
   EXPECT_EQ(process(),
             RenderProcessHostImpl::GetExistingProcessHost(site_instance.get()));
 }

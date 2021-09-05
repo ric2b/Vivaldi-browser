@@ -11,6 +11,7 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/optional.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "cc/layers/video_frame_provider_client_impl.h"
@@ -23,7 +24,6 @@
 #include "media/base/video_types.h"
 #include "media/video/gpu_memory_buffer_video_frame_pool.h"
 #include "services/viz/public/cpp/gpu/context_provider_command_buffer.h"
-#include "third_party/blink/public/platform/modules/mediastream/web_media_element_source_utils.h"
 #include "third_party/blink/public/platform/modules/mediastream/web_media_stream_audio_renderer.h"
 #include "third_party/blink/public/platform/modules/mediastream/web_media_stream_video_renderer.h"
 #include "third_party/blink/public/platform/modules/webrtc/webrtc_logging.h"
@@ -34,10 +34,9 @@
 #include "third_party/blink/public/platform/web_size.h"
 #include "third_party/blink/public/platform/web_surface_layer_bridge.h"
 #include "third_party/blink/public/web/modules/media/webmediaplayer_util.h"
-#include "third_party/blink/public/web/modules/mediastream/media_stream_video_track.h"
-#include "third_party/blink/public/web/modules/mediastream/web_media_stream_renderer_factory.h"
 #include "third_party/blink/public/web/web_local_frame.h"
 #include "third_party/blink/renderer/modules/mediastream/media_stream_local_frame_wrapper.h"
+#include "third_party/blink/renderer/modules/mediastream/media_stream_renderer_factory.h"
 #include "third_party/blink/renderer/modules/mediastream/webmediaplayer_ms_compositor.h"
 #include "third_party/blink/renderer/platform/mediastream/media_stream_audio_track.h"
 #include "third_party/blink/renderer/platform/mediastream/media_stream_component.h"
@@ -145,8 +144,8 @@ const gfx::Size WebMediaPlayerMS::kUseGpuMemoryBufferVideoFramesMinResolution =
 // should be destructed on the IO thread.
 class WebMediaPlayerMS::FrameDeliverer {
  public:
-  using RepaintCB =
-      WTF::CrossThreadRepeatingFunction<void(scoped_refptr<media::VideoFrame>)>;
+  using RepaintCB = WTF::CrossThreadRepeatingFunction<
+      void(scoped_refptr<media::VideoFrame> frame, bool is_copy)>;
   FrameDeliverer(const base::WeakPtr<WebMediaPlayerMS>& player,
                  RepaintCB enqueue_frame_cb,
                  scoped_refptr<base::SingleThreadTaskRunner> media_task_runner,
@@ -184,7 +183,8 @@ class WebMediaPlayerMS::FrameDeliverer {
 #endif  // defined(OS_ANDROID)
 
     if (!gpu_memory_buffer_pool_) {
-      EnqueueFrame(std::move(frame));
+      int original_frame_id = frame->unique_id();
+      EnqueueFrame(original_frame_id, std::move(frame));
       return;
     }
 
@@ -203,13 +203,16 @@ class WebMediaPlayerMS::FrameDeliverer {
     // frames is unnecessary, because the frames are not going to be shown for
     // the time period.
     if (render_frame_suspended_ || skip_creating_gpu_memory_buffer) {
-      EnqueueFrame(std::move(frame));
+      int original_frame_id = frame->unique_id();
+      EnqueueFrame(original_frame_id, std::move(frame));
       // If there are any existing MaybeCreateHardwareFrame() calls, we do not
       // want those frames to be placed after the current one, so just drop
       // them.
       DropCurrentPoolTasks();
       return;
     }
+
+    int original_frame_id = frame->unique_id();
 
     // |gpu_memory_buffer_pool_| deletion is going to be posted to
     // |media_task_runner_|. base::Unretained() usage is fine since
@@ -222,9 +225,9 @@ class WebMediaPlayerMS::FrameDeliverer {
         base::BindOnce(
             &media::GpuMemoryBufferVideoFramePool::MaybeCreateHardwareFrame,
             base::Unretained(gpu_memory_buffer_pool_.get()), std::move(frame),
-            media::BindToCurrentLoop(
-                base::BindOnce(&FrameDeliverer::EnqueueFrame,
-                               weak_factory_for_pool_.GetWeakPtr()))));
+            media::BindToCurrentLoop(base::BindOnce(
+                &FrameDeliverer::EnqueueFrame,
+                weak_factory_for_pool_.GetWeakPtr(), original_frame_id))));
   }
 
   void SetRenderFrameSuspended(bool render_frame_suspended) {
@@ -232,7 +235,9 @@ class WebMediaPlayerMS::FrameDeliverer {
     render_frame_suspended_ = render_frame_suspended;
   }
 
-  RepaintCB GetRepaintCallback() {
+  WTF::CrossThreadRepeatingFunction<
+      void(scoped_refptr<media::VideoFrame> frame)>
+  GetRepaintCallback() {
     return CrossThreadBindRepeating(&FrameDeliverer::OnVideoFrame,
                                     weak_factory_.GetWeakPtr());
   }
@@ -240,7 +245,8 @@ class WebMediaPlayerMS::FrameDeliverer {
  private:
   friend class WebMediaPlayerMS;
 
-  void EnqueueFrame(scoped_refptr<media::VideoFrame> frame) {
+  void EnqueueFrame(int original_frame_id,
+                    scoped_refptr<media::VideoFrame> frame) {
     DCHECK_CALLED_ON_VALID_THREAD(io_thread_checker_);
 
     {
@@ -256,7 +262,8 @@ class WebMediaPlayerMS::FrameDeliverer {
       }
     }
 
-    enqueue_frame_cb_.Run(std::move(frame));
+    bool is_copy = original_frame_id != frame->unique_id();
+    enqueue_frame_cb_.Run(std::move(frame), is_copy);
   }
 
   void DropCurrentPoolTasks() {
@@ -301,7 +308,6 @@ WebMediaPlayerMS::WebMediaPlayerMS(
     WebMediaPlayerClient* client,
     WebMediaPlayerDelegate* delegate,
     std::unique_ptr<media::MediaLog> media_log,
-    std::unique_ptr<WebMediaStreamRendererFactory> factory,
     scoped_refptr<base::SingleThreadTaskRunner> main_render_task_runner,
     scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
     scoped_refptr<base::SingleThreadTaskRunner> compositor_task_runner,
@@ -322,7 +328,7 @@ WebMediaPlayerMS::WebMediaPlayerMS(
       paused_(true),
       video_transformation_(media::kNoTransformation),
       media_log_(std::move(media_log)),
-      renderer_factory_(std::move(factory)),
+      renderer_factory_(std::make_unique<MediaStreamRendererFactory>()),
       main_render_task_runner_(std::move(main_render_task_runner)),
       io_task_runner_(std::move(io_task_runner)),
       compositor_task_runner_(std::move(compositor_task_runner)),
@@ -345,9 +351,10 @@ WebMediaPlayerMS::WebMediaPlayerMS(
   DCHECK(delegate_);
   weak_this_ = weak_factory_.GetWeakPtr();
   delegate_id_ = delegate_->AddObserver(this);
-  SendLogMessage(String::Format("%s({delegate_id=%d}, {is_audio_element=%s})",
-                                __func__, delegate_id_,
-                                client->IsAudioElement() ? "true" : "false"));
+  SendLogMessage(String::Format(
+      "%s({delegate_id=%d}, {is_audio_element=%s}, {sink_id=%s})", __func__,
+      delegate_id_, client->IsAudioElement() ? "true" : "false",
+      sink_id.Utf8().c_str()));
 
   // TODO(tmathmeyer) WebMediaPlayerImpl gets the URL from the WebLocalFrame.
   // doing that here causes a nullptr deref.
@@ -356,6 +363,8 @@ WebMediaPlayerMS::WebMediaPlayerMS(
 
 WebMediaPlayerMS::~WebMediaPlayerMS() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  SendLogMessage(
+      String::Format("%s() [delegate_id=%d]", __func__, delegate_id_));
 
   if (!web_stream_.IsNull())
     web_stream_.RemoveObserver(this);
@@ -408,7 +417,7 @@ WebMediaPlayer::LoadTiming WebMediaPlayerMS::Load(
   // TODO(acolwell): Change this to DCHECK_EQ(load_type, LoadTypeMediaStream)
   // once Blink-side changes land.
   DCHECK_NE(load_type, kLoadTypeMediaSource);
-  web_stream_ = GetWebMediaStreamFromWebMediaPlayerSource(source);
+  web_stream_ = source.GetAsMediaStream();
   if (!web_stream_.IsNull())
     web_stream_.AddObserver(this);
 
@@ -529,15 +538,15 @@ void WebMediaPlayerMS::OnSurfaceIdUpdated(viz::SurfaceId surface_id) {
     client_->OnPictureInPictureStateChange();
 }
 
-void WebMediaPlayerMS::TrackAdded(const WebMediaStreamTrack& track) {
+void WebMediaPlayerMS::TrackAdded(const WebString& track_id) {
   SendLogMessage(
-      String::Format("%s({track_id=%s})", __func__, track.Id().Utf8().c_str()));
+      String::Format("%s({track_id=%s})", __func__, track_id.Utf8().c_str()));
   Reload();
 }
 
-void WebMediaPlayerMS::TrackRemoved(const WebMediaStreamTrack& track) {
+void WebMediaPlayerMS::TrackRemoved(const WebString& track_id) {
   SendLogMessage(
-      String::Format("%s({track_id=%s})", __func__, track.Id().Utf8().c_str()));
+      String::Format("%s({track_id=%s})", __func__, track_id.Utf8().c_str()));
   Reload();
 }
 
@@ -630,6 +639,12 @@ void WebMediaPlayerMS::ReloadVideo() {
   DCHECK_NE(renderer_action, RendererReloadAction::KEEP_RENDERER);
   if (!paused_)
     delegate_->DidPlayerSizeChange(delegate_id_, NaturalSize());
+
+  // TODO(perkj, magjed): We use OneShot focus type here so that it takes
+  // audio focus once it starts, and then will not respond to further audio
+  // focus changes. See https://crbug.com/596516 for more details.
+  delegate_->DidMediaMetadataChange(delegate_id_, HasAudio(), HasVideo(),
+                                    media::MediaContentType::OneShot);
 }
 
 void WebMediaPlayerMS::ReloadAudio() {
@@ -682,6 +697,12 @@ void WebMediaPlayerMS::ReloadAudio() {
     default:
       break;
   }
+
+  // TODO(perkj, magjed): We use OneShot focus type here so that it takes
+  // audio focus once it starts, and then will not respond to further audio
+  // focus changes. See https://crbug.com/596516 for more details.
+  delegate_->DidMediaMetadataChange(delegate_id_, HasAudio(), HasVideo(),
+                                    media::MediaContentType::OneShot);
 }
 
 void WebMediaPlayerMS::Play() {
@@ -703,16 +724,7 @@ void WebMediaPlayerMS::Play() {
   if (HasVideo())
     delegate_->DidPlayerSizeChange(delegate_id_, NaturalSize());
 
-  // |delegate_| expects the notification only if there is at least one track
-  // actually playing. A media stream might have none since tracks can be
-  // removed from the stream.
-  if (HasAudio() || HasVideo()) {
-    // TODO(perkj, magjed): We use OneShot focus type here so that it takes
-    // audio focus once it starts, and then will not respond to further audio
-    // focus changes. See https://crbug.com/596516 for more details.
-    delegate_->DidPlay(delegate_id_, HasVideo(), HasAudio(),
-                       media::MediaContentType::OneShot);
-  }
+  delegate_->DidPlay(delegate_id_);
 
   delegate_->SetIdle(delegate_id_, false);
   paused_ = false;
@@ -736,7 +748,7 @@ void WebMediaPlayerMS::Pause() {
   if (audio_renderer_)
     audio_renderer_->Pause();
 
-  delegate_->DidPause(delegate_id_);
+  delegate_->DidPause(delegate_id_, /* reached_end_of_stream = */ false);
   delegate_->SetIdle(delegate_id_, true);
 
   paused_ = true;
@@ -797,7 +809,9 @@ void WebMediaPlayerMS::SetSinkId(
   media::OutputDeviceStatusCB callback =
       ConvertToOutputDeviceStatusCB(std::move(completion_callback));
   if (audio_renderer_) {
-    audio_renderer_->SwitchOutputDevice(sink_id.Utf8(), std::move(callback));
+    auto sink_id_utf8 = sink_id.Utf8();
+    audio_renderer_->SwitchOutputDevice(sink_id_utf8, std::move(callback));
+    delegate_->DidAudioOutputSinkChange(delegate_id_, sink_id_utf8);
   } else {
     std::move(callback).Run(media::OUTPUT_DEVICE_STATUS_ERROR_INTERNAL);
     SendLogMessage(String::Format(
@@ -1073,6 +1087,11 @@ void WebMediaPlayerMS::OnExitPictureInPicture() {
   client_->RequestExitPictureInPicture();
 }
 
+void WebMediaPlayerMS::OnSetAudioSink(const std::string& sink_id) {
+  SetSinkId(WebString::FromASCII(sink_id),
+            base::DoNothing::Once<base::Optional<blink::WebSetSinkIdError>>());
+}
+
 void WebMediaPlayerMS::OnVolumeMultiplierUpdate(double multiplier) {
   // TODO(perkj, magjed): See TODO in OnPlay().
 }
@@ -1319,6 +1338,11 @@ void WebMediaPlayerMS::SetGpuMemoryBufferVideoForTesting(
     media::GpuMemoryBufferVideoFramePool* gpu_memory_buffer_pool) {
   CHECK(frame_deliverer_);
   frame_deliverer_->gpu_memory_buffer_pool_.reset(gpu_memory_buffer_pool);
+}
+
+void WebMediaPlayerMS::SetMediaStreamRendererFactoryForTesting(
+    std::unique_ptr<MediaStreamRendererFactory> renderer_factory) {
+  renderer_factory_ = std::move(renderer_factory);
 }
 
 void WebMediaPlayerMS::OnDisplayTypeChanged(

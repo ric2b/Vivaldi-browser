@@ -473,7 +473,7 @@ bool OperaImporter::ImportWand_ReadEntryHTML(
     return true;  // Ignore this entry, no URL
 
   password.signon_realm = password.url.GetOrigin().spec();
-  password.blacklisted_by_user = (field_count == 0);
+  password.blocked_by_user = (field_count == 0);
 
   if (first_field >= 0) {
     password.username_element = fields[first_field].fieldname;
@@ -569,7 +569,7 @@ bool OperaImporter::ImportWand_ReadEntryAuth(
 
   password.url = GURL(url8).ReplaceComponents(rep);
   password.signon_realm = password.url.GetOrigin().spec();
-  password.blacklisted_by_user = (field_count == 0);
+  password.blocked_by_user = (field_count == 0);
 
   if (first_field >= 0) {
     password.username_element = fields[first_field].fieldname;

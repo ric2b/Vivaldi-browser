@@ -18,6 +18,7 @@
 #include "third_party/blink/renderer/core/layout/ng/ng_length_utils.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_physical_box_fragment.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_positioned_float.h"
+#include "third_party/blink/renderer/core/layout/ng/ng_relative_utils.h"
 #include "third_party/blink/renderer/core/paint/ng/ng_paint_fragment.h"
 
 namespace blink {
@@ -196,11 +197,43 @@ void NGBoxFragmentBuilder::AddResult(const NGLayoutResult& child_layout_result,
     PropagateBreak(child_layout_result);
 }
 
+void NGBoxFragmentBuilder::AddChild(const NGPhysicalContainerFragment& child,
+                                    const LogicalOffset& child_offset,
+                                    const LayoutInline* inline_container) {
+  LogicalOffset adjusted_offset = child_offset;
+
+  if (child.IsCSSBox() &&
+      box_type_ != NGPhysicalBoxFragment::NGBoxType::kInlineBox) {
+    // Apply the relative position offset.
+    const auto& box_child = To<NGPhysicalBoxFragment>(child);
+    if (box_child.Style().GetPosition() == EPosition::kRelative) {
+      adjusted_offset += ComputeRelativeOffsetForBoxFragment(
+          box_child, GetWritingDirection(), child_available_size_);
+    }
+
+    // The |may_have_descendant_above_block_start_| flag is used to determine
+    // if a fragment can be re-used when preceding floats are present. This is
+    // relatively rare, and is true if:
+    //  - An inflow child is positioned above our block-start edge.
+    //  - Any inflow descendants (within the same formatting-context) which
+    //    *may* have a child positioned above our block-start edge.
+    if ((child_offset.block_offset < LayoutUnit() &&
+         !box_child.IsOutOfFlowPositioned()) ||
+        (!box_child.IsFormattingContextRoot() &&
+         box_child.MayHaveDescendantAboveBlockStart()))
+      may_have_descendant_above_block_start_ = true;
+  }
+
+  PropagateChildData(child, adjusted_offset, inline_container);
+  AddChildInternal(&child, adjusted_offset);
+}
+
 void NGBoxFragmentBuilder::AddBreakToken(
-    scoped_refptr<const NGBreakToken> token) {
+    scoped_refptr<const NGBreakToken> token,
+    bool is_in_parallel_flow) {
   DCHECK(token.get());
   child_break_tokens_.push_back(std::move(token));
-  has_inflow_child_break_inside_ = true;
+  has_inflow_child_break_inside_ |= !is_in_parallel_flow;
 }
 
 void NGBoxFragmentBuilder::AddOutOfFlowLegacyCandidate(
@@ -295,11 +328,8 @@ scoped_refptr<const NGLayoutResult> NGBoxFragmentBuilder::ToBoxFragment(
           child_break_tokens_.push_back(std::move(token));
       }
     }
-    if (DidBreakSelf() || HasChildBreakInside()) {
-      break_token_ = NGBlockBreakToken::Create(
-          node_, consumed_block_size_, sequence_number_, child_break_tokens_,
-          break_appeal_, has_seen_all_children_, is_at_block_end_);
-    }
+    if (DidBreakSelf() || HasChildBreakInside())
+      break_token_ = NGBlockBreakToken::Create(*this);
   }
 
   if (!has_floating_descendants_for_paint_ && items_builder_) {

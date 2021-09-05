@@ -61,7 +61,7 @@
 #include "base/files/file_descriptor_watcher_posix.h"
 #endif
 
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
 #include "base/mac/scoped_nsautorelease_pool.h"
 #endif
 
@@ -361,7 +361,7 @@ int LaunchChildTestProcessWithOptions(const CommandLine& command_line,
        base::fuchsia::OpenDirectory(nested_data_path).TakeChannel().release()});
 #endif  // defined(OS_FUCHSIA)
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
   // To prevent accidental privilege sharing to an untrusted child, processes
   // are started with PR_SET_NO_NEW_PRIVS. Do not set that here, since this
   // new child will be privileged and trusted.
@@ -436,40 +436,19 @@ int LaunchChildTestProcessWithOptions(const CommandLine& command_line,
     ZX_CHECK(status == ZX_OK, status);
 
     // Cleanup the data directory.
-    CHECK(DeleteFileRecursively(nested_data_path));
+    CHECK(DeletePathRecursively(nested_data_path));
 #elif defined(OS_POSIX)
-
-#if BUILDFLAG(CLANG_PROFILING)
-    // TODO(crbug.com/1094369): Remove this condition once the child process
-    // leaking bug is fixed.
-    //
-    // TODO(crbug.com/1095075): Make test launcher treat lingering child
-    // processes hard failures so that they can be detected and surfaced
-    // gracefully.
-    //
-    // When profiling is enabled, browser child processes take extra time to
-    // dump profiles, which means that lingering processes are much more likely
-    // to happen than non-profiling build. Therefore, on POSIX, in order to
-    // avoid polluting the machine state, ensure any child processes that the
-    // test might have created are cleaned up to avoid potential leaking even
-    // when tests have passed. On Windows, child processes are automatically
-    // cleaned up using JobObjects.
-    //
-    // On non-profiling build, when tests have passed, we don't clean up the
-    // lingering processes even when there are any, and the reason is that they
-    // usually indicate prod issues, letting them slip to the following test
-    // tasks and cause failures increses the chance of them being surfaced.
+    // It is not possible to waitpid() on any leaked sub-processes of the test
+    // batch process, since those are not direct children of this process.
+    // kill()ing the process-group will return a result indicating whether the
+    // group was found (i.e. processes were still running in it) or not (i.e.
+    // sub-processes had exited already). Unfortunately many tests (e.g. browser
+    // tests) have processes exit asynchronously, so checking the kill() result
+    // will report false failures.
+    // Unconditionally kill the process group, regardless of the batch exit-code
+    // until a better solution is available.
     kill(-1 * process.Handle(), SIGKILL);
-#else
-    if (exit_code != 0) {
-      // On POSIX, in case the test does not exit cleanly, either due to a crash
-      // or due to it timing out, we need to clean up any child processes that
-      // it might have created. On Windows, child processes are automatically
-      // cleaned up using JobObjects.
-      KillProcessGroup(process.Handle());
-    }
-#endif
-#endif
+#endif  // defined(OS_POSIX)
 
     GetLiveProcesses()->erase(process.Handle());
   }
@@ -509,7 +488,7 @@ void SetTemporaryDirectory(const FilePath& temp_dir,
                            EnvironmentMap* environment) {
 #if defined(OS_WIN)
   environment->emplace(L"TMP", temp_dir.value());
-#elif defined(OS_MACOSX)
+#elif defined(OS_APPLE)
   environment->emplace("MAC_CHROMIUM_TMPDIR", temp_dir.value());
 #elif defined(OS_POSIX) || defined(OS_FUCHSIA)
   environment->emplace("TMPDIR", temp_dir.value());
@@ -582,7 +561,7 @@ ChildProcessResults DoLaunchChildTestProcess(
 #if !defined(OS_FUCHSIA)
   options.new_process_group = true;
 #endif
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
   options.kill_on_parent_death = true;
 #endif
 
@@ -606,7 +585,7 @@ ChildProcessResults DoLaunchChildTestProcess(
     // On Windows, the reset() above is enough to delete the file since it was
     // painted for such after being opened. Lesser platforms require an explicit
     // delete now.
-    if (!DeleteFile(output_filename, /*recursive=*/false))
+    if (!DeleteFile(output_filename))
       LOG(WARNING) << "Failed to delete " << output_filename.AsUTF8Unsafe();
 #endif
   }
@@ -710,7 +689,7 @@ void TestRunner::LaunchNextTask(scoped_refptr<TaskRunner> task_runner,
   DCHECK(thread_checker_.CalledOnValidThread());
   // delete previous temporary directory
   if (!last_task_temp_dir.empty() &&
-      !DeleteFileRecursively(last_task_temp_dir)) {
+      !DeletePathRecursively(last_task_temp_dir)) {
     // This needs to be non-fatal at least for Windows.
     LOG(WARNING) << "Failed to delete " << last_task_temp_dir.AsUTF8Unsafe();
   }
@@ -1465,6 +1444,10 @@ bool TestLauncher::Init(CommandLine* command_line) {
   results_tracker_.AddGlobalTag("OS_ANDROID");
 #endif
 
+#if defined(OS_APPLE)
+  results_tracker_.AddGlobalTag("OS_APPLE");
+#endif
+
 #if defined(OS_BSD)
   results_tracker_.AddGlobalTag("OS_BSD");
 #endif
@@ -1481,12 +1464,16 @@ bool TestLauncher::Init(CommandLine* command_line) {
   results_tracker_.AddGlobalTag("OS_IOS");
 #endif
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
   results_tracker_.AddGlobalTag("OS_LINUX");
 #endif
 
-#if defined(OS_MACOSX)
-  results_tracker_.AddGlobalTag("OS_MACOSX");
+#if defined(OS_CHROMEOS)
+  results_tracker_.AddGlobalTag("OS_CHROMEOS");
+#endif
+
+#if defined(OS_MAC)
+  results_tracker_.AddGlobalTag("OS_MAC");
 #endif
 
 #if defined(OS_NACL)
@@ -1691,6 +1678,7 @@ void TestLauncher::RunTests() {
       if (!found)
         continue;
     }
+
     if (!negative_test_filter_.empty()) {
       bool excluded = false;
       for (auto filter : negative_test_filter_) {
@@ -1733,9 +1721,41 @@ void TestLauncher::RunTests() {
 
   test_started_count_ = test_names.size();
 
+  // If there are no matching tests, warn and notify of any matches against
+  // *<filter>*.
+  if (test_started_count_ == 0) {
+    PrintFuzzyMatchingTestNames();
+    fprintf(stdout, "WARNING: No matching tests to run.\n");
+    fflush(stdout);
+  }
+
   TestRunner test_runner(this, parallel_jobs_,
                          launcher_delegate_->GetBatchSize());
   test_runner.Run(test_names);
+}
+
+void TestLauncher::PrintFuzzyMatchingTestNames() {
+  for (auto filter : positive_test_filter_) {
+    if (filter.empty())
+      continue;
+    std::string almost_filter;
+    if (filter.front() != '*')
+      almost_filter += '*';
+    almost_filter += filter;
+    if (filter.back() != '*')
+      almost_filter += '*';
+
+    for (const TestInfo& test_info : tests_) {
+      std::string test_name = test_info.GetFullName();
+      std::string prefix_stripped_name = test_info.GetPrefixStrippedName();
+      if (MatchPattern(test_name, almost_filter) ||
+          MatchPattern(prefix_stripped_name, almost_filter)) {
+        fprintf(stdout, "Filter \"%s\" would have matched: %s\n",
+                almost_filter.c_str(), test_name.c_str());
+        fflush(stdout);
+      }
+    }
+  }
 }
 
 bool TestLauncher::RunRetryTests() {
@@ -1837,7 +1857,7 @@ void TestLauncher::OnOutputTimeout() {
   watchdog_timer_.Reset();
 }
 
-size_t NumParallelJobs() {
+size_t NumParallelJobs(unsigned int cores_per_job) {
   const CommandLine* command_line = CommandLine::ForCurrentProcess();
   if (command_line->HasSwitch(switches::kTestLauncherJobs)) {
     // If the number of test launcher jobs was specified, return that number.
@@ -1860,15 +1880,15 @@ size_t NumParallelJobs() {
     return 1U;
   }
 
-  // Default to the number of processor cores.
 #if defined(OS_WIN)
   // Use processors in all groups (Windows splits more than 64 logical
   // processors into groups).
-  return base::checked_cast<size_t>(
+  size_t cores = base::checked_cast<size_t>(
       ::GetActiveProcessorCount(ALL_PROCESSOR_GROUPS));
 #else
-  return base::checked_cast<size_t>(SysInfo::NumberOfProcessors());
+  size_t cores = base::checked_cast<size_t>(SysInfo::NumberOfProcessors());
 #endif
+  return std::max(size_t(1), cores / cores_per_job);
 }
 
 std::string GetTestOutputSnippet(const TestResult& result,

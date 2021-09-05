@@ -39,6 +39,7 @@ extern const char kVivaldiStatsNextWeeklyPing[];
 extern const char kVivaldiStatsNextMonthlyPing[];
 extern const char kVivaldiStatsExtraPing[];
 extern const char kVivaldiStatsExtraPingTime[];
+extern const char kVivaldiProfileImagePath[];
 
 }  // namespace vivaldiprefs
 

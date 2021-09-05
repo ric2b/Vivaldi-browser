@@ -81,7 +81,7 @@ android_resources("java_resources") {
     ":java_strings_grd",
     "//chrome/android:chrome_app_java_resources",
   ]
-  custom_package = "org.chromium.chrome.tab_ui"
+  create_srcjar = false
 }
 
 android_library("java") {
@@ -129,6 +129,7 @@ android_library("java") {
     "java/src/org/chromium/chrome/browser/tasks/tab_management/TabGridItemTouchHelperCallback.java",
     "java/src/org/chromium/chrome/browser/tasks/tab_management/TabGridPanelProperties.java",
     "java/src/org/chromium/chrome/browser/tasks/tab_management/TabGridPanelViewBinder.java",
+    "java/src/org/chromium/chrome/browser/tasks/tab_management/TabGridThumbnailView.java",
     "java/src/org/chromium/chrome/browser/tasks/tab_management/TabGridViewBinder.java",
     "java/src/org/chromium/chrome/browser/tasks/tab_management/TabGroupPopupUiCoordinator.java",
     "java/src/org/chromium/chrome/browser/tasks/tab_management/TabGroupPopupUiMediator.java",
@@ -189,6 +190,7 @@ android_library("java") {
     "//chrome/browser/browser_controls/android:java",
     "//chrome/browser/flags:java",
     "//chrome/browser/profiles/android:java",
+    "//chrome/browser/share:java",
     "//chrome/browser/tab:java",
     "//chrome/browser/tabmodel:java",
     "//chrome/browser/ui/android/favicon:java",
@@ -206,7 +208,7 @@ android_library("java") {
     "//components/infobars/core:infobar_enums_java",
     "//components/policy/android:policy_java",
     "//components/search_engines/android:java",
-    "//components/signin/core/browser/android:java",
+    "//components/signin/public/android:java",
     "//content/public/android:content_java",
     "//content/public/android:content_java_resources",
     "//third_party/android_deps:android_support_v7_appcompat_java",
@@ -218,9 +220,10 @@ android_library("java") {
     "//third_party/android_deps:androidx_lifecycle_lifecycle_runtime_java",
     "//third_party/android_deps:androidx_lifecycle_lifecycle_viewmodel_java",
     "//third_party/android_deps:androidx_recyclerview_recyclerview_java",
-    "//third_party/android_deps:com_google_android_material_material_java",
+    "//third_party/android_deps:material_design_java",
     "//ui/android:ui_java",
   ]
+  resources_package = "org.chromium.chrome.tab_ui"
 }
 
 module_desc_java("module_desc_java") {

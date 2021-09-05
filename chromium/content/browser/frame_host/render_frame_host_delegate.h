@@ -88,6 +88,7 @@ struct AXEventNotificationDetails;
 struct AXLocationChangeNotificationDetails;
 struct ContextMenuParams;
 struct GlobalRequestID;
+struct WebPreferences;
 
 namespace mojom {
 class CreateNewWindowParams;
@@ -250,6 +251,9 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   // Get the accessibility mode for the WebContents that owns this frame.
   virtual ui::AXMode GetAccessibilityMode();
 
+  // Called whenever the AXTreeID for the topmost RenderFrameHost has changed.
+  virtual void AXTreeIDForMainFrameHasChanged() {}
+
   // Called when accessibility events or location changes are received
   // from a render frame, when the accessibility mode has the
   // ui::AXMode::kWebContents flag set.
@@ -345,6 +349,7 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   // Creates a WebUI object for a frame navigating to |url|. If no WebUI
   // applies, returns null.
   virtual std::unique_ptr<WebUIImpl> CreateWebUIForRenderFrameHost(
+      RenderFrameHost* frame_host,
       const GURL& url);
 
   // Called by |frame| to notify that it has received an update on focused
@@ -353,7 +358,8 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   // coordinate space.
   virtual void OnFocusedElementChangedInFrame(
       RenderFrameHostImpl* frame,
-      const gfx::Rect& bounds_in_root_view) {}
+      const gfx::Rect& bounds_in_root_view,
+      blink::mojom::FocusType focus_type) {}
 
   // The page is trying to open a new page (e.g. a popup window). The window
   // should be created associated the process of |opener|, but it should not
@@ -387,9 +393,12 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   // The window is identified by the |main_frame_widget_route_id| passed to
   // CreateNewWindow.
   //
+  // The passed |opener| is the RenderFrameHost initiating the window creation.
+  // It will never be null, even if the opener is suppressed via |params|.
+  //
   // Note: this is not called "ShowWindow" because that will clash with
   // the Windows function which is actually a #define.
-  virtual void ShowCreatedWindow(int process_id,
+  virtual void ShowCreatedWindow(RenderFrameHost* opener,
                                  int main_frame_widget_route_id,
                                  WindowOpenDisposition disposition,
                                  const gfx::Rect& initial_rect,
@@ -451,6 +460,16 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   // of the video to be in Picture-in-Picture mode.
   virtual void UpdatePictureInPictureSurfaceId(const viz::SurfaceId& surface_id,
                                                const gfx::Size& natural_size) {}
+
+  // Returns a copy of the current WebPreferences associated with this
+  // RenderFrameHost's WebContents. If it does not exist, this will create one
+  // and send the newly computed value to all renderers.
+  // Note that this will not trigger a recomputation of WebPreferences if it
+  // already exists - this will return the last computed/set value of
+  // WebPreferences. If we want to guarantee that the value reflects the current
+  // state of the WebContents, NotifyPreferencesChanged() should be called
+  // before calling this.
+  virtual const WebPreferences& GetOrCreateWebPreferences() = 0;
 
   // Returns the visibility of the delegate.
   virtual Visibility GetVisibility();

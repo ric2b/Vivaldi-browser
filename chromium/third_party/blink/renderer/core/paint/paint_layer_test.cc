@@ -4,9 +4,7 @@
 
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
 
-#include "base/test/scoped_feature_list.h"
 #include "testing/gmock/include/gmock/gmock.h"
-#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/renderer/core/dom/pseudo_element.h"
 #include "third_party/blink/renderer/core/html/html_iframe_element.h"
 #include "third_party/blink/renderer/core/layout/layout_box_model_object.h"
@@ -1236,66 +1234,6 @@ TEST_P(PaintLayerTest, DescendantDependentFlagsStopsAtThrottledFrames) {
                    ->needs_descendant_dependent_flags_update_);
 }
 
-TEST_P(PaintLayerTest, PaintInvalidationOnNonCompositedScroll) {
-  if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled())
-    return;
-
-  SetBodyInnerHTML(R"HTML(
-    <style>* { margin: 0 } ::-webkit-scrollbar { display: none }</style>
-    <div id='scroller' style='overflow: scroll; width: 50px; height: 50px'>
-      <div style='height: 400px'>
-        <div id='content-layer' style='position: relative; height: 10px;
-            top: 30px; background: blue'>
-          <div id='content' style='height: 5px; background: yellow'></div>
-        </div>
-      </div>
-    </div>
-  )HTML");
-
-  LayoutBox* scroller = ToLayoutBox(GetLayoutObjectByElementId("scroller"));
-  LayoutObject* content_layer = GetLayoutObjectByElementId("content-layer");
-  LayoutObject* content = GetLayoutObjectByElementId("content");
-  EXPECT_EQ(IntRect(0, 30, 50, 10),
-            content_layer->FirstFragment().VisualRect());
-  EXPECT_EQ(IntRect(0, 30, 50, 5), content->FirstFragment().VisualRect());
-
-  scroller->GetScrollableArea()->SetScrollOffset(
-      ScrollOffset(0, 20), mojom::blink::ScrollType::kProgrammatic);
-  UpdateAllLifecyclePhasesForTest();
-  EXPECT_EQ(IntRect(0, 30, 50, 10),
-            content_layer->FirstFragment().VisualRect());
-  EXPECT_EQ(IntRect(0, 30, 50, 5), content->FirstFragment().VisualRect());
-}
-
-TEST_P(PaintLayerTest, PaintInvalidationOnCompositedScroll) {
-  SetBodyInnerHTML(R"HTML(
-    <style>* { margin: 0 } ::-webkit-scrollbar { display: none }</style>
-    <div id='scroller' style='overflow: scroll; width: 50px; height: 50px;
-        will-change: transform'>
-      <div style='height: 400px'>
-        <div id='content-layer' style='position: relative; height: 10px;
-            top: 30px; background: blue'>
-          <div id='content' style='height: 5px; background: yellow'></div>
-        </div>
-      </div>
-    </div>
-  )HTML");
-
-  LayoutBox* scroller = ToLayoutBox(GetLayoutObjectByElementId("scroller"));
-  LayoutObject* content_layer = GetLayoutObjectByElementId("content-layer");
-  LayoutObject* content = GetLayoutObjectByElementId("content");
-  EXPECT_EQ(IntRect(0, 30, 50, 10),
-            content_layer->FirstFragment().VisualRect());
-  EXPECT_EQ(IntRect(0, 30, 50, 5), content->FirstFragment().VisualRect());
-
-  scroller->GetScrollableArea()->SetScrollOffset(
-      ScrollOffset(0, 20), mojom::blink::ScrollType::kProgrammatic);
-  UpdateAllLifecyclePhasesForTest();
-  EXPECT_EQ(IntRect(0, 30, 50, 10),
-            content_layer->FirstFragment().VisualRect());
-  EXPECT_EQ(IntRect(0, 30, 50, 5), content->FirstFragment().VisualRect());
-}
-
 TEST_P(PaintLayerTest, CompositingContainerStackedFloatUnderStackingInline) {
   SetBodyInnerHTML(R"HTML(
     <div id='compositedContainer' style='position: relative;
@@ -1574,34 +1512,51 @@ TEST_P(PaintLayerTest, FloatLayerAndAbsoluteUnderInlineLayer) {
   EXPECT_EQ(container, span->ContainingLayer());
 
   if (RuntimeEnabledFeatures::LayoutNGEnabled()) {
-    EXPECT_EQ(PhysicalOffset(0, 0), floating->LocationWithoutPositionOffset());
-    EXPECT_EQ(PhysicalOffset(50, 50),
+    EXPECT_EQ(PhysicalOffset(150, 150),
+              floating->LocationWithoutPositionOffset());
+    EXPECT_EQ(PhysicalOffset(0, 0),
               floating->GetLayoutObject().OffsetForInFlowPosition());
+    EXPECT_EQ(PhysicalOffset(150, 150),
+              floating->VisualOffsetFromAncestor(span));
+    EXPECT_EQ(PhysicalOffset(183, 183),
+              floating->VisualOffsetFromAncestor(container));
   } else {
     EXPECT_EQ(PhysicalOffset(33, 33),
               floating->LocationWithoutPositionOffset());
     EXPECT_EQ(PhysicalOffset(50, 50),
               floating->GetLayoutObject().OffsetForInFlowPosition());
-  }
-  EXPECT_EQ(PhysicalOffset(50, 50), absolute->LocationWithoutPositionOffset());
-  EXPECT_EQ(PhysicalOffset(33, 33), span->LocationWithoutPositionOffset());
-  EXPECT_EQ(PhysicalOffset(100, 100),
-            span->GetLayoutObject().OffsetForInFlowPosition());
-  EXPECT_EQ(PhysicalOffset(20, 20), container->LocationWithoutPositionOffset());
-
-  if (RuntimeEnabledFeatures::LayoutNGEnabled()) {
-    EXPECT_EQ(PhysicalOffset(50, 50), floating->VisualOffsetFromAncestor(span));
-    EXPECT_EQ(PhysicalOffset(183, 183),
-              floating->VisualOffsetFromAncestor(container));
-  } else {
     EXPECT_EQ(PhysicalOffset(-50, -50),
               floating->VisualOffsetFromAncestor(span));
     EXPECT_EQ(PhysicalOffset(83, 83),
               floating->VisualOffsetFromAncestor(container));
   }
-  EXPECT_EQ(PhysicalOffset(50, 50), absolute->VisualOffsetFromAncestor(span));
-  EXPECT_EQ(PhysicalOffset(183, 183),
-            absolute->VisualOffsetFromAncestor(container));
+
+  EXPECT_EQ(PhysicalOffset(20, 20), container->LocationWithoutPositionOffset());
+
+  if (RuntimeEnabledFeatures::LayoutNGEnabled()) {
+    EXPECT_EQ(PhysicalOffset(33, 33), span->LocationWithoutPositionOffset());
+    EXPECT_EQ(PhysicalOffset(0, 0),
+              span->GetLayoutObject().OffsetForInFlowPosition());
+  } else {
+    EXPECT_EQ(PhysicalOffset(33, 33), span->LocationWithoutPositionOffset());
+    EXPECT_EQ(PhysicalOffset(100, 100),
+              span->GetLayoutObject().OffsetForInFlowPosition());
+  }
+
+  if (RuntimeEnabledFeatures::LayoutNGEnabled()) {
+    EXPECT_EQ(PhysicalOffset(150, 150),
+              absolute->LocationWithoutPositionOffset());
+    EXPECT_EQ(PhysicalOffset(150, 150),
+              absolute->VisualOffsetFromAncestor(span));
+    EXPECT_EQ(PhysicalOffset(183, 183),
+              absolute->VisualOffsetFromAncestor(container));
+  } else {
+    EXPECT_EQ(PhysicalOffset(50, 50),
+              absolute->LocationWithoutPositionOffset());
+    EXPECT_EQ(PhysicalOffset(50, 50), absolute->VisualOffsetFromAncestor(span));
+    EXPECT_EQ(PhysicalOffset(183, 183),
+              absolute->VisualOffsetFromAncestor(container));
+  }
 }
 
 TEST_P(PaintLayerTest, FloatLayerUnderInlineLayerScrolled) {
@@ -1631,19 +1586,26 @@ TEST_P(PaintLayerTest, FloatLayerUnderInlineLayerScrolled) {
   EXPECT_EQ(container, span->Parent());
   EXPECT_EQ(container, span->ContainingLayer());
 
-  EXPECT_EQ(PhysicalOffset(0, 0), span->LocationWithoutPositionOffset());
-  EXPECT_EQ(PhysicalOffset(100, 100),
-            span->GetLayoutObject().OffsetForInFlowPosition());
-  EXPECT_EQ(LayoutSize(0, 400),
-            span->ContainingLayer()->PixelSnappedScrolledContentOffset());
   if (RuntimeEnabledFeatures::LayoutNGEnabled()) {
-    EXPECT_EQ(PhysicalOffset(0, 0), floating->LocationWithoutPositionOffset());
-    EXPECT_EQ(PhysicalOffset(50, 50),
+    EXPECT_EQ(PhysicalOffset(0, 0), span->LocationWithoutPositionOffset());
+    EXPECT_EQ(PhysicalOffset(0, 0),
+              span->GetLayoutObject().OffsetForInFlowPosition());
+    EXPECT_EQ(LayoutSize(0, 400),
+              span->ContainingLayer()->PixelSnappedScrolledContentOffset());
+    EXPECT_EQ(PhysicalOffset(150, 150),
+              floating->LocationWithoutPositionOffset());
+    EXPECT_EQ(PhysicalOffset(0, 0),
               floating->GetLayoutObject().OffsetForInFlowPosition());
-    EXPECT_EQ(PhysicalOffset(50, 50), floating->VisualOffsetFromAncestor(span));
+    EXPECT_EQ(PhysicalOffset(150, 150),
+              floating->VisualOffsetFromAncestor(span));
     EXPECT_EQ(PhysicalOffset(150, -250),
               floating->VisualOffsetFromAncestor(container));
   } else {
+    EXPECT_EQ(PhysicalOffset(0, 0), span->LocationWithoutPositionOffset());
+    EXPECT_EQ(PhysicalOffset(100, 100),
+              span->GetLayoutObject().OffsetForInFlowPosition());
+    EXPECT_EQ(LayoutSize(0, 400),
+              span->ContainingLayer()->PixelSnappedScrolledContentOffset());
     EXPECT_EQ(PhysicalOffset(0, 0), floating->LocationWithoutPositionOffset());
     EXPECT_EQ(PhysicalOffset(50, 50),
               floating->GetLayoutObject().OffsetForInFlowPosition());
@@ -1674,16 +1636,32 @@ TEST_P(PaintLayerTest, FloatLayerUnderBlockUnderInlineLayer) {
   EXPECT_EQ(span, floating->Parent());
   EXPECT_EQ(span, floating->ContainingLayer());
 
-  EXPECT_EQ(PhysicalOffset(33, 33), floating->LocationWithoutPositionOffset());
-  EXPECT_EQ(PhysicalOffset(50, 50),
-            floating->GetLayoutObject().OffsetForInFlowPosition());
-  EXPECT_EQ(PhysicalOffset(0, 0), span->LocationWithoutPositionOffset());
-  EXPECT_EQ(PhysicalOffset(100, 100),
-            span->GetLayoutObject().OffsetForInFlowPosition());
-  EXPECT_EQ(PhysicalOffset(83, 83), floating->VisualOffsetFromAncestor(span));
-  EXPECT_EQ(PhysicalOffset(183, 183),
-            floating->VisualOffsetFromAncestor(
-                GetDocument().GetLayoutView()->Layer()));
+  if (RuntimeEnabledFeatures::LayoutNGEnabled()) {
+    EXPECT_EQ(PhysicalOffset(183, 183),
+              floating->LocationWithoutPositionOffset());
+    EXPECT_EQ(PhysicalOffset(0, 0),
+              floating->GetLayoutObject().OffsetForInFlowPosition());
+    EXPECT_EQ(PhysicalOffset(0, 0), span->LocationWithoutPositionOffset());
+    EXPECT_EQ(PhysicalOffset(0, 0),
+              span->GetLayoutObject().OffsetForInFlowPosition());
+    EXPECT_EQ(PhysicalOffset(183, 183),
+              floating->VisualOffsetFromAncestor(span));
+    EXPECT_EQ(PhysicalOffset(183, 183),
+              floating->VisualOffsetFromAncestor(
+                  GetDocument().GetLayoutView()->Layer()));
+  } else {
+    EXPECT_EQ(PhysicalOffset(33, 33),
+              floating->LocationWithoutPositionOffset());
+    EXPECT_EQ(PhysicalOffset(50, 50),
+              floating->GetLayoutObject().OffsetForInFlowPosition());
+    EXPECT_EQ(PhysicalOffset(0, 0), span->LocationWithoutPositionOffset());
+    EXPECT_EQ(PhysicalOffset(100, 100),
+              span->GetLayoutObject().OffsetForInFlowPosition());
+    EXPECT_EQ(PhysicalOffset(83, 83), floating->VisualOffsetFromAncestor(span));
+    EXPECT_EQ(PhysicalOffset(183, 183),
+              floating->VisualOffsetFromAncestor(
+                  GetDocument().GetLayoutView()->Layer()));
+  }
 }
 
 TEST_P(PaintLayerTest, FloatLayerUnderFloatUnderInlineLayer) {
@@ -1708,18 +1686,27 @@ TEST_P(PaintLayerTest, FloatLayerUnderFloatUnderInlineLayer) {
     EXPECT_EQ(span->Parent(), floating->ContainingLayer());
   }
 
-  EXPECT_EQ(PhysicalOffset(33, 33), floating->LocationWithoutPositionOffset());
-  EXPECT_EQ(PhysicalOffset(50, 50),
-            floating->GetLayoutObject().OffsetForInFlowPosition());
-  EXPECT_EQ(PhysicalOffset(0, 0), span->LocationWithoutPositionOffset());
-  EXPECT_EQ(PhysicalOffset(100, 100),
-            span->GetLayoutObject().OffsetForInFlowPosition());
   if (RuntimeEnabledFeatures::LayoutNGEnabled()) {
-    EXPECT_EQ(PhysicalOffset(83, 83), floating->VisualOffsetFromAncestor(span));
+    EXPECT_EQ(PhysicalOffset(0, 0), span->LocationWithoutPositionOffset());
+    EXPECT_EQ(PhysicalOffset(0, 0),
+              span->GetLayoutObject().OffsetForInFlowPosition());
+    EXPECT_EQ(PhysicalOffset(183, 183),
+              floating->LocationWithoutPositionOffset());
+    EXPECT_EQ(PhysicalOffset(0, 0),
+              floating->GetLayoutObject().OffsetForInFlowPosition());
+    EXPECT_EQ(PhysicalOffset(183, 183),
+              floating->VisualOffsetFromAncestor(span));
     EXPECT_EQ(PhysicalOffset(183, 183),
               floating->VisualOffsetFromAncestor(
                   GetDocument().GetLayoutView()->Layer()));
   } else {
+    EXPECT_EQ(PhysicalOffset(0, 0), span->LocationWithoutPositionOffset());
+    EXPECT_EQ(PhysicalOffset(100, 100),
+              span->GetLayoutObject().OffsetForInFlowPosition());
+    EXPECT_EQ(PhysicalOffset(33, 33),
+              floating->LocationWithoutPositionOffset());
+    EXPECT_EQ(PhysicalOffset(50, 50),
+              floating->GetLayoutObject().OffsetForInFlowPosition());
     EXPECT_EQ(PhysicalOffset(-17, -17),
               floating->VisualOffsetFromAncestor(span));
     EXPECT_EQ(PhysicalOffset(83, 83),
@@ -1754,22 +1741,36 @@ TEST_P(PaintLayerTest, FloatLayerUnderFloatLayerUnderInlineLayer) {
     EXPECT_EQ(span->Parent(), floating_parent->ContainingLayer());
   }
 
-  EXPECT_EQ(PhysicalOffset(0, 0), floating->LocationWithoutPositionOffset());
-  EXPECT_EQ(PhysicalOffset(50, 50),
-            floating->GetLayoutObject().OffsetForInFlowPosition());
-  EXPECT_EQ(PhysicalOffset(33, 33),
-            floating_parent->LocationWithoutPositionOffset());
-  EXPECT_EQ(PhysicalOffset(0, 0), span->LocationWithoutPositionOffset());
-  EXPECT_EQ(PhysicalOffset(100, 100),
-            span->GetLayoutObject().OffsetForInFlowPosition());
   if (RuntimeEnabledFeatures::LayoutNGEnabled()) {
-    EXPECT_EQ(PhysicalOffset(83, 83), floating->VisualOffsetFromAncestor(span));
-    EXPECT_EQ(PhysicalOffset(33, 33),
+    EXPECT_EQ(PhysicalOffset(50, 50),
+              floating->LocationWithoutPositionOffset());
+    EXPECT_EQ(PhysicalOffset(0, 0),
+              floating->GetLayoutObject().OffsetForInFlowPosition());
+    EXPECT_EQ(PhysicalOffset(133, 133),
+              floating_parent->LocationWithoutPositionOffset());
+    EXPECT_EQ(PhysicalOffset(0, 0), span->LocationWithoutPositionOffset());
+    EXPECT_EQ(PhysicalOffset(0, 0),
+              span->GetLayoutObject().OffsetForInFlowPosition());
+    EXPECT_EQ(PhysicalOffset(0, 0),
+              span->GetLayoutObject().OffsetForInFlowPosition());
+    EXPECT_EQ(PhysicalOffset(183, 183),
+              floating->VisualOffsetFromAncestor(span));
+    EXPECT_EQ(PhysicalOffset(133, 133),
               floating_parent->VisualOffsetFromAncestor(span));
     EXPECT_EQ(PhysicalOffset(183, 183),
               floating->VisualOffsetFromAncestor(
                   GetDocument().GetLayoutView()->Layer()));
   } else {
+    EXPECT_EQ(PhysicalOffset(0, 0), floating->LocationWithoutPositionOffset());
+    EXPECT_EQ(PhysicalOffset(50, 50),
+              floating->GetLayoutObject().OffsetForInFlowPosition());
+    EXPECT_EQ(PhysicalOffset(33, 33),
+              floating_parent->LocationWithoutPositionOffset());
+    EXPECT_EQ(PhysicalOffset(0, 0), span->LocationWithoutPositionOffset());
+    EXPECT_EQ(PhysicalOffset(100, 100),
+              span->GetLayoutObject().OffsetForInFlowPosition());
+    EXPECT_EQ(PhysicalOffset(100, 100),
+              span->GetLayoutObject().OffsetForInFlowPosition());
     EXPECT_EQ(PhysicalOffset(-17, -17),
               floating->VisualOffsetFromAncestor(span));
     EXPECT_EQ(PhysicalOffset(-67, -67),
@@ -1803,19 +1804,24 @@ TEST_P(PaintLayerTest, LayerUnderFloatUnderInlineLayer) {
     EXPECT_EQ(span->Parent(), child->ContainingLayer());
   }
 
-  EXPECT_EQ(PhysicalOffset(33, 33), child->LocationWithoutPositionOffset());
-  EXPECT_EQ(PhysicalOffset(50, 50),
-            child->GetLayoutObject().OffsetForInFlowPosition());
   EXPECT_EQ(PhysicalOffset(0, 0), span->LocationWithoutPositionOffset());
-  EXPECT_EQ(PhysicalOffset(100, 100),
-            span->GetLayoutObject().OffsetForInFlowPosition());
   if (RuntimeEnabledFeatures::LayoutNGEnabled()) {
-    EXPECT_EQ(PhysicalOffset(83, 83), child->VisualOffsetFromAncestor(span));
+    EXPECT_EQ(PhysicalOffset(183, 183), child->LocationWithoutPositionOffset());
+    EXPECT_EQ(PhysicalOffset(0, 0),
+              child->GetLayoutObject().OffsetForInFlowPosition());
+    EXPECT_EQ(PhysicalOffset(0, 0),
+              span->GetLayoutObject().OffsetForInFlowPosition());
+    EXPECT_EQ(PhysicalOffset(183, 183), child->VisualOffsetFromAncestor(span));
     EXPECT_EQ(PhysicalOffset(183, 183),
               child->VisualOffsetFromAncestor(
                   GetDocument().GetLayoutView()->Layer()));
 
   } else {
+    EXPECT_EQ(PhysicalOffset(33, 33), child->LocationWithoutPositionOffset());
+    EXPECT_EQ(PhysicalOffset(50, 50),
+              child->GetLayoutObject().OffsetForInFlowPosition());
+    EXPECT_EQ(PhysicalOffset(100, 100),
+              span->GetLayoutObject().OffsetForInFlowPosition());
     EXPECT_EQ(PhysicalOffset(-17, -17), child->VisualOffsetFromAncestor(span));
     EXPECT_EQ(PhysicalOffset(83, 83),
               child->VisualOffsetFromAncestor(
@@ -2596,52 +2602,7 @@ TEST_P(PaintLayerTest, InlineWithBackdropFilterHasPaintLayer) {
   EXPECT_NE(nullptr, paint_layer);
 }
 
-TEST_P(PaintLayerTest, FixedDoesNotUseExpandedBoundingBoxForOverlap) {
-  // TODO(samfort): Remove this test after kMaxOverlapBoundsForFixed ships.
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitWithFeatureState(blink::features::kMaxOverlapBoundsForFixed,
-                                    false);
-
-  SetBodyInnerHTML(R"HTML(
-    <style>
-      * {
-        margin: 0;
-      }
-      body {
-        height: 610px;
-        width: 820px;
-      }
-      #fixed {
-        height: 10px;
-        left: 50px;
-        position: fixed;
-        top: 50px;
-        width: 10px;
-      }
-    </style>
-    <div id=fixed></div>
-  )HTML");
-
-  PaintLayer* fixed =
-      ToLayoutBoxModelObject(GetLayoutObjectByElementId("fixed"))->Layer();
-  EXPECT_EQ(fixed->BoundingBoxForCompositingOverlapTest(),
-            PhysicalRect(0, 0, 10, 10));
-
-  // Modify the scroll offset and ensure that the bounding box is still the
-  // same.
-  GetDocument().View()->LayoutViewport()->SetScrollOffset(
-      ScrollOffset(10, 10), mojom::blink::ScrollType::kProgrammatic);
-  UpdateAllLifecyclePhasesForTest();
-
-  EXPECT_EQ(fixed->BoundingBoxForCompositingOverlapTest(),
-            PhysicalRect(0, 0, 10, 10));
-}
-
 TEST_P(PaintLayerTest, FixedUsesExpandedBoundingBoxForOverlap) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitWithFeatureState(blink::features::kMaxOverlapBoundsForFixed,
-                                    true);
-
   SetBodyInnerHTML(R"HTML(
     <style>
       * {
@@ -2678,10 +2639,6 @@ TEST_P(PaintLayerTest, FixedUsesExpandedBoundingBoxForOverlap) {
 }
 
 TEST_P(PaintLayerTest, FixedInScrollerUsesExpandedBoundingBoxForOverlap) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitWithFeatureState(blink::features::kMaxOverlapBoundsForFixed,
-                                    true);
-
   SetBodyInnerHTML(R"HTML(
     <style>
       * {
@@ -2744,10 +2701,6 @@ TEST_P(PaintLayerTest, FixedInScrollerUsesExpandedBoundingBoxForOverlap) {
 }
 
 TEST_P(PaintLayerTest, FixedUnderTransformDoesNotExpandBoundingBoxForOverlap) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitWithFeatureState(blink::features::kMaxOverlapBoundsForFixed,
-                                    true);
-
   SetBodyInnerHTML(R"HTML(
     <style>
       .anim {
@@ -2792,10 +2745,6 @@ TEST_P(PaintLayerTest, FixedUnderTransformDoesNotExpandBoundingBoxForOverlap) {
 }
 
 TEST_P(PaintLayerTest, NestedFixedUsesExpandedBoundingBoxForOverlap) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitWithFeatureState(blink::features::kMaxOverlapBoundsForFixed,
-                                    true);
-
   SetBodyInnerHTML(R"HTML(
     <style>
       * {
@@ -2861,6 +2810,122 @@ TEST_P(PaintLayerTest, NestedFixedUsesExpandedBoundingBoxForOverlap) {
 
   EXPECT_EQ(fixed->BoundingBoxForCompositingOverlapTest(),
             PhysicalRect(-10, -10, 410, 410));
+}
+
+TEST_P(PaintLayerTest, DirectCompositingReasonsCrossingFrameBoundaries) {
+  if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled())
+    return;
+  SetBodyInnerHTML(R"HTML(
+    <iframe></iframe>
+  )HTML");
+  SetChildFrameHTML(R"HTML(
+    <div id=target style="position: relative"></div>
+  )HTML");
+  UpdateAllLifecyclePhasesForTest();
+
+  PaintLayer* target =
+      ToLayoutBoxModelObject(
+          ChildDocument().getElementById("target")->GetLayoutObject())
+          ->Layer();
+
+  EXPECT_EQ(
+      GetDocument().View()->GetLayoutView()->Layer(),
+      target->EnclosingDirectlyCompositableLayerCrossingFrameBoundaries());
+}
+
+TEST_P(PaintLayerTest,
+       DirectCompositingReasonsCrossingFrameBoundariesCompositedIframe) {
+  if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled())
+    return;
+  SetBodyInnerHTML(R"HTML(
+    <iframe id="iframe" style="will-change: transform";></iframe>
+  )HTML");
+  SetChildFrameHTML(R"HTML(
+    <div id=target style="position: relative"></div>
+  )HTML");
+  UpdateAllLifecyclePhasesForTest();
+
+  PaintLayer* target =
+      ToLayoutBoxModelObject(
+          ChildDocument().getElementById("target")->GetLayoutObject())
+          ->Layer();
+
+  PaintLayer* iframe =
+      ToLayoutBoxModelObject(
+          GetDocument().getElementById("iframe")->GetLayoutObject())
+          ->Layer();
+
+  EXPECT_EQ(
+      iframe,
+      target->EnclosingDirectlyCompositableLayerCrossingFrameBoundaries());
+}
+
+TEST_P(PaintLayerTest,
+       DirectCompositingReasonsCrossingFrameBoundariesCompositedParent) {
+  if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled())
+    return;
+  SetBodyInnerHTML(R"HTML(
+    <iframe></iframe>
+  )HTML");
+  SetChildFrameHTML(R"HTML(
+    <div id="parent" style="will-change: transform">
+      <div id=target style="position: relative"></div>
+    </div>
+  )HTML");
+  UpdateAllLifecyclePhasesForTest();
+
+  PaintLayer* target =
+      ToLayoutBoxModelObject(
+          ChildDocument().getElementById("target")->GetLayoutObject())
+          ->Layer();
+
+  PaintLayer* parent =
+      ToLayoutBoxModelObject(
+          ChildDocument().getElementById("parent")->GetLayoutObject())
+          ->Layer();
+
+  EXPECT_EQ(
+      parent,
+      target->EnclosingDirectlyCompositableLayerCrossingFrameBoundaries());
+}
+
+TEST_P(PaintLayerTest, GlobalRootScrollerHitTest) {
+  SetBodyInnerHTML(R"HTML(
+    <style>
+      :root {
+        clip-path: circle(30%);
+        background:blue;
+        transform: rotate(30deg);
+        transform-style: preserve-3d;
+      }
+      #perspective {
+        perspective:100px;
+      }
+      #threedee {
+        transform: rotate3d(1, 1, 1, 45deg);
+        width:100px; height:200px;
+      }
+    </style>
+    <div id="perspective">
+      <div id="threedee"></div>
+    </div>
+  )HTML");
+  GetDocument().GetPage()->SetPageScaleFactor(2);
+  UpdateAllLifecyclePhasesForTest();
+
+  const HitTestRequest hit_request(HitTestRequest::kActive);
+  const HitTestLocation location(IntPoint(400, 300));
+  HitTestResult result;
+  GetLayoutView().HitTestNoLifecycleUpdate(location, result);
+  EXPECT_EQ(result.InnerNode(), GetDocument().documentElement());
+  EXPECT_EQ(result.GetScrollbar(), nullptr);
+
+  if (GetDocument().GetPage()->GetScrollbarTheme().AllowsHitTest()) {
+    const HitTestLocation location_scrollbar(IntPoint(790, 300));
+    HitTestResult result_scrollbar;
+    EXPECT_EQ(result_scrollbar.InnerNode(), &GetDocument());
+    EXPECT_NE(result_scrollbar.GetScrollbar(), nullptr);
+  }
 }
 
 }  // namespace blink

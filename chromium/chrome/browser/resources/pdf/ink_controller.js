@@ -78,6 +78,9 @@ export class InkController extends ContentController {
   }
 
   /** @override */
+  setDisplayAnnotations(displayAnnotations) {}
+
+  /** @override */
   setTwoUpView(enableTwoUpView) {
     // TODO(dstockwell): Implement two up view.
   }
@@ -117,7 +120,9 @@ export class InkController extends ContentController {
             new CustomEvent('set-annotation-undo-state', {detail: e.detail}));
       });
     }
-    return this.inkHost_.load(filename, data);
+    return this.inkHost_.load(filename, data).then(() => {
+      this.eventTarget_.dispatchEvent(new CustomEvent('loaded'));
+    });
   }
 
   /** @override */

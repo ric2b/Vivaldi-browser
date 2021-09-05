@@ -5,14 +5,25 @@
 #ifndef CHROME_SERVICES_SHARING_NEARBY_NEARBY_CONNECTIONS_H_
 #define CHROME_SERVICES_SHARING_NEARBY_NEARBY_CONNECTIONS_H_
 
+#include <stdint.h>
+#include <memory>
+
 #include "base/callback_forward.h"
+#include "base/containers/flat_map.h"
+#include "base/files/file.h"
 #include "base/memory/weak_ptr.h"
+#include "base/optional.h"
+#include "base/synchronization/lock.h"
+#include "base/task/post_task.h"
+#include "base/thread_annotations.h"
 #include "chrome/services/sharing/public/mojom/nearby_connections.mojom.h"
+#include "chrome/services/sharing/public/mojom/webrtc_signaling_messenger.mojom.h"
 #include "device/bluetooth/public/mojom/adapter.mojom.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
-#include "mojo/public/cpp/bindings/remote.h"
+#include "mojo/public/cpp/bindings/shared_remote.h"
+#include "third_party/nearby/src/cpp/core_v2/core.h"
 
 namespace location {
 namespace nearby {
@@ -33,21 +44,102 @@ class NearbyConnections : public mojom::NearbyConnections {
   // destroy this instance.
   NearbyConnections(
       mojo::PendingReceiver<mojom::NearbyConnections> nearby_connections,
-      mojo::PendingRemote<mojom::NearbyConnectionsHost> host,
-      base::OnceClosure on_disconnect);
+      mojom::NearbyConnectionsDependenciesPtr dependencies,
+      base::OnceClosure on_disconnect,
+      std::unique_ptr<Core> core = std::make_unique<Core>());
+
   NearbyConnections(const NearbyConnections&) = delete;
   NearbyConnections& operator=(const NearbyConnections&) = delete;
   ~NearbyConnections() override;
 
+  // Should only be used by objects within lifetime of NearbyConnections.
+  static NearbyConnections& GetInstance();
+
+  // May return null if Nearby Connections was not provided an Adapter (likely
+  // because this device does not support Bluetooth).
+  bluetooth::mojom::Adapter* GetBluetoothAdapter();
+
+  network::mojom::P2PSocketManager* GetWebRtcP2PSocketManager();
+  network::mojom::MdnsResponder* GetWebRtcMdnsResponder();
+  sharing::mojom::IceConfigFetcher* GetWebRtcIceConfigFetcher();
+  sharing::mojom::WebRtcSignalingMessenger* GetWebRtcSignalingMessenger();
+
+  // mojom::NearbyConnections:
+  void StartAdvertising(
+      const std::vector<uint8_t>& endpoint_info,
+      const std::string& service_id,
+      mojom::AdvertisingOptionsPtr options,
+      mojo::PendingRemote<mojom::ConnectionLifecycleListener> listener,
+      StartAdvertisingCallback callback) override;
+  void StopAdvertising(StopAdvertisingCallback callback) override;
+  void StartDiscovery(
+      const std::string& service_id,
+      mojom::DiscoveryOptionsPtr options,
+      mojo::PendingRemote<mojom::EndpointDiscoveryListener> listener,
+      StartDiscoveryCallback callback) override;
+  void StopDiscovery(StopDiscoveryCallback callback) override;
+  void RequestConnection(
+      const std::vector<uint8_t>& endpoint_info,
+      const std::string& endpoint_id,
+      mojo::PendingRemote<mojom::ConnectionLifecycleListener> listener,
+      RequestConnectionCallback callback) override;
+  void DisconnectFromEndpoint(const std::string& endpoint_id,
+                              DisconnectFromEndpointCallback callback) override;
+  void AcceptConnection(const std::string& endpoint_id,
+                        mojo::PendingRemote<mojom::PayloadListener> listener,
+                        AcceptConnectionCallback callback) override;
+  void RejectConnection(const std::string& endpoint_id,
+                        RejectConnectionCallback callback) override;
+  void SendPayload(const std::vector<std::string>& endpoint_ids,
+                   mojom::PayloadPtr payload,
+                   SendPayloadCallback callback) override;
+  void CancelPayload(int64_t payload_id,
+                     CancelPayloadCallback callback) override;
+  void StopAllEndpoints(StopAllEndpointsCallback callback) override;
+  void InitiateBandwidthUpgrade(
+      const std::string& endpoint_id,
+      InitiateBandwidthUpgradeCallback callback) override;
+  void RegisterPayloadFile(int64_t payload_id,
+                           base::File input_file,
+                           base::File output_file,
+                           RegisterPayloadFileCallback callback) override;
+
+  // Returns the file associated with |payload_id| for InputFile.
+  base::File ExtractInputFile(int64_t payload_id);
+
+  // Returns the file associated with |payload_id| for OutputFile.
+  base::File ExtractOutputFile(int64_t payload_id);
+
  private:
   void OnDisconnect();
-  void OnGetBluetoothAdapter(
-      mojo::PendingRemote<::bluetooth::mojom::Adapter> pending_remote_adapter);
 
   mojo::Receiver<mojom::NearbyConnections> nearby_connections_;
-  mojo::Remote<mojom::NearbyConnectionsHost> host_;
-  mojo::Remote<bluetooth::mojom::Adapter> bluetooth_adapter_;
   base::OnceClosure on_disconnect_;
+
+  // Medium dependencies. SharedRemote is used to ensure all calls are posted
+  // to sequence binding the Remote.
+  mojo::SharedRemote<bluetooth::mojom::Adapter> bluetooth_adapter_;
+  mojo::SharedRemote<network::mojom::P2PSocketManager> socket_manager_;
+  mojo::SharedRemote<network::mojom::MdnsResponder> mdns_responder_;
+  mojo::SharedRemote<sharing::mojom::IceConfigFetcher> ice_config_fetcher_;
+  mojo::SharedRemote<sharing::mojom::WebRtcSignalingMessenger>
+      webrtc_signaling_messenger_;
+
+  // Core is thread-safe as its operations are always dispatched to a
+  // single-thread executor.
+  std::unique_ptr<Core> core_;
+
+  // input_file_map_ is accessed from background threads.
+  base::Lock input_file_lock_;
+  // A map of payload_id to file for InputFile.
+  base::flat_map<int64_t, base::File> input_file_map_
+      GUARDED_BY(input_file_lock_);
+
+  // output_file_map_ is accessed from background threads.
+  base::Lock output_file_lock_;
+  // A map of payload_id to file for OutputFile.
+  base::flat_map<int64_t, base::File> output_file_map_
+      GUARDED_BY(output_file_lock_);
 
   base::WeakPtrFactory<NearbyConnections> weak_ptr_factory_{this};
 };

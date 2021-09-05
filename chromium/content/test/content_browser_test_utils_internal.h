@@ -120,7 +120,7 @@ class FileChooserDelegate : public WebContentsDelegate {
 
   // Implementation of WebContentsDelegate::RunFileChooser.
   void RunFileChooser(RenderFrameHost* render_frame_host,
-                      std::unique_ptr<content::FileSelectListener> listener,
+                      scoped_refptr<content::FileSelectListener> listener,
                       const blink::mojom::FileChooserParams& params) override;
 
   // The params passed to RunFileChooser.
@@ -236,7 +236,7 @@ class ShowWidgetMessageFilter : public BrowserMessageFilter,
   void OnShowWidget(int route_id, const gfx::Rect& initial_rect);
 
   // WebContentsObserver:
-#if defined(OS_MACOSX) || defined(OS_ANDROID)
+#if defined(OS_MAC) || defined(OS_ANDROID)
   bool ShowPopupMenu(
       RenderFrameHost* render_frame_host,
       mojo::PendingRemote<blink::mojom::PopupMenuClient>* popup_client,

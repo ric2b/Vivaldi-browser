@@ -8,6 +8,7 @@
 
 #include "base/base64.h"
 #include "base/pickle.h"
+#include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/util/values/values_util.h"
 #include "base/values.h"
@@ -20,53 +21,86 @@
 namespace feed {
 namespace {
 
-void PickleDebugStreamData(const DebugStreamData& data, base::Pickle* pickle) {
-  pickle->WriteInt(DebugStreamData::kVersion);
-  pickle->WriteBool(data.fetch_info.has_value());
-  if (data.fetch_info) {
-    pickle->WriteInt(data.fetch_info->status_code);
-    pickle->WriteUInt64(data.fetch_info->fetch_duration.InMilliseconds());
-    pickle->WriteUInt64((data.fetch_info->fetch_time - base::Time::UnixEpoch())
-                            .InMilliseconds());
-    pickle->WriteString(data.fetch_info->bless_nonce);
-    pickle->WriteString(data.fetch_info->base_request_url.spec());
-  }
-  pickle->WriteString(data.load_stream_status);
+void PickleNetworkResponseInfo(const NetworkResponseInfo& value,
+                               base::Pickle& pickle) {
+  pickle.WriteInt(value.status_code);
+  pickle.WriteUInt64(value.fetch_duration.InMilliseconds());
+  pickle.WriteUInt64(
+      (value.fetch_time - base::Time::UnixEpoch()).InMilliseconds());
+  pickle.WriteString(value.bless_nonce);
+  pickle.WriteString(value.base_request_url.spec());
 }
 
-base::Optional<DebugStreamData> UnpickleDebugStreamData(
-    base::PickleIterator iterator) {
-  DebugStreamData result;
-  int version;
-  if (!iterator.ReadInt(&version) || version != DebugStreamData::kVersion)
-    return base::nullopt;
-  bool has_fetch_info;
-  if (!iterator.ReadBool(&has_fetch_info))
-    return base::nullopt;
-  if (has_fetch_info) {
-    NetworkResponseInfo fetch_info;
-    uint64_t fetch_duration_ms;
-    uint64_t fetch_time_ms;
-    std::string base_request_url;
-    if (!(iterator.ReadInt(&fetch_info.status_code) &&
-          iterator.ReadUInt64(&fetch_duration_ms) &&
-          iterator.ReadUInt64(&fetch_time_ms) &&
-          iterator.ReadString(&fetch_info.bless_nonce) &&
-          iterator.ReadString(&base_request_url)))
-      return base::nullopt;
-    fetch_info.fetch_duration =
-        base::TimeDelta::FromMilliseconds(fetch_duration_ms);
-    fetch_info.fetch_time = base::TimeDelta::FromMilliseconds(fetch_time_ms) +
-                            base::Time::UnixEpoch();
-    fetch_info.base_request_url = GURL(base_request_url);
-    result.fetch_info = std::move(fetch_info);
+bool UnpickleNetworkResponseInfo(base::PickleIterator& iterator,
+                                 NetworkResponseInfo& value) {
+  uint64_t fetch_duration_ms;
+  uint64_t fetch_time_ms;
+  std::string base_request_url;
+  if (!(iterator.ReadInt(&value.status_code) &&
+        iterator.ReadUInt64(&fetch_duration_ms) &&
+        iterator.ReadUInt64(&fetch_time_ms) &&
+        iterator.ReadString(&value.bless_nonce) &&
+        iterator.ReadString(&base_request_url)))
+    return false;
+  value.fetch_duration = base::TimeDelta::FromMilliseconds(fetch_duration_ms);
+  value.fetch_time = base::TimeDelta::FromMilliseconds(fetch_time_ms) +
+                     base::Time::UnixEpoch();
+  value.base_request_url = GURL(base_request_url);
+  return true;
+}
+
+void PickleOptionalNetworkResponseInfo(
+    const base::Optional<NetworkResponseInfo>& value,
+    base::Pickle& pickle) {
+  if (value.has_value()) {
+    pickle.WriteBool(true);
+    PickleNetworkResponseInfo(*value, pickle);
+  } else {
+    pickle.WriteBool(false);
   }
-  if (!iterator.ReadString(&result.load_stream_status))
-    return base::nullopt;
-  return result;
+}
+
+bool UnpickleOptionalNetworkResponseInfo(
+    base::PickleIterator& iterator,
+    base::Optional<NetworkResponseInfo>& value) {
+  bool has_network_response_info = false;
+  if (!iterator.ReadBool(&has_network_response_info))
+    return false;
+
+  if (has_network_response_info) {
+    NetworkResponseInfo reponse_info;
+    if (!UnpickleNetworkResponseInfo(iterator, reponse_info))
+      return false;
+    value = std::move(reponse_info);
+  } else {
+    value.reset();
+  }
+  return true;
+}
+
+void PickleDebugStreamData(const DebugStreamData& value, base::Pickle& pickle) {
+  (void)PickleOptionalNetworkResponseInfo;
+  pickle.WriteInt(DebugStreamData::kVersion);
+  PickleOptionalNetworkResponseInfo(value.fetch_info, pickle);
+  PickleOptionalNetworkResponseInfo(value.upload_info, pickle);
+  pickle.WriteString(value.load_stream_status);
+}
+
+bool UnpickleDebugStreamData(base::PickleIterator iterator,
+                             DebugStreamData& value) {
+  int version;
+  return iterator.ReadInt(&version) && version == DebugStreamData::kVersion &&
+         UnpickleOptionalNetworkResponseInfo(iterator, value.fetch_info) &&
+         UnpickleOptionalNetworkResponseInfo(iterator, value.upload_info) &&
+         iterator.ReadString(&value.load_stream_status);
 }
 
 }  // namespace
+
+RequestMetadata::RequestMetadata() = default;
+RequestMetadata::~RequestMetadata() = default;
+RequestMetadata::RequestMetadata(RequestMetadata&&) = default;
+RequestMetadata& RequestMetadata::operator=(RequestMetadata&&) = default;
 
 NetworkResponseInfo::NetworkResponseInfo() = default;
 NetworkResponseInfo::~NetworkResponseInfo() = default;
@@ -75,19 +109,26 @@ NetworkResponseInfo& NetworkResponseInfo::operator=(
     const NetworkResponseInfo&) = default;
 
 std::string ToString(ContentRevision c) {
-  return base::NumberToString(c.value());
+  // The 'c/' prefix is used to identify slices as content. Don't change this
+  // without updating the Java side.
+  return base::StrCat({"c/", base::NumberToString(c.value())});
 }
 
 ContentRevision ToContentRevision(const std::string& str) {
-  uint32_t value;
-  if (!base::StringToUint(str, &value))
+  if (str.size() < 3)
     return {};
-  return ContentRevision(value);
+
+  uint32_t value;
+  if (str[0] == 'c' && str[1] == '/' &&
+      base::StringToUint(base::StringPiece(str).substr(2), &value)) {
+    return ContentRevision(value);
+  }
+  return {};
 }
 
 std::string SerializeDebugStreamData(const DebugStreamData& data) {
   base::Pickle pickle;
-  PickleDebugStreamData(data, &pickle);
+  PickleDebugStreamData(data, pickle);
   const uint8_t* pickle_data_ptr = static_cast<const uint8_t*>(pickle.data());
   return base::Base64Encode(
       base::span<const uint8_t>(pickle_data_ptr, pickle.size()));
@@ -99,7 +140,10 @@ base::Optional<DebugStreamData> DeserializeDebugStreamData(
   if (!base::Base64Decode(base64_encoded, &binary_data))
     return base::nullopt;
   base::Pickle pickle(binary_data.data(), binary_data.size());
-  return UnpickleDebugStreamData(base::PickleIterator(pickle));
+  DebugStreamData result;
+  if (!UnpickleDebugStreamData(base::PickleIterator(pickle), result))
+    return base::nullopt;
+  return result;
 }
 
 DebugStreamData::DebugStreamData() = default;
@@ -131,6 +175,14 @@ PersistentMetricsData PersistentMetricsDataFromValue(const base::Value& value) {
   }
 
   return result;
+}
+
+LoadLatencyTimes::LoadLatencyTimes() : last_time_(base::TimeTicks::Now()) {}
+LoadLatencyTimes::~LoadLatencyTimes() = default;
+void LoadLatencyTimes::StepComplete(StepKind kind) {
+  auto now = base::TimeTicks::Now();
+  steps_.push_back(Step{kind, now - last_time_});
+  last_time_ = now;
 }
 
 }  // namespace feed

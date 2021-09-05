@@ -36,42 +36,4 @@ TEST(AppListFileIconUtilTest, GetIconTypeForPath) {
   }
 }
 
-TEST(AppListFileIconUtilTest, GetResourceIdForIconType) {
-  const std::vector<std::pair<internal::IconType, int>>
-      icon_type_to_resource_id = {
-          {internal::IconType::PDF,
-           IDR_FILE_MANAGER_IMG_LAUNCHER_FILETYPE_2X_PDF},
-          {internal::IconType::PDF,
-           IDR_FILE_MANAGER_IMG_LAUNCHER_FILETYPE_2X_PDF},
-          {internal::IconType::ARCHIVE,
-           IDR_FILE_MANAGER_IMG_LAUNCHER_FILETYPE_2X_ARCHIVE},
-          {internal::IconType::GSLIDE,
-           IDR_FILE_MANAGER_IMG_LAUNCHER_FILETYPE_2X_GSLIDES},
-          {internal::IconType::GENERIC,
-           IDR_FILE_MANAGER_IMG_LAUNCHER_FILETYPE_2X_GENERIC}};
-
-  for (const auto& pair : icon_type_to_resource_id) {
-    EXPECT_EQ(::app_list::internal::GetResourceIdForIconType(pair.first),
-              pair.second);
-  }
-}
-
-TEST(AppListFileIconUtilTest, GetChipResourceIdForIconType) {
-  const std::vector<std::pair<internal::IconType, int>>
-      icon_type_to_resource_id = {
-          {internal::IconType::PDF, IDR_LAUNCHER_CHIP_ICON_PDF},
-          {internal::IconType::ARCHIVE, IDR_LAUNCHER_CHIP_ICON_ARCHIVE},
-          {internal::IconType::IMAGE, IDR_LAUNCHER_CHIP_ICON_IMAGE},
-          {internal::IconType::GSLIDE, IDR_LAUNCHER_CHIP_ICON_GSLIDE},
-          {internal::IconType::GENERIC, IDR_LAUNCHER_CHIP_ICON_GENERIC},
-          {internal::IconType::FOLDER, IDR_LAUNCHER_CHIP_ICON_FOLDER},
-          {internal::IconType::VIDEO, IDR_LAUNCHER_CHIP_ICON_VIDEO},
-      };
-
-  for (const auto& pair : icon_type_to_resource_id) {
-    EXPECT_EQ(::app_list::internal::GetChipResourceIdForIconType(pair.first),
-              pair.second);
-  }
-}
-
 }  // namespace app_list

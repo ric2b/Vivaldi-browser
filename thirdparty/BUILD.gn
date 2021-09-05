@@ -1,0 +1,39 @@
+import("//vivaldi/gn/config/product.gni")
+
+if (is_mac) {
+
+  action("build_sparkle") {
+    script = "//vivaldi/scripts/mac/build_sparkle_mac.py"
+    sparkle_code = rebase_path("//vivaldi/thirdparty/macsparkle")
+    output_folder = rebase_path("$root_out_dir/sparkle_lib")
+    inputs = []
+    outputs = [
+      "$root_out_dir/sparkle_lib/Build/Products/Release/Sparkle.framework/Versions/Current/Helpers",
+      "$root_out_dir/sparkle_lib/Build/Products/Release/Sparkle.framework/Versions/Current/Modules",
+      "$root_out_dir/sparkle_lib/Build/Products/Release/Sparkle.framework/Versions/Current/Resources",
+      "$root_out_dir/sparkle_lib/Build/Products/Release/Sparkle.framework/Versions/Current/Sparkle",
+    ]
+    args = [
+      "--project-folder", sparkle_code,
+      "--output-folder", output_folder,
+      "--vivaldi-release-kind", VIVALDI_RELEASE_KIND,
+    ]
+  }
+
+  copy("copy_sparkle_framework") {
+    deps = [ ":build_sparkle" ]
+
+    framework_path = "$root_out_dir/sparkle_lib/Build/Products/Release/Sparkle.framework/Versions/Current"
+
+    sources = [
+      "$framework_path/Helpers",
+      "$framework_path/Sparkle",
+      "$framework_path/Modules",
+      "$framework_path/Resources",
+    ]
+    outputs = [
+      "$root_out_dir/Vivaldi.app/Contents/Frameworks/Sparkle.framework/{{source_file_part}}",
+    ]
+  }
+
+}

@@ -21,6 +21,7 @@
 <translation id="1150565364351027703">Sunglasses</translation>
 <translation id="115443833402798225">Hangul Ahnmatae</translation>
 <translation id="1155759005174418845">Catalan</translation>
+<translation id="1172970565351728681">About <ph name="REMAINING_TIME" /> remaining</translation>
 <translation id="1173894706177603556">Rename</translation>
 <translation id="117624967391683467">Copying <ph name="FILE_NAME" />...</translation>
 <translation id="1178581264944972037">Pause</translation>
@@ -106,7 +107,6 @@
 <translation id="2085470240340828803">A file named "<ph name="FILENAME" />" already exists. What do you want to do?</translation>
 <translation id="2121825465123208577">Re-size</translation>
 <translation id="2136953289241069843">Transliteration (namaste → नमस्कार)</translation>
-<translation id="2138867954865495510">Unable to open '<ph name="PATH" />': <ph name="ERROR_MESSAGE" /></translation>
 <translation id="2163152940313951844">Invalid character: <ph name="CHARACTER_NAME" /></translation>
 <translation id="2164862903024139959">Vietnamese keyboard (TCVN)</translation>
 <translation id="2168214441502403371">Persian keyboard</translation>
@@ -198,6 +198,7 @@
 <translation id="3236289833370040187">Ownership will be transferred to <ph name="DESTINATION_DOMAIN" />.</translation>
 <translation id="3241720467332021590">Irish Gaelic</translation>
 <translation id="3245321423178950146">Unknown Artist</translation>
+<translation id="3248185426436836442">Pending</translation>
 <translation id="3252266817569339921">French</translation>
 <translation id="3254434849914415189">Choose the default app for <ph name="FILE_TYPE" /> files:</translation>
 <translation id="3264582393905923483">Context</translation>
@@ -208,6 +209,7 @@
 <translation id="3335337277364016868">Year recorded</translation>
 <translation id="3338239663705455570">Slovenian keyboard</translation>
 <translation id="3353984535370177728">Select a folder to upload</translation>
+<translation id="3356580349448036450">Complete</translation>
 <translation id="3399597614303179694">Macedonian keyboard</translation>
 <translation id="3414856743105198592">Formatting the removable media is going to erase all data. Do you wish to continue?</translation>
 <translation id="3437801641691368414">Created time</translation>
@@ -243,6 +245,7 @@
 <translation id="3780536599611287598">You don't have permission to move files into '<ph name="FOLDER_NAME" />'.</translation>
 <translation id="3786301125658655746">You are offline</translation>
 <translation id="3789841737615482174">Install</translation>
+<translation id="3793469551756281394">About <ph name="REMAINING_TIME_HOUR" /> <ph name="REMAINING_TIME_MINUTE" /> remaining</translation>
 <translation id="3798449238516105146">Version</translation>
 <translation id="3801082500826908679">Faroese</translation>
 <translation id="3809272675881623365">Rabbit</translation>
@@ -299,6 +302,7 @@
 <translation id="4481711095103932593">This folder is shared with Windows</translation>
 <translation id="4487088045714738411">Belgian keyboard</translation>
 <translation id="4522570452068850558">Details</translation>
+<translation id="4542387084127299777">Unable to open '<ph name="PATH" />'</translation>
 <translation id="4552678318981539154">Buy more storage</translation>
 <translation id="4559767610552730302">Bokeh</translation>
 <translation id="4572815280350369984"><ph name="FILE_TYPE" /> file</translation>
@@ -511,6 +515,7 @@
 <translation id="6629841649550503054">All backed up to <ph name="BEGIN_LINK" />Google Drive!<ph name="END_LINK" /></translation>
 <translation id="6643016212128521049">Clear</translation>
 <translation id="6650726141019353908">Pink butterfly</translation>
+<translation id="6657585470893396449">Password</translation>
 <translation id="6710213216561001401">Previous</translation>
 <translation id="6718273304615422081">Zipping...</translation>
 <translation id="6751256176799620176">1 folder selected</translation>
@@ -551,7 +556,6 @@
 <translation id="7012943028104619157"><ph name="ROOT_TITLE" /> (<ph name="ROOT_SUMMARY" />)</translation>
 <translation id="7014174261166285193">Installation failed.</translation>
 <translation id="7040138676081995583">Open with...</translation>
-<translation id="7059566040011178088">Less than <ph name="REMAINING_TIME" /></translation>
 <translation id="7100897339030255923"><ph name="COUNT" /> items selected</translation>
 <translation id="7106346894903675391">Buy more storage...</translation>
 <translation id="7126604456862387217">'&lt;b&gt;<ph name="SEARCH_STRING" />&lt;/b&gt;' - &lt;em&gt;search Drive&lt;/em&gt;</translation>
@@ -662,7 +666,6 @@
 <translation id="8193175696669055101">Device model</translation>
 <translation id="8208580316430297579">Artwork</translation>
 <translation id="8223479393428528563">To save these files for offline use, get back online, right-click the files and select the <ph name="OFFLINE_CHECKBOX_NAME" /> option.</translation>
-<translation id="8231972167769262174">About <ph name="REMAINING_TIME" /></translation>
 <translation id="8249296373107784235">Abort</translation>
 <translation id="8261506727792406068">Delete</translation>
 <translation id="8269755669432358899">Collapse files feedback panels</translation>
@@ -725,6 +728,7 @@
 <translation id="9065203028668620118">Edit</translation>
 <translation id="9099674669267916096">Page count</translation>
 <translation id="9110990317705400362">We're constantly looking for ways to make your browsing safer. Previously, any website could prompt you to add an extension into your browser. In the latest versions of Google Chrome, you must explicitly tell Chrome that you want to install these extensions by adding them through the Extensions page. <ph name="BEGIN_LINK" />Learn more<ph name="END_LINK" /></translation>
+<translation id="9111102763498581341">Unlock</translation>
 <translation id="912419004897138677">Codec</translation>
 <translation id="9129931661813833980">Pin folder</translation>
 <translation id="9130775360844693113">Members of '<ph name="DESTINATION_NAME" />' will gain access to these items.</translation>

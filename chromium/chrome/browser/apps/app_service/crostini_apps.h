@@ -55,7 +55,7 @@ class CrostiniApps : public KeyedService,
                apps::mojom::ConnectOptionsPtr opts) override;
   void LoadIcon(const std::string& app_id,
                 apps::mojom::IconKeyPtr icon_key,
-                apps::mojom::IconCompression icon_compression,
+                apps::mojom::IconType icon_type,
                 int32_t size_hint_in_dip,
                 bool allow_placeholder_icon,
                 LoadIconCallback callback) override;
@@ -64,6 +64,7 @@ class CrostiniApps : public KeyedService,
               apps::mojom::LaunchSource launch_source,
               int64_t display_id) override;
   void Uninstall(const std::string& app_id,
+                 apps::mojom::UninstallSource uninstall_source,
                  bool clear_site_data,
                  bool report_abuse) override;
   void GetMenuModel(const std::string& app_id,
@@ -84,14 +85,14 @@ class CrostiniApps : public KeyedService,
   void OnCrostiniEnabledChanged();
 
   void LoadIconFromVM(const std::string app_id,
-                      apps::mojom::IconCompression icon_compression,
+                      apps::mojom::IconType icon_type,
                       int32_t size_hint_in_dip,
                       ui::ScaleFactor scale_factor,
                       IconEffects icon_effects,
                       LoadIconCallback callback);
 
   void OnLoadIconFromVM(const std::string app_id,
-                        apps::mojom::IconCompression icon_compression,
+                        apps::mojom::IconType icon_type,
                         int32_t size_hint_in_dip,
                         IconEffects icon_effects,
                         LoadIconCallback callback,

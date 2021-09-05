@@ -28,8 +28,10 @@
 
 #include <memory>
 
+#include "base/feature_list.h"
 #include "base/memory/ptr_util.h"
 #include "build/build_config.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/renderer/platform/graphics/dark_mode_settings.h"
 
 namespace blink {
@@ -43,12 +45,16 @@ namespace blink {
 // 99) MacEditingBehavior is used a fallback.
 static EditingBehaviorType EditingBehaviorTypeForPlatform() {
   return
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
       kEditingMacBehavior
 #elif defined(OS_WIN)
       kEditingWindowsBehavior
 #elif defined(OS_ANDROID)
       kEditingAndroidBehavior
+#elif defined(OS_CHROMEOS)
+      base::FeatureList::IsEnabled(features::kCrOSAutoSelect)
+          ? kEditingChromeOSBehavior
+          : kEditingUnixBehavior
 #else  // Rest of the UNIX-like systems
       kEditingUnixBehavior
 #endif

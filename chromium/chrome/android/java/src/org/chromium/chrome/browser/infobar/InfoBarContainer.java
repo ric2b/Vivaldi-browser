@@ -16,16 +16,18 @@ import org.chromium.base.UserData;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.NativeMethods;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabObserver;
-import org.chromium.chrome.browser.ui.messages.infobar.InfoBar;
-import org.chromium.chrome.browser.ui.messages.infobar.InfoBarUiItem;
 import org.chromium.chrome.browser.util.ChromeAccessibilityUtil;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
+import org.chromium.components.browser_ui.bottomsheet.BottomSheetControllerProvider;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetObserver;
 import org.chromium.components.browser_ui.bottomsheet.EmptyBottomSheetObserver;
+import org.chromium.components.infobars.InfoBar;
+import org.chromium.components.infobars.InfoBarAnimationListener;
+import org.chromium.components.infobars.InfoBarUiItem;
 import org.chromium.content_public.browser.NavigationHandle;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.KeyboardVisibilityDelegate.KeyboardVisibilityListener;
@@ -49,26 +51,6 @@ public class InfoBarContainer implements UserData, KeyboardVisibilityListener, I
     static {
         sAccessibilityObserver = (enabled) -> setIsAllowedToAutoHide(!enabled);
         ChromeAccessibilityUtil.get().addObserver(sAccessibilityObserver);
-    }
-
-    /**
-     * A listener for the InfoBar animations.
-     */
-    public interface InfoBarAnimationListener {
-        public static final int ANIMATION_TYPE_SHOW = 0;
-        public static final int ANIMATION_TYPE_SWAP = 1;
-        public static final int ANIMATION_TYPE_HIDE = 2;
-
-        /**
-         * Notifies the subscriber when an animation is completed.
-         */
-        void notifyAnimationFinished(int animationType);
-
-        /**
-         * Notifies the subscriber when all animations are finished.
-         * @param frontInfoBar The frontmost infobar or {@code null} if none are showing.
-         */
-        void notifyAllAnimationsFinished(InfoBarUiItem frontInfoBar);
     }
 
     /**
@@ -212,6 +194,9 @@ public class InfoBarContainer implements UserData, KeyboardVisibilityListener, I
 
     /** A {@link BottomSheetObserver} so this view knows when to show/hide. */
     private @Nullable BottomSheetObserver mBottomSheetObserver;
+
+    /** */
+    private BottomSheetController mBottomSheetController;
 
     public static InfoBarContainer from(Tab tab) {
         InfoBarContainer container = get(tab);
@@ -467,7 +452,7 @@ public class InfoBarContainer implements UserData, KeyboardVisibilityListener, I
                 != null
             : "ChromeActivity should not be null when initializing InfoBarContainerView";
         mInfoBarContainerView = new InfoBarContainerView(chromeActivity, mContainerViewObserver,
-                chromeActivity.getFullscreenManager(), chromeActivity.isTablet());
+                chromeActivity.getBrowserControlsManager(), chromeActivity.isTablet());
 
         mInfoBarContainerView.addOnAttachStateChangeListener(
                 new View.OnAttachStateChangeListener() {
@@ -484,8 +469,9 @@ public class InfoBarContainer implements UserData, KeyboardVisibilityListener, I
                                                     : View.VISIBLE);
                                 }
                             };
-                            getActivity(mTab).getBottomSheetController().addObserver(
-                                    mBottomSheetObserver);
+                            mBottomSheetController =
+                                    BottomSheetControllerProvider.from(mTab.getWindowAndroid());
+                            mBottomSheetController.addObserver(mBottomSheetObserver);
                         }
 
                         for (InfoBarContainer.InfoBarContainerObserver observer : mObservers) {
@@ -526,7 +512,7 @@ public class InfoBarContainer implements UserData, KeyboardVisibilityListener, I
 
         ChromeActivity activity = getActivity(mTab);
         if (activity != null && mBottomSheetObserver != null) {
-            activity.getBottomSheetController().removeObserver(mBottomSheetObserver);
+            mBottomSheetController.removeObserver(mBottomSheetObserver);
         }
 
         mTab.getWindowAndroid().getKeyboardDelegate().removeKeyboardVisibilityListener(this);

@@ -9,6 +9,8 @@
 #include <vector>
 
 #include "base/command_line.h"
+#include "base/feature_list.h"
+#include "build/build_config.h"
 #include "components/viz/common/switches.h"
 #include "components/viz/service/display_embedder/skia_output_surface_dependency.h"
 #include "gpu/command_buffer/common/capabilities.h"
@@ -27,13 +29,26 @@ SkiaOutputDeviceBufferQueue::SkiaOutputDeviceBufferQueue(
     SkiaOutputSurfaceDependency* deps,
     gpu::MemoryTracker* memory_tracker,
     const DidSwapBufferCompleteCallback& did_swap_buffer_complete_callback)
-    : SkiaOutputDevice(memory_tracker, did_swap_buffer_complete_callback),
+    : SkiaOutputDevice(deps->GetSharedContextState()->gr_context(),
+                       memory_tracker,
+                       did_swap_buffer_complete_callback),
       presenter_(std::move(presenter)),
       dependency_(deps) {
   capabilities_.uses_default_gl_framebuffer = false;
   capabilities_.preserve_buffer_content = true;
   capabilities_.only_invalidates_damage_rect = false;
   capabilities_.number_of_buffers = 3;
+  capabilities_.orientation_mode = OutputSurface::OrientationMode::kHardware;
+#if defined(OS_ANDROID)
+  // With vulkan, if the chrome is launched in landscape mode, the chrome is
+  // always blank until chrome window is rotated once. Workaround this problem
+  // by using logic rotation mode.
+  // TODO(https://crbug.com/1115065): use hardware orientation mode for vulkan,
+  if (dependency_->GetSharedContextState()->GrContextIsVulkan() &&
+      base::FeatureList::GetFieldTrial(features::kVulkan)) {
+    capabilities_.orientation_mode = OutputSurface::OrientationMode::kLogic;
+  }
+#endif
 
   // Force the number of max pending frames to one when the switch
   // "double-buffer-compositing" is passed.
@@ -98,14 +113,20 @@ bool SkiaOutputDeviceBufferQueue::IsPrimaryPlaneOverlay() const {
 }
 
 void SkiaOutputDeviceBufferQueue::SchedulePrimaryPlane(
-    const OverlayProcessorInterface::OutputSurfaceOverlayPlane& plane) {
-  // If the current_image_ is nullptr, it means there is no change on the
-  // primary plane. So we just need to schedule the last submitted image.
-  auto* image = current_image_ ? current_image_ : submitted_image_;
-  DCHECK(image);
+    const base::Optional<OverlayProcessorInterface::OutputSurfaceOverlayPlane>&
+        plane) {
+  if (plane) {
+    // If the current_image_ is nullptr, it means there is no change on the
+    // primary plane. So we just need to schedule the last submitted image.
+    auto* image = current_image_ ? current_image_ : submitted_image_;
+    DCHECK(image);
 
-  image->BeginPresent();
-  presenter_->SchedulePrimaryPlane(plane, image, image == submitted_image_);
+    image->BeginPresent();
+    presenter_->SchedulePrimaryPlane(plane.value(), image,
+                                     image == submitted_image_);
+  } else {
+    current_frame_has_no_primary_plane_ = true;
+  }
 }
 
 void SkiaOutputDeviceBufferQueue::ScheduleOverlays(
@@ -114,14 +135,26 @@ void SkiaOutputDeviceBufferQueue::ScheduleOverlays(
   pending_overlays_ = presenter_->ScheduleOverlays(std::move(overlays));
 }
 
+void SkiaOutputDeviceBufferQueue::PreGrContextSubmit() {
+  // The current image may be missing, for example during WebXR presentation.
+  if (current_image_)
+    current_image_->PreGrContextSubmit();
+}
+
 void SkiaOutputDeviceBufferQueue::SwapBuffers(
     BufferPresentedCallback feedback,
     std::vector<ui::LatencyInfo> latency_info) {
   StartSwapBuffers({});
 
-  DCHECK(current_image_);
-  submitted_image_ = current_image_;
-  current_image_ = nullptr;
+  if (current_frame_has_no_primary_plane_) {
+    DCHECK(!current_image_);
+    submitted_image_ = nullptr;
+    current_frame_has_no_primary_plane_ = false;
+  } else {
+    DCHECK(current_image_);
+    submitted_image_ = current_image_;
+    current_image_ = nullptr;
+  }
 
   // Cancelable callback uses weak ptr to drop this task upon destruction.
   // Thus it is safe to use |base::Unretained(this)|.
@@ -131,7 +164,8 @@ void SkiaOutputDeviceBufferQueue::SwapBuffers(
       std::make_unique<CancelableSwapCompletionCallback>(base::BindOnce(
           &SkiaOutputDeviceBufferQueue::DoFinishSwapBuffers,
           base::Unretained(this), image_size_, std::move(latency_info),
-          submitted_image_->GetWeakPtr(), std::move(committed_overlays_))));
+          submitted_image_ ? submitted_image_->GetWeakPtr() : nullptr,
+          std::move(committed_overlays_))));
   presenter_->SwapBuffers(swap_completion_callbacks_.back()->callback(),
                           std::move(feedback));
   committed_overlays_.clear();
@@ -144,11 +178,17 @@ void SkiaOutputDeviceBufferQueue::PostSubBuffer(
     std::vector<ui::LatencyInfo> latency_info) {
   StartSwapBuffers({});
 
-  if (current_image_) {
-    submitted_image_ = current_image_;
-    current_image_ = nullptr;
+  if (current_frame_has_no_primary_plane_) {
+    DCHECK(!current_image_);
+    submitted_image_ = nullptr;
+    current_frame_has_no_primary_plane_ = false;
+  } else {
+    if (current_image_) {
+      submitted_image_ = current_image_;
+      current_image_ = nullptr;
+    }
+    DCHECK(submitted_image_);
   }
-  DCHECK(submitted_image_);
 
   // Cancelable callback uses weak ptr to drop this task upon destruction.
   // Thus it is safe to use |base::Unretained(this)|.
@@ -158,7 +198,8 @@ void SkiaOutputDeviceBufferQueue::PostSubBuffer(
       std::make_unique<CancelableSwapCompletionCallback>(base::BindOnce(
           &SkiaOutputDeviceBufferQueue::DoFinishSwapBuffers,
           base::Unretained(this), image_size_, std::move(latency_info),
-          submitted_image_->GetWeakPtr(), std::move(committed_overlays_))));
+          submitted_image_ ? submitted_image_->GetWeakPtr() : nullptr,
+          std::move(committed_overlays_))));
   presenter_->PostSubBuffer(rect, swap_completion_callbacks_.back()->callback(),
                             std::move(feedback));
 
@@ -173,8 +214,12 @@ void SkiaOutputDeviceBufferQueue::CommitOverlayPlanes(
 
   // There is no drawing for this frame on the main buffer.
   DCHECK(!current_image_);
-  // A main buffer has to be submitted for previous frames.
-  DCHECK(submitted_image_);
+  if (current_frame_has_no_primary_plane_) {
+    submitted_image_ = nullptr;
+    current_frame_has_no_primary_plane_ = false;
+  } else {
+    DCHECK(submitted_image_);
+  }
 
   // Cancelable callback uses weak ptr to drop this task upon destruction.
   // Thus it is safe to use |base::Unretained(this)|.
@@ -184,7 +229,8 @@ void SkiaOutputDeviceBufferQueue::CommitOverlayPlanes(
       std::make_unique<CancelableSwapCompletionCallback>(base::BindOnce(
           &SkiaOutputDeviceBufferQueue::DoFinishSwapBuffers,
           base::Unretained(this), image_size_, std::move(latency_info),
-          submitted_image_->GetWeakPtr(), std::move(committed_overlays_))));
+          submitted_image_ ? submitted_image_->GetWeakPtr() : nullptr,
+          std::move(committed_overlays_))));
   presenter_->CommitOverlayPlanes(swap_completion_callbacks_.back()->callback(),
                                   std::move(feedback));
 
@@ -198,6 +244,18 @@ void SkiaOutputDeviceBufferQueue::DoFinishSwapBuffers(
     const base::WeakPtr<OutputPresenter::Image>& image,
     std::vector<OutputPresenter::OverlayData> overlays,
     gfx::SwapCompletionResult result) {
+  // Remove the no-longer-in-use overlays from
+  // |in_use_by_window_server_overlays_|.
+  base::EraseIf(in_use_by_window_server_overlays_,
+                [](auto& overlay) { return !overlay.IsInUseByWindowServer(); });
+
+  // Move the still-in-use entries from |overlays| to
+  // |in_use_by_window_server_overlays_|.
+  for (auto& overlay : overlays) {
+    if (overlay.IsInUseByWindowServer())
+      in_use_by_window_server_overlays_.emplace(std::move(overlay));
+  }
+
   DCHECK(!result.gpu_fence);
   FinishSwapBuffers(std::move(result), size, latency_info);
   PageFlipComplete(image.get());
@@ -243,6 +301,12 @@ SkSurface* SkiaOutputDeviceBufferQueue::BeginPaint(
 void SkiaOutputDeviceBufferQueue::EndPaint() {
   DCHECK(current_image_);
   current_image_->EndWriteSkia();
+}
+
+bool SkiaOutputDeviceBufferQueue::OverlayDataComparator::operator()(
+    const OutputPresenter::OverlayData& a,
+    const OutputPresenter::OverlayData& b) const {
+  return a.mailbox() < b.mailbox();
 }
 
 }  // namespace viz

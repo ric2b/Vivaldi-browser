@@ -37,9 +37,11 @@
 <translation id="1842960171412779397">বাছনি কৰক</translation>
 <translation id="1859234291848436338">লিখাৰ নির্দেশনা</translation>
 <translation id="1860796786778352021">জাননী বন্ধ কৰক</translation>
+<translation id="186476001994626254">ৱেব স্মাৰ্ট পে’ষ্ট সমল</translation>
 <translation id="1871244248791675517">Ins</translation>
 <translation id="1884435127456172652"><ph name="NUMBER" /> %</translation>
 <translation id="1901303067676059328">&amp;সকলো বাছনি কৰক</translation>
+<translation id="19085484004813472">এইটো এটা নতুন সুবিধা</translation>
 <translation id="2006524834898217237">নিশ্চিত হৈ লওক যে এই ডিভাইচটো ইণ্টাৰনেটৰ সৈতে সংযুক্ত হৈ আছে।</translation>
 <translation id="208586643495776849">অনুগ্ৰহ কৰি পুনৰ চেষ্টা কৰক</translation>
 <translation id="2090963878406559571"><ph name="ORIGIN" />ৰ পৰা আপোনাৰ Android ফ’নলৈ এটা নম্বৰ পঠিয়াবলৈ দুয়োটা ডিভাইচৰ ছেটিংসমূহত <ph name="TROUBLESHOOT_LINK" />।</translation>
@@ -67,6 +69,7 @@
 <translation id="2570734079541893434">ছেটিংসমূহ পৰিচালনা কৰক</translation>
 <translation id="2573731672208488250">{HOURS,plural, =1{১ ঘণ্টাত}one{# ঘণ্টাত}other{# ঘণ্টাত}}</translation>
 <translation id="2583543531130364912">আপোনাৰ টাচ্চ স্ক্ৰীণ কেলিব্ৰেট কৰক</translation>
+<translation id="2586657967955657006">ক্লিপব'ৰ্ড</translation>
 <translation id="2666092431469916601">শীর্ষ</translation>
 <translation id="2701330563083355633"><ph name="DEVICE_NAME" />ৰ পৰা শ্বেয়াৰ কৰা হৈছে</translation>
 <translation id="271033894570825754">নতুন</translation>
@@ -74,6 +77,7 @@
 <translation id="2749082172777216925"><ph name="APP_NAME_INFO" />, <ph name="PRICE" /></translation>
 <translation id="2803313416453193357">ফ'ল্ডাৰ খোলক</translation>
 <translation id="2824719307700604149">{YEARS,plural, =1{১ বছৰ পূর্বে}one{# বছৰ পূর্বে}other{# বছৰ পূর্বে}}</translation>
+<translation id="2878511608894704031">সকলো মচক</translation>
 <translation id="2907671656515444832">{DAYS,plural, =1{১ দিনত}one{# দিনত}other{# দিনত}}</translation>
 <translation id="2931838996092594335">ক্লিক কৰক</translation>
 <translation id="2981684127883932071">পৰামৰ্শ দেখুৱাই থকা হৈছে</translation>
@@ -114,6 +118,7 @@
 <translation id="4289300219472526559">কথা কওক</translation>
 <translation id="430191667033048642"><ph name="MOVED_APP_NAME" />ক <ph name="FOLDER_NAME" /> ফ’ল্ডাৰলৈ স্থানান্তৰ কৰা হ’ল।</translation>
 <translation id="4316910396681052118">সকলো এপ্</translation>
+<translation id="4491109536499578614">প্ৰতিচ্ছবি</translation>
 <translation id="4588090240171750605">সোঁফাললৈ স্ক্ৰ’ল কৰক</translation>
 <translation id="4631891353005174729"><ph name="APP_NAME_TYPE" />, তৰাযুক্ত মূল্যাংকন <ph name="RATING_SCORE" /></translation>
 <translation id="4648249871170053485"><ph name="APP_NAME" />, এপৰ চুপাৰিছ</translation>
@@ -147,6 +152,7 @@
 <translation id="5768079895599174203">{DAYS,plural, =1{১দিন আৰু }one{# দিন আৰু }other{# দিন আৰু }}</translation>
 <translation id="5789643057113097023">.</translation>
 <translation id="5866104238061687188">{YEARS,plural, =1{১ বছৰত}one{# বছৰত}other{# বছৰত}}</translation>
+<translation id="588258955323874662">পূৰ্ণস্ক্ৰীণ</translation>
 <translation id="5906667377645263094">{SECONDS,plural, =1{১ ছেকেণ্ড বাকী আছে}one{# ছেকেণ্ড বাকী আছে}other{# ছেকেণ্ড বাকী আছে}}</translation>
 <translation id="5941711191222866238">সৰু কৰক</translation>
 <translation id="5943826764092288734">{HOURS,plural, =1{১ ঘণ্টা}one{# ঘণ্টা}other{# ঘণ্টা}}</translation>
@@ -169,6 +175,7 @@
 <translation id="6404817160109697034">{SECONDS,plural, =1{১ ছেকেণ্ড পূর্বে}one{# ছেকেণ্ড পূর্বে}other{# ছেকেণ্ড পূর্বে}}</translation>
 <translation id="6417265370957905582">Google Assistant</translation>
 <translation id="6430678249303439055">এই এপ্‌‌টোৰ পৰা সকলো জাননী অৱৰোধ কৰক</translation>
+<translation id="6503257047630241175">RTF সমল</translation>
 <translation id="6539092367496845964">কিবা ভুল হ’ল। পাছত পুনৰ চেষ্টা কৰক।</translation>
 <translation id="654149438358937226">সকলো জাননী অৱৰোধ কৰক</translation>
 <translation id="6567071839949112727">এনচেষ্টৰ-ত ক্লিক কৰক</translation>

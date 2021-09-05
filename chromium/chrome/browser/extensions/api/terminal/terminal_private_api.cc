@@ -4,6 +4,7 @@
 
 #include "chrome/browser/extensions/api/terminal/terminal_private_api.h"
 
+#include <cstdlib>
 #include <memory>
 #include <string>
 #include <utility>
@@ -15,6 +16,7 @@
 #include "base/json/json_writer.h"
 #include "base/lazy_instance.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/system/sys_info.h"
 #include "base/values.h"
@@ -35,13 +37,10 @@
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents.h"
-#include "extensions/browser/api/storage/settings_namespace.h"
-#include "extensions/browser/api/storage/storage_frontend.h"
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/browser/app_window/app_window_registry.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extensions_browser_client.h"
-#include "extensions/common/extension.h"
 
 namespace terminal_private = extensions::api::terminal_private;
 namespace OnTerminalResize =
@@ -72,17 +71,22 @@ const char kSwitchOwnerId[] = "owner_id";
 const char kSwitchVmName[] = "vm_name";
 const char kSwitchTargetContainer[] = "target_container";
 const char kSwitchStartupId[] = "startup_id";
+const char kSwitchCurrentWorkingDir[] = "cwd";
+
+int32_t g_last_active_pid = 0;
 
 // Copies the value of |switch_name| if present from |src| to |dst|.  If not
-// present, uses |default_value|.  Returns the value set into |dst|.
-std::string GetSwitch(const base::CommandLine* src,
+// present, uses |default_value| if nonempty.  Returns the value set into |dst|.
+std::string GetSwitch(const base::CommandLine& src,
                       base::CommandLine* dst,
                       const std::string& switch_name,
                       const std::string& default_value) {
-  std::string result = src->HasSwitch(switch_name)
-                           ? src->GetSwitchValueASCII(switch_name)
+  std::string result = src.HasSwitch(switch_name)
+                           ? src.GetSwitchValueASCII(switch_name)
                            : default_value;
-  dst->AppendSwitchASCII(switch_name, result);
+  if (!result.empty()) {
+    dst->AppendSwitchASCII(switch_name, result);
+  }
   return result;
 }
 
@@ -138,6 +142,12 @@ void PreferenceChanged(Profile* profile,
                                                      std::move(args));
     event_router->BroadcastEvent(std::move(event));
   }
+}
+
+void SetLastActiveTerminal(const std::string& terminal_id) {
+  // The terminal_id is <pid>-<guid>.  We will parse it to get the pid.
+  // atoi will read all leading digits and stop at any non-digit such as '-'.
+  g_last_active_pid = atoi(terminal_id.c_str());
 }
 
 }  // namespace
@@ -216,15 +226,19 @@ TerminalPrivateOpenTerminalProcessFunction::OpenProcess(
   // Passing --crosh-command overrides any JS process name.
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   if (command_line->HasSwitch(switches::kCroshCommand)) {
-    OpenProcess(user_id_hash, tab_id,
-                {command_line->GetSwitchValueASCII(switches::kCroshCommand)});
+    OpenProcess(
+        user_id_hash, tab_id,
+        base::CommandLine(base::FilePath(
+            command_line->GetSwitchValueASCII(switches::kCroshCommand))));
 
   } else if (process_name == kCroshName) {
     // command=crosh: use '/usr/bin/crosh' on a device, 'cat' otherwise.
     if (base::SysInfo::IsRunningOnChromeOS()) {
-      OpenProcess(user_id_hash, tab_id, {kCroshCommand});
+      OpenProcess(user_id_hash, tab_id,
+                  base::CommandLine(base::FilePath(kCroshCommand)));
     } else {
-      OpenProcess(user_id_hash, tab_id, {kStubbedCroshCommand});
+      OpenProcess(user_id_hash, tab_id,
+                  base::CommandLine(base::FilePath(kStubbedCroshCommand)));
     }
 
   } else if (process_name == kVmShellName) {
@@ -233,20 +247,21 @@ TerminalPrivateOpenTerminalProcessFunction::OpenProcess(
     if (!crostini::CrostiniFeatures::Get()->IsAllowed(profile))
       return RespondNow(Error("vmshell not allowed"));
 
-    // command=vmshell: ensure --owner_id, --vm_name, and --target_container are
-    // set and the specified vm/container is running.
-    base::CommandLine vmshell_cmd({kVmShellCommand});
+    // command=vmshell: ensure --owner_id, --vm_name, --target_container, --cwd
+    // are set, and the specified vm/container is running.
+    base::CommandLine cmdline((base::FilePath(kVmShellCommand)));
     if (!args)
       args = std::make_unique<std::vector<std::string>>();
     args->insert(args->begin(), kVmShellCommand);
     base::CommandLine params_args(*args);
     std::string owner_id =
-        GetSwitch(&params_args, &vmshell_cmd, kSwitchOwnerId, user_id_hash);
-    std::string vm_name = GetSwitch(&params_args, &vmshell_cmd, kSwitchVmName,
+        GetSwitch(params_args, &cmdline, kSwitchOwnerId, user_id_hash);
+    std::string vm_name = GetSwitch(params_args, &cmdline, kSwitchVmName,
                                     crostini::kCrostiniDefaultVmName);
     std::string container_name =
-        GetSwitch(&params_args, &vmshell_cmd, kSwitchTargetContainer,
+        GetSwitch(params_args, &cmdline, kSwitchTargetContainer,
                   crostini::kCrostiniDefaultContainerName);
+    GetSwitch(params_args, &cmdline, kSwitchCurrentWorkingDir, "");
     std::string startup_id = params_args.GetSwitchValueASCII(kSwitchStartupId);
     crostini::ContainerId container_id(vm_name, container_name);
 
@@ -266,7 +281,7 @@ TerminalPrivateOpenTerminalProcessFunction::OpenProcess(
         base::BindOnce(
             &TerminalPrivateOpenTerminalProcessFunction::OnCrostiniRestarted,
             this, std::move(observer), user_id_hash, tab_id,
-            vmshell_cmd.argv()),
+            std::move(cmdline)),
         observer_ptr);
   } else {
     // command=[unrecognized].
@@ -279,7 +294,7 @@ void TerminalPrivateOpenTerminalProcessFunction::OnCrostiniRestarted(
     std::unique_ptr<CrostiniStartupStatus> startup_status,
     const std::string& user_id_hash,
     int tab_id,
-    const std::vector<std::string>& arguments,
+    base::CommandLine cmdline,
     crostini::CrostiniResult result) {
   if (crostini::MaybeShowCrostiniDialogBeforeLaunch(
           Profile::FromBrowserContext(browser_context()), result)) {
@@ -290,7 +305,7 @@ void TerminalPrivateOpenTerminalProcessFunction::OnCrostiniRestarted(
   }
   startup_status->OnCrostiniRestarted(result);
   if (result == crostini::CrostiniResult::SUCCESS) {
-    OpenProcess(user_id_hash, tab_id, arguments);
+    OpenVmshellProcess(user_id_hash, tab_id, std::move(cmdline));
   } else {
     const std::string msg =
         base::StringPrintf("Error starting crostini for terminal: %d", result);
@@ -299,11 +314,49 @@ void TerminalPrivateOpenTerminalProcessFunction::OnCrostiniRestarted(
   }
 }
 
+void TerminalPrivateOpenTerminalProcessFunction::OpenVmshellProcess(
+    const std::string& user_id_hash,
+    int tab_id,
+    base::CommandLine cmdline) {
+  // If cwd is already set in cmdline, or this is the first terminal, open now.
+  if (cmdline.HasSwitch(kSwitchCurrentWorkingDir) || !g_last_active_pid) {
+    return OpenProcess(user_id_hash, tab_id, std::move(cmdline));
+  }
+
+  // Lookup container shell pid from cicierone to use for cwd.
+  crostini::CrostiniManager::GetForProfile(
+      Profile::FromBrowserContext(browser_context()))
+      ->GetVshSession(
+          crostini::ContainerId::GetDefault(), g_last_active_pid,
+          base::BindOnce(
+              &TerminalPrivateOpenTerminalProcessFunction::OnGetVshSession,
+              this, user_id_hash, tab_id, std::move(cmdline),
+              g_last_active_pid));
+}
+
+void TerminalPrivateOpenTerminalProcessFunction::OnGetVshSession(
+    const std::string& user_id_hash,
+    int tab_id,
+    base::CommandLine cmdline,
+    int32_t vsh_pid,
+    bool success,
+    const std::string& failure_reason,
+    int32_t container_shell_pid) {
+  if (!success) {
+    LOG(WARNING) << "Failed to get vsh session for " << vsh_pid << ". "
+                 << failure_reason;
+  } else {
+    cmdline.AppendSwitchASCII(kSwitchCurrentWorkingDir,
+                              base::NumberToString(container_shell_pid));
+  }
+  OpenProcess(user_id_hash, tab_id, std::move(cmdline));
+}
+
 void TerminalPrivateOpenTerminalProcessFunction::OpenProcess(
     const std::string& user_id_hash,
     int tab_id,
-    const std::vector<std::string>& arguments) {
-  DCHECK(!arguments.empty());
+    base::CommandLine cmdline) {
+  DCHECK(!cmdline.argv().empty());
   // Registry lives on its own task runner.
   chromeos::ProcessProxyRegistry::GetTaskRunner()->PostTask(
       FROM_HERE,
@@ -313,23 +366,33 @@ void TerminalPrivateOpenTerminalProcessFunction::OpenProcess(
           base::Bind(
               &TerminalPrivateOpenTerminalProcessFunction::RespondOnUIThread,
               this),
-          arguments, user_id_hash));
+          std::move(cmdline), user_id_hash));
 }
 
 void TerminalPrivateOpenTerminalProcessFunction::OpenOnRegistryTaskRunner(
     const ProcessOutputCallback& output_callback,
     const OpenProcessCallback& callback,
-    const std::vector<std::string>& arguments,
+    base::CommandLine cmdline,
     const std::string& user_id_hash) {
   chromeos::ProcessProxyRegistry* registry =
       chromeos::ProcessProxyRegistry::Get();
-  const base::CommandLine cmdline{arguments};
   std::string terminal_id;
-  bool success = registry->OpenProcess(cmdline, user_id_hash, output_callback,
-                                       &terminal_id);
+  bool success = registry->OpenProcess(std::move(cmdline), user_id_hash,
+                                       output_callback, &terminal_id);
 
   content::GetUIThreadTaskRunner({})->PostTask(
       FROM_HERE, base::BindOnce(callback, success, terminal_id));
+}
+
+void TerminalPrivateOpenTerminalProcessFunction::RespondOnUIThread(
+    bool success,
+    const std::string& terminal_id) {
+  if (!success) {
+    Respond(Error("Failed to open process."));
+    return;
+  }
+  SetLastActiveTerminal(terminal_id);
+  Respond(OneArgument(std::make_unique<base::Value>(terminal_id)));
 }
 
 TerminalPrivateOpenVmshellProcessFunction::
@@ -347,19 +410,10 @@ TerminalPrivateOpenVmshellProcessFunction::Run() {
 
 TerminalPrivateSendInputFunction::~TerminalPrivateSendInputFunction() = default;
 
-void TerminalPrivateOpenTerminalProcessFunction::RespondOnUIThread(
-    bool success,
-    const std::string& terminal_id) {
-  if (!success) {
-    Respond(Error("Failed to open process."));
-    return;
-  }
-  Respond(OneArgument(std::make_unique<base::Value>(terminal_id)));
-}
-
 ExtensionFunction::ResponseAction TerminalPrivateSendInputFunction::Run() {
   std::unique_ptr<SendInput::Params> params(SendInput::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
+  SetLastActiveTerminal(params->id);
 
   // Registry lives on its own task runner.
   chromeos::ProcessProxyRegistry::GetTaskRunner()->PostTask(
@@ -429,6 +483,7 @@ TerminalPrivateOnTerminalResizeFunction::Run() {
   std::unique_ptr<OnTerminalResize::Params> params(
       OnTerminalResize::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
+  SetLastActiveTerminal(params->id);
 
   // Registry lives on its own task runner.
   chromeos::ProcessProxyRegistry::GetTaskRunner()->PostTask(
@@ -506,38 +561,6 @@ TerminalPrivateOpenOptionsPageFunction::Run() {
   crostini::LaunchTerminalSettings(
       Profile::FromBrowserContext(browser_context()));
   return RespondNow(NoArguments());
-}
-
-TerminalPrivateGetCroshSettingsFunction::
-    ~TerminalPrivateGetCroshSettingsFunction() = default;
-
-ExtensionFunction::ResponseAction
-TerminalPrivateGetCroshSettingsFunction::Run() {
-  const Extension* crosh_extension =
-      TerminalExtensionHelper::GetTerminalExtension(
-          Profile::FromBrowserContext(browser_context()));
-  if (!crosh_extension) {
-    return RespondNow(OneArgument(std::make_unique<base::DictionaryValue>()));
-  }
-
-  StorageFrontend* frontend = StorageFrontend::Get(browser_context());
-  frontend->RunWithStorage(
-      crosh_extension, settings_namespace::SYNC,
-      base::Bind(&TerminalPrivateGetCroshSettingsFunction::AsyncRunWithStorage,
-                 this));
-  return RespondLater();
-}
-
-void TerminalPrivateGetCroshSettingsFunction::AsyncRunWithStorage(
-    ValueStore* storage) {
-  ValueStore::ReadResult result = storage->Get();
-  ExtensionFunction::ResponseValue response =
-      result.status().ok() ? OneArgument(result.PassSettings())
-                           : Error(result.status().message);
-  content::GetUIThreadTaskRunner({})->PostTask(
-      FROM_HERE,
-      base::BindOnce(&TerminalPrivateGetCroshSettingsFunction::Respond, this,
-                     std::move(response)));
 }
 
 TerminalPrivateGetSettingsFunction::~TerminalPrivateGetSettingsFunction() =

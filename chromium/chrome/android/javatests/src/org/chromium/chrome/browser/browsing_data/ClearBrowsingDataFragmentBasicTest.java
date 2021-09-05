@@ -20,7 +20,7 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.CollectionUtil;
 import org.chromium.base.test.util.CommandLineFlags;
-import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.browsing_data.ClearBrowsingDataFragment.DialogOption;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.settings.SettingsActivityTestRule;
@@ -83,16 +83,16 @@ public class ClearBrowsingDataFragmentBasicTest {
     }
 
     private void setSyncable(final boolean syncable) {
-        MockSyncContentResolverDelegate delegate = new MockSyncContentResolverDelegate();
-        delegate.setMasterSyncAutomatically(syncable);
-        AndroidSyncSettings.overrideForTests(delegate, null);
-        if (syncable) {
-            AndroidSyncSettings.get().enableChromeSync();
-        } else {
-            AndroidSyncSettings.get().disableChromeSync();
-        }
-
         TestThreadUtils.runOnUiThreadBlocking(() -> {
+            MockSyncContentResolverDelegate delegate = new MockSyncContentResolverDelegate();
+            delegate.setMasterSyncAutomatically(syncable);
+            AndroidSyncSettings.overrideForTests(new AndroidSyncSettings(delegate));
+            if (syncable) {
+                AndroidSyncSettings.get().enableChromeSync();
+            } else {
+                AndroidSyncSettings.get().disableChromeSync();
+            }
+
             ProfileSyncService.overrideForTests(new StubProfileSyncService(syncable));
         });
     }

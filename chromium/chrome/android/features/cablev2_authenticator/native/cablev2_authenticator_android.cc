@@ -32,7 +32,7 @@
 
 // These "headers" actually contain several function definitions and thus can
 // only be included once across Chromium.
-#include "chrome/android/features/cablev2_authenticator/jni_headers/BLEHandler_jni.h"
+#include "chrome/android/features/cablev2_authenticator/jni_headers/CableAuthenticator_jni.h"
 
 using base::android::ConvertJavaStringToUTF8;
 using base::android::ConvertUTF8ToJavaString;
@@ -278,34 +278,30 @@ static constexpr StepOrByte<GetAssertionRequest> kGetAssertionParseSteps[] = {
     // clang-format on
 };
 
-// Client represents the state of a single BLE peer.
-class Client {
+// BLEClient represents the state of a single BLE peer.
+class BLEClient {
  public:
   class Delegate {
    public:
     virtual ~Delegate() = default;
-    virtual void MakeCredential(
-        Client* client,
-        const std::string& origin,
-        const std::string& rp_id,
-        base::span<const uint8_t> challenge,
-        base::span<const uint8_t> user_id,
-        base::span<const int> algorithms,
-        base::span<std::vector<uint8_t>> excluded_credential_ids,
-        bool resident_key_required) = 0;
-    virtual void GetAssertion(
-        Client* client,
-        const std::string& origin,
-        const std::string& rp_id,
-        base::span<const uint8_t> challenge,
-        base::span<std::vector<uint8_t>> allowed_credential_ids) = 0;
+
+    // ProcessCTAPMessage handles the CTAP2 message in |message_bytes| (which is
+    // a command code followed by optional CBOR payload) and returns the
+    // response. A |nullopt| return value indicates an error, an empty return
+    // value indicates that the response is pending and |Send| will be called
+    // later, and a non-empty return value indicates that the response is
+    // available immediately.
+    virtual base::Optional<std::vector<uint8_t>> ProcessCTAPMessage(
+        base::span<const uint8_t> message_bytes) = 0;
+
+    // SendBLEMessages sends the given fragments to the target peer.
+    virtual void SendBLEMessages(uint64_t target_addr,
+                                 std::vector<std::vector<uint8_t>> messages,
+                                 bool is_transaction_complete) = 0;
   };
 
-  Client(uint64_t addr,
-         uint16_t mtu,
-         const AuthenticatorState* auth_state,
-         Delegate* delegate)
-      : addr_(addr), mtu_(mtu), auth_state_(auth_state), delegate_(delegate) {}
+  BLEClient(uint64_t addr, uint16_t mtu, Delegate* delegate)
+      : addr_(addr), mtu_(mtu), delegate_(delegate) {}
 
   bool Process(
       base::span<const uint8_t> fragment,
@@ -317,22 +313,21 @@ class Client {
     return true;
   }
 
-  base::Optional<std::vector<std::vector<uint8_t>>> EncryptAndFragment(
-      base::span<uint8_t> data) {
-    std::vector<uint8_t> encrypted_data =
-        device::fido_parsing_utils::Materialize(data);
-    if (!crypter_->Encrypt(&encrypted_data)) {
+  void Send(std::vector<uint8_t> data, bool is_transaction_complete) {
+    if (!crypter_->Encrypt(&data)) {
       FIDO_LOG(ERROR) << "Failed to encrypt response";
-      return base::nullopt;
+      return;
     }
     std::vector<std::vector<uint8_t>> fragments;
     if (!Fragment(static_cast<uint8_t>(device::FidoBleDeviceCommand::kMsg),
-                  encrypted_data, &fragments)) {
+                  data, &fragments)) {
       FIDO_LOG(ERROR) << "Failed to fragment response of length "
-                      << encrypted_data.size();
-      return base::nullopt;
+                      << data.size();
+      return;
     }
-    return fragments;
+
+    delegate_->SendBLEMessages(addr_, std::move(fragments),
+                               is_transaction_complete);
   }
 
   uint64_t addr() { return addr_; }
@@ -386,26 +381,6 @@ class Client {
 
         base::Optional<std::unique_ptr<device::cablev2::Crypter>>
             handshake_result;
-        if (requested_eid == auth_state_->pairing_advert.second) {
-          handshake_result = device::cablev2::RespondToHandshake(
-              auth_state_->pairing_data.v2->psk_gen_key,
-              auth_state_->pairing_advert, auth_state_->identity_key.get(),
-              /*peer_identity=*/nullptr, /*pairing_data=*/nullptr,
-              message->second, &response);
-        } else if (auth_state_->qr_advert.has_value() &&
-                   requested_eid == auth_state_->qr_advert->second) {
-          // TODO: QR handshakes currently always send pairing data, but it's
-          // optional in the protocol.
-          handshake_result = device::cablev2::RespondToHandshake(
-              *auth_state_->qr_psk_gen_key, *auth_state_->qr_advert,
-              /*identity=*/nullptr, auth_state_->qr_peer_identity->get(),
-              &auth_state_->pairing_data, message->second, &response);
-        } else {
-          FIDO_LOG(ERROR) << "Peer is connecting to unknown EID "
-                          << base::HexEncode(requested_eid);
-          return false;
-        }
-
         if (!handshake_result) {
           FIDO_LOG(ERROR) << "Handshake failed";
           return false;
@@ -424,172 +399,20 @@ class Client {
         }
 
         std::vector<uint8_t> plaintext;
-        if (!crypter_->Decrypt(
-                static_cast<device::FidoBleDeviceCommand>(message->first),
-                message->second, &plaintext) ||
+        if (!crypter_->Decrypt(message->second, &plaintext) ||
             plaintext.empty()) {
           FIDO_LOG(ERROR) << "Decryption failed";
           return false;
         }
 
-        base::span<const uint8_t> cbor_bytes = plaintext;
-        const auto command = cbor_bytes[0];
-        cbor_bytes = cbor_bytes.subspan(1);
-
-        base::Optional<cbor::Value> payload;
-        if (!cbor_bytes.empty()) {
-          payload = cbor::Reader::Read(cbor_bytes);
-          if (!payload) {
-            FIDO_LOG(ERROR)
-                << "CBOR decoding failed for " << base::HexEncode(cbor_bytes);
-            return false;
-          }
-          FIDO_LOG(DEBUG) << "<- (" << base::HexEncode(&command, 1) << ") "
-                          << cbor::DiagnosticWriter::Write(*payload);
-        } else {
-          FIDO_LOG(DEBUG) << "<- (" << base::HexEncode(&command, 1)
-                          << ") <no payload>";
+        base::Optional<std::vector<uint8_t>> delegate_response =
+            delegate_->ProcessCTAPMessage(plaintext);
+        if (!delegate_response) {
+          return false;
+        } else if (delegate_response->empty()) {
+          return true;
         }
-
-        switch (command) {
-          case static_cast<uint8_t>(
-              device::CtapRequestCommand::kAuthenticatorGetInfo): {
-            if (payload) {
-              FIDO_LOG(ERROR)
-                  << "getInfo command incorrectly contained payload";
-              return false;
-            }
-
-            std::array<uint8_t, device::kAaguidLength> aaguid{};
-            std::vector<cbor::Value> versions;
-            versions.emplace_back("FIDO_2_0");
-            std::vector<cbor::Value> extensions;
-            extensions.emplace_back(device::kExtensionAndroidClientData);
-            // TODO: should be based on whether a screen-lock is enabled.
-            cbor::Value::MapValue options;
-            options.emplace("uv", true);
-
-            cbor::Value::MapValue response_map;
-            response_map.emplace(1, std::move(versions));
-            response_map.emplace(2, std::move(extensions));
-            response_map.emplace(3, aaguid);
-            response_map.emplace(4, std::move(options));
-
-            base::Optional<std::vector<uint8_t>> response_bytes(
-                cbor::Writer::Write(cbor::Value(std::move(response_map))));
-            response = std::move(*response_bytes);
-            response.insert(response.begin(), 0);
-            break;
-          }
-
-          case static_cast<uint8_t>(
-              device::CtapRequestCommand::kAuthenticatorMakeCredential): {
-            if (!payload || !payload->is_map()) {
-              FIDO_LOG(ERROR) << "Invalid makeCredential payload";
-              return false;
-            }
-
-            MakeCredRequest make_cred_request;
-            if (!device::cbor_extract::Extract<MakeCredRequest>(
-                    &make_cred_request, kMakeCredParseSteps,
-                    payload->GetMap())) {
-              LOG(ERROR) << "Failed to parse makeCredential request";
-              return false;
-            }
-
-            std::vector<int> algorithms;
-            if (!device::cbor_extract::ForEachPublicKeyEntry(
-                    *make_cred_request.cred_params, cbor::Value("alg"),
-                    base::BindRepeating(
-                        [](std::vector<int>* out,
-                           const cbor::Value& value) -> bool {
-                          if (!value.is_integer()) {
-                            return false;
-                          }
-                          const int64_t alg = value.GetInteger();
-
-                          if (alg > std::numeric_limits<int>::max() ||
-                              alg < std::numeric_limits<int>::min()) {
-                            return false;
-                          }
-                          out->push_back(static_cast<int>(alg));
-                          return true;
-                        },
-                        base::Unretained(&algorithms)))) {
-              return false;
-            }
-
-            std::vector<std::vector<uint8_t>> excluded_credential_ids;
-            if (make_cred_request.excluded_credentials &&
-                !device::cbor_extract::ForEachPublicKeyEntry(
-                    *make_cred_request.excluded_credentials, cbor::Value("id"),
-                    base::BindRepeating(
-                        [](std::vector<std::vector<uint8_t>>* out,
-                           const cbor::Value& value) -> bool {
-                          if (!value.is_bytestring()) {
-                            return false;
-                          }
-                          out->push_back(value.GetBytestring());
-                          return true;
-                        },
-                        base::Unretained(&excluded_credential_ids)))) {
-              return false;
-            }
-
-            // TODO: plumb the rk flag through once GmsCore supports resident
-            // keys. This will require support for optional maps in |Extract|.
-            delegate_->MakeCredential(
-                this, *make_cred_request.origin, *make_cred_request.rp_id,
-                *make_cred_request.challenge, *make_cred_request.user_id,
-                algorithms, excluded_credential_ids,
-                /*resident_key=*/false);
-            return true;
-          }
-
-          case static_cast<uint8_t>(
-              device::CtapRequestCommand::kAuthenticatorGetAssertion): {
-            if (!payload || !payload->is_map()) {
-              FIDO_LOG(ERROR) << "Invalid makeCredential payload";
-              return false;
-            }
-            GetAssertionRequest get_assertion_request;
-            if (!device::cbor_extract::Extract<GetAssertionRequest>(
-                    &get_assertion_request, kGetAssertionParseSteps,
-                    payload->GetMap())) {
-              FIDO_LOG(ERROR) << "Failed to parse getAssertion request";
-              return false;
-            }
-
-            std::vector<std::vector<uint8_t>> allowed_credential_ids;
-            if (get_assertion_request.allowed_credentials &&
-                !device::cbor_extract::ForEachPublicKeyEntry(
-                    *get_assertion_request.allowed_credentials,
-                    cbor::Value("id"),
-                    base::BindRepeating(
-                        [](std::vector<std::vector<uint8_t>>* out,
-                           const cbor::Value& value) -> bool {
-                          if (!value.is_bytestring()) {
-                            return false;
-                          }
-                          out->push_back(value.GetBytestring());
-                          return true;
-                        },
-                        base::Unretained(&allowed_credential_ids)))) {
-              return false;
-            }
-
-            delegate_->GetAssertion(this, *get_assertion_request.origin,
-                                    *get_assertion_request.rp_id,
-                                    *get_assertion_request.challenge,
-                                    allowed_credential_ids);
-            return true;
-          }
-
-          default:
-            FIDO_LOG(ERROR) << "Received unknown command "
-                            << static_cast<unsigned>(command);
-            return false;
-        }
+        response = std::move(delegate_response.value());
 
         if (!crypter_->Encrypt(&response)) {
           FIDO_LOG(ERROR) << "Failed to encrypt response";
@@ -654,7 +477,6 @@ class Client {
 
   const uint64_t addr_;
   const uint16_t mtu_;
-  const AuthenticatorState* const auth_state_;
   State state_ = State::kHandshake;
   Defragmenter defrag_;
   std::unique_ptr<device::cablev2::Crypter> crypter_;
@@ -664,16 +486,16 @@ class Client {
 // CableInterface is a singleton that receives events from BLEHandler.java:
 // the code that interfaces to Android's BLE stack. All calls into this
 // object happen on a single thread.
-class CableInterface : public Client::Delegate {
+class CableInterface : public BLEClient::Delegate {
  public:
   static CableInterface* GetInstance() {
     return base::Singleton<CableInterface>::get();
   }
 
   void Start(JNIEnv* env,
-             const JavaParamRef<jobject>& ble_handler,
+             const JavaParamRef<jobject>& cable_authenticator,
              const JavaParamRef<jbyteArray>& state_bytes) {
-    ble_handler_.Reset(ble_handler);
+    cable_authenticator_.Reset(cable_authenticator);
     env_ = env;
 
     if (!ParseState(state_bytes)) {
@@ -692,11 +514,11 @@ class CableInterface : public Client::Delegate {
   }
 
   void Stop() {
-    ble_handler_.Reset();
+    cable_authenticator_.Reset();
     auth_state_.identity_key.reset();
     auth_state_.qr_advert.reset();
     auth_state_.qr_psk_gen_key.reset();
-    client_ = nullptr;
+    ble_client_ = nullptr;
     env_ = nullptr;
   }
 
@@ -739,32 +561,33 @@ class CableInterface : public Client::Delegate {
                      &auth_state_.qr_advert.emplace());
   }
 
-  ScopedJavaLocalRef<jobjectArray> Write(uint64_t client_addr,
-                                         uint16_t mtu,
-                                         const JavaParamRef<jbyteArray>& data) {
+  ScopedJavaLocalRef<jobjectArray> OnBLEWrite(
+      uint64_t client_addr,
+      uint16_t mtu,
+      const JavaParamRef<jbyteArray>& data) {
     // First client to write to the fidoControlPoint characteristic becomes the
     // only permissible client for the lifetime of this instance. The Java side
     // filters writes from all other clients.
-    if (client_ == nullptr) {
-      client_ = std::make_unique<Client>(client_addr, mtu, &auth_state_, this);
-    } else if (client_->addr() != static_cast<uint64_t>(client_addr)) {
-      NOTREACHED() << "Write from unknown client " << client_->addr();
+    if (ble_client_ == nullptr) {
+      ble_client_ = std::make_unique<BLEClient>(client_addr, mtu, this);
+    } else if (ble_client_->addr() != static_cast<uint64_t>(client_addr)) {
+      NOTREACHED() << "Write from unknown client " << ble_client_->addr();
       return nullptr;
     }
-    if (client_->mtu() != mtu) {
+    if (ble_client_->mtu() != mtu) {
       // MTU must not be changed after the initial write. Keep going, but things
       // might fail at this point.
-      FIDO_LOG(ERROR) << "MTU changed after first write: " << client_->mtu()
+      FIDO_LOG(ERROR) << "MTU changed after first write: " << ble_client_->mtu()
                       << " != " << mtu;
     }
 
     const size_t data_len = env_->GetArrayLength(data);
     jbyte* data_bytes = env_->GetByteArrayElements(data, /*iscopy=*/nullptr);
     base::Optional<std::vector<std::vector<uint8_t>>> response_fragments;
-    const bool process_ok =
-        client_->Process(base::span<const uint8_t>(
-                             reinterpret_cast<uint8_t*>(data_bytes), data_len),
-                         &response_fragments);
+    const bool process_ok = ble_client_->Process(
+        base::span<const uint8_t>(reinterpret_cast<uint8_t*>(data_bytes),
+                                  data_len),
+        &response_fragments);
     env_->ReleaseByteArrayElements(data, data_bytes, JNI_ABORT);
     if (!process_ok) {
       return nullptr;
@@ -775,47 +598,192 @@ class CableInterface : public Client::Delegate {
         env_, response_fragments ? *response_fragments : kEmptyFragments);
   }
 
-  void MakeCredential(Client* client,
-                      const std::string& origin,
-                      const std::string& rp_id,
-                      base::span<const uint8_t> challenge,
-                      base::span<const uint8_t> user_id,
-                      base::span<const int> algorithms,
-                      base::span<std::vector<uint8_t>> excluded_credential_ids,
-                      bool resident_key_required) override {
-    Java_BLEHandler_makeCredential(
-        env_, ble_handler_, client->addr(),
-        ConvertUTF8ToJavaString(env_, origin),
-        ConvertUTF8ToJavaString(env_, rp_id), ToJavaByteArray(env_, challenge),
-        // TODO: Pass full user entity once resident key support is added.
-        ToJavaByteArray(env_, user_id), ToJavaIntArray(env_, algorithms),
-        ToJavaArrayOfByteArray(env_, excluded_credential_ids),
-        resident_key_required);
+  base::Optional<std::vector<uint8_t>> ProcessCTAPMessage(
+      base::span<const uint8_t> message_bytes) override {
+    if (message_bytes.empty()) {
+      return base::nullopt;
+    }
+    const auto command = message_bytes[0];
+    const auto cbor_bytes = message_bytes.subspan(1);
+
+    base::Optional<cbor::Value> payload;
+    if (!cbor_bytes.empty()) {
+      payload = cbor::Reader::Read(cbor_bytes);
+      if (!payload) {
+        FIDO_LOG(ERROR) << "CBOR decoding failed for "
+                        << base::HexEncode(cbor_bytes);
+        return base::nullopt;
+      }
+      FIDO_LOG(DEBUG) << "<- (" << base::HexEncode(&command, 1) << ") "
+                      << cbor::DiagnosticWriter::Write(*payload);
+    } else {
+      FIDO_LOG(DEBUG) << "<- (" << base::HexEncode(&command, 1)
+                      << ") <no payload>";
+    }
+
+    switch (command) {
+      case static_cast<uint8_t>(
+          device::CtapRequestCommand::kAuthenticatorGetInfo): {
+        if (payload) {
+          FIDO_LOG(ERROR) << "getInfo command incorrectly contained payload";
+          return base::nullopt;
+        }
+
+        std::array<uint8_t, device::kAaguidLength> aaguid{};
+        std::vector<cbor::Value> versions;
+        versions.emplace_back("FIDO_2_0");
+        std::vector<cbor::Value> extensions;
+        extensions.emplace_back(device::kExtensionAndroidClientData);
+        // TODO: should be based on whether a screen-lock is enabled.
+        cbor::Value::MapValue options;
+        options.emplace("uv", true);
+
+        cbor::Value::MapValue response_map;
+        response_map.emplace(1, std::move(versions));
+        response_map.emplace(2, std::move(extensions));
+        response_map.emplace(3, aaguid);
+        response_map.emplace(4, std::move(options));
+
+        base::Optional<std::vector<uint8_t>> response(
+            cbor::Writer::Write(cbor::Value(std::move(response_map))));
+        if (!response) {
+          return base::nullopt;
+        }
+        response->insert(response->begin(), 0);
+        return response;
+      }
+
+      case static_cast<uint8_t>(
+          device::CtapRequestCommand::kAuthenticatorMakeCredential): {
+        if (!payload || !payload->is_map()) {
+          FIDO_LOG(ERROR) << "Invalid makeCredential payload";
+          return base::nullopt;
+        }
+
+        MakeCredRequest make_cred_request;
+        if (!device::cbor_extract::Extract<MakeCredRequest>(
+                &make_cred_request, kMakeCredParseSteps, payload->GetMap())) {
+          LOG(ERROR) << "Failed to parse makeCredential request";
+          return base::nullopt;
+        }
+
+        std::vector<int> algorithms;
+        if (!device::cbor_extract::ForEachPublicKeyEntry(
+                *make_cred_request.cred_params, cbor::Value("alg"),
+                base::BindRepeating(
+                    [](std::vector<int>* out,
+                       const cbor::Value& value) -> bool {
+                      if (!value.is_integer()) {
+                        return false;
+                      }
+                      const int64_t alg = value.GetInteger();
+
+                      if (alg > std::numeric_limits<int>::max() ||
+                          alg < std::numeric_limits<int>::min()) {
+                        return false;
+                      }
+                      out->push_back(static_cast<int>(alg));
+                      return true;
+                    },
+                    base::Unretained(&algorithms)))) {
+          return base::nullopt;
+        }
+
+        std::vector<std::vector<uint8_t>> excluded_credential_ids;
+        if (make_cred_request.excluded_credentials &&
+            !device::cbor_extract::ForEachPublicKeyEntry(
+                *make_cred_request.excluded_credentials, cbor::Value("id"),
+                base::BindRepeating(
+                    [](std::vector<std::vector<uint8_t>>* out,
+                       const cbor::Value& value) -> bool {
+                      if (!value.is_bytestring()) {
+                        return false;
+                      }
+                      out->push_back(value.GetBytestring());
+                      return true;
+                    },
+                    base::Unretained(&excluded_credential_ids)))) {
+          return base::nullopt;
+        }
+
+        // TODO: plumb the rk flag through once GmsCore supports resident
+        // keys. This will require support for optional maps in |Extract|.
+        Java_CableAuthenticator_makeCredential(
+            env_, cable_authenticator_,
+            ConvertUTF8ToJavaString(env_, *make_cred_request.origin),
+            ConvertUTF8ToJavaString(env_, *make_cred_request.rp_id),
+            ToJavaByteArray(env_, *make_cred_request.challenge),
+            // TODO: pass full user entity once resident // key support is added
+            ToJavaByteArray(env_, *make_cred_request.user_id),
+            ToJavaIntArray(env_, algorithms),
+            ToJavaArrayOfByteArray(env_, excluded_credential_ids),
+            /*resident_key_required=*/false);
+        return std::vector<uint8_t>();
+      }
+
+      case static_cast<uint8_t>(
+          device::CtapRequestCommand::kAuthenticatorGetAssertion): {
+        if (!payload || !payload->is_map()) {
+          FIDO_LOG(ERROR) << "Invalid makeCredential payload";
+          return base::nullopt;
+        }
+        GetAssertionRequest get_assertion_request;
+        if (!device::cbor_extract::Extract<GetAssertionRequest>(
+                &get_assertion_request, kGetAssertionParseSteps,
+                payload->GetMap())) {
+          FIDO_LOG(ERROR) << "Failed to parse getAssertion request";
+          return base::nullopt;
+        }
+
+        std::vector<std::vector<uint8_t>> allowed_credential_ids;
+        if (get_assertion_request.allowed_credentials &&
+            !device::cbor_extract::ForEachPublicKeyEntry(
+                *get_assertion_request.allowed_credentials, cbor::Value("id"),
+                base::BindRepeating(
+                    [](std::vector<std::vector<uint8_t>>* out,
+                       const cbor::Value& value) -> bool {
+                      if (!value.is_bytestring()) {
+                        return false;
+                      }
+                      out->push_back(value.GetBytestring());
+                      return true;
+                    },
+                    base::Unretained(&allowed_credential_ids)))) {
+          return base::nullopt;
+        }
+
+        Java_CableAuthenticator_getAssertion(
+            env_, cable_authenticator_,
+            ConvertUTF8ToJavaString(env_, *get_assertion_request.origin),
+            ConvertUTF8ToJavaString(env_, *get_assertion_request.rp_id),
+            ToJavaByteArray(env_, *get_assertion_request.challenge),
+            ToJavaArrayOfByteArray(env_, allowed_credential_ids));
+        return std::vector<uint8_t>();
+      }
+
+      default:
+        FIDO_LOG(ERROR) << "Received unknown command "
+                        << static_cast<unsigned>(command);
+        return base::nullopt;
+    }
   }
 
-  void GetAssertion(
-      Client* client,
-      const std::string& origin,
-      const std::string& rp_id,
-      base::span<const uint8_t> challenge,
-      base::span<std::vector<uint8_t>> allowed_credential_ids) override {
-    Java_BLEHandler_getAssertion(
-        env_, ble_handler_, client->addr(),
-        ConvertUTF8ToJavaString(env_, origin),
-        ConvertUTF8ToJavaString(env_, rp_id), ToJavaByteArray(env_, challenge),
-        ToJavaArrayOfByteArray(env_, allowed_credential_ids));
+  void SendBLEMessages(uint64_t target_addr,
+                       std::vector<std::vector<uint8_t>> messages,
+                       bool is_transaction_complete) override {
+    Java_CableAuthenticator_sendNotification(
+        env_, cable_authenticator_, target_addr,
+        ToJavaArrayOfByteArray(env_, messages), is_transaction_complete);
   }
 
-  void OnMakeCredentialResponse(uint64_t client_addr,
-                                uint32_t ctap_status,
+  void OnMakeCredentialResponse(uint32_t ctap_status,
                                 base::span<const uint8_t> client_data_json,
                                 base::span<const uint8_t> attestation_object) {
     DCHECK_LE(ctap_status, 0xFFu);
-    if (!client_) {
+    if (!ble_client_) {
       NOTREACHED() << "OnMakeCredentialResponse() without a connected client";
       return;
     }
-    DCHECK_EQ(client_->addr(), client_addr);
 
     std::vector<uint8_t> response = {base::checked_cast<uint8_t>(ctap_status)};
     if (ctap_status == static_cast<uint8_t>(CtapDeviceResponseCode::kSuccess)) {
@@ -852,30 +820,19 @@ class CableInterface : public Client::Delegate {
                       response_payload->end());
     }
 
-    base::Optional<std::vector<std::vector<uint8_t>>> response_fragments =
-        client_->EncryptAndFragment(response);
-    if (!response_fragments) {
-      FIDO_LOG(ERROR) << "EncryptAndFragment() failed for " << client_addr;
-      return;
-    }
-
-    Java_BLEHandler_sendNotification(
-        env_, ble_handler_, client_addr,
-        ToJavaArrayOfByteArray(env_, *response_fragments));
+    ble_client_->Send(std::move(response), /*is_transaction_complete=*/true);
   }
 
-  void OnGetAssertionResponse(uint64_t client_addr,
-                              uint32_t ctap_status,
+  void OnGetAssertionResponse(uint32_t ctap_status,
                               std::vector<uint8_t> client_data_json,
                               std::vector<uint8_t> credential_id,
                               std::vector<uint8_t> authenticator_data,
                               std::vector<uint8_t> signature) {
     DCHECK_LE(ctap_status, 0xFFu);
-    if (!client_) {
+    if (!ble_client_) {
       NOTREACHED() << "OnGetAssertionResponse() without a connected client";
       return;
     }
-    DCHECK_EQ(client_->addr(), client_addr);
 
     std::vector<uint8_t> response = {base::checked_cast<uint8_t>(ctap_status)};
 
@@ -904,16 +861,7 @@ class CableInterface : public Client::Delegate {
                       response_payload->end());
     }
 
-    base::Optional<std::vector<std::vector<uint8_t>>> response_fragments =
-        client_->EncryptAndFragment(response);
-    if (!response_fragments) {
-      FIDO_LOG(ERROR) << "EncryptAndFragment() failed for " << client_addr;
-      return;
-    }
-
-    Java_BLEHandler_sendNotification(
-        env_, ble_handler_, client_addr,
-        ToJavaArrayOfByteArray(env_, *response_fragments));
+    ble_client_->Send(std::move(response), /*is_transaction_complete=*/true);
   }
 
  private:
@@ -939,11 +887,12 @@ class CableInterface : public Client::Delegate {
     std::array<uint8_t, AES_BLOCK_SIZE> eid;
     AES_encrypt(/*in=*/eid_plaintext, /*out=*/eid.data(), &key);
 
-    out_nonce_and_eid->first = nonce;
+    // TODO: nonces are now a different size.
+    // out_nonce_and_eid->first = nonce;
     out_nonce_and_eid->second = eid;
 
-    Java_BLEHandler_sendBLEAdvert(env_, ble_handler_,
-                                  ToJavaByteArray(env_, eid));
+    Java_CableAuthenticator_sendBLEAdvert(env_, cable_authenticator_,
+                                          ToJavaByteArray(env_, eid));
   }
 
   bool ParseState(const JavaParamRef<jbyteArray>& state_bytes) {
@@ -999,7 +948,8 @@ class CableInterface : public Client::Delegate {
         cbor::Writer::Write(cbor::Value(std::move(map)));
     CHECK(bytes.has_value());
 
-    Java_BLEHandler_setState(env_, ble_handler_, ToJavaByteArray(env_, *bytes));
+    Java_CableAuthenticator_setState(env_, cable_authenticator_,
+                                     ToJavaByteArray(env_, *bytes));
   }
 
   static bssl::UniquePtr<EC_KEY> P256KeyFromSeed(
@@ -1022,31 +972,33 @@ class CableInterface : public Client::Delegate {
   }
 
   JNIEnv* env_ = nullptr;
-  base::android::ScopedJavaGlobalRef<jobject> ble_handler_;
+  base::android::ScopedJavaGlobalRef<jobject> cable_authenticator_;
   AuthenticatorState auth_state_;
-  std::unique_ptr<Client> client_;
+  std::unique_ptr<BLEClient> ble_client_;
 };
 
 }  // anonymous namespace
 
 // These functions are the entry points for BLEHandler.java calling into C++.
 
-static void JNI_BLEHandler_Start(JNIEnv* env,
-                                 const JavaParamRef<jobject>& ble_handler,
-                                 const JavaParamRef<jbyteArray>& state_bytes) {
-  CableInterface::GetInstance()->Start(env, ble_handler, state_bytes);
+static void JNI_CableAuthenticator_Start(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& cable_authenticator,
+    const JavaParamRef<jbyteArray>& state_bytes) {
+  CableInterface::GetInstance()->Start(env, cable_authenticator, state_bytes);
 }
 
-static void JNI_BLEHandler_Stop(JNIEnv* env) {
+static void JNI_CableAuthenticator_Stop(JNIEnv* env) {
   CableInterface::GetInstance()->Stop();
 }
 
-static void JNI_BLEHandler_OnQRScanned(JNIEnv* env,
-                                       const JavaParamRef<jstring>& jvalue) {
+static void JNI_CableAuthenticator_OnQRScanned(
+    JNIEnv* env,
+    const JavaParamRef<jstring>& jvalue) {
   CableInterface::GetInstance()->OnQRScanned(ConvertJavaStringToUTF8(jvalue));
 }
 
-static ScopedJavaLocalRef<jobjectArray> JNI_BLEHandler_Write(
+static ScopedJavaLocalRef<jobjectArray> JNI_CableAuthenticator_OnBLEWrite(
     JNIEnv* env,
     jlong client,
     jint mtu,
@@ -1056,12 +1008,11 @@ static ScopedJavaLocalRef<jobjectArray> JNI_BLEHandler_Write(
   } else if (mtu > 0xffff) {
     mtu = 0xffff;
   }
-  return CableInterface::GetInstance()->Write(client, mtu, data);
+  return CableInterface::GetInstance()->OnBLEWrite(client, mtu, data);
 }
 
-static void JNI_BLEHandler_OnAuthenticatorAttestationResponse(
+static void JNI_CableAuthenticator_OnAuthenticatorAttestationResponse(
     JNIEnv* env,
-    jlong client,
     jint ctap_status,
     const JavaParamRef<jbyteArray>& jclient_data_json,
     const JavaParamRef<jbyteArray>& jattestation_object) {
@@ -1074,12 +1025,11 @@ static void JNI_BLEHandler_OnAuthenticatorAttestationResponse(
     JavaByteArrayToByteVector(env, jattestation_object, &attestation_object);
   }
   return CableInterface::GetInstance()->OnMakeCredentialResponse(
-      client, ctap_status, client_data_json, attestation_object);
+      ctap_status, client_data_json, attestation_object);
 }
 
-static void JNI_BLEHandler_OnAuthenticatorAssertionResponse(
+static void JNI_CableAuthenticator_OnAuthenticatorAssertionResponse(
     JNIEnv* env,
-    jlong client,
     jint ctap_status,
     const JavaParamRef<jbyteArray>& jclient_data_json,
     const JavaParamRef<jbyteArray>& jcredential_id,
@@ -1102,7 +1052,6 @@ static void JNI_BLEHandler_OnAuthenticatorAssertionResponse(
     JavaByteArrayToByteVector(env, jsignature, &signature);
   }
   return CableInterface::GetInstance()->OnGetAssertionResponse(
-      client, ctap_status, std::move(client_data_json),
-      std::move(credential_id), std::move(authenticator_data),
-      std::move(signature));
+      ctap_status, std::move(client_data_json), std::move(credential_id),
+      std::move(authenticator_data), std::move(signature));
 }

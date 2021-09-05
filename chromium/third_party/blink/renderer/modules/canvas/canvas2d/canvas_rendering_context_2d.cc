@@ -502,8 +502,8 @@ void CanvasRenderingContext2D::setFont(const String& new_font) {
   // documents.
   if (!canvas()->GetDocument().GetFrame())
     return;
-  identifiability_study_helper_.MaybeUpdateDigest(CanvasOps::kSetFont,
-                                                  new_font);
+  identifiability_study_helper_.MaybeUpdateBuilder(
+      CanvasOps::kSetFont, IdentifiabilityBenignStringToken(new_font));
 
   base::TimeTicks start_time = base::TimeTicks::Now();
   canvas()->GetDocument().UpdateStyleAndLayoutTreeForNode(canvas());
@@ -545,7 +545,7 @@ void CanvasRenderingContext2D::setFont(const String& new_font) {
           element_font_description.SpecifiedSize());
 
       font_style->SetFontDescription(element_font_description);
-      canvas()->GetDocument().EnsureStyleResolver().ComputeFont(
+      canvas()->GetDocument().GetStyleEngine().ComputeFont(
           *canvas(), font_style.get(), *parsed_style);
 
       // We need to reset Computed and Adjusted size so we skip zoom and
@@ -865,11 +865,13 @@ void CanvasRenderingContext2D::DrawTextInternal(
   if (max_width && (!std::isfinite(*max_width) || *max_width <= 0))
     return;
 
-  identifiability_study_helper_.MaybeUpdateDigest(
+  identifiability_study_helper_.MaybeUpdateBuilder(
       paint_type == CanvasRenderingContext2DState::kFillPaintType
           ? CanvasOps::kFillText
           : CanvasOps::kStrokeText,
-      IdentifiabilitySensitiveString(text), x, y, max_width ? *max_width : -1);
+      IdentifiabilitySensitiveStringToken(text), x, y,
+      max_width ? *max_width : -1);
+  identifiability_study_helper_.set_encountered_sensitive_ops();
 
   const Font& font = AccessFont();
   const SimpleFontData* font_data = font.PrimaryFont();

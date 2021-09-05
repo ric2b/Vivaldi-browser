@@ -35,7 +35,7 @@ class FakeLoginDisplayHost : public LoginDisplayHost {
   void SetStatusAreaVisible(bool visible) override;
   void StartWizard(chromeos::OobeScreenId first_screen) override;
   WizardController* GetWizardController() override;
-  AppLaunchController* GetAppLaunchController() override;
+  KioskLaunchController* GetKioskLaunchController() override;
   void StartUserAdding(base::OnceClosure completion_callback) override;
   void CancelUserAdding() override;
   void StartSignInScreen() override;
@@ -50,15 +50,14 @@ class FakeLoginDisplayHost : public LoginDisplayHost {
                               const std::string& given_name) override;
   void LoadWallpaper(const AccountId& account_id) override;
   void LoadSigninWallpaper() override;
-  bool IsUserWhitelisted(const AccountId& account_id) override;
+  bool IsUserAllowlisted(const AccountId& account_id) override;
   void ShowGaiaDialog(const AccountId& prefilled_account) override;
   void HideOobeDialog() override;
   void UpdateOobeDialogState(ash::OobeDialogState state) override;
   void CancelPasswordChangedFlow() override;
   void MigrateUserData(const std::string& old_password) override;
   void ResyncUserData() override;
-  void ShowFeedback() override;
-  void ShowResetScreen() override;
+  bool HandleAccelerator(ash::LoginAcceleratorAction action) override;
   void HandleDisplayCaptivePortal() override;
   void UpdateAddUserButtonStatus() override;
   void RequestSystemInfoUpdate() override;

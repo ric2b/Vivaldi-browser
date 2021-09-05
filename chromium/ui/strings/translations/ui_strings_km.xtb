@@ -37,9 +37,11 @@
 <translation id="1842960171412779397">ជ្រើសរើស</translation>
 <translation id="1859234291848436338">ទិសដៅការសរសេរ</translation>
 <translation id="1860796786778352021">បិទការជូនដំណឹង</translation>
+<translation id="186476001994626254">ខ្លឹមសារពី Web Smart Paste</translation>
 <translation id="1871244248791675517">Ins</translation>
 <translation id="1884435127456172652"><ph name="NUMBER" /> %</translation>
 <translation id="1901303067676059328">ជ្រើសរើសទាំងអស់</translation>
+<translation id="19085484004813472">នេះគឺជាមុខងារថ្មី</translation>
 <translation id="2006524834898217237">ត្រូវប្រាកដថា ឧបករណ៍នេះមានការតភ្ជាប់អ៊ីនធឺណិត។</translation>
 <translation id="208586643495776849">សូម​ព្យាយាម​ម្ដងទៀត</translation>
 <translation id="2090963878406559571">ដើម្បី​ផ្ញើ​លេខទូរសព្ទ​ពី <ph name="ORIGIN" /> ទៅ​ទូរសព្ទ Android របស់អ្នក សូម <ph name="TROUBLESHOOT_LINK" /> សម្រាប់​ឧបករណ៍​ទាំងពីរ​នៅក្នុង​ការកំណត់​។</translation>
@@ -67,6 +69,7 @@
 <translation id="2570734079541893434">គ្រប់គ្រង​ការកំណត់</translation>
 <translation id="2573731672208488250">{HOURS,plural, =1{1 ម៉ោងទៀត}other{# ម៉ោងទៀត}}</translation>
 <translation id="2583543531130364912">ក្រិត​អេក្រង់​ចុច​របស់​អ្នក</translation>
+<translation id="2586657967955657006">អង្គ​ចងចាំ</translation>
 <translation id="2666092431469916601">ខាងលើ</translation>
 <translation id="2701330563083355633">បាន​ចែករំលែក​ពី <ph name="DEVICE_NAME" /></translation>
 <translation id="271033894570825754">ថ្មី</translation>
@@ -74,6 +77,7 @@
 <translation id="2749082172777216925"><ph name="APP_NAME_INFO" />, <ph name="PRICE" /></translation>
 <translation id="2803313416453193357">បើកថតឯកសារ</translation>
 <translation id="2824719307700604149">{YEARS,plural, =1{1 ឆ្នាំមុន}other{# ឆ្នាំមុន}}</translation>
+<translation id="2878511608894704031">លុបទាំងអស់</translation>
 <translation id="2907671656515444832">{DAYS,plural, =1{1 ថ្ងៃទៀត}other{# ថ្ងៃទៀត}}</translation>
 <translation id="2931838996092594335">ចុច</translation>
 <translation id="2981684127883932071">កំពុងបង្ហាញ​ការណែនាំ</translation>
@@ -114,6 +118,7 @@
 <translation id="4289300219472526559">ចាប់ផ្តើមនិយាយ</translation>
 <translation id="430191667033048642"><ph name="MOVED_APP_NAME" /> ត្រូវបាន​ផ្លាស់ទី​ទៅថត <ph name="FOLDER_NAME" />។</translation>
 <translation id="4316910396681052118">កម្មវិធី​ទាំងអស់</translation>
+<translation id="4491109536499578614">រូបភាព</translation>
 <translation id="4588090240171750605">ទាញចុះទៅខាងស្តាំ</translation>
 <translation id="4631891353005174729"><ph name="APP_NAME_TYPE" />, ការវាយតម្លៃ​ដោយដាក់​ផ្កាយ <ph name="RATING_SCORE" /></translation>
 <translation id="4648249871170053485"><ph name="APP_NAME" />, ការណែនាំ​កម្មវិធី</translation>
@@ -147,6 +152,7 @@
 <translation id="5768079895599174203">{DAYS,plural, =1{1 ថ្ងៃ និង }other{# ថ្ងៃ និង }}</translation>
 <translation id="5789643057113097023">.</translation>
 <translation id="5866104238061687188">{YEARS,plural, =1{1 ឆ្នាំទៀត}other{# ឆ្នាំទៀត}}</translation>
+<translation id="588258955323874662">ពេញអេក្រង់</translation>
 <translation id="5906667377645263094">{SECONDS,plural, =1{នៅសល់ 1 វិនាទីទៀត}other{នៅសល់ # វិនាទីទៀត}}</translation>
 <translation id="5941711191222866238">បង្រួម</translation>
 <translation id="5943826764092288734">{HOURS,plural, =1{1 ម៉ោង}other{# ម៉ោង}}</translation>
@@ -170,6 +176,7 @@
 <translation id="6417265370957905582">Google ជំនួយការ</translation>
 <translation id="6430678249303439055">ទប់ស្កាត់​ការជូនដំណឹង​ទាំងអស់​ពីកម្មវិធី​នេះ</translation>
 <translation id="6483402905448010557">{SECONDS,plural, =1{1 វិនាទី​មុន}other{# វិនាទី​មុន}}</translation>
+<translation id="6503257047630241175">ខ្លឹមសារ RTF</translation>
 <translation id="6539092367496845964">មានអ្វីមួយខុសប្រក្រតី។ សូមព្យាយាមម្តង​ទៀតនៅ​ពេលក្រោយ។</translation>
 <translation id="654149438358937226">ទប់ស្កាត់ការជូនដំណឹងទាំងអស់</translation>
 <translation id="6567071839949112727">ចុច​ធាតុ</translation>

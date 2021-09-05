@@ -36,13 +36,13 @@ update_target("//components/sessions:shared") {
   ]
 }
 
-update_template_instance("//content/public/browser:browser_sources") {
+update_target("//content/public/browser:browser_sources") {
   sources += [
     "//vivaldi/components/content/vivaldi_web_contents_delegate.cc",
   ]
 }
 
-update_template_instance("//content/renderer:renderer") {
+update_target("//content/renderer:renderer") {
   sources += [
     "//vivaldi/components/content/vivaldi_render_views.cc",
   ]
@@ -68,9 +68,8 @@ update_template_instance("//third_party/blink/renderer/platform/loader:loader") 
   ]
 }
 
-update_template_instance("//content/browser:browser") {
+update_target("//content/browser:browser") {
   sources += [
-    "//vivaldi/components/content/vivaldi_browser_plugin_guest.cc",
     "//vivaldi/components/content/vivaldi_render_frame_host_impl.cc",
     "//vivaldi/components/content/vivaldi_render_view_host_impl.cc",
     "//vivaldi/components/content/vivaldi_renderers.cc",
@@ -81,7 +80,7 @@ update_template_instance("//content/browser:browser") {
   ]
 }
 
-if (!is_android) {
+if (vivaldi_build_tests) {
   update_target("//components:components_unittests") {
     if (!defined(sources)) {
       sources = []
@@ -104,6 +103,47 @@ if (!is_android) {
     deps += [ "//vivaldi/components:adverse_adblocking" ]
   }
 
+  update_target("//components/guest_view/browser:test_support") {
+    sources += [
+      "//vivaldi/components/guest_view/vivaldi_guest_view_test_helper.cc",
+    ]
+  }
+}
+
+update_target("//chrome/browser:browser") {
+  sources += [
+    "//vivaldi/components/capture/capture_page.cc",
+    "//vivaldi/components/capture/capture_page.h",
+    "//vivaldi/components/capture/thumbnail_capture_contents.cc",
+    "//vivaldi/components/capture/thumbnail_capture_contents.h",
+
+    "//vivaldi/components/datasource/vivaldi_data_source_api.cc",
+    "//vivaldi/components/datasource/vivaldi_data_source_api.h",
+  ]
+
+  if (!is_android) {
+    sources += [
+      "//vivaldi/components/datasource/css_mods_data_source.cc",
+      "//vivaldi/components/datasource/css_mods_data_source.h",
+      "//vivaldi/components/datasource/local_image_data_source.cc",
+      "//vivaldi/components/datasource/local_image_data_source.h",
+      "//vivaldi/components/datasource/notes_attachment_data_source.cc",
+      "//vivaldi/components/datasource/notes_attachment_data_source.h",
+      "//vivaldi/components/datasource/vivaldi_data_source.cc",
+      "//vivaldi/components/datasource/vivaldi_data_source.h",
+      "//vivaldi/components/datasource/vivaldi_web_source.cc",
+      "//vivaldi/components/datasource/vivaldi_web_source.h",
+    ]
+    if (is_win) {
+      sources += [
+        "//vivaldi/components/datasource/desktop_data_source_win.cc",
+        "//vivaldi/components/datasource/desktop_data_source_win.h",
+      ]
+    }
+  }
+}
+
+if (!is_android) {
   update_target("//chrome/browser/extensions:extensions") {
     sources += [
       "//vivaldi/components/browser/vivaldi_component_loader.cc",
@@ -116,12 +156,6 @@ if (!is_android) {
     ]
     deps += [
       "//components/paint_preview/buildflags",
-    ]
-  }
-
-  update_target("//components/guest_view/browser:test_support") {
-    sources += [
-      "//vivaldi/components/guest_view/vivaldi_guest_view_test_helper.cc",
     ]
   }
 
@@ -147,20 +181,20 @@ if (!is_android) {
     ]
   }
 
-  update_template_instance("//extensions/browser:browser_sources") {
+  update_target("//extensions/browser:browser_sources") {
     sources += [
       "//vivaldi/components/browser/vivaldi_app_window.cc",
       "//vivaldi/components/guest_view/vivaldi_web_view_permission_helper_delegate.cc",
     ]
   }
 
-  update_template_instance("//extensions/common:common") {
+  update_target("//extensions/common:common") {
     sources += [
       "//vivaldi/components/extensions/vivaldi_common_features.cc",
     ]
   }
 
-  update_template_instance("//extensions/renderer:renderer") {
+  update_target("//extensions/renderer:renderer") {
     sources += [
       "//vivaldi/components/extensions/vivaldi_mime_handler_view_container_manager.cc",
     ]
@@ -184,14 +218,7 @@ if (is_mac) {
   }
 }
 
-if (!is_android) {
-  update_target("//components:components_unittests") {
-      deps += [
-        "//vivaldi/components/request_filter/adblock_filter:unit_tests",
-        "//vivaldi/components/datasource:dataurl_unit_tests",
-      ]
-  }
-
+if (vivaldi_build_tests) {
   update_target("//components/content_settings/browser:test_support") {
     sources += [
       "//vivaldi/components/content/vivaldi_test_tab_specific_content_settings_delegate.cc",

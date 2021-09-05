@@ -25,8 +25,6 @@
 #include "gpu/ipc/host/shader_disk_cache.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/gfx/font_render_params.h"
-#include "ui/ozone/public/gpu_platform_support_host.h"
-#include "ui/ozone/public/ozone_platform.h"
 
 #if defined(OS_ANDROID)
 #include "base/android/build_info.h"
@@ -37,7 +35,8 @@
 #endif
 
 #if defined(USE_OZONE)
-#include "ui/base/ui_base_features.h"
+#include "ui/ozone/public/gpu_platform_support_host.h"
+#include "ui/ozone/public/ozone_platform.h"
 #endif
 
 namespace viz {
@@ -195,7 +194,8 @@ void GpuHostImpl::BlockLiveOffscreenContexts() {
 
 void GpuHostImpl::ConnectFrameSinkManager(
     mojo::PendingReceiver<mojom::FrameSinkManager> receiver,
-    mojo::PendingRemote<mojom::FrameSinkManagerClient> client) {
+    mojo::PendingRemote<mojom::FrameSinkManagerClient> client,
+    const DebugRendererSettings& debug_renderer_settings) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   TRACE_EVENT0("gpu", "GpuHostImpl::ConnectFrameSinkManager");
 
@@ -208,6 +208,7 @@ void GpuHostImpl::ConnectFrameSinkManager(
       params_.deadline_to_synchronize_surfaces.value_or(0u);
   params->frame_sink_manager = std::move(receiver);
   params->frame_sink_manager_client = std::move(client);
+  params->debug_renderer_settings = debug_renderer_settings;
   viz_main_->CreateFrameSinkManager(std::move(params));
 }
 
@@ -429,7 +430,7 @@ void GpuHostImpl::DidInitialize(
                            gpu_feature_info_for_hardware_gpu, gpu_extra_info);
 
   if (!params_.disable_gpu_shader_disk_cache) {
-    CreateChannelCache(gpu::kInProcessCommandBufferClientId);
+    CreateChannelCache(gpu::kDisplayCompositorClientId);
 
     bool use_gr_shader_cache = base::FeatureList::IsEnabled(
                                    features::kDefaultEnableOopRasterization) ||

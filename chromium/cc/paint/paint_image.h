@@ -5,6 +5,7 @@
 #ifndef CC_PAINT_PAINT_IMAGE_H_
 #define CC_PAINT_PAINT_IMAGE_H_
 
+#include <string>
 #include <vector>
 
 #include "base/gtest_prod_util.h"
@@ -17,6 +18,7 @@
 #include "third_party/skia/include/core/SkImage.h"
 #include "third_party/skia/include/core/SkYUVAIndex.h"
 #include "third_party/skia/include/core/SkYUVASizeInfo.h"
+#include "ui/gfx/display_color_spaces.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 
@@ -120,7 +122,7 @@ class CC_PAINT_EXPORT PaintImage {
 
   class CC_PAINT_EXPORT FrameKey {
    public:
-    FrameKey(ContentId content_id, size_t frame_index, gfx::Rect subset_rect);
+    FrameKey(ContentId content_id, size_t frame_index);
     bool operator==(const FrameKey& other) const;
     bool operator!=(const FrameKey& other) const;
 
@@ -132,8 +134,6 @@ class CC_PAINT_EXPORT PaintImage {
    private:
     ContentId content_id_;
     size_t frame_index_;
-    // TODO(khushalsagar): Remove this when callers take care of subsetting.
-    gfx::Rect subset_rect_;
 
     size_t hash_;
   };
@@ -215,26 +215,36 @@ class CC_PAINT_EXPORT PaintImage {
   //    code that assume YUV420 without alpha because it is currently the only
   //    subsampling supported for direct YUV rendering.
   //  - The dimensions of YUV planes are tracked in |yuva_size_info|.
-  //    This struct is initialized by QueryYUVA8 in calls to
+  //    This struct is initialized by QueryYUVA in calls to
   //    PaintImage::IsYuv(), including within this method.
   //  - The |frame_index| parameter will be passed along to
   //    ImageDecoder::DecodeToYUV but for multi-frame YUV support, ImageDecoder
   //    needs a separate YUV frame buffer cache.
   //  - The mapping of source planes to channels is tracked by |plane_indices|.
-  //    This struct is initialized by QueryYUVA8 in calls to
+  //    This struct is initialized by QueryYUVA in calls to
   //    PaintImage::IsYuv(), including within this method.
   bool DecodeYuv(void* planes[SkYUVASizeInfo::kMaxCount],
                  size_t frame_index,
                  GeneratorClientId client_id,
                  const SkYUVASizeInfo& yuva_size_info,
+                 SkColorType yuva_color_type,
                  SkYUVAIndex* plane_indices) const;
 
   // Returns the SkImage associated with this PaintImage. If PaintImage is
-  // texture backed, this API may do a readback from GPU to CPU memory.
-  // Avoid using this API unless actual pixels are needed.
-  // For other cases, prefer using PaintImage APIs directly or use
-  // GetSkImageInfo() for metadata about the SkImage.
-  const sk_sp<SkImage>& GetRasterSkImage() const;
+  // texture backed, this API will always do a readback from GPU to CPU memory,
+  // so avoid using it unless actual pixels are needed. For other cases, prefer
+  // using PaintImage APIs directly or use GetSkImageInfo() for metadata about
+  // the SkImage.
+  sk_sp<SkImage> GetSwSkImage() const;
+
+  // Reads this image's pixels into caller-owned |dst_pixels|
+  bool readPixels(const SkImageInfo& dst_info,
+                  void* dst_pixels,
+                  size_t dst_row_bytes,
+                  int src_x,
+                  int src_y) const;
+
+  SkImageInfo GetSkImageInfo() const;
 
   Id stable_id() const { return id_; }
   const sk_sp<SkImage>& GetSkImage() const;
@@ -255,20 +265,20 @@ class CC_PAINT_EXPORT PaintImage {
     return paint_worklet_input_ ? 0 : GetSkImage()->uniqueID();
   }
   explicit operator bool() const {
-    return paint_worklet_input_ || !!GetSkImage();
+    return paint_worklet_input_ || !!GetSkImage() || texture_backing_;
   }
   bool IsLazyGenerated() const {
-    return paint_worklet_input_ ? false : GetSkImage()->isLazyGenerated();
+    return paint_record_ || paint_image_generator_;
   }
   bool IsPaintWorklet() const { return !!paint_worklet_input_; }
   bool IsTextureBacked() const;
   int width() const;
   int height() const;
   SkColorSpace* color_space() const {
-    return paint_worklet_input_ ? nullptr : GetSkImage()->colorSpace();
+    return paint_worklet_input_ ? nullptr : GetSkImageInfo().colorSpace();
   }
-  bool isSRGB() const;
-  const gfx::Rect subset_rect() const { return subset_rect_; }
+
+  gfx::ContentColorUsage GetContentColorUsage() const;
 
   // Returns whether this image will be decoded and rendered from YUV data
   // and fills out plane size info, plane index info, and the matrix for
@@ -276,7 +286,8 @@ class CC_PAINT_EXPORT PaintImage {
   // |plane_indices|, and |yuv_color_space| if any are provided.
   bool IsYuv(SkYUVASizeInfo* yuva_size_info = nullptr,
              SkYUVAIndex* plane_indices = nullptr,
-             SkYUVColorSpace* yuv_color_space = nullptr) const;
+             SkYUVColorSpace* yuv_color_space = nullptr,
+             uint8_t* bit_depth = nullptr) const;
 
   // Get metadata associated with this image.
   SkColorType GetColorType() const;
@@ -306,7 +317,7 @@ class CC_PAINT_EXPORT PaintImage {
     return paint_worklet_input_;
   }
 
-  bool IsOpaque() const { return GetSkImage() && GetSkImage()->isOpaque(); }
+  bool IsOpaque() const { return GetSkImageInfo().isOpaque(); }
 
   std::string ToString() const;
 
@@ -319,7 +330,9 @@ class CC_PAINT_EXPORT PaintImage {
   friend class ScopedRasterFlags;
   friend class PaintOpReader;
 
-  bool CanDecodeFromGenerator() const;
+  friend class PlaybackImageProvider;
+  friend class DrawImageRectOp;
+  friend class DrawImageOp;
 
   bool DecodeFromGenerator(void* memory,
                            SkImageInfo* info,
@@ -332,7 +345,9 @@ class CC_PAINT_EXPORT PaintImage {
                          size_t frame_index,
                          GeneratorClientId client_id) const;
   void CreateSkImage();
-  PaintImage MakeSubset(const gfx::Rect& subset) const;
+
+  // Only supported in non-OOPR contexts by friend callers.
+  sk_sp<SkImage> GetAcceleratedSkImage() const;
 
   sk_sp<SkImage> sk_image_;
   sk_sp<PaintRecord> paint_record_;
@@ -347,10 +362,6 @@ class CC_PAINT_EXPORT PaintImage {
   AnimationType animation_type_ = AnimationType::STATIC;
   CompletionState completion_state_ = CompletionState::DONE;
   int repetition_count_ = kAnimationNone;
-
-  // If non-empty, holds the subset of this image relative to the original image
-  // at the origin.
-  gfx::Rect subset_rect_;
 
   // Whether the data fetched for this image is a part of a multpart response.
   bool is_multipart_ = false;

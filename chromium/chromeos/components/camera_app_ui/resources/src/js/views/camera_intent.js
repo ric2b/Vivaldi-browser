@@ -14,6 +14,8 @@ import {DeviceInfoUpdater} from '../device/device_info_updater.js';
 import {Intent} from '../intent.js';
 import * as metrics from '../metrics.js';
 // eslint-disable-next-line no-unused-vars
+import {AbstractFileEntry} from '../models/file_system_entry.js';
+// eslint-disable-next-line no-unused-vars
 import {ResultSaver} from '../models/result_saver.js';
 import {VideoSaver} from '../models/video_saver.js';
 // eslint-disable-next-line no-unused-vars
@@ -92,7 +94,7 @@ export class CameraIntent extends Camera {
     this.videoResult_ = null;
 
     /**
-     * @type {?FileEntry}
+     * @type {?AbstractFileEntry}
      * @private
      */
     this.videoResultFile_ = null;
@@ -157,13 +159,13 @@ export class CameraIntent extends Camera {
         }
       })();
       const result = this.photoResult_ || this.videoResult_;
-      metrics.log(metrics.Type.CAPTURE, {
+      metrics.sendCaptureEvent({
         facing: this.facingMode_,
         duration: result.duration || undefined,
         resolution: result.resolution,
         intentResult: confirmed ? metrics.IntentResultType.CONFIRMED :
                                   metrics.IntentResultType.CANCELED,
-        shutterType: this.shutterType_
+        shutterType: this.shutterType_,
       });
       if (confirmed) {
         await this.intent_.finish();

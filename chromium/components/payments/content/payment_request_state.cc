@@ -73,7 +73,7 @@ PaymentRequestState::PaymentRequestState(
       frame_origin_(frame_origin),
       frame_security_origin_(frame_security_origin),
       app_locale_(app_locale),
-      spec_(spec),
+      spec_(spec->GetWeakPtr()),
       delegate_(delegate),
       personal_data_manager_(personal_data_manager),
       journey_logger_(journey_logger),
@@ -108,7 +108,11 @@ void PaymentRequestState::ShowProcessingSpinner() {
 }
 
 PaymentRequestSpec* PaymentRequestState::GetSpec() const {
-  return spec_;
+  return spec_.get();
+}
+
+std::string PaymentRequestState::GetTwaPackageName() const {
+  return GetPaymentRequestDelegate()->GetTwaPackageName();
 }
 
 const GURL& PaymentRequestState::GetTopOrigin() {
@@ -130,7 +134,13 @@ content::RenderFrameHost* PaymentRequestState::GetInitiatorRenderFrameHost()
 
 const std::vector<mojom::PaymentMethodDataPtr>&
 PaymentRequestState::GetMethodData() const {
+  DCHECK(GetSpec());
   return GetSpec()->method_data();
+}
+
+std::unique_ptr<autofill::InternalAuthenticator>
+PaymentRequestState::CreateInternalAuthenticator() const {
+  return GetPaymentRequestDelegate()->CreateInternalAuthenticator();
 }
 
 scoped_refptr<PaymentManifestWebDataService>
@@ -150,7 +160,7 @@ bool PaymentRequestState::IsRequestedAutofillDataAvailable() {
 bool PaymentRequestState::MayCrawlForInstallablePaymentApps() {
   return PaymentsExperimentalFeatures::IsEnabled(
              features::kAlwaysAllowJustInTimePaymentApp) ||
-         !spec_->supports_basic_card();
+         !spec_ || !spec_->supports_basic_card();
 }
 
 bool PaymentRequestState::IsOffTheRecord() const {
@@ -186,6 +196,25 @@ void PaymentRequestState::OnDoneCreatingPaymentApps() {
   if (--number_of_payment_app_factories_ > 0U)
     return;
 
+  if (IsInTwa()) {
+    // If a preferred payment app is present (e.g. Play Billing within a TWA),
+    // all other payment apps are ignored.
+    bool has_preferred_app =
+        std::any_of(available_apps_.begin(), available_apps_.end(),
+                    [](const auto& app) { return app->IsPreferred(); });
+    if (has_preferred_app) {
+      available_apps_.erase(
+          std::remove_if(available_apps_.begin(), available_apps_.end(),
+                         [](const auto& app) { return !app->IsPreferred(); }),
+          available_apps_.end());
+
+      // By design, only one payment app can be preferred.
+      DCHECK_EQ(available_apps_.size(), 1u);
+      if (available_apps_.size() > 1)
+        available_apps_.resize(1);
+    }
+  }
+
   SetDefaultProfileSelections();
 
   get_all_apps_finished_ = true;
@@ -198,16 +227,21 @@ void PaymentRequestState::OnDoneCreatingPaymentApps() {
 
   // Fulfill the pending CanMakePayment call.
   if (can_make_payment_callback_)
-    std::move(can_make_payment_callback_).Run(are_requested_methods_supported_);
+    std::move(can_make_payment_callback_).Run(GetCanMakePaymentValue());
 
   // Fulfill the pending HasEnrolledInstrument call.
   if (has_enrolled_instrument_callback_)
-    std::move(has_enrolled_instrument_callback_).Run(has_enrolled_instrument_);
+    std::move(has_enrolled_instrument_callback_)
+        .Run(GetHasEnrolledInstrumentValue());
 
   // Fulfill the pending AreRequestedMethodsSupported call.
   if (are_requested_methods_supported_callback_)
     CheckRequestedMethodsSupported(
         std::move(are_requested_methods_supported_callback_));
+}
+
+void PaymentRequestState::SetCanMakePaymentEvenWithoutApps() {
+  can_make_payment_even_without_apps_ = true;
 }
 
 void PaymentRequestState::OnPaymentResponseReady(
@@ -221,6 +255,9 @@ void PaymentRequestState::OnPaymentResponseError(
 }
 
 void PaymentRequestState::OnSpecUpdated() {
+  if (!spec_)
+    return;
+
   autofill::AutofillProfile* selected_shipping_profile =
       selected_shipping_profile_;
   autofill::AutofillProfile* selected_contact_profile =
@@ -260,7 +297,7 @@ void PaymentRequestState::CanMakePayment(StatusCallback callback) {
     return;
   }
 
-  PostStatusCallback(std::move(callback), are_requested_methods_supported_);
+  PostStatusCallback(std::move(callback), GetCanMakePaymentValue());
 }
 
 void PaymentRequestState::HasEnrolledInstrument(StatusCallback callback) {
@@ -270,7 +307,7 @@ void PaymentRequestState::HasEnrolledInstrument(StatusCallback callback) {
     return;
   }
 
-  PostStatusCallback(std::move(callback), has_enrolled_instrument_);
+  PostStatusCallback(std::move(callback), GetHasEnrolledInstrumentValue());
 }
 
 void PaymentRequestState::AreRequestedMethodsSupported(
@@ -297,6 +334,9 @@ void PaymentRequestState::CheckRequestedMethodsSupported(
     MethodsSupportedCallback callback) {
   DCHECK(get_all_apps_finished_);
 
+  if (!spec_)
+    return;
+
   // Don't modify the value of |are_requested_methods_supported_|, because it's
   // used for canMakePayment().
   bool supported = are_requested_methods_supported_;
@@ -310,11 +350,10 @@ void PaymentRequestState::CheckRequestedMethodsSupported(
     get_all_payment_apps_error_ = errors::kStrictBasicCardShowReject;
   }
 
-  bool is_in_twa = !payment_request_delegate_->GetTwaPackageName().empty();
   if (!supported && get_all_payment_apps_error_.empty() &&
       base::Contains(spec_->payment_method_identifiers_set(),
                      methods::kGooglePlayBilling) &&
-      !is_in_twa) {
+      !IsInTwa()) {
     get_all_payment_apps_error_ = errors::kAppStoreMethodOnlySupportedInTwa;
   }
 
@@ -337,9 +376,12 @@ void PaymentRequestState::RemoveObserver(Observer* observer) {
 void PaymentRequestState::GeneratePaymentResponse() {
   DCHECK(is_ready_to_pay());
 
+  if (!spec_)
+    return;
+
   // Once the response is ready, will call back into OnPaymentResponseReady.
   response_helper_ = std::make_unique<PaymentResponseHelper>(
-      app_locale_, spec_, selected_app_, payment_request_delegate_,
+      app_locale_, spec_.get(), selected_app_, payment_request_delegate_,
       selected_shipping_profile_, selected_contact_profile_, this);
 }
 
@@ -429,6 +471,9 @@ void PaymentRequestState::AddAutofillContactProfile(
 
 void PaymentRequestState::SetSelectedShippingOption(
     const std::string& shipping_option_id) {
+  if (!spec_)
+    return;
+
   spec_->StartWaitingForUpdateWith(
       PaymentRequestSpec::UpdateReason::SHIPPING_OPTION);
   // This will inform the merchant and will lead to them calling updateWith with
@@ -439,6 +484,9 @@ void PaymentRequestState::SetSelectedShippingOption(
 void PaymentRequestState::SetSelectedShippingProfile(
     autofill::AutofillProfile* profile,
     SectionSelectionStatus selection_status) {
+  if (!spec_)
+    return;
+
   spec_->StartWaitingForUpdateWith(
       PaymentRequestSpec::UpdateReason::SHIPPING_ADDRESS);
   selected_shipping_profile_ = profile;
@@ -534,7 +582,8 @@ void PaymentRequestState::SelectDefaultShippingAddressAndNotifyObservers() {
   // Only pre-select an address if the merchant provided at least one selected
   // shipping option, and the top profile is complete. Assumes that profiles
   // have already been sorted for completeness and frecency.
-  if (!shipping_profiles().empty() && spec_->selected_shipping_option() &&
+  if (!shipping_profiles().empty() && spec_ &&
+      spec_->selected_shipping_option() &&
       profile_comparator()->IsShippingComplete(shipping_profiles_[0])) {
     selected_shipping_profile_ = shipping_profiles()[0];
   }
@@ -546,13 +595,16 @@ void PaymentRequestState::SelectDefaultShippingAddressAndNotifyObservers() {
 }
 
 bool PaymentRequestState::ShouldShowShippingSection() const {
-  if (!spec_->request_shipping())
+  if (!spec_ || !spec_->request_shipping())
     return false;
 
   return selected_app_ ? !selected_app_->HandlesShippingAddress() : true;
 }
 
 bool PaymentRequestState::ShouldShowContactSection() const {
+  if (!spec_)
+    return false;
+
   if (spec_->request_payer_name() &&
       (!selected_app_ || !selected_app_->HandlesPayerName())) {
     return true;
@@ -642,7 +694,7 @@ void PaymentRequestState::SetDefaultProfileSelections() {
   // Record the missing required payment fields when no complete payment
   // info exists.
   if (available_apps_.empty()) {
-    if (spec_->supports_basic_card()) {
+    if (spec_ && spec_->supports_basic_card()) {
       // All fields are missing when basic-card is requested but no card exits.
       base::UmaHistogramSparse("PaymentRequest.MissingPaymentFields",
                                CREDIT_CARD_EXPIRED | CREDIT_CARD_NO_CARDHOLDER |
@@ -686,7 +738,7 @@ bool PaymentRequestState::ArePaymentDetailsSatisfied() {
 }
 
 bool PaymentRequestState::ArePaymentOptionsSatisfied() {
-  if (is_waiting_for_merchant_validation_)
+  if (is_waiting_for_merchant_validation_ || !spec_)
     return false;
 
   if (ShouldShowShippingSection() &&
@@ -709,6 +761,19 @@ void PaymentRequestState::OnAddressNormalized(
   delegate_->OnShippingAddressSelected(
       data_util::GetPaymentAddressFromAutofillProfile(normalized_profile,
                                                       app_locale_));
+}
+
+bool PaymentRequestState::IsInTwa() const {
+  return !payment_request_delegate_->GetTwaPackageName().empty();
+}
+
+bool PaymentRequestState::GetCanMakePaymentValue() const {
+  return are_requested_methods_supported_ ||
+         can_make_payment_even_without_apps_;
+}
+
+bool PaymentRequestState::GetHasEnrolledInstrumentValue() const {
+  return has_enrolled_instrument_ || can_make_payment_even_without_apps_;
 }
 
 }  // namespace payments

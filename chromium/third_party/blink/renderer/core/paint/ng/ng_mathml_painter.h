@@ -21,10 +21,14 @@ class NGMathMLPainter {
   explicit NGMathMLPainter(const NGPhysicalBoxFragment& box_fragment)
       : box_fragment_(box_fragment) {}
   void Paint(const PaintInfo&, PhysicalOffset);
-  void PaintFractionBar(const PaintInfo&, PhysicalOffset);
 
  private:
   void PaintBar(const PaintInfo&, const IntRect&);
+  void PaintFractionBar(const PaintInfo&,
+                        PhysicalOffset);
+  void PaintRadicalSymbol(const PaintInfo&,
+                          PhysicalOffset);
+  void PaintStretchyOrLargeOperator(const PaintInfo&, PhysicalOffset);
 
   const NGPhysicalBoxFragment& box_fragment_;
 };

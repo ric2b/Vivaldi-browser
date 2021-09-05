@@ -53,8 +53,6 @@ enum class TypingContinuation;
 class CORE_EXPORT InputMethodController final
     : public GarbageCollected<InputMethodController>,
       public ExecutionContextLifecycleObserver {
-  USING_GARBAGE_COLLECTED_MIXIN(InputMethodController);
-
  public:
   enum ConfirmCompositionBehavior {
     kDoNotKeepSelection,
@@ -238,6 +236,10 @@ class CORE_EXPORT InputMethodController final
       TypingCommand::Options options,
       TypingCommand::TextCompositionType composition_type);
   void DispatchCompositionEndEvent(LocalFrame& frame, const String& text);
+
+  // Gets ime text spans of interest at the cursor position.
+  WebVector<ui::ImeTextSpan> GetImeTextSpansAroundPosition(
+      unsigned position) const;
 
   FRIEND_TEST_ALL_PREFIXES(InputMethodControllerTest,
                            InputModeOfFocusedElement);

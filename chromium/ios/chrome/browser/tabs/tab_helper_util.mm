@@ -9,12 +9,13 @@
 #endif
 
 #include "base/feature_list.h"
+#include "components/autofill/ios/form_util/unique_id_data_tab_helper.h"
+#include "components/favicon/core/favicon_service.h"
 #import "components/favicon/ios/web_favicon_driver.h"
 #include "components/history/core/browser/top_sites.h"
 #import "components/history/ios/browser/web_state_top_sites_observer.h"
 #include "components/keyed_service/core/service_access_type.h"
 #import "components/language/ios/browser/ios_language_detection_tab_helper.h"
-#import "components/password_manager/ios/unique_id_tab_helper.h"
 #include "components/safe_browsing/core/features.h"
 #import "components/safe_browsing/ios/browser/safe_browsing_url_allow_list.h"
 #import "components/security_state/ios/insecure_input_tab_helper.h"
@@ -45,6 +46,7 @@
 #import "ios/chrome/browser/open_in/open_in_tab_helper.h"
 #import "ios/chrome/browser/overscroll_actions/overscroll_actions_tab_helper.h"
 #import "ios/chrome/browser/passwords/password_tab_helper.h"
+#import "ios/chrome/browser/passwords/well_known_change_password_tab_helper.h"
 #import "ios/chrome/browser/policy/policy_features.h"
 #import "ios/chrome/browser/policy_url_blocking/policy_url_blocking_tab_helper.h"
 #include "ios/chrome/browser/reading_list/reading_list_model_factory.h"
@@ -76,6 +78,7 @@
 #import "ios/chrome/browser/web/tab_id_tab_helper.h"
 #import "ios/chrome/browser/web/web_state_delegate_tab_helper.h"
 #import "ios/components/security_interstitials/ios_blocking_page_tab_helper.h"
+#import "ios/components/security_interstitials/legacy_tls/legacy_tls_tab_allow_list.h"
 #import "ios/components/security_interstitials/lookalikes/lookalike_url_container.h"
 #import "ios/components/security_interstitials/lookalikes/lookalike_url_tab_allow_list.h"
 #import "ios/components/security_interstitials/lookalikes/lookalike_url_tab_helper.h"
@@ -113,6 +116,8 @@ void AttachTabHelpers(web::WebState* web_state, bool for_prerender) {
   IOSTaskTabHelper::CreateForWebState(web_state);
   AppLauncherTabHelper::CreateForWebState(web_state);
   security_interstitials::IOSBlockingPageTabHelper::CreateForWebState(
+      web_state);
+  password_manager::WellKnownChangePasswordTabHelper::CreateForWebState(
       web_state);
 
   if (base::FeatureList::IsEnabled(web::features::kUseJSForErrorPage)) {
@@ -162,7 +167,7 @@ void AttachTabHelpers(web::WebState* web_state, bool for_prerender) {
       web_state,
       ios::TopSitesFactory::GetForBrowserState(original_browser_state).get());
 
-  UniqueIDTabHelper::CreateForWebState(web_state);
+  UniqueIDDataTabHelper::CreateForWebState(web_state);
 
   PasswordTabHelper::CreateForWebState(web_state);
 
@@ -187,10 +192,15 @@ void AttachTabHelpers(web::WebState* web_state, bool for_prerender) {
   PageloadForegroundDurationTabHelper::CreateForWebState(web_state);
 
   if (base::FeatureList::IsEnabled(
-          web::features::kIOSLookalikeUrlNavigationSuggestionsUI)) {
+          web::features::kIOSLookalikeUrlNavigationSuggestionsUI) &&
+      base::FeatureList::IsEnabled(web::features::kSSLCommittedInterstitials)) {
     LookalikeUrlTabHelper::CreateForWebState(web_state);
     LookalikeUrlTabAllowList::CreateForWebState(web_state);
     LookalikeUrlContainer::CreateForWebState(web_state);
+  }
+
+  if (base::FeatureList::IsEnabled(web::features::kIOSLegacyTLSInterstitial)) {
+    LegacyTLSTabAllowList::CreateForWebState(web_state);
   }
 
   // TODO(crbug.com/794115): pre-rendered WebState have lots of unnecessary

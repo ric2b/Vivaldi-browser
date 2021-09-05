@@ -166,9 +166,6 @@ class CORE_EXPORT NGPaintFragment : public RefCounted<NGPaintFragment>,
   // InkOverflow of itself, not including contents, in the local coordinate.
   PhysicalRect SelfInkOverflow() const;
 
-  // InkOverflow of its contents, not including itself, in the local coordinate.
-  PhysicalRect ContentsInkOverflow() const;
-
   // InkOverflow of itself, including contents if they contribute to the ink
   // overflow of this object (e.g. when not clipped,) in the local coordinate.
   PhysicalRect InkOverflow() const;
@@ -180,9 +177,6 @@ class CORE_EXPORT NGPaintFragment : public RefCounted<NGPaintFragment>,
   bool HasOverflowClip() const { return PhysicalFragment().HasOverflowClip(); }
   bool ShouldClipOverflow() const;
   bool HasSelfPaintingLayer() const;
-  // This is equivalent to LayoutObject::VisualRect
-  IntRect VisualRect() const override;
-  IntRect PartialInvalidationVisualRect() const override;
 
   // Set ShouldDoFullPaintInvalidation flag in the corresponding LayoutObject.
   void SetShouldDoFullPaintInvalidation();
@@ -321,9 +315,6 @@ class CORE_EXPORT NGPaintFragment : public RefCounted<NGPaintFragment>,
   // Re-compute ink overflow of children and return the union.
   PhysicalRect RecalcInkOverflow();
   PhysicalRect RecalcContentsInkOverflow() const;
-
-  // This fragment will use the layout object's visual rect.
-  const LayoutObject& VisualRectLayoutObject(bool& this_as_inline_box) const;
 
   //
   // Following fields are computed in the layout phase.

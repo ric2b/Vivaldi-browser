@@ -48,15 +48,17 @@ template("system_webview_apk_or_module_tmpl") {
       "//android_webview:pak_file_assets",
     ]
 
-    # If the R SDK isn't public yet, include the downstream code to support R.
-    if (!public_android_sdk && android_sdk_release == "r") {
-      deps += [ "//clank/android_webview/next:r_sdk_java" ]
-    }
-
     if (_exclude_weblayer_java) {
       deps += [ "//android_webview:android_webview_no_weblayer_java" ]
     } else {
-      deps += [ "//android_webview:android_webview_java" ]
+      if (_is_bundle_module && weblayer_in_split) {
+        deps += [
+          "//android_webview:android_webview_no_weblayer_java",
+          "//weblayer/browser/java:base_module_java",
+        ]
+      } else {
+        deps += [ "//android_webview:android_webview_java" ]
+      }
 
       # Resources from this target will be kept in the base bundle module
       # instead of in language splits.
@@ -66,7 +68,6 @@ template("system_webview_apk_or_module_tmpl") {
       }
     }
 
-    target_sdk_version = android_sdk_version
     product_config_java_packages = [ webview_product_config_java_package ]
 
     if (webview_includes_weblayer) {

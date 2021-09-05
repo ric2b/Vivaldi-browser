@@ -128,6 +128,8 @@ ContentSettingsType PermissionTypeToContentSettingSafe(
       return ContentSettingsType::CAMERA_PAN_TILT_ZOOM;
     case PermissionType::WINDOW_PLACEMENT:
       return ContentSettingsType::WINDOW_PLACEMENT;
+    case PermissionType::FONT_ACCESS:
+      return ContentSettingsType::FONT_ACCESS;
     case PermissionType::NUM:
       break;
   }
@@ -315,14 +317,7 @@ GURL PermissionManager::GetCanonicalOrigin(ContentSettingsType permission,
   if (permission == ContentSettingsType::STORAGE_ACCESS)
     return requesting_origin;
 
-  if (base::FeatureList::IsEnabled(features::kPermissionDelegation)) {
-    // Once permission delegation is enabled by default, it may be possible to
-    // remove "embedding_origin" as a parameter from all function calls in
-    // PermissionContextBase and subclasses. The embedding origin will always
-    // match the requesting origin.
-    return embedding_origin;
-  }
-  return requesting_origin;
+  return embedding_origin;
 }
 
 int PermissionManager::RequestPermission(
@@ -398,8 +393,7 @@ PermissionResult PermissionManager::GetPermissionStatus(
   // called for the top level origin (or a service worker origin).
   // GetPermissionStatusForFrame should be called when to determine the status
   // for an embedded frame.
-  DCHECK(!base::FeatureList::IsEnabled(features::kPermissionDelegation) ||
-         requesting_origin == embedding_origin);
+  DCHECK_EQ(requesting_origin, embedding_origin);
 
   return GetPermissionStatusHelper(permission, nullptr /* render_frame_host */,
                                    requesting_origin, embedding_origin);

@@ -41,7 +41,7 @@
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/remote_set.h"
 #include "third_party/blink/public/common/dom_storage/session_storage_namespace_id.h"
-#include "third_party/blink/public/common/feature_policy/feature_policy.h"
+#include "third_party/blink/public/common/feature_policy/feature_policy_features.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/mojom/renderer_preference_watcher.mojom.h"
 #include "third_party/blink/public/mojom/renderer_preferences.mojom.h"
@@ -89,6 +89,12 @@ class CreateViewParams;
 // When the main frame is part of this RenderViewImpl's frame tree, then this
 // object acts as the RenderWidgetDelegate for that frame's RenderWidget. Other
 // RenderWidgets would have a null RenderWidgetDelegate.
+//
+// Note: There are cases where there may be multiple main frames in tab. For
+// example, both Portals and GuestViews create their own RenderView that's
+// nested within another RenderView's frame tree. In these cases, the
+// RenderWidget for the nested view will have a non-null RenderWidgetDelegate,
+// despite the fact that it isn't the root of the hierarchy.
 class CONTENT_EXPORT RenderViewImpl : public blink::WebViewClient,
                                       public IPC::Listener,
                                       public RenderWidgetDelegate,
@@ -118,9 +124,6 @@ class CONTENT_EXPORT RenderViewImpl : public blink::WebViewClient,
       CompositorDependencies* compositor_deps,
       const mojom::CreateViewParams&));
 
-  // Returns the RenderViewImpl containing the given WebView.
-  static RenderViewImpl* FromWebView(blink::WebView* webview);
-
   // Returns the RenderViewImpl for the given routing ID.
   static RenderViewImpl* FromRoutingID(int routing_id);
 
@@ -149,10 +152,6 @@ class CONTENT_EXPORT RenderViewImpl : public blink::WebViewClient,
   // Functions to add and remove observers for this object.
   void AddObserver(RenderViewObserver* observer);
   void RemoveObserver(RenderViewObserver* observer);
-
-  // Sets the zoom level and notifies observers. Returns true if the zoom level
-  // changed. A value of 0 means the default zoom level.
-  bool SetZoomLevel(double zoom_level);
 
   // Passes along the prefer compositing preference to the WebView's settings.
   void SetPreferCompositingToLCDTextEnabled(bool prefer);
@@ -212,11 +211,10 @@ class CONTENT_EXPORT RenderViewImpl : public blink::WebViewClient,
       const blink::WebString& frame_name,
       blink::WebNavigationPolicy policy,
       network::mojom::WebSandboxFlags sandbox_flags,
-      const blink::FeaturePolicy::FeatureState& opener_feature_state,
+      const blink::FeaturePolicyFeatureState& opener_feature_state,
       const blink::SessionStorageNamespaceId& session_storage_namespace_id)
       override;
   blink::WebPagePopup* CreatePopup(blink::WebLocalFrame* creator) override;
-  void CloseWindowSoon() override;
   base::StringPiece GetSessionStorageNamespaceId() override;
   void PrintPage(blink::WebLocalFrame* frame) override;
   void SetValidationMessageDirection(base::string16* main_text,
@@ -237,6 +235,10 @@ class CONTENT_EXPORT RenderViewImpl : public blink::WebViewClient,
   bool CanHandleGestureEvent() override;
   bool AllowPopupsDuringPageUnload() override;
   void OnPageVisibilityChanged(PageVisibilityState visibility) override;
+  void OnPageFrozenChanged(bool frozen) override;
+  void ZoomLevelChanged() override;
+  void OnSetHistoryOffsetAndLength(int history_offset,
+                                   int history_length) override;
 
   // RenderView implementation -------------------------------------------------
 
@@ -307,7 +309,7 @@ class CONTENT_EXPORT RenderViewImpl : public blink::WebViewClient,
   FRIEND_TEST_ALL_PREFIXES(RenderViewImplTest, UpdateDSFAfterSwapIn);
   FRIEND_TEST_ALL_PREFIXES(RenderViewImplTest,
                            BeginNavigationHandlesAllTopLevel);
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   FRIEND_TEST_ALL_PREFIXES(RenderViewTest, MacTestCmdUp);
 #endif
   FRIEND_TEST_ALL_PREFIXES(RenderViewImplTest, SetHistoryLengthAndOffset);
@@ -332,8 +334,6 @@ class CONTENT_EXPORT RenderViewImpl : public blink::WebViewClient,
     CONNECTION_ERROR,
   };
 
-  static scoped_refptr<base::SingleThreadTaskRunner> GetCleanupTaskRunner();
-
   // Initialize() is separated out from the constructor because it is possible
   // to accidentally call virtual functions. All RenderViewImpl creation is
   // fronted by the Create() method which ensures Initialize() is always called
@@ -348,9 +348,7 @@ class CONTENT_EXPORT RenderViewImpl : public blink::WebViewClient,
   void SetActiveForWidget(bool active) override;
   bool SupportsMultipleWindowsForWidget() override;
   bool ShouldAckSyntheticInputImmediately() override;
-  void ApplyAutoResizeLimitsForWidget(const gfx::Size& min_size,
-                                      const gfx::Size& max_size) override;
-  void DisableAutoResizeForWidget() override;
+  bool AutoResizeMode() override;
   void ScrollFocusedNodeIntoViewForWidget() override;
   void DidReceiveSetFocusEventForWidget() override;
   void DidCommitCompositorFrameForWidget() override;
@@ -361,7 +359,7 @@ class CONTENT_EXPORT RenderViewImpl : public blink::WebViewClient,
       cc::BrowserControlsParams browser_controls_params) override;
   void SetScreenMetricsEmulationParametersForWidget(
       bool enabled,
-      const blink::WebDeviceEmulationParams& params) override;
+      const blink::DeviceEmulationParams& params) override;
 
   // Old WebLocalFrameClient implementations
   // ----------------------------------------
@@ -389,19 +387,14 @@ class CONTENT_EXPORT RenderViewImpl : public blink::WebViewClient,
       const gfx::Size& disable_scrollbars_size_limit);
   void OnMoveOrResizeStarted();
   void OnExitFullscreen();
-  void OnSetHistoryOffsetAndLength(int history_offset, int history_length);
   void OnSetRendererPrefs(
       const blink::mojom::RendererPreferences& renderer_prefs);
   void OnSuppressDialogsUntilSwapOut();
   void OnUpdateTargetURLAck();
   void OnUpdateWebPreferences(const WebPreferences& prefs);
-  void OnAudioStateChanged(bool is_audio_playing);
 
   // Page message handlers -----------------------------------------------------
   void SetPageFrozen(bool frozen);
-  void OnTextAutosizerPageInfoChanged(
-      const blink::WebTextAutosizerPageInfo& page_info);
-  void OnSetInsidePortal(bool inside_portal);
 
   void ApplyVivaldiSpecificPreferences();
 
@@ -410,10 +403,6 @@ class CONTENT_EXPORT RenderViewImpl : public blink::WebViewClient,
 
   // Misc private functions ----------------------------------------------------
 
-  // Request the window to close from the renderer by sending the request to the
-  // browser.
-  void DoDeferredClose();
-
 #if defined(OS_ANDROID)
   // Make the video capture devices (e.g. webcam) stop/resume delivering video
   // frames to their clients, depending on flag |suspend|. This is called in
@@ -421,7 +410,7 @@ class CONTENT_EXPORT RenderViewImpl : public blink::WebViewClient,
   void SuspendVideoCaptureDevices(bool suspend);
 #endif
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   void UpdateFontRenderingFromRendererPrefs() {}
 #else
   void UpdateFontRenderingFromRendererPrefs();
@@ -554,10 +543,6 @@ class CONTENT_EXPORT RenderViewImpl : public blink::WebViewClient,
   // This class owns this member, and is responsible for calling
   // WebView::Close().
   blink::WebView* webview_ = nullptr;
-
-  // Used to indicate the zoom level to be used during subframe loads, since
-  // they should match page zoom level.
-  double page_zoom_level_ = 0;
 
   // Helper objects ------------------------------------------------------------
 

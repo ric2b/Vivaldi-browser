@@ -17,6 +17,7 @@
 #include "chrome/browser/chromeos/net/network_health/network_health_localized_strings.h"
 #include "chrome/browser/chromeos/net/network_health/network_health_service.h"
 #include "chrome/browser/extensions/tab_helper.h"
+#include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/webui/chromeos/cellular_setup/cellular_setup_dialog_launcher.h"
 #include "chrome/browser/ui/webui/chromeos/internet_config_dialog.h"
 #include "chrome/browser/ui/webui/chromeos/internet_detail_dialog.h"
@@ -33,6 +34,7 @@
 #include "chromeos/network/network_state_handler.h"
 #include "chromeos/network/onc/onc_utils.h"
 #include "chromeos/services/network_config/public/mojom/cros_network_config.mojom.h"
+#include "chromeos/services/network_health/public/mojom/network_diagnostics.mojom.h"
 #include "chromeos/services/network_health/public/mojom/network_health.mojom.h"
 #include "components/device_event_log/device_event_log.h"
 #include "content/public/browser/browser_context.h"
@@ -68,29 +70,26 @@ bool GetServicePathFromGuid(const std::string& guid,
   return true;
 }
 
-void SetDeviceProperties(base::DictionaryValue* dictionary) {
-  std::string device;
-  dictionary->GetStringWithoutPathExpansion(shill::kDeviceProperty, &device);
+void SetDeviceProperties(base::Value* dictionary) {
+  const std::string* device = dictionary->FindStringKey(shill::kDeviceProperty);
+  if (!device)
+    return;
   const DeviceState* device_state =
-      NetworkHandler::Get()->network_state_handler()->GetDeviceState(device);
+      NetworkHandler::Get()->network_state_handler()->GetDeviceState(*device);
   if (!device_state)
     return;
 
-  std::unique_ptr<base::DictionaryValue> device_dictionary(
-      device_state->properties().DeepCopy());
-
+  base::Value device_dictionary(device_state->properties().Clone());
   if (!device_state->ip_configs().empty()) {
     // Convert IPConfig dictionary to a ListValue.
-    std::unique_ptr<base::ListValue> ip_configs(new base::ListValue);
-    for (base::DictionaryValue::Iterator iter(device_state->ip_configs());
-         !iter.IsAtEnd(); iter.Advance()) {
-      ip_configs->Append(iter.value().CreateDeepCopy());
+    base::Value ip_configs(base::Value::Type::LIST);
+    for (auto iter : device_state->ip_configs().DictItems()) {
+      ip_configs.Append(iter.second.Clone());
     }
-    device_dictionary->SetWithoutPathExpansion(shill::kIPConfigsProperty,
-                                               std::move(ip_configs));
+    device_dictionary.SetKey(shill::kIPConfigsProperty, std::move(ip_configs));
   }
-  if (!device_dictionary->empty())
-    dictionary->Set(shill::kDeviceProperty, std::move(device_dictionary));
+  if (!device_dictionary.DictEmpty())
+    dictionary->SetKey(shill::kDeviceProperty, std::move(device_dictionary));
 }
 
 class NetworkConfigMessageHandler : public content::WebUIMessageHandler {
@@ -151,34 +150,31 @@ class NetworkConfigMessageHandler : public content::WebUIMessageHandler {
 
     std::string service_path;
     if (!GetServicePathFromGuid(guid, &service_path)) {
-      ErrorCallback(callback_id, guid, kGetNetworkProperties,
-                    "Error.InvalidNetworkGuid", nullptr);
+      RunErrorCallback(callback_id, guid, kGetNetworkProperties,
+                       "Error.InvalidNetworkGuid");
       return;
     }
     NetworkHandler::Get()->network_configuration_handler()->GetShillProperties(
         service_path,
         base::BindOnce(
-            &NetworkConfigMessageHandler::GetShillNetworkPropertiesSuccess,
-            weak_ptr_factory_.GetWeakPtr(), callback_id),
-        base::Bind(&NetworkConfigMessageHandler::ErrorCallback,
-                   weak_ptr_factory_.GetWeakPtr(), callback_id, guid,
-                   kGetNetworkProperties));
+            &NetworkConfigMessageHandler::OnGetShillNetworkProperties,
+            weak_ptr_factory_.GetWeakPtr(), callback_id, guid));
   }
 
-  void GetShillNetworkPropertiesSuccess(
-      const std::string& callback_id,
-      const std::string& service_path,
-      const base::DictionaryValue& dictionary) {
-    std::unique_ptr<base::DictionaryValue> dictionary_copy(
-        dictionary.DeepCopy());
-
+  void OnGetShillNetworkProperties(const std::string& callback_id,
+                                   const std::string& guid,
+                                   const std::string& service_path,
+                                   base::Optional<base::Value> result) {
+    if (!result) {
+      RunErrorCallback(callback_id, guid, kGetNetworkProperties, "Error.DBus");
+      return;
+    }
     // Set the 'service_path' property for debugging.
-    dictionary_copy->SetKey("service_path", base::Value(service_path));
+    result->SetKey("service_path", base::Value(service_path));
     // Set the device properties for debugging.
-    SetDeviceProperties(dictionary_copy.get());
-
+    SetDeviceProperties(&result.value());
     base::ListValue return_arg_list;
-    return_arg_list.Append(std::move(dictionary_copy));
+    return_arg_list.Append(std::move(*result));
     Respond(callback_id, return_arg_list);
   }
 
@@ -192,18 +188,14 @@ class NetworkConfigMessageHandler : public content::WebUIMessageHandler {
         NetworkHandler::Get()->network_state_handler()->GetDeviceStateByType(
             onc::NetworkTypePatternFromOncType(type));
     if (!device) {
-      ErrorCallback(callback_id, type, kGetDeviceProperties,
-                    "Error.InvalidDeviceType", nullptr);
+      RunErrorCallback(callback_id, type, kGetDeviceProperties,
+                       "Error.InvalidDeviceType");
       return;
     }
     NetworkHandler::Get()->network_device_handler()->GetDeviceProperties(
         device->path(),
-        base::BindOnce(
-            &NetworkConfigMessageHandler::GetShillDevicePropertiesSuccess,
-            weak_ptr_factory_.GetWeakPtr(), callback_id),
-        base::Bind(&NetworkConfigMessageHandler::ErrorCallback,
-                   weak_ptr_factory_.GetWeakPtr(), callback_id, type,
-                   kGetDeviceProperties));
+        base::BindOnce(&NetworkConfigMessageHandler::OnGetShillDeviceProperties,
+                       weak_ptr_factory_.GetWeakPtr(), callback_id, type));
   }
 
   void GetShillEthernetEAP(const base::ListValue* arg_list) {
@@ -271,18 +263,21 @@ class NetworkConfigMessageHandler : public content::WebUIMessageHandler {
     InternetConfigDialog::ShowDialogForNetworkType(::onc::network_type::kWiFi);
   }
 
-  void GetShillDevicePropertiesSuccess(
-      const std::string& callback_id,
-      const std::string& device_path,
-      const base::DictionaryValue& dictionary) {
-    std::unique_ptr<base::DictionaryValue> dictionary_copy(
-        dictionary.DeepCopy());
+  void OnGetShillDeviceProperties(const std::string& callback_id,
+                                  const std::string& type,
+                                  const std::string& device_path,
+                                  base::Optional<base::Value> result) {
+    if (!result) {
+      RunErrorCallback(callback_id, type, kGetDeviceProperties,
+                       "GetDeviceProperties failed");
+      return;
+    }
 
     // Set the 'device_path' property for debugging.
-    dictionary_copy->SetKey("device_path", base::Value(device_path));
+    result->SetKey("device_path", base::Value(device_path));
 
     base::ListValue return_arg_list;
-    return_arg_list.Append(std::move(dictionary_copy));
+    return_arg_list.Append(std::move(*result));
     Respond(callback_id, return_arg_list);
   }
 
@@ -291,6 +286,13 @@ class NetworkConfigMessageHandler : public content::WebUIMessageHandler {
                      const std::string& function_name,
                      const std::string& error_name,
                      std::unique_ptr<base::DictionaryValue> /* error_data */) {
+    RunErrorCallback(callback_id, guid_or_type, function_name, error_name);
+  }
+
+  void RunErrorCallback(const std::string& callback_id,
+                        const std::string& guid_or_type,
+                        const std::string& function_name,
+                        const std::string& error_name) {
     NET_LOG(ERROR) << "Shill Error: " << error_name << " id=" << guid_or_type;
     base::ListValue return_arg_list;
     base::Value dictionary(base::Value::Type::DICTIONARY);
@@ -312,6 +314,29 @@ class NetworkConfigMessageHandler : public content::WebUIMessageHandler {
   base::WeakPtrFactory<NetworkConfigMessageHandler> weak_ptr_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(NetworkConfigMessageHandler);
+};
+
+class NetworkDiagnosticsMessageHandler : public content::WebUIMessageHandler {
+ public:
+  NetworkDiagnosticsMessageHandler() = default;
+  ~NetworkDiagnosticsMessageHandler() override = default;
+
+  void RegisterMessages() override {
+    web_ui()->RegisterMessageCallback(
+        "OpenFeedbackDialog",
+        base::BindRepeating(
+            &NetworkDiagnosticsMessageHandler::OpenFeedbackDialog,
+            base::Unretained(this)));
+  }
+
+ private:
+  void OpenFeedbackDialog(const base::ListValue* value) {
+    const std::string result = value->GetList()[0].GetString();
+    chrome::ShowFeedbackPage(nullptr, chrome::kFeedbackSourceNetworkHealthPage,
+                             "" /*description_template*/,
+                             "" /*description_template_placeholder*/,
+                             "network-health", result);
+  }
 };
 
 }  // namespace
@@ -371,6 +396,9 @@ void NetworkUI::GetLocalizedStrings(base::DictionaryValue* localized_strings) {
   localized_strings->SetString(
       "networkHealthLabel",
       l10n_util::GetStringUTF16(IDS_NETWORK_UI_NETWORK_HEALTH));
+  localized_strings->SetString(
+      "networkDiagnosticsLabel",
+      l10n_util::GetStringUTF16(IDS_NETWORK_UI_NETWORK_DIAGNOSTICS));
   localized_strings->SetString(
       "visibleNetworksLabel",
       l10n_util::GetStringUTF16(IDS_NETWORK_UI_VISIBLE_NETWORKS));
@@ -454,6 +482,8 @@ NetworkUI::NetworkUI(content::WebUI* web_ui)
   web_ui->AddMessageHandler(std::make_unique<NetworkConfigMessageHandler>());
   web_ui->AddMessageHandler(std::make_unique<OncImportMessageHandler>());
   web_ui->AddMessageHandler(std::make_unique<NetworkLogsMessageHandler>());
+  web_ui->AddMessageHandler(
+      std::make_unique<NetworkDiagnosticsMessageHandler>());
 
   // Enable extension API calls in the WebUI.
   extensions::TabHelper::CreateForWebContents(web_ui->GetWebContents());
@@ -463,6 +493,9 @@ NetworkUI::NetworkUI(content::WebUI* web_ui)
 
   content::WebUIDataSource* html =
       content::WebUIDataSource::Create(chrome::kChromeUINetworkHost);
+
+  html->DisableTrustedTypesCSP();
+
   html->AddLocalizedStrings(localized_strings);
   network_health::AddLocalizedStrings(html);
 
@@ -496,7 +529,14 @@ void NetworkUI::BindInterface(
 void NetworkUI::BindInterface(
     mojo::PendingReceiver<network_health::mojom::NetworkHealthService>
         receiver) {
-  network_health::NetworkHealthService::GetInstance()->BindRemote(
+  network_health::NetworkHealthService::GetInstance()->BindHealthReceiver(
+      std::move(receiver));
+}
+
+void NetworkUI::BindInterface(
+    mojo::PendingReceiver<
+        network_diagnostics::mojom::NetworkDiagnosticsRoutines> receiver) {
+  network_health::NetworkHealthService::GetInstance()->BindDiagnosticsReceiver(
       std::move(receiver));
 }
 

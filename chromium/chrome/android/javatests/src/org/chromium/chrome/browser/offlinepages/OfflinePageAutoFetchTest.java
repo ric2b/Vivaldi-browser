@@ -24,9 +24,8 @@ import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.FlakyTest;
-import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.DeviceConditions;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.offlinepages.AutoFetchNotifier.NotificationAction;
 import org.chromium.chrome.browser.profiles.Profile;
@@ -186,7 +185,7 @@ public class OfflinePageAutoFetchTest {
     @Test
     @MediumTest
     @Feature({"OfflineAutoFetch"})
-    @FlakyTest(message = "https://crbug.com/1108684")
+    @DisabledTest(message = "https://crbug.com/1108684")
     public void testAutoFetchTriggersOnDNSErrorWhenOffline() {
         attemptLoadPage("http://does.not.resolve.com");
         waitForRequestCount(1);
@@ -238,7 +237,7 @@ public class OfflinePageAutoFetchTest {
         // A new tab should open, and it should load the offline page.
         pollInstrumentationThread(() -> {
             return getCurrentTabModel().getCount() == 2
-                    && getCurrentTab().getTitle().equals("MyTestPage");
+                    && ChromeTabUtils.getTitleOnUiThread(getCurrentTab()).equals("MyTestPage");
         });
     }
 
@@ -287,7 +286,7 @@ public class OfflinePageAutoFetchTest {
             // No new tab is opened, because the URL of the tab matches the original URL.
             return getCurrentTabModel().getCount() == 1
                     // The title matches the original page, not the 'AlternativeWebServerResponse'.
-                    && getCurrentTab().getTitle().equals("MyTestPage");
+                    && ChromeTabUtils.getTitleOnUiThread(getCurrentTab()).equals("MyTestPage");
         });
     }
 
@@ -567,7 +566,7 @@ public class OfflinePageAutoFetchTest {
         int tabCount = tabModel.getCount();
         Log.d(TAG, "Tab Count: " + tabCount);
         for (int i = 0; i < tabCount; ++i) {
-            String title = tabModel.getTabAt(i).getTitle();
+            String title = ChromeTabUtils.getTitleOnUiThread(tabModel.getTabAt(i));
             String current = tabModel.index() == i ? "*current" : "";
             Log.d(TAG, "Tab " + String.valueOf(i) + " '" + title + "' " + current);
         }

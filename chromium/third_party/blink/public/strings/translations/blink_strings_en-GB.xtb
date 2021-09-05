@@ -16,6 +16,7 @@
 <translation id="1335095011850992622">credits</translation>
 <translation id="1342835525016946179">article</translation>
 <translation id="1359897965706325498">banner</translation>
+<translation id="1480676835519562650">multiselectable, <ph name="SELECTED" /> of <ph name="COUNT" /> selected.</translation>
 <translation id="1589122976691792535">region</translation>
 <translation id="1591562245178063882">This month</translation>
 <translation id="1637811476055996098">Choose Files</translation>
@@ -51,6 +52,7 @@
 <translation id="248395913932153421">Day</translation>
 <translation id="2507943997699731163">Please fill in this field.</translation>
 <translation id="2508569020611168319">tab list</translation>
+<translation id="2530182415807757784">multiselectable, none selected.</translation>
 <translation id="2561842179657104141">show more media controls</translation>
 <translation id="2572483411312390101">play</translation>
 <translation id="2613802280814924224">Please enter a valid value. The nearest valid value is <ph name="VALID_VALUE" />.</translation>
@@ -102,7 +104,6 @@
 <translation id="4248100235867064564">menu bar</translation>
 <translation id="4360991593054037559">Please enter a valid value. The two nearest valid values are <ph name="VALID_VALUE_LOW" /> and <ph name="VALID_VALUE_HIGHER" />.</translation>
 <translation id="4384583879834880242">Q&amp;A</translation>
-<translation id="4413860115965805769">menu button</translation>
 <translation id="4444765639179266822">Appears to say: <ph name="OCR_TEXT" /></translation>
 <translation id="4446524499724042288">glossary reference</translation>
 <translation id="4522570452068850558">Details</translation>

@@ -83,14 +83,17 @@
 #if defined(USE_OZONE)
 #include "ui/ozone/public/ozone_platform.h"
 #endif
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include <ApplicationServices/ApplicationServices.h>
-#endif  // OS_MACOSX
+#endif  // OS_MAC
 #if defined(OS_WIN)
 #include "base/base_paths_win.h"
 #include "base/win/windows_version.h"
 #include "ui/display/win/screen_win.h"
 #endif  // OS_WIN
+#if BUILDFLAG(IS_CHROMECAST)
+#include "chromecast/chromecast_buildflags.h"
+#endif
 
 namespace content {
 
@@ -113,10 +116,10 @@ NOINLINE void FatalGpuProcessLaunchFailureOnBackground() {
 #endif
 
 #if defined(OS_WIN)
-int GetGpuBlacklistHistogramValueWin(gpu::GpuFeatureStatus status) {
+int GetGpuBlocklistHistogramValueWin(gpu::GpuFeatureStatus status) {
   // The enums are defined as:
   //   Enabled VERSION_PRE_XP = 0,
-  //   Blacklisted VERSION_PRE_XP = 1,
+  //   Blocklisted VERSION_PRE_XP = 1,
   //   Disabled VERSION_PRE_XP = 2,
   //   Software VERSION_PRE_XP = 3,
   //   Unknown VERSION_PRE_XP = 4,
@@ -232,19 +235,19 @@ void EnableIntelShaderCache() {
 // Send UMA histograms about the enabled features and GPU properties.
 void UpdateFeatureStats(const gpu::GpuFeatureInfo& gpu_feature_info) {
   // Update applied entry stats.
-  std::unique_ptr<gpu::GpuBlocklist> blacklist(gpu::GpuBlocklist::Create());
-  DCHECK(blacklist.get() && blacklist->max_entry_id() > 0);
-  uint32_t max_entry_id = blacklist->max_entry_id();
+  std::unique_ptr<gpu::GpuBlocklist> blocklist(gpu::GpuBlocklist::Create());
+  DCHECK(blocklist.get() && blocklist->max_entry_id() > 0);
+  uint32_t max_entry_id = blocklist->max_entry_id();
   // Use entry 0 to capture the total number of times that data
   // was recorded in this histogram in order to have a convenient
-  // denominator to compute blacklist percentages for the rest of the
+  // denominator to compute blocklist percentages for the rest of the
   // entries.
   UMA_HISTOGRAM_EXACT_LINEAR("GPU.BlacklistTestResultsPerEntry", 0,
                              max_entry_id + 1);
-  if (!gpu_feature_info.applied_gpu_blacklist_entries.empty()) {
-    std::vector<uint32_t> entry_ids = blacklist->GetEntryIDsFromIndices(
-        gpu_feature_info.applied_gpu_blacklist_entries);
-    DCHECK_EQ(gpu_feature_info.applied_gpu_blacklist_entries.size(),
+  if (!gpu_feature_info.applied_gpu_blocklist_entries.empty()) {
+    std::vector<uint32_t> entry_ids = blocklist->GetEntryIDsFromIndices(
+        gpu_feature_info.applied_gpu_blocklist_entries);
+    DCHECK_EQ(gpu_feature_info.applied_gpu_blocklist_entries.size(),
               entry_ids.size());
     for (auto id : entry_ids) {
       DCHECK_GE(max_entry_id, id);
@@ -263,7 +266,7 @@ void UpdateFeatureStats(const gpu::GpuFeatureInfo& gpu_feature_info) {
       gpu::GPU_FEATURE_TYPE_OOP_RASTERIZATION,
       gpu::GPU_FEATURE_TYPE_ACCELERATED_WEBGL,
       gpu::GPU_FEATURE_TYPE_ACCELERATED_WEBGL2};
-  const std::string kGpuBlacklistFeatureHistogramNames[] = {
+  const std::string kGpuBlocklistFeatureHistogramNames[] = {
       "GPU.BlacklistFeatureTestResults.Accelerated2dCanvas",
       "GPU.BlacklistFeatureTestResults.GpuCompositing",
       "GPU.BlacklistFeatureTestResults.GpuRasterization",
@@ -279,7 +282,7 @@ void UpdateFeatureStats(const gpu::GpuFeatureInfo& gpu_feature_info) {
       (command_line.HasSwitch(switches::kDisableWebGL) ||
        command_line.HasSwitch(switches::kDisableWebGL2))};
 #if defined(OS_WIN)
-  const std::string kGpuBlacklistFeatureHistogramNamesWin[] = {
+  const std::string kGpuBlocklistFeatureHistogramNamesWin[] = {
       "GPU.BlacklistFeatureTestResultsWindows2.Accelerated2dCanvas",
       "GPU.BlacklistFeatureTestResultsWindows2.GpuCompositing",
       "GPU.BlacklistFeatureTestResultsWindows2.GpuRasterization",
@@ -297,17 +300,17 @@ void UpdateFeatureStats(const gpu::GpuFeatureInfo& gpu_feature_info) {
     if (value == gpu::kGpuFeatureStatusEnabled && kGpuFeatureUserFlags[i])
       value = gpu::kGpuFeatureStatusDisabled;
     base::HistogramBase* histogram_pointer = base::LinearHistogram::FactoryGet(
-        kGpuBlacklistFeatureHistogramNames[i], 1, gpu::kGpuFeatureStatusMax,
+        kGpuBlocklistFeatureHistogramNames[i], 1, gpu::kGpuFeatureStatusMax,
         gpu::kGpuFeatureStatusMax + 1,
         base::HistogramBase::kUmaTargetedHistogramFlag);
     histogram_pointer->Add(value);
 #if defined(OS_WIN)
-    int value_win = GetGpuBlacklistHistogramValueWin(value);
+    int value_win = GetGpuBlocklistHistogramValueWin(value);
     if (value_win >= 0) {
       int32_t max_sample = static_cast<int32_t>(base::win::Version::WIN_LAST) *
                            gpu::kGpuFeatureStatusMax;
       histogram_pointer = base::LinearHistogram::FactoryGet(
-          kGpuBlacklistFeatureHistogramNamesWin[i], 1, max_sample,
+          kGpuBlocklistFeatureHistogramNamesWin[i], 1, max_sample,
           max_sample + 1, base::HistogramBase::kUmaTargetedHistogramFlag);
       histogram_pointer->Add(value_win);
     }
@@ -336,7 +339,7 @@ void UpdateDriverBugListStats(const gpu::GpuFeatureInfo& gpu_feature_info) {
   }
 }
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 void DisplayReconfigCallback(CGDirectDisplayID display,
                              CGDisplayChangeSummaryFlags flags,
                              void* gpu_data_manager) {
@@ -359,7 +362,7 @@ void DisplayReconfigCallback(CGDirectDisplayID display,
   if (gpu_changed)
     manager->HandleGpuSwitch();
 }
-#endif  // OS_MACOSX
+#endif  // OS_MAC
 
 // Block all domains' use of 3D APIs for this many milliseconds if
 // approaching a threshold where system stability might be compromised.
@@ -419,7 +422,7 @@ bool ALLOW_UNUSED_TYPE VulkanAllowed() {
 
 // Determines if Metal is available for the GPU process.
 bool ALLOW_UNUSED_TYPE MetalAllowed() {
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   return base::FeatureList::IsEnabled(features::kMetal);
 #else
   return false;
@@ -514,9 +517,9 @@ GpuDataManagerImplPrivate::GpuDataManagerImplPrivate(GpuDataManagerImpl* owner)
     AppendGpuCommandLine(command_line, GPU_PROCESS_KIND_SANDBOXED);
   }
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   CGDisplayRegisterReconfigurationCallback(DisplayReconfigCallback, owner_);
-#endif  // OS_MACOSX
+#endif  // OS_MAC
 
   // For testing only.
   if (command_line->HasSwitch(switches::kDisableDomainBlockingFor3DAPIs))
@@ -531,7 +534,7 @@ GpuDataManagerImplPrivate::GpuDataManagerImplPrivate(GpuDataManagerImpl* owner)
 }
 
 GpuDataManagerImplPrivate::~GpuDataManagerImplPrivate() {
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   CGDisplayRemoveReconfigurationCallback(DisplayReconfigCallback, owner_);
 #endif
 
@@ -563,8 +566,10 @@ void GpuDataManagerImplPrivate::InitializeGpuModes() {
     // Chomecast audio-only builds run with the flag --disable-gpu. The GPU
     // process should not be started in this case.
 #if BUILDFLAG(IS_CHROMECAST)
+#if BUILDFLAG(IS_CAST_AUDIO_ONLY)
     fallback_modes_.clear();
     fallback_modes_.push_back(gpu::GpuMode::DISABLED);
+#endif
 #elif defined(OS_ANDROID) || defined(OS_CHROMEOS)
     CHECK(false) << "GPU acceleration is required on certain platforms!";
 #endif  // IS_CHROMECAST
@@ -587,14 +592,14 @@ void GpuDataManagerImplPrivate::InitializeGpuModes() {
   FallBackToNextGpuMode();
 }
 
-void GpuDataManagerImplPrivate::BlacklistWebGLForTesting() {
+void GpuDataManagerImplPrivate::BlocklistWebGLForTesting() {
   // This function is for testing only, so disable histograms.
   update_histograms_ = false;
 
   gpu::GpuFeatureInfo gpu_feature_info;
   for (int ii = 0; ii < gpu::NUMBER_OF_GPU_FEATURE_TYPES; ++ii) {
     if (ii == static_cast<int>(gpu::GPU_FEATURE_TYPE_ACCELERATED_WEBGL))
-      gpu_feature_info.status_values[ii] = gpu::kGpuFeatureStatusBlacklisted;
+      gpu_feature_info.status_values[ii] = gpu::kGpuFeatureStatusBlocklisted;
     else
       gpu_feature_info.status_values[ii] = gpu::kGpuFeatureStatusEnabled;
   }
@@ -717,7 +722,7 @@ void GpuDataManagerImplPrivate::RequestGpuSupportedDx12Version(bool delayed) {
         base::CommandLine* command_line =
             base::CommandLine::ForCurrentProcess();
         if (command_line->HasSwitch(
-                switches::kDisableGpuProcessForDX12VulkanInfoCollection)) {
+                switches::kDisableGpuProcessForDX12InfoCollection)) {
           manager->UpdateDx12RequestStatus(false);
           return;
         }
@@ -777,14 +782,6 @@ void GpuDataManagerImplPrivate::RequestGpuSupportedVulkanVersion(bool delayed) {
         GpuDataManagerImpl* manager = GpuDataManagerImpl::GetInstance();
         if (manager->VulkanRequested())
           return;
-
-        base::CommandLine* command_line =
-            base::CommandLine::ForCurrentProcess();
-        if (command_line->HasSwitch(
-                switches::kDisableGpuProcessForDX12VulkanInfoCollection)) {
-          manager->UpdateVulkanRequestStatus(false);
-          return;
-        }
 
         // No info collection for software GL implementation (id == 0xffff) or
         // abnormal situation (id == 0). There are a few crash reports on
@@ -1170,7 +1167,7 @@ void GpuDataManagerImplPrivate::AppendGpuCommandLine(
     command_line->AppendSwitchASCII(switches::kUseGL, use_gl);
   }
 
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
   // MacOSX bots use real GPU in tests.
   if (browser_command_line->HasSwitch(switches::kHeadless)) {
     if (command_line->HasSwitch(switches::kUseGL)) {
@@ -1181,7 +1178,7 @@ void GpuDataManagerImplPrivate::AppendGpuCommandLine(
         command_line->AppendSwitch(switches::kOverrideUseSoftwareGLForTests);
     }
   }
-#endif  // !OS_MACOSX
+#endif  // !OS_MAC
 }
 
 void GpuDataManagerImplPrivate::UpdateGpuPreferences(
@@ -1240,7 +1237,7 @@ void GpuDataManagerImplPrivate::UpdateGpuPreferences(
   }
 #endif
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   if (gpu_mode_ != gpu::GpuMode::HARDWARE_METAL)
     gpu_preferences->enable_metal = false;
 #elif BUILDFLAG(ENABLE_VULKAN)
@@ -1446,8 +1443,6 @@ void GpuDataManagerImplPrivate::BlockDomainFrom3DAPIs(const GURL& url,
 }
 
 bool GpuDataManagerImplPrivate::Are3DAPIsBlocked(const GURL& top_origin_url,
-                                                 int render_process_id,
-                                                 int render_frame_id,
                                                  ThreeDAPIType requester) {
   return Are3DAPIsBlockedAtTime(top_origin_url, base::Time::Now()) !=
          DomainBlockStatus::kNotBlocked;
@@ -1525,7 +1520,7 @@ GpuDataManagerImplPrivate::Are3DAPIsBlockedAtTime(const GURL& url,
   }
 
   // Look at the timestamps of the recent GPU resets to see if there are
-  // enough within the threshold which would cause us to blacklist all
+  // enough within the threshold which would cause us to blocklist all
   // domains. This doesn't need to be overly precise -- if time goes
   // backward due to a system clock adjustment, that's fine.
   //

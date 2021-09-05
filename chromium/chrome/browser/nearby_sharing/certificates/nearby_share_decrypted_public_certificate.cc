@@ -6,15 +6,14 @@
 
 #include <utility>
 
-#include "base/logging.h"
 #include "chrome/browser/nearby_sharing/certificates/common.h"
 #include "chrome/browser/nearby_sharing/certificates/constants.h"
+#include "chrome/browser/nearby_sharing/logging/logging.h"
 #include "chrome/browser/nearby_sharing/proto/timestamp.pb.h"
 #include "crypto/aead.h"
 #include "crypto/encryptor.h"
 #include "crypto/hmac.h"
 #include "crypto/signature_verifier.h"
-#include "crypto/symmetric_key.h"
 
 namespace {
 
@@ -41,7 +40,7 @@ base::Optional<std::vector<uint8_t>> DecryptMetadataKey(
   std::unique_ptr<crypto::Encryptor> encryptor =
       CreateNearbyShareCtrEncryptor(secret_key, encrypted_metadata_key.salt());
   if (!encryptor) {
-    LOG(ERROR)
+    NS_LOG(ERROR)
         << "Cannot decrypt metadata key: Could not create CTR encryptor.";
     return base::nullopt;
   }
@@ -126,21 +125,18 @@ NearbyShareDecryptedPublicCertificate::DecryptPublicCertificate(
     return base::nullopt;
   }
 
-  // Note: Failure to decrypt the metadata key should not log an error. When
-  // another device advertises their encrypted metadata key, we do not know what
-  // public certificate that corresponds too. So, we will potentially be calling
-  // DecryptPublicCertificate() on all of our public certificates with the same
-  // encrypted metadata key until we find the correct one.
+  // Note: Failure to decrypt the metadata key or failure to confirm that the
+  // decrypted metadata key agrees with the key commitment tag should not log an
+  // error. When another device advertises their encrypted metadata key, we do
+  // not know what public certificate that corresponds to. So, we will
+  // potentially be calling DecryptPublicCertificate() on all of our public
+  // certificates with the same encrypted metadata key until we find the correct
+  // one.
   base::Optional<std::vector<uint8_t>> decrypted_metadata_key =
       DecryptMetadataKey(encrypted_metadata_key, secret_key.get());
-  if (!decrypted_metadata_key)
-    return base::nullopt;
-
-  // Confirm that the decrypted metadata key agrees with key commitment tag.
-  if (!VerifyMetadataEncryptionKeyTag(*decrypted_metadata_key,
+  if (!decrypted_metadata_key ||
+      !VerifyMetadataEncryptionKeyTag(*decrypted_metadata_key,
                                       metadata_encryption_key_tag)) {
-    LOG(ERROR) << "Metadata decryption failed: Failed to verify metadata "
-               << "encryption key tag.";
     return base::nullopt;
   }
 
@@ -150,37 +146,64 @@ NearbyShareDecryptedPublicCertificate::DecryptPublicCertificate(
       DecryptMetadataPayload(encrypted_metadata, *decrypted_metadata_key,
                              secret_key.get());
   if (!decrypted_metadata_bytes) {
-    LOG(ERROR) << "Metadata decryption failed: Failed to decrypt metadata "
-               << "payload.";
+    NS_LOG(ERROR) << "Metadata decryption failed: Failed to decrypt metadata "
+                  << "payload.";
     return base::nullopt;
   }
 
   nearbyshare::proto::EncryptedMetadata unencrypted_metadata;
   if (!unencrypted_metadata.ParseFromArray(decrypted_metadata_bytes->data(),
                                            decrypted_metadata_bytes->size())) {
-    LOG(ERROR) << "Metadata decryption failed: Failed to parse decrypted "
-               << "metadata payload.";
+    NS_LOG(ERROR) << "Metadata decryption failed: Failed to parse decrypted "
+                  << "metadata payload.";
     return base::nullopt;
   }
 
   return NearbyShareDecryptedPublicCertificate(
-      not_before, not_after, std::move(public_key), std::move(id),
-      std::move(unencrypted_metadata));
+      not_before, not_after, std::move(secret_key), std::move(public_key),
+      std::move(id), std::move(unencrypted_metadata));
 }
 
 NearbyShareDecryptedPublicCertificate::NearbyShareDecryptedPublicCertificate(
     base::Time not_before,
     base::Time not_after,
+    std::unique_ptr<crypto::SymmetricKey> secret_key,
     std::vector<uint8_t> public_key,
     std::vector<uint8_t> id,
     nearbyshare::proto::EncryptedMetadata unencrypted_metadata)
     : not_before_(not_before),
       not_after_(not_after),
+      secret_key_(std::move(secret_key)),
       public_key_(std::move(public_key)),
       id_(std::move(id)),
       unencrypted_metadata_(std::move(unencrypted_metadata)) {}
 
 NearbyShareDecryptedPublicCertificate::NearbyShareDecryptedPublicCertificate(
+    const NearbyShareDecryptedPublicCertificate& other) {
+  *this = other;
+}
+
+NearbyShareDecryptedPublicCertificate&
+NearbyShareDecryptedPublicCertificate::operator=(
+    const NearbyShareDecryptedPublicCertificate& other) {
+  if (this == &other)
+    return *this;
+
+  not_before_ = other.not_before_;
+  not_after_ = other.not_after_;
+  secret_key_ = crypto::SymmetricKey::Import(
+      crypto::SymmetricKey::Algorithm::AES, other.secret_key_->key());
+  public_key_ = other.public_key_;
+  id_ = other.id_;
+  unencrypted_metadata_ = other.unencrypted_metadata_;
+  return *this;
+}
+
+NearbyShareDecryptedPublicCertificate::NearbyShareDecryptedPublicCertificate(
+    NearbyShareDecryptedPublicCertificate&&) = default;
+
+NearbyShareDecryptedPublicCertificate&
+NearbyShareDecryptedPublicCertificate::operator=(
     NearbyShareDecryptedPublicCertificate&&) = default;
 
 NearbyShareDecryptedPublicCertificate::
@@ -192,11 +215,19 @@ bool NearbyShareDecryptedPublicCertificate::VerifySignature(
   crypto::SignatureVerifier verifier;
   if (!verifier.VerifyInit(crypto::SignatureVerifier::ECDSA_SHA256, signature,
                            public_key_)) {
-    LOG(ERROR) << "Verification failed: Initialization unsuccessful.";
+    NS_LOG(ERROR) << "Verification failed: Initialization unsuccessful.";
     return false;
   }
 
   verifier.VerifyUpdate(payload);
 
   return verifier.VerifyFinal();
+}
+
+std::vector<uint8_t>
+NearbyShareDecryptedPublicCertificate::HashAuthenticationToken(
+    base::span<const uint8_t> authentication_token) const {
+  return ComputeAuthenticationTokenHash(
+      authentication_token,
+      base::as_bytes(base::make_span(secret_key_->key())));
 }

@@ -13,6 +13,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "build/build_config.h"
+#include "chrome/browser/profiles/profile_attributes_entry.h"
 #include "chrome/browser/profiles/profile_avatar_downloader.h"
 #include "chrome/browser/profiles/profile_avatar_icon_util.h"
 #include "chrome/browser/profiles/profile_info_cache.h"
@@ -28,6 +29,7 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkBitmap.h"
+#include "ui/native_theme/native_theme.h"
 
 using ::testing::Mock;
 using ::testing::_;
@@ -749,9 +751,12 @@ TEST_F(ProfileAttributesStorageTest, DownloadHighResAvatarTest) {
             entry->GetHighResAvatar());
 
   // Since we are not using GAIA image, |GetAvatarIcon| should return the same
-  // image as |GetHighResAvatar| in desktop.
-  EXPECT_EQ(&storage()->cached_avatar_images_[icon_filename],
-            &entry->GetAvatarIcon());
+  // image as |GetHighResAvatar| in desktop. Since it returns a copy, the
+  // backing object needs to get checked.
+  const gfx::ImageSkia* avatar_icon = entry->GetAvatarIcon().ToImageSkia();
+  const gfx::ImageSkia* cached_icon =
+      storage()->cached_avatar_images_[icon_filename].ToImageSkia();
+  EXPECT_TRUE(avatar_icon->BackedBySameObjectAs(*cached_icon));
 
   // Finish the async calls that save the image to the disk.
   EXPECT_CALL(observer(), OnProfileHighResAvatarLoaded(profile_path)).Times(1);
@@ -761,7 +766,7 @@ TEST_F(ProfileAttributesStorageTest, DownloadHighResAvatarTest) {
   // Clean up.
   EXPECT_NE(std::string::npos, icon_path.MaybeAsASCII().find(icon_filename));
   ASSERT_TRUE(base::PathExists(icon_path));
-  EXPECT_TRUE(base::DeleteFile(icon_path, false));
+  EXPECT_TRUE(base::DeleteFile(icon_path));
   EXPECT_FALSE(base::PathExists(icon_path));
 }
 
@@ -827,7 +832,7 @@ TEST_F(ProfileAttributesStorageTest, LoadAvatarFromDiskTest) {
   VerifyAndResetCallExpectations();
 
   // Clean up.
-  EXPECT_TRUE(base::DeleteFile(icon_path, false));
+  EXPECT_TRUE(base::DeleteFile(icon_path));
   EXPECT_FALSE(base::PathExists(icon_path));
 }
 #endif
@@ -913,3 +918,38 @@ TEST_F(ProfileAttributesStorageTest, ProfilesState_SingleProfile) {
   histogram_tester.ExpectTotalCount(
       "Profile.State.LastUsed_LatentMultiProfileOthers", 0);
 }
+
+// Themes aren't used on Android
+#if !defined(OS_ANDROID)
+TEST_F(ProfileAttributesStorageTest, ProfileThemeColors) {
+  AddTestingProfile();
+  base::FilePath profile_path = GetProfilePath("testing_profile_path0");
+
+  DisableObserver();  // No need to test observers in this test.
+
+  ProfileAttributesEntry* entry;
+  ASSERT_TRUE(storage()->GetProfileAttributesWithPath(profile_path, &entry));
+  EXPECT_EQ(entry->GetProfileThemeColors(),
+            ProfileAttributesEntry::GetDefaultProfileThemeColors(false));
+
+  ui::NativeTheme::GetInstanceForNativeUi()->set_use_dark_colors(true);
+  EXPECT_EQ(entry->GetProfileThemeColors(),
+            ProfileAttributesEntry::GetDefaultProfileThemeColors(true));
+  EXPECT_NE(entry->GetProfileThemeColors(),
+            ProfileAttributesEntry::GetDefaultProfileThemeColors(false));
+
+  ProfileThemeColors colors = {SK_ColorTRANSPARENT, SK_ColorBLACK,
+                               SK_ColorWHITE};
+  entry->SetProfileThemeColors(colors);
+  EXPECT_EQ(entry->GetProfileThemeColors(), colors);
+
+  // Colors shouldn't change after switching back to the light mode.
+  ui::NativeTheme::GetInstanceForNativeUi()->set_use_dark_colors(false);
+  EXPECT_EQ(entry->GetProfileThemeColors(), colors);
+
+  // base::nullopt resets the colors to default.
+  entry->SetProfileThemeColors(base::nullopt);
+  EXPECT_EQ(entry->GetProfileThemeColors(),
+            ProfileAttributesEntry::GetDefaultProfileThemeColors(false));
+}
+#endif

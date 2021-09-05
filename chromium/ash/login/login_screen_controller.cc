@@ -270,12 +270,6 @@ void LoginScreenController::RequestPublicSessionKeyboardLayouts(
   client_->RequestPublicSessionKeyboardLayouts(account_id, locale);
 }
 
-void LoginScreenController::ShowFeedback() {
-  if (!client_)
-    return;
-  client_->ShowFeedback();
-}
-
 void LoginScreenController::SetClient(LoginScreenClient* client) {
   client_ = client;
 }
@@ -296,7 +290,7 @@ void LoginScreenController::FocusLoginShelf(bool reverse) {
   Shelf* shelf = Shelf::ForWindow(Shell::Get()->GetPrimaryRootWindow());
   // Tell the focus direction to the status area or the shelf so they can focus
   // the correct child view.
-  if (reverse) {
+  if (reverse || !shelf->shelf_widget()->login_shelf_view()->IsFocusable()) {
     if (!Shell::GetPrimaryRootWindowController()->IsSystemTrayVisible())
       return;
     shelf->GetStatusAreaWidget()
@@ -399,11 +393,12 @@ void LoginScreenController::ShowLockScreen() {
 
 void LoginScreenController::ShowLoginScreen() {
   // Login screen can only be used during login.
-  CHECK_EQ(session_manager::SessionState::LOGIN_PRIMARY,
-           Shell::Get()->session_controller()->GetSessionState())
+  session_manager::SessionState session_state =
+      Shell::Get()->session_controller()->GetSessionState();
+  CHECK(session_state == session_manager::SessionState::LOGIN_PRIMARY ||
+        session_state == session_manager::SessionState::LOGIN_SECONDARY)
       << "Not showing login screen since session state is "
-      << static_cast<int>(
-             Shell::Get()->session_controller()->GetSessionState());
+      << static_cast<int>(session_state);
 
   OnShow();
   // TODO(jdufault): rename LockScreen to LoginScreen.
@@ -420,8 +415,11 @@ void LoginScreenController::SetKioskApps(
       ->SetKioskApps(kiosk_apps, launch_app, on_show_menu);
 }
 
-void LoginScreenController::ShowResetScreen() {
-  client_->ShowResetScreen();
+void LoginScreenController::HandleAccelerator(
+    ash::LoginAcceleratorAction action) {
+  if (!client_)
+    return;
+  client_->HandleAccelerator(action);
 }
 
 void LoginScreenController::ShowAccountAccessHelpApp(

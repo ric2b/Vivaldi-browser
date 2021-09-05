@@ -4,8 +4,6 @@
 
 package org.chromium.chrome.browser.thumbnail.generator;
 
-import android.os.Build;
-
 import androidx.test.filters.LargeTest;
 
 import org.junit.Assert;
@@ -16,13 +14,11 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.MinAndroidSdkLevel;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.base.test.util.UrlUtils;
 import org.chromium.chrome.test.ChromeBrowserTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.content_public.browser.test.NativeLibraryTestUtils;
-import org.chromium.content_public.browser.test.util.Criteria;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.ui.test.util.UiRestriction;
@@ -76,12 +72,8 @@ public class ThumbnailMediaParserTest {
             parser.start();
         });
 
-        CriteriaHelper.pollUiThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                return result.done;
-            }
-        }, MAX_MEDIA_PARSER_POLL_TIME_MS, MEDIA_PARSER_POLL_INTERVAL_MS);
+        CriteriaHelper.pollUiThread(
+                () -> result.done, MAX_MEDIA_PARSER_POLL_TIME_MS, MEDIA_PARSER_POLL_INTERVAL_MS);
         return result;
     }
 
@@ -101,7 +93,6 @@ public class ThumbnailMediaParserTest {
     @Test
     @LargeTest
     @Feature({"MediaParser"})
-    @MinAndroidSdkLevel(Build.VERSION_CODES.LOLLIPOP)
     @Restriction(UiRestriction.RESTRICTION_TYPE_PHONE)
     @DisabledTest(message = "flaky on android-pie-arm64-rel, see crbug.com/1046382")
     /**

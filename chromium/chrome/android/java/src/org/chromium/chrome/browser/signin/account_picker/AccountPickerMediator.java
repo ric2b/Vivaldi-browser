@@ -14,8 +14,10 @@ import org.chromium.base.Callback;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.signin.DisplayableProfileData;
 import org.chromium.chrome.browser.signin.ProfileDataCache;
+import org.chromium.chrome.browser.signin.account_picker.AccountPickerCoordinator.AccountPickerAccessPoint;
 import org.chromium.chrome.browser.signin.account_picker.AccountPickerProperties.AddAccountRowProperties;
 import org.chromium.chrome.browser.signin.account_picker.AccountPickerProperties.ExistingAccountRowProperties;
+import org.chromium.chrome.browser.signin.account_picker.AccountPickerProperties.IncognitoAccountRowProperties;
 import org.chromium.chrome.browser.signin.account_picker.AccountPickerProperties.ItemType;
 import org.chromium.components.signin.AccountManagerFacade;
 import org.chromium.components.signin.AccountManagerFacadeProvider;
@@ -36,20 +38,22 @@ class AccountPickerMediator {
     private final MVCListAdapter.ModelList mListModel;
     private final AccountPickerCoordinator.Listener mAccountPickerListener;
     private final ProfileDataCache mProfileDataCache;
+    private final @AccountPickerAccessPoint int mAccessPoint;
     private @Nullable String mSelectedAccountName;
 
     private final AccountManagerFacade mAccountManagerFacade;
     private final AccountsChangeObserver mAccountsChangeObserver = this::updateAccounts;
-    private final ProfileDataCache.Observer mProfileDataObserver = accountId -> updateProfileData();
-    private List<String> mAccountNames;
+    private final ProfileDataCache.Observer mProfileDataObserver = this::updateProfileData;
 
     @MainThread
     AccountPickerMediator(Context context, MVCListAdapter.ModelList listModel,
-            AccountPickerCoordinator.Listener listener, @Nullable String selectedAccountName) {
+            AccountPickerCoordinator.Listener listener, @Nullable String selectedAccountName,
+            @AccountPickerAccessPoint int accessPoint) {
         mListModel = listModel;
         mAccountPickerListener = listener;
         mProfileDataCache = new ProfileDataCache(
                 context, context.getResources().getDimensionPixelSize(R.dimen.user_picture_size));
+        mAccessPoint = accessPoint;
         mSelectedAccountName = selectedAccountName;
         mAccountManagerFacade = AccountManagerFacadeProvider.getInstance();
 
@@ -74,28 +78,38 @@ class AccountPickerMediator {
         }
     }
 
+    /**
+     * Implements {@link AccountsChangeObserver}.
+     */
     private void updateAccounts() {
-        mAccountNames = AccountUtils.toAccountNames(mAccountManagerFacade.tryGetGoogleAccounts());
-        mProfileDataCache.update(mAccountNames);
-        updateProfileData();
-    }
-
-    private void updateProfileData() {
+        List<String> accountNames =
+                AccountUtils.toAccountNames(mAccountManagerFacade.tryGetGoogleAccounts());
+        mProfileDataCache.update(accountNames);
         mListModel.clear();
+
         // Add an "existing account" row for each account
-        if (mAccountNames.size() > 0) {
+        if (accountNames.size() > 0) {
             DisplayableProfileData profileData =
-                    mProfileDataCache.getProfileDataOrDefault(mAccountNames.get(0));
+                    mProfileDataCache.getProfileDataOrDefault(accountNames.get(0));
             mListModel.add(createExistingAccountRowItem(profileData, true));
-            for (int i = 1; i < mAccountNames.size(); ++i) {
-                profileData = mProfileDataCache.getProfileDataOrDefault(mAccountNames.get(i));
+            for (int i = 1; i < accountNames.size(); ++i) {
+                profileData = mProfileDataCache.getProfileDataOrDefault(accountNames.get(i));
                 mListModel.add(createExistingAccountRowItem(profileData, false));
             }
         }
+
         // Add an "add account" row
         PropertyModel model =
                 AddAccountRowProperties.createModel(mAccountPickerListener::addAccount);
         mListModel.add(new MVCListAdapter.ListItem(ItemType.ADD_ACCOUNT_ROW, model));
+
+        // Add a "Go incognito mode" row
+        if (mAccessPoint == AccountPickerAccessPoint.WEB) {
+            PropertyModel incognitoModel = IncognitoAccountRowProperties.createModel(
+                    mAccountPickerListener::goIncognitoMode);
+            mListModel.add(
+                    new MVCListAdapter.ListItem(ItemType.INCOGNITO_ACCOUNT_ROW, incognitoModel));
+        }
     }
 
     private MVCListAdapter.ListItem createExistingAccountRowItem(
@@ -109,11 +123,31 @@ class AccountPickerMediator {
     }
 
     private void updateSelectedAccount() {
-        for (int i = 0; i < mListModel.size() - 1; ++i) {
-            PropertyModel model = mListModel.get(i).model;
-            boolean isSelectedAccount = TextUtils.equals(mSelectedAccountName,
-                    model.get(ExistingAccountRowProperties.PROFILE_DATA).getAccountName());
-            model.set(ExistingAccountRowProperties.IS_SELECTED_ACCOUNT, isSelectedAccount);
+        for (MVCListAdapter.ListItem item : mListModel) {
+            if (item.type == AccountPickerProperties.ItemType.EXISTING_ACCOUNT_ROW) {
+                PropertyModel model = item.model;
+                boolean isSelectedAccount = TextUtils.equals(mSelectedAccountName,
+                        model.get(ExistingAccountRowProperties.PROFILE_DATA).getAccountName());
+                model.set(ExistingAccountRowProperties.IS_SELECTED_ACCOUNT, isSelectedAccount);
+            }
+        }
+    }
+
+    /**
+     * Implements {@link ProfileDataCache.Observer}
+     */
+    private void updateProfileData(String accountName) {
+        for (MVCListAdapter.ListItem item : mListModel) {
+            if (item.type == AccountPickerProperties.ItemType.EXISTING_ACCOUNT_ROW) {
+                PropertyModel model = item.model;
+                boolean isProfileDataUpdated = TextUtils.equals(accountName,
+                        model.get(ExistingAccountRowProperties.PROFILE_DATA).getAccountName());
+                if (isProfileDataUpdated) {
+                    model.set(ExistingAccountRowProperties.PROFILE_DATA,
+                            mProfileDataCache.getProfileDataOrDefault(accountName));
+                    break;
+                }
+            }
         }
     }
 }

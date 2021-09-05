@@ -102,8 +102,8 @@ void InitializeTestMetaData(base::ListValue* parameters) {
 
 class WebrtcLoggingPrivateApiTest : public extensions::ExtensionApiTest {
  protected:
-  void SetUp() override {
-    extensions::ExtensionApiTest::SetUp();
+  void SetUpOnMainThread() override {
+    ExtensionApiTest::SetUpOnMainThread();
     extension_ = extensions::ExtensionBuilder("Test").Build();
   }
 
@@ -152,7 +152,8 @@ class WebrtcLoggingPrivateApiTest : public extensions::ExtensionApiTest {
     request_info->SetInteger(
         "tabId", extensions::ExtensionTabUtil::GetTabId(web_contents()));
     parameters->Append(std::move(request_info));
-    parameters->AppendString(web_contents()->GetURL().GetOrigin().spec());
+    parameters->AppendString(
+        web_contents()->GetLastCommittedURL().GetOrigin().spec());
   }
 
   // This function implicitly expects the function to succeed (test failure
@@ -704,8 +705,7 @@ class WebrtcLoggingPrivateApiStartEventLoggingTestBase
     values.Set(policy::key::kWebRtcEventLogCollectionAllowed,
                policy::POLICY_LEVEL_MANDATORY, policy::POLICY_SCOPE_USER,
                policy::POLICY_SOURCE_ENTERPRISE_DEFAULT,
-               std::make_unique<base::Value>(WebRtcEventLogCollectionPolicy()),
-               nullptr);
+               base::Value(WebRtcEventLogCollectionPolicy()), nullptr);
 
     provider_.UpdateChromePolicy(values);
   }

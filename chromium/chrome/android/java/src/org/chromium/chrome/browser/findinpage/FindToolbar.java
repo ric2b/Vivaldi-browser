@@ -29,12 +29,12 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import androidx.annotation.IntDef;
+import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 import androidx.core.view.accessibility.AccessibilityEventCompat;
 import androidx.core.view.inputmethod.EditorInfoCompat;
 
 import org.chromium.base.ApiCompatibilityUtils;
-import org.chromium.base.Log;
 import org.chromium.base.ThreadUtils;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
@@ -198,6 +198,13 @@ public class FindToolbar extends LinearLayout {
         super(context, attrs);
 
         mTabObserver = new EmptyTabObserver() {
+            @Override
+            public void onActivityAttachmentChanged(Tab tab, @Nullable WindowAndroid window) {
+                if (window == null && getVisibility() == View.VISIBLE) {
+                    deactivate(/* clearSelection= */ true);
+                }
+            }
+
             @Override
             public void onPageLoadStarted(Tab tab, String url) {
                 deactivate();
@@ -726,12 +733,7 @@ public class FindToolbar extends LinearLayout {
         } else {
             mSearchKeyShouldTriggerSearch = false;
         }
-        try {
-            mFindQuery.setText(findText);
-        } catch (NullPointerException e) {
-            // See crbug.com/1092978.
-            Log.w(TAG, "ignoring exception in setText", e);
-        }
+        mFindQuery.setText(findText);
         mSettingFindTextProgrammatically = false;
     }
 
@@ -776,7 +778,7 @@ public class FindToolbar extends LinearLayout {
      */
     protected int getStatusColor(boolean failed, boolean incognito) {
         int colorResourceId = failed ? R.color.find_in_page_failed_results_status_color
-                                     : R.color.default_text_color_tertiary;
+                                     : R.color.default_text_color_secondary;
         return ApiCompatibilityUtils.getColor(getContext().getResources(), colorResourceId);
     }
 

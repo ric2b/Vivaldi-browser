@@ -18,10 +18,8 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/rand_util.h"
-#include "base/run_loop.h"
 #include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
-#include "base/threading/thread.h"
 #include "base/time/time.h"
 #include "components/invalidation/public/invalidation_service.h"
 #include "components/signin/public/base/signin_metrics.h"
@@ -30,17 +28,17 @@
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/signin/public/identity_manager/primary_account_mutator.h"
 #include "components/sync/base/bind_to_task_runner.h"
+#include "components/sync/base/legacy_directory_deletion.h"
 #include "components/sync/base/model_type.h"
-#include "components/sync/base/report_unrecoverable_error.h"
 #include "components/sync/base/stop_source.h"
 #include "components/sync/base/sync_base_switches.h"
+#include "components/sync/base/sync_util.h"
 #include "components/sync/driver/backend_migrator.h"
 #include "components/sync/driver/configure_context.h"
 #include "components/sync/driver/sync_api_component_factory.h"
 #include "components/sync/driver/sync_auth_manager.h"
 #include "components/sync/driver/sync_driver_switches.h"
 #include "components/sync/driver/sync_type_preference_provider.h"
-#include "components/sync/driver/sync_util.h"
 #include "components/sync/engine/cycle/type_debug_info_observer.h"
 #include "components/sync/engine/engine_components_factory_impl.h"
 #include "components/sync/engine/net/http_bridge.h"
@@ -48,7 +46,6 @@
 #include "components/sync/engine/polling_constants.h"
 #include "components/sync/engine/sync_encryption_handler.h"
 #include "components/sync/model/sync_error.h"
-#include "components/sync/syncable/directory.h"
 #include "components/version_info/version_info_values.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 
@@ -237,6 +234,9 @@ ProfileSyncService::ProfileSyncService(InitParams init_params)
                               base::Unretained(this)),
           &sync_prefs_,
           sync_client_->GetTrustedVaultClient()),
+      backend_task_runner_(base::ThreadPool::CreateSequencedTaskRunner(
+          {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
+           base::TaskShutdownBehavior::BLOCK_SHUTDOWN})),
       network_time_update_callback_(
           std::move(init_params.network_time_update_callback)),
       url_loader_factory_(std::move(init_params.url_loader_factory)),
@@ -275,7 +275,7 @@ ProfileSyncService::ProfileSyncService(InitParams init_params)
   startup_controller_ = std::make_unique<StartupController>(
       base::BindRepeating(&ProfileSyncService::GetPreferredDataTypes,
                           base::Unretained(this)),
-      base::BindRepeating(&ProfileSyncService::IsEngineAllowedToStart,
+      base::BindRepeating(&ProfileSyncService::IsEngineAllowedToRun,
                           base::Unretained(this)),
       base::BindRepeating(&ProfileSyncService::StartUpSlowEngineComponents,
                           base::Unretained(this)));
@@ -375,11 +375,6 @@ WeakHandle<JsEventHandler> ProfileSyncService::GetJsEventHandler() {
   return MakeWeakHandle(sync_js_controller_.AsWeakPtr());
 }
 
-WeakHandle<UnrecoverableErrorHandler>
-ProfileSyncService::GetUnrecoverableErrorHandler() {
-  return MakeWeakHandle(sync_enabled_weak_factory_.GetWeakPtr());
-}
-
 void ProfileSyncService::AccountStateChanged() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
@@ -417,7 +412,7 @@ void ProfileSyncService::CredentialsChanged() {
   // If the engine isn't allowed to start anymore due to the credentials change,
   // then shut down. This happens when the user signs out on the web, i.e. we're
   // in the "Sync paused" state.
-  if (!IsEngineAllowedToStart()) {
+  if (!IsEngineAllowedToRun()) {
     // TODO(crbug/1031162): Remove once traffic investigation is closed.
     EmitUmaMetricWithEmitTimeMinutes(
         "Sync.PeakAnalysis.StopAfterCredentialsChanged");
@@ -441,14 +436,19 @@ void ProfileSyncService::CredentialsChanged() {
   NotifyObservers();
 }
 
-bool ProfileSyncService::IsEngineAllowedToStart() const {
+bool ProfileSyncService::IsEngineAllowedToRun() const {
   // USER_CHOICE (i.e. the Sync feature toggle) and PLATFORM_OVERRIDE (i.e.
   // Android's "MasterSync" toggle) do not prevent starting up the Sync
   // transport.
   auto disable_reasons = GetDisableReasons();
   disable_reasons.RemoveAll(SyncService::DisableReasonSet(
       DISABLE_REASON_USER_CHOICE, DISABLE_REASON_PLATFORM_OVERRIDE));
-  return disable_reasons.Empty();
+  return disable_reasons.Empty() && !IsInPausedState();
+}
+
+bool ProfileSyncService::IsInPausedState() const {
+  return auth_manager_->IsSyncPaused() &&
+         base::FeatureList::IsEnabled(switches::kStopSyncInPausedState);
 }
 
 void ProfileSyncService::OnProtocolEvent(const ProtocolEvent& event) {
@@ -513,39 +513,8 @@ void ProfileSyncService::OnDataTypeRequestsSyncStartup(ModelType type) {
   startup_controller_->OnDataTypeRequestsSyncStartup(type);
 }
 
-void ProfileSyncService::InitializeBackendTaskRunnerIfNeeded() {
-  if (backend_task_runner_) {
-    // Already started.
-    return;
-  }
-
-  if (base::FeatureList::IsEnabled(
-          switches::kProfileSyncServiceUsesThreadPool)) {
-    backend_task_runner_ = base::ThreadPool::CreateSequencedTaskRunner(
-        {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
-         base::TaskShutdownBehavior::BLOCK_SHUTDOWN});
-  } else {
-    // The thread where all the sync operations happen. This thread is kept
-    // alive until browser shutdown and reused if sync is turned off and on
-    // again. It is joined during the shutdown process, but there is an abort
-    // mechanism in place to prevent slow HTTP requests from blocking browser
-    // shutdown.
-    auto sync_thread = std::make_unique<base::Thread>("Chrome_SyncThread");
-    base::Thread::Options options;
-    options.timer_slack = base::TIMER_SLACK_MAXIMUM;
-    bool success = sync_thread->StartWithOptions(options);
-    DCHECK(success);
-    backend_task_runner_ = sync_thread->task_runner();
-
-    // Transfer ownership of the thread to the stopper closure that gets
-    // executed at shutdown.
-    sync_thread_stopper_ =
-        base::BindOnce(&base::Thread::Stop, std::move(sync_thread));
-  }
-}
-
 void ProfileSyncService::StartUpSlowEngineComponents() {
-  DCHECK(IsEngineAllowedToStart());
+  DCHECK(IsEngineAllowedToRun());
 
   const CoreAccountInfo authenticated_account_info =
       GetAuthenticatedAccountInfo();
@@ -565,7 +534,7 @@ void ProfileSyncService::StartUpSlowEngineComponents() {
 
   engine_ = sync_client_->GetSyncApiComponentFactory()->CreateSyncEngine(
       debug_identifier_, sync_client_->GetInvalidationService(),
-      sync_prefs_.AsWeakPtr());
+      sync_client_->GetSyncInvalidationsService(), sync_prefs_.AsWeakPtr());
 
   // Clear any old errors the first time sync starts.
   if (!user_settings_->IsFirstSetupComplete()) {
@@ -589,8 +558,6 @@ void ProfileSyncService::StartUpSlowEngineComponents() {
     sync_prefs_.SetCacheGuid(GenerateCacheGUID());
     sync_prefs_.SetGaiaId(authenticated_account_info.gaia);
   }
-
-  InitializeBackendTaskRunnerIfNeeded();
 
   SyncEngine::InitParams params;
   params.sync_task_runner = backend_task_runner_;
@@ -631,9 +598,6 @@ void ProfileSyncService::StartUpSlowEngineComponents() {
   params.engine_components_factory =
       std::make_unique<EngineComponentsFactoryImpl>(
           EngineSwitchesFromCommandLine());
-  params.unrecoverable_error_handler = GetUnrecoverableErrorHandler();
-  params.report_unrecoverable_error_function =
-      base::BindRepeating(ReportUnrecoverableError, channel_);
   sync_prefs_.GetInvalidationVersions(&params.invalidation_versions);
   params.poll_interval = sync_prefs_.GetPollInterval();
   if (params.poll_interval.is_zero()) {
@@ -666,10 +630,6 @@ void ProfileSyncService::Shutdown() {
   DCHECK(!observers_.might_have_observers());
 
   auth_manager_.reset();
-
-  if (sync_thread_stopper_) {
-    std::move(sync_thread_stopper_).Run();
-  }
 }
 
 void ProfileSyncService::ShutdownImpl(ShutdownReason reason) {
@@ -677,19 +637,15 @@ void ProfileSyncService::ShutdownImpl(ShutdownReason reason) {
     // If the engine hasn't started or is already shut down when a DISABLE_SYNC
     // happens, the data directory needs to be cleaned up here.
     if (reason == ShutdownReason::DISABLE_SYNC) {
-      // Clearing the Directory via Directory::DeleteDirectoryFiles() requires
-      // the |backend_task_runner_| initialized. It also means there's IO
-      // involved which may we considerable overhead if triggered consistently
-      // upon browser startup (which is the case for certain codepaths such as
-      // the user being signed out). To avoid that, SyncPrefs is used to
-      // determine whether it's worth it.
+      // Clearing the Directory via Directory::DeleteDirectoryFiles() means
+      // there's IO involved which may we considerable overhead if triggered
+      // consistently upon browser startup (which is the case for certain
+      // codepaths such as the user being signed out). To avoid that, SyncPrefs
+      // is used to determine whether it's worth it.
       if (!sync_prefs_.GetCacheGuid().empty()) {
-        InitializeBackendTaskRunnerIfNeeded();
-      }
-      if (backend_task_runner_) {
         backend_task_runner_->PostTask(
             FROM_HERE,
-            base::BindOnce(&syncable::Directory::DeleteDirectoryFiles,
+            base::BindOnce(&DeleteLegacyDirectoryFilesAndNigoriStorage,
                            sync_client_->GetSyncDataPath()));
       }
       sync_prefs_.ClearLocalSyncTransportData();
@@ -766,6 +722,9 @@ void ProfileSyncService::StopImpl(SyncStopDataFate data_fate) {
       // For explicit passphrase users, clear the encryption key, such that they
       // will need to reenter it if sync gets re-enabled.
       sync_prefs_.ClearEncryptionBootstrapToken();
+      // Also let observers know that Sync-the-feature is now fully disabled
+      // (before it possibly starts up again in transport-only mode).
+      NotifyObservers();
       break;
   }
 }
@@ -805,25 +764,17 @@ SyncService::DisableReasonSet ProfileSyncService::GetDisableReasons() const {
   if (unrecoverable_error_reason_ != ERROR_REASON_UNSET) {
     result.Put(DISABLE_REASON_UNRECOVERABLE_ERROR);
   }
-  if (base::FeatureList::IsEnabled(switches::kStopSyncInPausedState)) {
-    // Some crashes on Chrome OS (crbug.com/1043642) suggest that
-    // ProfileSyncService gets called after its shutdown. It's not clear why
-    // this actually happens. To avoid crashes check that |auth_manager_| isn't
-    // null.
-    if (auth_manager_ && auth_manager_->IsSyncPaused()) {
-      result.Put(DISABLE_REASON_PAUSED);
-    }
-  }
   return result;
 }
 
 SyncService::TransportState ProfileSyncService::GetTransportState() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  if (!IsEngineAllowedToStart()) {
+  if (!IsEngineAllowedToRun()) {
     // We generally shouldn't have an engine while in a disabled state, but it
     // can happen if this method gets called during ShutdownImpl().
-    return TransportState::DISABLED;
+    return IsInPausedState() ? TransportState::PAUSED
+                             : TransportState::DISABLED;
   }
 
   if (!engine_ || !engine_->IsInitialized()) {
@@ -896,18 +847,6 @@ void ProfileSyncService::ClearUnrecoverableError() {
   unrecoverable_error_location_ = base::Location();
 }
 
-// An invariant has been violated.  Transition to an error state where we try
-// to do as little work as possible, to avoid further corruption or crashes.
-void ProfileSyncService::OnUnrecoverableError(const base::Location& from_here,
-                                              const std::string& message) {
-  // TODO(crbug.com/840720): Get rid of the UnrecoverableErrorHandler interface
-  // and instead pass a callback.
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  // Unrecoverable errors that arrive via the UnrecoverableErrorHandler
-  // interface are assumed to originate within the syncer.
-  OnUnrecoverableErrorImpl(from_here, message, ERROR_REASON_SYNCER);
-}
-
 void ProfileSyncService::OnUnrecoverableErrorImpl(
     const base::Location& from_here,
     const std::string& message,
@@ -961,7 +900,7 @@ void ProfileSyncService::OnEngineInitialized(
   // TODO(treib): Based on some crash reports, it seems like the user could have
   // signed out already at this point, so many of the steps below, including
   // datatype reconfiguration, should not be triggered.
-  DCHECK(IsEngineAllowedToStart());
+  DCHECK(IsEngineAllowedToRun());
 
   // The very first time the backend initializes is effectively the first time
   // we can say we successfully "synced".  LastSyncedTime will only be null in
@@ -1444,7 +1383,7 @@ ModelTypeSet ProfileSyncService::GetModelTypesForTransportOnlyMode() const {
       SECURITY_EVENTS,
       SHARING_MESSAGE,
       SUPERVISED_USER_SETTINGS,
-      SUPERVISED_USER_WHITELISTS,
+      SUPERVISED_USER_ALLOWLISTS,
       USER_CONSENTS,
   };
 
@@ -1982,14 +1921,6 @@ bool ProfileSyncService::IsPassphrasePrompted() const {
 
 void ProfileSyncService::SetPassphrasePrompted(bool prompted) {
   sync_prefs_.SetPassphrasePrompted(prompted);
-}
-
-void ProfileSyncService::FlushBackendTaskRunnerForTest() const {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  base::RunLoop run_loop;
-
-  backend_task_runner_->PostTask(FROM_HERE, run_loop.QuitClosure());
-  run_loop.Run();
 }
 
 SyncEncryptionHandler::Observer*

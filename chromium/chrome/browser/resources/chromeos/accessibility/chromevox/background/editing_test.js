@@ -1305,8 +1305,9 @@ TEST_F('ChromeVoxEditingTest', 'GrammarErrors', function() {
       });
 });
 
+// Flaky test, crbug.com/1098642.
 TEST_F(
-    'ChromeVoxEditingTest', 'CharacterTypedAfterNewLine', function() {
+    'ChromeVoxEditingTest', 'DISABLED_CharacterTypedAfterNewLine', function() {
       const mockFeedback = this.createMockFeedback();
       this.runWithLoadedTree(
           `
@@ -1432,6 +1433,52 @@ TEST_F('ChromeVoxEditingTest', 'MoveByLineIntent', function() {
               .expectSpeech('456')
               .call(this.press(38 /* up */))
               .expectSpeech('123')
+              .replay();
+        });
+        input.focus();
+      });
+});
+
+TEST_F('ChromeVoxEditingTest', 'SelectAllBareTextContent', function() {
+  const mockFeedback = this.createMockFeedback();
+  this.runWithLoadedTree(
+      `
+    <div contenteditable role="textbox">unread</div>
+  `,
+      function(root) {
+        const input = root.find({role: RoleType.TEXT_FIELD});
+        this.listenOnce(input, 'focus', function() {
+          mockFeedback.call(this.press(35 /* end */, {ctrl: true}))
+              .expectSpeech('unread')
+              .call(this.press(65 /* a */, {ctrl: true}))
+              .expectSpeech('unread', 'selected')
+              .replay();
+        });
+        input.focus();
+      });
+});
+
+TEST_F('ChromeVoxEditingTest', 'NonBreakingSpaceNewLine', function() {
+  const mockFeedback = this.createMockFeedback();
+  this.runWithLoadedTree(
+      `
+    <div contenteditable role="textbox">&nbsp</div>
+  `,
+      function(root) {
+        const input = root.find({role: RoleType.TEXT_FIELD});
+        this.listenOnce(input, 'focus', function() {
+          mockFeedback
+              .call(() => {
+                const node = root.find({role: RoleType.INLINE_TEXT_BOX});
+                const line = new editing.EditableLine(node, 0, node, 0);
+                const prev =
+                    new editing.EditableLine(node.root, 1, node.root, 1);
+                const editableHandler = DesktopAutomationHandler.instance
+                                            .textEditHandler_.editableText_;
+                editableHandler.handleSpeech_(
+                    line, prev, line, line, prev, prev, true, []);
+              })
+              .expectSpeech('\n')
               .replay();
         });
         input.focus();

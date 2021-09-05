@@ -316,28 +316,30 @@ PinRequestView::PinRequestView(PinRequest request, Delegate* delegate)
                             base::Unretained(this)),
         base::BindRepeating(&PinRequestView::OnBack, base::Unretained(this)),
         request.obscure_pin));
+    access_code_view_->SetFocusBehavior(FocusBehavior::ALWAYS);
   } else {
-    access_code_view_ = AddChildView(std::make_unique<FlexCodeInput>(
+    auto flex_code_input = std::make_unique<FlexCodeInput>(
         base::BindRepeating(&PinRequestView::OnInputChange,
                             base::Unretained(this), false),
         base::BindRepeating(&PinRequestView::SubmitCode,
                             base::Unretained(this)),
         base::BindRepeating(&PinRequestView::OnBack, base::Unretained(this)),
-        request.obscure_pin));
+        request.obscure_pin);
+    flex_code_input->SetAccessibleName(default_accessible_title_);
+    access_code_view_ = AddChildView(std::move(flex_code_input));
   }
-  access_code_view_->SetFocusBehavior(FocusBehavior::ALWAYS);
 
   add_spacer(kAccessCodeToPinKeyboardDistanceDp);
 
   // Pin keyboard. Note that the keyboard's own submit button is disabled via
   // passing a null |on_submit| callback.
-  pin_keyboard_view_ =
-      new LoginPinView(LoginPinView::Style::kAlphanumeric,
-                       base::BindRepeating(&AccessCodeInput::InsertDigit,
-                                           base::Unretained(access_code_view_)),
-                       base::BindRepeating(&AccessCodeInput::Backspace,
-                                           base::Unretained(access_code_view_)),
-                       /*on_submit=*/LoginPinView::OnPinSubmit());
+  pin_keyboard_view_ = new LoginPinView(
+      LoginPinView::Style::kAlphanumeric, CreateDefaultLoginPalette(),
+      base::BindRepeating(&AccessCodeInput::InsertDigit,
+                          base::Unretained(access_code_view_)),
+      base::BindRepeating(&AccessCodeInput::Backspace,
+                          base::Unretained(access_code_view_)),
+      /*on_submit=*/LoginPinView::OnPinSubmit());
   // Backspace key is always enabled and |access_code_| field handles it.
   pin_keyboard_view_->OnPasswordTextChanged(false);
   AddChildView(pin_keyboard_view_);

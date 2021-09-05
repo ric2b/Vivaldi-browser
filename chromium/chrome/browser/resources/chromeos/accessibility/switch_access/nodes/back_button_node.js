@@ -17,8 +17,8 @@ class BackButtonNode extends SAChildNode {
      */
     this.group_ = group;
 
-    /** @private {function(chrome.automation.AutomationEvent)} */
-    this.locationChangedHandler_ = () => FocusRingManager.setFocusedNode(this);
+    /** @private {!RepeatedEventHandler} */
+    this.locationChangedHandler_;
   }
 
   // ================= Getters and setters =================
@@ -76,6 +76,11 @@ class BackButtonNode extends SAChildNode {
   }
 
   /** @override */
+  isValidAndVisible() {
+    return this.group_.isValidGroup();
+  }
+
+  /** @override */
   onFocus() {
     super.onFocus();
     chrome.accessibilityPrivate.updateSwitchAccessBubble(
@@ -84,9 +89,11 @@ class BackButtonNode extends SAChildNode {
     BackButtonNode.findAutomationNode_();
 
     if (this.group_.automationNode) {
-      this.group_.automationNode.addEventListener(
+      this.locationChangedHandler_ = new RepeatedEventHandler(
+          this.group_.automationNode,
           chrome.automation.EventType.LOCATION_CHANGED,
-          this.locationChangedHandler_, false /* is_capture */);
+          () => FocusRingManager.setFocusedNode(this),
+          {exactMatch: true, allAncestors: true});
     }
   }
 
@@ -97,10 +104,8 @@ class BackButtonNode extends SAChildNode {
         chrome.accessibilityPrivate.SwitchAccessBubble.BACK_BUTTON,
         false /* show */);
 
-    if (this.group_.automationNode) {
-      this.group_.automationNode.removeEventListener(
-          chrome.automation.EventType.LOCATION_CHANGED,
-          this.locationChangedHandler_, false /* is_capture */);
+    if (this.locationChangedHandler_) {
+      this.locationChangedHandler_.stopListening();
     }
   }
 
@@ -130,18 +135,12 @@ class BackButtonNode extends SAChildNode {
     if (BackButtonNode.automationNode_ && BackButtonNode.automationNode_.role) {
       return;
     }
-    SwitchAccess.findNodeMatchingPredicate(
-        BackButtonNode.isBackButton_, BackButtonNode.saveAutomationNode_);
-  }
-
-  /**
-   * Checks if the given node is the back button automation node.
-   * @param {!AutomationNode} node
-   * @return {boolean}
-   * @private
-   */
-  static isBackButton_(node) {
-    return node.htmlAttributes.id === 'switch_access_back_button';
+    SwitchAccess.findNodeMatching(
+        {
+          role: chrome.automation.RoleType.BUTTON,
+          attributes: {className: 'SwitchAccessBackButtonView'}
+        },
+        BackButtonNode.saveAutomationNode_);
   }
 
   /**
@@ -164,7 +163,13 @@ class BackButtonNode extends SAChildNode {
    */
   static saveAutomationNode_(automationNode) {
     BackButtonNode.automationNode_ = automationNode;
-    BackButtonNode.automationNode_.addEventListener(
-        chrome.automation.EventType.CLICKED, BackButtonNode.onClick_, false);
+
+    if (BackButtonNode.clickHandler_) {
+      BackButtonNode.clickHandler_.setNodes(automationNode);
+    } else {
+      BackButtonNode.clickHandler_ = new EventHandler(
+          automationNode, chrome.automation.EventType.CLICKED,
+          BackButtonNode.onClick_);
+    }
   }
 }

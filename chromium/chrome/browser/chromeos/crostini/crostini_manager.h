@@ -19,6 +19,7 @@
 #include "chrome/browser/chromeos/crostini/crostini_simple_types.h"
 #include "chrome/browser/chromeos/crostini/crostini_types.mojom-forward.h"
 #include "chrome/browser/chromeos/crostini/crostini_util.h"
+#include "chrome/browser/chromeos/crostini/termina_installer.h"
 #include "chrome/browser/chromeos/vm_starting_observer.h"
 #include "chrome/browser/component_updater/cros_component_installer_chromeos.h"
 #include "chrome/browser/ui/browser.h"
@@ -40,6 +41,7 @@ class Profile;
 namespace crostini {
 
 class CrostiniStabilityMonitor;
+class CrostiniUpgradeAvailableNotification;
 
 class LinuxPackageOperationProgressObserver {
  public:
@@ -226,21 +228,20 @@ class CrostiniManager : public KeyedService,
 
   base::WeakPtr<CrostiniManager> GetWeakPtr();
 
-  // Returns true if the cros-termina component is installed.
-  static bool IsCrosTerminaInstalled();
-
   // Returns true if the /dev/kvm directory is present.
   static bool IsDevKvmPresent();
 
-  // Upgrades cros-termina component if the current version is not compatible.
+  // Upgrades cros-termina component if the current version is not
+  // compatible. This is a no-op if chromeos::features::kCrostiniUseDlc is
+  // enabled.
   void MaybeUpdateCrostini();
 
-  // Installs the current version of cros-termina component. Attempts to apply
-  // pending upgrades if a MaybeUpdateCrostini failed.
-  void InstallTerminaComponent(CrostiniResultCallback callback);
+  // Installs termina using either component updater or the DLC service
+  // depending on the value of chromeos::features::kCrostiniUseDlc
+  void InstallTermina(CrostiniResultCallback callback);
 
-  // Unloads and removes the cros-termina component. Returns success/failure.
-  bool UninstallTerminaComponent();
+  // Unloads and removes termina.
+  void UninstallTermina(BoolCallback callback);
 
   // Starts the Concierge service. |callback| is called after the method call
   // finishes.
@@ -370,7 +371,7 @@ class CrostiniManager : public KeyedService,
                                   std::string desktop_file_id,
                                   const std::vector<std::string>& files,
                                   bool display_scaled,
-                                  BoolCallback callback);
+                                  CrostiniSuccessCallback callback);
 
   // Asynchronously gets app icons as specified by their desktop file ids.
   // |callback| is called after the method call finishes.
@@ -453,6 +454,15 @@ class CrostiniManager : public KeyedService,
                        const base::FilePath& path);
   void AddFileChangeObserver(CrostiniFileChangeObserver* observer);
   void RemoveFileChangeObserver(CrostiniFileChangeObserver* observer);
+
+  // Lookup vsh session from pid. Used by terminal to open new tabs in cwd.
+  using VshSessionCallback =
+      base::OnceCallback<void(bool success,
+                              const std::string& failure_reason,
+                              int32_t container_shell_pid)>;
+  void GetVshSession(const ContainerId& container_id,
+                     int32_t host_vsh_pid,
+                     VshSessionCallback callback);
 
   // Runs all the steps required to restart the given crostini vm and container.
   // The optional |observer| tracks progress. If provided, it must be alive
@@ -709,14 +719,6 @@ class CrostiniManager : public KeyedService,
       base::Optional<vm_tools::concierge::GetVmEnterpriseReportingInfoResponse>
           response);
 
-  // Callback for CrostiniManager::InstallCrostiniComponent. Must be called on
-  // the UI thread.
-  void OnInstallTerminaComponent(
-      CrostiniResultCallback callback,
-      bool is_update_checked,
-      component_updater::CrOSComponentManager::Error error,
-      const base::FilePath& path);
-
   // Callback for CrostiniClient::StartConcierge. Called after the
   // DebugDaemon service method finishes.
   void OnStartConcierge(BoolCallback callback, bool success);
@@ -794,7 +796,7 @@ class CrostiniManager : public KeyedService,
 
   // Callback for CrostiniManager::LaunchContainerApplication.
   void OnLaunchContainerApplication(
-      BoolCallback callback,
+      CrostiniSuccessCallback callback,
       base::Optional<vm_tools::cicerone::LaunchContainerApplicationResponse>
           response);
 
@@ -845,9 +847,8 @@ class CrostiniManager : public KeyedService,
   void OnDefaultContainerConfigured(bool success);
 
   // Helper for CrostiniManager::MaybeUpdateCrostini. Makes blocking calls to
-  // check for file paths and registered components.
-  static void CheckPathsAndComponents(
-      scoped_refptr<component_updater::CrOSComponentManager> component_manager);
+  // check for /dev/kvm.
+  static void CheckPaths();
 
   // Helper for CrostiniManager::MaybeUpdateCrostini. Separated because the
   // checking component registration code may block.
@@ -878,8 +879,6 @@ class CrostiniManager : public KeyedService,
       component_manager_load_error_for_testing_ =
           component_updater::CrOSComponentManager::Error::NONE;
 
-  static bool is_cros_termina_registered_;
-  bool termina_update_check_needed_ = false;
   static bool is_dev_kvm_present_;
 
   // |is_unclean_startup_| is true when we detect Concierge still running at
@@ -969,6 +968,11 @@ class CrostiniManager : public KeyedService,
   base::Time time_of_last_disk_type_metric_;
 
   std::unique_ptr<CrostiniStabilityMonitor> crostini_stability_monitor_;
+
+  std::unique_ptr<CrostiniUpgradeAvailableNotification>
+      upgrade_available_notification_;
+
+  TerminaInstaller termina_installer_{};
 
   // Note: This should remain the last member so it'll be destroyed and
   // invalidate its weak pointers before any other members are destroyed.

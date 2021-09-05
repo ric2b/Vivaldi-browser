@@ -39,6 +39,11 @@ id ExecuteJavaScript(NSString* javascript, NSError* __autoreleasing* out_error);
 // will properly synchronize the UI for Earl Grey tests.
 @interface ChromeEarlGreyImpl : BaseEGTestHelperImpl
 
+#pragma mark - Test Utilities
+
+// Wait until |matcher| is accessible (not nil) on the device.
+- (void)waitForMatcher:(id<GREYMatcher>)matcher;
+
 #pragma mark - Device Utilities
 
 // Simulate the user action to rotate the device to a certain orientation.
@@ -136,6 +141,10 @@ id ExecuteJavaScript(NSString* javascript, NSError* __autoreleasing* out_error);
 // Waits for there to be |count| number of incognito tabs within a timeout, or a
 // GREYAssert is induced.
 - (void)waitForIncognitoTabCount:(NSUInteger)count;
+
+// Waits for there to be |count| number of browsers within a timeout,
+// or a GREYAssert is induced.
+- (void)waitForBrowserCount:(NSUInteger)count;
 
 // Loads |URL| as if it was opened from an external application.
 - (void)openURLFromExternalApp:(const GURL&)URL;
@@ -294,6 +303,9 @@ id ExecuteJavaScript(NSString* javascript, NSError* __autoreleasing* out_error);
 // Returns the number of incognito tabs.
 - (NSUInteger)incognitoTabCount WARN_UNUSED_RESULT;
 
+// Returns the number of browsers.
+- (NSUInteger)browserCount WARN_UNUSED_RESULT;
+
 // Returns the index of active tab in normal (non-incognito) mode.
 - (NSUInteger)indexOfActiveNormalTab;
 
@@ -340,11 +352,6 @@ id ExecuteJavaScript(NSString* javascript, NSError* __autoreleasing* out_error);
 // accounts were correctly removed from the keychain. Induces a GREYAssert if
 // the operation fails.
 - (void)signOutAndClearIdentities;
-
-// Same as signOutAndClearIdentities.
-//
-// DEPRECATED in favor of signOutAndClearIdentities
-- (void)signOutAndClearAccounts;
 
 #pragma mark - Sync Utilities (EG2)
 
@@ -512,6 +519,9 @@ id ExecuteJavaScript(NSString* javascript, NSError* __autoreleasing* out_error);
 // system frameworks. Always returns YES if the app was not requested to run
 // with custom WebKit frameworks.
 - (BOOL)isCustomWebKitLoadedIfRequested WARN_UNUSED_RESULT;
+
+// Returns whether the mobile version of the websites are requested by default.
+- (BOOL)isMobileModeByDefault WARN_UNUSED_RESULT;
 
 #pragma mark - Popup Blocking
 

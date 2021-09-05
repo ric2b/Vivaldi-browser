@@ -414,7 +414,7 @@ ui::EventDispatchDetails TouchExplorationController::InDoubleTapPending(
     if (current_touch_ids_.size() != 0)
       return DiscardEvent(continuation);
 
-    SendSimulatedClickOrTap(continuation);
+    SendSimulatedClick();
 
     SET_STATE(NO_FINGERS_DOWN);
     return DiscardEvent(continuation);
@@ -433,7 +433,7 @@ ui::EventDispatchDetails TouchExplorationController::InTouchReleasePending(
     if (current_touch_ids_.size() != 0)
       return DiscardEvent(continuation);
 
-    SendSimulatedClickOrTap(continuation);
+    SendSimulatedClick();
     SET_STATE(NO_FINGERS_DOWN);
     return DiscardEvent(continuation);
   }
@@ -464,18 +464,14 @@ ui::EventDispatchDetails TouchExplorationController::InTouchExploration(
     return SendEvent(continuation, &event);
   }
 
-  // Rewrite as a mouse-move event.
-  // |event| locations are in DIP; see |RewriteEvent|. We need to dispatch
-  // |screen coords.
-  gfx::PointF location_f(ConvertDIPToPixels(event.location_f()));
-  std::unique_ptr<ui::Event> new_event = CreateMouseMoveEvent(
-      location_f, event.flags());
-  SetTouchAccessibilityFlag(new_event.get());
+  delegate_->HandleAccessibilityGesture(ax::mojom::Gesture::kTouchExplore,
+                                        event.location_f());
+
   last_touch_exploration_ = std::make_unique<ui::TouchEvent>(event);
   if (anchor_point_state_ != ANCHOR_POINT_EXPLICITLY_SET)
     SetAnchorPointInternal(last_touch_exploration_->location_f());
 
-  return SendEventFinally(continuation, new_event.get());
+  return DiscardEvent(continuation);
 }
 
 ui::EventDispatchDetails TouchExplorationController::InGestureInProgress(
@@ -579,7 +575,7 @@ ui::EventDispatchDetails TouchExplorationController::InTouchExploreSecondPress(
       return DiscardEvent(continuation);
     }
 
-    SendSimulatedClickOrTap(continuation);
+    SendSimulatedClick();
 
     SET_STATE(TOUCH_EXPLORATION);
     EnterTouchToMouseMode();
@@ -623,15 +619,9 @@ void TouchExplorationController::PlaySoundForTimer() {
   delegate_->PlayVolumeAdjustEarcon();
 }
 
-void TouchExplorationController::SendSimulatedClickOrTap(
-    const Continuation continuation) {
-  // If we got an anchor point from ChromeVox, send a double-tap gesture
-  // and let ChromeVox handle the click.
-  if (anchor_point_state_ == ANCHOR_POINT_EXPLICITLY_SET) {
-    delegate_->HandleAccessibilityGesture(ax::mojom::Gesture::kClick);
-    return;
-  }
-  SendSimulatedTap(continuation);
+void TouchExplorationController::SendSimulatedClick() {
+  // Always send a double tap gesture to ChromeVox.
+  delegate_->HandleAccessibilityGesture(ax::mojom::Gesture::kClick);
 }
 
 void TouchExplorationController::SendSimulatedTap(
@@ -768,6 +758,7 @@ void TouchExplorationController::OnTapTimerFired() {
       return;
     case DOUBLE_TAP_PENDING: {
       SET_STATE(ONE_FINGER_PASSTHROUGH);
+      delegate_->PlayPassthroughEarcon();
       passthrough_offset_ =
           last_unused_finger_event_->location_f() - anchor_point_dip_;
       std::unique_ptr<ui::TouchEvent> passthrough_press(
@@ -798,9 +789,8 @@ void TouchExplorationController::OnTapTimerFired() {
       return;
   }
   EnterTouchToMouseMode();
-  std::unique_ptr<ui::Event> mouse_move = CreateMouseMoveEvent(
-      initial_press_->location_f(), initial_press_->flags());
-  DispatchEvent(mouse_move.get(), initial_press_continuation_);
+  delegate_->HandleAccessibilityGesture(ax::mojom::Gesture::kTouchExplore,
+                                        initial_press_->location_f());
   last_touch_exploration_ = std::make_unique<ui::TouchEvent>(*initial_press_);
   SetAnchorPointInternal(last_touch_exploration_->location_f());
   anchor_point_state_ = ANCHOR_POINT_FROM_TOUCH_EXPLORATION;

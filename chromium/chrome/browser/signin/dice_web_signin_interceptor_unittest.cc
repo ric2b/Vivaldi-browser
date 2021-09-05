@@ -8,7 +8,9 @@
 
 #include "base/callback.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile_attributes_entry.h"
 #include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/signin/chrome_signin_client_factory.h"
@@ -16,9 +18,11 @@
 #include "chrome/browser/signin/identity_test_environment_profile_adaptor.h"
 #include "chrome/browser/signin/signin_features.h"
 #include "chrome/common/chrome_constants.h"
+#include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/testing_profile_manager.h"
+#include "components/prefs/pref_service.h"
 #include "components/signin/public/identity_manager/identity_test_environment.h"
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/test_web_contents_factory.h"
@@ -33,10 +37,8 @@ class MockDiceWebSigninInterceptorDelegate
  public:
   MOCK_METHOD(void,
               ShowSigninInterceptionBubble,
-              (DiceWebSigninInterceptor::SigninInterceptionType
-                   signin_interception_type,
-               content::WebContents* web_contents,
-               const AccountInfo& account_info,
+              (content::WebContents * web_contents,
+               const BubbleParameters& bubble_parameters,
                base::OnceCallback<void(bool)> callback),
               (override));
 };
@@ -84,6 +86,14 @@ class DiceWebSigninInterceptorTest : public testing::Test {
 
   Profile* CreateTestingProfile(const std::string& name) {
     return profile_manager_->CreateTestingProfile(name);
+  }
+
+  // Helper function that calls MaybeInterceptWebSignin with parameters
+  // compatible with interception.
+  void MaybeIntercept(CoreAccountId account_id) {
+    interceptor()->MaybeInterceptWebSignin(web_contents(), account_id,
+                                           /*is_new_account=*/true,
+                                           /*is_sync_signin=*/false);
   }
 
  private:
@@ -298,30 +308,44 @@ TEST_F(DiceWebSigninInterceptorTest, NoInterception) {
   entry->SetAuthInfo(account_info.gaia, base::UTF8ToUTF16("Bob"),
                      /*is_consented_primary_account=*/false);
 
+  std::unique_ptr<base::HistogramTester> histogram_tester =
+      std::make_unique<base::HistogramTester>();
   // Check that Sync signin is not intercepted.
   interceptor()->MaybeInterceptWebSignin(web_contents(),
                                          account_info.account_id,
                                          /*is_new_account=*/true,
                                          /*is_sync_signin=*/true);
   testing::Mock::VerifyAndClearExpectations(mock_delegate());
+  histogram_tester->ExpectUniqueSample(
+      "Signin.Intercept.HeuristicOutcome",
+      SigninInterceptionHeuristicOutcome::kAbortSyncSignin, 1);
 
   // Check that reauth is not intercepted.
+  histogram_tester = std::make_unique<base::HistogramTester>();
   interceptor()->MaybeInterceptWebSignin(web_contents(),
                                          account_info.account_id,
                                          /*is_new_account=*/false,
                                          /*is_sync_signin=*/false);
   testing::Mock::VerifyAndClearExpectations(mock_delegate());
+  histogram_tester->ExpectUniqueSample(
+      "Signin.Intercept.HeuristicOutcome",
+      SigninInterceptionHeuristicOutcome::kAbortAccountNotNew, 1);
 
   // Check that interception works otherwise, as a sanity check.
-  EXPECT_CALL(
-      *mock_delegate(),
-      ShowSigninInterceptionBubble(
-          DiceWebSigninInterceptor::SigninInterceptionType::kProfileSwitch,
-          web_contents(), account_info, testing::_));
+  histogram_tester = std::make_unique<base::HistogramTester>();
+  DiceWebSigninInterceptor::Delegate::BubbleParameters expected_parameters = {
+      DiceWebSigninInterceptor::SigninInterceptionType::kProfileSwitch,
+      account_info, AccountInfo()};
+  EXPECT_CALL(*mock_delegate(),
+              ShowSigninInterceptionBubble(web_contents(), expected_parameters,
+                                           testing::_));
   interceptor()->MaybeInterceptWebSignin(web_contents(),
                                          account_info.account_id,
                                          /*is_new_account=*/true,
                                          /*is_sync_signin=*/false);
+  histogram_tester->ExpectUniqueSample(
+      "Signin.Intercept.HeuristicOutcome",
+      SigninInterceptionHeuristicOutcome::kInterceptProfileSwitch, 1);
 }
 
 TEST_F(DiceWebSigninInterceptorTest, InterceptionInProgress) {
@@ -336,48 +360,43 @@ TEST_F(DiceWebSigninInterceptorTest, InterceptionInProgress) {
                      /*is_consented_primary_account=*/false);
 
   // Start an interception.
+  DiceWebSigninInterceptor::Delegate::BubbleParameters expected_parameters = {
+      DiceWebSigninInterceptor::SigninInterceptionType::kProfileSwitch,
+      account_info, AccountInfo()};
   base::OnceCallback<void(bool)> delegate_callback;
-  EXPECT_CALL(
-      *mock_delegate(),
-      ShowSigninInterceptionBubble(
-          DiceWebSigninInterceptor::SigninInterceptionType::kProfileSwitch,
-          web_contents(), account_info, testing::_))
-      .WillOnce(testing::WithArg<3>(testing::Invoke(
+  EXPECT_CALL(*mock_delegate(),
+              ShowSigninInterceptionBubble(web_contents(), expected_parameters,
+                                           testing::_))
+      .WillOnce(testing::WithArg<2>(testing::Invoke(
           [&delegate_callback](base::OnceCallback<void(bool)> callback) {
             delegate_callback = std::move(callback);
           })));
-  interceptor()->MaybeInterceptWebSignin(web_contents(),
-                                         account_info.account_id,
-                                         /*is_new_account=*/true,
-                                         /*is_sync_signin=*/false);
+  MaybeIntercept(account_info.account_id);
   testing::Mock::VerifyAndClearExpectations(mock_delegate());
   EXPECT_TRUE(interceptor()->is_interception_in_progress_);
 
   // Check that there is no interception while another one is in progress.
-  interceptor()->MaybeInterceptWebSignin(web_contents(),
-                                         account_info.account_id,
-                                         /*is_new_account=*/true,
-                                         /*is_sync_signin=*/false);
+  base::HistogramTester histogram_tester;
+  MaybeIntercept(account_info.account_id);
   testing::Mock::VerifyAndClearExpectations(mock_delegate());
+  histogram_tester.ExpectUniqueSample(
+      "Signin.Intercept.HeuristicOutcome",
+      SigninInterceptionHeuristicOutcome::kAbortInterceptInProgress, 1);
 
   // Complete the interception that was in progress.
   std::move(delegate_callback).Run(false);
   EXPECT_FALSE(interceptor()->is_interception_in_progress_);
 
   // A new interception can now start.
-  EXPECT_CALL(
-      *mock_delegate(),
-      ShowSigninInterceptionBubble(
-          DiceWebSigninInterceptor::SigninInterceptionType::kProfileSwitch,
-          web_contents(), account_info, testing::_));
-  interceptor()->MaybeInterceptWebSignin(web_contents(),
-                                         account_info.account_id,
-                                         /*is_new_account=*/true,
-                                         /*is_sync_signin=*/false);
+  EXPECT_CALL(*mock_delegate(),
+              ShowSigninInterceptionBubble(web_contents(), expected_parameters,
+                                           testing::_));
+  MaybeIntercept(account_info.account_id);
 }
 
 // Interception other than the profile switch require at least 2 accounts.
 TEST_F(DiceWebSigninInterceptorTest, NoInterceptionWithOneAccount) {
+  base::HistogramTester histogram_tester;
   AccountInfo account_info =
       identity_test_env()->MakeAccountAvailable("bob@example.com");
   // Interception aborts even if the account info is not available.
@@ -387,38 +406,78 @@ TEST_F(DiceWebSigninInterceptorTest, NoInterceptionWithOneAccount) {
           ->FindExtendedAccountInfoForAccountWithRefreshTokenByAccountId(
               account_info.account_id)
           ->IsValid());
-  interceptor()->MaybeInterceptWebSignin(web_contents(),
-                                         account_info.account_id,
-                                         /*is_new_account=*/true,
-                                         /*is_sync_signin=*/false);
+  MaybeIntercept(account_info.account_id);
   EXPECT_FALSE(interceptor()->is_interception_in_progress_);
+  histogram_tester.ExpectUniqueSample(
+      "Signin.Intercept.HeuristicOutcome",
+      SigninInterceptionHeuristicOutcome::kAbortSingleAccount, 1);
+}
+
+// When profile creation is disallowed, profile switch interception is still
+// enabled, but others are disabled.
+TEST_F(DiceWebSigninInterceptorTest, ProfileCreationDisallowed) {
+  base::HistogramTester histogram_tester;
+  g_browser_process->local_state()->SetBoolean(prefs::kBrowserAddPersonEnabled,
+                                               false);
+  // Setup for profile switch interception.
+  AccountInfo account_info =
+      identity_test_env()->MakeAccountAvailable("bob@example.com");
+  AccountInfo other_account_info =
+      identity_test_env()->MakeAccountAvailable("alice@example.com");
+  Profile* profile_2 = CreateTestingProfile("Profile 2");
+  ProfileAttributesEntry* entry;
+  ASSERT_TRUE(profile_attributes_storage()->GetProfileAttributesWithPath(
+      profile_2->GetPath(), &entry));
+  entry->SetAuthInfo(account_info.gaia, base::UTF8ToUTF16("Bob"),
+                     /*is_consented_primary_account=*/false);
+
+  // Interception that would offer creating a new profile does not work.
+  MaybeIntercept(other_account_info.account_id);
+  EXPECT_FALSE(interceptor()->is_interception_in_progress_);
+  histogram_tester.ExpectUniqueSample(
+      "Signin.Intercept.HeuristicOutcome",
+      SigninInterceptionHeuristicOutcome::kAbortProfileCreationDisallowed, 1);
+
+  // Profile switch interception still works.
+  DiceWebSigninInterceptor::Delegate::BubbleParameters expected_parameters = {
+      DiceWebSigninInterceptor::SigninInterceptionType::kProfileSwitch,
+      account_info, AccountInfo()};
+  EXPECT_CALL(*mock_delegate(),
+              ShowSigninInterceptionBubble(web_contents(), expected_parameters,
+                                           testing::_));
+  MaybeIntercept(account_info.account_id);
 }
 
 TEST_F(DiceWebSigninInterceptorTest, WaitForAccountInfoAvailable) {
-  identity_test_env()->MakeUnconsentedPrimaryAccountAvailable(
-      "bob@example.com");
+  base::HistogramTester histogram_tester;
+  AccountInfo primary_account_info =
+      identity_test_env()->MakeUnconsentedPrimaryAccountAvailable(
+          "bob@example.com");
   AccountInfo account_info =
       identity_test_env()->MakeAccountAvailable("alice@example.com");
-  interceptor()->MaybeInterceptWebSignin(web_contents(),
-                                         account_info.account_id,
-                                         /*is_new_account=*/true,
-                                         /*is_sync_signin=*/false);
+  MaybeIntercept(account_info.account_id);
   // Delegate was not called yet.
   testing::Mock::VerifyAndClearExpectations(mock_delegate());
 
   // Account info becomes available, interception happens.
+  DiceWebSigninInterceptor::Delegate::BubbleParameters expected_parameters = {
+      DiceWebSigninInterceptor::SigninInterceptionType::kEnterprise,
+      account_info, primary_account_info};
   EXPECT_CALL(*mock_delegate(),
-              ShowSigninInterceptionBubble(
-                  DiceWebSigninInterceptor::SigninInterceptionType::kEnterprise,
-                  web_contents(), account_info, testing::_));
+              ShowSigninInterceptionBubble(web_contents(), expected_parameters,
+                                           testing::_));
   MakeValidAccountInfo(&account_info);
   account_info.hosted_domain = "example.com";
   identity_test_env()->UpdateAccountInfoForAccount(account_info);
+  histogram_tester.ExpectTotalCount("Signin.Intercept.AccountInfoFetchDuration",
+                                    1);
 }
 
 TEST_F(DiceWebSigninInterceptorTest, AccountInfoAlreadyAvailable) {
-  identity_test_env()->MakeUnconsentedPrimaryAccountAvailable(
-      "bob@example.com");
+  base::HistogramTester histogram_tester;
+  AccountInfo primary_account_info =
+      identity_test_env()->MakeUnconsentedPrimaryAccountAvailable(
+          "bob@example.com");
   AccountInfo account_info =
       identity_test_env()->MakeAccountAvailable("alice@example.com");
   MakeValidAccountInfo(&account_info);
@@ -426,31 +485,39 @@ TEST_F(DiceWebSigninInterceptorTest, AccountInfoAlreadyAvailable) {
   identity_test_env()->UpdateAccountInfoForAccount(account_info);
 
   // Account info is already available, interception happens immediately.
+  DiceWebSigninInterceptor::Delegate::BubbleParameters expected_parameters = {
+      DiceWebSigninInterceptor::SigninInterceptionType::kEnterprise,
+      account_info, primary_account_info};
   EXPECT_CALL(*mock_delegate(),
-              ShowSigninInterceptionBubble(
-                  DiceWebSigninInterceptor::SigninInterceptionType::kEnterprise,
-                  web_contents(), account_info, testing::_));
-  interceptor()->MaybeInterceptWebSignin(web_contents(),
-                                         account_info.account_id,
-                                         /*is_new_account=*/true,
-                                         /*is_sync_signin=*/false);
+              ShowSigninInterceptionBubble(web_contents(), expected_parameters,
+                                           testing::_));
+  MaybeIntercept(account_info.account_id);
+  histogram_tester.ExpectTotalCount("Signin.Intercept.AccountInfoFetchDuration",
+                                    1);
+  histogram_tester.ExpectUniqueSample(
+      "Signin.Intercept.HeuristicOutcome",
+      SigninInterceptionHeuristicOutcome::kInterceptEnterprise, 1);
 }
 
 TEST_F(DiceWebSigninInterceptorTest, MultiUserInterception) {
-  identity_test_env()->MakeUnconsentedPrimaryAccountAvailable(
-      "bob@example.com");
+  base::HistogramTester histogram_tester;
+  AccountInfo primary_account_info =
+      identity_test_env()->MakeUnconsentedPrimaryAccountAvailable(
+          "bob@example.com");
   AccountInfo account_info =
       identity_test_env()->MakeAccountAvailable("alice@example.com");
   MakeValidAccountInfo(&account_info);
   identity_test_env()->UpdateAccountInfoForAccount(account_info);
 
   // Account info is already available, interception happens immediately.
+  DiceWebSigninInterceptor::Delegate::BubbleParameters expected_parameters = {
+      DiceWebSigninInterceptor::SigninInterceptionType::kMultiUser,
+      account_info, primary_account_info};
   EXPECT_CALL(*mock_delegate(),
-              ShowSigninInterceptionBubble(
-                  DiceWebSigninInterceptor::SigninInterceptionType::kMultiUser,
-                  web_contents(), account_info, testing::_));
-  interceptor()->MaybeInterceptWebSignin(web_contents(),
-                                         account_info.account_id,
-                                         /*is_new_account=*/true,
-                                         /*is_sync_signin=*/false);
+              ShowSigninInterceptionBubble(web_contents(), expected_parameters,
+                                           testing::_));
+  MaybeIntercept(account_info.account_id);
+  histogram_tester.ExpectUniqueSample(
+      "Signin.Intercept.HeuristicOutcome",
+      SigninInterceptionHeuristicOutcome::kInterceptMultiUser, 1);
 }

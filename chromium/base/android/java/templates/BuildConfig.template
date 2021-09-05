@@ -93,4 +93,16 @@ public class BuildConfig {
 #else
     public static MAYBE_FINAL boolean IS_VIVALDI;
 #endif
+
+#if defined(_IS_OFFICIAL_VIVALDI_BUILD)
+    public static MAYBE_FINAL boolean IS_OFFICIAL_VIVALDI_BUILD = true;
+#else
+    public static MAYBE_FINAL boolean IS_OFFICIAL_VIVALDI_BUILD MAYBE_FALSE;
+#endif
+
+#if defined(_IS_FORCE_SOPRANOS_BUILD)
+    public static MAYBE_FINAL boolean IS_FORCE_SOPRANOS_BUILD = true;
+#else
+    public static MAYBE_FINAL boolean IS_FORCE_SOPRANOS_BUILD MAYBE_FALSE;
+#endif
 }

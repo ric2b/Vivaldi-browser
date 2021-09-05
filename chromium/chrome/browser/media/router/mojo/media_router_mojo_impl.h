@@ -83,6 +83,7 @@ class MediaRouterMojoImpl : public MediaRouterBase, public mojom::MediaRouter {
       const MediaRoute::Id& route_id,
       mojo::PendingReceiver<mojom::MediaController> controller,
       mojo::PendingRemote<mojom::MediaStatusObserver> observer) final;
+  base::Value GetLogs() const override;
   void RegisterMediaRouteProvider(
       MediaRouteProviderId provider_id,
       mojo::PendingRemote<mojom::MediaRouteProvider>
@@ -142,6 +143,8 @@ class MediaRouterMojoImpl : public MediaRouterBase, public mojom::MediaRouter {
                        const std::string& media_source,
                        const std::vector<MediaSinkInternal>& internal_sinks,
                        const std::vector<url::Origin>& origins) override;
+
+  LoggerImpl* GetLogger() override;
 
   // Mojo remotes to media route providers. Providers are added via
   // RegisterMediaRouteProvider().
@@ -333,11 +336,6 @@ class MediaRouterMojoImpl : public MediaRouterBase, public mojom::MediaRouter {
   void OnRouteMessagesReceived(
       const std::string& route_id,
       std::vector<mojom::RouteMessagePtr> messages) override;
-  void OnMediaRemoterCreated(
-      int32_t tab_id,
-      mojo::PendingRemote<media::mojom::MirrorServiceRemoter> remoter,
-      mojo::PendingReceiver<media::mojom::MirrorServiceRemotingSource>
-          source_receiver) override;
   void GetLogger(mojo::PendingReceiver<mojom::Logger> receiver) override;
   void GetLogsAsString(GetLogsAsStringCallback callback) override;
   void GetMediaSinkServiceStatus(

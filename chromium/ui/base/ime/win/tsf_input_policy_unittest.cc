@@ -39,7 +39,7 @@ class MockTextInputClient : public TextInputClient {
  public:
   ~MockTextInputClient() {}
   MOCK_METHOD1(SetCompositionText, void(const ui::CompositionText&));
-  MOCK_METHOD1(ConfirmCompositionText, void(bool));
+  MOCK_METHOD1(ConfirmCompositionText, uint32_t(bool));
   MOCK_METHOD0(ClearCompositionText, void());
   MOCK_METHOD1(InsertText, void(const base::string16&));
   MOCK_METHOD1(InsertChar, void(const ui::KeyEvent&));
@@ -187,6 +187,7 @@ class TSFInputPanelTest : public testing::Test {
  protected:
   void SetUp() override {
     text_store_ = new TSFTextStore();
+    EXPECT_EQ(S_OK, text_store_->Initialize());
     sink_ = new MockStoreACPSink();
     EXPECT_EQ(S_OK, text_store_->AdviseSink(IID_ITextStoreACPSink, sink_.get(),
                                             TS_AS_ALL_SINKS));
@@ -216,7 +217,9 @@ class TSFMultipleInputPanelTest : public testing::Test {
  protected:
   void SetUp() override {
     text_store1_ = new TSFTextStore();
+    EXPECT_EQ(S_OK, text_store1_->Initialize());
     text_store2_ = new TSFTextStore();
+    EXPECT_EQ(S_OK, text_store2_->Initialize());
     sink1_ = new MockStoreACPSink();
     sink2_ = new MockStoreACPSink();
     EXPECT_EQ(S_OK, text_store1_->AdviseSink(IID_ITextStoreACPSink,
@@ -265,22 +268,19 @@ TEST_F(TSFInputPanelTest, GetStatusTest) {
   TS_STATUS status = {};
   EXPECT_EQ(S_OK, text_store_->GetStatus(&status));
   EXPECT_EQ((ULONG)TS_SD_INPUTPANEMANUALDISPLAYENABLE, status.dwDynamicFlags);
-  EXPECT_EQ((ULONG)(TS_SS_TRANSITORY | TS_SS_NOHIDDENTEXT),
-            status.dwStaticFlags);
+  EXPECT_EQ((ULONG)(TS_SS_NOHIDDENTEXT), status.dwStaticFlags);
 }
 
 TEST_F(TSFInputPanelTest, ManualInputPaneToAutomaticPolicyTest) {
   TS_STATUS status = {};
   EXPECT_EQ(S_OK, text_store_->GetStatus(&status));
   EXPECT_EQ((ULONG)TS_SD_INPUTPANEMANUALDISPLAYENABLE, status.dwDynamicFlags);
-  EXPECT_EQ((ULONG)(TS_SS_TRANSITORY | TS_SS_NOHIDDENTEXT),
-            status.dwStaticFlags);
+  EXPECT_EQ((ULONG)(TS_SS_NOHIDDENTEXT), status.dwStaticFlags);
   // TODO(crbug.com/1031786): Change this test once this bug is fixed
   fake_input_method_->ShowVirtualKeyboardIfEnabled();
   EXPECT_EQ(S_OK, text_store_->GetStatus(&status));
   EXPECT_EQ((ULONG)TS_SD_INPUTPANEMANUALDISPLAYENABLE, status.dwDynamicFlags);
-  EXPECT_EQ((ULONG)(TS_SS_TRANSITORY | TS_SS_NOHIDDENTEXT),
-            status.dwStaticFlags);
+  EXPECT_EQ((ULONG)(TS_SS_NOHIDDENTEXT), status.dwStaticFlags);
 }
 
 // TODO(crbug.com/1031786): Enable this test this once this bug is fixed.
@@ -290,18 +290,15 @@ TEST_F(TSFInputPanelTest, DISABLED_AutomaticInputPaneToManualPolicyTest) {
   // and test if the automatic policy flag has been set or not.
   EXPECT_EQ(S_OK, text_store_->GetStatus(&status));
   EXPECT_EQ((ULONG)TS_SD_INPUTPANEMANUALDISPLAYENABLE, status.dwDynamicFlags);
-  EXPECT_EQ((ULONG)(TS_SS_TRANSITORY | TS_SS_NOHIDDENTEXT),
-            status.dwStaticFlags);
+  EXPECT_EQ((ULONG)(TS_SS_NOHIDDENTEXT), status.dwStaticFlags);
   fake_input_method_->ShowVirtualKeyboardIfEnabled();
   EXPECT_EQ(S_OK, text_store_->GetStatus(&status));
   EXPECT_NE((ULONG)TS_SD_INPUTPANEMANUALDISPLAYENABLE, status.dwDynamicFlags);
-  EXPECT_EQ((ULONG)(TS_SS_TRANSITORY | TS_SS_NOHIDDENTEXT),
-            status.dwStaticFlags);
+  EXPECT_EQ((ULONG)(TS_SS_NOHIDDENTEXT), status.dwStaticFlags);
   fake_input_method_->DetachTextInputClient(nullptr);
   EXPECT_EQ(S_OK, text_store_->GetStatus(&status));
   EXPECT_EQ((ULONG)TS_SD_INPUTPANEMANUALDISPLAYENABLE, status.dwDynamicFlags);
-  EXPECT_EQ((ULONG)(TS_SS_TRANSITORY | TS_SS_NOHIDDENTEXT),
-            status.dwStaticFlags);
+  EXPECT_EQ((ULONG)(TS_SS_NOHIDDENTEXT), status.dwStaticFlags);
 }
 
 // TODO(crbug.com/1031786): Enable this test this once this bug is fixed.
@@ -312,30 +309,25 @@ TEST_F(TSFMultipleInputPanelTest,
   // and test if the automatic policy flag has been set or not.
   EXPECT_EQ(S_OK, text_store1_->GetStatus(&status));
   EXPECT_EQ((ULONG)TS_SD_INPUTPANEMANUALDISPLAYENABLE, status.dwDynamicFlags);
-  EXPECT_EQ((ULONG)(TS_SS_TRANSITORY | TS_SS_NOHIDDENTEXT),
-            status.dwStaticFlags);
+  EXPECT_EQ((ULONG)(TS_SS_NOHIDDENTEXT), status.dwStaticFlags);
   fake_input_method_->ShowVirtualKeyboardIfEnabled();
   EXPECT_EQ(S_OK, text_store1_->GetStatus(&status));
   EXPECT_NE((ULONG)TS_SD_INPUTPANEMANUALDISPLAYENABLE, status.dwDynamicFlags);
-  EXPECT_EQ((ULONG)(TS_SS_TRANSITORY | TS_SS_NOHIDDENTEXT),
-            status.dwStaticFlags);
+  EXPECT_EQ((ULONG)(TS_SS_NOHIDDENTEXT), status.dwStaticFlags);
   fake_input_method_->DetachTextInputClient(nullptr);
   SwitchToDifferentTSFTextStore();
   // Different TSFTextStore is in focus so manual policy should be set in the
   // previous one
   EXPECT_EQ(S_OK, text_store1_->GetStatus(&status));
   EXPECT_EQ((ULONG)TS_SD_INPUTPANEMANUALDISPLAYENABLE, status.dwDynamicFlags);
-  EXPECT_EQ((ULONG)(TS_SS_TRANSITORY | TS_SS_NOHIDDENTEXT),
-            status.dwStaticFlags);
+  EXPECT_EQ((ULONG)(TS_SS_NOHIDDENTEXT), status.dwStaticFlags);
   EXPECT_EQ(S_OK, text_store2_->GetStatus(&status));
   EXPECT_EQ((ULONG)TS_SD_INPUTPANEMANUALDISPLAYENABLE, status.dwDynamicFlags);
-  EXPECT_EQ((ULONG)(TS_SS_TRANSITORY | TS_SS_NOHIDDENTEXT),
-            status.dwStaticFlags);
+  EXPECT_EQ((ULONG)(TS_SS_NOHIDDENTEXT), status.dwStaticFlags);
   fake_input_method_->ShowVirtualKeyboardIfEnabled();
   EXPECT_EQ(S_OK, text_store2_->GetStatus(&status));
   EXPECT_NE((ULONG)TS_SD_INPUTPANEMANUALDISPLAYENABLE, status.dwDynamicFlags);
-  EXPECT_EQ((ULONG)(TS_SS_TRANSITORY | TS_SS_NOHIDDENTEXT),
-            status.dwStaticFlags);
+  EXPECT_EQ((ULONG)(TS_SS_NOHIDDENTEXT), status.dwStaticFlags);
 }
 
 }  // namespace

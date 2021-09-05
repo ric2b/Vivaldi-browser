@@ -11,6 +11,7 @@
 #include "base/time/time.h"
 #include "chrome/browser/chromeos/app_mode/arc/arc_kiosk_app_manager.h"
 #include "chrome/browser/chromeos/app_mode/arc/arc_kiosk_app_service_factory.h"
+#include "chrome/browser/chromeos/arc/session/arc_session_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_utils.h"
@@ -43,7 +44,9 @@ ArcKioskAppService* ArcKioskAppService::Get(content::BrowserContext* context) {
 
 void ArcKioskAppService::Shutdown() {
   ArcAppListPrefs::Get(profile_)->RemoveObserver(this);
-  arc::ArcSessionManager::Get()->RemoveObserver(this);
+  // It can be null unittests.
+  if (arc::ArcSessionManager::Get())
+    arc::ArcSessionManager::Get()->RemoveObserver(this);
   app_manager_->RemoveObserver(this);
   arc::ArcPolicyBridge::GetForBrowserContext(profile_)->RemoveObserver(this);
 }
@@ -222,9 +225,9 @@ void ArcKioskAppService::PreconditionsChanged() {
       pending_policy_app_installs_.count(app_info_->package_name) == 0) {
     if (!app_launcher_) {
       VLOG(2) << "Starting kiosk app";
-      delegate_->OnAppPrepared();
       app_launcher_ = std::make_unique<ArcKioskAppLauncher>(
           profile_, ArcAppListPrefs::Get(profile_), app_id_, this);
+      delegate_->OnAppPrepared();
     }
   } else if (task_id_ != -1) {
     VLOG(2) << "Kiosk app should be closed";

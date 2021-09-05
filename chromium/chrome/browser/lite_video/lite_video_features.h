@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_LITE_VIDEO_LITE_VIDEO_FEATURES_H_
 #define CHROME_BROWSER_LITE_VIDEO_LITE_VIDEO_FEATURES_H_
 
+#include "base/containers/flat_set.h"
 #include "base/feature_list.h"
 #include "base/optional.h"
 #include "net/nqe/effective_connection_type.h"
@@ -24,6 +25,9 @@ bool IsLiteVideoEnabled();
 // experiment is a counterfactual experiment that decides whether LiteVideos
 // should be heldback on a per navigation basis.
 bool IsCoinflipExperimentEnabled();
+
+// Whether LiteVideo should rely on the optimization guide for hints.
+bool LiteVideoUseOptimizationGuide();
 
 // Return the origins that are whitelisted for using the LiteVideo optimization
 // and the parameters needed to throttle media requests for that origin.
@@ -57,6 +61,14 @@ int LiteVideoBlocklistVersion();
 // The minimum effective connection type that LiteVideos should be attempted
 // on.
 net::EffectiveConnectionType MinLiteVideoECT();
+
+// The maximum number of hints the LiteVideoDecider should cache locally
+// for reuse by subframes.
+int MaxOptimizationGuideHintCacheSize();
+
+// Return the set of hosts that LiteVideos are permanently blocked from
+// being applied on.
+base::flat_set<std::string> GetLiteVideoPermanentBlocklist();
 
 }  // namespace features
 }  // namespace lite_video

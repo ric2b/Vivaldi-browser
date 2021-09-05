@@ -41,6 +41,7 @@
 #include "components/optimization_guide/top_host_provider.h"
 #include "components/prefs/pref_service.h"
 #include "components/ukm/test_ukm_recorder.h"
+#include "components/variations/hashing.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_base.h"
@@ -89,20 +90,6 @@ int RetryForHistogramUntilCountReached(
     metrics::SubprocessMetricsProvider::MergeHistogramDeltasForTesting();
     base::RunLoop().RunUntilIdle();
   }
-}
-
-int GetCountBucketSamples(const base::HistogramTester* histogram_tester,
-                          const std::string& histogram_name,
-                          size_t bucket_min) {
-  std::vector<base::Bucket> buckets =
-      histogram_tester->GetAllSamples(histogram_name);
-
-  for (const auto& bucket : buckets) {
-    if (bucket_min == static_cast<size_t>(bucket.min))
-      return bucket.count;
-  }
-
-  return 0;
 }
 
 enum class HintsFetcherRemoteResponseType {
@@ -421,7 +408,7 @@ class HintsFetcherDisabledBrowserTest : public InProcessBrowserTest {
       optimization_guide::proto::GetHintsResponse get_hints_response;
 
       optimization_guide::proto::Hint* hint = get_hints_response.add_hints();
-      hint->set_key_representation(optimization_guide::proto::HOST_SUFFIX);
+      hint->set_key_representation(optimization_guide::proto::HOST);
       hint->set_key(https_url_.host());
       optimization_guide::proto::PageHint* page_hint = hint->add_page_hints();
       page_hint->set_page_pattern("page pattern");
@@ -471,6 +458,12 @@ class HintsFetcherDisabledBrowserTest : public InProcessBrowserTest {
       hosts_and_urls_requested.erase(host_or_url);
     }
     EXPECT_EQ(0u, hosts_and_urls_requested.size());
+
+    // We only expect 1 field trial to be allowed and sent up.
+    EXPECT_EQ(1, hints_request.active_field_trials_size());
+    EXPECT_EQ(variations::HashName(
+                  "scoped_feature_list_trial_for_OptimizationHintsFetching"),
+              hints_request.active_field_trials(0).name_hash());
   }
 
   void TearDownOnMainThread() override {
@@ -523,6 +516,9 @@ class HintsFetcherBrowserTest : public HintsFetcherDisabledBrowserTest {
             {optimization_guide::features::kOptimizationHints, {}},
             {optimization_guide::features::kRemoteOptimizationGuideFetching,
              {{"max_concurrent_page_navigation_fetches", "2"}}},
+            {optimization_guide::features::kOptimizationHintsFieldTrials,
+             {{"allowed_field_trial_names",
+               "scoped_feature_list_trial_for_OptimizationHintsFetching"}}},
         },
         {});
     // Call to inherited class to match same set up with feature flags added.
@@ -537,8 +533,7 @@ class HintsFetcherBrowserTest : public HintsFetcherDisabledBrowserTest {
                                         ->tab_strip_model()
                                         ->GetActiveWebContents()
                                         ->GetBrowserContext()))
-        ->RegisterOptimizationTypesAndTargets(
-            {optimization_guide::proto::NOSCRIPT}, {});
+        ->RegisterOptimizationTypes({optimization_guide::proto::NOSCRIPT});
 
     HintsFetcherDisabledBrowserTest::SetUpOnMainThread();
   }
@@ -556,7 +551,7 @@ class HintsFetcherBrowserTest : public HintsFetcherDisabledBrowserTest {
 
 // Issues with multiple profiles likely cause the site engagement service-based
 // tests to flake.
-#if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_CHROMEOS)
+#if defined(OS_WIN) || defined(OS_MAC) || defined(OS_CHROMEOS)
 #define DISABLE_ON_WIN_MAC_CHROMEOS(x) DISABLED_##x
 #else
 #define DISABLE_ON_WIN_MAC_CHROMEOS(x) x
@@ -666,20 +661,10 @@ IN_PROC_BROWSER_TEST_F(
 
   ui_test_utils::NavigateToURL(browser(), https_url());
 
-  // Verifies that the fetched hint is loaded and not the component hint as
-  // fetched hints are prioritized.
-
-  histogram_tester->ExpectBucketCount(
-      "OptimizationGuide.HintCache.HintType.Loaded",
-      static_cast<int>(optimization_guide::OptimizationGuideStore::
-                           StoreEntryType::kFetchedHint),
-      1);
-
-  histogram_tester->ExpectBucketCount(
-      "OptimizationGuide.HintCache.HintType.Loaded",
-      static_cast<int>(optimization_guide::OptimizationGuideStore::
-                           StoreEntryType::kComponentHint),
-      0);
+  // Verifies that the fetched hint is just used in memory and nothing is
+  // loaded.
+  histogram_tester->ExpectTotalCount(
+      "OptimizationGuide.HintCache.HintType.Loaded", 0);
 }
 
 IN_PROC_BROWSER_TEST_F(
@@ -776,23 +761,6 @@ IN_PROC_BROWSER_TEST_F(
       1);
   histogram_tester->ExpectTotalCount(
       "OptimizationGuide.HintsFetcher.GetHintsRequest.HintCount", 0);
-
-  LoadHintsForUrl(https_url());
-
-  ui_test_utils::NavigateToURL(browser(), https_url());
-
-  // Verifies that no Fetched Hint was added to the store, only the
-  // Component hint is loaded.
-  histogram_tester->ExpectBucketCount(
-      "OptimizationGuide.HintCache.HintType.Loaded",
-      static_cast<int>(optimization_guide::OptimizationGuideStore::
-                           StoreEntryType::kComponentHint),
-      1);
-  histogram_tester->ExpectBucketCount(
-      "OptimizationGuide.HintCache.HintType.Loaded",
-      static_cast<int>(optimization_guide::OptimizationGuideStore::
-                           StoreEntryType::kFetchedHint),
-      0);
 }
 
 IN_PROC_BROWSER_TEST_F(
@@ -870,19 +838,10 @@ IN_PROC_BROWSER_TEST_F(
 
   ui_test_utils::NavigateToURL(browser(), https_url());
 
-  // Verifies that the fetched hint is loaded and not the component hint as
-  // fetched hints are prioritized.
-  EXPECT_LE(1,
-            GetCountBucketSamples(
-                histogram_tester, "OptimizationGuide.HintCache.HintType.Loaded",
-                static_cast<int>(optimization_guide::OptimizationGuideStore::
-                                     StoreEntryType::kFetchedHint)));
-
-  EXPECT_EQ(0,
-            GetCountBucketSamples(
-                histogram_tester, "OptimizationGuide.HintCache.HintType.Loaded",
-                static_cast<int>(optimization_guide::OptimizationGuideStore::
-                                     StoreEntryType::kComponentHint)));
+  // Verifies that the fetched hint is used in-memory and no hint is loaded
+  // from store.
+  histogram_tester->ExpectTotalCount(
+      "OptimizationGuide.HintCache.HintType.Loaded", 0);
 
   // Wipe the browser history - clear all the fetched hints.
   browser()->profile()->Wipe();
@@ -892,18 +851,11 @@ IN_PROC_BROWSER_TEST_F(
 
   ui_test_utils::NavigateToURL(browser(), https_url());
 
-  // Fetched Hints count should not change.
-  EXPECT_LE(1,
-            GetCountBucketSamples(
-                histogram_tester, "OptimizationGuide.HintCache.HintType.Loaded",
-                static_cast<int>(optimization_guide::OptimizationGuideStore::
-                                     StoreEntryType::kFetchedHint)));
-
-  EXPECT_LE(0,
-            GetCountBucketSamples(
-                histogram_tester, "OptimizationGuide.HintCache.HintType.Loaded",
-                static_cast<int>(optimization_guide::OptimizationGuideStore::
-                                     StoreEntryType::kComponentHint)));
+  histogram_tester->ExpectUniqueSample(
+      "OptimizationGuide.HintCache.HintType.Loaded",
+      static_cast<int>(optimization_guide::OptimizationGuideStore::
+                           StoreEntryType::kComponentHint),
+      1);
 }
 
 IN_PROC_BROWSER_TEST_F(HintsFetcherBrowserTest,
@@ -948,19 +900,9 @@ IN_PROC_BROWSER_TEST_F(HintsFetcherBrowserTest,
 
   ui_test_utils::NavigateToURL(browser(), https_url());
 
-  // Verifies that the fetched hint is loaded and not the component hint as
-  // fetched hints are prioritized.
-  histogram_tester->ExpectBucketCount(
-      "OptimizationGuide.HintCache.HintType.Loaded",
-      static_cast<int>(optimization_guide::OptimizationGuideStore::
-                           StoreEntryType::kFetchedHint),
-      1);
-
-  histogram_tester->ExpectBucketCount(
-      "OptimizationGuide.HintCache.HintType.Loaded",
-      static_cast<int>(optimization_guide::OptimizationGuideStore::
-                           StoreEntryType::kComponentHint),
-      0);
+  // Verifies that the fetched hint is used from memory and no hints are loaded.
+  histogram_tester->ExpectTotalCount(
+      "OptimizationGuide.HintCache.HintType.Loaded", 0);
 }
 
 IN_PROC_BROWSER_TEST_F(
@@ -1303,7 +1245,7 @@ IN_PROC_BROWSER_TEST_F(HintsFetcherBrowserTest,
     EXPECT_EQ(2u, count_hints_requests_received());
     RetryForHistogramUntilCountReached(
         histogram_tester, optimization_guide::kLoadedHintLocalHistogramString,
-        2);
+        1);
     histogram_tester->ExpectUniqueSample(
         "OptimizationGuide.HintsManager.RaceNavigationFetchAttemptStatus",
         optimization_guide::RaceNavigationFetchAttemptStatus::
@@ -1389,7 +1331,7 @@ IN_PROC_BROWSER_TEST_F(
     EXPECT_EQ(2u, count_hints_requests_received());
     RetryForHistogramUntilCountReached(
         histogram_tester, optimization_guide::kLoadedHintLocalHistogramString,
-        2);
+        1);
     histogram_tester->ExpectUniqueSample(
         "OptimizationGuide.HintsManager.RaceNavigationFetchAttemptStatus",
         optimization_guide::RaceNavigationFetchAttemptStatus::
@@ -1402,8 +1344,8 @@ IN_PROC_BROWSER_TEST_F(
                                       ->tab_strip_model()
                                       ->GetActiveWebContents()
                                       ->GetBrowserContext()))
-      ->RegisterOptimizationTypesAndTargets(
-          {optimization_guide::proto::COMPRESS_PUBLIC_IMAGES}, {});
+      ->RegisterOptimizationTypes(
+          {optimization_guide::proto::COMPRESS_PUBLIC_IMAGES});
 
   // Navigate again to the same webpage, the race should occur because the
   // hints have been cleared.
@@ -1483,7 +1425,7 @@ IN_PROC_BROWSER_TEST_F(
     EXPECT_EQ(2u, count_hints_requests_received());
     RetryForHistogramUntilCountReached(
         histogram_tester, optimization_guide::kLoadedHintLocalHistogramString,
-        2);
+        1);
     histogram_tester->ExpectUniqueSample(
         "OptimizationGuide.HintsManager.RaceNavigationFetchAttemptStatus",
         optimization_guide::RaceNavigationFetchAttemptStatus::
@@ -1496,8 +1438,8 @@ IN_PROC_BROWSER_TEST_F(
                                       ->tab_strip_model()
                                       ->GetActiveWebContents()
                                       ->GetBrowserContext()))
-      ->RegisterOptimizationTypesAndTargets(
-          {optimization_guide::proto::DEFER_ALL_SCRIPT}, {});
+      ->RegisterOptimizationTypes(
+          {optimization_guide::proto::DEFER_ALL_SCRIPT});
 
   // Navigate again to the same webpage, no race should occur.
   {

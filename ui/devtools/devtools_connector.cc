@@ -362,7 +362,7 @@ content::ColorChooser* DevtoolsConnectorItem::OpenColorChooser(
 
 void DevtoolsConnectorItem::RunFileChooser(
     content::RenderFrameHost* render_frame_host,
-    std::unique_ptr<content::FileSelectListener> listener,
+    scoped_refptr<content::FileSelectListener> listener,
     const blink::mojom::FileChooserParams& params) {
   if (devtools_delegate_) {
     devtools_delegate_->RunFileChooser(render_frame_host, std::move(listener),

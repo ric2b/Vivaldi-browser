@@ -21,11 +21,9 @@ import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.task.AsyncTask;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeActivity;
-import org.chromium.chrome.browser.GlobalDiscardableReferencePool;
-import org.chromium.chrome.browser.util.BitmapCache;
-import org.chromium.chrome.browser.vr.VrModeProviderImpl;
+import org.chromium.components.browser_ui.util.BitmapCache;
 import org.chromium.components.browser_ui.util.ConversionUtils;
+import org.chromium.components.browser_ui.util.GlobalDiscardableReferencePool;
 import org.chromium.components.browser_ui.widget.RoundedIconGenerator;
 import org.chromium.components.browser_ui.widget.selectable_list.SelectableListLayout;
 import org.chromium.components.browser_ui.widget.selectable_list.SelectableListToolbar;
@@ -33,6 +31,9 @@ import org.chromium.components.browser_ui.widget.selectable_list.SelectionDelega
 import org.chromium.content.browser.contacts.ContactsPickerPropertiesRequested;
 import org.chromium.ui.ContactsPickerListener;
 import org.chromium.ui.UiUtils;
+import org.chromium.ui.base.WindowAndroid;
+import org.chromium.ui.modaldialog.ModalDialogManager;
+import org.chromium.ui.vr.VrModeProvider;
 import org.chromium.ui.widget.OptimizedFrameLayout;
 
 import java.util.ArrayList;
@@ -67,8 +68,8 @@ public class PickerCategoryView extends OptimizedFrameLayout
     // The view containing the RecyclerView and the toolbar, etc.
     private SelectableListLayout<ContactDetails> mSelectableListLayout;
 
-    // Our activity.
-    private ChromeActivity mActivity;
+    // The window for the main Activity.
+    private WindowAndroid mWindowAndroid;
 
     // The callback to notify the listener of decisions reached in the picker.
     private ContactsPickerListener mListener;
@@ -125,17 +126,31 @@ public class PickerCategoryView extends OptimizedFrameLayout
     public final boolean includeIcons;
 
     /**
+     * @param windowAndroid The Activity window the Contacts Picker is associated with.
+     * @param adapter An uninitialized PickerAdapter for this dialog, which may contain
+     *         embedder-specific behaviors. The PickerCategoryView will initialized it.
      * @param multiSelectionAllowed Whether the contacts picker should allow multiple items to be
-     * selected.
+     *         selected.
+     * @param shouldIncludeNames Whether to allow sharing of names of contacts.
+     * @param shouldIncludeEmails Whether to allow sharing of contact emails.
+     * @param shouldIncludeTel Whether to allow sharing of contact telephone numbers.
+     * @param shouldIncludeAddresses Whether to allow sharing of contact (physical) addresses.
+     * @param shouldIncludeIcons Whether to allow sharing of contact icons.
+     * @param formattedOrigin The origin receiving the contact details, formatted for display in the
+     *         UI.
+     * @param delegate A delegate listening for events from the toolbar.
+     * @param vrModeProvider Provides accessors for VR mode state.
      */
     @SuppressWarnings("unchecked") // mSelectableListLayout
-    public PickerCategoryView(Context context, boolean multiSelectionAllowed,
-            boolean shouldIncludeNames, boolean shouldIncludeEmails, boolean shouldIncludeTel,
-            boolean shouldIncludeAddresses, boolean shouldIncludeIcons, String formattedOrigin,
-            ContactsPickerToolbar.ContactsToolbarDelegate delegate) {
-        super(context, null);
+    public PickerCategoryView(WindowAndroid windowAndroid, PickerAdapter adapter,
+            boolean multiSelectionAllowed, boolean shouldIncludeNames, boolean shouldIncludeEmails,
+            boolean shouldIncludeTel, boolean shouldIncludeAddresses, boolean shouldIncludeIcons,
+            String formattedOrigin, ContactsPickerToolbar.ContactsToolbarDelegate delegate,
+            VrModeProvider vrModeProvider) {
+        super(windowAndroid.getContext().get(), null);
 
-        mActivity = (ChromeActivity) context;
+        mWindowAndroid = windowAndroid;
+        Context context = windowAndroid.getContext().get();
         mMultiSelectionAllowed = multiSelectionAllowed;
         includeNames = shouldIncludeNames;
         includeEmails = shouldIncludeEmails;
@@ -160,13 +175,14 @@ public class PickerCategoryView extends OptimizedFrameLayout
                 R.string.contacts_picker_no_contacts_found,
                 R.string.contacts_picker_no_contacts_found);
 
-        mPickerAdapter = new PickerAdapter(this, context, formattedOrigin);
+        mPickerAdapter = adapter;
+        mPickerAdapter.init(this, context, formattedOrigin);
         mRecyclerView = mSelectableListLayout.initializeRecyclerView(mPickerAdapter);
         int titleId = multiSelectionAllowed ? R.string.contacts_picker_select_contacts
                                             : R.string.contacts_picker_select_contact;
         mToolbar = (ContactsPickerToolbar) mSelectableListLayout.initializeToolbar(
                 R.layout.contacts_picker_toolbar, mSelectionDelegate, titleId, 0, 0, null, false,
-                false, new VrModeProviderImpl());
+                false, vrModeProvider);
         mToolbar.setNavigationOnClickListener(this);
         mToolbar.initializeSearchView(this, R.string.contacts_picker_search, 0);
         mToolbar.setDelegate(delegate);
@@ -323,8 +339,8 @@ public class PickerCategoryView extends OptimizedFrameLayout
         return mBitmapCache;
     }
 
-    ChromeActivity getActivity() {
-        return mActivity;
+    ModalDialogManager getModalDialogManager() {
+        return mWindowAndroid.getModalDialogManager();
     }
 
     void setTopView(TopView topView) {
@@ -350,7 +366,8 @@ public class PickerCategoryView extends OptimizedFrameLayout
         if (includeIcons && PickerAdapter.includesIcons()) {
             // Fetch missing icons and compress them first.
             new CompressContactIconsWorkerTask(
-                    mActivity.getContentResolver(), mBitmapCache, selectedContacts, this)
+                    mWindowAndroid.getContext().get().getContentResolver(), mBitmapCache,
+                    selectedContacts, this)
                     .executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
             return;
         }

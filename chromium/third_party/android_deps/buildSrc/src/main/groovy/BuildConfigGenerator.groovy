@@ -190,6 +190,10 @@ class BuildConfigGenerator extends DefaultTask {
                         depsStr += "\"${existingLib}\","
                     } else if (onlyPlayServices && !isPlayServicesTarget(dep.id)) {
                         depsStr += "\"//third_party/android_deps:${targetName}\","
+                    } else if (dep.id == "com_google_android_material_material") {
+                        // Material design is pulled in via doubledown, should
+                        // use the variable instead of the real target.
+                        depsStr += "\"\\\$material_design_target\","
                     } else {
                         depsStr += "\":${targetName}\","
                     }
@@ -245,13 +249,6 @@ class BuildConfigGenerator extends DefaultTask {
         if (isPlayServicesTarget(targetName)) {
             return targetName.replaceFirst("com_", "").replaceFirst("android_gms_", "")
         }
-        // To avoid stale depfile issues, rename this. (due to recently removed
-        // alias from lite to javalite and the recently added alias from
-        // javalite to lite, causing a dep cycle because stale depfiles).
-        // Todo(mheikal): remove this after crbug.com/1093059 .
-        if (targetName.equals("com_google_protobuf_protobuf_lite")) {
-          return "com_google_protobuf_protobuf_lite_cr1"
-        }
         return targetName
     }
 
@@ -294,7 +291,6 @@ class BuildConfigGenerator extends DefaultTask {
                 sb.append('  # shown when incremental_install=true.\n')
                 sb.append('  ignore_manifest = true\n')
                 sb.append('  ignore_proguard_configs = true\n')
-                sb.append('  custom_package = "androidx.core"\n')
                 break
             case 'androidx_fragment_fragment':
                 sb.append('\n')
@@ -338,15 +334,19 @@ class BuildConfigGenerator extends DefaultTask {
                 break
             case 'com_android_support_coordinatorlayout':
             case 'androidx_coordinatorlayout_coordinatorlayout':
+            case 'com_android_support_design':
                 sb.append('\n')
-                sb.append('  # https:crbug.com/954584\n')
+                sb.append('  # Reduce binary size. https:crbug.com/954584\n')
                 sb.append('  ignore_proguard_configs = true\n')
                 break
-            case 'com_android_support_design':
             case 'com_google_android_material_material':
                 sb.append('\n')
                 sb.append('  # Reduce binary size. https:crbug.com/954584\n')
                 sb.append('  ignore_proguard_configs = true\n')
+                sb.append('\n')
+                sb.append('  # Material Design is pulled in via Doubledown, thus this target should not\n')
+                sb.append('  # be directly depended on. Please use :material_design_java instead.\n')
+                sb.append('  visibility = [ ":*" ]\n')
                 break
             case 'com_android_support_support_annotations':
                 sb.append('  # https://crbug.com/989505\n')
@@ -425,6 +425,7 @@ class BuildConfigGenerator extends DefaultTask {
                 |""".stripMargin())
                 break
             case 'androidx_test_espresso_espresso_web':
+            case 'androidx_window_window':
                 sb.append('  enable_bytecode_checks = false\n')
                 break
             case 'net_sf_kxml_kxml2':
@@ -444,6 +445,37 @@ class BuildConfigGenerator extends DefaultTask {
             case 'com_google_android_gms_play_services_maps':
                 sb.append('  # Ignore the dependency to org.apache.http.legacy. See crbug.com/1084879.\n')
                 sb.append('  ignore_manifest = true\n')
+                break
+            case 'com_google_protobuf_protobuf_javalite':
+                sb.append('  # Protobuf runtime is pulled in via Doubledown, thus this target should not\n')
+                sb.append('  # be directly depended on. Please use :protobuf_lite_runtime_java instead.\n')
+                sb.append('  visibility = [ ":*" ]\n')
+                sb.append('\n')
+                sb.append('  # Prebuilt protos in the runtime library.\n')
+                sb.append('  # If you want to use these protos, you should create a proto_java_library\n')
+                sb.append('  # target for them. See crbug.com/1103399 for discussion.\n')
+                sb.append('  jar_excluded_patterns = [\n')
+                sb.append('    "com/google/protobuf/Any*",\n')
+                sb.append('    "com/google/protobuf/Api*",\n')
+                sb.append('    "com/google/protobuf/Duration*",\n')
+                sb.append('    "com/google/protobuf/Empty*",\n')
+                sb.append('    "com/google/protobuf/FieldMask*",\n')
+                sb.append('    "com/google/protobuf/SourceContext*",\n')
+                sb.append('    "com/google/protobuf/Struct\\\\\\$1.class",\n')
+                sb.append('    "com/google/protobuf/Struct\\\\\\$Builder.class",\n')
+                sb.append('    "com/google/protobuf/Struct.class",\n')
+                sb.append('    "com/google/protobuf/StructOrBuilder.class",\n')
+                sb.append('    "com/google/protobuf/StructProto.class",\n')
+                sb.append('    "com/google/protobuf/Timestamp*",\n')
+                sb.append('    "com/google/protobuf/Type*",\n')
+                sb.append('    "com/google/protobuf/Wrappers*",\n')
+                sb.append('  ]')
+                break
+            case 'androidx_webkit_webkit':
+                sb.append('  visibility = ["//android_webview/tools/system_webview_shell:*"]\n')
+                break
+            case 'com_android_tools_desugar_jdk_libs_configuration':
+                sb.append('  enable_bytecode_checks = false\n')
                 break
         }
     }

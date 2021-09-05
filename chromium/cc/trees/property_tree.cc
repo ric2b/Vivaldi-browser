@@ -4,18 +4,22 @@
 
 #include <stddef.h>
 
+#include <algorithm>
 #include <set>
+#include <string>
+#include <utility>
 #include <vector>
 
 #include "base/check_op.h"
 #include "base/memory/ptr_util.h"
 #include "base/numerics/checked_math.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/trace_event/traced_value.h"
 #include "cc/trees/clip_node.h"
+#include "cc/trees/compositor_commit_data.h"
 #include "cc/trees/effect_node.h"
 #include "cc/trees/layer_tree_impl.h"
 #include "cc/trees/property_tree.h"
-#include "cc/trees/scroll_and_scale_set.h"
 #include "cc/trees/scroll_node.h"
 #include "cc/trees/transform_node.h"
 #include "components/viz/common/frame_sinks/copy_output_request.h"
@@ -173,7 +177,6 @@ void TransformTree::UpdateTransforms(int id) {
   UpdateScreenSpaceTransform(node, parent_node);
   UpdateAnimationProperties(node, parent_node);
   UpdateSnapping(node);
-  UpdateNodeAndAncestorsHaveIntegerTranslations(node, parent_node);
   UpdateTransformChanged(node, parent_node);
   UpdateNodeAndAncestorsAreAnimatedOrInvertible(node, parent_node);
 
@@ -722,6 +725,14 @@ void EffectTree::UpdateEffectChanged(EffectNode* node,
   }
 }
 
+void EffectTree::UpdateHasFilters(EffectNode* node, EffectNode* parent_node) {
+  node->node_or_ancestor_has_filters = !node->filters.IsEmpty();
+  if (parent_node) {
+    node->node_or_ancestor_has_filters |=
+        parent_node->node_or_ancestor_has_filters;
+  }
+}
+
 void EffectTree::UpdateBackfaceVisibility(EffectNode* node,
                                           EffectNode* parent_node) {
   if (parent_node && parent_node->hidden_by_backface_visibility) {
@@ -841,6 +852,7 @@ void EffectTree::UpdateEffects(int id) {
   UpdateSubtreeHidden(node, parent_node);
   UpdateIsDrawn(node, parent_node);
   UpdateEffectChanged(node, parent_node);
+  UpdateHasFilters(node, parent_node);
   UpdateBackfaceVisibility(node, parent_node);
   UpdateHasMaskingChild(node, parent_node);
   UpdateOnlyDrawsVisibleContent(node, parent_node);
@@ -949,8 +961,8 @@ void EffectTree::TakeCopyRequestsAndTransformToSurface(
                  .AssignIfValid(&scale_to_y)) {
           continue;
         }
-        int scale_from_x = gfx::ToRoundedInt(scale_from_x_f);
-        int scale_from_y = gfx::ToRoundedInt(scale_from_y_f);
+        int scale_from_x = base::ClampRound(scale_from_x_f);
+        int scale_from_y = base::ClampRound(scale_from_y_f);
         if (scale_from_x <= 0 || scale_from_y <= 0 || scale_to_x <= 0 ||
             scale_to_y <= 0) {
           // Transformed scaling ratio became illegal. Drop the request to
@@ -1114,15 +1126,6 @@ bool EffectTree::HitTestMayBeAffectedByMask(int effect_id) const {
   return false;
 }
 
-void TransformTree::UpdateNodeAndAncestorsHaveIntegerTranslations(
-    TransformNode* node,
-    TransformNode* parent_node) {
-  DCHECK(parent_node);
-  node->node_and_ancestors_have_only_integer_translation =
-      node->to_parent.IsIdentityOrIntegerTranslation() &&
-      parent_node->node_and_ancestors_have_only_integer_translation;
-}
-
 void ClipTree::SetViewportClip(gfx::RectF viewport_rect) {
   if (size() < 2)
     return;
@@ -1134,7 +1137,7 @@ void ClipTree::SetViewportClip(gfx::RectF viewport_rect) {
 }
 
 gfx::RectF ClipTree::ViewportClip() const {
-  const unsigned long min_size = 1;
+  const size_t min_size = 1;
   DCHECK_GT(size(), min_size);
   return Node(kViewportNodeId)->clip;
 }
@@ -1453,7 +1456,7 @@ gfx::ScrollOffset ScrollTree::PullDeltaForMainThread(
 }
 
 void ScrollTree::CollectScrollDeltas(
-    ScrollAndScaleSet* scroll_info,
+    CompositorCommitData* commit_data,
     ElementId inner_viewport_scroll_element_id,
     bool use_fractional_deltas,
     const base::flat_set<ElementId>& snapped_elements) {
@@ -1483,13 +1486,13 @@ void ScrollTree::CollectScrollDeltas(
       TRACE_EVENT_INSTANT2("cc", "CollectScrollDeltas",
                            TRACE_EVENT_SCOPE_THREAD, "x", scroll_delta.x(), "y",
                            scroll_delta.y());
-      ScrollAndScaleSet::ScrollUpdateInfo update(id, scroll_delta,
-                                                 snap_target_ids);
+      CompositorCommitData::ScrollUpdateInfo update(id, scroll_delta,
+                                                    snap_target_ids);
       if (id == inner_viewport_scroll_element_id) {
         // Inner (visual) viewport is stored separately.
-        scroll_info->inner_viewport_scroll = std::move(update);
+        commit_data->inner_viewport_scroll = std::move(update);
       } else {
-        scroll_info->scrolls.push_back(std::move(update));
+        commit_data->scrolls.push_back(std::move(update));
       }
     }
   }

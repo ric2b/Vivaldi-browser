@@ -31,6 +31,7 @@
 #include "third_party/blink/renderer/core/html/imports/html_imports_controller.h"
 
 #include "third_party/blink/renderer/core/dom/document.h"
+#include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/frame/web_feature.h"
 #include "third_party/blink/renderer/core/html/imports/html_import_child.h"
 #include "third_party/blink/renderer/core/html/imports/html_import_child_client.h"
@@ -117,7 +118,7 @@ HTMLImportChild* HTMLImportsController::Load(const Document& parent_document,
   }
 
   scoped_refptr<const SecurityOrigin> security_origin =
-      TreeRoot()->GetSecurityOrigin();
+      TreeRoot()->GetExecutionContext()->GetSecurityOrigin();
   ResourceFetcher* fetcher = parent->GetDocument()->Fetcher();
 
   if (parent->GetDocument()->ImportsController()) {

@@ -37,9 +37,11 @@
 <translation id="1842960171412779397">निवडा</translation>
 <translation id="1859234291848436338">लिहिण्याची दिशा</translation>
 <translation id="1860796786778352021">सूचना बंद</translation>
+<translation id="186476001994626254">वेब स्‍मार्ट पेस्ट आशय</translation>
 <translation id="1871244248791675517">Ins</translation>
 <translation id="1884435127456172652"><ph name="NUMBER" /> %</translation>
 <translation id="1901303067676059328">&amp;सर्व निवडा</translation>
+<translation id="19085484004813472">हे नवीन वैशिष्‍ट्य आहे</translation>
 <translation id="2006524834898217237">हे डिव्हाइस इंटरनेटशी कनेक्ट केलेले असल्याची खात्री करा.</translation>
 <translation id="208586643495776849">कृपया पुन्हा प्रयत्न करा</translation>
 <translation id="2090963878406559571"><ph name="ORIGIN" /> वरून तुमच्या Android फोनवर नंबर पाठवण्याकरिता सेटिंग्जमध्ये दोन्ही डिव्हाइससाठी <ph name="TROUBLESHOOT_LINK" />.</translation>
@@ -67,6 +69,7 @@
 <translation id="2570734079541893434">सेटिंग्ज व्यवस्थापित करा</translation>
 <translation id="2573731672208488250">{HOURS,plural, =1{१ता मध्ये}other{#ता मध्ये}}</translation>
 <translation id="2583543531130364912">तुमची टचस्क्रीन कॅलिब्रेट करा</translation>
+<translation id="2586657967955657006">क्लिपबोर्ड</translation>
 <translation id="2666092431469916601">शीर्ष</translation>
 <translation id="2701330563083355633"><ph name="DEVICE_NAME" /> वरून शेअर केले</translation>
 <translation id="271033894570825754">नवीन</translation>
@@ -74,6 +77,7 @@
 <translation id="2749082172777216925"><ph name="APP_NAME_INFO" />, <ph name="PRICE" /></translation>
 <translation id="2803313416453193357">फोल्डर उघडा</translation>
 <translation id="2824719307700604149">{YEARS,plural, =1{1 वर्षापूर्वी}other{# वर्षांपूर्वी}}</translation>
+<translation id="2878511608894704031">सर्व हटवा</translation>
 <translation id="2907671656515444832">{DAYS,plural, =1{१दि मध्ये}other{#दि मध्ये}}</translation>
 <translation id="2931838996092594335">क्लिक करा</translation>
 <translation id="2981684127883932071">सूचना दाखवत आहे</translation>
@@ -114,6 +118,7 @@
 <translation id="4289300219472526559">बोलणे प्रारंभ करा</translation>
 <translation id="430191667033048642"><ph name="MOVED_APP_NAME" /> फोल्डर <ph name="FOLDER_NAME" /> वर हलवले.</translation>
 <translation id="4316910396681052118">सर्व अ‍ॅप्स</translation>
+<translation id="4491109536499578614">इमेज</translation>
 <translation id="4588090240171750605">उजवे स्क्रोल करा</translation>
 <translation id="4631891353005174729"><ph name="APP_NAME_TYPE" />, तारा रेटिंग <ph name="RATING_SCORE" /></translation>
 <translation id="4648249871170053485"><ph name="APP_NAME" />, ॲप शिफारस</translation>
@@ -147,8 +152,9 @@
 <translation id="5768079895599174203">{DAYS,plural, =1{1 दिवस आणि }other{# दिवस आणि }}</translation>
 <translation id="5789643057113097023">.</translation>
 <translation id="5866104238061687188">{YEARS,plural, =1{१व मध्ये}other{#व मध्ये}}</translation>
+<translation id="588258955323874662">क्षेत्रे</translation>
 <translation id="5906667377645263094">{SECONDS,plural, =1{1 सेकंद शिल्लक}other{# सेकंद शिल्लक}}</translation>
-<translation id="5941711191222866238">लहान करा</translation>
+<translation id="5941711191222866238">कमी करा</translation>
 <translation id="5943826764092288734">{HOURS,plural, =1{1 तास}other{# तास}}</translation>
 <translation id="6012623610530968780"><ph name="TOTAL_PAGE_NUM" /> पैकी <ph name="SELECTED_PAGE" /> पेज</translation>
 <translation id="6022924867608035986">शोध बॉक्स मजकूर साफ करा</translation>
@@ -170,6 +176,7 @@
 <translation id="6417265370957905582">Google Assistant</translation>
 <translation id="6430678249303439055">या अ‍ॅपच्या सर्व सूचना ब्‍लॉक करा</translation>
 <translation id="6483402905448010557">{SECONDS,plural, =1{1 सेकंदापूर्वी}other{# सेकंदांपूर्वी}}</translation>
+<translation id="6503257047630241175">RTF आशय</translation>
 <translation id="6539092367496845964">काहीतरी चूक झाली. पुन्हा प्रयत्न करा.</translation>
 <translation id="654149438358937226">सर्व सूचना ब्लॉक करा</translation>
 <translation id="6567071839949112727">पूर्वजवर क्लिक करा</translation>

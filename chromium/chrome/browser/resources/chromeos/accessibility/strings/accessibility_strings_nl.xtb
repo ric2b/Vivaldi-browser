@@ -6,6 +6,7 @@
 <translation id="1012173283529841972">Lijstitem</translation>
 <translation id="1013742170491673792">srched</translation>
 <translation id="1014370462248694370">Swipe met twee vingers naar rechts</translation>
+<translation id="1016393160682012902">Druk op een QWERTY-toets of een vernieuwbare brailletoets of maak een aanraakgebaar om de functie ervan te leren. Druk op Ctrl en W of Escape om af te sluiten.</translation>
 <translation id="1022586497894531524">Gebruik je de gesproken feedback van ChromeVox voor de eerste keer? In deze korte handleiding worden de basisprincipes uitgelegd, zodat je aan de slag kunt met ChromeVox.</translation>
 <translation id="1025074108959230262">Modus voor vastzetten uitgeschakeld</translation>
 <translation id="1031961866430398710">dan</translation>
@@ -82,7 +83,7 @@
 <translation id="1555130319947370107">Blauw</translation>
 <translation id="1559739829547075274">Terug navigeren</translation>
 <translation id="1565432156062359693">Geen volgende lijst</translation>
-<translation id="1571643229714746283">ChromeVox gereed</translation>
+<translation id="1571643229714746283">ChromeVox klaar</translation>
 <translation id="1594072653727561613">menu</translation>
 <translation id="1610130962244179598">Overschakelen naar zespuntsbraille</translation>
 <translation id="161042844686301425">Cyaan</translation>
@@ -409,7 +410,7 @@
 <translation id="4148180433151187540">{COUNT,plural, =1{accolade rechts}other{# accolades rechts}}</translation>
 <translation id="4159784952369912983">Paars</translation>
 <translation id="4161104397932142764">{COUNT,plural, =1{seconde}other{seconden}}</translation>
-<translation id="4161663686871496107">Gesproken ChromeVox-feedback is gereed</translation>
+<translation id="4161663686871496107">Gesproken ChromeVox-feedback is klaar</translation>
 <translation id="4176463684765177261">Uitgeschakeld</translation>
 <translation id="4187322598335821254">Swipe omhoog of omlaag om per regel te navigeren</translation>
 <translation id="4188530942454211480">Vorige zin</translation>
@@ -504,7 +505,6 @@
 <translation id="489907760999452556">Interne link</translation>
 <translation id="4909019435900810068">Eén woord teruggaan</translation>
 <translation id="4911349081560453449">Geen vorig selectievakje</translation>
-<translation id="4915087353619183190">Leermodus starten. Druk op een QWERTY-toets, een vernieuwbare brailletoets of tik op een gebaar om de functie ervan te leren. Druk op Control en W of Escape om af te sluiten.</translation>
 <translation id="492295894462528572">Voorwoord</translation>
 <translation id="495046168593986294">Omhoog scrollen</translation>
 <translation id="495170559598752135">Acties</translation>
@@ -647,6 +647,7 @@
 <translation id="6017514345406065928">Groen</translation>
 <translation id="602001110135236999">Naar links scrollen</translation>
 <translation id="6034000775414344507">Lichtgrijs</translation>
+<translation id="6036135911048686884">Verkennen via aanraking</translation>
 <translation id="6037602951055904232">Vooruit schuiven</translation>
 <translation id="6044160928851315051">Scherm donkerder maken</translation>
 <translation id="6082768461603900813">Basisnavigatie</translation>
@@ -922,6 +923,7 @@
 <translation id="8345569862449483843">{COUNT,plural, =1{hekje}other{# hekjes}}</translation>
 <translation id="8378855320830505539">Regio</translation>
 <translation id="8382679411218029383">Automatisch inline en lijst aanvullen</translation>
+<translation id="8394908167088220973">Media afspelen/onderbreken</translation>
 <translation id="8428213095426709021">Instellingen</translation>
 <translation id="8428603554127842284">niveau <ph name="DEPTH" /></translation>
 <translation id="8430049249787218991">mnubr</translation>
@@ -966,6 +968,7 @@
 <translation id="8770473310765924354">gestructureerde content verlaten, zoals tabellen</translation>
 <translation id="8779057862865475116">Geen vorige link</translation>
 <translation id="8796411681063377102">Volgende kop voor niveau 3</translation>
+<translation id="8823311177246872527">Pagina <ph name="CURRENTPAGE" /> van <ph name="TOTALPAGES" /></translation>
 <translation id="8825828890761629845">banner</translation>
 <translation id="8851136666856101339">hoofd</translation>
 <translation id="8882002077197914455">Rijkop</translation>

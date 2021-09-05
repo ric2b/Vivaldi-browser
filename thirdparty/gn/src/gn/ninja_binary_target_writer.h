@@ -24,6 +24,15 @@ class NinjaBinaryTargetWriter : public NinjaTargetWriter {
   void Run() override;
 
  protected:
+  // Structure used to return the classified deps from |GetDeps| method.
+  struct ClassifiedDeps {
+    UniqueVector<OutputFile> extra_object_files;
+    UniqueVector<const Target*> linkable_deps;
+    UniqueVector<const Target*> non_linkable_deps;
+    UniqueVector<const Target*> framework_deps;
+    UniqueVector<const Target*> swiftmodule_deps;
+  };
+
   // Writes to the output stream a stamp rule for inputs, and
   // returns the file to be appended to source rules that encodes the
   // implicit dependencies for the current target.
@@ -39,25 +48,19 @@ class NinjaBinaryTargetWriter : public NinjaTargetWriter {
 
   // Gets all target dependencies and classifies them, as well as accumulates
   // object files from source sets we need to link.
-  void GetDeps(UniqueVector<OutputFile>* extra_object_files,
-               UniqueVector<const Target*>* linkable_deps,
-               UniqueVector<const Target*>* non_linkable_deps,
-               UniqueVector<const Target*>* framework_deps) const;
+  ClassifiedDeps GetClassifiedDeps() const;
 
   // Classifies the dependency as linkable or nonlinkable with the current
-  // target, adding it to the appropriate vector. If the dependency is a source
-  // set we should link in, the source set's object files will be appended to
-  // |extra_object_files|.
+  // target, adding it to the appropriate vector of |classified_deps|. If the
+  // dependency is a source set we should link in, the source set's object
+  // files will be appended to |classified_deps.extra_object_files|.
   void ClassifyDependency(const Target* dep,
-                          UniqueVector<OutputFile>* extra_object_files,
-                          UniqueVector<const Target*>* linkable_deps,
-                          UniqueVector<const Target*>* non_linkable_deps,
-                          UniqueVector<const Target*>* framework_deps) const;
+                          ClassifiedDeps* classified_deps) const;
 
   OutputFile WriteStampAndGetDep(const UniqueVector<const SourceFile*>& files,
                                  const std::string& stamp_ext) const;
 
-  void WriteCompilerBuildLine(const SourceFile& source,
+  void WriteCompilerBuildLine(const std::vector<SourceFile>& sources,
                               const std::vector<OutputFile>& extra_deps,
                               const std::vector<OutputFile>& order_only_deps,
                               const char* tool_name,
@@ -68,6 +71,9 @@ class NinjaBinaryTargetWriter : public NinjaTargetWriter {
                         const SourceFile* optional_def_file);
   void WriteLibs(std::ostream& out, const Tool* tool);
   void WriteFrameworks(std::ostream& out, const Tool* tool);
+  void WriteSwiftModules(std::ostream& out,
+                         const Tool* tool,
+                         const std::vector<OutputFile>& swiftmodules);
 
   void AddSourceSetFiles(const Target* source_set,
                          UniqueVector<OutputFile>* obj_files) const;

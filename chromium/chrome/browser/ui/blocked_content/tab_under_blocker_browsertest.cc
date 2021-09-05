@@ -65,8 +65,7 @@ class TabUnderBlockerBrowserTest : public extensions::ExtensionBrowserTest {
     policy::PolicyMap policy;
     policy.Set(policy::key::kDefaultPopupsSetting,
                policy::POLICY_LEVEL_MANDATORY, policy::POLICY_SCOPE_USER,
-               policy::POLICY_SOURCE_CLOUD,
-               std::make_unique<base::Value>(popup_setting),
+               policy::POLICY_SOURCE_CLOUD, base::Value(popup_setting),
                nullptr /* external_data_fetcher */);
     provider_.UpdateChromePolicy(policy);
   }
@@ -182,7 +181,7 @@ IN_PROC_BROWSER_TEST_F(TabUnderBlockerBrowserTest,
   const std::string script =
       "var evt = new MouseEvent('click', {"
       "  view : window,"
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
       "  metaKey : true"
 #else
       "  ctrlKey : true"

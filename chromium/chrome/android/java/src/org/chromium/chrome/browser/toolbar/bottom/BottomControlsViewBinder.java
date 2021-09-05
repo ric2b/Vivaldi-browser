@@ -66,6 +66,9 @@ class BottomControlsViewBinder {
             model.get(BottomControlsProperties.RESOURCE_MANAGER)
                     .getDynamicResourceLoader()
                     .registerResource(view.root.getId(), view.root.getResourceAdapter());
+            // Note(david@vivaldi.com): Apply the swipe handler.
+        } else if (BottomControlsProperties.TOOLBAR_SWIPE_HANDLER == propertyKey) {
+            view.root.setSwipeDetector(model.get(BottomControlsProperties.TOOLBAR_SWIPE_HANDLER));
         } else {
             assert false : "Unhandled property detected in BottomControlsViewBinder!";
         }

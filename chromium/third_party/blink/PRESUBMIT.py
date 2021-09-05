@@ -38,13 +38,12 @@ def _CheckForWrongMojomIncludes(input_api, output_api):
     # headers, except in public where only -shared.h headers should be
     # used to avoid exporting Blink types outside Blink.
     def source_file_filter(path):
-        return input_api.FilterSourceFile(
-            path,
-            black_list=[
-                r'third_party/blink/common/',
-                r'third_party/blink/public/common',
-                r'third_party/blink/renderer/platform/loader/fetch/url_loader',
-            ])
+        return input_api.FilterSourceFile(path,
+                                          files_to_skip=[
+                                              r'third_party/blink/common/',
+                                              r'third_party/blink/public/common',
+                                              r'third_party/blink/renderer/platform/loader/fetch/url_loader',
+                                          ])
 
     pattern = input_api.re.compile(r'#include\s+[<"](.+)\.mojom(.*)\.h[>"]')
     public_folder = input_api.os_path.normpath('third_party/blink/public/')
@@ -63,7 +62,7 @@ def _CheckForWrongMojomIncludes(input_api, output_api):
     allowed_interfaces = ('services/network/public/mojom/cross_origin_embedder_policy', 'services/network/public/mojom/fetch_api',
                           'services/network/public/mojom/load_timing_info',
                           'third_party/blink/public/mojom/worker/subresource_loader_updater', 'media/mojo/mojom/interface_factory',
-                          'media/mojo/mojom/video_decoder')
+                          'media/mojo/mojom/audio_decoder', 'media/mojo/mojom/video_decoder')
 
     for f in input_api.AffectedFiles(file_filter=source_file_filter):
         for line_num, line in f.ChangedContents():

@@ -12,6 +12,7 @@ import("//build/config/compiler/compiler.gni")
 import("//build/config/features.gni")
 import("//build/config/sanitizers/sanitizers.gni")
 import("//build/config/ui.gni")
+import("//build/gn_logs.gni")
 import("//build/util/generate_wrapper.gni")
 import("//chrome/browser/buildflags.gni")
 import("//chrome/browser/media/router/features.gni")
@@ -22,8 +23,8 @@ import("//gpu/vulkan/features.gni")
 import("//media/gpu/args.gni")
 import("//media/media_options.gni")
 import("//remoting/remoting_enable.gni")
-import("//third_party/openh264/openh264_args.gni")
 import("//third_party/closure_compiler/compile_js.gni")
+import("//third_party/openh264/openh264_args.gni")
 import("//tools/ipc_fuzzer/ipc_fuzzer.gni")
 import("//ui/base/ui_features.gni")
 import("//ui/gl/features.gni")
@@ -90,9 +91,7 @@ group("gn_all") {
   ]
 
   if (!is_component_build) {
-    deps += [
-      "//third_party/abseil-cpp:absl_tests",
-    ]
+    deps += [ "//third_party/abseil-cpp:absl_tests" ]
   }
 
   if (!is_android && !is_chromecast) {
@@ -151,7 +150,6 @@ group("gn_all") {
       "//printing:printing_unittests",
       "//third_party/SPIRV-Tools/src:SPIRV-Tools",
       "//third_party/SPIRV-Tools/src/test/fuzzers",
-      "//third_party/cacheinvalidation:cacheinvalidation_unittests",
       "//third_party/pdfium/samples:pdfium_test",
       "//tools/perf/clear_system_cache",
       "//tools/polymer:polymer_tools_python_unittests",
@@ -316,7 +314,7 @@ group("gn_all") {
     deps += [ "//chrome/browser/browser_switcher/bho:browser_switcher_dlls" ]
   }
 
-  if (is_win || is_linux) {
+  if (is_win || is_linux || is_chromeos) {
     deps += [
       "//tools/traffic_annotation/auditor:traffic_annotation_auditor",
       "//tools/traffic_annotation/auditor:traffic_annotation_auditor_unittests",
@@ -342,6 +340,7 @@ group("gn_all") {
       "//build/android/gyp/test:hello_world",
       "//build/android/stacktrace:java_deobfuscate",
       "//build/config/android/test/proto:test_build_protos",
+      "//chrome/android/monochrome:monochrome_apk_checker",
       "//chrome/android/webapk/shell_apk:maps_go_webapk",
       "//chrome/android/webapk/shell_apk:webapk",
       "//chrome/android/webapk/shell_apk/prepare_upload_dir:prepare_webapk_shell_upload_dir",
@@ -352,7 +351,7 @@ group("gn_all") {
       "//device:device_junit_tests",
       "//media/gpu:video_decode_accelerator_unittest",
       "//net/android:net_junit_tests",
-      "//services:service_junit_tests",
+      "//services:services_junit_tests",
       "//testing/android/junit:junit_unit_tests",
       "//third_party/catapult/devil",
       "//third_party/smhasher:murmurhash3",
@@ -361,6 +360,7 @@ group("gn_all") {
       "//tools/android:push_apps_to_background",
       "//tools/android/audio_focus_grabber:audio_focus_grabber_apk",
       "//tools/android/customtabs_benchmark:customtabs_benchmark_apk",
+      "//tools/android/errorprone_plugin:errorprone_plugin_tests",
       "//tools/android/kerberos/SpnegoAuthenticator:spnego_authenticator_apk",
       "//ui/android:ui_junit_tests",
       "//weblayer/public/java:client_aar",
@@ -403,17 +403,13 @@ group("gn_all") {
     if (enable_chrome_android_internal) {
       deps += [ "//clank" ]
     }
-
-    if (public_android_sdk) {
-      deps += [ "//chrome/android/monochrome:monochrome_apk_checker" ]
-    }
   }
 
   # NOTE: The following should really be 'is_android', but the fuzzing build
   #       seems currently broken for this platform at the moment, and the
   #       corresponding code build and works on Linux unmodified.
   #       See instructions in the corresponding BUILD.gn.
-  if (is_linux) {
+  if (is_linux || is_chromeos) {
     deps +=
         [ "//third_party/android_crazy_linker:android_crazy_linker_zip_fuzzer" ]
   }
@@ -427,7 +423,7 @@ group("gn_all") {
     ]
   }
 
-  if (is_linux || is_android) {
+  if (is_linux || is_chromeos || is_android) {
     deps += [
       "//third_party/breakpad:breakpad_unittests",
       "//third_party/breakpad:core-2-minidump",
@@ -439,7 +435,6 @@ group("gn_all") {
 
   if (is_chromeos) {
     deps += [
-      "//ash:ash_shell_with_content",
       "//ash:ash_unittests",
       "//ash/app_list:app_list_demo",
       "//ash/app_list:app_list_unittests",
@@ -462,7 +457,7 @@ group("gn_all") {
     ]
   }
 
-  if (is_linux) {
+  if (is_linux || is_chromeos) {
     # The following are definitely linux-only.
     deps += [
       "//chrome:xdg_mime",
@@ -559,7 +554,7 @@ group("gn_all") {
     if (enable_nacl) {
       deps += [ "//components/nacl/loader:nacl_loader_unittests" ]
 
-      if (is_linux) {
+      if (is_linux || is_chromeos) {
         # TODO(dpranke): Figure out what platforms should actually have this.
         deps += [ "//components/nacl/loader:nacl_helper" ]
 
@@ -704,15 +699,15 @@ group("gn_all") {
     deps += [ "//content/browser/bluetooth/tools:bluetooth_metrics_hash" ]
   }
 
-  if (is_win || is_linux) {
+  if (is_win || is_linux || is_chromeos) {
     deps += [ "//mojo" ]
   }
 
-  if (is_mac || is_linux || is_android || is_fuchsia) {
+  if (is_mac || is_linux || is_chromeos || is_android || is_fuchsia) {
     deps += [ "//third_party/perfetto:all" ]
   }
 
-  if (is_win || is_mac || is_linux) {
+  if (is_win || is_mac || is_linux || is_chromeos) {
     deps += [ "//third_party/sqlite:sqlite_shell" ]
   }
 
@@ -758,19 +753,20 @@ group("gn_all") {
       }
       deps += [ "//third_party/libjpeg_turbo:simd_asm" ]
     }
-    if (is_linux && current_toolchain == host_toolchain) {
+    if ((is_linux || is_chromeos) && current_toolchain == host_toolchain) {
       deps += [ "//v8:v8_shell" ]
     }
   }
 
-  if ((is_linux && !is_chromecast) || (is_win && use_libfuzzer) ||
-      (use_libfuzzer && is_mac)) {
+  if (((is_linux || is_chromeos) && !is_chromecast) ||
+      (is_win && use_libfuzzer) || (use_libfuzzer && is_mac)) {
     deps += [
       "//chrome/services/ipp_parser/public/cpp:fuzzers",
       "//testing/libfuzzer/fuzzers",
       "//third_party/grpc:fuzzers",
       "//third_party/icu/fuzzers",
       "//third_party/qcms:fuzzers",
+      "//third_party/ukey2/fuzzers",
       "//third_party/zlib/contrib/tests/fuzzers",
     ]
 
@@ -786,7 +782,7 @@ group("gn_all") {
     deps += [ "//native_client_sdk/src:nacl_core_sdk" ]
   }
 
-  if (is_linux && use_ozone) {
+  if ((is_linux || is_chromeos) && use_ozone) {
     deps += [
       "//headless:headless_non_renderer",
       "//headless:headless_tests",
@@ -800,9 +796,6 @@ group("gn_all") {
       "//chrome/browser/vr:vr_pixeltests",
       "//tools/perf/contrib/vr_benchmarks:vr_perf_tests",
     ]
-    if (is_desktop_linux && use_ozone) {
-      deps += [ "//chrome/browser/vr/testapp:vr_testapp" ]
-    }
     if (is_android) {
       deps += [ "//chrome/browser/android/vr:vr_android_unittests" ]
     }
@@ -838,7 +831,12 @@ group("gn_all") {
   deps += [ "//third_party/opencv:opencv_emd_fuzzer" ]
 }
 
-if ((is_linux || is_win) && enable_remoting && !use_ozone) {
+# TODO(https://crbug.com/1112776): ensure remoting is functional on Linux builds with
+# ozone. We also need to figure out what to do with remoting_host that is set for
+# use_x11 && is_linux. See remoting/remoting_options.gni.  For now, just allow to
+# enable remoting for is_linux && use_x11 && use_ozone.
+if ((is_linux || is_chromeos || is_win) && enable_remoting &&
+    (use_x11 || !use_ozone)) {
   # This group is used for network annotation check test.
   group("shipped_binaries") {
     deps = [
@@ -929,7 +927,7 @@ if (is_chromeos) {
   # of Chrome for Chrome OS.
   group("chromiumos_preflight") {
     testonly = true
-    deps = [
+    data_deps = [
       "//chrome",
       "//chrome/test/chromedriver",
       "//components/chromeos_camera:jpeg_decode_accelerator_unittest",
@@ -950,14 +948,14 @@ if (is_chromeos) {
     ]
 
     if (use_v4l2_codec || use_vaapi) {
-      deps += [
+      data_deps += [
         "//components/chromeos_camera:jpeg_encode_accelerator_unittest",
         "//media/gpu:video_decode_accelerator_perf_tests",
         "//media/gpu:video_decode_accelerator_tests",
         "//media/gpu:video_encode_accelerator_unittest",
       ]
       if (use_vaapi) {
-        deps += [ "//media/gpu/vaapi:vaapi_unittest" ]
+        data_deps += [ "//media/gpu/vaapi:vaapi_unittest" ]
       }
     }
   }
@@ -1049,7 +1047,6 @@ if (!is_ios) {
       ":layout_test_data_mojo_bindings",
       ":layout_test_data_mojo_bindings_lite",
       "//content/shell:content_shell",
-      "//content/shell:web_test_common_mojom_js_data_deps",
       "//content/test:mojo_web_test_bindings_js_data_deps",
       "//device/bluetooth/public/mojom:fake_bluetooth_interfaces_js_data_deps",
       "//device/vr/public/mojom:mojom_js_data_deps",
@@ -1083,6 +1080,8 @@ if (!is_ios) {
         "//third_party/breakpad:symupload",
         "//tools/android/forwarder2",
       ]
+    } else {
+      data_deps += [ "//content/shell:web_test_common_mojom_js_data_deps" ]
     }
 
     if (!is_win && !is_android) {
@@ -1094,7 +1093,7 @@ if (!is_ios) {
       data_deps += [ "//third_party/breakpad:dump_syms($host_toolchain)" ]
     }
 
-    if (is_linux) {
+    if (is_linux || is_chromeos) {
       data_deps += [ "//third_party/breakpad:dump_syms($host_toolchain)" ]
     }
 
@@ -1251,7 +1250,6 @@ if (!is_ios) {
       "//third_party/depot_tools/pylint_main.py",
       "//third_party/depot_tools/pylintrc",
       "//third_party/ply/",
-      "//third_party/pymock/",
       "//tools/idl_parser/",
     ]
   }
@@ -1298,8 +1296,8 @@ group("chromium_builder_perf") {
     }
     if (is_win || is_android) {
       data_deps += [
-        "//chrome/test:angle_perftests",
         "//components:components_perftests",
+        "//third_party/angle/src/tests:angle_perftests",
       ]
     }
   }
@@ -1406,3 +1404,15 @@ assert(
                      "*\bwin/*",
                    ]) != [],
     "Do not use a platform name in your output directory (found \"$root_build_dir\"). http://crbug.com/548283")
+
+# Write debug logs to gn_logs.txt.
+_lines = [
+           "Generated during 'gn gen' by //BUILD.gn.",
+           "",
+         ] + build_gn_logs
+
+# GN evaluates each .gn file once per toolchain, so restricting to default
+# toolchain will ensure write_file() is called only once.
+assert(current_toolchain == default_toolchain)
+
+write_file("$root_build_dir/gn_logs.txt", _lines)

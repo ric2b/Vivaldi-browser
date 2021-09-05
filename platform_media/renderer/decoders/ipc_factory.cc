@@ -13,7 +13,7 @@
 #include "base/logging.h"
 #include "base/no_destructor.h"
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include "base/mac/mac_util.h"
 #endif
 

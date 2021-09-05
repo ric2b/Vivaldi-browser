@@ -13,11 +13,17 @@
 #include "base/macros.h"
 #include "base/observer_list.h"
 #include "base/strings/string16.h"
+#include "build/build_config.h"
 #include "chrome/browser/browsing_data/local_data_container.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "extensions/buildflags/buildflags.h"
 #include "ui/base/models/tree_node_model.h"
 
+#if !defined(OS_ANDROID)
+#include "chrome/browser/browsing_data/access_context_audit_database.h"
+#endif  // !defined(OS_ANDROID)
+
+class AccessContextAuditService;
 class CookiesTreeModel;
 class CookieTreeAppCacheNode;
 class CookieTreeAppCachesNode;
@@ -172,6 +178,14 @@ class CookieTreeNode : public ui::TreeNode<CookieTreeNode> {
  protected:
   void AddChildSortedByTitle(std::unique_ptr<CookieTreeNode> new_child);
 
+#if !defined(OS_ANDROID)
+  // TODO (crbug.com/1113602): Remove this when all storage deletions from
+  // the browser process use the StoragePartition directly.
+  void ReportDeletionToAuditService(
+      const url::Origin& origin,
+      AccessContextAuditDatabase::StorageAPIType type);
+#endif  // !defined(OS_ANDROID)
+
  private:
   DISALLOW_COPY_AND_ASSIGN(CookieTreeNode);
 };
@@ -271,6 +285,16 @@ class CookiesTreeModel : public ui::TreeNodeModel<CookieTreeNode> {
  public:
   CookiesTreeModel(std::unique_ptr<LocalDataContainer> data_container,
                    ExtensionSpecialStoragePolicy* special_storage_policy);
+  // As above, but also provides the tree model with a pointer to the Access
+  // Context Audit service. This allows the tree model to report deletion events
+  // to the service. This must be used whenever the service exists to ensure
+  // audit record consistency.
+  // TODO (crbug.com/1113602): Remove this constructor when all deletions are
+  // performed directly against the StoragePartition and the tree model doesn't
+  // require knowledge of the audit service.
+  CookiesTreeModel(std::unique_ptr<LocalDataContainer> data_container,
+                   ExtensionSpecialStoragePolicy* special_storage_policy,
+                   AccessContextAuditService* access_context_audit_service);
   ~CookiesTreeModel() override;
 
   // Given a CanonicalCookie, return the ID of the message which should be
@@ -356,6 +380,12 @@ class CookiesTreeModel : public ui::TreeNodeModel<CookieTreeNode> {
   void PopulateCacheStorageUsageInfo(LocalDataContainer* container);
   void PopulateFlashLSOInfo(LocalDataContainer* container);
   void PopulateMediaLicenseInfo(LocalDataContainer* container);
+
+  // Returns the Access Context Audit service provided to the cookies tree model
+  // as part of the constructor, or nullptr if no service was provided.
+  AccessContextAuditService* access_context_audit_service() {
+    return access_context_audit_service_;
+  }
 
   LocalDataContainer* data_container() {
     return data_container_.get();
@@ -445,6 +475,8 @@ class CookiesTreeModel : public ui::TreeNodeModel<CookieTreeNode> {
   // The CookiesTreeModel maintains a separate list of observers that are
   // specifically of the type CookiesTreeModel::Observer.
   base::ObserverList<Observer>::Unchecked cookies_observer_list_;
+
+  AccessContextAuditService* access_context_audit_service_ = nullptr;
 
   // Keeps track of how many batches the consumer of this class says it is going
   // to send.

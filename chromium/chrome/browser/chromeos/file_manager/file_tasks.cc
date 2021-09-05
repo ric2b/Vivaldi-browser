@@ -18,11 +18,15 @@
 #include "base/strings/string_split.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "chrome/browser/apps/app_service/app_icon_source.h"
 #include "chrome/browser/apps/app_service/app_launch_params.h"
 #include "chrome/browser/apps/app_service/app_service_metrics.h"
+#include "chrome/browser/apps/app_service/app_service_proxy.h"
+#include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/chromeos/crostini/crostini_features.h"
 #include "chrome/browser/chromeos/drive/file_system_util.h"
 #include "chrome/browser/chromeos/file_manager/app_id.h"
+#include "chrome/browser/chromeos/file_manager/app_service_file_tasks.h"
 #include "chrome/browser/chromeos/file_manager/arc_file_tasks.h"
 #include "chrome/browser/chromeos/file_manager/file_browser_handlers.h"
 #include "chrome/browser/chromeos/file_manager/file_tasks_notifier.h"
@@ -38,6 +42,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/extensions/application_launch.h"
 #include "chrome/browser/ui/webui/extensions/extension_icon_source.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/extensions/api/file_browser_handlers/file_browser_handler.h"
 #include "chrome/common/extensions/api/file_manager_private.h"
 #include "chrome/common/extensions/extension_constants.h"
@@ -71,6 +76,10 @@ using storage::FileSystemURL;
 
 namespace file_manager {
 namespace file_tasks {
+
+const char kActionIdView[] = "view";
+const char kActionIdSend[] = "send";
+const char kActionIdSendMultiple[] = "send_multiple";
 
 namespace {
 
@@ -282,6 +291,21 @@ Profile* GetProfileForExtensionTask(Profile* profile,
   return profile;
 }
 
+GURL GetIconURL(Profile* profile, const Extension& extension) {
+  if (base::FeatureList::IsEnabled(features::kAppServiceAdaptiveIcon) &&
+      apps::AppServiceProxyFactory::IsAppServiceAvailableForProfile(profile) &&
+      apps::AppServiceProxyFactory::GetForProfile(profile)
+              ->AppRegistryCache()
+              .GetAppType(extension.id()) != apps::mojom::AppType::kUnknown) {
+    return apps::AppIconSource::GetIconURL(
+        extension.id(), extension_misc::EXTENSION_ICON_SMALL);
+  }
+  return extensions::ExtensionIconSource::GetIconURL(
+      &extension, extension_misc::EXTENSION_ICON_SMALL,
+      ExtensionIconSet::MATCH_BIGGER,
+      false);  // grayscale
+}
+
 void ExecuteByArcAfterMimeTypesCollected(
     Profile* profile,
     const TaskDescriptor& task,
@@ -289,6 +313,13 @@ void ExecuteByArcAfterMimeTypesCollected(
     FileTaskFinishedCallback done,
     extensions::app_file_handler_util::MimeTypeCollector* mime_collector,
     std::unique_ptr<std::vector<std::string>> mime_types) {
+  if (base::FeatureList::IsEnabled(features::kIntentHandlingSharing) &&
+      (task.action_id == kActionIdSend ||
+       task.action_id == kActionIdSendMultiple)) {
+    ExecuteAppServiceTask(profile, task, file_urls, *mime_types,
+                          std::move(done));
+    return;
+  }
   ExecuteArcTask(profile, task, file_urls, *mime_types, std::move(done));
 }
 
@@ -694,10 +725,7 @@ void FindFileHandlerTasks(Profile* profile,
       std::string task_id = file_tasks::MakeTaskID(
           extension->id(), file_tasks::TASK_TYPE_FILE_HANDLER, handler->id);
 
-      GURL best_icon = extensions::ExtensionIconSource::GetIconURL(
-          extension, extension_misc::EXTENSION_ICON_SMALL,
-          ExtensionIconSet::MATCH_BIGGER,
-          false);  // grayscale
+      const GURL best_icon = GetIconURL(profile, *extension);
 
       // If file handler doesn't match as good match, regards it as generic file
       // handler.
@@ -755,10 +783,7 @@ void FindFileBrowserHandlerTasks(
 
     // TODO(zelidrag): Figure out how to expose icon URL that task defined in
     // manifest instead of the default extension icon.
-    const GURL icon_url = extensions::ExtensionIconSource::GetIconURL(
-        extension, extension_misc::EXTENSION_ICON_SMALL,
-        ExtensionIconSet::MATCH_BIGGER,
-        false);  // grayscale
+    const GURL icon_url = GetIconURL(profile, *extension);
 
     result_list->push_back(FullTaskDescriptor(
         TaskDescriptor(extension_id, file_tasks::TASK_TYPE_FILE_BROWSER_HANDLER,
@@ -787,6 +812,14 @@ void FindExtensionAndAppTasks(
   // duplicates because "file_browser_handlers" and "file_handlers" shouldn't
   // be used in the same manifest.json.
   FindFileBrowserHandlerTasks(profile, file_urls, result_list_ptr);
+
+  // TODO(crbug/1092784): Link app service task finder here to test the intent
+  // handling backend. This is not fully completed and only support sharing for
+  // now. When the unified sharesheet UI is completed, this might be called from
+  // a different place.
+  if (base::FeatureList::IsEnabled(features::kIntentHandlingSharing)) {
+    FindAppServiceTasks(profile, entries, file_urls, result_list_ptr);
+  }
 
   // 5. Find and append Guest OS tasks.
   FindGuestOsTasks(profile, entries, file_urls, result_list_ptr,
@@ -842,6 +875,16 @@ void ChooseAndSetDefaultTask(const PrefService& pref_service,
     FullTaskDescriptor& task = (*tasks)[i];
     if (task.is_file_extension_match() && !task.is_generic_file_handler() &&
         !IsFallbackFileHandler(task)) {
+      task.set_is_default(true);
+      return;
+    }
+  }
+
+  // Prefer a fallback app over viewing in the browser (crbug.com/1111399).
+  for (size_t i = 0; i < tasks->size(); ++i) {
+    FullTaskDescriptor& task = (*tasks)[i];
+    if (IsFallbackFileHandler(task) &&
+        task.task_descriptor().action_id != "view-in-browser") {
       task.set_is_default(true);
       return;
     }

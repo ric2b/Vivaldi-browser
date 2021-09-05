@@ -6,6 +6,7 @@
 
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/system/sys_info.h"
 #include "base/test/bind_test_util.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
@@ -15,6 +16,7 @@
 #include "chrome/browser/chromeos/settings/scoped_testing_cros_settings.h"
 #include "chrome/browser/notifications/notification_display_service_tester.h"
 #include "chrome/browser/notifications/system_notification_helper.h"
+#include "chrome/common/pref_names.h"
 #include "chrome/test/base/scoped_testing_local_state.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chromeos/constants/chromeos_features.h"
@@ -24,6 +26,7 @@
 #include "chromeos/network/network_handler.h"
 #include "chromeos/settings/cros_settings_names.h"
 #include "chromeos/tpm/stub_install_attributes.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/test/browser_task_environment.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -38,11 +41,11 @@ using MinimumVersionRequirement =
 namespace policy {
 
 namespace {
-const char kFakeCurrentVersion[] = "80.25.4";
-const char kNewVersion[] = "81.4.2";
-const char kNewerVersion[] = "81.5.4";
-const char kNewestVersion[] = "82";
-const char kOldVersion[] = "78.1.5";
+const char kFakeCurrentVersion[] = "13305.20.0";
+const char kNewVersion[] = "13305.25.0";
+const char kNewerVersion[] = "13310.0.0";
+const char kNewestVersion[] = "13320.10.0";
+const char kOldVersion[] = "13301.0.0";
 const char kUpdateRequiredNotificationId[] = "policy.update_required";
 const char kCellularServicePath[] = "/service/cellular1";
 
@@ -64,8 +67,8 @@ class MinimumVersionPolicyHandlerTest
   // MinimumVersionPolicyHandler::Delegate:
   bool IsKioskMode() const;
   bool IsEnterpriseManaged() const;
-  const base::Version& GetCurrentVersion() const;
-  bool IsUserManaged() const;
+  base::Version GetCurrentVersion() const;
+  bool IsUserEnterpriseManaged() const;
   bool IsUserLoggedIn() const;
   bool IsLoginInProgress() const;
   MOCK_METHOD0(ShowUpdateRequiredScreen, void());
@@ -86,6 +89,12 @@ class MinimumVersionPolicyHandlerTest
   base::Value CreateRequirement(const std::string& version,
                                 int warning,
                                 int eol_warning) const;
+
+  base::Value CreatePolicyValue(base::Value requirements,
+                                bool unmanaged_user_restricted);
+
+  void VerifyUpdateRequiredNotification(const base::string16& expected_title,
+                                        const base::string16& expected_message);
 
   MinimumVersionPolicyHandler* GetMinimumVersionPolicyHandler() {
     return minimum_version_policy_handler_.get();
@@ -179,7 +188,7 @@ bool MinimumVersionPolicyHandlerTest::IsEnterpriseManaged() const {
   return true;
 }
 
-bool MinimumVersionPolicyHandlerTest::IsUserManaged() const {
+bool MinimumVersionPolicyHandlerTest::IsUserEnterpriseManaged() const {
   return user_managed_;
 }
 
@@ -191,14 +200,13 @@ bool MinimumVersionPolicyHandlerTest::IsLoginInProgress() const {
   return false;
 }
 
-const base::Version& MinimumVersionPolicyHandlerTest::GetCurrentVersion()
-    const {
+base::Version MinimumVersionPolicyHandlerTest::GetCurrentVersion() const {
   return *current_version_;
 }
 
 void MinimumVersionPolicyHandlerTest::SetPolicyPref(base::Value value) {
   scoped_testing_cros_settings_.device_settings()->Set(
-      chromeos::kMinimumChromeVersionEnforced, value);
+      chromeos::kDeviceMinimumVersion, value);
 }
 
 /**
@@ -212,16 +220,43 @@ base::Value MinimumVersionPolicyHandlerTest::CreateRequirement(
     const int warning,
     const int eol_warning) const {
   base::Value dict(base::Value::Type::DICTIONARY);
-  dict.SetStringKey(MinimumVersionPolicyHandler::kChromeVersion, version);
+  dict.SetStringKey(MinimumVersionPolicyHandler::kChromeOsVersion, version);
   dict.SetIntKey(MinimumVersionPolicyHandler::kWarningPeriod, warning);
-  dict.SetIntKey(MinimumVersionPolicyHandler::KEolWarningPeriod, eol_warning);
+  dict.SetIntKey(MinimumVersionPolicyHandler::kEolWarningPeriod, eol_warning);
   return dict;
+}
+
+base::Value MinimumVersionPolicyHandlerTest::CreatePolicyValue(
+    base::Value requirements,
+    bool unmanaged_user_restricted) {
+  base::Value dict(base::Value::Type::DICTIONARY);
+  dict.SetKey(MinimumVersionPolicyHandler::kRequirements,
+              std::move(requirements));
+  dict.SetBoolKey(MinimumVersionPolicyHandler::kUnmanagedUserRestricted,
+                  unmanaged_user_restricted);
+  return dict;
+}
+
+void MinimumVersionPolicyHandlerTest::VerifyUpdateRequiredNotification(
+    const base::string16& expected_title,
+    const base::string16& expected_message) {
+  auto notification =
+      display_service()->GetNotification(kUpdateRequiredNotificationId);
+  ASSERT_TRUE(notification);
+  EXPECT_EQ(notification->title(), expected_title);
+  EXPECT_EQ(notification->message(), expected_message);
 }
 
 TEST_F(MinimumVersionPolicyHandlerTest, RequirementsNotMetState) {
   // No policy applied yet. Check requirements are satisfied.
   EXPECT_TRUE(GetMinimumVersionPolicyHandler()->RequirementsAreSatisfied());
   EXPECT_FALSE(GetState());
+  EXPECT_FALSE(GetMinimumVersionPolicyHandler()->GetTimeRemainingInDays());
+
+  // This is needed to wait till EOL status is fetched from the update_engine.
+  base::RunLoop run_loop;
+  GetMinimumVersionPolicyHandler()->set_fetch_eol_callback_for_testing(
+      run_loop.QuitClosure());
 
   // Create policy value as a list of requirements.
   base::Value requirement_list(base::Value::Type::LIST);
@@ -229,30 +264,34 @@ TEST_F(MinimumVersionPolicyHandlerTest, RequirementsNotMetState) {
       CreateRequirement(kNewVersion, kShortWarning, kNoWarning);
   auto strongest_requirement = MinimumVersionRequirement::CreateInstanceIfValid(
       &base::Value::AsDictionaryValue(new_version_short_warning));
-  base::Value newer_version_long_warning =
-      CreateRequirement(kNewerVersion, kLongWarning, kNoWarning);
-  base::Value newest_version_no_warning =
-      CreateRequirement(kNewestVersion, kNoWarning, kNoWarning);
 
   requirement_list.Append(std::move(new_version_short_warning));
-  requirement_list.Append(std::move(newer_version_long_warning));
-  requirement_list.Append(std::move(newest_version_no_warning));
+  requirement_list.Append(
+      CreateRequirement(kNewerVersion, kLongWarning, kNoWarning));
+  requirement_list.Append(
+      CreateRequirement(kNewestVersion, kNoWarning, kNoWarning));
 
   // Set new value for pref and check that requirements are not satisfied.
   // The state in |MinimumVersionPolicyHandler| should be equal to the strongest
   // requirement as defined in the policy description.
-  SetPolicyPref(std::move(requirement_list));
+  SetPolicyPref(CreatePolicyValue(std::move(requirement_list),
+                                  false /* unmanaged_user_restricted */));
+  run_loop.Run();
 
   EXPECT_FALSE(GetMinimumVersionPolicyHandler()->RequirementsAreSatisfied());
   EXPECT_TRUE(GetState());
   EXPECT_TRUE(strongest_requirement);
   EXPECT_EQ(GetState()->Compare(strongest_requirement.get()), 0);
+  EXPECT_TRUE(GetMinimumVersionPolicyHandler()->GetTimeRemainingInDays());
+  EXPECT_EQ(GetMinimumVersionPolicyHandler()->GetTimeRemainingInDays().value(),
+            kShortWarning);
 
   // Reset the pref to empty list and verify state is reset.
   base::Value requirement_list2(base::Value::Type::LIST);
   SetPolicyPref(std::move(requirement_list2));
   EXPECT_TRUE(GetMinimumVersionPolicyHandler()->RequirementsAreSatisfied());
   EXPECT_FALSE(GetState());
+  EXPECT_FALSE(GetMinimumVersionPolicyHandler()->GetTimeRemainingInDays());
 }
 
 TEST_F(MinimumVersionPolicyHandlerTest, CriticalUpdates) {
@@ -286,7 +325,8 @@ TEST_F(MinimumVersionPolicyHandlerTest, CriticalUpdates) {
   // Set new value for pref and check that requirements are not satisfied.
   // As the warning time is set to zero, the user should be logged out of the
   // session.
-  SetPolicyPref(std::move(requirement_list));
+  SetPolicyPref(CreatePolicyValue(std::move(requirement_list),
+                                  false /* unmanaged_user_restricted */));
   // Start the run loop to wait for EOL status fetch.
   run_loop.Run();
   EXPECT_FALSE(GetMinimumVersionPolicyHandler()->RequirementsAreSatisfied());
@@ -324,7 +364,8 @@ TEST_F(MinimumVersionPolicyHandlerTest, CriticalUpdatesUnmanagedUser) {
 
   // Set new value for pref and check that requirements are not satisfied.
   // Unmanaged user should not be logged out of the session.
-  SetPolicyPref(std::move(requirement_list));
+  SetPolicyPref(CreatePolicyValue(std::move(requirement_list),
+                                  false /* unmanaged_user_restricted */));
   // Start the run loop to wait for EOL status fetch.
   run_loop.Run();
   EXPECT_FALSE(GetMinimumVersionPolicyHandler()->RequirementsAreSatisfied());
@@ -347,7 +388,8 @@ TEST_F(MinimumVersionPolicyHandlerTest, RequirementsMetState) {
 
   // Set new value for pref and check that requirements are still satisfied
   // as none of the requirements has version greater than current version.
-  SetPolicyPref(std::move(requirement_list));
+  SetPolicyPref(CreatePolicyValue(std::move(requirement_list),
+                                  false /* unmanaged_user_restricted */));
   EXPECT_TRUE(GetMinimumVersionPolicyHandler()->RequirementsAreSatisfied());
   EXPECT_FALSE(GetState());
 }
@@ -370,7 +412,8 @@ TEST_F(MinimumVersionPolicyHandlerTest, DeadlineTimerExpired) {
   base::Value requirement_list(base::Value::Type::LIST);
   requirement_list.Append(
       CreateRequirement(kNewVersion, kLongWarning, kLongWarning));
-  SetPolicyPref(std::move(requirement_list));
+  SetPolicyPref(CreatePolicyValue(std::move(requirement_list),
+                                  false /* unmanaged_user_restricted */));
 
   run_loop.Run();
   EXPECT_TRUE(
@@ -408,7 +451,8 @@ TEST_F(MinimumVersionPolicyHandlerTest, NoNetworkNotifications) {
   base::Value requirement_list(base::Value::Type::LIST);
   requirement_list.Append(
       CreateRequirement(kNewVersion, kLongWarning, kLongWarning));
-  SetPolicyPref(std::move(requirement_list));
+  SetPolicyPref(CreatePolicyValue(std::move(requirement_list),
+                                  false /* unmanaged_user_restricted */));
 
   run_loop.Run();
   EXPECT_TRUE(
@@ -417,30 +461,23 @@ TEST_F(MinimumVersionPolicyHandlerTest, NoNetworkNotifications) {
 
   // Check notification is shown for offline devices with the warning time.
   base::string16 expected_title =
-      base::ASCIIToUTF16("Update device within 10 days");
+      base::ASCIIToUTF16("Update Chrome device within 10 days");
   base::string16 expected_message = base::ASCIIToUTF16(
       "managed.com requires you to download an update before the deadline. The "
       "update will download automatically when you connect to the internet.");
-  auto notification_long_waiting =
-      display_service()->GetNotification(kUpdateRequiredNotificationId);
-  ASSERT_TRUE(notification_long_waiting);
-  EXPECT_EQ(notification_long_waiting->title(), expected_title);
-  EXPECT_EQ(notification_long_waiting->message(), expected_message);
+  VerifyUpdateRequiredNotification(expected_title, expected_message);
 
   // Expire the notification timer to show new notification on the last day.
   const base::TimeDelta warning = base::TimeDelta::FromDays(kLongWarning - 1);
   task_environment.FastForwardBy(warning);
 
   base::string16 expected_title_last_day =
-      base::ASCIIToUTF16("Last day to update device");
+      base::ASCIIToUTF16("Last day to update Chrome device");
   base::string16 expected_message_last_day = base::ASCIIToUTF16(
       "managed.com requires you to download an update today. The "
       "update will download automatically when you connect to the internet.");
-  auto notification_last_day =
-      display_service()->GetNotification(kUpdateRequiredNotificationId);
-  ASSERT_TRUE(notification_long_waiting);
-  EXPECT_EQ(notification_last_day->title(), expected_title_last_day);
-  EXPECT_EQ(notification_last_day->message(), expected_message_last_day);
+  VerifyUpdateRequiredNotification(expected_title_last_day,
+                                   expected_message_last_day);
 }
 
 TEST_F(MinimumVersionPolicyHandlerTest, MeteredNetworkNotifications) {
@@ -465,38 +502,32 @@ TEST_F(MinimumVersionPolicyHandlerTest, MeteredNetworkNotifications) {
   base::Value requirement_list(base::Value::Type::LIST);
   requirement_list.Append(
       CreateRequirement(kNewVersion, kLongWarning, kLongWarning));
-  SetPolicyPref(std::move(requirement_list));
+  SetPolicyPref(CreatePolicyValue(std::move(requirement_list),
+                                  false /* unmanaged_user_restricted */));
   run_loop.Run();
   EXPECT_TRUE(
       GetMinimumVersionPolicyHandler()->IsDeadlineTimerRunningForTesting());
 
   // Check notification is shown for metered network with the warning time.
   base::string16 expected_title =
-      base::ASCIIToUTF16("Update device within 10 days");
+      base::ASCIIToUTF16("Update Chrome device within 10 days");
   base::string16 expected_message = base::ASCIIToUTF16(
       "managed.com requires you to connect to Wi-Fi and download an update "
       "before the deadline. Or, download from a metered connection (charges "
       "may apply).");
-  auto notification_long_waiting =
-      display_service()->GetNotification(kUpdateRequiredNotificationId);
-  ASSERT_TRUE(notification_long_waiting);
-  EXPECT_EQ(notification_long_waiting->title(), expected_title);
-  EXPECT_EQ(notification_long_waiting->message(), expected_message);
+  VerifyUpdateRequiredNotification(expected_title, expected_message);
 
   // Expire the notification timer to show new notification on the last day.
   const base::TimeDelta warning = base::TimeDelta::FromDays(kLongWarning - 1);
   task_environment.FastForwardBy(warning);
 
   base::string16 expected_title_last_day =
-      base::ASCIIToUTF16("Last day to update device");
+      base::ASCIIToUTF16("Last day to update Chrome device");
   base::string16 expected_message_last_day = base::ASCIIToUTF16(
       "managed.com requires you to connect to Wi-Fi today to download an "
       "update. Or, download from a metered connection (charges may apply).");
-  auto notification_last_day =
-      display_service()->GetNotification(kUpdateRequiredNotificationId);
-  ASSERT_TRUE(notification_long_waiting);
-  EXPECT_EQ(notification_last_day->title(), expected_title_last_day);
-  EXPECT_EQ(notification_last_day->message(), expected_message_last_day);
+  VerifyUpdateRequiredNotification(expected_title_last_day,
+                                   expected_message_last_day);
 }
 
 TEST_F(MinimumVersionPolicyHandlerTest, EolNotifications) {
@@ -513,34 +544,27 @@ TEST_F(MinimumVersionPolicyHandlerTest, EolNotifications) {
   base::Value requirement_list(base::Value::Type::LIST);
   requirement_list.Append(
       CreateRequirement(kNewVersion, kLongWarning, kLongWarning));
-  SetPolicyPref(std::move(requirement_list));
+  SetPolicyPref(CreatePolicyValue(std::move(requirement_list),
+                                  false /* unmanaged_user_restricted */));
   run_loop.Run();
   EXPECT_TRUE(
       GetMinimumVersionPolicyHandler()->IsDeadlineTimerRunningForTesting());
 
   // Check notification is shown for end of life with the warning time.
   base::string16 expected_title =
-      base::ASCIIToUTF16("Return device within 10 days");
+      base::ASCIIToUTF16("Return Chrome device within 10 days");
   base::string16 expected_message = base::ASCIIToUTF16(
-      "managed.com requires you to back up your data and return this device "
-      "before the deadline.");
-  auto notification_long_waiting =
-      display_service()->GetNotification(kUpdateRequiredNotificationId);
-  ASSERT_TRUE(notification_long_waiting);
-  EXPECT_EQ(notification_long_waiting->title(), expected_title);
-  EXPECT_EQ(notification_long_waiting->message(), expected_message);
+      "managed.com requires you to back up your data and return this Chrome "
+      "device before the deadline.");
+  VerifyUpdateRequiredNotification(expected_title, expected_message);
 
   // Expire notification timer to show new notification a week before deadline.
   const base::TimeDelta warning = base::TimeDelta::FromDays(kLongWarning - 7);
   task_environment.FastForwardBy(warning);
 
   base::string16 expected_title_one_week =
-      base::ASCIIToUTF16("Return device within 7 days");
-  auto notification_one_week =
-      display_service()->GetNotification(kUpdateRequiredNotificationId);
-  ASSERT_TRUE(notification_one_week);
-  EXPECT_EQ(notification_one_week->title(), expected_title_one_week);
-  EXPECT_EQ(notification_one_week->message(), expected_message);
+      base::ASCIIToUTF16("Return Chrome device within 1 week");
+  VerifyUpdateRequiredNotification(expected_title_one_week, expected_message);
 
   // Expire the notification timer to show new notification on the last day.
   const base::TimeDelta warning_last_day = base::TimeDelta::FromDays(6);
@@ -549,13 +573,89 @@ TEST_F(MinimumVersionPolicyHandlerTest, EolNotifications) {
   base::string16 expected_title_last_day =
       base::ASCIIToUTF16("Immediate return required");
   base::string16 expected_message_last_day = base::ASCIIToUTF16(
-      "managed.com requires you to back up your data and return this device "
-      "today.");
-  auto notification_last_day =
-      display_service()->GetNotification(kUpdateRequiredNotificationId);
-  ASSERT_TRUE(notification_long_waiting);
-  EXPECT_EQ(notification_last_day->title(), expected_title_last_day);
-  EXPECT_EQ(notification_last_day->message(), expected_message_last_day);
+      "managed.com requires you to back up your data and return this Chrome "
+      "device today.");
+  VerifyUpdateRequiredNotification(expected_title_last_day,
+                                   expected_message_last_day);
+}
+
+TEST_F(MinimumVersionPolicyHandlerTest, LastHourEolNotifications) {
+  // Set device state to end of life.
+  update_engine()->set_eol_date(base::DefaultClock::GetInstance()->Now() -
+                                base::TimeDelta::FromDays(kLongWarning));
+
+  // Set local state to simulate update required timer running and one hour to
+  // deadline.
+  PrefService* prefs = g_browser_process->local_state();
+  const base::TimeDelta delta =
+      base::TimeDelta::FromDays(kShortWarning) - base::TimeDelta::FromHours(1);
+  prefs->SetTime(prefs::kUpdateRequiredTimerStartTime,
+                 base::Time::Now() - delta);
+  prefs->SetTimeDelta(prefs::kUpdateRequiredWarningPeriod,
+                      base::TimeDelta::FromDays(kShortWarning));
+
+  // This is needed to wait till EOL status is fetched from the update_engine.
+  base::RunLoop run_loop;
+  GetMinimumVersionPolicyHandler()->set_fetch_eol_callback_for_testing(
+      run_loop.QuitClosure());
+
+  // Create and set pref value to invoke policy handler.
+  base::Value requirement_list(base::Value::Type::LIST);
+  requirement_list.Append(
+      CreateRequirement(kNewVersion, kShortWarning, kShortWarning));
+  SetPolicyPref(CreatePolicyValue(std::move(requirement_list),
+                                  false /* unmanaged_user_restricted */));
+  run_loop.Run();
+  EXPECT_TRUE(
+      GetMinimumVersionPolicyHandler()->IsDeadlineTimerRunningForTesting());
+
+  base::string16 expected_title_last_day =
+      base::ASCIIToUTF16("Immediate return required");
+  base::string16 expected_message_last_day = base::ASCIIToUTF16(
+      "managed.com requires you to back up your data and return this Chrome "
+      "device today.");
+  VerifyUpdateRequiredNotification(expected_title_last_day,
+                                   expected_message_last_day);
+}
+
+TEST_F(MinimumVersionPolicyHandlerTest, ChromeboxNotifications) {
+  base::SysInfo::SetChromeOSVersionInfoForTest("DEVICETYPE=CHROMEBOX",
+                                               base::Time::Now());
+  // Set device state to end of life reached.
+  update_engine()->set_eol_date(base::DefaultClock::GetInstance()->Now() -
+                                base::TimeDelta::FromDays(kLongWarning));
+
+  // This is needed to wait till EOL status is fetched from the update_engine.
+  base::RunLoop run_loop;
+  GetMinimumVersionPolicyHandler()->set_fetch_eol_callback_for_testing(
+      run_loop.QuitClosure());
+
+  // Create and set pref value to invoke policy handler.
+  base::Value requirement_list(base::Value::Type::LIST);
+  requirement_list.Append(
+      CreateRequirement(kNewVersion, kLongWarning, kLongWarning));
+  SetPolicyPref(CreatePolicyValue(std::move(requirement_list),
+                                  false /* unmanaged_user_restricted */));
+  run_loop.Run();
+  EXPECT_TRUE(
+      GetMinimumVersionPolicyHandler()->IsDeadlineTimerRunningForTesting());
+
+  // Check Chromebox notification is shown for end of life with the warning
+  // time.
+  base::string16 expected_title =
+      base::ASCIIToUTF16("Return Chromebox within 10 days");
+  base::string16 expected_message = base::ASCIIToUTF16(
+      "managed.com requires you to back up your data and return this Chromebox "
+      "before the deadline.");
+  VerifyUpdateRequiredNotification(expected_title, expected_message);
+
+  // Expire notification timer to show new notification a week before deadline.
+  const base::TimeDelta warning = base::TimeDelta::FromDays(kLongWarning - 7);
+  task_environment.FastForwardBy(warning);
+
+  base::string16 expected_title_one_week =
+      base::ASCIIToUTF16("Return Chromebox within 1 week");
+  VerifyUpdateRequiredNotification(expected_title_one_week, expected_message);
 }
 
 }  // namespace policy

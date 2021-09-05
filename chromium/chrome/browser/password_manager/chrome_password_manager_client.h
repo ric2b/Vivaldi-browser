@@ -83,9 +83,6 @@ class ChromePasswordManagerClient
   bool IsSavingAndFillingEnabled(const GURL& url) const override;
   bool IsFillingEnabled(const GURL& url) const override;
   bool IsFillingFallbackEnabled(const GURL& url) const override;
-  void PostHSTSQueryForHost(
-      const url::Origin& origin,
-      password_manager::HSTSCallback callback) const override;
   bool PromptUserToSaveOrUpdatePassword(
       std::unique_ptr<password_manager::PasswordFormManagerForUI> form_to_save,
       bool is_update) override;
@@ -106,7 +103,7 @@ class ChromePasswordManagerClient
   bool PromptUserToChooseCredentials(
       std::vector<std::unique_ptr<autofill::PasswordForm>> local_forms,
       const url::Origin& origin,
-      const CredentialsCallback& callback) override;
+      CredentialsCallback callback) override;
   void ShowTouchToFill(
       password_manager::PasswordManagerDriver* driver) override;
   // Returns a pointer to the BiometricAuthenticator which is created on demand.
@@ -141,6 +138,7 @@ class ChromePasswordManagerClient
       const password_manager::PasswordFormManagerForUI* form_manager) override;
   void NotifyUserCredentialsWereLeaked(
       password_manager::CredentialLeakType leak_type,
+      password_manager::CompromisedSitesCount saved_sites,
       const GURL& origin,
       const base::string16& username) override;
   void TriggerReauthForPrimaryAccount(
@@ -207,6 +205,7 @@ class ChromePasswordManagerClient
   favicon::FaviconService* GetFaviconService() override;
   signin::IdentityManager* GetIdentityManager() override;
   scoped_refptr<network::SharedURLLoaderFactory> GetURLLoaderFactory() override;
+  network::mojom::NetworkContext* GetNetworkContext() const override;
   bool IsUnderAdvancedProtection() const override;
   void UpdateFormManagers() override;
   void NavigateToManagePasswordsPage(
@@ -292,8 +291,8 @@ class ChromePasswordManagerClient
 #if !defined(OS_ANDROID)
   void OnPaste() override;
 #endif
-
   void RenderFrameCreated(content::RenderFrameHost* render_frame_host) override;
+  void RenderFrameDeleted(content::RenderFrameHost* render_frame_host) override;
 
   // content::RenderWidgetHost::InputEventObserver overrides.
   void OnInputEvent(const blink::WebInputEvent&) override;

@@ -14,18 +14,24 @@
 
 #include "base/callback_forward.h"
 #include "base/containers/circular_deque.h"
+#include "base/containers/flat_set.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
 #include "base/strings/string16.h"
+#include "content/shell/common/web_test/web_test.mojom.h"
+#include "content/shell/common/web_test/web_test_bluetooth_fake_adapter_setter.mojom.h"
+#include "content/shell/renderer/web_test/gamepad_controller.h"
+#include "content/shell/renderer/web_test/layout_dump.h"
+#include "content/shell/renderer/web_test/mock_content_settings_client.h"
 #include "content/shell/renderer/web_test/mock_screen_orientation_client.h"
 #include "content/shell/renderer/web_test/web_test_runtime_flags.h"
 #include "third_party/blink/public/platform/web_effective_connection_type.h"
+#include "third_party/blink/public/platform/web_url.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "v8/include/v8.h"
 
-class GURL;
 class SkBitmap;
 
 namespace base {
@@ -35,16 +41,9 @@ class DictionaryValue;
 namespace blink {
 class WebContentSettingsClient;
 class WebFrame;
-class WebLocalFrame;
 class WebString;
-class WebTextCheckClient;
 class WebView;
 }  // namespace blink
-
-namespace content {
-class RenderView;
-struct TestPreferences;
-}
 
 namespace gin {
 class ArrayBufferView;
@@ -53,14 +52,15 @@ class Arguments;
 
 namespace content {
 class BlinkTestRunner;
-class MockContentSettingsClient;
 class MockScreenOrientationClient;
 class RenderFrame;
+class RenderView;
 class SpellCheckClient;
-class TestInterfaces;
+class TestRunnerBindings;
 class WebFrameTestProxy;
 class WebWidgetTestProxy;
 class WebViewTestProxy;
+struct TestPreferences;
 
 // TestRunner class currently has dual purpose:
 // 1. It implements TestRunner javascript bindings for "global" / "ambient".
@@ -71,26 +71,22 @@ class WebViewTestProxy;
 //    - TestRunner.SetTextSubpixelPositioning (directly interacts with product).
 // 2. It manages global test state.  Example:
 //    - Tracking topLoadingFrame that can finish the test when it loads.
-//    - WorkQueue holding load requests from the TestInterfaces
+//    - WorkQueue holding load requests from web tests.
 //    - WebTestRuntimeFlags
 class TestRunner {
  public:
-  explicit TestRunner(TestInterfaces*);
+  TestRunner();
   virtual ~TestRunner();
 
   void Install(WebFrameTestProxy* frame, SpellCheckClient* spell_check);
 
-  void SetDelegate(BlinkTestRunner*);
-  void SetMainView(blink::WebView*);
-
-  // Resets state on the TestRunner for the next test.
+  // Resets global TestRunner state for the next test.
   void Reset();
+
   // Resets state on the |web_view_test_proxy| for the next test.
   void ResetWebView(WebViewTestProxy* web_view_test_proxy);
   // Resets state on the |web_widget_test_proxy| for the next test.
   void ResetWebWidget(WebWidgetTestProxy* web_widget_test_proxy);
-  // Resets state on the |web_frame_test_proxy| for the next test.
-  void ResetWebFrame(WebFrameTestProxy* web_frame_test_proxy);
 
   void SetTestIsRunning(bool);
   bool TestIsRunning() const { return test_is_running_; }
@@ -103,13 +99,20 @@ class TestRunner {
   // the middle of blink call stacks that have inconsistent state.
   void FinishTestIfReady();
 
+  // Track the set of all main frames in the process, which is also the set of
+  // windows rooted in this process.
+  void AddMainFrame(WebFrameTestProxy* frame);
+  void RemoveMainFrame(WebFrameTestProxy* frame);
+
+  // Track the set of all RenderViews in the process, which includes cross-site
+  // frames/windows accessible from this process but homed in a different
+  // renderer and parts of any windows' frame trees that share the same site.
+  void AddRenderView(WebViewTestProxy* view);
+  void RemoveRenderView(WebViewTestProxy* view);
+
   // Returns a mock WebContentSettings that is used for web tests. An
   // embedder should use this for all WebViews it creates.
-  blink::WebContentSettingsClient* GetWebContentSettings() const;
-
-  // Returns a mock WebTextCheckClient that is used for web tests. An
-  // embedder should use this for all WebLocalFrames it creates.
-  blink::WebTextCheckClient* GetWebTextCheckClient() const;
+  blink::WebContentSettingsClient* GetWebContentSettings();
 
   // After BlinkTestRunner::TestFinished was invoked, the following methods
   // can be used to determine what kind of dump the main WebViewTestProxy can
@@ -120,29 +123,24 @@ class TestRunner {
   bool ShouldDumpAsAudio() const;
   // Gets the audio test output for when audio test results are requested by
   // the current test.
-  void GetAudioData(std::vector<unsigned char>* buffer_view) const;
+  const std::vector<uint8_t>& GetAudioData() const;
 
   // Reports if tests requested a recursive layout dump of all frames
   // (i.e. by calling testRunner.dumpChildFramesAsText() from javascript).
   bool IsRecursiveLayoutDumpRequested();
-
-  // Dumps layout of |frame| using the mode requested by the current test
-  // (i.e. text mode if testRunner.dumpAsText() was called from javascript).
-  std::string DumpLayout(blink::WebLocalFrame* frame);
 
   // Returns true if the selection window should be painted onto captured
   // pixels.
   bool ShouldDumpSelectionRect() const;
 
   // Returns false if the browser should capture the pixel output, true if it
-  // can be done locally in the renderer via DumpPixelsAsync().
+  // can be done locally in the renderer via DumpPixelsInRenderer().
   bool CanDumpPixelsFromRenderer() const;
 
   // Snapshots the content of |render_view| using the mode requested by the
   // current test and calls |callback| with the result.  Caller needs to ensure
   // that |render_view| stays alive until |callback| is called.
-  void DumpPixelsAsync(content::RenderView* render_view,
-                       base::OnceCallback<void(const SkBitmap&)> callback);
+  SkBitmap DumpPixelsInRenderer(content::RenderView* render_view);
 
   // Replicates changes to web test runtime flags (i.e. changes that happened in
   // another renderer). See also BlinkTestRunner::OnWebTestRuntimeFlagsChanged.
@@ -161,6 +159,8 @@ class TestRunner {
   // Returns true if pixel results should be generated at the end of the test.
   bool ShouldGeneratePixelResults();
 
+  TextResultType ShouldGenerateTextResults();
+
   // Activate the window holding the given main frame, and set focus on the
   // frame's widget.
   void FocusWindow(RenderFrame* main_frame, bool focus);
@@ -173,14 +173,10 @@ class TestRunner {
   std::string CustomDumpText() const;
   void ShowDevTools(const std::string& settings,
                     const std::string& frontend_url);
-  void SetV8CacheDisabled(bool);
-  void SetShouldDumpAsText(bool);
-  void SetShouldDumpAsMarkup(bool);
   void SetShouldDumpAsLayout(bool);
   void SetCustomTextOutput(const std::string& text);
   void SetShouldGeneratePixelResults(bool);
   void SetShouldDumpFrameLoadCallbacks(bool);
-  void SetShouldEnableViewSource(bool);
   bool ShouldDumpEditingCallbacks() const;
   bool ShouldDumpFrameLoadCallbacks() const;
   bool ShouldDumpPingLoaderCallbacks() const;
@@ -211,7 +207,6 @@ class TestRunner {
   // requests in WorkQueue.
   void RemoveLoadingFrame(blink::WebFrame* frame);
 
-  blink::WebFrame* MainFrame() const;
   void PolicyDelegateDone();
   bool PolicyDelegateEnabled() const;
   bool PolicyDelegateIsPermissive() const;
@@ -225,7 +220,24 @@ class TestRunner {
   // to test output.
   void SetDumpConsoleMessages(bool value);
 
-  bool ShouldDumpJavaScriptDialogs() const;
+  // The following trigger navigations on the main WebView.
+  void GoToOffset(int offset);
+  void Reload();
+  void LoadURLForFrame(const GURL& url, const std::string& frame_name);
+
+  // Add a message to the text dump for the web test.
+  void PrintMessage(const std::string& message);
+  // Add a message to stderr (not saved to expected output files, for debugging
+  // only).
+  void PrintMessageToStderr(const std::string& message);
+
+  // Register a new isolated filesystem with the given files, and return the
+  // new filesystem id.
+  blink::WebString RegisterIsolatedFileSystem(
+      const std::vector<base::FilePath>& file_paths);
+
+  // Convert the provided relative path into an absolute path.
+  blink::WebString GetAbsoluteWebStringFromUTF8Path(const std::string& path);
 
   blink::WebEffectiveConnectionType effective_connection_type() const {
     return effective_connection_type_;
@@ -237,12 +249,13 @@ class TestRunner {
     virtual ~WorkItem() {}
 
     // Returns true if this started a load.
-    virtual bool Run(BlinkTestRunner*, blink::WebView*) = 0;
+    virtual bool Run(TestRunner*) = 0;
   };
 
  private:
   friend class TestRunnerBindings;
   friend class WorkQueue;
+  friend class BlinkTestRunner;  // For the mojom::WebTestControlHost.
 
   // Helper class for managing events queued by methods like QueueLoad or
   // QueueScript.
@@ -273,22 +286,35 @@ class TestRunner {
     base::WeakPtrFactory<WorkQueue> weak_factory_{this};
   };
 
+  // If the main test window's main frame is hosted in this renderer process,
+  // then this will return it. Otherwise, it is in another process and this
+  // returns null.
+  WebFrameTestProxy* FindInProcessMainWindowMainFrame();
+
   ///////////////////////////////////////////////////////////////////////////
   // Methods dealing with the test logic
 
   // By default, tests end when page load is complete. These methods are used
   // to delay the completion of the test until NotifyDone is called.
-  void NotifyDone();
   void WaitUntilDone();
+  void NotifyDone();
+
+  // When there are no conditions left to wait for, this is called to cause the
+  // test to end, collect results, and inform the browser.
+  void FinishTest();
 
   // Methods for adding actions to the work queue. Used in conjunction with
   // WaitUntilDone/NotifyDone above.
   void QueueBackNavigation(int how_far_back);
   void QueueForwardNavigation(int how_far_forward);
   void QueueReload();
-  void QueueLoadingScript(const std::string& script);
-  void QueueNonLoadingScript(const std::string& script);
-  void QueueLoad(const std::string& url, const std::string& target);
+  void QueueLoadingScript(const std::string& script,
+                          base::WeakPtr<TestRunnerBindings> bindings);
+  void QueueNonLoadingScript(const std::string& script,
+                             base::WeakPtr<TestRunnerBindings> bindings);
+  void QueueLoad(const GURL& current_url,
+                 const std::string& relative_url,
+                 const std::string& target);
 
   // Called from the TestRunnerBindings to inform that the test has modified
   // the TestPreferences. This will update the WebkitPreferences in the renderer
@@ -304,10 +330,9 @@ class TestRunner {
   // Delays completion of the test until the policy delegate runs.
   void WaitForPolicyDelegate();
 
-  // TODO(danakj): This is the count of in-process RenderViewHosts, not the
-  // count of windows. It's only a window count if the page is entire in one
-  // site and any page opened in a window has only a single site each.
-  int WindowCount();
+  // This is the count of windows which have their main frame in this renderer
+  // process. A cross-origin window would not appear in this count.
+  int InProcessWindowCount();
 
   // Allows web tests to manage origins' allow list.
   void AddOriginAccessAllowListEntry(const std::string& source_origin,
@@ -331,10 +356,11 @@ class TestRunner {
   // http://crbug.com/309760 for the plan.
   void UseUnfortunateSynchronousResizeMode();
 
-  void SetMockScreenOrientation(const std::string& orientation);
-  void DisableMockScreenOrientation();
-
-  void SetPopupBlockingEnabled(bool block_popups);
+  // Set the mock orientation on |view| to |orientation|.
+  void SetMockScreenOrientation(WebViewTestProxy* view,
+                                const std::string& orientation);
+  // Disable any mock orientation on |view| that is set.
+  void DisableMockScreenOrientation(WebViewTestProxy* view);
 
   // Modify accept_languages in blink::mojom::RendererPreferences.
   void SetAcceptLanguages(const std::string& accept_languages);
@@ -417,19 +443,8 @@ class TestRunner {
   void SetImagesAllowed(bool allowed);
   void SetScriptsAllowed(bool allowed);
   void SetStorageAllowed(bool allowed);
-  void SetPluginsAllowed(bool allowed);
   void SetAllowRunningOfInsecureContent(bool allowed);
   void DumpPermissionClientCallbacks();
-
-  // Sets up a mock DocumentSubresourceFilter to disallow subsequent subresource
-  // loads within the current document with the given path |suffixes|. The
-  // filter is created and injected even if |suffixes| is empty. If |suffixes|
-  // contains the empty string, all subresource loads will be disallowed. If
-  // |block_subresources| is false, matching resources will not be blocked but
-  // instead marked as matching a disallowed resource.
-  void SetDisallowedSubresourcePathSuffixes(
-      const std::vector<std::string>& suffixes,
-      bool block_subresources);
 
   // This function sets a flag that tells the test runner to print out a text
   // representation of the back/forward list. It ignores all arguments.
@@ -476,72 +491,27 @@ class TestRunner {
   void SetEffectiveConnectionType(
       blink::WebEffectiveConnectionType connection_type);
 
-  ///////////////////////////////////////////////////////////////////////////
-  // Methods forwarding to the BlinkTestRunner.
-
-  // Shows DevTools window.
-  void ShowWebInspector(const std::string& str,
-                        const std::string& frontend_url);
-  void CloseWebInspector();
-
-  // Inspect chooser state
-  bool IsChooserShown();
-
-  // Allows web tests to exec scripts at WebInspector side.
-  void EvaluateInWebInspector(int call_id, const std::string& script);
-
-  // Clears all databases.
-  void ClearAllDatabases();
-  // Sets the default quota for all origins
-  void SetDatabaseQuota(int quota);
-
-  // Sets the cookie policy to:
-  // - allow all cookies when |block| is false
-  // - block only third-party cookies when |block| is true
-  void SetBlockThirdPartyCookies(bool block);
-
-  // Sets the permission's |name| to |value| for a given {origin, embedder}
-  // tuple.
-  void SetPermission(const std::string& name,
-                     const std::string& value,
-                     const GURL& origin,
-                     const GURL& embedding_origin);
-
-  // Calls setlocale(LC_ALL, ...) for a specified locale.
-  // Resets between tests.
-  void SetPOSIXLocale(const std::string& locale);
-
-  // Simulates a click on a Web Notification.
-  void SimulateWebNotificationClick(
-      const std::string& title,
-      const base::Optional<int>& action_index,
-      const base::Optional<base::string16>& reply);
-
-  // Simulates closing a Web Notification.
-  void SimulateWebNotificationClose(const std::string& title, bool by_user);
-
-  // Simulates a user deleting a content index entry.
-  void SimulateWebContentIndexDelete(const std::string& id);
-
-  // Returns the absolute path to a directory this test can write data in. This
-  // returns the path to a fresh empty directory every time this method is
-  // called. Additionally when this method is called any previously created
-  // directories will be deleted.
-  base::FilePath GetWritableDirectory();
-
-  // Sets the path that should be returned when the test shows a file dialog.
-  void SetFilePathForMockFileDialog(const base::FilePath& path);
-
-  // Takes care of notifying the delegate after a change to web test runtime
+  // Takes care of notifying the browser after a change to web test runtime
   // flags.
   void OnWebTestRuntimeFlagsChanged();
 
   ///////////////////////////////////////////////////////////////////////////
   // Internal helpers
 
-  bool IsFramePartOfMainTestWindow(blink::WebFrame*) const;
+  mojo::AssociatedRemote<mojom::WebTestControlHost>&
+  GetWebTestControlHostRemote();
+  void HandleWebTestControlHostDisconnected();
+  mojo::AssociatedRemote<mojom::WebTestControlHost>
+      web_test_control_host_remote_;
 
-  void CheckResponseMimeType();
+  mojo::AssociatedRemote<mojom::WebTestClient>& GetWebTestClientRemote();
+  void HandleWebTestClientDisconnected();
+  mojo::AssociatedRemote<mojom::WebTestClient> web_test_client_remote_;
+
+  mojom::WebTestBluetoothFakeAdapterSetter& GetBluetoothFakeAdapterSetter();
+  void HandleBluetoothFakeAdapterSetterDisconnected();
+  mojo::Remote<mojom::WebTestBluetoothFakeAdapterSetter>
+      bluetooth_fake_adapter_setter_;
 
   bool test_is_running_ = false;
 
@@ -549,9 +519,6 @@ class TestRunner {
 
   // Bound variable to return the name of this platform (chromium).
   std::string platform_name_;
-
-  // Bound variable counting the number of top URLs visited.
-  int web_history_item_count_ = 0;
 
   // Flags controlling what content gets dumped as a layout text result.
   WebTestRuntimeFlags web_test_runtime_flags_;
@@ -575,33 +542,32 @@ class TestRunner {
   bool clear_referrer_ = false;
 
   // WAV audio data is stored here.
-  std::vector<unsigned char> audio_data_;
+  std::vector<uint8_t> audio_data_;
 
-  TestInterfaces* test_interfaces_;
-  BlinkTestRunner* blink_test_runner_ = nullptr;
-  blink::WebView* main_view_ = nullptr;
+  base::flat_set<WebFrameTestProxy*> main_frames_;
+  // The set of all render views in this renderer process. This may include
+  // cross-site windows accessible from this process, or parts of same-site
+  // windows opened from any renderer process.
+  base::flat_set<WebViewTestProxy*> render_views_;
 
   // This is non empty when a load is in progress.
   std::vector<blink::WebFrame*> loading_frames_;
+  // We do not want the test to end until the main frame finishes loading. This
+  // starts as true at the beginning of the test, and will be set to false once
+  // we run out of frames to load at any time.
+  bool main_frame_loaded_ = false;
   // When a loading task is started, this bool is set until all loading_frames_
   // are completed and removed. This bool becomes true earlier than
-  // loading_frames_ becomes non-empty. Starts as true for the initial load
-  // which does not come from the WorkQueue.
-  bool running_load_ = true;
+  // loading_frames_ becomes non-empty.
+  bool frame_will_start_load_ = true;
   // When NotifyDone() occurs, if loading is still working, it is delayed, and
   // this bool tracks that NotifyDone() was called. This differentiates from a
   // test that was not waiting for NotifyDone() at all.
   bool did_notify_done_ = false;
 
-  // WebContentSettingsClient mock object.
-  std::unique_ptr<MockContentSettingsClient> mock_content_settings_client_;
-
-  bool use_mock_theme_ = false;
-
+  MockContentSettingsClient mock_content_settings_client_;
   MockScreenOrientationClient mock_screen_orientation_client_;
-
-  // Number of currently active color choosers.
-  int chooser_count_ = 0;
+  GamepadController gamepad_controller_;
 
   // Captured drag image.
   SkBitmap drag_image_;
@@ -614,9 +580,6 @@ class TestRunner {
   // An effective connection type settable by web tests.
   blink::WebEffectiveConnectionType effective_connection_type_ =
       blink::WebEffectiveConnectionType::kTypeUnknown;
-
-  // Forces v8 compilation cache to be disabled (used for inspector tests).
-  bool disable_v8_cache_ = false;
 
   base::WeakPtrFactory<TestRunner> weak_factory_{this};
 

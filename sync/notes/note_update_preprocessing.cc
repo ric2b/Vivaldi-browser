@@ -137,32 +137,34 @@ void AdaptTitleForNote(const sync_pb::SyncEntity& update_entity,
   }
 }
 
-void AdaptGuidForNote(const sync_pb::SyncEntity& update_entity,
+bool AdaptGuidForNote(const sync_pb::SyncEntity& update_entity,
                       sync_pb::EntitySpecifics* specifics) {
   DCHECK(specifics);
   // Tombstones and permanent entities don't have a GUID.
   if (update_entity.deleted() ||
       !update_entity.server_defined_unique_tag().empty()) {
-    return;
+    return false;
   }
   // Legacy clients don't populate the guid field in the NotesSpecifics, so
   // we use the originator_client_item_id instead, if it is a valid GUID.
   // Otherwise, we leave the field empty.
-  if (!specifics->notes().has_guid()) {
-    if (base::IsValidGUID(update_entity.originator_client_item_id())) {
-      // Notes created around 2016, between [M44..M52) use an uppercase GUID
-      // as originator client item ID, so it needs to be lowercased to adhere to
-      // the invariant that GUIDs in specifics are canonicalized.
-      specifics->mutable_notes()->set_guid(
-          base::ToLowerASCII(update_entity.originator_client_item_id()));
-      DCHECK(base::IsValidGUIDOutputString(specifics->notes().guid()));
-    } else {
-      specifics->mutable_notes()->set_guid(
-          InferGuidForLegacyNote(update_entity.originator_cache_guid(),
-                                 update_entity.originator_client_item_id()));
-      DCHECK(base::IsValidGUIDOutputString(specifics->notes().guid()));
-    }
+  if (specifics->notes().has_guid()) {
+    return false;
   }
+  if (base::IsValidGUID(update_entity.originator_client_item_id())) {
+    // Notes created around 2016, between [M44..M52) use an uppercase GUID
+    // as originator client item ID, so it needs to be lowercased to adhere to
+    // the invariant that GUIDs in specifics are canonicalized.
+    specifics->mutable_notes()->set_guid(
+        base::ToLowerASCII(update_entity.originator_client_item_id()));
+    DCHECK(base::IsValidGUIDOutputString(specifics->notes().guid()));
+  } else {
+    specifics->mutable_notes()->set_guid(
+        InferGuidForLegacyNote(update_entity.originator_cache_guid(),
+                               update_entity.originator_client_item_id()));
+    DCHECK(base::IsValidGUIDOutputString(specifics->notes().guid()));
+  }
+  return true;
 }
 
 std::string InferGuidForLegacyNoteForTesting(
@@ -171,5 +173,4 @@ std::string InferGuidForLegacyNoteForTesting(
   return InferGuidForLegacyNote(originator_cache_guid,
                                 originator_client_item_id);
 }
-
 }  // namespace syncer

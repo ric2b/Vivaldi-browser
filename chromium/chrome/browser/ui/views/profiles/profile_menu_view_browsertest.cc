@@ -5,6 +5,7 @@
 #include <stddef.h>
 
 #include "base/command_line.h"
+#include "base/feature_list.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/path_service.h"
@@ -50,6 +51,7 @@
 #include "components/signin/public/base/signin_pref_names.h"
 #include "components/signin/public/identity_manager/consent_level.h"
 #include "components/signin/public/identity_manager/identity_test_utils.h"
+#include "components/sync/driver/sync_driver_switches.h"
 #include "components/sync/driver/sync_service.h"
 #include "components/sync/driver/sync_user_settings.h"
 #include "components/sync/test/fake_server/fake_server_network_resources.h"
@@ -112,7 +114,7 @@ Profile* CreateTestingProfile(const base::FilePath& path) {
   std::unique_ptr<Profile> profile =
       Profile::CreateProfile(path, nullptr, Profile::CREATE_MODE_SYNCHRONOUS);
   Profile* profile_ptr = profile.get();
-  profile_manager->RegisterTestingProfile(std::move(profile), true, false);
+  profile_manager->RegisterTestingProfile(std::move(profile), true);
   EXPECT_EQ(starting_number_of_profiles + 1,
             profile_manager->GetNumberOfProfiles());
   return profile_ptr;
@@ -144,7 +146,7 @@ class ProfileMenuViewTestBase {
     ASSERT_TRUE(profile_menu_view());
     profile_menu_view()->set_close_on_deactivate(false);
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
     base::RunLoop().RunUntilIdle();
 #else
     // If possible wait until the menu is active.
@@ -322,7 +324,13 @@ IN_PROC_BROWSER_TEST_F(ProfileMenuViewSignoutTest, OpenLogoutTab) {
 
 // Checks that the NTP is navigated to the logout URL, instead of creating
 // another tab.
-IN_PROC_BROWSER_TEST_F(ProfileMenuViewSignoutTest, SignoutFromNTP) {
+// Flaky on Linux, at least. crbug.com/1116606
+#if defined(OS_LINUX)
+#define MAYBE_SignoutFromNTP DISABLED_SignoutFromNTP
+#else
+#define MAYBE_SignoutFromNTP SignoutFromNTP
+#endif
+IN_PROC_BROWSER_TEST_F(ProfileMenuViewSignoutTest, MAYBE_SignoutFromNTP) {
   // Start from the NTP.
   ui_test_utils::NavigateToURL(browser(), GURL(chrome::kChromeUINewTabURL));
   TabStripModel* tab_strip = browser()->tab_strip_model();
@@ -664,8 +672,15 @@ constexpr ProfileMenuViewBase::ActionableItem kActionableItems_SyncError[] = {
     // there are no other buttons at the end.
     ProfileMenuViewBase::ActionableItem::kPasswordsButton};
 
+#if defined(OS_WIN)
+// TODO(crbug.com/1021930): Failure on Windows
+#define MAYBE_ProfileMenuClickTest_SyncError \
+  DISABLED_ProfileMenuClickTest_SyncError
+#else
+#define MAYBE_ProfileMenuClickTest_SyncError ProfileMenuClickTest_SyncError
+#endif
 PROFILE_MENU_CLICK_TEST(kActionableItems_SyncError,
-                        ProfileMenuClickTest_SyncError) {
+                        MAYBE_ProfileMenuClickTest_SyncError) {
   ASSERT_TRUE(sync_harness()->SignInPrimaryAccount());
   // Check that the setup was successful.
   ASSERT_TRUE(identity_manager()->HasPrimaryAccount());
@@ -701,8 +716,10 @@ PROFILE_MENU_CLICK_TEST(kActionableItems_SyncPaused,
   sync_harness()->EnterSyncPausedStateForPrimaryAccount();
   // Check that the setup was successful.
   ASSERT_TRUE(identity_manager()->HasPrimaryAccount());
-  ASSERT_FALSE(sync_service()->HasDisableReason(
-      syncer::SyncService::DISABLE_REASON_PAUSED));
+  if (base::FeatureList::IsEnabled(switches::kStopSyncInPausedState)) {
+    ASSERT_EQ(syncer::SyncService::TransportState::PAUSED,
+              sync_service()->GetTransportState());
+  }
 
   RunTest();
 }
@@ -756,7 +773,7 @@ constexpr ProfileMenuViewBase::ActionableItem
         ProfileMenuViewBase::ActionableItem::kPasswordsButton};
 
 // TODO(https://crbug.com/1021930) flakey on Linux and Windows.
-#if defined(OS_LINUX) || defined(OS_WIN)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_WIN)
 #define MAYBE_ProfileMenuClickTest_WithUnconsentedPrimaryAccount \
   DISABLED_ProfileMenuClickTest_WithUnconsentedPrimaryAccount
 #else

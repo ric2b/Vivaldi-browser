@@ -13,7 +13,7 @@ import org.chromium.base.Log;
 import org.chromium.chrome.browser.ShortcutHelper;
 import org.chromium.chrome.browser.ShortcutSource;
 import org.chromium.chrome.browser.browserservices.BrowserServicesIntentDataProvider;
-import org.chromium.content_public.common.ScreenOrientationValues;
+import org.chromium.device.mojom.ScreenOrientationLockType;
 import org.chromium.webapk.lib.common.splash.SplashLayout;
 
 /**
@@ -54,7 +54,7 @@ public class WebappIntentDataProviderFactory {
      * @param intent Intent containing info about the app.
      */
     public static BrowserServicesIntentDataProvider create(Intent intent) {
-        String id = WebappIntentUtils.getId(intent);
+        String id = WebappIntentUtils.getIdForHomescreenShortcut(intent);
         String url = IntentUtils.safeGetStringExtra(intent, ShortcutHelper.EXTRA_URL);
         if (id == null || url == null) {
             Log.e(TAG, "Incomplete data provided: " + id + ", " + url);
@@ -78,7 +78,7 @@ public class WebappIntentDataProviderFactory {
         int displayMode = IntentUtils.safeGetIntExtra(
                 intent, ShortcutHelper.EXTRA_DISPLAY_MODE, WebDisplayMode.STANDALONE);
         int orientation = IntentUtils.safeGetIntExtra(
-                intent, ShortcutHelper.EXTRA_ORIENTATION, ScreenOrientationValues.DEFAULT);
+                intent, ShortcutHelper.EXTRA_ORIENTATION, ScreenOrientationLockType.DEFAULT);
         int source = sourceFromIntent(intent);
         Integer backgroundColor = WebappIntentUtils.colorFromLongColor(
                 IntentUtils.safeGetLongExtra(intent, ShortcutHelper.EXTRA_BACKGROUND_COLOR,

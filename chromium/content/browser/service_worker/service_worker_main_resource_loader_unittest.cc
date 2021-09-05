@@ -105,10 +105,18 @@ class FetchEventServiceWorker : public FakeServiceWorker {
  public:
   FetchEventServiceWorker(
       EmbeddedWorkerTestHelper* helper,
-      FakeEmbeddedWorkerInstanceClient* embedded_worker_instance_client)
+      FakeEmbeddedWorkerInstanceClient* embedded_worker_instance_client,
+      BrowserTaskEnvironment* task_environment)
       : FakeServiceWorker(helper),
+        task_environment_(task_environment),
         embedded_worker_instance_client_(embedded_worker_instance_client) {}
   ~FetchEventServiceWorker() override = default;
+
+  // Tells this worker to dispatch a fetch event 1s after the fetch event is
+  // received.
+  void DispatchAfter1sDelay() {
+    response_mode_ = ResponseMode::kDispatchAfter1sDelay;
+  }
 
   // Tells this worker to respond to fetch events with the specified blob.
   void RespondWithBlob(blink::mojom::SerializedBlobPtr blob) {
@@ -212,6 +220,10 @@ class FetchEventServiceWorker : public FakeServiceWorker {
 
   void SetResponseTime(base::Time time) { response_time_ = time; }
 
+  void WaitForTransferInstalledScript() {
+    embedded_worker_instance_client_->WaitForTransferInstalledScript();
+  }
+
  protected:
   void DispatchFetchEventForMainResource(
       blink::mojom::DispatchFetchEventParamsPtr params,
@@ -235,6 +247,12 @@ class FetchEventServiceWorker : public FakeServiceWorker {
         response_callback(std::move(pending_response_callback));
     switch (response_mode_) {
       case ResponseMode::kDefault:
+        FakeServiceWorker::DispatchFetchEventForMainResource(
+            std::move(params), response_callback.Unbind(),
+            std::move(finish_callback));
+        break;
+      case ResponseMode::kDispatchAfter1sDelay:
+        task_environment_->AdvanceClock(base::TimeDelta::FromSeconds(1));
         FakeServiceWorker::DispatchFetchEventForMainResource(
             std::move(params), response_callback.Unbind(),
             std::move(finish_callback));
@@ -316,6 +334,7 @@ class FetchEventServiceWorker : public FakeServiceWorker {
  private:
   enum class ResponseMode {
     kDefault,
+    kDispatchAfter1sDelay,
     kBlob,
     kStream,
     kFallbackResponse,
@@ -326,6 +345,8 @@ class FetchEventServiceWorker : public FakeServiceWorker {
     kRedirect,
     kHeaders
   };
+
+  BrowserTaskEnvironment* const task_environment_;
 
   ResponseMode response_mode_ = ResponseMode::kDefault;
   scoped_refptr<network::ResourceRequestBody> request_body_;
@@ -387,14 +408,14 @@ const char kHistogramMainResourceFetchEvent[] =
 class ServiceWorkerMainResourceLoaderTest : public testing::Test {
  public:
   ServiceWorkerMainResourceLoaderTest()
-      : task_environment_(BrowserTaskEnvironment::IO_MAINLOOP) {}
+      : task_environment_(BrowserTaskEnvironment::IO_MAINLOOP,
+                          base::test::TaskEnvironment::TimeSource::MOCK_TIME) {}
   ~ServiceWorkerMainResourceLoaderTest() override = default;
 
   void SetUp() override {
     helper_ = std::make_unique<EmbeddedWorkerTestHelper>(base::FilePath());
 
     // Create an active service worker.
-    storage()->LazyInitializeForTest();
     blink::mojom::ServiceWorkerRegistrationOptions options;
     options.scope = GURL("https://example.com/");
     registration_ = CreateNewServiceWorkerRegistration(
@@ -404,9 +425,9 @@ class ServiceWorkerMainResourceLoaderTest : public testing::Test {
         GURL("https://example.com/service_worker.js"),
         blink::mojom::ScriptType::kClassic);
     std::vector<storage::mojom::ServiceWorkerResourceRecordPtr> records;
-    records.push_back(WriteToDiskCacheSync(storage(), version_->script_url(),
-                                           {} /* headers */, "I'm the body",
-                                           "I'm the meta data"));
+    records.push_back(WriteToDiskCacheSync(
+        GetStorageControl(), version_->script_url(), {} /* headers */,
+        "I'm the body", "I'm the meta data"));
     version_->script_cache_map()->SetResources(records);
     version_->set_fetch_handler_existence(
         ServiceWorkerVersion::FetchHandlerExistence::EXISTS);
@@ -430,11 +451,29 @@ class ServiceWorkerMainResourceLoaderTest : public testing::Test {
             helper_.get());
     service_worker_ =
         helper_->AddNewPendingServiceWorker<FetchEventServiceWorker>(
-            helper_.get(), client);
+            helper_.get(), client, &task_environment_);
+
+    // Wait for main script response is set to |version| because
+    // ServiceWorkerMainResourceLoader needs the main script response to
+    // create a response. The main script response is set when the first
+    // TransferInstalledScript().
+    {
+      base::Optional<blink::ServiceWorkerStatusCode> status;
+      base::RunLoop loop;
+      version_->StartWorker(
+          ServiceWorkerMetrics::EventType::UNKNOWN,
+          ReceiveServiceWorkerStatus(&status, loop.QuitClosure()));
+      loop.Run();
+      ASSERT_EQ(blink::ServiceWorkerStatusCode::kOk, status.value());
+      service_worker_->WaitForTransferInstalledScript();
+    }
   }
 
   ServiceWorkerRegistry* registry() { return helper_->context()->registry(); }
-  ServiceWorkerStorage* storage() { return helper_->context()->storage(); }
+  mojo::Remote<storage::mojom::ServiceWorkerStorageControl>&
+  GetStorageControl() {
+    return helper_->context()->GetStorageControl();
+  }
 
   // Starts a request. After calling this, the request is ongoing and the
   // caller can use functions like client_.RunUntilComplete() to wait for
@@ -504,7 +543,7 @@ class ServiceWorkerMainResourceLoaderTest : public testing::Test {
     EXPECT_FALSE(info.load_timing.service_worker_fetch_start.is_null());
     EXPECT_FALSE(
         info.load_timing.service_worker_respond_with_settled.is_null());
-    EXPECT_LT(info.load_timing.service_worker_start_time,
+    EXPECT_LE(info.load_timing.service_worker_start_time,
               info.load_timing.service_worker_ready_time);
     EXPECT_LE(info.load_timing.service_worker_ready_time,
               info.load_timing.service_worker_fetch_start);
@@ -1034,6 +1073,28 @@ TEST_F(ServiceWorkerMainResourceLoaderTest, CancelNavigationDuringFetchEvent) {
 
   client_.RunUntilComplete();
   EXPECT_EQ(net::ERR_ABORTED, client_.completion_status().error_code);
+}
+
+TEST_F(ServiceWorkerMainResourceLoaderTest, TimingInfo) {
+  service_worker_->DispatchAfter1sDelay();
+
+  // Perform the request.
+  StartRequest(CreateRequest());
+  client_.RunUntilComplete();
+
+  // The response header's timing is recorded appropriately.
+  auto& info = client_.response_head();
+  EXPECT_EQ(200, info->headers->response_code());
+  ExpectResponseInfo(*info, *CreateResponseInfoFromServiceWorker());
+  EXPECT_EQ(base::TimeDelta::FromSeconds(1),
+            info->load_timing.service_worker_ready_time -
+                info->load_timing.service_worker_start_time);
+  EXPECT_EQ(base::TimeDelta::FromSeconds(1),
+            info->load_timing.service_worker_fetch_start -
+                info->load_timing.service_worker_start_time);
+  EXPECT_EQ(base::TimeDelta::FromSeconds(1),
+            info->load_timing.service_worker_respond_with_settled -
+                info->load_timing.service_worker_start_time);
 }
 
 }  // namespace service_worker_main_resource_loader_unittest

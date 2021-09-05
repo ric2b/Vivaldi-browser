@@ -36,11 +36,11 @@ class D3D11VideoProcessorProxyUnittest : public ::testing::Test {
   MockD3D11VideoProcessor proc_;
 
   std::unique_ptr<VideoProcessorProxy> CreateProxy() {
-    dev_ = CreateD3D11Mock<D3D11VideoDeviceMock>();
-    ctx_ = CreateD3D11Mock<D3D11DeviceContextMock>();
-    vctx_ = CreateD3D11Mock<D3D11VideoContextMock>();
-    proc_ = CreateD3D11Mock<D3D11VideoProcessorMock>();
-    enumerator_ = CreateD3D11Mock<D3D11VideoProcessorEnumeratorMock>();
+    dev_ = MakeComPtr<D3D11VideoDeviceMock>();
+    ctx_ = MakeComPtr<D3D11DeviceContextMock>();
+    vctx_ = MakeComPtr<D3D11VideoContextMock>();
+    proc_ = MakeComPtr<D3D11VideoProcessorMock>();
+    enumerator_ = MakeComPtr<D3D11VideoProcessorEnumeratorMock>();
 
     EXPECT_CALL(*dev_.Get(), CreateVideoProcessorEnumerator(_, _))
         .WillOnce(SetComPointeeAndReturnOk<1>(enumerator_.Get()));
@@ -86,7 +86,7 @@ TEST_F(D3D11VideoProcessorProxyUnittest, EnsureMethodPassthrough) {
   EXPECT_CALL(*vctx_.Get(),
               VideoProcessorBlt(proc_.Get(), out_view, 6, 7, streams));
 
-  EXPECT_TRUE(proxy->Init(0, 0));
+  EXPECT_TRUE(proxy->Init(0, 0).is_ok());
   proxy->CreateVideoProcessorOutputView(texture, out_desc, nullptr);
   proxy->CreateVideoProcessorInputView(texture, in_desc, nullptr);
   proxy->VideoProcessorBlt(out_view, 6, 7, streams);

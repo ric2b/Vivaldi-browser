@@ -8,21 +8,18 @@
 #include <string>
 
 #include "base/memory/unsafe_shared_memory_region.h"
-#include "browser/thumbnails/capture_page.h"
-#include "components/datasource/vivaldi_data_source_api.h"
+#include "components/capture/capture_page.h"
 #include "content/public/common/drop_data.h"
 #include "extensions/browser/extension_function.h"
 #include "extensions/common/api/extension_types.h"
 #include "extensions/schema/thumbnails.h"
 #include "third_party/skia/include/core/SkBitmap.h"
-
+#include "ui/vivaldi_skia_utils.h"
 
 namespace content {
 class RenderWidgetHostView;
 class WebContents;
 }
-
-using extensions::api::extension_types::ImageFormat;
 
 namespace extensions {
 
@@ -44,7 +41,8 @@ void StartUICapture(content::WebContents* web_contents,
 struct CaptureFormat {
   CaptureFormat();
   ~CaptureFormat();
-  ImageFormat image_format = ImageFormat::IMAGE_FORMAT_PNG;
+  ::vivaldi::skia_utils::ImageFormat image_format =
+      ::vivaldi::skia_utils::ImageFormat::kPNG;
   int encode_quality = 90;
   bool show_file_in_path = false;
   bool copy_to_clipboard = false;
@@ -105,28 +103,23 @@ class ThumbnailsCaptureTabFunction : public ExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(ThumbnailsCaptureTabFunction);
 };
 
-class ThumbnailsCaptureUrlFunction : public ExtensionFunction {
+class ThumbnailsCaptureBookmarkFunction : public ExtensionFunction {
  public:
-  DECLARE_EXTENSION_FUNCTION("thumbnails.captureUrl", THUMBNAILS_CAPTUREURL)
-  ThumbnailsCaptureUrlFunction();
+  DECLARE_EXTENSION_FUNCTION("thumbnails.captureBookmark",
+                             THUMBNAILS_CAPTUREBOOKMARK)
+  ThumbnailsCaptureBookmarkFunction();
 
  private:
-  ~ThumbnailsCaptureUrlFunction() override;
+  ~ThumbnailsCaptureBookmarkFunction() override;
 
   // ExtensionFunction:
   ResponseAction Run() override;
 
-  void OnCaptured(::vivaldi::CapturePage::Result captured);
-
-  void ConvertImageOnWorkerThread(scoped_refptr<VivaldiDataSourcesAPI> api,
-                                  ::vivaldi::CapturePage::Result captured);
-
   void SendResult(bool success);
 
-  int64_t bookmark_id_ = 0;
   GURL url_;
 
-  DISALLOW_COPY_AND_ASSIGN(ThumbnailsCaptureUrlFunction);
+  DISALLOW_COPY_AND_ASSIGN(ThumbnailsCaptureBookmarkFunction);
 };
 
 }  // namespace extensions

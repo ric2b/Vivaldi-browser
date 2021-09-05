@@ -355,8 +355,7 @@ BOOL WaitForKeyboardToAppear() {
   // When keyboard is split, icons are not visible, so we rely on timeout before
   // docking again, because EarlGrey synchronization isn't working properly with
   // the keyboard.
-  [self waitForMatcherToBeVisible:ManualFallbackProfilesIconMatcher()
-                          timeout:base::test::ios::kWaitForUIElementTimeout];
+  [ChromeEarlGrey waitForMatcher:ManualFallbackProfilesIconMatcher()];
 
   DockKeyboard();
 
@@ -432,8 +431,7 @@ BOOL WaitForKeyboardToAppear() {
   // When keyboard is split, icons are not visible, so we rely on timeout before
   // docking again, because EarlGrey synchronization isn't working properly with
   // the keyboard.
-  [self waitForMatcherToBeVisible:ManualFallbackProfilesIconMatcher()
-                          timeout:base::test::ios::kWaitForUIElementTimeout];
+  [ChromeEarlGrey waitForMatcher:ManualFallbackProfilesIconMatcher()];
 
   DockKeyboard();
 
@@ -451,7 +449,8 @@ BOOL WaitForKeyboardToAppear() {
 }
 
 // Tests that the manual fallback view is present in incognito.
-- (void)testIncognitoManualFallbackMenu {
+// Disabled due to flakiness. See crbug.com/1115321.
+- (void)DISABLED_testIncognitoManualFallbackMenu {
   // Add the profile to use for verification.
   [AutofillAppInterface saveExampleProfile];
 
@@ -487,7 +486,8 @@ BOOL WaitForKeyboardToAppear() {
 // Tests the mediator stops observing objects when the incognito BVC is
 // destroyed. Waiting for dealloc was causing a race condition with the
 // autorelease pool, and some times a DCHECK will be hit.
-- (void)testOpeningIncognitoTabsDoNotLeak {
+// TODO(crbug.com/1111258): Investigate cause of flakiness and re-enable.
+- (void)DISABLED_testOpeningIncognitoTabsDoNotLeak {
   const GURL URL = self.testServer->GetURL(kFormHTMLFile);
   std::string webViewText("Profile form");
   [AutofillAppInterface saveExampleProfile];
@@ -559,7 +559,8 @@ BOOL WaitForKeyboardToAppear() {
 }
 
 // Tests that the manual fallback view is not duplicated after incognito.
-- (void)testReturningFromIncognitoDoesNotDuplicatesManualFallbackMenu {
+// Disabled due to flakiness. See crbug.com/1115282.
+- (void)DISABLED_testReturningFromIncognitoDoesNotDuplicatesManualFallbackMenu {
   // Add the profile to use for verification.
   [AutofillAppInterface saveExampleProfile];
 
@@ -600,24 +601,6 @@ BOOL WaitForKeyboardToAppear() {
       performAction:grey_scrollToContentEdge(kGREYContentEdgeRight)];
   [[EarlGrey selectElementWithMatcher:ManualFallbackProfilesIconMatcher()]
       assertWithMatcher:grey_sufficientlyVisible()];
-}
-
-#pragma mark - Utilities
-
-// Waits for the passed matcher to be visible with a given timeout.
-- (void)waitForMatcherToBeVisible:(id<GREYMatcher>)matcher
-                          timeout:(CFTimeInterval)timeout {
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wunused-result"
-  [[GREYCondition conditionWithName:@"Wait for visible matcher condition"
-                              block:^BOOL {
-                                NSError* error;
-                                [[EarlGrey selectElementWithMatcher:matcher]
-                                    assertWithMatcher:grey_sufficientlyVisible()
-                                                error:&error];
-                                return error == nil;
-                              }] waitWithTimeout:timeout];
-#pragma clang diagnostic pop
 }
 
 @end

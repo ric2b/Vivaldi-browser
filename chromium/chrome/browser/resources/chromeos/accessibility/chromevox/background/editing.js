@@ -119,7 +119,8 @@ editing.TextEditHandler = class {
                       this.node_, Dir.FORWARD, AutomationPredicate.object,
                       {skipInitialSubtree: true}) ||
         this.node_;
-    ChromeVoxState.instance.navigateToRange(cursors.Range.fromNode(after));
+    ChromeVoxState.instance.navigateToRange(
+        cursors.Range.fromNode(after), true, {}, true);
   }
 
   /**
@@ -421,7 +422,7 @@ const AutomationRichEditableText = class extends AutomationEditableText {
     this.handleSpeech_(
         cur, prev, startLine, endLine, prevStartLine, prevEndLine,
         baseLineOnStart, intents);
-    this.brailleCurrentRichLine_();
+    this.handleBraille_();
   }
 
   /**
@@ -501,7 +502,14 @@ const AutomationRichEditableText = class extends AutomationEditableText {
     }
 
     const curBase = baseLineOnStart ? endLine : startLine;
-    if ((cur.startContainer_.role == RoleType.TEXT_FIELD ||
+    if (cur.text == '\u00a0' && cur.hasCollapsedSelection() &&
+        !cur.end_.node.nextOnLine) {
+      // This is a specific pattern seen in Google Docs. A single node (static
+      // text/in line text box), containing a non-breaking-space signifies a new
+      // line.
+      ChromeVox.tts.speak('\n', QueueMode.CATEGORY_FLUSH);
+    } else if (
+        (cur.startContainer_.role == RoleType.TEXT_FIELD ||
          (cur.startContainer_ == prev.startContainer_ &&
           cur.endContainer_ == prev.endContainer_)) &&
         cur.startContainerValue_ != prev.startContainerValue_) {
@@ -607,6 +615,79 @@ const AutomationRichEditableText = class extends AutomationEditableText {
       this.speakCurrentRichLine_(prev);
     }
     this.updateIntraLineState_(cur);
+  }
+
+  /** @private */
+  handleBraille_() {
+    const isFirstLine = this.isSelectionOnFirstLine();
+    const cur = this.line_;
+    if (cur.value_ === null) {
+      return;
+    }
+
+    let value = new MultiSpannable(cur.value_);
+    if (!this.node_.constructor) {
+      return;
+    }
+    value.getSpansInstanceOf(this.node_.constructor).forEach(function(span) {
+      const style = span.role == RoleType.INLINE_TEXT_BOX ? span.parent : span;
+      if (!style) {
+        return;
+      }
+      let formType = FormType.PLAIN_TEXT;
+      // Currently no support for sub/superscript in 3rd party liblouis library.
+      if (style.bold) {
+        formType |= FormType.BOLD;
+      }
+      if (style.italic) {
+        formType |= FormType.ITALIC;
+      }
+      if (style.underline) {
+        formType |= FormType.UNDERLINE;
+      }
+      if (formType == FormType.PLAIN_TEXT) {
+        return;
+      }
+      const start = value.getSpanStart(span);
+      const end = value.getSpanEnd(span);
+      value.setSpan(
+          new BrailleTextStyleSpan(
+              /** @type {LibLouis.FormType<number>} */ (formType)),
+          start, end);
+    });
+
+    // Provide context for the current selection.
+    const context = cur.startContainer_;
+    if (context && context.role != RoleType.TEXT_FIELD) {
+      const output = new Output().suppress('name').withBraille(
+          Range.fromNode(context), Range.fromNode(this.node_),
+          Output.EventType.NAVIGATE);
+      if (output.braille.length) {
+        const end = cur.containerEndOffset + 1;
+        const prefix = value.substring(0, end);
+        const suffix = value.substring(end, value.length);
+        value = prefix;
+        value.append(Output.SPACE);
+        value.append(output.braille);
+        if (suffix.length) {
+          if (suffix.toString()[0] != Output.SPACE) {
+            value.append(Output.SPACE);
+          }
+          value.append(suffix);
+        }
+      }
+    }
+
+    if (isFirstLine) {
+      if (!/\s/.test(value.toString()[value.length - 1])) {
+        value.append(Output.SPACE);
+      }
+      value.append(Msgs.getMsg('tag_textarea_brl'));
+    }
+    value.setSpan(new ValueSpan(0), 0, cur.value_.length);
+    value.setSpan(new ValueSelectionSpan(), cur.startOffset, cur.endOffset);
+    ChromeVox.braille.write(new NavBraille(
+        {text: value, startIndex: cur.startOffset, endIndex: cur.endOffset}));
   }
 
   /**
@@ -793,79 +874,6 @@ const AutomationRichEditableText = class extends AutomationEditableText {
     }
   }
 
-  /** @private */
-  brailleCurrentRichLine_() {
-    const isFirstLine = this.isSelectionOnFirstLine();
-    const cur = this.line_;
-    if (cur.value_ === null) {
-      return;
-    }
-
-    let value = new MultiSpannable(cur.value_);
-    if (!this.node_.constructor) {
-      return;
-    }
-    value.getSpansInstanceOf(this.node_.constructor).forEach(function(span) {
-      const style = span.role == RoleType.INLINE_TEXT_BOX ? span.parent : span;
-      if (!style) {
-        return;
-      }
-      let formType = FormType.PLAIN_TEXT;
-      // Currently no support for sub/superscript in 3rd party liblouis library.
-      if (style.bold) {
-        formType |= FormType.BOLD;
-      }
-      if (style.italic) {
-        formType |= FormType.ITALIC;
-      }
-      if (style.underline) {
-        formType |= FormType.UNDERLINE;
-      }
-      if (formType == FormType.PLAIN_TEXT) {
-        return;
-      }
-      const start = value.getSpanStart(span);
-      const end = value.getSpanEnd(span);
-      value.setSpan(
-          new BrailleTextStyleSpan(
-              /** @type {LibLouis.FormType<number>} */ (formType)),
-          start, end);
-    });
-
-    // Provide context for the current selection.
-    const context = cur.startContainer_;
-    if (context && context.role != RoleType.TEXT_FIELD) {
-      const output = new Output().suppress('name').withBraille(
-          Range.fromNode(context), Range.fromNode(this.node_),
-          Output.EventType.NAVIGATE);
-      if (output.braille.length) {
-        const end = cur.containerEndOffset + 1;
-        const prefix = value.substring(0, end);
-        const suffix = value.substring(end, value.length);
-        value = prefix;
-        value.append(Output.SPACE);
-        value.append(output.braille);
-        if (suffix.length) {
-          if (suffix.toString()[0] != Output.SPACE) {
-            value.append(Output.SPACE);
-          }
-          value.append(suffix);
-        }
-      }
-    }
-
-    if (isFirstLine) {
-      if (!/\s/.test(value.toString()[value.length - 1])) {
-        value.append(Output.SPACE);
-      }
-      value.append(Msgs.getMsg('tag_textarea_brl'));
-    }
-    value.setSpan(new ValueSpan(0), 0, cur.value_.length);
-    value.setSpan(new ValueSelectionSpan(), cur.startOffset, cur.endOffset);
-    ChromeVox.braille.write(new NavBraille(
-        {text: value, startIndex: cur.startOffset, endIndex: cur.endOffset}));
-  }
-
   /** @override */
   describeSelectionChanged(evt) {
     // Note that since Chrome allows for selection to be placed immediately at
@@ -1038,15 +1046,16 @@ editing.EditableLine = class {
     // cursors.Cursor.deepEquivalent results in cursors to different container
     // nodes. The cursors can point directly to inline text boxes, in which case
     // we should not adjust the container start or end index.
-    if (startNode.role != RoleType.INLINE_TEXT_BOX &&
-        this.start_.node != startNode && this.start_.node.parent != startNode) {
+    if (!AutomationPredicate.text(startNode) ||
+        (this.start_.node != startNode &&
+         this.start_.node.parent != startNode)) {
       startIndex = this.start_.index == cursors.NODE_INDEX ?
           this.start_.node.name.length :
           this.start_.index;
     }
 
-    if (endNode.role != RoleType.INLINE_TEXT_BOX && this.end_.node != endNode &&
-        this.end_.node.parent != endNode) {
+    if (!AutomationPredicate.text(endNode) ||
+        (this.end_.node != endNode && this.end_.node.parent != endNode)) {
       endIndex = this.end_.index == cursors.NODE_INDEX ?
           this.end_.node.name.length :
           this.end_.index;

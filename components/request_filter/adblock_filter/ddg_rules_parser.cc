@@ -2,6 +2,7 @@
 
 #include "components/request_filter/adblock_filter/ddg_rules_parser.h"
 
+#include "base/strings/string_util.h"
 #include "components/request_filter/adblock_filter/parse_result.h"
 #include "components/request_filter/adblock_filter/parse_utils.h"
 
@@ -307,8 +308,7 @@ void DuckDuckGoRulesParser::ParseRule(const base::Value& rule,
               } else if (option_domain.size() > exception_domain.size()) {
                 size_t dot_position =
                     option_domain.size() - exception_domain.size() - 1;
-                if (base::StringPiece(option_domain)
-                        .ends_with(exception_domain) &&
+                if (base::EndsWith(option_domain, exception_domain) &&
                     option_domain[dot_position] == '.')
                   potential_domain = option_domain;
                 continue;
@@ -318,8 +318,7 @@ void DuckDuckGoRulesParser::ParseRule(const base::Value& rule,
             if (option_domain.size() < exception_domain.size()) {
               size_t dot_position =
                   exception_domain.size() - option_domain.size() - 1;
-              if (base::StringPiece(exception_domain)
-                      .ends_with(option_domain) &&
+              if (base::EndsWith(exception_domain, option_domain) &&
                   exception_domain[dot_position] == '.' &&
                   (potential_domain.empty() ||
                    potential_domain.size() > exception_domain.size()))

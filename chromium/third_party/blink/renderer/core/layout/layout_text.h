@@ -332,6 +332,26 @@ class CORE_EXPORT LayoutText : public LayoutObject {
 
   void DetachAbstractInlineTextBoxesIfNeeded();
 
+  // Returns the logical location of the first line box, and the logical height
+  // of the LayoutText.
+  void LogicalStartingPointAndHeight(LogicalOffset& logical_starting_point,
+                                     LayoutUnit& logical_height) const;
+
+  // For LayoutShiftTracker. Saves the value of LogicalStartingPoint() value
+  // during the previous paint invalidation.
+  LogicalOffset PreviousLogicalStartingPoint() const {
+    return previous_logical_starting_point_;
+  }
+  // This is const because LayoutObjects are const for paint invalidation.
+  void SetPreviousLogicalStartingPoint(const LogicalOffset& point) const {
+    DCHECK_EQ(GetDocument().Lifecycle().GetState(),
+              DocumentLifecycle::kInPrePaint);
+    previous_logical_starting_point_ = point;
+  }
+  static LogicalOffset UninitializedLogicalStartingPoint() {
+    return {LayoutUnit::Max(), LayoutUnit::Max()};
+  }
+
  protected:
   void WillBeDestroyed() override;
 
@@ -345,7 +365,8 @@ class CORE_EXPORT LayoutText : public LayoutObject {
   virtual InlineTextBox* CreateTextBox(int start,
                                        uint16_t length);  // Subclassed by SVG.
 
-  void InvalidateDisplayItemClients(PaintInvalidationReason) const override;
+  void InvalidatePaint(const PaintInvalidatorContext&) const final;
+  void InvalidateDisplayItemClients(PaintInvalidationReason) const final;
 
   bool CanBeSelectionLeafInternal() const final { return true; }
 
@@ -404,6 +425,8 @@ class CORE_EXPORT LayoutText : public LayoutObject {
   bool CanOptimizeSetText() const;
   void SetFirstTextBoxLogicalLeft(float text_width) const;
 
+  const DisplayItemClient* GetSelectionDisplayItemClient() const final;
+
   // We put the bitfield first to minimize padding on 64-bit.
  protected:
   // Whether or not we can be broken into multiple lines.
@@ -445,12 +468,19 @@ class CORE_EXPORT LayoutText : public LayoutObject {
   // Used for LayoutNG with accessibility. True if inline fragments are
   // associated to |NGAbstractInlineTextBox|.
   unsigned has_abstract_inline_text_box_ : 1;
+
+  DOMNodeId node_id_ = kInvalidDOMNodeId;
+
   float min_width_;
   float max_width_;
   float first_line_min_width_;
   float last_line_line_min_width_;
 
   String text_;
+
+  // This is mutable for paint invalidation.
+  mutable LogicalOffset previous_logical_starting_point_ =
+      UninitializedLogicalStartingPoint();
 
   union {
     // The line boxes associated with this object.
@@ -465,7 +495,6 @@ class CORE_EXPORT LayoutText : public LayoutObject {
     // Valid only when IsInLayoutNGInlineFormattingContext().
     wtf_size_t first_fragment_item_index_;
   };
-  DOMNodeId node_id_ = kInvalidDOMNodeId;
 };
 
 inline InlineTextBoxList& LayoutText::MutableTextBoxes() {

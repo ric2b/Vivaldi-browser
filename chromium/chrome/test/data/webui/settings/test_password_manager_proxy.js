@@ -59,6 +59,7 @@ export class TestPasswordManagerProxy extends TestBrowserProxy {
       'movePasswordToAccount',
       'removeException',
       'removeExceptions',
+      'changeSavedPassword',
     ]);
 
     /** @private {!PasswordManagerExpectations} */
@@ -295,6 +296,12 @@ export class TestPasswordManagerProxy extends TestBrowserProxy {
   /** override */
   recordPasswordCheckReferrer(referrer) {
     this.methodCalled('recordPasswordCheckReferrer', referrer);
+  }
+
+  /** override */
+  changeSavedPassword(ids, newPassword) {
+    this.methodCalled('changeSavedPassword', {ids, newPassword});
+    return Promise.resolve();
   }
 
   /** override */

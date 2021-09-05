@@ -16,6 +16,7 @@
 #include "base/stl_util.h"
 #include "base/test/task_environment.h"
 #include "chromeos/components/account_manager/account_manager.h"
+#include "chromeos/components/account_manager/tokens.pb.h"
 #include "components/signin/internal/identity_manager/account_tracker_service.h"
 #include "components/signin/internal/identity_manager/profile_oauth2_token_service_observer.h"
 #include "components/signin/public/base/signin_pref_names.h"
@@ -207,6 +208,18 @@ class ProfileOAuth2TokenServiceDelegateChromeOSTest : public testing::Test {
         GetValidTokenResponse("token", 3600));
   }
 
+  void UpdateCredentials(const std::string& gaia_id,
+                         const std::string& email,
+                         const std::string& refresh_token) {
+    // Will result in chromeos::AccountManager calling
+    // |ProfileOAuth2TokenServiceDelegateChromeOS::OnTokenUpserted|.
+    account_manager_.UpsertAccount(
+        chromeos::AccountManager::AccountKey{
+            gaia_id, chromeos::account_manager::AccountType::
+                         ACCOUNT_TYPE_GAIA} /* account_key */,
+        email /* email */, refresh_token);
+  }
+
   base::test::TaskEnvironment task_environment_;
 
   base::ScopedTempDir tmp_dir_;
@@ -324,7 +337,7 @@ TEST_F(ProfileOAuth2TokenServiceDelegateChromeOSTest,
 TEST_F(ProfileOAuth2TokenServiceDelegateChromeOSTest,
        ObserversAreNotifiedOnCredentialsInsertion) {
   TestOAuth2TokenServiceObserver observer(delegate_.get());
-  delegate_->UpdateCredentials(account_info_.account_id, kGaiaToken);
+  UpdateCredentials(account_info_.gaia, account_info_.email, kGaiaToken);
 
   EXPECT_EQ(1UL, observer.account_ids_.size());
   EXPECT_EQ(account_info_.account_id, *observer.account_ids_.begin());
@@ -337,19 +350,33 @@ TEST_F(ProfileOAuth2TokenServiceDelegateChromeOSTest,
   TestOAuth2TokenServiceObserver observer(delegate_.get());
   auto error =
       GoogleServiceAuthError(GoogleServiceAuthError::State::SERVICE_ERROR);
-  delegate_->UpdateCredentials(account_info_.account_id, kGaiaToken);
+  UpdateCredentials(account_info_.gaia, account_info_.email, kGaiaToken);
   // Deliberately add an error.
   delegate_->UpdateAuthError(account_info_.account_id, error);
 
   // Update credentials. The delegate will check if see cached errors.
-  delegate_->UpdateCredentials(account_info_.account_id, "new-token");
+  UpdateCredentials(account_info_.gaia, account_info_.email, "new-token");
+}
+
+TEST_F(ProfileOAuth2TokenServiceDelegateChromeOSTest,
+       ObserversDoNotSeeCachedErrorsOnAccountRemoval) {
+  auto error =
+      GoogleServiceAuthError(GoogleServiceAuthError::State::SERVICE_ERROR);
+  UpdateCredentials(account_info_.gaia, account_info_.email, kGaiaToken);
+  // Deliberately add an error.
+  delegate_->UpdateAuthError(account_info_.account_id, error);
+  account_manager_.RemoveAccount(chromeos::AccountManager::AccountKey{
+      account_info_.gaia,
+      chromeos::account_manager::AccountType::ACCOUNT_TYPE_GAIA});
+  EXPECT_EQ(GoogleServiceAuthError::AuthErrorNone(),
+            delegate_->GetAuthError(account_info_.account_id));
 }
 
 TEST_F(ProfileOAuth2TokenServiceDelegateChromeOSTest,
        DummyTokensArePreEmptivelyRejected) {
   TestOAuth2TokenServiceObserver observer(delegate_.get());
-  delegate_->UpdateCredentials(account_info_.account_id,
-                               chromeos::AccountManager::kInvalidToken);
+  UpdateCredentials(account_info_.gaia, account_info_.email,
+                    chromeos::AccountManager::kInvalidToken);
 
   const GoogleServiceAuthError error =
       delegate_->GetAuthError(account_info_.account_id);
@@ -367,7 +394,7 @@ TEST_F(ProfileOAuth2TokenServiceDelegateChromeOSTest,
 TEST_F(ProfileOAuth2TokenServiceDelegateChromeOSTest,
        ObserversAreNotifiedOnCredentialsUpdate) {
   TestOAuth2TokenServiceObserver observer(delegate_.get());
-  delegate_->UpdateCredentials(account_info_.account_id, kGaiaToken);
+  UpdateCredentials(account_info_.gaia, account_info_.email, kGaiaToken);
 
   EXPECT_EQ(1UL, observer.account_ids_.size());
   EXPECT_EQ(account_info_.account_id, *observer.account_ids_.begin());
@@ -379,10 +406,10 @@ TEST_F(ProfileOAuth2TokenServiceDelegateChromeOSTest,
        ObserversAreNotNotifiedIfCredentialsAreNotUpdated) {
   TestOAuth2TokenServiceObserver observer(delegate_.get());
 
-  delegate_->UpdateCredentials(account_info_.account_id, kGaiaToken);
+  UpdateCredentials(account_info_.gaia, account_info_.email, kGaiaToken);
   observer.account_ids_.clear();
   observer.last_err_account_id_ = CoreAccountId();
-  delegate_->UpdateCredentials(account_info_.account_id, kGaiaToken);
+  UpdateCredentials(account_info_.gaia, account_info_.email, kGaiaToken);
 
   EXPECT_TRUE(observer.account_ids_.empty());
   EXPECT_TRUE(observer.last_err_account_id_.empty());
@@ -391,7 +418,7 @@ TEST_F(ProfileOAuth2TokenServiceDelegateChromeOSTest,
 TEST_F(ProfileOAuth2TokenServiceDelegateChromeOSTest,
        BatchChangeObserversAreNotifiedOnCredentialsUpdate) {
   TestOAuth2TokenServiceObserver observer(delegate_.get());
-  delegate_->UpdateCredentials(account_info_.account_id, kGaiaToken);
+  UpdateCredentials(account_info_.gaia, account_info_.email, kGaiaToken);
 
   EXPECT_EQ(1UL, observer.batch_change_records_.size());
   EXPECT_EQ(1UL, observer.batch_change_records_[0].size());
@@ -530,7 +557,7 @@ TEST_F(ProfileOAuth2TokenServiceDelegateChromeOSTest,
        UpdateCredentialsSucceeds) {
   EXPECT_TRUE(delegate_->GetAccounts().empty());
 
-  delegate_->UpdateCredentials(account_info_.account_id, kGaiaToken);
+  UpdateCredentials(account_info_.gaia, account_info_.email, kGaiaToken);
 
   std::vector<CoreAccountId> accounts = delegate_->GetAccounts();
   EXPECT_EQ(1UL, accounts.size());
@@ -539,7 +566,7 @@ TEST_F(ProfileOAuth2TokenServiceDelegateChromeOSTest,
 
 TEST_F(ProfileOAuth2TokenServiceDelegateChromeOSTest,
        ObserversAreNotifiedOnAccountRemoval) {
-  delegate_->UpdateCredentials(account_info_.account_id, kGaiaToken);
+  UpdateCredentials(account_info_.gaia, account_info_.email, kGaiaToken);
 
   TestOAuth2TokenServiceObserver observer(delegate_.get());
   account_manager_.RemoveAccount(gaia_account_key_);
@@ -575,7 +602,7 @@ TEST_F(ProfileOAuth2TokenServiceDelegateChromeOSTest,
 
 TEST_F(ProfileOAuth2TokenServiceDelegateChromeOSTest,
        BackOffIsTriggerredForTransientErrors) {
-  delegate_->UpdateCredentials(account_info_.account_id, kGaiaToken);
+  UpdateCredentials(account_info_.gaia, account_info_.email, kGaiaToken);
   auto transient_error = GoogleServiceAuthError(
       GoogleServiceAuthError::State::SERVICE_UNAVAILABLE);
   delegate_->UpdateAuthError(account_info_.account_id, transient_error);
@@ -613,7 +640,7 @@ TEST_F(ProfileOAuth2TokenServiceDelegateChromeOSTest,
 
 TEST_F(ProfileOAuth2TokenServiceDelegateChromeOSTest,
        BackOffIsResetOnNetworkChange) {
-  delegate_->UpdateCredentials(account_info_.account_id, kGaiaToken);
+  UpdateCredentials(account_info_.gaia, account_info_.email, kGaiaToken);
   auto transient_error = GoogleServiceAuthError(
       GoogleServiceAuthError::State::SERVICE_UNAVAILABLE);
   delegate_->UpdateAuthError(account_info_.account_id, transient_error);

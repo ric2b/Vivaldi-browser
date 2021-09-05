@@ -16,7 +16,7 @@ import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.components.autofill.AutofillDelegate;
 import org.chromium.components.autofill.AutofillPopup;
@@ -173,8 +173,8 @@ public class AutofillPopupBridge implements AutofillDelegate, DialogInterface.On
             String label, String sublabel, int iconId, boolean isIconAtStart,
             int suggestionId, boolean isDeletable, boolean isLabelMultiline, boolean isLabelBold) {
         int drawableId = iconId == 0 ? DropdownItem.NO_ICON : iconId;
-        array[index] = new AutofillSuggestion(label, sublabel, drawableId, isIconAtStart,
-                suggestionId, isDeletable, isLabelMultiline, isLabelBold);
+        array[index] = new AutofillSuggestion(label, sublabel, /*itemTag= */ "", drawableId,
+                isIconAtStart, suggestionId, isDeletable, isLabelMultiline, isLabelBold);
     }
 
     @NativeMethods

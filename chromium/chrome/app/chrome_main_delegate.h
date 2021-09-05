@@ -48,7 +48,7 @@ class ChromeMainDelegate : public content::ContentMainDelegate {
       const std::string& process_type,
       const content::MainFunctionParams& main_function_params) override;
   void ProcessExiting(const std::string& process_type) override;
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
   void ZygoteStarting(std::vector<std::unique_ptr<content::ZygoteForkDelegate>>*
                           delegates) override;
   void ZygoteForked() override;
@@ -65,11 +65,11 @@ class ChromeMainDelegate : public content::ContentMainDelegate {
   content::ContentRendererClient* CreateContentRendererClient() override;
   content::ContentUtilityClient* CreateContentUtilityClient() override;
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   void InitMacCrashReporter(const base::CommandLine& command_line,
                             const std::string& process_type);
   void SetUpInstallerPreferences(const base::CommandLine& command_line);
-#endif  // defined(OS_MACOSX)
+#endif  // defined(OS_MAC)
 
   ChromeContentClient chrome_content_client_;
 

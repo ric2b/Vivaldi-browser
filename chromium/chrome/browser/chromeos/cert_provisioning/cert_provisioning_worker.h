@@ -12,6 +12,7 @@
 #include "base/time/time.h"
 #include "chrome/browser/chromeos/attestation/tpm_challenge_key_subtle.h"
 #include "chrome/browser/chromeos/cert_provisioning/cert_provisioning_common.h"
+#include "chrome/browser/chromeos/platform_keys/platform_keys.h"
 #include "chrome/browser/chromeos/platform_keys/platform_keys_service.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
 #include "net/base/backoff_entry.h"
@@ -128,7 +129,7 @@ class CertProvisioningWorkerImpl : public CertProvisioningWorker {
 
   void GenerateRegularKey();
   void OnGenerateRegularKeyDone(const std::string& public_key_spki_der,
-                                const std::string& error_message);
+                                platform_keys::Status status);
 
   void GenerateKeyForVa();
   void OnGenerateKeyForVaDone(base::TimeTicks start_time,
@@ -154,12 +155,12 @@ class CertProvisioningWorkerImpl : public CertProvisioningWorker {
   void OnRegisterKeyDone(const attestation::TpmChallengeKeyResult& result);
 
   void MarkKey();
-  void OnMarkKeyDone(const std::string& error_message);
+  void OnMarkKeyDone(platform_keys::Status status);
 
   void SignCsr();
   void OnSignCsrDone(base::TimeTicks start_time,
                      const std::string& signature,
-                     const std::string& error_message);
+                     platform_keys::Status status);
 
   void FinishCsr();
   void OnFinishCsrDone(policy::DeviceManagementStatus status,
@@ -174,7 +175,7 @@ class CertProvisioningWorkerImpl : public CertProvisioningWorker {
       const std::string& pem_encoded_certificate);
 
   void ImportCert(const std::string& pem_encoded_certificate);
-  void OnImportCertDone(const std::string& error_message);
+  void OnImportCertDone(platform_keys::Status status);
 
   void ScheduleNextStep(base::TimeDelta delay);
   void CancelScheduledTasks();
@@ -205,7 +206,7 @@ class CertProvisioningWorkerImpl : public CertProvisioningWorker {
 
   void CleanUpAndRunCallback();
   void OnDeleteVaKeyDone(base::Optional<bool> delete_result);
-  void OnRemoveKeyDone(const std::string& error_message);
+  void OnRemoveKeyDone(platform_keys::Status status);
   void OnCleanUpDone();
 
   // Returns true if there are no errors and the flow can be continued.
@@ -254,6 +255,10 @@ class CertProvisioningWorkerImpl : public CertProvisioningWorker {
   // because of it).
   static constexpr int kVersion = 1;
 
+  // Unowned PlatformKeysService. Note that the CertProvisioningWorker does not
+  // observe the PlatformKeysService for shutdown events. Instead, it relies on
+  // the CertProvisioningScheduler to destroy all CertProvisioningWorker
+  // instances when the corresponding PlatformKeysService is shutting down.
   platform_keys::PlatformKeysService* platform_keys_service_ = nullptr;
   std::unique_ptr<attestation::TpmChallengeKeySubtle>
       tpm_challenge_key_subtle_impl_;

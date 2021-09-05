@@ -379,10 +379,6 @@ void WebRuntimeFeatures::EnableScriptedSpeechSynthesis(bool enable) {
   RuntimeEnabledFeatures::SetScriptedSpeechSynthesisEnabled(enable);
 }
 
-void WebRuntimeFeatures::EnableUserActivationPostMessageTransfer(bool enable) {
-  RuntimeEnabledFeatures::SetUserActivationPostMessageTransferEnabled(enable);
-}
-
 void WebRuntimeFeatures::EnableUserActivationSameOriginVisibility(bool enable) {
   RuntimeEnabledFeatures::SetUserActivationSameOriginVisibilityEnabled(enable);
 }
@@ -447,12 +443,12 @@ void WebRuntimeFeatures::EnablePushMessaging(bool enable) {
   RuntimeEnabledFeatures::SetPushMessagingEnabled(enable);
 }
 
-void WebRuntimeFeatures::EnableWebShare(bool enable) {
-  RuntimeEnabledFeatures::SetWebShareEnabled(enable);
+void WebRuntimeFeatures::EnablePushSubscriptionChangeEvent(bool enable) {
+  RuntimeEnabledFeatures::SetPushMessagingSubscriptionChangeEnabled(enable);
 }
 
-void WebRuntimeFeatures::EnableWebShareV2(bool enable) {
-  RuntimeEnabledFeatures::SetWebShareV2Enabled(enable);
+void WebRuntimeFeatures::EnableWebShare(bool enable) {
+  RuntimeEnabledFeatures::SetWebShareEnabled(enable);
 }
 
 void WebRuntimeFeatures::EnableWebGPU(bool enable) {
@@ -505,6 +501,10 @@ void WebRuntimeFeatures::EnableRestrictAutomaticLazyImageLoadingToDataSaver(
     bool enable) {
   RuntimeEnabledFeatures::
       SetRestrictAutomaticLazyImageLoadingToDataSaverEnabled(enable);
+}
+
+void WebRuntimeFeatures::EnableSecurePaymentConfirmationDebug(bool enable) {
+  RuntimeEnabledFeatures::SetSecurePaymentConfirmationDebugEnabled(enable);
 }
 
 void WebRuntimeFeatures::EnableAutoLazyLoadOnReloads(bool enable) {
@@ -595,6 +595,14 @@ void WebRuntimeFeatures::EnableDisplayCutoutAPI(bool enable) {
 
 void WebRuntimeFeatures::EnableDocumentPolicy(bool enable) {
   RuntimeEnabledFeatures::SetDocumentPolicyEnabled(enable);
+}
+
+void WebRuntimeFeatures::EnableDocumentPolicyNegotiation(bool enable) {
+  RuntimeEnabledFeatures::SetDocumentPolicyNegotiationEnabled(enable);
+}
+
+void WebRuntimeFeatures::EnablePermissionsPolicyHeader(bool enable) {
+  RuntimeEnabledFeatures::SetPermissionsPolicyHeaderEnabled(enable);
 }
 
 void WebRuntimeFeatures::EnableAutoplayIgnoresWebAudio(bool enable) {
@@ -707,6 +715,18 @@ void WebRuntimeFeatures::EnableVideoWakeLockOptimisationHiddenMuted(
 
 void WebRuntimeFeatures::EnableContentIndex(bool enable) {
   RuntimeEnabledFeatures::SetContentIndexEnabled(enable);
+}
+
+void WebRuntimeFeatures::EnableRestrictGamepadAccess(bool enable) {
+  RuntimeEnabledFeatures::SetRestrictGamepadAccessEnabled(enable);
+}
+
+void WebRuntimeFeatures::EnableCompositingOptimizations(bool enable) {
+  RuntimeEnabledFeatures::SetCompositingOptimizationsEnabled(enable);
+}
+
+void WebRuntimeFeatures::EnableConversionMeasurementInfraSupport(bool enable) {
+  RuntimeEnabledFeatures::SetConversionMeasurementInfraSupportEnabled(enable);
 }
 
 }  // namespace blink

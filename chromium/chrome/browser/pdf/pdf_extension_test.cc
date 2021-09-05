@@ -102,7 +102,7 @@
 #include "ui/gfx/geometry/point.h"
 #include "url/gurl.h"
 
-#if defined(TOOLKIT_VIEWS) && !defined(OS_MACOSX)
+#if defined(TOOLKIT_VIEWS) && !defined(OS_MAC)
 #include "chrome/browser/ui/views/location_bar/zoom_bubble_view.h"
 #endif
 
@@ -123,7 +123,7 @@ using guest_view::TestGuestViewManagerFactory;
 
 const int kNumberLoadTestParts = 10;
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 const int kDefaultKeyModifier = blink::WebInputEvent::kMetaKey;
 #else
 const int kDefaultKeyModifier = blink::WebInputEvent::kControlKey;
@@ -179,11 +179,11 @@ class PDFExtensionTest : public extensions::ExtensionApiTest {
     extensions::ExtensionApiTest::TearDownOnMainThread();
   }
 
-  // Serve paths prefixed with _test_resources/ from chrome/test/data/pdf.
+  // Serve paths prefixed with _test_resources/ from chrome/test/data.
   base::FilePath GetTestResourcesParentDir() override {
     base::FilePath test_root_path;
     base::PathService::Get(chrome::DIR_TEST_DATA, &test_root_path);
-    return test_root_path.AppendASCII("pdf");
+    return test_root_path;
   }
 
   bool PdfIsExpectedToLoad(const std::string& pdf_file) {
@@ -504,6 +504,51 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionTestWithTestGuestViewManager,
   EXPECT_EQ(embedder_rect, guest_rect);
 }
 
+// This test verifies that Content-Security-Policy's frame-ancestors 'none'
+// directive is effective on a PDF response.
+// Regression test for https://crbug.com/1107535.
+IN_PROC_BROWSER_TEST_F(PDFExtensionTestWithTestGuestViewManager,
+                       CSPFrameAncestorsCanBlockEmbedding) {
+  WebContents* web_contents = GetActiveWebContents();
+  content::WebContentsConsoleObserver console_observer(web_contents);
+  console_observer.SetPattern(
+      "*because an ancestor violates the following Content Security Policy "
+      "directive: \"frame-ancestors 'none'*");
+
+  GURL main_url(embedded_test_server()->GetURL(
+      "/pdf/frame-test-csp-frame-ancestors-none.html"));
+  ui_test_utils::NavigateToURL(browser(), main_url);
+
+  console_observer.Wait();
+
+  // Didn't launch a PPAPI process.
+  EXPECT_EQ(0, CountPDFProcesses());
+}
+
+// This test verifies that Content-Security-Policy's frame-ancestors directive
+// overrides an X-Frame-Options header on a PDF response.
+// Regression test for https://crbug.com/1107535.
+IN_PROC_BROWSER_TEST_F(PDFExtensionTestWithTestGuestViewManager,
+                       CSPFrameAncestorsOverridesXFrameOptions) {
+  GURL main_url(
+      embedded_test_server()->GetURL("/pdf/frame-test-csp-and-xfo.html"));
+  ui_test_utils::NavigateToURL(browser(), main_url);
+  auto* embedder_web_contents = GetActiveWebContents();
+  ASSERT_TRUE(embedder_web_contents);
+
+  // Verify the pdf has loaded.
+  auto* guest_web_contents = GetGuestViewManager()->WaitForSingleGuestCreated();
+  ASSERT_TRUE(guest_web_contents);
+  EXPECT_NE(embedder_web_contents, guest_web_contents);
+  EXPECT_TRUE(content::WaitForLoadStop(guest_web_contents));
+
+  // Verify the extension was loaded.
+  const GURL extension_url(
+      "chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/index.html");
+  EXPECT_EQ(extension_url, guest_web_contents->GetURL());
+  EXPECT_EQ(main_url, embedder_web_contents->GetURL());
+}
+
 class PDFExtensionLoadTest : public PDFExtensionTest,
                              public testing::WithParamInterface<int> {
  public:
@@ -738,7 +783,7 @@ class PDFExtensionJSTest : public PDFExtensionTest {
     constexpr char kModuleLoaderTemplate[] =
         R"(var s = document.createElement('script');
            s.type = 'module';
-           s.src = '_test_resources/%s';
+           s.src = '_test_resources/pdf/%s';
            document.body.appendChild(s);)";
 
     ASSERT_TRUE(content::ExecuteScript(
@@ -803,6 +848,30 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionJSTest, Elements) {
   RunTestsInJsModule("material_elements_test.js", "test.pdf");
 }
 
+IN_PROC_BROWSER_TEST_F(PDFExtensionJSTest, DownloadControls) {
+  // Although this test file does not require a PDF to be loaded, loading the
+  // elements without loading a PDF is difficult.
+  RunTestsInJsModule("download_controls_test.js", "test.pdf");
+}
+
+IN_PROC_BROWSER_TEST_F(PDFExtensionJSTest, ViewerPdfToolbarNew) {
+  // Although this test file does not require a PDF to be loaded, loading the
+  // elements without loading a PDF is difficult.
+  RunTestsInJsModule("viewer_pdf_toolbar_new_test.js", "test.pdf");
+}
+
+IN_PROC_BROWSER_TEST_F(PDFExtensionJSTest, ViewerPdfSidenav) {
+  // Although this test file does not require a PDF to be loaded, loading the
+  // elements without loading a PDF is difficult.
+  RunTestsInJsModule("viewer_pdf_sidenav_test.js", "test.pdf");
+}
+
+IN_PROC_BROWSER_TEST_F(PDFExtensionJSTest, ViewerThumbnailBar) {
+  // Although this test file does not require a PDF to be loaded, loading the
+  // elements without loading a PDF is difficult.
+  RunTestsInJsModule("viewer_thumbnail_bar_test.js", "test.pdf");
+}
+
 IN_PROC_BROWSER_TEST_F(PDFExtensionJSTest, ToolbarManager) {
   RunTestsInJsModule("toolbar_manager_test.js", "test.pdf");
 }
@@ -813,10 +882,6 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionJSTest, Title) {
 
 IN_PROC_BROWSER_TEST_F(PDFExtensionJSTest, WhitespaceTitle) {
   RunTestsInJsModule("whitespace_title_test.js", "test-whitespace-title.pdf");
-}
-
-IN_PROC_BROWSER_TEST_F(PDFExtensionJSTest, TwoUpViewFeature) {
-  RunTestsInJsModule("two_up_view_feature_test.js", "test.pdf");
 }
 
 IN_PROC_BROWSER_TEST_F(PDFExtensionJSTest, PageChange) {
@@ -867,10 +932,9 @@ class PDFExtensionContentSettingJSTest
  protected:
   void SetUpCommandLine(base::CommandLine* command_line) override {
     PDFExtensionJSTest::SetUpCommandLine(command_line);
-    if (ShouldHonorJsContentSettings()) {
-      feature_list_.InitAndEnableFeature(
-          chrome_pdf::features::kPdfHonorJsContentSettings);
-    }
+    feature_list_.InitWithFeatureState(
+        chrome_pdf::features::kPdfHonorJsContentSettings,
+        ShouldHonorJsContentSettings());
   }
 
   bool ShouldHonorJsContentSettings() const { return GetParam(); }
@@ -1028,17 +1092,15 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionTest, EnsureOpaqueOriginRepliesBlocked) {
 IN_PROC_BROWSER_TEST_F(PDFExtensionTest, BlockDirectAccess) {
   WebContents* web_contents = GetActiveWebContents();
 
-  std::unique_ptr<content::ConsoleObserverDelegate> console_delegate(
-      new content::ConsoleObserverDelegate(
-          web_contents,
-          "*Streams are only available from a mime handler view guest.*"));
-  web_contents->SetDelegate(console_delegate.get());
-  GURL forbiddenUrl(
+  content::WebContentsConsoleObserver console_observer(web_contents);
+  console_observer.SetPattern(
+      "*Streams are only available from a mime handler view guest.*");
+  GURL forbidden_url(
       "chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/index.html?"
       "https://example.com/notrequested.pdf");
-  ui_test_utils::NavigateToURL(browser(), forbiddenUrl);
+  ui_test_utils::NavigateToURL(browser(), forbidden_url);
 
-  console_delegate->Wait();
+  console_observer.Wait();
 
   // Didn't launch a PPAPI process.
   EXPECT_EQ(0, CountPDFProcesses());
@@ -1172,14 +1234,14 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionTest, MAYBE_PdfZoomWithoutBubble) {
                            zoom::ZoomController::ZOOM_MODE_MANUAL, false));
 
   // Zoom PDF via script.
-#if defined(TOOLKIT_VIEWS) && !defined(OS_MACOSX)
+#if defined(TOOLKIT_VIEWS) && !defined(OS_MAC)
   EXPECT_EQ(nullptr, ZoomBubbleView::GetZoomBubble());
 #endif
   ASSERT_TRUE(
       content::ExecuteScript(guest_contents, "viewer.viewport.zoomIn();"));
 
   watcher.Wait();
-#if defined(TOOLKIT_VIEWS) && !defined(OS_MACOSX)
+#if defined(TOOLKIT_VIEWS) && !defined(OS_MAC)
   EXPECT_EQ(nullptr, ZoomBubbleView::GetZoomBubble());
 #endif
 }
@@ -1957,14 +2019,16 @@ class PDFExtensionClipboardTest : public PDFExtensionTest {
     const std::string& last_data = last_clipboard_data_[clipboard_buffer];
     if (last_data.size() == expected.size()) {
       DCHECK_EQ(last_data, expected);
-      clipboard->ReadAsciiText(clipboard_buffer, &clipboard_data);
+      clipboard->ReadAsciiText(clipboard_buffer, /* data_dst = */ nullptr,
+                               &clipboard_data);
       EXPECT_EQ(expected, clipboard_data);
       return;
     }
 
     const bool expect_increase = last_data.size() < expected.size();
     while (true) {
-      clipboard->ReadAsciiText(clipboard_buffer, &clipboard_data);
+      clipboard->ReadAsciiText(clipboard_buffer, /* data_dst = */ nullptr,
+                               &clipboard_data);
       if (expect_increase) {
         if (clipboard_data.size() >= expected.size())
           break;
@@ -2189,7 +2253,7 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionTest, TouchpadPinchInvokesCustomZoom) {
                                std::move(send_pinch));
 }
 
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
 // Ensure that ctrl-wheel events are handled by the PDF viewer.
 IN_PROC_BROWSER_TEST_F(PDFExtensionTest, CtrlWheelInvokesCustomZoom) {
   GURL test_pdf_url(embedded_test_server()->GetURL("/pdf/test.pdf"));
@@ -2241,7 +2305,7 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionTest,
                                std::move(send_touchscreen_pinch));
 }
 
-#endif  // !defined(OS_MACOSX)
+#endif  // !defined(OS_MAC)
 
 // Flaky in nearly all configurations; see https://crbug.com/856169.
 IN_PROC_BROWSER_TEST_F(PDFExtensionHitTestTest, DISABLED_MouseLeave) {
@@ -2543,7 +2607,7 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionTest, DidStopLoading) {
 
   // MAIN VERIFICATION: Wait for the main frame to report that is has stopped
   // loading.
-  content::WaitForLoadStop(web_contents);
+  EXPECT_TRUE(content::WaitForLoadStop(web_contents));
 }
 
 // This test verifies that it is possible to add an <embed src=pdf> element into
@@ -2584,7 +2648,7 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionTest,
                        PdfLoadsWithExtensionThatInjectsFrame) {
   // Load the test extension.
   const extensions::Extension* test_extension = LoadExtension(
-      GetTestResourcesParentDir().AppendASCII("extension_injects_iframe"));
+      GetTestResourcesParentDir().AppendASCII("pdf/extension_injects_iframe"));
   ASSERT_TRUE(test_extension);
 
   // Load the PDF. The call to LoadPdf() will return false if the pdf extension
@@ -2619,7 +2683,8 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionTest, Metrics) {
   EXPECT_EQ(1, actions.GetActionCount("PDF.LoadSuccess"));
 }
 
-IN_PROC_BROWSER_TEST_F(PDFExtensionTest, TabInAndOutOfPDFPlugin) {
+// Flaky. See https://crbug.com/1101514.
+IN_PROC_BROWSER_TEST_F(PDFExtensionTest, DISABLED_TabInAndOutOfPDFPlugin) {
   GURL test_pdf_url(embedded_test_server()->GetURL("/pdf/test.pdf"));
   content::WebContents* guest_contents = LoadPdfGetGuestContents(test_pdf_url);
   ASSERT_TRUE(guest_contents);
@@ -2677,7 +2742,6 @@ class PDFExtensionAccessibilityTextExtractionTest : public PDFExtensionTest {
   void SetUpCommandLine(base::CommandLine* command_line) override {
     PDFExtensionTest::SetUpCommandLine(command_line);
     std::vector<base::Feature> enabled_features = {
-        chrome_pdf::features::kAccessiblePDFHighlight,
         chrome_pdf::features::kAccessiblePDFForm};
     feature_list_.InitWithFeatures(enabled_features, /*disabled_features=*/{});
   }
@@ -2882,7 +2946,6 @@ class PDFExtensionAccessibilityTreeDumpTest
   void SetUpCommandLine(base::CommandLine* command_line) override {
     PDFExtensionTest::SetUpCommandLine(command_line);
     std::vector<base::Feature> enabled_features = {
-        chrome_pdf::features::kAccessiblePDFHighlight,
         chrome_pdf::features::kAccessiblePDFForm};
     feature_list_.InitWithFeatures(enabled_features, /*disabled_features=*/{});
 
@@ -2925,8 +2988,7 @@ class PDFExtensionAccessibilityTreeDumpTest
         if (base::StartsWith(trimmed_line, allow_str,
                              base::CompareCase::SENSITIVE)) {
           property_filters->push_back(PropertyFilter(
-              base::UTF8ToUTF16(trimmed_line.substr(allow_str.size())),
-              PropertyFilter::ALLOW));
+              trimmed_line.substr(allow_str.size()), PropertyFilter::ALLOW));
         }
       }
     }
@@ -3028,8 +3090,7 @@ class PDFExtensionAccessibilityTreeDumpTest
   void AddPropertyFilter(std::vector<PropertyFilter>* property_filters,
                          std::string filter,
                          PropertyFilter::Type type = PropertyFilter::ALLOW) {
-    property_filters->push_back(
-        PropertyFilter(base::ASCIIToUTF16(filter), type));
+    property_filters->push_back(PropertyFilter(filter, type));
   }
 
   content::AccessibilityTreeFormatter::TestPass test_pass_;

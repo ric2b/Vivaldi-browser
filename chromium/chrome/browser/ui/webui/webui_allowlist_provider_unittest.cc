@@ -34,7 +34,7 @@ TEST_F(WebUIAllowlistProviderTest, RegisterChrome) {
   map->SetDefaultContentSetting(ContentSettingsType::GEOLOCATION,
                                 CONTENT_SETTING_BLOCK);
 
-  // Check |url_allowed| is not affected by whitelisted_schemes. This mechanism
+  // Check |url_allowed| is not affected by allowlisted_schemes. This mechanism
   // take precedence over allowlist provider.
   const GURL url_allowed = GURL("chrome://test/");
   ASSERT_EQ(CONTENT_SETTING_BLOCK,
@@ -81,7 +81,7 @@ TEST_F(WebUIAllowlistProviderTest, RegisterChromeUntrusted) {
   map->SetDefaultContentSetting(ContentSettingsType::GEOLOCATION,
                                 CONTENT_SETTING_BLOCK);
 
-  // Check |url_allowed| is not affected by whitelisted_schemes. This mechanism
+  // Check |url_allowed| is not affected by allowlisted_schemes. This mechanism
   // take precedence over allowlist provider.
   const GURL url_allowed = GURL("chrome-untrusted://test/");
   ASSERT_EQ(CONTENT_SETTING_BLOCK,
@@ -223,4 +223,57 @@ TEST_F(WebUIAllowlistProviderTest, OnlyNotifyOnChange) {
   allowlist->RegisterAutoGrantedPermission(origin2,
                                            ContentSettingsType::GEOLOCATION);
   EXPECT_EQ(3U, change_observer.change_counter());
+}
+
+TEST_F(WebUIAllowlistProviderTest, RegisterDevtools) {
+  auto* map = GetHostContentSettingsMap(profile());
+  map->SetDefaultContentSetting(ContentSettingsType::BLUETOOTH_GUARD,
+                                CONTENT_SETTING_BLOCK);
+
+  // Check |url_allowed| is not affected by allowlisted_schemes. This mechanism
+  // take precedence over allowlist provider.
+  const GURL url_allowed = GURL("devtools://devtools");
+  ASSERT_EQ(CONTENT_SETTING_BLOCK,
+            map->GetContentSetting(url_allowed, url_allowed,
+                                   ContentSettingsType::BLUETOOTH_GUARD,
+                                   std::string()));
+
+  auto* allowlist = WebUIAllowlist::GetOrCreate(profile());
+  allowlist->RegisterAutoGrantedPermission(
+      url::Origin::Create(url_allowed), ContentSettingsType::BLUETOOTH_GUARD);
+
+  EXPECT_EQ(CONTENT_SETTING_ALLOW,
+            map->GetContentSetting(url_allowed, url_allowed,
+                                   ContentSettingsType::BLUETOOTH_GUARD,
+                                   std::string()));
+
+  const GURL url_no_permission_webui = GURL("devtools://other");
+  EXPECT_EQ(CONTENT_SETTING_BLOCK,
+            map->GetContentSetting(
+                url_no_permission_webui, url_no_permission_webui,
+                ContentSettingsType::BLUETOOTH_GUARD, std::string()));
+}
+
+TEST_F(WebUIAllowlistProviderTest, RegisterWithPermissionList) {
+  auto* map = GetHostContentSettingsMap(profile());
+  map->SetDefaultContentSetting(ContentSettingsType::BLUETOOTH_GUARD,
+                                CONTENT_SETTING_BLOCK);
+  map->SetDefaultContentSetting(ContentSettingsType::NOTIFICATIONS,
+                                CONTENT_SETTING_BLOCK);
+
+  const GURL url_chrome = GURL("chrome://test");
+
+  auto* allowlist = WebUIAllowlist::GetOrCreate(profile());
+  allowlist->RegisterAutoGrantedPermissions(
+      url::Origin::Create(url_chrome), {ContentSettingsType::BLUETOOTH_GUARD,
+                                        ContentSettingsType::NOTIFICATIONS});
+
+  EXPECT_EQ(CONTENT_SETTING_ALLOW,
+            map->GetContentSetting(url_chrome, url_chrome,
+                                   ContentSettingsType::BLUETOOTH_GUARD,
+                                   std::string()));
+  EXPECT_EQ(CONTENT_SETTING_ALLOW,
+            map->GetContentSetting(url_chrome, url_chrome,
+                                   ContentSettingsType::NOTIFICATIONS,
+                                   std::string()));
 }

@@ -21,6 +21,7 @@
 <translation id="1150565364351027703">მზის სათვალე</translation>
 <translation id="115443833402798225">ჰანგული ანმატე</translation>
 <translation id="1155759005174418845">კატალანური</translation>
+<translation id="1172970565351728681">დარჩა დაახლოებით <ph name="REMAINING_TIME" /></translation>
 <translation id="1173894706177603556">სახელის შეცვლა</translation>
 <translation id="117624967391683467"><ph name="FILE_NAME" />-ის გადაწერა…</translation>
 <translation id="1178581264944972037">პაუზა</translation>
@@ -106,7 +107,6 @@
 <translation id="2085470240340828803">ფაილი სახელად „<ph name="FILENAME" />“ უკვე არსებობს. რისი გაკეთება გსურთ?</translation>
 <translation id="2121825465123208577">ზომის შეცვლა</translation>
 <translation id="2136953289241069843">ტრანსლიტერაცია (namaste → नमस्कार)</translation>
-<translation id="2138867954865495510">„<ph name="PATH" />“ ვერ გაიხსნა: <ph name="ERROR_MESSAGE" /></translation>
 <translation id="2163152940313951844">არასწორი სიმბოლო: <ph name="CHARACTER_NAME" /></translation>
 <translation id="2164862903024139959">ვიეტნამური კლავიატურა (TCVN)</translation>
 <translation id="2168214441502403371">სპარსული კლავიატურა</translation>
@@ -198,6 +198,7 @@
 <translation id="3236289833370040187">მფლობელი გახდება <ph name="DESTINATION_DOMAIN" />.</translation>
 <translation id="3241720467332021590">ირლანდიური</translation>
 <translation id="3245321423178950146">უცნობი შემსრულებელი</translation>
+<translation id="3248185426436836442">მომლოდინე</translation>
 <translation id="3252266817569339921">ფრანგული</translation>
 <translation id="3254434849914415189">აირჩიეთ ნაგულისხმევი პროგრამა <ph name="FILE_TYPE" /> ფაილებისთვის:</translation>
 <translation id="3264582393905923483">კონტექსტი</translation>
@@ -208,6 +209,7 @@
 <translation id="3335337277364016868">ჩაწერის წელი</translation>
 <translation id="3338239663705455570">სლოვენური კლავიატურა</translation>
 <translation id="3353984535370177728">აირჩიეთ საქაღალდე ატვირთვისთვის</translation>
+<translation id="3356580349448036450">დასრულებულია</translation>
 <translation id="3399597614303179694">მაკედონიური კლავიატურა</translation>
 <translation id="3414856743105198592">ამოღებადი მედიის ფორმატირების შემთხვევაში მთლიანი მონაცემები წაიშლება. გსურთ გააგრძელოთ?</translation>
 <translation id="3437801641691368414">შექმნის დრო</translation>
@@ -243,6 +245,7 @@
 <translation id="3780536599611287598">თქვენ არ გაქვთ „<ph name="FOLDER_NAME" />“-ში ფაილების გადატანის ნებართვა.</translation>
 <translation id="3786301125658655746">თქვენ ოფლაინში ხართ</translation>
 <translation id="3789841737615482174">ინსტალაცია</translation>
+<translation id="3793469551756281394">დარჩა დაახლოებით <ph name="REMAINING_TIME_HOUR" /> <ph name="REMAINING_TIME_MINUTE" /></translation>
 <translation id="3798449238516105146">ვერსია</translation>
 <translation id="3801082500826908679">ფარერული</translation>
 <translation id="3809272675881623365">კურდღელი</translation>
@@ -299,6 +302,7 @@
 <translation id="4481711095103932593">ეს საქაღალდე გაზიარებულია Windows-თან</translation>
 <translation id="4487088045714738411">ბელგიური კლავიატურა</translation>
 <translation id="4522570452068850558">დეტალები</translation>
+<translation id="4542387084127299777">„<ph name="PATH" />“ ვერ გაიხსნა</translation>
 <translation id="4552678318981539154">მეტი მეხსიერების ყიდვა</translation>
 <translation id="4559767610552730302">ბოკე</translation>
 <translation id="4572815280350369984"><ph name="FILE_TYPE" /> ფაილი</translation>
@@ -510,6 +514,7 @@
 <translation id="6629841649550503054">ყველაფრის სარეზერვო ასლი შენახულია <ph name="BEGIN_LINK" />Google Drive<ph name="END_LINK" />-ში</translation>
 <translation id="6643016212128521049">გასუფთავება</translation>
 <translation id="6650726141019353908">ვარდისფერი პეპელა</translation>
+<translation id="6657585470893396449">პაროლი</translation>
 <translation id="6710213216561001401">წინა</translation>
 <translation id="6718273304615422081">დაარქივება…</translation>
 <translation id="6751256176799620176">არჩეულია 1 საქაღალდე</translation>
@@ -550,7 +555,6 @@
 <translation id="7012943028104619157"><ph name="ROOT_TITLE" /> (<ph name="ROOT_SUMMARY" />)</translation>
 <translation id="7014174261166285193">ინსტალაცია ვერ მოხერხდა.</translation>
 <translation id="7040138676081995583">გახსნა პროგრამით…</translation>
-<translation id="7059566040011178088">ნაკლები, ვიდრე <ph name="REMAINING_TIME" /></translation>
 <translation id="7100897339030255923"><ph name="COUNT" /> შერჩეული ელემენტები</translation>
 <translation id="7106346894903675391">შეიძინეთ დამატებითი სივრცე…</translation>
 <translation id="7126604456862387217">„&lt;b&gt;<ph name="SEARCH_STRING" />&lt;/b&gt;“ - &lt;em&gt;ძიება Drive-ზე&lt;/em&gt;</translation>
@@ -661,7 +665,6 @@
 <translation id="8193175696669055101">მოწყობილობის მოდელი</translation>
 <translation id="8208580316430297579">ხელოვნების ნიმუშები</translation>
 <translation id="8223479393428528563">ამ ფაილების ქსელგარე გამოყენებისათვის, დაბრუნდით ქსელში, ფაილზე გმარჯვენა ღილაკზე დააჭირეთ და მონიშნეთ <ph name="OFFLINE_CHECKBOX_NAME" /> ვარიანტი.</translation>
-<translation id="8231972167769262174">დაახლოებით <ph name="REMAINING_TIME" /></translation>
 <translation id="8249296373107784235">შეწყვეტა</translation>
 <translation id="8261506727792406068">წაშლა</translation>
 <translation id="8269755669432358899">ფაილების გამოხმაურების არეების ჩაკეცვა</translation>
@@ -724,6 +727,7 @@
 <translation id="9065203028668620118">რედაქტირება</translation>
 <translation id="9099674669267916096">გვერდების რაოდენობა</translation>
 <translation id="9110990317705400362">ჩვენ მუდამ ვზრუნავთ იმაზე, თუ როგორ გავზარდოთ ჩვენი ბრაუზერის უსაფრთხოება. ადრე ნებისმიერ საიტს შეეძლო თქვენთვის ბრაუზერში გაფართოების დამატების შემოთავაზება. Google Chrome-ის უახლეს ვერსიებში პირდაპირ უნდა მიუთითოთ Chrome-ს, რომ გსურთ გაფართოების დაინსტალირება, გაფართოების გევრდზე მისი დამატების გზით. <ph name="BEGIN_LINK" />შეიტყვეთ მეტი<ph name="END_LINK" /></translation>
+<translation id="9111102763498581341">განბლოკვა</translation>
 <translation id="912419004897138677">კოდეკი</translation>
 <translation id="9129931661813833980">საქაღალდის ჩამაგრება</translation>
 <translation id="9130775360844693113">„<ph name="DESTINATION_NAME" />“-ის წევრები მიიღებენ წვდომას ამ ერთეულებზე.</translation>

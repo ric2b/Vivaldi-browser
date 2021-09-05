@@ -11,6 +11,7 @@ import static androidx.test.espresso.matcher.ViewMatchers.withId;
 
 import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.instanceOf;
+import static org.hamcrest.Matchers.is;
 
 import static org.chromium.chrome.test.util.ViewUtils.waitForView;
 
@@ -104,7 +105,8 @@ public class NewTabPageTest {
     public SuggestionsDependenciesRule mSuggestionsDeps = new SuggestionsDependenciesRule();
 
     @Rule
-    public ChromeRenderTestRule mRenderTestRule = new ChromeRenderTestRule();
+    public ChromeRenderTestRule mRenderTestRule =
+            ChromeRenderTestRule.Builder.withPublicCorpus().build();
 
     private static final String TEST_PAGE = "/chrome/test/data/android/navigate/simple.html";
     private static final String TEST_FEED =
@@ -160,7 +162,6 @@ public class NewTabPageTest {
         scrimCoordinator.disableAnimationForTesting(false);
     }
 
-    @DisabledTest(message = "https://crbug.com/898165")
     @Test
     @SmallTest
     @Feature({"NewTabPage", "FeedNewTabPage", "RenderTest"})
@@ -257,7 +258,8 @@ public class NewTabPageTest {
                 TouchCommon.singleClickView(mostVisitedItem);
             }
         });
-        Assert.assertEquals(mSiteSuggestions.get(0).url, mTab.getUrlString());
+        Assert.assertEquals(
+                mSiteSuggestions.get(0).url, ChromeTabUtils.getUrlStringOnUiThread(mTab));
     }
 
     /**
@@ -305,7 +307,7 @@ public class NewTabPageTest {
         Assert.assertTrue(InstrumentationRegistry.getInstrumentation().invokeContextMenuAction(
                 mActivityTestRule.getActivity(), ContextMenuManager.ContextMenuItemId.REMOVE, 0));
 
-        Assert.assertTrue(mMostVisitedSites.isUrlBlacklisted(testSite.url));
+        Assert.assertTrue(mMostVisitedSites.isUrlBlocklisted(testSite.url));
     }
 
     @Test
@@ -438,11 +440,9 @@ public class NewTabPageTest {
 
             ntpLayout.getTileGroup().onSwitchToForeground(false); // Force tile refresh.
         });
-        CriteriaHelper.pollUiThread(new Criteria("The tile grid was not updated.") {
-            @Override
-            public boolean isSatisfied() {
-                return mTileGridLayout.getChildCount() == 0;
-            }
+        CriteriaHelper.pollUiThread(() -> {
+            Criteria.checkThat(
+                    "The tile grid was not updated.", mTileGridLayout.getChildCount(), is(0));
         });
         Assert.assertNotNull(ntpLayout.getPlaceholder());
         Assert.assertEquals(View.VISIBLE, ntpLayout.getPlaceholder().getVisibility());
@@ -517,21 +517,12 @@ public class NewTabPageTest {
     }
 
     private void waitForUrlFocusAnimationsDisabledState(boolean disabled) {
-        CriteriaHelper.pollInstrumentationThread(Criteria.equals(disabled, new Callable<Boolean>() {
-            @Override
-            public Boolean call() {
-                return getUrlFocusAnimationsDisabled();
-            }
-        }));
+        CriteriaHelper.pollInstrumentationThread(
+                () -> Criteria.checkThat(getUrlFocusAnimationsDisabled(), is(disabled)));
     }
 
     private void waitForTabLoading() {
-        CriteriaHelper.pollUiThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                return mTab.isLoading();
-            }
-        });
+        CriteriaHelper.pollUiThread(() -> mTab.isLoading());
     }
 
     private void waitForFakeboxFocusAnimationComplete(NewTabPage ntp) {
@@ -539,12 +530,10 @@ public class NewTabPageTest {
     }
 
     private void waitForUrlFocusPercent(final NewTabPage ntp, float percent) {
-        CriteriaHelper.pollUiThread(Criteria.equals(percent, new Callable<Float>() {
-            @Override
-            public Float call() {
-                return ntp.getNewTabPageLayout().getUrlFocusChangeAnimationPercent();
-            }
-        }));
+        CriteriaHelper.pollUiThread(() -> {
+            Criteria.checkThat(
+                    ntp.getNewTabPageLayout().getUrlFocusChangeAnimationPercent(), is(percent));
+        });
     }
 
     private void clickFakebox() {
@@ -571,11 +560,6 @@ public class NewTabPageTest {
      * Waits until the top of the fakebox reaches the given position.
      */
     private void waitForFakeboxTopPosition(final NewTabPage ntp, int position) {
-        CriteriaHelper.pollUiThread(Criteria.equals(position, new Callable<Integer>() {
-            @Override
-            public Integer call() {
-                return getFakeboxTop(ntp);
-            }
-        }));
+        CriteriaHelper.pollUiThread(() -> Criteria.checkThat(getFakeboxTop(ntp), is(position)));
     }
 }

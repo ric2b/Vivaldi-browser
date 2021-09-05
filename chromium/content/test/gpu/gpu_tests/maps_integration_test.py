@@ -6,6 +6,7 @@ import json
 import os
 import sys
 
+from gpu_tests import common_browser_args as cba
 from gpu_tests import color_profile_manager
 from gpu_tests import gpu_integration_test
 from gpu_tests import path_util
@@ -43,10 +44,10 @@ class MapsIntegrationTest(
     color_profile_manager.ForceUntilExitSRGB(
         options.dont_restore_color_profile_after_test)
     super(MapsIntegrationTest, cls).SetUpProcess()
-    browser_args = [
-        '--force-color-profile=srgb', '--ensure-forced-color-profile'
-    ]
-    cls.CustomizeBrowserArgs(browser_args)
+    cls.CustomizeBrowserArgs([
+        cba.FORCE_COLOR_PROFILE_SRGB,
+        cba.ENSURE_FORCED_COLOR_PROFILE,
+    ])
     cloud_storage.GetIfChanged(
         os.path.join(_MAPS_PERF_TEST_PATH, 'load_dataset'),
         cloud_storage.PUBLIC_BUCKET)
@@ -87,15 +88,23 @@ class MapsIntegrationTest(
             { timeout : 10000 })''')
     action_runner.WaitForJavaScriptCondition('window.testCompleted', timeout=30)
 
-    screenshot = tab.Screenshot(5)
+    expected = _ReadPixelExpectations('maps_pixel_expectations.json')
+    page = _GetMapsPageForUrl(url, expected)
+
+    # Special case some tests on Fuchsia that need to grab the entire contents
+    # in the screenshot instead of just the visible portion due to small screen
+    # sizes.
+    if (MapsIntegrationTest.browser.platform.GetOSName() == 'fuchsia'
+        and page.name in pixel_test_pages.PROBLEMATIC_FUCHSIA_TESTS):
+      screenshot = tab.FullScreenshot(5)
+    else:
+      screenshot = tab.Screenshot(5)
     if screenshot is None:
       self.fail('Could not capture screenshot')
 
     dpr = tab.EvaluateJavaScript('window.devicePixelRatio')
     print 'Maps\' devicePixelRatio is ' + str(dpr)
 
-    expected = _ReadPixelExpectations('maps_pixel_expectations.json')
-    page = _GetMapsPageForUrl(url, expected)
     # The bottom corners of Mac screenshots have black triangles due to the
     # rounded corners of Mac windows. So, crop the bottom few rows off now to
     # get rid of those. The triangles appear to be 5 pixels wide and tall

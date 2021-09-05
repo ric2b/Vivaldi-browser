@@ -13,9 +13,10 @@ namespace apps {
 IconCache::Value::Value()
     : image_(), is_placeholder_icon_(false), ref_count_(0) {}
 
-apps::mojom::IconValuePtr IconCache::Value::AsIconValue() {
+apps::mojom::IconValuePtr IconCache::Value::AsIconValue(
+    apps::mojom::IconType icon_type) {
   auto icon_value = apps::mojom::IconValue::New();
-  icon_value->icon_compression = apps::mojom::IconCompression::kUncompressed;
+  icon_value->icon_type = icon_type;
   icon_value->uncompressed = image_;
   icon_value->is_placeholder_icon = is_placeholder_icon_;
   return icon_value;
@@ -37,13 +38,13 @@ std::unique_ptr<IconLoader::Releaser> IconCache::LoadIconFromIconKey(
     apps::mojom::AppType app_type,
     const std::string& app_id,
     apps::mojom::IconKeyPtr icon_key,
-    apps::mojom::IconCompression icon_compression,
+    apps::mojom::IconType icon_type,
     int32_t size_hint_in_dip,
     bool allow_placeholder_icon,
     apps::mojom::Publisher::LoadIconCallback callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   IconLoader::Key key(
-      app_type, app_id, icon_key, icon_compression, size_hint_in_dip,
+      app_type, app_id, icon_key, icon_type, size_hint_in_dip,
       // We pass false instead of allow_placeholder_icon, as the Value
       // already records placeholder-ness. If the allow_placeholder_icon
       // arg to this function is true, we can re-use a cache hit regardless
@@ -54,7 +55,8 @@ std::unique_ptr<IconLoader::Releaser> IconCache::LoadIconFromIconKey(
   Value* cache_hit = nullptr;
   bool ref_count_incremented = false;
 
-  if (icon_compression == apps::mojom::IconCompression::kUncompressed) {
+  if (icon_type == apps::mojom::IconType::kUncompressed ||
+      icon_type == apps::mojom::IconType::kStandard) {
     auto iter = map_.find(key);
     if (iter == map_.end()) {
       iter = map_.insert(std::make_pair(key, Value())).first;
@@ -63,17 +65,18 @@ std::unique_ptr<IconLoader::Releaser> IconCache::LoadIconFromIconKey(
       cache_hit = &iter->second;
     }
 
-    iter->second.ref_count_++;
+    auto new_ref_count = ++iter->second.ref_count_;
+    CHECK(new_ref_count != std::numeric_limits<decltype(new_ref_count)>::max());
     ref_count_incremented = true;
   }
 
   std::unique_ptr<IconLoader::Releaser> releaser(nullptr);
   if (cache_hit) {
-    std::move(callback).Run(cache_hit->AsIconValue());
+    std::move(callback).Run(cache_hit->AsIconValue(icon_type));
   } else if (wrapped_loader_) {
     releaser = wrapped_loader_->LoadIconFromIconKey(
-        app_type, app_id, std::move(icon_key), icon_compression,
-        size_hint_in_dip, allow_placeholder_icon,
+        app_type, app_id, std::move(icon_key), icon_type, size_hint_in_dip,
+        allow_placeholder_icon,
         base::BindOnce(&IconCache::OnLoadIcon, weak_ptr_factory_.GetWeakPtr(),
                        key, std::move(callback)));
   } else {
@@ -106,10 +109,27 @@ void IconCache::SweepReleasedIcons() {
   }
 }
 
+void IconCache::RemoveIcon(apps::mojom::AppType app_type,
+                           const std::string& app_id) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  if (gc_policy_ != GarbageCollectionPolicy::kExplicit) {
+    return;
+  }
+
+  auto iter = map_.begin();
+  while (iter != map_.end()) {
+    if (iter->first.app_type_ == app_type && iter->first.app_id_ == app_id) {
+      iter = map_.erase(iter);
+    } else {
+      ++iter;
+    }
+  }
+}
+
 void IconCache::Update(const IconLoader::Key& key,
                        const apps::mojom::IconValue& icon_value) {
-  if (icon_value.icon_compression !=
-      apps::mojom::IconCompression::kUncompressed) {
+  if (icon_value.icon_type != apps::mojom::IconType::kUncompressed &&
+      icon_value.icon_type != apps::mojom::IconType::kStandard) {
     return;
   }
 
@@ -140,13 +160,13 @@ void IconCache::OnRelease(IconLoader::Key key) {
 
   auto iter = map_.find(key);
   if (iter == map_.end()) {
-    NOTREACHED();
     return;
   }
 
-  uint64_t n = iter->second.ref_count_;
-  DCHECK(n > 0);
-  n--;
+  auto n = iter->second.ref_count_;
+  if (n > 0) {
+    n--;
+  }
   iter->second.ref_count_ = n;
 
   if ((n == 0) && (gc_policy_ == GarbageCollectionPolicy::kEager)) {

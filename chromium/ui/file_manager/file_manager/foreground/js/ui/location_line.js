@@ -36,7 +36,7 @@ class LocationLine extends cr.EventTarget {
   }
 
   /**
-   * Shows breadcrumbs. This operation is done without IO.
+   * Shows path of |entry|.
    *
    * @param {!Entry|!FakeEntry} entry Target entry or fake entry.
    */
@@ -45,8 +45,16 @@ class LocationLine extends cr.EventTarget {
       return;
     }
 
+    this.entry_ = entry;
+
     const components =
         PathComponent.computeComponentsFromEntry(entry, this.volumeManager_);
+
+    // Root "/" paths have no components, crbug.com/1107391.
+    if (!components.length) {
+      return;
+    }
+
     if (util.isFilesNg()) {
       this.updateNg_(components);
     } else {
@@ -55,8 +63,8 @@ class LocationLine extends cr.EventTarget {
   }
 
   /**
-   * Returns current path components built by the current directory entry.
-   * @return {!Array<!PathComponent>} Current path components.
+   * Returns the breadcrumb path components.
+   * @return {!Array<!PathComponent>}
    */
   getCurrentPathComponents() {
     return this.components_;
@@ -64,12 +72,11 @@ class LocationLine extends cr.EventTarget {
 
   /**
    * Updates the breadcrumb display for files-ng.
-   * @param {!Array<!PathComponent>} components Components to the
-   *     target path.
+   * @param {!Array<!PathComponent>} components Path components.
    * @private
    */
   updateNg_(components) {
-    this.components_ = components;
+    this.components_ = Array.from(components);
 
     let breadcrumbs = document.querySelector('bread-crumb');
     if (!breadcrumbs) {
@@ -79,12 +86,12 @@ class LocationLine extends cr.EventTarget {
       breadcrumbs.setSignalCallback(this.breadCrumbSignal_.bind(this));
     }
 
-    let crumbPath = components[0].name;
+    let path = components[0].name.replace(/\//g, '%2F');
     for (let i = 1; i < components.length; i++) {
-      crumbPath += '/' + components[i].name;
+      path += '/' + components[i].name.replace(/\//g, '%2F');
     }
-    breadcrumbs.path = crumbPath;
 
+    breadcrumbs.path = path;
     this.breadcrumbs_.hidden = false;
   }
 

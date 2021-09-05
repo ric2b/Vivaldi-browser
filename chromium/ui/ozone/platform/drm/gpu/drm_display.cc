@@ -85,12 +85,13 @@ std::vector<drmModeModeInfo> GetDrmModeVector(drmModeConnector* connector) {
   return modes;
 }
 
-void FillLinearValues(std::vector<display::GammaRampRGBEntry>* table,
-                      size_t table_size,
-                      float max_value) {
+void FillPowerFunctionValues(std::vector<display::GammaRampRGBEntry>* table,
+                             size_t table_size,
+                             float max_value,
+                             float exponent) {
   for (size_t i = 0; i < table_size; i++) {
-    const uint16_t v =
-        max_value * std::numeric_limits<uint16_t>::max() * i / (table_size - 1);
+    const uint16_t v = max_value * std::numeric_limits<uint16_t>::max() *
+                       pow((static_cast<float>(i) + 1) / table_size, exponent);
     struct display::GammaRampRGBEntry gamma_entry = {v, v, v};
     table->push_back(gamma_entry);
   }
@@ -104,10 +105,10 @@ DrmDisplay::DrmDisplay(ScreenManager* screen_manager,
       drm_(drm),
       current_color_space_(gfx::ColorSpace::CreateSRGB()) {}
 
-DrmDisplay::~DrmDisplay() {
-}
+DrmDisplay::~DrmDisplay() = default;
 
 uint32_t DrmDisplay::connector() const {
+  DCHECK(connector_);
   return connector_->connector_id;
 }
 
@@ -117,12 +118,13 @@ std::unique_ptr<display::DisplaySnapshot> DrmDisplay::Update(
   std::unique_ptr<display::DisplaySnapshot> params = CreateDisplaySnapshot(
       info, drm_->get_fd(), drm_->device_path(), device_index, origin_);
   crtc_ = info->crtc()->crtc_id;
-  // TODO(dcastagna): consider taking ownership of |info->connector()|
+  // TODO(crbug.com/1119499): consider taking ownership of |info->connector()|
   connector_ = ScopedDrmConnectorPtr(
       drm_->GetConnector(info->connector()->connector_id));
   if (!connector_) {
     PLOG(ERROR) << "Failed to get connector "
                 << info->connector()->connector_id;
+    return nullptr;
   }
 
   display_id_ = params->display_id();
@@ -228,7 +230,8 @@ void DrmDisplay::SetGammaCorrection(
   // When both |degamma_lut| and |gamma_lut| are empty they are interpreted as
   // "linear/pass-thru" [1]. If the display |is_hdr_capable_| we have to make
   // sure the |current_color_space_| is considered properly.
-  // [1] https://www.kernel.org/doc/html/v4.19/gpu/drm-kms.html#color-management-properties
+  // [1]
+  // https://www.kernel.org/doc/html/v4.19/gpu/drm-kms.html#color-management-properties
   if (degamma_lut.empty() && gamma_lut.empty() && is_hdr_capable_)
     SetColorSpace(current_color_space_);
   else
@@ -271,12 +274,16 @@ void DrmDisplay::SetColorSpace(const gfx::ColorSpace& color_space) {
   if (current_color_space_.IsHDR())
     return CommitGammaCorrection(degamma, gamma);
 
-  // TODO(mcasas) This should be the same value as in DisplayChangeObservers's
-  // FillDisplayColorSpaces, move to a common place.
-  constexpr float kHDRLevel = 2.0;
+  // TODO(mcasas) This should be the inverse value of DisplayChangeObservers's
+  // FillDisplayColorSpaces's kHDRLevel, move to a common place.
+  // TODO(b/165822222): adjust this level based on the display brightness.
+  constexpr float kSDRLevel = 0.85;
   // TODO(mcasas): Retrieve this from the |drm_| HardwareDisplayPlaneManager.
-  constexpr size_t kNumGammaSamples = 16ul;
-  FillLinearValues(&gamma, kNumGammaSamples, 1.0 / kHDRLevel);
+  constexpr size_t kNumGammaSamples = 64ul;
+  // Only using kSDRLevel of the available values shifts the contrast ratio, we
+  // restore it via a smaller local gamma correction using this exponent.
+  constexpr float kExponent = 1.2;
+  FillPowerFunctionValues(&gamma, kNumGammaSamples, kSDRLevel, kExponent);
   CommitGammaCorrection(degamma, gamma);
 }
 

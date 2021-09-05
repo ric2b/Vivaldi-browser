@@ -183,7 +183,8 @@ class WebsiteLoginManagerImpl::UpdatePasswordRequest
     DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
     password_manager::PasswordStore::FormDigest digest(
-        autofill::PasswordForm::Scheme::kHtml, login.origin.spec(), GURL());
+        autofill::PasswordForm::Scheme::kHtml, password_form_.signon_realm,
+        password_form_.url);
     form_fetcher_ = std::make_unique<password_manager::FormFetcherImpl>(
         digest, client, true);
   }
@@ -195,7 +196,7 @@ class WebsiteLoginManagerImpl::UpdatePasswordRequest
   }
 
   void CommitGeneratedPassword() {
-    password_save_manager_->Save(form_data_ /* observed_form */,
+    password_save_manager_->Save(&form_data_ /* observed_form */,
                                  password_form_);
   }
 
@@ -205,7 +206,7 @@ class WebsiteLoginManagerImpl::UpdatePasswordRequest
                                  metrics_recorder_, &votes_uploader_);
     password_save_manager_->PresaveGeneratedPassword(password_form_);
     password_save_manager_->CreatePendingCredentials(
-        password_form_, form_data_ /* observed_form */,
+        password_form_, &form_data_ /* observed_form */,
         form_data_ /* submitted_form */, false /* is_http_auth */,
         false /* is_credential_api_save */);
 

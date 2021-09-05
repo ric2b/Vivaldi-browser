@@ -49,13 +49,14 @@
 #include "components/signin/ios/browser/features.h"
 #include "components/signin/public/base/signin_switches.h"
 #include "components/strings/grit/components_strings.h"
+#include "components/sync/base/sync_base_switches.h"
 #include "components/sync/driver/sync_driver_switches.h"
-#include "components/sync/engine/sync_engine_switches.h"
 #include "components/translate/core/browser/translate_prefs.h"
 #include "components/ukm/ios/features.h"
 #include "ios/chrome/browser/browsing_data/browsing_data_features.h"
 #include "ios/chrome/browser/chrome_switches.h"
 #include "ios/chrome/browser/crash_report/breadcrumbs/features.h"
+#include "ios/chrome/browser/crash_report/features.h"
 #include "ios/chrome/browser/drag_and_drop/drag_and_drop_flag.h"
 #include "ios/chrome/browser/flags/ios_chrome_flag_descriptions.h"
 #include "ios/chrome/browser/passwords/password_manager_features.h"
@@ -121,16 +122,6 @@ const FeatureEntry::Choice kAutofillIOSDelayBetweenFieldsChoices[] = {
     {"500", autofill::switches::kAutofillIOSDelayBetweenFields, "500"},
     {"1000", autofill::switches::kAutofillIOSDelayBetweenFields, "1000"},
 };
-
-const FeatureEntry::FeatureVariation
-    kOmniboxOnDeviceHeadSuggestIncognitoExperimentVariations[] = {{
-        "relevance-1000",
-        (FeatureEntry::FeatureParam[]){
-            {OmniboxFieldTrial::kOnDeviceHeadSuggestMaxScoreForNonUrlInput,
-             "1000"}},
-        1,
-        nullptr,
-    }};
 
 const FeatureEntry::FeatureVariation
     kOmniboxOnDeviceHeadSuggestNonIncognitoExperimentVariations[] = {
@@ -394,10 +385,7 @@ const flags_ui::FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kOmniboxOnDeviceHeadSuggestionsIncognitoName,
      flag_descriptions::kOmniboxOnDeviceHeadSuggestionsIncognitoDescription,
      flags_ui::kOsIos,
-     FEATURE_WITH_PARAMS_VALUE_TYPE(
-         omnibox::kOnDeviceHeadProviderIncognito,
-         kOmniboxOnDeviceHeadSuggestIncognitoExperimentVariations,
-         "OmniboxOnDeviceHeadSuggestIncognitoIOS")},
+     FEATURE_VALUE_TYPE(omnibox::kOnDeviceHeadProviderIncognito)},
     {"omnibox-on-device-head-suggestions-non-incognito",
      flag_descriptions::kOmniboxOnDeviceHeadSuggestionsNonIncognitoName,
      flag_descriptions::kOmniboxOnDeviceHeadSuggestionsNonIncognitoDescription,
@@ -461,10 +449,6 @@ const flags_ui::FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kAutofillPruneSuggestionsName,
      flag_descriptions::kAutofillPruneSuggestionsDescription, flags_ui::kOsIos,
      FEATURE_VALUE_TYPE(autofill::features::kAutofillPruneSuggestions)},
-    {"enable-sync-trusted-vault",
-     flag_descriptions::kEnableSyncTrustedVaultName,
-     flag_descriptions::kEnableSyncTrustedVaultDescription, flags_ui::kOsIos,
-     FEATURE_VALUE_TYPE(switches::kSyncSupportTrustedVaultPassphrase)},
     {"collections-card-presentation-style",
      flag_descriptions::kCollectionsCardPresentationStyleName,
      flag_descriptions::kCollectionsCardPresentationStyleDescription,
@@ -475,6 +459,10 @@ const flags_ui::FeatureEntry kFeatureEntries[] = {
     {"ios-breadcrumbs", flag_descriptions::kLogBreadcrumbsName,
      flag_descriptions::kLogBreadcrumbsDescription, flags_ui::kOsIos,
      FEATURE_VALUE_TYPE(kLogBreadcrumbs)},
+    {"ios-synthetic-crash-reports",
+     flag_descriptions::kSyntheticCrashReportsForUteName,
+     flag_descriptions::kSyntheticCrashReportsForUteDescription,
+     flags_ui::kOsIos, FEATURE_VALUE_TYPE(kSyntheticCrashReportsForUte)},
     {"force-startup-signin-promo",
      flag_descriptions::kForceStartupSigninPromoName,
      flag_descriptions::kForceStartupSigninPromoDescription, flags_ui::kOsIos,
@@ -541,16 +529,9 @@ const flags_ui::FeatureEntry kFeatureEntries[] = {
     {"reload-sad-tab", flag_descriptions::kReloadSadTabName,
      flag_descriptions::kReloadSadTabDescription, flags_ui::kOsIos,
      FEATURE_VALUE_TYPE(web::kReloadSadTab)},
-    {"improved-cookie-controls",
-     flag_descriptions::kImprovedCookieControlsDescription,
-     flag_descriptions::kImprovedCookieControlsDescription, flags_ui::kOsIos,
-     FEATURE_VALUE_TYPE(content_settings::kImprovedCookieControls)},
     {"page-info-refactoring", flag_descriptions::kPageInfoRefactoringName,
      flag_descriptions::kPageInfoRefactoringDescription, flags_ui::kOsIos,
      FEATURE_VALUE_TYPE(kPageInfoRefactoring)},
-    {"contained-browser-bvc", flag_descriptions::kContainedBVCName,
-     flag_descriptions::kContainedBVCDescription, flags_ui::kOsIos,
-     FEATURE_VALUE_TYPE(kContainedBVC)},
     {"ssl-committed-interstitials",
      flag_descriptions::kSSLCommittedInterstitialsName,
      flag_descriptions::kSSLCommittedInterstitialsDescription, flags_ui::kOsIos,
@@ -578,9 +559,11 @@ const flags_ui::FeatureEntry kFeatureEntries[] = {
     {"safe-browsing-available", flag_descriptions::kSafeBrowsingAvailableName,
      flag_descriptions::kSafeBrowsingAvailableDescription, flags_ui::kOsIos,
      FEATURE_VALUE_TYPE(safe_browsing::kSafeBrowsingAvailableOnIOS)},
-    {"qr-code-generation", flag_descriptions::kQRCodeGenerationName,
-     flag_descriptions::kQRCodeGenerationDescription, flags_ui::kOsIos,
-     FEATURE_VALUE_TYPE(kQRCodeGeneration)},
+    {"safe-browsing-real-time",
+     flag_descriptions::kSafeBrowsingRealTimeLookupName,
+     flag_descriptions::kSafeBrowsingRealTimeLookupDescription,
+     flags_ui::kOsIos,
+     FEATURE_VALUE_TYPE(safe_browsing::kRealTimeUrlLookupEnabled)},
     {"autofill-enable-surfacing-server-card-nickname",
      flag_descriptions::kAutofillEnableSurfacingServerCardNicknameName,
      flag_descriptions::kAutofillEnableSurfacingServerCardNicknameDescription,
@@ -634,7 +617,7 @@ const flags_ui::FeatureEntry kFeatureEntries[] = {
     {"safety-check-ios", flag_descriptions::kSafetyCheckIOSName,
      flag_descriptions::kSafetyCheckIOSDescription, flags_ui::kOsIos,
      FEATURE_VALUE_TYPE(kSafetyCheckIOS)},
-    {"discover-feed-ntp-ios", flag_descriptions::kDiscoverFeedInNtpName,
+    {"new-content-suggestions-feed", flag_descriptions::kDiscoverFeedInNtpName,
      flag_descriptions::kDiscoverFeedInNtpDescription, flags_ui::kOsIos,
      FEATURE_VALUE_TYPE(kDiscoverFeedInNtp)},
     {"autofill-enable-card-nickname-upstream",
@@ -670,6 +653,32 @@ const flags_ui::FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kAddWebContentDropInteractionDescription,
      flags_ui::kOsIos,
      FEATURE_VALUE_TYPE(web::features::kAddWebContentDropInteraction)},
+    {"enable-fullpage-screenshot",
+     flag_descriptions::kEnableFullPageScreenshotName,
+     flag_descriptions::kEnableFullPageScreenshotDescription, flags_ui::kOsIos,
+     FEATURE_VALUE_TYPE(kEnableFullPageScreenshot)},
+    {"scroll-to-text-ios", flag_descriptions::kScrollToTextIOSName,
+     flag_descriptions::kScrollToTextIOSDescription, flags_ui::kOsIos,
+     FEATURE_VALUE_TYPE(web::features::kScrollToTextIOS)},
+    {"legacy-tls-interstitial",
+     flag_descriptions::kIOSLegacyTLSInterstitialsName,
+     flag_descriptions::kIOSLegacyTLSInterstitialsDescription, flags_ui::kOsIos,
+     FEATURE_VALUE_TYPE(web::features::kIOSLegacyTLSInterstitial)},
+    {"enable-autofill-password-reauth-ios",
+     flag_descriptions::kEnableAutofillPasswordReauthIOSName,
+     flag_descriptions::kEnableAutofillPasswordReauthIOSDescription,
+     flags_ui::kOsIos, FEATURE_VALUE_TYPE(kEnableAutofillPasswordReauthIOS)},
+    {"well-known-change-password",
+     flag_descriptions::kWellKnownChangePasswordName,
+     flag_descriptions::kWellKnownChangePasswordDescription, flags_ui::kOsIos,
+     FEATURE_VALUE_TYPE(password_manager::features::kWellKnownChangePassword)},
+    {"default-browser-fullscreen-promo",
+     flag_descriptions::kDefaultBrowserFullscreenPromoName,
+     flag_descriptions::kDefaultBrowserFullscreenPromoDescription,
+     flags_ui::kOsIos, FEATURE_VALUE_TYPE(kDefaultBrowserFullscreenPromo)},
+    {"default-browser-setting", flag_descriptions::kDefaultBrowserSettingsName,
+     flag_descriptions::kDefaultBrowserSettingsDescription, flags_ui::kOsIos,
+     FEATURE_VALUE_TYPE(kDefaultBrowserSettings)},
 };
 
 bool SkipConditionalFeatureEntry(const flags_ui::FeatureEntry& entry) {
@@ -701,22 +710,32 @@ void AppendSwitchesFromExperimentalSettings(base::CommandLine* command_line) {
                                     web::BuildMobileUserAgent(product));
   }
 
-  // Set some sample policy values for testing if EnableSamplePolicies is
-  // enabled.
+  // Shared variables for all enterprise experimental flags.
+  NSMutableDictionary* testing_policies = [[NSMutableDictionary alloc] init];
+  NSMutableArray* allowed_experimental_policies = [[NSMutableArray alloc] init];
+
+  // Set some sample policy values for testing if EnableSamplePolicies is set to
+  // true.
   if ([defaults boolForKey:@"EnableSamplePolicies"]) {
-    // List the sample policies to enable as experimental. This is necessary for
-    // the flag to work on Beta.
-    NSArray* experimental_policies = @[
+    // Some of the sample policies are still marked as experimental and must be
+    // explicitly allowed, otherwise they will be ignored in Beta and Stable.
+    [allowed_experimental_policies addObjectsFromArray:@[
+      base::SysUTF8ToNSString(policy::key::kAutofillAddressEnabled),
       base::SysUTF8ToNSString(policy::key::kAutofillCreditCardEnabled),
       base::SysUTF8ToNSString(policy::key::kChromeVariations),
       base::SysUTF8ToNSString(policy::key::kDefaultPopupsSetting),
-      base::SysUTF8ToNSString(policy::key::kPasswordManagerEnabled)
-    ];
+      base::SysUTF8ToNSString(policy::key::kDefaultSearchProviderEnabled),
+      base::SysUTF8ToNSString(policy::key::kDefaultSearchProviderName),
+      base::SysUTF8ToNSString(policy::key::kDefaultSearchProviderSearchURL),
+      base::SysUTF8ToNSString(policy::key::kPasswordManagerEnabled),
+      base::SysUTF8ToNSString(policy::key::kSafeBrowsingProtectionLevel),
+      base::SysUTF8ToNSString(policy::key::kSearchSuggestEnabled),
+      base::SysUTF8ToNSString(policy::key::kTranslateEnabled)
+    ]];
 
     // Define sample policies to enable.
-    NSDictionary* testing_policies = @{
-      base::SysUTF8ToNSString(policy::key::kEnableExperimentalPolicies) :
-          experimental_policies,
+    [testing_policies addEntriesFromDictionary:@{
+      base::SysUTF8ToNSString(policy::key::kAutofillAddressEnabled) : @NO,
 
       base::SysUTF8ToNSString(policy::key::kAutofillCreditCardEnabled) : @NO,
 
@@ -726,8 +745,49 @@ void AppendSwitchesFromExperimentalSettings(base::CommandLine* command_line) {
       // 2 = Do not allow any site to show popups
       base::SysUTF8ToNSString(policy::key::kDefaultPopupsSetting) : @2,
 
+      // Set default search engine.
+      base::SysUTF8ToNSString(policy::key::kDefaultSearchProviderEnabled) :
+          @YES,
+      base::SysUTF8ToNSString(policy::key::kDefaultSearchProviderSearchURL) :
+          @"http://www.google.com/search?q={searchTerms}",
+      base::SysUTF8ToNSString(policy::key::kDefaultSearchProviderName) :
+          @"TestEngine",
+
       base::SysUTF8ToNSString(policy::key::kPasswordManagerEnabled) : @NO,
-    };
+
+      base::SysUTF8ToNSString(policy::key::kTranslateEnabled) : @NO,
+
+      // 2 = Enhanced safe browsing protection
+      base::SysUTF8ToNSString(policy::key::kSafeBrowsingProtectionLevel) : @2,
+
+      base::SysUTF8ToNSString(policy::key::kSearchSuggestEnabled) : @YES,
+    }];
+  }
+
+  // If a CBCM enrollment token is provided, force Chrome Browser Cloud
+  // Management to enabled, add the token to the list of policies, and allow
+  // the CloudReportingEnabled experimental policy.
+  NSString* token_key =
+      base::SysUTF8ToNSString(policy::key::kCloudManagementEnrollmentToken);
+  NSString* token = [defaults stringForKey:token_key];
+
+  if ([token length] > 0) {
+    command_line->AppendSwitch(switches::kEnableChromeBrowserCloudManagement);
+    [allowed_experimental_policies
+        addObject:base::SysUTF8ToNSString(policy::key::kCloudReportingEnabled)];
+    [testing_policies setValue:token forKey:token_key];
+  }
+
+  // If any experimental policy was allowed, set the EnableExperimentalPolicies
+  // policy.
+  if ([allowed_experimental_policies count] > 0) {
+    [testing_policies setValue:allowed_experimental_policies
+                        forKey:base::SysUTF8ToNSString(
+                                   policy::key::kEnableExperimentalPolicies)];
+  }
+
+  // If some policies were set, commit them to the app's registration defaults.
+  if ([testing_policies count] > 0) {
     NSDictionary* registration_defaults =
         @{kPolicyLoaderIOSConfigurationKey : testing_policies};
     [defaults registerDefaults:registration_defaults];

@@ -150,6 +150,8 @@ class CC_EXPORT LayerImpl {
 
   virtual bool IsScrollbarLayer() const;
 
+  bool IsScrollerOrScrollbar() const;
+
   // Returns true if this layer has content to draw.
   void SetDrawsContent(bool draws_content);
   bool DrawsContent() const { return draws_content_; }
@@ -177,11 +179,6 @@ class CC_EXPORT LayerImpl {
   // Stable identifier for clients. See comment in cc/trees/element_id.h.
   void SetElementId(ElementId element_id);
   ElementId element_id() const { return element_id_; }
-
-  void SetFrameElementId(ElementId frame_element_id) {
-    frame_element_id_ = frame_element_id;
-  }
-  ElementId frame_element_id() const { return frame_element_id_; }
 
   bool IsAffectedByPageScale() const;
 
@@ -512,8 +509,6 @@ class CC_EXPORT LayerImpl {
 
  private:
   ElementId element_id_;
-  // Element ID of the document containing this layer.
-  ElementId frame_element_id_;
   // Rect indicating what was repainted/updated during update.
   // Note that plugin layers bypass this and leave it empty.
   // This is in the layer's space.

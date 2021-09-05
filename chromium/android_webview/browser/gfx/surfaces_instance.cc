@@ -83,7 +83,8 @@ SurfacesInstance::SurfacesInstance()
   auto overlay_processor = std::make_unique<viz::OverlayProcessorStub>();
   display_ = std::make_unique<viz::Display>(
       nullptr /* shared_bitmap_manager */,
-      output_surface_provider_.renderer_settings(), frame_sink_id_,
+      output_surface_provider_.renderer_settings(),
+      output_surface_provider_.debug_settings(), frame_sink_id_,
       std::move(output_surface), std::move(overlay_processor),
       std::move(scheduler), nullptr /* current_task_runner */);
   display_->Initialize(this, frame_sink_manager_->surface_manager(),
@@ -142,7 +143,8 @@ void SurfacesInstance::DrawAndSwap(gfx::Size viewport,
   // Create a frame with a single SurfaceDrawQuad referencing the child
   // Surface and transformed using the given transform.
   std::unique_ptr<viz::RenderPass> render_pass = viz::RenderPass::Create();
-  render_pass->SetNew(1, gfx::Rect(viewport), clip, gfx::Transform());
+  render_pass->SetNew(viz::RenderPassId{1}, gfx::Rect(viewport), clip,
+                      gfx::Transform());
   render_pass->has_transparent_background = false;
 
   viz::SharedQuadState* quad_state =
@@ -226,7 +228,7 @@ void SurfacesInstance::SetSolidColorRootFrame() {
   bool is_clipped = false;
   bool are_contents_opaque = true;
   std::unique_ptr<viz::RenderPass> render_pass = viz::RenderPass::Create();
-  render_pass->SetNew(1, rect, rect, gfx::Transform());
+  render_pass->SetNew(viz::RenderPassId{1}, rect, rect, gfx::Transform());
   viz::SharedQuadState* quad_state =
       render_pass->CreateAndAppendSharedQuadState();
   quad_state->SetAll(gfx::Transform(), rect, rect, gfx::RRectF(), rect,
@@ -289,6 +291,10 @@ bool SurfacesInstance::BackdropFiltersPreventMerge(
   //  in the cases listed above. crbug.com/996434
   const viz::Surface* surface =
       frame_sink_manager_->surface_manager()->GetSurfaceForId(surface_id);
+
+  if (!surface || !surface->HasActiveFrame())
+    return false;
+
   const auto& frame = surface->GetActiveFrame();
   base::flat_set<viz::RenderPassId> backdrop_filter_passes;
   for (const auto& render_pass : frame.render_pass_list) {

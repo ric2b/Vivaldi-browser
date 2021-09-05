@@ -77,8 +77,6 @@ source_set("automation_client_lib") {
     "chrome/chrome_remote_impl.h",
     "chrome/console_logger.cc",
     "chrome/console_logger.h",
-    "chrome/debugger_tracker.cc",
-    "chrome/debugger_tracker.h",
     "chrome/device_manager.cc",
     "chrome/device_manager.h",
     "chrome/device_metrics.cc",
@@ -148,6 +146,8 @@ source_set("automation_client_lib") {
     "net/command_id.h",
     "net/net_util.cc",
     "net/net_util.h",
+    "net/pipe_handler.cc",
+    "net/pipe_handler.h",
     "net/sync_websocket.h",
     "net/sync_websocket_factory.cc",
     "net/sync_websocket_factory.h",
@@ -278,7 +278,7 @@ source_set("lib") {
   }
 
   if (is_mac) {
-    libs = [ "Carbon.framework" ]
+    frameworks = [ "Carbon.framework" ]
   }
 }
 

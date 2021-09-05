@@ -122,6 +122,7 @@
 // <include src="file_selection.js">
 // <include src="file_tasks.js">
 // <include src="file_transfer_controller.js">
+// <include src="file_type_filters_controller.js">
 // <include src="file_watcher.js">
 // <include src="folder_shortcuts_data_model.js">
 // <include src="sort_menu_controller.js">
@@ -197,4 +198,6 @@ window.fileManager = fileManager;
 
 // Exports
 window.util = util;
+// TODO(crbug.com/1115792) remove this export.
+window.AsyncUtil = AsyncUtil;
 })();

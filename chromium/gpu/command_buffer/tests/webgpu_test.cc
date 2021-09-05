@@ -22,7 +22,7 @@ namespace gpu {
 
 namespace {
 
-void OnRequestAdapterCallback(uint32_t adapter_service_id,
+void OnRequestAdapterCallback(int32_t adapter_service_id,
                               const WGPUDeviceProperties& properties) {}
 
 void CountCallback(int* count) {
@@ -51,7 +51,8 @@ bool WebGPUTest::WebGPUSupported() const {
 
 bool WebGPUTest::WebGPUSharedImageSupported() const {
   // Currently WebGPUSharedImage is only implemented on Mac, Linux and Windows
-#if (defined(OS_MACOSX) || defined(OS_LINUX) || defined(OS_WIN)) && \
+#if (defined(OS_MAC) || defined(OS_LINUX) || defined(OS_CHROMEOS) || \
+     defined(OS_WIN)) &&                                             \
     BUILDFLAG(USE_DAWN)
   return true;
 #else
@@ -62,7 +63,7 @@ bool WebGPUTest::WebGPUSharedImageSupported() const {
 void WebGPUTest::SetUp() {
   gpu::GpuPreferences gpu_preferences;
   gpu_preferences.enable_webgpu = true;
-#if defined(OS_LINUX) && BUILDFLAG(USE_DAWN)
+#if (defined(OS_LINUX) || defined(OS_CHROMEOS)) && BUILDFLAG(USE_DAWN)
   gpu_preferences.use_vulkan = gpu::VulkanImplementationName::kNative;
   gpu_preferences.gr_context_type = gpu::GrContextType::kVulkan;
 #elif defined(OS_WIN)
@@ -90,7 +91,11 @@ void WebGPUTest::Initialize(const Options& options) {
   attributes.context_type = CONTEXT_TYPE_WEBGPU;
 
   static constexpr GpuMemoryBufferManager* memory_buffer_manager = nullptr;
+#if defined(OS_MAC)
+  ImageFactory* image_factory = &image_factory_;
+#else
   static constexpr ImageFactory* image_factory = nullptr;
+#endif
   static constexpr GpuChannelManagerDelegate* channel_manager = nullptr;
   context_ = std::make_unique<WebGPUInProcessContext>();
   ContextResult result =

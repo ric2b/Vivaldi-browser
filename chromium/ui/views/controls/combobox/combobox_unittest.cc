@@ -11,10 +11,12 @@
 #include <vector>
 
 #include "base/macros.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "ui/accessibility/ax_action_data.h"
 #include "ui/accessibility/ax_enums.mojom.h"
+#include "ui/accessibility/ax_node_data.h"
 #include "ui/base/ime/input_method.h"
 #include "ui/base/ime/text_input_client.h"
 #include "ui/base/models/combobox_model.h"
@@ -30,6 +32,7 @@
 #include "ui/views/controls/combobox/combobox_listener.h"
 #include "ui/views/style/platform_style.h"
 #include "ui/views/test/combobox_test_api.h"
+#include "ui/views/test/test_ax_event_observer.h"
 #include "ui/views/test/view_metadata_test_utils.h"
 #include "ui/views/test/views_test_base.h"
 #include "ui/views/widget/unique_widget_ptr.h"
@@ -280,7 +283,7 @@ class ComboboxTest : public ViewsTestBase {
   DISALLOW_COPY_AND_ASSIGN(ComboboxTest);
 };
 
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
 // Tests whether the various Mac specific keyboard shortcuts invoke the dropdown
 // menu or not.
 TEST_F(ComboboxTest, KeyTestMac) {
@@ -354,7 +357,7 @@ TEST_F(ComboboxTest, DisabilityTest) {
 
 // On Mac, key events can't change the currently selected index directly for a
 // combobox.
-#if !defined(OS_MACOSX)
+#if !defined(OS_APPLE)
 
 // Tests the behavior of various keyboard shortcuts on the currently selected
 // index.
@@ -499,7 +502,7 @@ TEST_F(ComboboxTest, SkipMultipleSeparatorsAtEnd) {
   PressKey(ui::VKEY_END);
   EXPECT_EQ(6, combobox_->GetSelectedIndex());
 }
-#endif  // !OS_MACOSX
+#endif  // !OS_APPLE
 
 TEST_F(ComboboxTest, GetTextForRowTest) {
   std::set<int> separators;
@@ -802,7 +805,7 @@ TEST_F(ComboboxTest, MenuModel) {
   EXPECT_EQ(ui::MenuModel::TYPE_SEPARATOR,
             menu_model->GetTypeAt(kSeparatorIndex));
 
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
   // Comboboxes on Mac should have checkmarks, with the selected item checked,
   EXPECT_EQ(ui::MenuModel::TYPE_CHECK, menu_model->GetTypeAt(0));
   EXPECT_EQ(ui::MenuModel::TYPE_CHECK, menu_model->GetTypeAt(1));
@@ -821,6 +824,124 @@ TEST_F(ComboboxTest, MenuModel) {
   EXPECT_EQ(ASCIIToUTF16("JELLY"), menu_model->GetLabelAt(1));
 
   EXPECT_TRUE(menu_model->IsVisibleAt(0));
+}
+
+// Verifies setting the tooltip text will call NotifyAccessibilityEvent.
+TEST_F(ComboboxTest, SetTooltipTextNotifiesAccessibilityEvent) {
+  InitCombobox(nullptr);
+  base::string16 test_tooltip_text = ASCIIToUTF16("Test Tooltip Text");
+  test::TestAXEventObserver observer;
+  EXPECT_EQ(0, observer.text_changed_event_count());
+  combobox_->SetTooltipText(test_tooltip_text);
+  EXPECT_EQ(1, observer.text_changed_event_count());
+  EXPECT_EQ(test_tooltip_text, combobox_->GetAccessibleName());
+  ui::AXNodeData data;
+  combobox_->GetAccessibleNodeData(&data);
+  const std::string& name =
+      data.GetStringAttribute(ax::mojom::StringAttribute::kName);
+  EXPECT_EQ(test_tooltip_text, ASCIIToUTF16(name));
+}
+
+namespace {
+
+using ComboboxDefaultTest = ViewsTestBase;
+
+class ConfigurableComboboxModel final : public ui::ComboboxModel {
+ public:
+  explicit ConfigurableComboboxModel(bool* destroyed = nullptr)
+      : destroyed_(destroyed) {
+    if (destroyed_)
+      *destroyed_ = false;
+  }
+  ConfigurableComboboxModel(ConfigurableComboboxModel&) = delete;
+  ConfigurableComboboxModel& operator=(const ConfigurableComboboxModel&) =
+      delete;
+  ~ConfigurableComboboxModel() override {
+    if (destroyed_)
+      *destroyed_ = true;
+  }
+
+  // ui::ComboboxModel:
+  int GetItemCount() const override { return item_count_; }
+  base::string16 GetItemAt(int index) const override {
+    DCHECK_LT(index, item_count_);
+    return base::NumberToString16(index);
+  }
+  int GetDefaultIndex() const override { return default_index_; }
+
+  void SetItemCount(int item_count) { item_count_ = item_count; }
+
+  void SetDefaultIndex(int default_index) { default_index_ = default_index; }
+
+ private:
+  bool* const destroyed_;
+  int item_count_ = 0;
+  int default_index_ = -1;
+};
+
+}  // namespace
+
+TEST_F(ComboboxDefaultTest, Default) {
+  auto combobox = std::make_unique<Combobox>();
+  EXPECT_EQ(0, combobox->GetRowCount());
+  EXPECT_EQ(-1, combobox->GetSelectedRow());
+}
+
+TEST_F(ComboboxDefaultTest, SetModel) {
+  bool destroyed = false;
+  std::unique_ptr<ConfigurableComboboxModel> model =
+      std::make_unique<ConfigurableComboboxModel>(&destroyed);
+  model->SetItemCount(42);
+  model->SetDefaultIndex(27);
+  {
+    auto combobox = std::make_unique<Combobox>();
+    combobox->SetModel(model.get());
+    EXPECT_EQ(42, combobox->GetRowCount());
+    EXPECT_EQ(27, combobox->GetSelectedRow());
+  }
+  EXPECT_FALSE(destroyed);
+}
+
+TEST_F(ComboboxDefaultTest, SetOwnedModel) {
+  bool destroyed = false;
+  std::unique_ptr<ConfigurableComboboxModel> model =
+      std::make_unique<ConfigurableComboboxModel>(&destroyed);
+  model->SetItemCount(42);
+  model->SetDefaultIndex(27);
+  {
+    auto combobox = std::make_unique<Combobox>();
+    combobox->SetOwnedModel(std::move(model));
+    EXPECT_EQ(42, combobox->GetRowCount());
+    EXPECT_EQ(27, combobox->GetSelectedRow());
+  }
+  EXPECT_TRUE(destroyed);
+}
+
+TEST_F(ComboboxDefaultTest, SetModelOverwriteOwned) {
+  bool destroyed = false;
+  std::unique_ptr<ConfigurableComboboxModel> model =
+      std::make_unique<ConfigurableComboboxModel>(&destroyed);
+  auto combobox = std::make_unique<Combobox>();
+  combobox->SetModel(model.get());
+  ASSERT_FALSE(destroyed);
+  combobox->SetOwnedModel(std::make_unique<ConfigurableComboboxModel>());
+  EXPECT_FALSE(destroyed);
+}
+
+TEST_F(ComboboxDefaultTest, SetOwnedModelOverwriteOwned) {
+  bool destroyed_first = false;
+  bool destroyed_second = false;
+  {
+    auto combobox = std::make_unique<Combobox>();
+    combobox->SetOwnedModel(
+        std::make_unique<ConfigurableComboboxModel>(&destroyed_first));
+    ASSERT_FALSE(destroyed_first);
+    combobox->SetOwnedModel(
+        std::make_unique<ConfigurableComboboxModel>(&destroyed_second));
+    EXPECT_TRUE(destroyed_first);
+    ASSERT_FALSE(destroyed_second);
+  }
+  EXPECT_TRUE(destroyed_second);
 }
 
 }  // namespace views

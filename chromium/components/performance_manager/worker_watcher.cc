@@ -13,6 +13,7 @@
 #include "components/performance_manager/graph/worker_node_impl.h"
 #include "components/performance_manager/performance_manager_impl.h"
 #include "components/performance_manager/process_node_source.h"
+#include "third_party/blink/public/common/tokens/tokens.h"
 
 #include "app/vivaldi_apptools.h"
 
@@ -147,19 +148,18 @@ void WorkerWatcher::TearDown() {
 }
 
 void WorkerWatcher::OnWorkerCreated(
-    content::DedicatedWorkerId dedicated_worker_id,
+    const blink::DedicatedWorkerToken& dedicated_worker_token,
     int worker_process_id,
     content::GlobalFrameRoutingId ancestor_render_frame_host_id) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  // TODO(https://crbug.com/993029): Plumb through the URL and the DevTools
-  // token.
+  // TODO(https://crbug.com/993029): Plumb through the URL.
   auto worker_node = PerformanceManagerImpl::CreateWorkerNode(
       browser_context_id_, WorkerNode::WorkerType::kDedicated,
       process_node_source_->GetProcessNode(worker_process_id),
-      base::UnguessableToken::Create());
+      dedicated_worker_token);
   auto insertion_result = dedicated_worker_nodes_.emplace(
-      dedicated_worker_id, std::move(worker_node));
+      dedicated_worker_token, std::move(worker_node));
   DCHECK(insertion_result.second);
 
   ConnectClient(insertion_result.first->second.get(),
@@ -167,11 +167,11 @@ void WorkerWatcher::OnWorkerCreated(
 }
 
 void WorkerWatcher::OnBeforeWorkerDestroyed(
-    content::DedicatedWorkerId dedicated_worker_id,
+    const blink::DedicatedWorkerToken& dedicated_worker_token,
     content::GlobalFrameRoutingId ancestor_render_frame_host_id) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  auto it = dedicated_worker_nodes_.find(dedicated_worker_id);
+  auto it = dedicated_worker_nodes_.find(dedicated_worker_token);
   DCHECK(it != dedicated_worker_nodes_.end());
 
   auto worker_node = std::move(it->second);
@@ -188,33 +188,35 @@ void WorkerWatcher::OnBeforeWorkerDestroyed(
 }
 
 void WorkerWatcher::OnFinalResponseURLDetermined(
-    content::DedicatedWorkerId dedicated_worker_id,
+    const blink::DedicatedWorkerToken& dedicated_worker_token,
     const GURL& url) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  SetFinalResponseURL(GetDedicatedWorkerNode(dedicated_worker_id), url);
+  SetFinalResponseURL(GetDedicatedWorkerNode(dedicated_worker_token), url);
 }
 
 void WorkerWatcher::OnWorkerCreated(
-    content::SharedWorkerId shared_worker_id,
+    const blink::SharedWorkerToken& shared_worker_token,
     int worker_process_id,
-    const base::UnguessableToken& dev_tools_token) {
+    const base::UnguessableToken& /* dev_tools_token */) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   auto worker_node = PerformanceManagerImpl::CreateWorkerNode(
       browser_context_id_, WorkerNode::WorkerType::kShared,
-      process_node_source_->GetProcessNode(worker_process_id), dev_tools_token);
+      process_node_source_->GetProcessNode(worker_process_id),
+      shared_worker_token);
+
   bool inserted =
-      shared_worker_nodes_.emplace(shared_worker_id, std::move(worker_node))
+      shared_worker_nodes_.emplace(shared_worker_token, std::move(worker_node))
           .second;
   DCHECK(inserted);
 }
 
 void WorkerWatcher::OnBeforeWorkerDestroyed(
-    content::SharedWorkerId shared_worker_id) {
+    const blink::SharedWorkerToken& shared_worker_token) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  auto it = shared_worker_nodes_.find(shared_worker_id);
+  auto it = shared_worker_nodes_.find(shared_worker_token);
   DCHECK(it != shared_worker_nodes_.end());
 
   auto worker_node = std::move(it->second);
@@ -227,27 +229,28 @@ void WorkerWatcher::OnBeforeWorkerDestroyed(
 }
 
 void WorkerWatcher::OnFinalResponseURLDetermined(
-    content::SharedWorkerId shared_worker_id,
+    const blink::SharedWorkerToken& shared_worker_token,
     const GURL& url) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  SetFinalResponseURL(GetSharedWorkerNode(shared_worker_id), url);
+  SetFinalResponseURL(GetSharedWorkerNode(shared_worker_token), url);
 }
 
 void WorkerWatcher::OnClientAdded(
-    content::SharedWorkerId shared_worker_id,
+    const blink::SharedWorkerToken& shared_worker_token,
     content::GlobalFrameRoutingId render_frame_host_id) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  ConnectClient(GetSharedWorkerNode(shared_worker_id), render_frame_host_id);
+  ConnectClient(GetSharedWorkerNode(shared_worker_token), render_frame_host_id);
 }
 
 void WorkerWatcher::OnClientRemoved(
-    content::SharedWorkerId shared_worker_id,
+    const blink::SharedWorkerToken& shared_worker_token,
     content::GlobalFrameRoutingId render_frame_host_id) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  DisconnectClient(GetSharedWorkerNode(shared_worker_id), render_frame_host_id);
+  DisconnectClient(GetSharedWorkerNode(shared_worker_token),
+                   render_frame_host_id);
 }
 
 void WorkerWatcher::OnVersionStartedRunning(
@@ -255,11 +258,10 @@ void WorkerWatcher::OnVersionStartedRunning(
     const content::ServiceWorkerRunningInfo& running_info) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  // TODO(pmonette): Plumb in the DevTools token.
   auto worker_node = PerformanceManagerImpl::CreateWorkerNode(
       browser_context_id_, WorkerNode::WorkerType::kService,
       process_node_source_->GetProcessNode(running_info.render_process_id),
-      base::UnguessableToken());
+      running_info.token);
   bool inserted =
       service_worker_nodes_.emplace(version_id, std::move(worker_node)).second;
   DCHECK(inserted);
@@ -420,10 +422,10 @@ bool WorkerWatcher::RemoveChildWorker(
 }
 
 WorkerNodeImpl* WorkerWatcher::GetDedicatedWorkerNode(
-    content::DedicatedWorkerId dedicated_worker_id) {
+    const blink::DedicatedWorkerToken& dedicated_worker_token) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  auto it = dedicated_worker_nodes_.find(dedicated_worker_id);
+  auto it = dedicated_worker_nodes_.find(dedicated_worker_token);
   if (it == dedicated_worker_nodes_.end()) {
     NOTREACHED();
     return nullptr;
@@ -432,10 +434,10 @@ WorkerNodeImpl* WorkerWatcher::GetDedicatedWorkerNode(
 }
 
 WorkerNodeImpl* WorkerWatcher::GetSharedWorkerNode(
-    content::SharedWorkerId shared_worker_id) {
+    const blink::SharedWorkerToken& shared_worker_token) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  auto it = shared_worker_nodes_.find(shared_worker_id);
+  auto it = shared_worker_nodes_.find(shared_worker_token);
   if (it == shared_worker_nodes_.end()) {
     NOTREACHED();
     return nullptr;

@@ -13,13 +13,14 @@ import android.util.AndroidRuntimeException;
 import android.webkit.ValueCallback;
 
 import org.chromium.base.ContextUtils;
+import org.chromium.base.ThreadUtils;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
-import org.chromium.components.browser_ui.notifications.ChromeNotification;
 import org.chromium.components.browser_ui.notifications.NotificationManagerProxy;
 import org.chromium.components.browser_ui.notifications.NotificationManagerProxyImpl;
 import org.chromium.components.browser_ui.notifications.NotificationMetadata;
+import org.chromium.components.browser_ui.notifications.NotificationWrapper;
 import org.chromium.components.browser_ui.notifications.PendingIntentProvider;
 import org.chromium.components.webrtc.MediaCaptureNotificationUtil;
 import org.chromium.components.webrtc.MediaCaptureNotificationUtil.MediaType;
@@ -178,6 +179,7 @@ public class MediaStreamManager {
                     audio, video, ObjectWrapper.wrap(new ValueCallback<Boolean>() {
                         @Override
                         public void onReceiveValue(Boolean allowed) {
+                            ThreadUtils.assertOnUiThread();
                             respondToStreamRequest(requestId, allowed.booleanValue());
                         }
                     }));
@@ -223,12 +225,13 @@ public class MediaStreamManager {
         int mediaType = audio && video ? MediaType.AUDIO_AND_VIDEO
                                        : audio ? MediaType.AUDIO_ONLY : MediaType.VIDEO_ONLY;
 
-        // TODO(crbug/1076098): don't pass a URL in incognito.
-        ChromeNotification notification = MediaCaptureNotificationUtil.createNotification(
-                WebLayerNotificationBuilder.create(
+        NotificationWrapper notification = MediaCaptureNotificationUtil.createNotification(
+                WebLayerNotificationWrapperBuilder.create(
                         WebLayerNotificationChannels.ChannelId.WEBRTC_CAM_AND_MIC,
                         new NotificationMetadata(0, AV_STREAM_TAG, mNotificationId)),
-                mediaType, mTab.getWebContents().getVisibleUrl().getSpec(),
+                mediaType,
+                mTab.getProfile().isIncognito() ? null
+                                                : mTab.getWebContents().getVisibleUrl().getSpec(),
                 WebLayerImpl.getClientApplicationName(), contentIntent, null /*stopIntent*/);
         getNotificationManager().notify(notification);
 

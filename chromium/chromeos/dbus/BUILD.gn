@@ -2,21 +2,19 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//chromeos/services/cfm/public/buildflags/buildflags.gni")
 import("//testing/test.gni")
 import("//third_party/protobuf/proto_library.gni")
+import("use_real_dbus_clients.gni")
 
 assert(is_chromeos, "Non-Chrome-OS builds must not depend on //chromeos")
-
-declare_args() {
-  # Instantiate real D-Bus clients instead of fakes.
-  use_real_dbus_clients = false
-}
 
 component("dbus") {
   output_name = "chromeos_dbus"  # Avoid conflict with //dbus
   defines = [ "IS_CHROMEOS_DBUS_IMPL" ]
   public_deps = [
     ":common",
+    "//chromeos/dbus/arc",
     "//chromeos/dbus/constants",
     "//chromeos/dbus/debug_daemon",
     "//chromeos/dbus/shill",
@@ -48,16 +46,6 @@ component("dbus") {
   sources = [
     "anomaly_detector_client.cc",
     "anomaly_detector_client.h",
-    "arc_appfuse_provider_client.cc",
-    "arc_appfuse_provider_client.h",
-    "arc_camera_client.cc",
-    "arc_camera_client.h",
-    "arc_keymaster_client.cc",
-    "arc_keymaster_client.h",
-    "arc_midis_client.cc",
-    "arc_midis_client.h",
-    "arc_obb_mounter_client.cc",
-    "arc_obb_mounter_client.h",
     "cec_service_client.cc",
     "cec_service_client.h",
     "chunneld_client.cc",
@@ -77,16 +65,6 @@ component("dbus") {
     "easy_unlock_client.h",
     "fake_anomaly_detector_client.cc",
     "fake_anomaly_detector_client.h",
-    "fake_arc_appfuse_provider_client.cc",
-    "fake_arc_appfuse_provider_client.h",
-    "fake_arc_camera_client.cc",
-    "fake_arc_camera_client.h",
-    "fake_arc_keymaster_client.cc",
-    "fake_arc_keymaster_client.h",
-    "fake_arc_midis_client.cc",
-    "fake_arc_midis_client.h",
-    "fake_arc_obb_mounter_client.cc",
-    "fake_arc_obb_mounter_client.h",
     "fake_cec_service_client.cc",
     "fake_cec_service_client.h",
     "fake_chunneld_client.cc",
@@ -228,6 +206,9 @@ source_set("unit_tests") {
     "//testing/gtest",
     "//third_party/icu",
   ]
+  if (is_cfm) {
+    deps += [ "//chromeos/dbus/cfm:unit_tests" ]
+  }
   sources = [
     "audio/cras_audio_client_unittest.cc",
     "authpolicy/fake_authpolicy_client_unittest.cc",

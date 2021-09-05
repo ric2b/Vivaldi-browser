@@ -38,9 +38,6 @@ class XcodeWriter {
     // Name of the ninja executable. Defaults to "ninja" if empty.
     std::string ninja_executable;
 
-    // Extra parameters to pass to ninja. Deprecated.
-    std::string ninja_extra_args;
-
     // If specified, should be a semicolon-separated list of label patterns.
     // It will be used to filter the list of targets generated in the project
     // (in the same way that the other filtering is done, source and header

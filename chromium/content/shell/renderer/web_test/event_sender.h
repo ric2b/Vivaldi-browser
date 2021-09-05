@@ -40,10 +40,9 @@ class Arguments;
 }  // namespace gin
 
 namespace content {
-
-class TestInterfaces;
-class WebWidgetTestProxy;
 class BlinkTestRunner;
+class TestRunner;
+class WebWidgetTestProxy;
 
 // Key event location code introduced in DOM Level 3.
 // See also: http://www.w3.org/TR/DOM-Level-3-Events/#events-keyboardevents
@@ -122,7 +121,7 @@ class EventSender {
     kWillFail,
   };
 
-  TestInterfaces* interfaces();
+  TestRunner* test_runner();
   BlinkTestRunner* blink_test_runner();
   const blink::WebView* view() const;
   blink::WebView* view();

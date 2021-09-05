@@ -21,6 +21,7 @@
 <translation id="1150565364351027703">Solbriller</translation>
 <translation id="115443833402798225">Hangul Ahnmatae</translation>
 <translation id="1155759005174418845">Catalansk</translation>
+<translation id="1172970565351728681">Cirka <ph name="REMAINING_TIME" /> tilbage</translation>
 <translation id="1173894706177603556">Omdøb</translation>
 <translation id="117624967391683467">Kopierer <ph name="FILE_NAME" />...</translation>
 <translation id="1178581264944972037">Pause</translation>
@@ -106,7 +107,6 @@
 <translation id="2085470240340828803">Der findes allerede en fil med navnet "<ph name="FILENAME" />". Hvad vil du foretage dig?</translation>
 <translation id="2121825465123208577">Tilpas størrelse</translation>
 <translation id="2136953289241069843">Translitteration (namaste → नमस्कार)</translation>
-<translation id="2138867954865495510">"<ph name="PATH" />" kan ikke åbnes: <ph name="ERROR_MESSAGE" /></translation>
 <translation id="2163152940313951844">Ugyldigt tegn: <ph name="CHARACTER_NAME" /></translation>
 <translation id="2164862903024139959">Vietnamesisk tastatur (TCVN)</translation>
 <translation id="2168214441502403371">Persisk tastatur</translation>
@@ -198,6 +198,7 @@
 <translation id="3236289833370040187">Ejerskabet overføres til <ph name="DESTINATION_DOMAIN" />.</translation>
 <translation id="3241720467332021590">Irsk</translation>
 <translation id="3245321423178950146">Ukendt kunstner</translation>
+<translation id="3248185426436836442">Afventer</translation>
 <translation id="3252266817569339921">Fransk</translation>
 <translation id="3254434849914415189">Vælg standardappen for <ph name="FILE_TYPE" />-filer:</translation>
 <translation id="3264582393905923483">Kontekst</translation>
@@ -208,6 +209,7 @@
 <translation id="3335337277364016868">År, det blev optaget</translation>
 <translation id="3338239663705455570">Slovensk tastatur</translation>
 <translation id="3353984535370177728">Vælg en mappe, der skal uploades</translation>
+<translation id="3356580349448036450">Fuldført</translation>
 <translation id="3399597614303179694">Makedonsk tastatur</translation>
 <translation id="3414856743105198592">Formatering af de flytbare medier kommer til at slette alle data. Vil du fortsætte?</translation>
 <translation id="3437801641691368414">Oprettelsestidspunkt</translation>
@@ -243,6 +245,7 @@
 <translation id="3780536599611287598">Du har ikke tilladelse til at flytte filer til "<ph name="FOLDER_NAME" />".</translation>
 <translation id="3786301125658655746">Du er offline</translation>
 <translation id="3789841737615482174">Installer</translation>
+<translation id="3793469551756281394">Cirka <ph name="REMAINING_TIME_HOUR" /> <ph name="REMAINING_TIME_MINUTE" /> tilbage</translation>
 <translation id="3798449238516105146">Version</translation>
 <translation id="3801082500826908679">Færøsk</translation>
 <translation id="3809272675881623365">Kanin</translation>
@@ -299,6 +302,7 @@
 <translation id="4481711095103932593">Denne mappe deles med Windows</translation>
 <translation id="4487088045714738411">Belgisk tastatur</translation>
 <translation id="4522570452068850558">Detaljer</translation>
+<translation id="4542387084127299777">"<ph name="PATH" />" kan ikke åbnes</translation>
 <translation id="4552678318981539154">Køb mere lagerplads</translation>
 <translation id="4559767610552730302">Bokeh</translation>
 <translation id="4572815280350369984"><ph name="FILE_TYPE" />-fil</translation>
@@ -511,6 +515,7 @@
 <translation id="6629841649550503054">Alt er sikkerhedskopieret til <ph name="BEGIN_LINK" />Google Drev<ph name="END_LINK" />.</translation>
 <translation id="6643016212128521049">Ryd</translation>
 <translation id="6650726141019353908">Lyserød sommerfugl</translation>
+<translation id="6657585470893396449">Adgangskode</translation>
 <translation id="6710213216561001401">Forrige</translation>
 <translation id="6718273304615422081">Komprimerer...</translation>
 <translation id="6751256176799620176">1 mappe er valgt</translation>
@@ -551,7 +556,6 @@
 <translation id="7012943028104619157"><ph name="ROOT_TITLE" /> (<ph name="ROOT_SUMMARY" />)</translation>
 <translation id="7014174261166285193">Installationen mislykkedes.</translation>
 <translation id="7040138676081995583">Åbn med...</translation>
-<translation id="7059566040011178088">Mindre end <ph name="REMAINING_TIME" /></translation>
 <translation id="7100897339030255923"><ph name="COUNT" /> elementer er markeret</translation>
 <translation id="7106346894903675391">Køb mere lagerplads...</translation>
 <translation id="7126604456862387217">"&lt;b&gt;<ph name="SEARCH_STRING" />&lt;/b&gt;" – &lt;em&gt;søg i Drev&lt;/em&gt;</translation>
@@ -662,7 +666,6 @@
 <translation id="8193175696669055101">Enhedsmodel</translation>
 <translation id="8208580316430297579">Kunst</translation>
 <translation id="8223479393428528563">Hvis du vil gemme disse filer til offlinebrug, skal du gå online igen, højreklikke på filerne og vælge indstillingen <ph name="OFFLINE_CHECKBOX_NAME" />.</translation>
-<translation id="8231972167769262174">Om <ph name="REMAINING_TIME" /></translation>
 <translation id="8249296373107784235">Annuller</translation>
 <translation id="8261506727792406068">Slet</translation>
 <translation id="8269755669432358899">Skjul paneler med feedback til filer</translation>
@@ -725,6 +728,7 @@
 <translation id="9065203028668620118">Rediger</translation>
 <translation id="9099674669267916096">Sideantal</translation>
 <translation id="9110990317705400362">Vi leder hele tiden efter nye metoder til at gøre din browsing mere sikker. Før kunne ethvert website anmode dig om at tilføje en udvidelse i din browser. I de nyeste versioner af Google Chrome skal du udtrykkeligt give Chrome besked om, at du vil installere udvidelser, ved at tilføje dem via siden Udvidelser. <ph name="BEGIN_LINK" />Få flere oplysninger<ph name="END_LINK" /></translation>
+<translation id="9111102763498581341">Lås op</translation>
 <translation id="912419004897138677">Codec</translation>
 <translation id="9129931661813833980">Fastgør mappe</translation>
 <translation id="9130775360844693113">Medlemmer af "<ph name="DESTINATION_NAME" />" får adgang til disse elementer.</translation>

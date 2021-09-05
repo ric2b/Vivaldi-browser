@@ -5,6 +5,7 @@
 package org.chromium.chrome.browser.ntp.snippets;
 
 import android.content.Context;
+import android.content.res.TypedArray;
 import android.graphics.Rect;
 import android.util.AttributeSet;
 import android.view.View;
@@ -44,9 +45,19 @@ public class SectionHeaderView extends LinearLayout implements View.OnClickListe
     private SectionHeader mHeader;
 
     private boolean mHasMenu;
+    private boolean mHairlineWhenDisabled = true;
 
     public SectionHeaderView(Context context, @Nullable AttributeSet attrs) {
         super(context, attrs);
+        TypedArray attrArray = context.getTheme().obtainStyledAttributes(
+                attrs, R.styleable.SectionHeaderView, 0, 0);
+
+        try {
+            mHairlineWhenDisabled = attrArray.getBoolean(
+                    R.styleable.SectionHeaderView_showHairlineWhenDisabled, true);
+        } finally {
+            attrArray.recycle();
+        }
     }
 
     @Override
@@ -100,14 +111,35 @@ public class SectionHeaderView extends LinearLayout implements View.OnClickListe
 
         if (mHeader.isExpandable()) {
             if (!mHasMenu) {
-                mStatusView.setText(mHeader.isExpanded() ? R.string.hide : R.string.show);
+                mStatusView.setText(
+                        mHeader.isExpanded() ? R.string.hide_content : R.string.show_content);
             }
-            setBackgroundResource(
-                    mHeader.isExpanded() ? 0 : R.drawable.hairline_border_card_background);
+            setBackgroundResource(mHeader.isExpanded() || !mHairlineWhenDisabled
+                            ? 0
+                            : R.drawable.hairline_border_card_background);
         }
     }
+
     /** Shows an IPH on the feed header menu button. */
     public void showMenuIph(UserEducationHelper helper) {
+        final ViewRectProvider rectProvider = new ViewRectProvider(mMenuView) {
+            // ViewTreeObserver.OnPreDrawListener implementation.
+            @Override
+            public boolean onPreDraw() {
+                boolean result = super.onPreDraw();
+
+                int minRectBottomPosPx =
+                        getResources().getDimensionPixelSize(R.dimen.toolbar_height_no_shadow)
+                        + mMenuView.getHeight() / 2;
+                // Notify that the rectangle is hidden to dismiss the popup if the anchor is
+                // positioned too high.
+                if (getRect().bottom < minRectBottomPosPx) {
+                    notifyRectHidden();
+                }
+
+                return result;
+            }
+        };
         helper.requestShowIPH(new IPHCommandBuilder(mMenuView.getContext().getResources(),
                 FeatureConstants.FEED_HEADER_MENU_FEATURE, R.string.ntp_feed_menu_iph,
                 R.string.accessibility_ntp_feed_menu_iph)
@@ -117,6 +149,7 @@ public class SectionHeaderView extends LinearLayout implements View.OnClickListe
                                       .setDismissOnTouch(false)
                                       .setInsetRect(new Rect(0, 0, 0, 0))
                                       .setAutoDismissTimeout(5 * 1000)
+                                      .setViewRectProvider(rectProvider)
                                       .build());
     }
 

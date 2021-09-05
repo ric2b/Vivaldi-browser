@@ -8,17 +8,22 @@
 #import "ios/chrome/browser/ui/activity_services/activity_scenario.h"
 #import "ios/chrome/browser/ui/coordinators/chrome_coordinator.h"
 
+@class ActivityParams;
 @protocol ActivityServicePositioner;
 @protocol ActivityServicePresentation;
 class Browser;
+@protocol QRGenerationCommands;
 
 // ActivityServiceCoordinator provides a public interface for the share
 // menu feature.
 @interface ActivityServiceCoordinator : ChromeCoordinator
 
+// Initializes a coordinator instance configured to share the current tab's URL
+// based on |baseViewController| and |browser|, and where |params| contains all
+// necessary values to drive the scenario.
 - (instancetype)initWithBaseViewController:(UIViewController*)baseViewController
                                    browser:(Browser*)browser
-                                  scenario:(ActivityScenario)scenario
+                                    params:(ActivityParams*)params
     NS_DESIGNATED_INITIALIZER;
 
 - (instancetype)initWithBaseViewController:(UIViewController*)baseViewController
@@ -28,16 +33,12 @@ class Browser;
 @property(nonatomic, readwrite, weak) id<ActivityServicePositioner>
     positionProvider;
 
-// Image that should be shared via the activity view. When set, will trigger
-// the share image experience.
-@property(nonatomic, strong) UIImage* image;
-
-// Title of the content that will be shared.
-@property(nonatomic, strong) NSString* title;
-
 // Provider of share action presentation.
 @property(nonatomic, readwrite, weak) id<ActivityServicePresentation>
     presentationProvider;
+
+// Handler for activities that need to be executed within a certain scope.
+@property(nonatomic, readwrite, weak) id<QRGenerationCommands> scopedHandler;
 
 @end
 

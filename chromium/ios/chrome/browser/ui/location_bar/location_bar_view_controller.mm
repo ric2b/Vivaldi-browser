@@ -24,6 +24,7 @@
 #import "ios/chrome/browser/ui/orchestrator/location_bar_offset_provider.h"
 #include "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/browser/ui/util/named_guide.h"
+#import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/whats_new/default_browser_utils.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #import "ios/chrome/grit/ios_strings.h"
@@ -47,7 +48,17 @@ typedef NS_ENUM(int, TrailingButtonState) {
 // off mode for the badge view.
 const double kFullscreenProgressBadgeViewThreshold = 0.85;
 
+// Identifier for the omnibox embedded in this location bar as a scribble
+// element.
+const NSString* kScribbleOmniboxElementId = @"omnibox";
+
 }  // namespace
+
+#if defined(__IPHONE_14_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_14_0
+@interface LocationBarViewController (Scribble) <
+    UIIndirectScribbleInteractionDelegate>
+@end
+#endif  // defined(__IPHONE14_0)
 
 @interface LocationBarViewController ()
 // The injected edit view.
@@ -76,6 +87,9 @@ const double kFullscreenProgressBadgeViewThreshold = 0.85;
 // Stores the current content type in the clipboard. This is only valid if
 // |hasCopiedContent| is YES.
 @property(nonatomic, assign) ClipboardContentType copiedContentType;
+// Stores whether the cached clipboard state is currently being updated. See
+// |-updateCachedClipboardState| for more information.
+@property(nonatomic, assign) BOOL isUpdatingCachedClipboardState;
 
 // Starts voice search, updating the NamedGuide to be constrained to the
 // trailing button.
@@ -191,6 +205,14 @@ const double kFullscreenProgressBadgeViewThreshold = 0.85;
                   action:@selector(showLongPressMenu:)];
   [_locationBarSteadyView.locationButton addGestureRecognizer:recognizer];
 
+#if defined(__IPHONE_14_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_14_0
+  if (@available(iOS 14, *)) {
+    UIIndirectScribbleInteraction* scribbleInteraction =
+        [[UIIndirectScribbleInteraction alloc] initWithDelegate:self];
+    [_locationBarSteadyView addInteraction:scribbleInteraction];
+  }
+#endif  // #if defined(__IPHONE_14_0)
+
   DCHECK(self.editView) << "The edit view must be set at this point";
 
   [self.view addSubview:self.editView];
@@ -202,27 +224,6 @@ const double kFullscreenProgressBadgeViewThreshold = 0.85;
   AddSameConstraints(self.locationBarSteadyView, self.view);
 
   [self switchToEditing:NO];
-}
-
-- (void)viewWillAppear:(BOOL)animated {
-  [super viewWillAppear:animated];
-
-  [self updateCachedClipboardState];
-
-  [NSNotificationCenter.defaultCenter
-      addObserver:self
-         selector:@selector(pasteboardDidChange:)
-             name:UIPasteboardChangedNotification
-           object:nil];
-
-  // The pasteboard changed notification doesn't fire if the clipboard changes
-  // while the app is in the background, so update the state whenever the app
-  // becomes active.
-  [NSNotificationCenter.defaultCenter
-      addObserver:self
-         selector:@selector(applicationDidBecomeActive:)
-             name:UIApplicationDidBecomeActiveNotification
-           object:nil];
 }
 
 - (void)viewWillDisappear:(BOOL)animated {
@@ -385,6 +386,53 @@ const double kFullscreenProgressBadgeViewThreshold = 0.85;
   return targetOffset;
 }
 
+#pragma mark - UIIndirectScribbleInteractionDelegate
+
+#if defined(__IPHONE_14_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_14_0
+
+- (void)indirectScribbleInteraction:(UIIndirectScribbleInteraction*)interaction
+              requestElementsInRect:(CGRect)rect
+                         completion:
+                             (void (^)(NSArray<UIScribbleElementIdentifier>*
+                                           elements))completion
+    API_AVAILABLE(ios(14.0)) {
+  completion(@[ kScribbleOmniboxElementId ]);
+}
+
+- (BOOL)indirectScribbleInteraction:(UIIndirectScribbleInteraction*)interaction
+                   isElementFocused:
+                       (UIScribbleElementIdentifier)elementIdentifier
+    API_AVAILABLE(ios(14.0)) {
+  DCHECK(elementIdentifier == kScribbleOmniboxElementId);
+  return self.delegate.omniboxScribbleForwardingTarget.isFirstResponder;
+}
+
+- (CGRect)
+    indirectScribbleInteraction:(UIIndirectScribbleInteraction*)interaction
+                frameForElement:(UIScribbleElementIdentifier)elementIdentifier
+    API_AVAILABLE(ios(14.0)) {
+  DCHECK(elementIdentifier == kScribbleOmniboxElementId);
+
+  // Imitate the entire location bar being scribblable.
+  return self.view.bounds;
+}
+
+- (void)indirectScribbleInteraction:(UIIndirectScribbleInteraction*)interaction
+               focusElementIfNeeded:
+                   (UIScribbleElementIdentifier)elementIdentifier
+                     referencePoint:(CGPoint)focusReferencePoint
+                         completion:
+                             (void (^)(UIResponder<UITextInput>* focusedInput))
+                                 completion API_AVAILABLE(ios(14.0)) {
+  if (!self.delegate.omniboxScribbleForwardingTarget.isFirstResponder) {
+    [self.delegate locationBarRequestScribbleTargetFocus];
+  }
+
+  completion(self.delegate.omniboxScribbleForwardingTarget);
+}
+
+#endif  // defined(__IPHONE_14_0)
+
 #pragma mark - private
 
 - (void)locationBarSteadyViewTapped {
@@ -484,15 +532,19 @@ const double kFullscreenProgressBadgeViewThreshold = 0.85;
   RecordAction(UserMetricsAction("MobileToolbarShareMenu"));
 }
 
-- (void)pasteboardDidChange:(NSNotification*)notification {
-  [self updateCachedClipboardState];
-}
-
-- (void)applicationDidBecomeActive:(NSNotification*)notification {
-  [self updateCachedClipboardState];
-}
-
-- (void)updateCachedClipboardState {
+// Updates the cached clipboard content type and calls |completion| when the
+// update process is finished.  If this is called while an update is already in
+// progress, it will return NO and the completion will never be called.
+// Otherwise, returns YES.
+- (BOOL)updateCachedClipboardStateWithCompletion:(void (^)(void))completion {
+  // Sometimes, checking the clipboard state itself causes the clipboard to
+  // emit a UIPasteboardChangedNotification, leading to an infinite loop. For
+  // now, just prevent re-checking the clipboard state, but hopefully this will
+  // be fixed in a future iOS version (see crbug.com/1049053 for crash details).
+  if (self.isUpdatingCachedClipboardState) {
+    return NO;
+  }
+  self.isUpdatingCachedClipboardState = YES;
   self.hasCopiedContent = NO;
   ClipboardRecentContent* clipboardRecentContent =
       ClipboardRecentContent::GetInstance();
@@ -516,7 +568,10 @@ const double kFullscreenProgressBadgeViewThreshold = 0.85;
                    matched_types.end()) {
           weakSelf.copiedContentType = ClipboardContentType::Text;
         }
+        weakSelf.isUpdatingCachedClipboardState = NO;
+        completion();
       }));
+  return YES;
 }
 
 #pragma mark - UIMenu
@@ -526,25 +581,29 @@ const double kFullscreenProgressBadgeViewThreshold = 0.85;
     [self.locationBarSteadyView becomeFirstResponder];
 
     UIMenuController* menu = [UIMenuController sharedMenuController];
-    UIMenuItem* searchCopiedImage = [[UIMenuItem alloc]
+    RegisterEditMenuItem([[UIMenuItem alloc]
         initWithTitle:l10n_util::GetNSString((IDS_IOS_SEARCH_COPIED_IMAGE))
-               action:@selector(searchCopiedImage:)];
-    UIMenuItem* visitCopiedLink = [[UIMenuItem alloc]
+               action:@selector(searchCopiedImage:)]);
+    RegisterEditMenuItem([[UIMenuItem alloc]
         initWithTitle:l10n_util::GetNSString(IDS_IOS_VISIT_COPIED_LINK)
-               action:@selector(visitCopiedLink:)];
-    UIMenuItem* searchCopiedText = [[UIMenuItem alloc]
+               action:@selector(visitCopiedLink:)]);
+    RegisterEditMenuItem([[UIMenuItem alloc]
         initWithTitle:l10n_util::GetNSString(IDS_IOS_SEARCH_COPIED_TEXT)
-               action:@selector(searchCopiedText:)];
-    [menu
-        setMenuItems:@[ searchCopiedImage, visitCopiedLink, searchCopiedText ]];
+               action:@selector(searchCopiedText:)]);
 
-    [menu setTargetRect:self.locationBarSteadyView.frame inView:self.view];
-    [menu setMenuVisible:YES animated:YES];
-    // When the menu is manually presented, it doesn't get focused by
-    // Voiceover. This notification forces voiceover to select the
-    // presented menu.
-    UIAccessibilityPostNotification(UIAccessibilityLayoutChangedNotification,
-                                    menu);
+    DCHECK([self updateCachedClipboardStateWithCompletion:^() {
+      if (@available(iOS 13, *)) {
+        [menu showMenuFromView:self.view rect:self.locationBarSteadyView.frame];
+      } else {
+        [menu setTargetRect:self.locationBarSteadyView.frame inView:self.view];
+        [menu setMenuVisible:YES animated:YES];
+      }
+      // When the menu is manually presented, it doesn't get focused by
+      // Voiceover. This notification forces voiceover to select the
+      // presented menu.
+      UIAccessibilityPostNotification(UIAccessibilityLayoutChangedNotification,
+                                      menu);
+    }]);
   }
 }
 
@@ -554,9 +613,10 @@ const double kFullscreenProgressBadgeViewThreshold = 0.85;
     return YES;
   }
 
-  if (action == @selector(searchCopiedImage:) ||
-      action == @selector(visitCopiedLink:) ||
-      action == @selector(searchCopiedText:)) {
+  BOOL isClipboardAction = action == @selector(searchCopiedImage:) ||
+                           action == @selector(visitCopiedLink:) ||
+                           action == @selector(searchCopiedText:);
+  if (self.locationBarSteadyView.isFirstResponder && isClipboardAction) {
     if (!self.hasCopiedContent) {
       return NO;
     }

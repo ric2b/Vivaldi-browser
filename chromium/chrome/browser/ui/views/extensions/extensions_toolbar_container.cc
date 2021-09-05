@@ -22,7 +22,6 @@
 #include "ui/views/layout/flex_layout.h"
 #include "ui/views/layout/flex_layout_types.h"
 #include "ui/views/view_class_properties.h"
-#include "ui/views/widget/widget_observer.h"
 
 struct ExtensionsToolbarContainer::DropInfo {
   DropInfo(ToolbarActionsModel::ActionId action_id, size_t index);
@@ -107,7 +106,6 @@ ExtensionsToolbarContainer::~ExtensionsToolbarContainer() {
 
 void ExtensionsToolbarContainer::UpdateAllIcons() {
   extensions_button_->UpdateIcon();
-
   for (const auto& action : actions_)
     action->UpdateState();
 }
@@ -245,7 +243,7 @@ void ExtensionsToolbarContainer::OnContextMenuShown(
   // Only update the extension's toolbar visibility if the context menu is being
   // shown from an extension visible in the toolbar.
   if (!ExtensionsMenuView::IsShowing()) {
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
     // TODO(crbug/1065584): Remove hiding active popup here once this bug is
     // fixed.
     HideActivePopup();
@@ -471,8 +469,7 @@ void ExtensionsToolbarContainer::CreateActionForId(
   auto icon = std::make_unique<ToolbarActionView>(actions_.back().get(), this);
   // Set visibility before adding to prevent extraneous animation.
   icon->SetVisible(CanShowIconInToolbar() && model_->IsActionPinned(action_id));
-  icon->AddButtonObserver(this);
-  icon->AddObserver(this);
+  ObserveButton(icon.get());
   icons_.insert({action_id, AddChildView(std::move(icon))});
 }
 
@@ -663,9 +660,10 @@ void ExtensionsToolbarContainer::SetExtensionIconVisibility(
                            return GetViewForId(action_id) == GetViewForId(id);
                          });
   ToolbarActionView* extension_view = GetViewForId(*it);
-  extension_view->SetImage(
+  extension_view->SetImageModel(
       views::Button::STATE_NORMAL,
-      visible ? GetExtensionIcon(extension_view) : gfx::ImageSkia());
+      visible ? ui::ImageModel::FromImageSkia(GetExtensionIcon(extension_view))
+              : ui::ImageModel());
 }
 
 void ExtensionsToolbarContainer::UpdateContainerVisibility() {

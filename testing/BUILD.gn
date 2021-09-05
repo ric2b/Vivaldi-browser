@@ -20,7 +20,6 @@ if (is_win) {
       "//net:net_unittests",
       "//ppapi:ppapi_unittests",
       "//sql:sql_unittests",
-      "//third_party/cacheinvalidation:cacheinvalidation_unittests",
       "//ui/gfx:gfx_unittests",
       "//url:url_unittests",
       "//chrome/test/chromedriver:chromedriver_unittests",

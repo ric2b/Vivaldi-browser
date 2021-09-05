@@ -98,17 +98,10 @@ const char kChromeUIUntrustedNewTabPageUrl[] =
 
 const char kChromiumProjectURL[] = "https://www.chromium.org/";
 
-const char kCloudPrintLearnMoreURL[] =
-#if defined(OS_CHROMEOS)
-    "https://support.google.com/chromebook/?p=settings_cloud_print";
-#else
-    "https://support.google.com/chrome/?p=settings_cloud_print";
-#endif
-
 const char kCloudPrintCertificateErrorLearnMoreURL[] =
 #if defined(OS_CHROMEOS)
     "https://support.google.com/chromebook?p=cloudprint_error_troubleshoot";
-#elif defined(OS_MACOSX)
+#elif defined(OS_MAC)
     "https://support.google.com/cloudprint?p=cloudprint_error_offline_mac";
 #elif defined(OS_WIN)
         "https://support.google.com/"
@@ -168,6 +161,8 @@ const char kGoogleAccountChooserURL[] =
     "https://accounts.google.com/AccountChooser";
 
 const char kGooglePasswordManagerURL[] = "https://passwords.google.com";
+
+const char kGooglePhotosURL[] = "https://photos.google.com";
 
 const char kLearnMoreReportingURL[] =
     "https://support.google.com/chrome/?p=ui_usagestat";
@@ -325,8 +320,11 @@ const char kChromeOSAssetPath[] = "/usr/share/chromeos-assets/";
 const char kChromeOSCreditsPath[] =
     "/opt/google/chrome/resources/about_os_credits.html";
 
+// TODO(carpenterr): Have a solution for plink mapping in Help App.
+// The magic numbers in this url are the topic and article ids currently
+// required to navigate directly to a help article in the Help App.
 const char kChromeOSGestureEducationHelpURL[] =
-    "https://support.google.com/chromebook?p=tablet_mode_gestures";
+    "chrome://help-app/help/sub/3399710/id/9739838";
 
 const char kChromePaletteHelpURL[] =
     "https://support.google.com/chromebook?p=stylus_help";
@@ -347,6 +345,9 @@ const char kArcTermsPathFormat[] = "arc_tos/%s/terms.html";
 const char kArcPrivacyPolicyPathFormat[] = "arc_tos/%s/privacy_policy.pdf";
 
 const char kEolNotificationURL[] = "https://www.google.com/chromebook/older/";
+
+const char kAutoUpdatePolicyURL[] =
+    "http://support.google.com/chrome/a?p=auto-update-policy";
 
 const char kGoogleNameserversLearnMoreURL[] =
     "https://developers.google.com/speed/public-dns";
@@ -411,7 +412,7 @@ const char kWifiSyncLearnMoreURL[] =
     "https://support.google.com/chromebook/?p=wifisync";
 #endif  // defined(OS_CHROMEOS)
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 const char kChromeEnterpriseSignInLearnMoreURL[] =
     "https://support.google.com/chromebook/answer/1331549";
 

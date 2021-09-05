@@ -51,11 +51,11 @@ namespace base {
 class TimeDelta;
 }
 
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
 namespace ui {
 class ScopedPasswordInputEnabler;
 }
-#endif  // defined(OS_MACOSX)
+#endif  // defined(OS_APPLE)
 
 namespace views {
 
@@ -121,6 +121,23 @@ class VIEWS_EXPORT Textfield : public View,
   // explicitly set here since redo's clear the selection anyways.
   void SetText(const base::string16& new_text);
   void SetText(const base::string16& new_text, size_t cursor_position);
+
+  // Similar to calling SetText followed by SetSelectedRange calls, but will
+  // dedupe some calls. Notably, this prevents OnCaretBoundsChanged from being
+  // called multiple times for a single change which can cause issues for
+  // accessibility tools.
+  // - |text| and |cursor_position| see SetText() comment above.
+  // - |scroll_positions| a vector of positions to scroll into view. This can
+  // contain multiple positions which can be useful to e.g. ensure multiple
+  // positions are in view (if possible). Scrolls are applied in the order of
+  // |scroll_positions|; i.e., later positions will have priority over earlier
+  // positions.
+  // - |range| is used to invoke SetSelectedRange and will also be scrolled to.
+  void SetTextAndScrollAndSelectRange(
+      const base::string16& text,
+      const size_t cursor_position,
+      const std::vector<size_t>& scroll_positions,
+      const gfx::Range range);
 
   // Appends the given string to the previously-existing text in the field.
   void AppendText(const base::string16& new_text);
@@ -261,6 +278,10 @@ class VIEWS_EXPORT Textfield : public View,
 
   void SetExtraInsets(const gfx::Insets& insets);
 
+  // Fits the textfield to the local bounds, applying internal padding and
+  // updating the cursor position and visibility.
+  void FitToLocalBounds();
+
   // View overrides:
   int GetBaseline() const override;
   gfx::Size CalculatePreferredSize() const override;
@@ -346,7 +367,7 @@ class VIEWS_EXPORT Textfield : public View,
 
   // ui::TextInputClient overrides:
   void SetCompositionText(const ui::CompositionText& composition) override;
-  void ConfirmCompositionText(bool keep_selection) override;
+  uint32_t ConfirmCompositionText(bool keep_selection) override;
   void ClearCompositionText() override;
   void InsertText(const base::string16& text) override;
   void InsertChar(const ui::KeyEvent& event) override;
@@ -387,8 +408,11 @@ class VIEWS_EXPORT Textfield : public View,
 #endif
 
 #if defined(OS_CHROMEOS)
+  gfx::Range GetAutocorrectRange() const override;
+  gfx::Rect GetAutocorrectCharacterBounds() const override;
   bool SetAutocorrectRange(const base::string16& autocorrect_text,
                            const gfx::Range& range) override;
+  void ClearAutocorrectRange() override;
 #endif
 
 #if defined(OS_WIN)
@@ -402,7 +426,7 @@ class VIEWS_EXPORT Textfield : public View,
 #endif
 
   views::PropertyChangedSubscription AddTextChangedCallback(
-      views::PropertyChangedCallback callback);
+      views::PropertyChangedCallback callback) WARN_UNUSED_RESULT;
 
  protected:
   // Inserts or appends a character in response to an IME operation.
@@ -670,10 +694,10 @@ class VIEWS_EXPORT Textfield : public View,
   // View containing the text cursor.
   View* cursor_view_ = nullptr;
 
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
   // Used to track active password input sessions.
   std::unique_ptr<ui::ScopedPasswordInputEnabler> password_input_enabler_;
-#endif  // defined(OS_MACOSX)
+#endif  // defined(OS_APPLE)
 
   // How this textfield was focused.
   ui::TextInputClient::FocusReason focus_reason_ =

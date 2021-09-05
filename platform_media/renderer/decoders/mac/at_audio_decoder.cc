@@ -292,7 +292,7 @@ void ATAudioDecoder::Initialize(const AudioDecoderConfig& config,
 }
 
 void ATAudioDecoder::Decode(scoped_refptr<DecoderBuffer> buffer,
-                            const DecodeCB& decode_cb) {
+                            DecodeCB decode_cb) {
   DCHECK(task_runner_->BelongsToCurrentThread());
 
   debug_buffer_logger_.Log(buffer);
@@ -308,7 +308,7 @@ void ATAudioDecoder::Decode(scoped_refptr<DecoderBuffer> buffer,
             << " ProcessBuffer succeeded";
   }
 
-  task_runner_->PostTask(FROM_HERE, base::Bind(decode_cb, status));
+  task_runner_->PostTask(FROM_HERE, base::BindOnce(std::move(decode_cb), status));
 }
 
 void ATAudioDecoder::Reset(base::OnceClosure closure) {

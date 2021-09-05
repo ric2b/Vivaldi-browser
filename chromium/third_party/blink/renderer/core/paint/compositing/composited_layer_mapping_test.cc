@@ -19,7 +19,9 @@
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
 #include "third_party/blink/renderer/core/testing/core_unit_test_helper.h"
+#include "third_party/blink/renderer/platform/graphics/compositing/paint_artifact_compositor.h"
 #include "third_party/blink/renderer/platform/graphics/paint/geometry_mapper.h"
+#include "third_party/blink/renderer/platform/testing/find_cc_layer.h"
 
 #include "third_party/blink/renderer/core/paint/compositing/graphics_layer_tree_as_text.h"
 
@@ -1059,7 +1061,7 @@ TEST_F(CompositedLayerMappingTest,
       mapping->ForegroundLayer()->PaintingPhase());
   // Regression test for crbug.com/767908: a foreground layer should also
   // participates hit testing.
-  EXPECT_TRUE(mapping->ForegroundLayer()->GetHitTestable());
+  EXPECT_TRUE(mapping->ForegroundLayer()->IsHitTestable());
 
   Element* negative_composited_child =
       GetDocument().getElementById("negative-composited-child");
@@ -1266,10 +1268,8 @@ TEST_F(CompositedLayerMappingTest,
 
   GraphicsLayer* root_scrolling_layer =
       GetDocument().GetLayoutView()->Layer()->GraphicsLayerBacking();
-  const PropertyTreeState& root_layer_state =
-      root_scrolling_layer->GetPropertyTreeState();
-  const PropertyTreeState& sticky_layer_state =
-      main_graphics_layer->GetPropertyTreeState();
+  const auto& root_layer_state = root_scrolling_layer->GetPropertyTreeState();
+  const auto& sticky_layer_state = main_graphics_layer->GetPropertyTreeState();
   auto transform_from_sticky_to_root =
       GeometryMapper::SourceToDestinationProjection(
           sticky_layer_state.Transform(), root_layer_state.Transform());
@@ -1314,10 +1314,8 @@ TEST_F(CompositedLayerMappingTest,
 
   GraphicsLayer* root_scrolling_layer =
       GetDocument().GetLayoutView()->Layer()->GraphicsLayerBacking();
-  const PropertyTreeState& root_layer_state =
-      root_scrolling_layer->GetPropertyTreeState();
-  const PropertyTreeState& sticky_layer_state =
-      main_graphics_layer->GetPropertyTreeState();
+  const auto& root_layer_state = root_scrolling_layer->GetPropertyTreeState();
+  const auto& sticky_layer_state = main_graphics_layer->GetPropertyTreeState();
   auto transform_from_sticky_to_root =
       GeometryMapper::SourceToDestinationProjection(
           sticky_layer_state.Transform(), root_layer_state.Transform());
@@ -1328,116 +1326,6 @@ TEST_F(CompositedLayerMappingTest,
           FloatPoint(main_graphics_layer->GetOffsetFromTransformNode()));
   EXPECT_FLOAT_EQ(8, sticky_position_relative_to_root.X());
   EXPECT_FLOAT_EQ(8, sticky_position_relative_to_root.Y());
-}
-
-TEST_F(CompositedLayerMappingTest,
-       TransformedRasterizationDisallowedForDirectReasons) {
-  // This test verifies layers with direct compositing reasons won't have
-  // transformed rasterization, i.e. should raster in local space.
-  SetBodyInnerHTML(R"HTML(
-    <div id='target1' style='will-change: transform;'>foo</div>
-    <div id='target2' style='will-change: opacity;'>bar</div>
-  )HTML");
-
-  {
-    LayoutObject* target = GetLayoutObjectByElementId("target1");
-    ASSERT_TRUE(target && target->IsBox());
-    PaintLayer* target_layer = ToLayoutBox(target)->Layer();
-    GraphicsLayer* target_graphics_layer =
-        target_layer ? target_layer->GraphicsLayerBacking() : nullptr;
-    ASSERT_TRUE(target_graphics_layer);
-    EXPECT_FALSE(
-        target_graphics_layer->CcLayer()->transformed_rasterization_allowed());
-  }
-  {
-    LayoutObject* target = GetLayoutObjectByElementId("target2");
-    ASSERT_TRUE(target && target->IsBox());
-    PaintLayer* target_layer = ToLayoutBox(target)->Layer();
-    GraphicsLayer* target_graphics_layer =
-        target_layer ? target_layer->GraphicsLayerBacking() : nullptr;
-    ASSERT_TRUE(target_graphics_layer);
-    EXPECT_FALSE(
-        target_graphics_layer->CcLayer()->transformed_rasterization_allowed());
-  }
-}
-
-TEST_F(CompositedLayerMappingTest, TransformedRasterizationForInlineTransform) {
-  // This test verifies we allow layers that are indirectly composited due to
-  // an inline transform (but no direct reason otherwise) to raster in the
-  // device space for higher quality.
-  SetBodyInnerHTML(R"HTML(
-    <div style='will-change:transform; width:500px;
-    height:20px;'>composited</div>
-    <div id='target' style='transform:translate(1.5px,-10.5px);
-    width:500px; height:20px;'>indirectly composited due to inline
-    transform</div>
-  )HTML");
-
-  LayoutObject* target = GetLayoutObjectByElementId("target");
-  ASSERT_TRUE(target && target->IsBox());
-  PaintLayer* target_layer = ToLayoutBox(target)->Layer();
-  GraphicsLayer* target_graphics_layer =
-      target_layer ? target_layer->GraphicsLayerBacking() : nullptr;
-  ASSERT_TRUE(target_graphics_layer);
-  EXPECT_TRUE(
-      target_graphics_layer->CcLayer()->transformed_rasterization_allowed());
-}
-
-TEST_F(CompositedLayerMappingTest,
-       TransformedRasterizationForScrollDependentPosition) {
-  SetBodyInnerHTML(R"HTML(
-    <div id="target"
-      style="transform: translateX(0.3px);
-             position: fixed; top: 20px; left: 30px;">
-        FIXED
-    </div>
-    <div style="height: 4000px; width: 4000px;
-         background: silver;">
-    </div>
-  )HTML");
-
-  LayoutObject* target = GetLayoutObjectByElementId("target");
-  ASSERT_TRUE(target && target->IsBox());
-  PaintLayer* target_layer = ToLayoutBox(target)->Layer();
-  GraphicsLayer* target_graphics_layer =
-      target_layer ? target_layer->GraphicsLayerBacking() : nullptr;
-  ASSERT_TRUE(target_graphics_layer);
-  EXPECT_TRUE(
-      target_graphics_layer->CcLayer()->transformed_rasterization_allowed());
-}
-
-TEST_F(CompositedLayerMappingTest,
-       TransformedRasterizationForTrivial3DTransform) {
-  SetBodyInnerHTML(R"HTML(
-    <div id="target" style="transform: translate3d(0.3px, 0px, 0px);">
-        Trivial 3D Transform
-    </div>
-  )HTML");
-
-  LayoutObject* target = GetLayoutObjectByElementId("target");
-  ASSERT_TRUE(target && target->IsBox());
-  PaintLayer* target_layer = ToLayoutBox(target)->Layer();
-  GraphicsLayer* target_graphics_layer =
-      target_layer ? target_layer->GraphicsLayerBacking() : nullptr;
-  ASSERT_TRUE(target_graphics_layer);
-  EXPECT_TRUE(
-      target_graphics_layer->CcLayer()->transformed_rasterization_allowed());
-}
-
-TEST_F(CompositedLayerMappingTest,
-       TransformedRasterizationForBackfaceVisibilityHidden) {
-  SetBodyInnerHTML(R"HTML(
-    <div id="target" style="backface-visibility: hidden;">EXAMPLE</div>
-  )HTML");
-
-  LayoutObject* target = GetLayoutObjectByElementId("target");
-  ASSERT_TRUE(target && target->IsBox());
-  PaintLayer* target_layer = ToLayoutBox(target)->Layer();
-  GraphicsLayer* target_graphics_layer =
-      target_layer ? target_layer->GraphicsLayerBacking() : nullptr;
-  ASSERT_TRUE(target_graphics_layer);
-  EXPECT_TRUE(
-      target_graphics_layer->CcLayer()->transformed_rasterization_allowed());
 }
 
 TEST_F(CompositedLayerMappingTest, ScrollingContainerBoundsChange) {
@@ -1494,9 +1382,10 @@ TEST_F(CompositedLayerMappingTest, ScrollingContainerBoundsChange) {
 TEST_F(CompositedLayerMappingTest, MainFrameLayerBackgroundColor) {
   UpdateAllLifecyclePhasesForTest();
   EXPECT_EQ(Color::kWhite, GetDocument().View()->BaseBackgroundColor());
-  auto* view_layer =
-      GetDocument().GetLayoutView()->Layer()->GraphicsLayerBacking();
-  EXPECT_EQ(Color::kWhite, view_layer->BackgroundColor());
+  auto* view_cc_layer = ScrollingContentsCcLayerByScrollElementId(
+      GetFrame().View()->RootCcLayer(),
+      GetFrame().View()->LayoutViewport()->GetScrollElementId());
+  EXPECT_EQ(SK_ColorWHITE, view_cc_layer->background_color());
 
   Color base_background(255, 0, 0);
   GetDocument().View()->SetBaseBackgroundColor(base_background);
@@ -1504,33 +1393,8 @@ TEST_F(CompositedLayerMappingTest, MainFrameLayerBackgroundColor) {
                                      "background: rgba(0, 255, 0, 0.5)");
   UpdateAllLifecyclePhasesForTest();
   EXPECT_EQ(base_background, GetDocument().View()->BaseBackgroundColor());
-  EXPECT_EQ(Color(127, 128, 0, 255), view_layer->BackgroundColor());
-}
-
-TEST_F(CompositedLayerMappingTest, ScrollingLayerBackgroundColor) {
-  SetBodyInnerHTML(R"HTML(
-    <style>.color {background-color: blue}</style>
-    <div id='target' style='width: 100px; height: 100px;
-         overflow: scroll; will-change: transform'>
-      <div style='height: 200px'></div>
-    </div>
-  )HTML");
-
-  auto* target = GetDocument().getElementById("target");
-  auto* mapping = ToLayoutBoxModelObject(target->GetLayoutObject())
-                      ->Layer()
-                      ->GetCompositedLayerMapping();
-  auto* graphics_layer = mapping->MainGraphicsLayer();
-  auto* scrolling_contents_layer = mapping->ScrollingContentsLayer();
-  ASSERT_TRUE(graphics_layer);
-  ASSERT_TRUE(scrolling_contents_layer);
-  EXPECT_EQ(Color::kTransparent, graphics_layer->BackgroundColor());
-  EXPECT_EQ(Color::kTransparent, scrolling_contents_layer->BackgroundColor());
-
-  target->setAttribute(html_names::kClassAttr, "color");
-  UpdateAllLifecyclePhasesForTest();
-  EXPECT_EQ(Color::kTransparent, graphics_layer->BackgroundColor());
-  EXPECT_EQ(Color(0, 0, 255), scrolling_contents_layer->BackgroundColor());
+  EXPECT_EQ(SkColorSetARGB(255, 127, 128, 0),
+            view_cc_layer->background_color());
 }
 
 TEST_F(CompositedLayerMappingTest, ScrollLayerSizingSubpixelAccumulation) {
@@ -1627,6 +1491,8 @@ TEST_F(CompositedLayerMappingTest,
 
   UpdateAllLifecyclePhasesForTest();
 
+  ASSERT_EQ(kPaintsIntoGroupedBacking, squashed->GetCompositingState());
+
   // 100px down from squashing's main graphics layer.
   EXPECT_EQ(IntPoint(0, 100),
             squashed->GraphicsLayerBacking()->GetOffsetFromTransformNode());
@@ -1680,15 +1546,15 @@ TEST_F(CompositedLayerMappingTest, TouchActionRectsWithoutContent) {
   auto* box = ToLayoutBoxModelObject(GetLayoutObjectByElementId("target"));
   auto* mapping = box->Layer()->GetCompositedLayerMapping();
 
-  const auto* layer = mapping->MainGraphicsLayer()->CcLayer();
+  const auto& layer = mapping->MainGraphicsLayer()->CcLayer();
   auto expected = gfx::Rect(0, 0, 100, 100);
-  EXPECT_EQ(layer->touch_action_region().GetAllRegions().bounds(), expected);
+  EXPECT_EQ(layer.touch_action_region().GetAllRegions().bounds(), expected);
 
   EXPECT_TRUE(mapping->MainGraphicsLayer()->PaintsHitTest());
 
   // The only painted content for the main graphics layer is the touch-action
   // rect which is not sent to cc, so the cc::layer should not draw content.
-  EXPECT_FALSE(layer->DrawsContent());
+  EXPECT_FALSE(layer.DrawsContent());
   EXPECT_FALSE(mapping->MainGraphicsLayer()->DrawsContent());
 }
 
@@ -1713,13 +1579,15 @@ TEST_F(CompositedLayerMappingTest, ContentsOpaque) {
   EXPECT_TRUE(mapping->MainGraphicsLayer()->ContentsOpaque());
 }
 
-TEST_F(CompositedLayerMappingTest, NullOverflowControlsHostLayer) {
+TEST_F(CompositedLayerMappingTest, NullOverflowControlLayers) {
   SetHtmlInnerHTML("<div id='target' style='will-change: transform'></div>");
   CompositedLayerMapping* mapping =
       ToLayoutBoxModelObject(GetLayoutObjectByElementId("target"))
           ->Layer()
           ->GetCompositedLayerMapping();
-  EXPECT_FALSE(mapping->DetachLayerForOverflowControls());
+  EXPECT_FALSE(mapping->LayerForHorizontalScrollbar());
+  EXPECT_FALSE(mapping->LayerForVerticalScrollbar());
+  EXPECT_FALSE(mapping->LayerForScrollCorner());
 }
 
 TEST_F(CompositedLayerMappingTest, CompositedHiddenAnimatingLayer) {
@@ -1798,7 +1666,7 @@ TEST_F(CompositedLayerMappingTest,
   ASSERT_TRUE(scrollable_area->VerticalScrollbar()->IsOverlayScrollbar());
 
   ASSERT_FALSE(scrollable_area->NeedsCompositedScrolling());
-  EXPECT_FALSE(scrollable_area->VerticalScrollbar()->VisualRect().IsEmpty());
+  EXPECT_FALSE(scrollable_area->VerticalScrollbar()->FrameRect().IsEmpty());
 
   GraphicsLayer* vertical_scrollbar_layer =
       scrollable_area->GraphicsLayerForVerticalScrollbar();
@@ -1873,44 +1741,6 @@ TEST_F(CompositedLayerMappingTest, IsolationClippingContainer) {
   PaintLayer* squash_container_a_layer =
       ToLayoutBoxModelObject(squash_container_a->GetLayoutObject())->Layer();
   EXPECT_EQ(squash_container_a_layer->ClippingContainer(), isolation_a_object);
-}
-
-TEST_F(CompositedLayerMappingTest, FrameAttribution) {
-  SetBodyInnerHTML(R"HTML(
-    <div id='child' style='will-change: transform;'></div>
-    <iframe id='subframe' style='will-change: transform;'></iframe>
-  )HTML");
-
-  UpdateAllLifecyclePhasesForTest();
-
-  // Ensure that we correctly attribute child layers in the main frame to their
-  // containing document.
-  Element* child = GetDocument().getElementById("child");
-  PaintLayer* child_paint_layer =
-      ToLayoutBoxModelObject(child->GetLayoutObject())->Layer();
-  auto* child_layer = child_paint_layer->GraphicsLayerBacking()->CcLayer();
-  EXPECT_TRUE(child_layer->frame_element_id());
-
-  EXPECT_EQ(child_layer->frame_element_id(),
-            CompositorElementIdFromUniqueObjectId(
-                DOMNodeIds::IdForNode(&GetDocument()),
-                CompositorElementIdNamespace::kDOMNodeId));
-
-  // Test that a layerized subframe's element ID is that of its containing
-  // document.
-  auto* subframe =
-      To<HTMLFrameOwnerElement>(GetDocument().getElementById("subframe"));
-  EXPECT_TRUE(subframe);
-  PaintLayer* subframe_paint_layer =
-      ToLayoutBoxModelObject(subframe->GetLayoutObject())->Layer();
-  auto* subframe_layer =
-      subframe_paint_layer->GraphicsLayerBacking()->CcLayer();
-  EXPECT_TRUE(subframe_layer->frame_element_id());
-
-  EXPECT_EQ(subframe_layer->frame_element_id(),
-            CompositorElementIdFromUniqueObjectId(
-                DOMNodeIds::IdForNode(subframe->contentDocument()),
-                CompositorElementIdNamespace::kDOMNodeId));
 }
 
 TEST_F(CompositedLayerMappingTest, SquashIntoScrollingContents) {

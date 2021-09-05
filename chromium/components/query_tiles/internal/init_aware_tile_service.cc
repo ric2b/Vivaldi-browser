@@ -104,6 +104,19 @@ void InitAwareTileService::PurgeDb() {
   }
 }
 
+void InitAwareTileService::SetServerUrl(const std::string& base_url) {
+  if (IsReady()) {
+    tile_service_->SetServerUrl(base_url);
+  } else if (!IsFailed()) {
+    MaybeCacheApiCall(base::BindOnce(&InitAwareTileService::SetServerUrl,
+                                     weak_ptr_factory_.GetWeakPtr(), base_url));
+  }
+}
+
+Logger* InitAwareTileService::GetLogger() {
+  return tile_service_->GetLogger();
+}
+
 void InitAwareTileService::MaybeCacheApiCall(base::OnceClosure api_call) {
   DCHECK(!init_success_.has_value())
       << "Only cache API calls before initialization.";

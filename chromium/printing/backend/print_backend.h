@@ -104,8 +104,8 @@ struct PRINTING_EXPORT PrinterSemanticCapsAndDefaults {
 
   bool color_changeable = false;
   bool color_default = false;
-  ColorModel color_model = UNKNOWN_COLOR_MODEL;
-  ColorModel bw_model = UNKNOWN_COLOR_MODEL;
+  mojom::ColorModel color_model = mojom::ColorModel::kUnknownColorModel;
+  mojom::ColorModel bw_model = mojom::ColorModel::kUnknownColorModel;
 
   struct Paper {
     std::string display_name;
@@ -179,11 +179,8 @@ class PRINTING_EXPORT PrintBackend
   // Returns true if printer_name points to a valid printer.
   virtual bool IsValidPrinter(const std::string& printer_name) = 0;
 
-  // Allocates a print backend. If |print_backend_settings| is nullptr, default
-  // settings will be used.
-  static scoped_refptr<PrintBackend> CreateInstance(
-      const base::DictionaryValue* print_backend_settings,
-      const std::string& locale);
+  // Allocates a print backend.
+  static scoped_refptr<PrintBackend> CreateInstance(const std::string& locale);
 
 #if defined(USE_CUPS)
   // TODO(crbug.com/1062136): Remove this static function when Cloud Print is

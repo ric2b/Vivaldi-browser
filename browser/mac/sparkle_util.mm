@@ -3,7 +3,7 @@
 #include "browser/mac/sparkle_util.h"
 
 #import <AppKit/AppKit.h>
-#import "third_party/sparkle_lib/Sparkle.framework/Headers/SUUpdater.h"
+#import "thirdparty/macsparkle/Sparkle/SUUpdater.h"
 
 
 @interface SparkleUtils : NSObject

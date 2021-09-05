@@ -5,23 +5,35 @@
 #ifndef COMPONENTS_PAYMENTS_CONTENT_CONTENT_PAYMENT_REQUEST_DELEGATE_H_
 #define COMPONENTS_PAYMENTS_CONTENT_CONTENT_PAYMENT_REQUEST_DELEGATE_H_
 
+#include <memory>
 #include <string>
 
+#include "base/memory/weak_ptr.h"
 #include "components/payments/content/payment_request_display_manager.h"
 #include "components/payments/core/payment_request_delegate.h"
 
 template <class T>
 class scoped_refptr;
 
+namespace autofill {
+class InternalAuthenticator;
+}  // namespace autofill
+
 namespace payments {
 
 class PaymentManifestWebDataService;
+class PaymentRequestDialog;
 class PaymentRequestDisplayManager;
 
 // The delegate for PaymentRequest that can use content.
 class ContentPaymentRequestDelegate : public PaymentRequestDelegate {
  public:
-  ~ContentPaymentRequestDelegate() override {}
+  ~ContentPaymentRequestDelegate() override;
+
+  // Creates and returns an instance of the InternalAuthenticator interface for
+  // communication with WebAuthn.
+  virtual std::unique_ptr<autofill::InternalAuthenticator>
+  CreateInternalAuthenticator() const = 0;
 
   // Returns the web data service for caching payment method manifests.
   virtual scoped_refptr<PaymentManifestWebDataService>
@@ -59,6 +71,17 @@ class ContentPaymentRequestDelegate : public PaymentRequestDelegate {
   // Returns the Android package name of the Trusted Web Activity that invoked
   // this browser, if any. Otherwise, an empty string.
   virtual std::string GetTwaPackageName() const = 0;
+
+  virtual PaymentRequestDialog* GetDialogForTesting() = 0;
+
+  // Returns a weak pointer to this delegate.
+  base::WeakPtr<ContentPaymentRequestDelegate> GetContentWeakPtr();
+
+ protected:
+  ContentPaymentRequestDelegate();
+
+ private:
+  base::WeakPtrFactory<ContentPaymentRequestDelegate> weak_ptr_factory_{this};
 };
 
 }  // namespace payments

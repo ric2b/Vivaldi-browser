@@ -9,7 +9,6 @@
 #include "chrome/browser/ui/views/passwords/password_bubble_view_base.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/controls/combobox/combobox_listener.h"
-#include "ui/views/controls/editable_combobox/editable_combobox_listener.h"
 #include "ui/views/layout/animating_layout_manager.h"
 #include "ui/views/view.h"
 
@@ -34,7 +33,6 @@ class FeaturePromoBubbleView;
 class PasswordSaveUpdateWithAccountStoreView
     : public PasswordBubbleViewBase,
       public views::ButtonListener,
-      public views::EditableComboboxListener,
       public views::ComboboxListener,
       public views::WidgetObserver,
       public views::AnimatingLayoutManager::Observer {
@@ -71,10 +69,6 @@ class PasswordSaveUpdateWithAccountStoreView
   // Used for the destination combobox.
   void OnPerformAction(views::Combobox* combobox) override;
 
-  // views::EditableComboboxListener:
-  // Used for both the username and password editable comboboxes.
-  void OnContentChanged(views::EditableCombobox* editable_combobox) override;
-
   // views::WidgetObserver:
   void OnWidgetDestroying(views::Widget* widget) override;
 
@@ -97,7 +91,6 @@ class PasswordSaveUpdateWithAccountStoreView
   void TogglePasswordVisibility();
   void UpdateUsernameAndPasswordInModel();
   void UpdateBubbleUIElements();
-  std::unique_ptr<views::View> CreateFooterView();
 
   // Whether we should show the IPH informing the user about the destination
   // picker and that they can now select where to store the passwords. It
@@ -114,6 +107,9 @@ class PasswordSaveUpdateWithAccountStoreView
   void ShowIPH(IPHType type);
 
   void CloseIPHBubbleIfOpen();
+
+  // Used for both the username and password editable comboboxes.
+  void OnContentChanged();
 
   SaveUpdateWithAccountStoreBubbleController controller_;
 
@@ -136,7 +132,7 @@ class PasswordSaveUpdateWithAccountStoreView
   // its NativeWidget.
   FeaturePromoBubbleView* account_storage_promo_ = nullptr;
 
-  IPHType currenly_shown_iph_type = IPHType::kNone;
+  IPHType currenly_shown_iph_type_ = IPHType::kNone;
 
   // Observes the |account_storage_promo_|'s Widget.  Used to tell whether the
   // promo is open and get called back when it closes.

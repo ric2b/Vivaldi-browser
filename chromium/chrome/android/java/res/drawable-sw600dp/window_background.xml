@@ -10,9 +10,11 @@
             <solid android:color="@android:color/black" />
         </shape>
     </item>
+    <!-- Note(david@vivaldi.com): That doesn't look nice in vivaldi. Skip it.
     <item
         android:top="25dp"
         android:bottom="0px">
       <nine-patch android:src="@drawable/toolbar_background" />
   </item>
+  -->
 </layer-list>

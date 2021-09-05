@@ -11,15 +11,20 @@
 
 #include "base/containers/flat_set.h"
 #include "base/macros.h"
-#include "base/unguessable_token.h"
+#include "base/util/type_safety/pass_key.h"
 #include "components/performance_manager/graph/node_base.h"
 #include "components/performance_manager/public/graph/worker_node.h"
+#include "third_party/blink/public/common/tokens/tokens.h"
 #include "url/gurl.h"
 
 namespace performance_manager {
 
 class FrameNodeImpl;
 class ProcessNodeImpl;
+
+namespace execution_context {
+class ExecutionContextAccess;
+}  // namespace execution_context
 
 class WorkerNodeImpl
     : public PublicNodeImpl<WorkerNodeImpl, WorkerNode>,
@@ -30,7 +35,7 @@ class WorkerNodeImpl
   WorkerNodeImpl(const std::string& browser_context_id,
                  WorkerType worker_type,
                  ProcessNodeImpl* process_node,
-                 const base::UnguessableToken& dev_tools_token);
+                 const blink::WorkerToken& worker_token);
   ~WorkerNodeImpl() override;
 
   // Invoked when a frame starts/stops being a client of this worker.
@@ -49,13 +54,21 @@ class WorkerNodeImpl
   const std::string& browser_context_id() const;
   WorkerType worker_type() const;
   ProcessNodeImpl* process_node() const;
-  const base::UnguessableToken& dev_tools_token() const;
+  const blink::WorkerToken& worker_token() const;
 
   // Getters for non-const properties. These are not thread safe.
   const GURL& url() const;
   const base::flat_set<FrameNodeImpl*>& client_frames() const;
   const base::flat_set<WorkerNodeImpl*>& client_workers() const;
   const base::flat_set<WorkerNodeImpl*>& child_workers() const;
+
+  // Implementation details below this point.
+
+  // Used by the ExecutionContextRegistry mechanism.
+  std::unique_ptr<NodeAttachedData>* GetExecutionContextStorage(
+      util::PassKey<execution_context::ExecutionContextAccess> key) {
+    return &execution_context_;
+  }
 
  private:
   void OnJoiningGraph() override;
@@ -66,7 +79,7 @@ class WorkerNodeImpl
   WorkerType GetWorkerType() const override;
   const std::string& GetBrowserContextID() const override;
   const ProcessNode* GetProcessNode() const override;
-  const base::UnguessableToken& GetDevToolsToken() const override;
+  const blink::WorkerToken& GetWorkerToken() const override;
   const GURL& GetURL() const override;
   const base::flat_set<const FrameNode*> GetClientFrames() const override;
   const base::flat_set<const WorkerNode*> GetClientWorkers() const override;
@@ -85,10 +98,12 @@ class WorkerNodeImpl
   // The process in which this worker lives.
   ProcessNodeImpl* const process_node_;
 
-  // A unique identifier shared with all representations of this node across
-  // content and blink. The token is only defined by the browser process and
-  // is never sent back from the renderer in control calls.
-  const base::UnguessableToken dev_tools_token_;
+  // A unique identifier shared with all representations of this worker across
+  // content and blink. This token should only ever be sent between the browser
+  // and the renderer hosting the worker. It should not be used to identify a
+  // worker in browser-to-renderer control messages, but may be used to identify
+  // a worker in informational messages going in either direction.
+  const blink::WorkerToken worker_token_;
 
   // The URL of the worker script. This is the final response URL which takes
   // into account redirections. This is initially empty and it is set when
@@ -105,6 +120,9 @@ class WorkerNodeImpl
   // The child workers of this worker. See the declaration of WorkerNode for a
   // distinction between client workers and child workers.
   base::flat_set<WorkerNodeImpl*> child_workers_;
+
+  // Used by ExecutionContextRegistry mechanism.
+  std::unique_ptr<NodeAttachedData> execution_context_;
 
   DISALLOW_COPY_AND_ASSIGN(WorkerNodeImpl);
 };

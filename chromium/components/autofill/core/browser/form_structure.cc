@@ -358,6 +358,9 @@ HtmlFieldType FieldTypeFromAutocompleteAttributeValue(
       autocomplete_attribute_value == "upi")
     return HTML_TYPE_UPI_VPA;
 
+  if (autocomplete_attribute_value == "one-time-code")
+    return HTML_TYPE_ONE_TIME_CODE;
+
   return HTML_TYPE_UNRECOGNIZED;
 }
 
@@ -426,11 +429,16 @@ void EncodeRandomizedValue(const RandomizedEncoder& encoder,
                            FieldSignature field_signature,
                            base::StringPiece data_type,
                            base::StringPiece data_value,
+                           bool include_checksum,
                            AutofillRandomizedValue* output) {
   DCHECK(output);
   output->set_encoding_type(encoder.encoding_type());
   output->set_encoded_bits(
       encoder.Encode(form_signature, field_signature, data_type, data_value));
+  if (include_checksum) {
+    DCHECK(data_type == RandomizedEncoder::FORM_URL);
+    output->set_checksum(StrToHash32Bit(data_value.data()));
+  }
 }
 
 void EncodeRandomizedValue(const RandomizedEncoder& encoder,
@@ -438,9 +446,11 @@ void EncodeRandomizedValue(const RandomizedEncoder& encoder,
                            FieldSignature field_signature,
                            base::StringPiece data_type,
                            base::StringPiece16 data_value,
+                           bool include_checksum,
                            AutofillRandomizedValue* output) {
   EncodeRandomizedValue(encoder, form_signature, field_signature, data_type,
-                        base::UTF16ToUTF8(data_value), output);
+                        base::UTF16ToUTF8(data_value), include_checksum,
+                        output);
 }
 
 void PopulateRandomizedFormMetadata(const RandomizedEncoder& encoder,
@@ -452,12 +462,12 @@ void PopulateRandomizedFormMetadata(const RandomizedEncoder& encoder,
   if (!form.id_attribute().empty()) {
     EncodeRandomizedValue(encoder, form_signature, kNullFieldSignature,
                           RandomizedEncoder::FORM_ID, form.id_attribute(),
-                          metadata->mutable_id());
+                          /*include_checksum=*/false, metadata->mutable_id());
   }
   if (!form.name_attribute().empty()) {
     EncodeRandomizedValue(encoder, form_signature, kNullFieldSignature,
                           RandomizedEncoder::FORM_NAME, form.name_attribute(),
-                          metadata->mutable_name());
+                          /*include_checksum=*/false, metadata->mutable_name());
   }
 
   for (const ButtonTitleInfo& e : form.button_titles()) {
@@ -465,6 +475,7 @@ void PopulateRandomizedFormMetadata(const RandomizedEncoder& encoder,
     DCHECK(!e.first.empty());
     EncodeRandomizedValue(encoder, form_signature, kNullFieldSignature,
                           RandomizedEncoder::FORM_BUTTON_TITLES, e.first,
+                          /*include_checksum=*/false,
                           button_title->mutable_title());
     button_title->set_type(static_cast<ButtonTitleType>(e.second));
   }
@@ -472,8 +483,7 @@ void PopulateRandomizedFormMetadata(const RandomizedEncoder& encoder,
   if (encoder.AnonymousUrlCollectionIsEnabled() && !full_source_url.empty()) {
     EncodeRandomizedValue(encoder, form_signature, kNullFieldSignature,
                           RandomizedEncoder::FORM_URL, full_source_url,
-                          metadata->mutable_url());
-    metadata->set_checksum_for_url(StrToHash32Bit(full_source_url));
+                          /*include_checksum=*/true, metadata->mutable_url());
   }
 }
 
@@ -487,43 +497,48 @@ void PopulateRandomizedFieldMetadata(
   if (!field.id_attribute.empty()) {
     EncodeRandomizedValue(encoder, form_signature, field_signature,
                           RandomizedEncoder::FIELD_ID, field.id_attribute,
-                          metadata->mutable_id());
+                          /*include_checksum=*/false, metadata->mutable_id());
   }
   if (!field.name_attribute.empty()) {
     EncodeRandomizedValue(encoder, form_signature, field_signature,
                           RandomizedEncoder::FIELD_NAME, field.name_attribute,
-                          metadata->mutable_name());
+                          /*include_checksum=*/false, metadata->mutable_name());
   }
   if (!field.form_control_type.empty()) {
     EncodeRandomizedValue(encoder, form_signature, field_signature,
                           RandomizedEncoder::FIELD_CONTROL_TYPE,
-                          field.form_control_type, metadata->mutable_type());
+                          field.form_control_type, /*include_checksum=*/false,
+                          metadata->mutable_type());
   }
   if (!field.label.empty()) {
     EncodeRandomizedValue(encoder, form_signature, field_signature,
                           RandomizedEncoder::FIELD_LABEL, field.label,
+                          /*include_checksum=*/false,
                           metadata->mutable_label());
   }
   if (!field.aria_label.empty()) {
     EncodeRandomizedValue(encoder, form_signature, field_signature,
                           RandomizedEncoder::FIELD_ARIA_LABEL, field.aria_label,
+                          /*include_checksum=*/false,
                           metadata->mutable_aria_label());
   }
   if (!field.aria_description.empty()) {
     EncodeRandomizedValue(encoder, form_signature, field_signature,
                           RandomizedEncoder::FIELD_ARIA_DESCRIPTION,
-                          field.aria_description,
+                          field.aria_description, /*include_checksum=*/false,
                           metadata->mutable_aria_description());
   }
   if (!field.css_classes.empty()) {
     EncodeRandomizedValue(encoder, form_signature, field_signature,
                           RandomizedEncoder::FIELD_CSS_CLASS, field.css_classes,
+                          /*include_checksum=*/false,
                           metadata->mutable_css_class());
   }
   if (!field.placeholder.empty()) {
     EncodeRandomizedValue(encoder, form_signature, field_signature,
                           RandomizedEncoder::FIELD_PLACEHOLDER,
-                          field.placeholder, metadata->mutable_placeholder());
+                          field.placeholder, /*include_checksum=*/false,
+                          metadata->mutable_placeholder());
   }
 }
 
@@ -888,6 +903,7 @@ void FormStructure::ProcessQueryResponse(
     form->UpdateAutofillCount();
     form->RationalizeRepeatedFields(form_interactions_ukm_logger);
     form->RationalizeFieldTypePredictions();
+    form->OverrideServerPredictionsWithHeuristics();
     form->IdentifySections(false);
   }
 
@@ -916,7 +932,6 @@ std::vector<FormDataPredictions> FormStructure::GetFieldTypePredictions(
 
     for (const auto& field : form_structure->fields_) {
       FormFieldDataPredictions annotated_field;
-      annotated_field.field = *field;
       annotated_field.signature = field->FieldSignatureAsStr();
       annotated_field.heuristic_type =
           AutofillType(field->heuristic_type()).ToString();
@@ -1170,7 +1185,7 @@ void FormStructure::LogQualityMetrics(
       AutofillMetrics::LogUserHappinessMetric(
           AutofillMetrics::USER_DID_ENTER_UPI_VPA, field->Type().group(),
           security_state::SecurityLevel::SECURITY_LEVEL_COUNT,
-          data_util::DetermineGroups(GetServerFieldTypes()));
+          data_util::DetermineGroups(*this));
     }
 
     form_interactions_ukm_logger->LogFieldFillStatus(*this, *field,
@@ -1846,6 +1861,25 @@ void FormStructure::RationalizeAddressStateCountry(
   }
 }
 
+void FormStructure::OverrideServerPredictionsWithHeuristics() {
+  if (!base::FeatureList::IsEnabled(
+          features::kAutofillEnableSupportForMoreStructureInNames)) {
+    return;
+  }
+  for (const auto& field : fields_) {
+    // If the heuristic type is |LAST_NAME_SECOND| or |LAST_NAME_FIRST|
+    // unconditionally use this prediction.
+    switch (field->heuristic_type()) {
+      case NAME_LAST_SECOND:
+      case NAME_LAST_FIRST:
+        field->SetTypeTo(AutofillType(field->heuristic_type()));
+        break;
+      default: {
+      };
+    }
+  }
+}
+
 void FormStructure::RationalizeRepeatedFields(
     AutofillMetrics::FormInteractionsUkmLogger* form_interactions_ukm_logger) {
   // The type of every field whose index is in
@@ -2273,14 +2307,6 @@ std::set<FormType> FormStructure::GetFormTypes() const {
   return form_types;
 }
 
-std::vector<ServerFieldType> FormStructure::GetServerFieldTypes() const {
-  std::vector<ServerFieldType> types(field_count());
-  std::transform(begin(), end(), types.begin(), [&](const auto& field) {
-    return field->Type().GetStorableType();
-  });
-  return types;
-}
-
 base::string16 FormStructure::GetIdentifierForRefill() const {
   if (!form_name().empty())
     return form_name();
@@ -2347,16 +2373,23 @@ std::ostream& operator<<(std::ostream& buffer, const FormStructure& form) {
                   {base::NumberToString(field->GetFieldSignature().value()),
                    " - ",
                    base::NumberToString(
-                       HashFieldSignature(field->GetFieldSignature()))});
+                       HashFieldSignature(field->GetFieldSignature())),
+                   ", unique renderer id: ",
+                   base::NumberToString(field->unique_renderer_id.value())});
     buffer << "\n  Name: " << field->parseable_name();
 
     auto type = field->Type().ToString();
     auto heuristic_type = AutofillType(field->heuristic_type()).ToString();
     auto server_type = AutofillType(field->server_type()).ToString();
+    auto html_type_description =
+        field->html_type() != HTML_TYPE_UNSPECIFIED
+            ? base::StrCat(
+                  {", html: ", FieldTypeToStringPiece(field->html_type())})
+            : "";
 
     buffer << "\n  Type: "
-           << base::StrCat({type, " (heuristic: ", heuristic_type,
-                            ", server: ", server_type, ")"});
+           << base::StrCat({type, " (heuristic: ", heuristic_type, ", server: ",
+                            server_type, html_type_description, ")"});
     buffer << "\n  Section: " << field->section;
 
     constexpr size_t kMaxLabelSize = 100;
@@ -2399,10 +2432,15 @@ LogBuffer& operator<<(LogBuffer& buffer, const FormStructure& form) {
     auto type = field->Type().ToString();
     auto heuristic_type = AutofillType(field->heuristic_type()).ToString();
     auto server_type = AutofillType(field->server_type()).ToString();
+    auto html_type_description =
+        field->html_type() != HTML_TYPE_UNSPECIFIED
+            ? base::StrCat(
+                  {", html: ", FieldTypeToStringPiece(field->html_type())})
+            : "";
 
     buffer << Tr{} << "Type:"
-           << base::StrCat({type, " (heuristic: ", heuristic_type,
-                            ", server: ", server_type, ")"});
+           << base::StrCat({type, " (heuristic: ", heuristic_type, ", server: ",
+                            server_type, html_type_description, ")"});
     buffer << Tr{} << "Section:" << field->section;
 
     constexpr size_t kMaxLabelSize = 100;

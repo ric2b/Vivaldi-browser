@@ -11,6 +11,7 @@
 #include "base/numerics/ranges.h"
 #include "base/time/time.h"
 #include "base/values.h"
+#include "chromecast/media/audio/audio_log.h"
 #include "chromecast/media/audio/interleaved_channel_mixer.h"
 #include "chromecast/media/cma/backend/mixer/channel_layout.h"
 #include "chromecast/media/cma/backend/mixer/mixer_input.h"
@@ -124,15 +125,16 @@ void FilterGroup::ParseVolumeLimits(const base::Value* volume_limits) {
   // Get default limits.
   if (ParseVolumeLimit(volume_limits, &default_volume_min_,
                        &default_volume_max_)) {
-    LOG(INFO) << "Default volume limits for '" << name_ << "' group: ["
-              << default_volume_min_ << ", " << default_volume_max_ << "]";
+    AUDIO_LOG(INFO) << "Default volume limits for '" << name_ << "' group: ["
+                    << default_volume_min_ << ", " << default_volume_max_
+                    << "]";
   }
 
   float min, max;
   for (const auto& item : volume_limits->DictItems()) {
     if (ParseVolumeLimit(&item.second, &min, &max)) {
-      LOG(INFO) << "Volume limits for device ID '" << item.first << "' = ["
-                << min << ", " << max << "]";
+      AUDIO_LOG(INFO) << "Volume limits for device ID '" << item.first
+                      << "' = [" << min << ", " << max << "]";
       volume_limits_.insert({item.first, {min, max}});
     }
   }
@@ -182,15 +184,9 @@ float FilterGroup::MixAndFilter(
   //    In this case, there was never any data in the pipeline.
   if (active_inputs_.empty() && volume == 0.0f &&
       !post_processing_pipeline_->IsRinging()) {
-    if (frames_zeroed_ < num_output_frames) {
-      std::fill_n(GetOutputBuffer(),
-                  num_output_frames * GetOutputChannelCount(), 0);
-      frames_zeroed_ = num_output_frames;
-    }
+    ZeroOutputBufferIfNeeded();
     return 0.0f;  // Output will be silence, no need to mix.
   }
-
-  frames_zeroed_ = 0;
 
   // Mix InputQueues
   mixed_->ZeroFramesPartial(0, input_frames_per_write_);
@@ -212,9 +208,11 @@ float FilterGroup::MixAndFilter(
   }
   if (!filled_some && volume == 0.0f &&
       !post_processing_pipeline_->IsRinging()) {
+    ZeroOutputBufferIfNeeded();
     return 0.0f;  // Output will be silence, no need to process.
   }
 
+  frames_zeroed_ = 0;
   mixed_->ToInterleaved<::media::FloatSampleTypeTraitsNoClip<float>>(
       input_frames_per_write_, interleaved_.data());
 
@@ -268,6 +266,15 @@ int FilterGroup::GetOutputChannelCount() const {
   return post_processing_pipeline_->NumOutputChannels();
 }
 
+void FilterGroup::ZeroOutputBufferIfNeeded() {
+  const int num_output_frames = output_config_.output_frames_per_write;
+  if (frames_zeroed_ < num_output_frames) {
+    std::fill_n(GetOutputBuffer(), num_output_frames * GetOutputChannelCount(),
+                0);
+    frames_zeroed_ = num_output_frames;
+  }
+}
+
 void FilterGroup::ResizeBuffers() {
   mixed_ = ::media::AudioBus::Create(num_channels_, input_frames_per_write_);
   mixed_->Zero();
@@ -275,6 +282,7 @@ void FilterGroup::ResizeBuffers() {
       ::media::AudioBus::Create(num_channels_, input_frames_per_write_);
   temp_buffer_->Zero();
   interleaved_.assign(input_frames_per_write_ * num_channels_, 0.0f);
+  frames_zeroed_ = 0;
 }
 
 void FilterGroup::SetPostProcessorConfig(const std::string& name,
@@ -284,8 +292,8 @@ void FilterGroup::SetPostProcessorConfig(const std::string& name,
 
 void FilterGroup::UpdatePlayoutChannel(int playout_channel) {
   if (playout_channel >= num_channels_) {
-    LOG(ERROR) << "only " << num_channels_ << " present, wanted channel #"
-               << playout_channel;
+    AUDIO_LOG(ERROR) << "only " << num_channels_ << " present, wanted channel #"
+                     << playout_channel;
     return;
   }
   post_processing_pipeline_->UpdatePlayoutChannel(playout_channel);

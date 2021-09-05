@@ -146,7 +146,7 @@ base::string16 DownloadShelfContextMenu::GetLabelForCommandId(
                    : IDS_DOWNLOAD_MENU_PLATFORM_OPEN_ALWAYS;
           break;
         }
-#elif defined(OS_MACOSX) || defined(OS_LINUX)
+#elif defined(OS_MAC) || defined(OS_LINUX) || defined(OS_CHROMEOS)
         if (can_open_pdf_in_system_viewer) {
           id = IDS_DOWNLOAD_MENU_PLATFORM_OPEN_ALWAYS;
           break;
@@ -413,7 +413,8 @@ void DownloadShelfContextMenu::AddAutoOpenToMenu(ui::SimpleMenuModel* menu) {
         DownloadCommands::ALWAYS_OPEN_TYPE,
         GetLabelForCommandId(DownloadCommands::ALWAYS_OPEN_TYPE),
         ui::ImageModel::FromVectorIcon(vector_icons::kBusinessIcon,
-                                       gfx::kChromeIconGrey, 16));
+                                       gfx::kChromeIconGrey,
+                                       ui::SimpleMenuModel::kDefaultIconSize));
   } else {
     menu->AddCheckItem(
         DownloadCommands::ALWAYS_OPEN_TYPE,

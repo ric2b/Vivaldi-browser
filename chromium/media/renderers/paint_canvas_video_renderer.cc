@@ -38,7 +38,7 @@
 #include "third_party/skia/include/core/SkImageGenerator.h"
 #include "third_party/skia/include/core/SkImageInfo.h"
 #include "third_party/skia/include/gpu/GrBackendSurface.h"
-#include "third_party/skia/include/gpu/GrContext.h"
+#include "third_party/skia/include/gpu/GrDirectContext.h"
 #include "third_party/skia/include/gpu/gl/GrGLTypes.h"
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/skia_util.h"
@@ -402,10 +402,16 @@ void ConvertVideoFrameToRGBPixelsTask(const VideoFrame* video_frame,
   uint8_t* pixels = static_cast<uint8_t*>(rgb_pixels) +
                     row_bytes * chunk_start * rows_per_chunk;
 
-  // TODO(hubbe): This should really default to the rec709 colorspace.
-  // https://crbug.com/828599
+  // TODO(crbug.com/828599): This should default to BT.709 color space.
   SkYUVColorSpace color_space = kRec601_SkYUVColorSpace;
   video_frame->ColorSpace().ToSkYUVColorSpace(&color_space);
+
+  // Downgrade unsupported color spaces to supported ones. libyuv doesn't have
+  // support for these, so this is best effort.
+  if (color_space == kBT2020_8bit_Full_SkYUVColorSpace)
+    color_space = kBT2020_SkYUVColorSpace;
+  else if (color_space == kRec709_Full_SkYUVColorSpace)
+    color_space = kRec709_Limited_SkYUVColorSpace;
 
   if (!video_frame->data(VideoFrame::kUPlane) &&
       !video_frame->data(VideoFrame::kVPlane)) {
@@ -615,9 +621,10 @@ class VideoImageGenerator : public cc::PaintImageGenerator {
     return true;
   }
 
-  bool QueryYUVA8(SkYUVASizeInfo* sizeInfo,
-                  SkYUVAIndex indices[SkYUVAIndex::kIndexCount],
-                  SkYUVColorSpace* color_space) const override {
+  bool QueryYUVA(SkYUVASizeInfo* sizeInfo,
+                 SkYUVAIndex indices[SkYUVAIndex::kIndexCount],
+                 SkYUVColorSpace* color_space,
+                 uint8_t* bit_depth) const override {
     // Temporarily disabling this path to avoid creating YUV ImageData in
     // GpuImageDecodeCache.
     // TODO(crbug.com/921636): Restore the code below once YUV rendering support
@@ -661,11 +668,12 @@ class VideoImageGenerator : public cc::PaintImageGenerator {
 #endif
   }
 
-  bool GetYUVA8Planes(const SkYUVASizeInfo& sizeInfo,
-                      const SkYUVAIndex indices[SkYUVAIndex::kIndexCount],
-                      void* planes[4],
-                      size_t frame_index,
-                      uint32_t lazy_pixel_ref) override {
+  bool GetYUVAPlanes(const SkYUVASizeInfo& sizeInfo,
+                     SkColorType color_type,
+                     const SkYUVAIndex indices[SkYUVAIndex::kIndexCount],
+                     void* planes[4],
+                     size_t frame_index,
+                     uint32_t lazy_pixel_ref) override {
     DCHECK_EQ(frame_index, 0u);
 
     media::VideoPixelFormat format = frame_->format();
@@ -711,23 +719,14 @@ class VideoImageGenerator : public cc::PaintImageGenerator {
 
       // Copy the frame to the supplied memory.
       // TODO: Find a way (API change?) to avoid this copy.
-      char* out_line = static_cast<char*>(planes[plane]);
+      uint8_t* out_line = static_cast<uint8_t*>(planes[plane]);
       int out_line_stride = sizeInfo.fWidthBytes[plane];
       uint8_t* in_line = frame_->data(plane) + offset;
       int in_line_stride = frame_->stride(plane);
       int plane_height = sizeInfo.fSizes[plane].height();
-      if (in_line_stride == out_line_stride) {
-        memcpy(out_line, in_line, plane_height * in_line_stride);
-      } else {
-        // Different line padding so need to copy one line at a time.
-        int bytes_to_copy_per_line =
-            out_line_stride < in_line_stride ? out_line_stride : in_line_stride;
-        for (int line_no = 0; line_no < plane_height; line_no++) {
-          memcpy(out_line, in_line, bytes_to_copy_per_line);
-          in_line += in_line_stride;
-          out_line += out_line_stride;
-        }
-      }
+      int bytes_to_copy_per_line = std::min(out_line_stride, in_line_stride);
+      libyuv::CopyPlane(in_line, in_line_stride, out_line, out_line_stride,
+                        bytes_to_copy_per_line, plane_height);
     }
     return true;
   }
@@ -738,6 +737,8 @@ class VideoImageGenerator : public cc::PaintImageGenerator {
   DISALLOW_IMPLICIT_CONSTRUCTORS(VideoImageGenerator);
 };
 
+// TODO(jochin): Add support for all OOP-R specific APIs (eg. GetMailbox() and
+// GetSkImageViaReadback())
 class VideoTextureBacking : public cc::TextureBacking {
  public:
   explicit VideoTextureBacking(sk_sp<SkImage> sk_image)
@@ -748,6 +749,23 @@ class VideoTextureBacking : public cc::TextureBacking {
   }
   gpu::Mailbox GetMailbox() const override { return mailbox_; }
   sk_sp<SkImage> GetAcceleratedSkImage() override { return sk_image_; }
+  sk_sp<SkImage> GetSkImageViaReadback() override {
+    if (sk_image_) {
+      return sk_image_->makeNonTextureImage();
+    }
+    return nullptr;
+  }
+  bool readPixels(const SkImageInfo& dst_info,
+                  void* dst_pixels,
+                  size_t dst_row_bytes,
+                  int src_x,
+                  int src_y) override {
+    if (sk_image_) {
+      return sk_image_->readPixels(dst_info, dst_pixels, dst_row_bytes, src_x,
+                                   src_y);
+    }
+    return false;
+  }
 
  private:
   const sk_sp<SkImage> sk_image_;
@@ -1384,9 +1402,10 @@ bool PaintCanvasVideoRenderer::CopyVideoFrameYUVDataToGLTexture(
                gpu::SHARED_IMAGE_USAGE_OOP_RASTERIZATION;
     }
 
-    yuv_cache_.mailbox = sii->CreateSharedImage(viz::ResourceFormat::RGBA_8888,
-                                                video_frame.coded_size(),
-                                                gfx::ColorSpace(), usage);
+    yuv_cache_.mailbox = sii->CreateSharedImage(
+        viz::ResourceFormat::RGBA_8888, video_frame.coded_size(),
+        gfx::ColorSpace(), kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType, usage,
+        gpu::kNullSurfaceHandle);
     token = sii->GenUnverifiedSyncToken();
   }
 
@@ -1596,7 +1615,8 @@ bool PaintCanvasVideoRenderer::UpdateLastImage(
           }
           cache_->source_mailbox = sii->CreateSharedImage(
               viz::ResourceFormat::RGBA_8888, video_frame->coded_size(),
-              gfx::ColorSpace(), flags);
+              gfx::ColorSpace(), kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType,
+              flags, gpu::kNullSurfaceHandle);
           ri->WaitSyncTokenCHROMIUM(
               sii->GenUnverifiedSyncToken().GetConstData());
         }
@@ -1642,8 +1662,10 @@ bool PaintCanvasVideoRenderer::UpdateLastImage(
       cache_->raster_context_provider = raster_context_provider;
       cache_->coded_size = video_frame->coded_size();
       cache_->visible_rect = video_frame->visible_rect();
-      sk_sp<SkImage> source_subset =
-          source_image->makeSubset(gfx::RectToSkIRect(cache_->visible_rect));
+      GrDirectContext* direct =
+          GrAsDirectContext(raster_context_provider->GrContext());
+      sk_sp<SkImage> source_subset = source_image->makeSubset(
+          gfx::RectToSkIRect(cache_->visible_rect), direct);
       if (source_subset) {
         // We use the flushPendingGrContextIO = true so we can flush any pending
         // GPU work on the GrContext to ensure that skia exectues the work for

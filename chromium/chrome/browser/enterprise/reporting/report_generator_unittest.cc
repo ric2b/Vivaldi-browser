@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "chrome/browser/enterprise/reporting/report_generator.h"
+#include "components/enterprise/browser/reporting/report_generator.h"
 
 #include <set>
 
@@ -13,12 +13,14 @@
 #include "base/test/bind_test_util.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "build/build_config.h"
+#include "chrome/browser/enterprise/reporting/reporting_delegate_factory_desktop.h"
 #include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile_manager.h"
 #include "components/account_id/account_id.h"
 #include "components/enterprise/browser/reporting/report_request_definition.h"
+#include "components/policy/core/common/cloud/cloud_policy_util.h"
 #include "content/public/browser/plugin_service.h"
 #include "content/public/common/webplugininfo.h"
 #include "content/public/test/browser_task_environment.h"
@@ -137,7 +139,8 @@ class ReportGeneratorTest : public ::testing::Test {
   using ReportRequest = definition::ReportRequest;
 
   ReportGeneratorTest()
-      : profile_manager_(TestingBrowserProcess::GetGlobal()) {}
+      : generator_(&delegate_factory_),
+        profile_manager_(TestingBrowserProcess::GetGlobal()) {}
   ~ReportGeneratorTest() override = default;
 
   void SetUp() override {
@@ -277,6 +280,7 @@ class ReportGeneratorTest : public ::testing::Test {
         .AsUTF8Unsafe();
   }
 
+  ReportingDelegateFactoryDesktop delegate_factory_;
   ReportGenerator generator_;
 
   content::BrowserTaskEnvironment task_environment_;
@@ -301,6 +305,9 @@ TEST_F(ReportGeneratorTest, GenerateBasicReport) {
   EXPECT_NE(std::string(), basic_request->computer_name());
   EXPECT_NE(std::string(), basic_request->os_user_name());
   VerifySerialNumber(basic_request->serial_number());
+  EXPECT_EQ(
+      policy::GetBrowserDeviceIdentifier()->SerializePartialAsString(),
+      basic_request->browser_device_identifier().SerializePartialAsString());
 
   EXPECT_TRUE(basic_request->has_os_report());
   auto& os_report = basic_request->os_report();

@@ -52,6 +52,11 @@
            file="${root_gen_dir}/chrome/browser/resources/settings/autofill_page/autofill_page.js"
            use_base_dir="false"
            compress="false" type="BINDATA" />
+  <include name="IDR_SETTINGS_AUTOFILL_PAGE_AVATAR_ICON_JS"
+           file="${root_gen_dir}/chrome/browser/resources/settings/autofill_page/avatar_icon.js"
+           use_base_dir="false"
+           compress="false" type="BINDATA"
+           preprocess="true" />
   <include name="IDR_SETTINGS_AUTOFILL_PAGE_PAYMENTS_LIST_JS"
            file="${root_gen_dir}/chrome/browser/resources/settings/autofill_page/payments_list.js"
            use_base_dir="false"
@@ -127,7 +132,8 @@
   <include name="IDR_SETTINGS_AUTOFILL_PAGE_PASSWORD_LIST_ITEM_JS"
            file="${root_gen_dir}/chrome/browser/resources/settings/autofill_page/password_list_item.js"
            use_base_dir="false"
-           compress="false" type="BINDATA" />
+           compress="false" type="BINDATA"
+           preprocess="true"/>
   <include name="IDR_SETTINGS_AUTOFILL_PAGE_PASSWORDS_LIST_HANDLER_JS"
            file="${root_gen_dir}/chrome/browser/resources/settings/autofill_page/passwords_list_handler.js"
            use_base_dir="false"
@@ -213,6 +219,10 @@
            file="${root_gen_dir}/chrome/browser/resources/settings/clear_browsing_data_dialog/installed_app_checkbox.js"
            use_base_dir="false"
            compress="false" type="BINDATA" />
+  <include name="IDR_SETTINGS_CLEAR_BROWSING_DATA_DIALOG_PASSWORDS_DELETION_DIALOG_JS"
+           file="${root_gen_dir}/chrome/browser/resources/settings/clear_browsing_data_dialog/passwords_deletion_dialog.js"
+           use_base_dir="false"
+           compress="false" type="BINDATA" />
   <include name="IDR_SETTINGS_CONTROLS_CONTROLLED_BUTTON_M_JS"
            file="${root_gen_dir}/chrome/browser/resources/settings/controls/controlled_button.m.js"
            use_base_dir="false"
@@ -241,9 +251,8 @@
            file="${root_gen_dir}/chrome/browser/resources/settings/controls/settings_dropdown_menu.m.js"
            use_base_dir="false"
            compress="false" type="BINDATA" />
-  <include name="IDR_SETTINGS_CONTROLS_SETTINGS_IDLE_LOAD_M_JS"
-           file="${root_gen_dir}/chrome/browser/resources/settings/controls/settings_idle_load.m.js"
-           use_base_dir="false"
+  <include name="IDR_SETTINGS_CONTROLS_SETTINGS_IDLE_LOAD_JS"
+           file="controls/settings_idle_load.js"
            compress="false" type="BINDATA" />
   <include name="IDR_SETTINGS_CONTROLS_PREF_CONTROL_BEHAVIOR_M_JS"
            file="${root_gen_dir}/chrome/browser/resources/settings/controls/pref_control_behavior.m.js"
@@ -333,6 +342,11 @@
            file="${root_gen_dir}/chrome/browser/resources/settings/languages_page/add_languages_dialog.js"
            use_base_dir="false"
            compress="false" type="BINDATA" />
+  <if expr="chromeos">
+    <include name="IDR_SETTINGS_LANGUAGES_PAGE_LANGUAGES_METRICS_PROXY_JS"
+            file="languages_page/languages_metrics_proxy.js"
+            compress="false" type="BINDATA" />
+  </if>
   <include name="IDR_SETTINGS_LANGUAGES_PAGE_LANGUAGES_PAGE_JS"
            file="${root_gen_dir}/chrome/browser/resources/settings/languages_page/languages_page.js"
            use_base_dir="false"
@@ -506,9 +520,6 @@
            use_base_dir="false"
            preprocess="true"
            compress="false" type="BINDATA" />
-  <include name="IDR_SETTINGS_PRIVACY_PAGE_SAFE_BROWSING_BROWSER_PROXY_JS"
-           file="privacy_page/safe_browsing_browser_proxy.js"
-           compress="false" type="BINDATA" />
   <include name="IDR_SETTINGS_PRIVACY_PAGE_SECURE_DNS_JS"
            file="${root_gen_dir}/chrome/browser/resources/settings/privacy_page/secure_dns.js"
            use_base_dir="false"
@@ -585,15 +596,18 @@
            file="${root_gen_dir}/chrome/browser/resources/settings/safety_check_page/safety_check_child.js"
            use_base_dir="false"
            compress="false" type="BINDATA" />
-  <include name="IDR_SETTINGS_SAFETY_CHECK_PAGE_SAFETY_CHECK_CHROME_CLEANER_CHILD_JS"
-           file="${root_gen_dir}/chrome/browser/resources/settings/safety_check_page/safety_check_chrome_cleaner_child.js"
-           use_base_dir="false"
-           compress="false" type="BINDATA" />
+  <if expr="is_win">
+    <include name="IDR_SETTINGS_SAFETY_CHECK_PAGE_SAFETY_CHECK_CHROME_CLEANER_CHILD_JS"
+             file="${root_gen_dir}/chrome/browser/resources/settings/safety_check_page/safety_check_chrome_cleaner_child.js"
+             use_base_dir="false"
+             compress="false" type="BINDATA" />
+  </if>
   <include name="IDR_SETTINGS_SAFETY_CHECK_PAGE_SAFETY_CHECK_EXTENSIONS_CHILD_JS"
            file="${root_gen_dir}/chrome/browser/resources/settings/safety_check_page/safety_check_extensions_child.js"
            use_base_dir="false"
            compress="false" type="BINDATA" />
   <include name="IDR_SETTINGS_SAFETY_CHECK_PAGE_SAFETY_CHECK_PAGE_JS"
+           preprocess="true"
            file="${root_gen_dir}/chrome/browser/resources/settings/safety_check_page/safety_check_page.js"
            use_base_dir="false"
            compress="false" type="BINDATA" />
@@ -650,9 +664,8 @@
            file="${root_gen_dir}/chrome/browser/resources/settings/settings_main/settings_main.js"
            use_base_dir="false"
            compress="false" type="BINDATA" />
-  <include name="IDR_SETTINGS_SETTINGS_PAGE_MAIN_PAGE_BEHAVIOR_M_JS"
-           file="${root_gen_dir}/chrome/browser/resources/settings/settings_page/main_page_behavior.m.js"
-           use_base_dir="false"
+  <include name="IDR_SETTINGS_SETTINGS_PAGE_MAIN_PAGE_BEHAVIOR_JS"
+           file="settings_page/main_page_behavior.js"
            compress="false" type="BINDATA" />
   <include name="IDR_SETTINGS_SETTINGS_PAGE_SETTINGS_ANIMATED_PAGES_M_JS"
            file="${root_gen_dir}/chrome/browser/resources/settings/settings_page/settings_animated_pages.m.js"
@@ -672,6 +685,10 @@
            use_base_dir="false"
            compress="false" type="BINDATA"
            preprocess="true" />
+  <include name="IDR_SETTINGS_SETTING_ID_PARAM_UTIL_M_JS"
+           file="${root_gen_dir}/chrome/browser/resources/settings/setting_id_param_util.m.js"
+           use_base_dir="false"
+           compress="false" type="BINDATA" />
   <include name="IDR_SETTINGS_SETTINGS_ROUTES_JS"
            file="settings_routes.js"
            compress="false" type="BINDATA" />

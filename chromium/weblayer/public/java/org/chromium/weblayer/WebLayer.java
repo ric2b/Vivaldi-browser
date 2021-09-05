@@ -4,6 +4,7 @@
 
 package org.chromium.weblayer;
 
+import android.annotation.TargetApi;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageInfo;
@@ -14,7 +15,6 @@ import android.os.IBinder;
 import android.os.RemoteException;
 import android.util.AndroidRuntimeException;
 import android.util.Log;
-import android.util.Pair;
 import android.webkit.ValueCallback;
 
 import androidx.annotation.NonNull;
@@ -38,7 +38,6 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.Callable;
 
 /**
  * WebLayer is responsible for initializing state necessary to use any of the classes in web layer.
@@ -56,15 +55,18 @@ public class WebLayer {
     private static Context sRemoteContext;
 
     @Nullable
+    private static ClassLoader sRemoteClassLoader;
+
+    @Nullable
     private static Context sAppContext;
 
     @Nullable
     private static WebLayerLoader sLoader;
 
+    private static boolean sDisableWebViewCompatibilityMode;
+
     @NonNull
     private final IWebLayer mImpl;
-
-    private static Callable<ClassLoader> sWebViewCompatClassLoaderGetter;
 
     /** The result of calling {@link #initializeWebViewCompatibilityMode}. */
     public enum WebViewCompatibilityResult {
@@ -89,7 +91,6 @@ public class WebLayer {
      */
     public static boolean isAvailable(Context context) {
         ThreadCheck.ensureOnUiThread();
-        context = context.getApplicationContext();
         return getWebLayerLoader(context).isAvailable();
     }
 
@@ -100,31 +101,13 @@ public class WebLayer {
     }
 
     /**
-     * Performs initialization needed to run WebView and WebLayer in the same process.
-     *
-     * @param appContext The hosting application's Context.
+     * Deprecated. This is no longer necessary since WebView compatibility mode is now enabled by
+     * default. This will be removed once the client app is updated.
      */
     public static WebViewCompatibilityResult initializeWebViewCompatibilityMode(
             @NonNull Context appContext) {
         ThreadCheck.ensureOnUiThread();
-        if (sWebViewCompatClassLoaderGetter != null) {
-            throw new AndroidRuntimeException(
-                    "initializeWebViewCompatibilityMode() has already been called.");
-        }
-        if (sLoader != null) {
-            throw new AndroidRuntimeException(
-                    "initializeWebViewCompatibilityMode() must be called before WebLayer is "
-                    + "loaded.");
-        }
-        try {
-            Pair<Callable<ClassLoader>, WebLayer.WebViewCompatibilityResult> result =
-                    WebViewCompatibilityHelper.initialize(appContext);
-            sWebViewCompatClassLoaderGetter = result.first;
-            return result.second;
-        } catch (Exception e) {
-            Log.e(TAG, "Unable to initialize WebView compatibility", e);
-            return WebViewCompatibilityResult.FAILURE_OTHER;
-        }
+        return WebViewCompatibilityResult.SUCCESS;
     }
 
     /**
@@ -143,8 +126,7 @@ public class WebLayer {
             throws UnsupportedVersionException {
         ThreadCheck.ensureOnUiThread();
         checkAvailable(appContext);
-        appContext = appContext.getApplicationContext();
-        getWebLayerLoader(appContext).loadAsync(appContext, callback);
+        getWebLayerLoader(appContext).loadAsync(callback);
     }
 
     /**
@@ -166,13 +148,12 @@ public class WebLayer {
     public static WebLayer loadSync(@NonNull Context appContext)
             throws UnsupportedVersionException {
         ThreadCheck.ensureOnUiThread();
-        appContext = appContext.getApplicationContext();
         checkAvailable(appContext);
-        return getWebLayerLoader(appContext).loadSync(appContext);
+        return getWebLayerLoader(appContext).loadSync();
     }
 
-    private static WebLayerLoader getWebLayerLoader(Context appContext) {
-        if (sLoader == null) sLoader = new WebLayerLoader(appContext);
+    private static WebLayerLoader getWebLayerLoader(Context context) {
+        if (sLoader == null) sLoader = new WebLayerLoader(context);
         return sLoader;
     }
 
@@ -183,7 +164,6 @@ public class WebLayer {
     static WebLayer getLoadedWebLayer(@NonNull Context appContext)
             throws UnsupportedVersionException {
         ThreadCheck.ensureOnUiThread();
-        appContext = appContext.getApplicationContext();
         checkAvailable(appContext);
         return getWebLayerLoader(appContext).getLoadedWebLayer();
     }
@@ -202,7 +182,6 @@ public class WebLayer {
      */
     public static int getSupportedMajorVersion(@NonNull Context context) {
         ThreadCheck.ensureOnUiThread();
-        context = context.getApplicationContext();
         return getWebLayerLoader(context).getMajorVersion();
     }
 
@@ -230,7 +209,6 @@ public class WebLayer {
     @NonNull
     public static String getSupportedFullVersion(@NonNull Context context) {
         ThreadCheck.ensureOnUiThread();
-        context = context.getApplicationContext();
         return getWebLayerLoader(context).getVersion();
     }
 
@@ -261,23 +239,26 @@ public class WebLayer {
         private final int mMajorVersion;
         private final String mVersion;
         private boolean mIsLoadingAsync;
+        private Context mContext;
 
         /**
          * Creates WebLayerLoader. This does a minimal amount of loading
          */
-        public WebLayerLoader(@NonNull Context appContext) {
-            ClassLoader remoteClassLoader = null;
+        public WebLayerLoader(@NonNull Context context) {
             boolean available = false;
             int majorVersion = -1;
             String version = "<unavailable>";
+            // Use the application context as the supplied context may have a shorter lifetime.
+            mContext = context.getApplicationContext();
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
+                    && context.getAttributionTag() != null) {
+                // Getting the application context means we lose any attribution. Use the
+                // attribution tag from the supplied context so that embedders have a way to set an
+                // attribution tag.
+                mContext = mContext.createAttributionContext(context.getAttributionTag());
+            }
             try {
-                if (sWebViewCompatClassLoaderGetter != null) {
-                    remoteClassLoader = sWebViewCompatClassLoaderGetter.call();
-                }
-                if (remoteClassLoader == null) {
-                    remoteClassLoader = getOrCreateRemoteContext(appContext).getClassLoader();
-                }
-                Class factoryClass = remoteClassLoader.loadClass(
+                Class factoryClass = getOrCreateRemoteClassLoader(mContext).loadClass(
                         "org.chromium.weblayer_private.WebLayerFactoryImpl");
                 mFactory = IWebLayerFactory.Stub.asInterface(
                         (IBinder) factoryClass
@@ -313,7 +294,7 @@ public class WebLayer {
             return mVersion;
         }
 
-        public void loadAsync(@NonNull Context appContext, @NonNull Callback<WebLayer> callback) {
+        public void loadAsync(@NonNull Callback<WebLayer> callback) {
             if (mWebLayer != null) {
                 callback.onResult(mWebLayer);
                 return;
@@ -323,48 +304,33 @@ public class WebLayer {
                 return; // Already loading.
             }
             mIsLoadingAsync = true;
-            if (getIWebLayer(appContext) == null) {
+            if (getIWebLayer() == null) {
                 // Unable to create WebLayer. This generally shouldn't happen.
                 onWebLayerReady();
                 return;
             }
             try {
-                if (getMajorVersion() < 81) {
-                    getIWebLayer(appContext)
-                            .loadAsyncV80(ObjectWrapper.wrap(appContext),
-                                    ObjectWrapper.wrap((ValueCallback<Boolean>) result -> {
-                                        onWebLayerReady();
-                                    }));
-                } else {
-                    getIWebLayer(appContext)
-                            .loadAsync(ObjectWrapper.wrap(appContext),
-                                    ObjectWrapper.wrap(getOrCreateRemoteContext(appContext)),
-                                    ObjectWrapper.wrap((ValueCallback<Boolean>) result -> {
-                                        onWebLayerReady();
-                                    }));
-                }
+                getIWebLayer().loadAsync(ObjectWrapper.wrap(mContext),
+                        ObjectWrapper.wrap(getOrCreateRemoteContext(mContext)),
+                        ObjectWrapper.wrap(
+                                (ValueCallback<Boolean>) result -> { onWebLayerReady(); }));
             } catch (Exception e) {
                 throw new APICallException(e);
             }
         }
 
-        public WebLayer loadSync(@NonNull Context appContext) {
+        public WebLayer loadSync() {
             if (mWebLayer != null) {
                 return mWebLayer;
             }
-            if (getIWebLayer(appContext) == null) {
+            if (getIWebLayer() == null) {
                 // Error in creating WebLayer. This generally shouldn't happen.
                 onWebLayerReady();
                 return null;
             }
             try {
-                if (getMajorVersion() < 81) {
-                    getIWebLayer(appContext).loadSyncV80(ObjectWrapper.wrap(appContext));
-                } else {
-                    getIWebLayer(appContext)
-                            .loadSync(ObjectWrapper.wrap(appContext),
-                                    ObjectWrapper.wrap(getOrCreateRemoteContext(appContext)));
-                }
+                getIWebLayer().loadSync(ObjectWrapper.wrap(mContext),
+                        ObjectWrapper.wrap(getOrCreateRemoteContext(mContext)));
                 onWebLayerReady();
                 return mWebLayer;
             } catch (Exception e) {
@@ -377,7 +343,7 @@ public class WebLayer {
         }
 
         @Nullable
-        private IWebLayer getIWebLayer(@NonNull Context appContext) {
+        private IWebLayer getIWebLayer() {
             if (mIWebLayer != null) return mIWebLayer;
             if (!mAvailable) return null;
             try {
@@ -595,15 +561,39 @@ public class WebLayer {
         }
     }
 
-    /* package */ static IWebLayer getIWebLayer(Context appContext) {
-        return getWebLayerLoader(appContext).getIWebLayer(appContext);
+    /* package */ static IWebLayer getIWebLayer(Context context) {
+        return getWebLayerLoader(context).getIWebLayer();
     }
 
     /**
-     * Forces setting the cached remote context.
+     * Creates a ClassLoader for the remote (weblayer implementation) side.
      */
-    static void setRemoteContext(Context remoteContext) {
-        sRemoteContext = remoteContext;
+    static ClassLoader getOrCreateRemoteClassLoader(Context appContext)
+            throws PackageManager.NameNotFoundException, ReflectiveOperationException {
+        if (sRemoteClassLoader != null) {
+            return sRemoteClassLoader;
+        }
+
+        // Child processes do not need WebView compatibility since there is no chance
+        // WebView will run in the same process.
+        if (sDisableWebViewCompatibilityMode) {
+            Context context = getOrCreateRemoteContext(appContext);
+            // Android versions before O do not support isolated splits, so WebLayer will be loaded
+            // as a normal split which is already available from the base class loader.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                try {
+                    // If the implementation APK does not support isolated splits, this will just
+                    // return the original context.
+                    context = ApiHelperForO.createContextForSplit(context, "weblayer");
+                } catch (PackageManager.NameNotFoundException e) {
+                    // WebLayer not in split, proceed with the base context.
+                }
+            }
+            sRemoteClassLoader = context.getClassLoader();
+        } else {
+            sRemoteClassLoader = WebViewCompatibilityHelper.initialize(appContext);
+        }
+        return sRemoteClassLoader;
     }
 
     /**
@@ -630,6 +620,10 @@ public class WebLayer {
             sRemoteContext = createRemoteContextFromPackageName(appContext, implPackageName);
         }
         return sRemoteContext;
+    }
+
+    /* package */ static void disableWebViewCompatibilityMode() {
+        sDisableWebViewCompatibilityMode = true;
     }
 
     /**
@@ -696,6 +690,16 @@ public class WebLayer {
             StrictModeWorkaround.apply();
             // The id is part of the public library to avoid conflicts.
             return R.id.weblayer_media_session_notification;
+        }
+    }
+
+    @VerifiesOnO
+    @TargetApi(Build.VERSION_CODES.O)
+    private static final class ApiHelperForO {
+        /** See {@link Context.createContextForSplit(String) }. */
+        public static Context createContextForSplit(Context context, String name)
+                throws PackageManager.NameNotFoundException {
+            return context.createContextForSplit(name);
         }
     }
 }

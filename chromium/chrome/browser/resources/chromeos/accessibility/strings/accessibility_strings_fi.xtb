@@ -6,6 +6,7 @@
 <translation id="1012173283529841972">Luettelokohde</translation>
 <translation id="1013742170491673792">srched</translation>
 <translation id="1014370462248694370">Pyyhkäise oikealle kahdella sormella</translation>
+<translation id="1016393160682012902">Kokeile qwerty-näppäintä, päivitettävää pistekirjoitusnäppäintä tai kosketuselettä, niin näet sen toiminnan. Paina Control ja w tai Esc sulkeaksesi tilan.</translation>
 <translation id="1022586497894531524">Käytätkö ChromeVoxin äänipalautetta ensimmäistä kertaa? Tämän ohjeen avulla voit tutustua ChromeVoxin perusteisiin nopeasti.</translation>
 <translation id="1025074108959230262">Kiinnitetty tila pois käytöstä</translation>
 <translation id="1031961866430398710">sitten</translation>
@@ -504,7 +505,6 @@
 <translation id="489907760999452556">Sisäinen linkki</translation>
 <translation id="4909019435900810068">Siirry taaksepäin yhden sanan verran</translation>
 <translation id="4911349081560453449">Ei edellisiä valintaruutuja</translation>
-<translation id="4915087353619183190">Opetustila käynnistyy. Kokeile qwerty-näppäintä, pistekirjoitusnäppäintä tai kosketuselettä, niin näet sen toiminnan. Paina Control ja W tai Esc sulkeaksesi tilan.</translation>
 <translation id="492295894462528572">Esipuhe</translation>
 <translation id="495046168593986294">Vieritä ylös</translation>
 <translation id="495170559598752135">Toiminnot</translation>
@@ -647,6 +647,7 @@
 <translation id="6017514345406065928">Vihreä</translation>
 <translation id="602001110135236999">Vieritä vasemmalle</translation>
 <translation id="6034000775414344507">Vaaleanharmaa</translation>
+<translation id="6036135911048686884">Valitse Tutki</translation>
 <translation id="6037602951055904232">Panoroi eteenpäin</translation>
 <translation id="6044160928851315051">Tummenna näyttö</translation>
 <translation id="6082768461603900813">Siirtymisen perustoiminnot</translation>
@@ -923,6 +924,7 @@
 <translation id="8345569862449483843">{COUNT,plural, =1{ristikko}other{# ristikkomerkkiä}}</translation>
 <translation id="8378855320830505539">Alue</translation>
 <translation id="8382679411218029383">Ennakoiva tekstin syöttö upotettuna ja luettelona</translation>
+<translation id="8394908167088220973">Media: toista/keskeytä</translation>
 <translation id="8428213095426709021">Asetukset</translation>
 <translation id="8428603554127842284">taso <ph name="DEPTH" /></translation>
 <translation id="8430049249787218991">mnubr</translation>
@@ -967,6 +969,7 @@
 <translation id="8770473310765924354">poistu rakenteellisesta sisällöstä, kuten taulukosta</translation>
 <translation id="8779057862865475116">Ei edellisiä linkkejä</translation>
 <translation id="8796411681063377102">Seuraava tason 3 otsikko</translation>
+<translation id="8823311177246872527">Sivu <ph name="CURRENTPAGE" />/<ph name="TOTALPAGES" /></translation>
 <translation id="8825828890761629845">bann.</translation>
 <translation id="8851136666856101339">pää</translation>
 <translation id="8882002077197914455">Rivin otsikko</translation>

@@ -9,6 +9,7 @@
 
 #include "base/i18n/break_iterator.h"
 #include "base/memory/ptr_util.h"
+#include "base/notreached.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversion_utils.h"
 #include "components/pdf/renderer/pdf_ax_action_target.h"
@@ -341,6 +342,20 @@ ui::AXNodeData* CreateNode(
   return node_ptr;
 }
 
+ax::mojom::Role GetRoleForButtonType(PP_PrivateButtonType button_type) {
+  switch (button_type) {
+    case PP_PrivateButtonType::PP_PRIVATEBUTTON_RADIOBUTTON:
+      return ax::mojom::Role::kRadioButton;
+    case PP_PrivateButtonType::PP_PRIVATEBUTTON_CHECKBOX:
+      return ax::mojom::Role::kCheckBox;
+    case PP_PrivateButtonType::PP_PRIVATEBUTTON_PUSHBUTTON:
+      return ax::mojom::Role::kButton;
+    default:
+      NOTREACHED();
+      return ax::mojom::Role::kNone;
+  }
+}
+
 class PdfAccessibilityTreeBuilder {
  public:
   explicit PdfAccessibilityTreeBuilder(
@@ -361,6 +376,8 @@ class PdfAccessibilityTreeBuilder {
         images_(page_objects.images),
         highlights_(page_objects.highlights),
         text_fields_(page_objects.form_fields.text_fields),
+        buttons_(page_objects.form_fields.buttons),
+        choice_fields_(page_objects.form_fields.choice_fields),
         page_bounds_(page_bounds),
         page_index_(page_index),
         page_node_(page_node),
@@ -387,11 +404,9 @@ class PdfAccessibilityTreeBuilder {
     ui::AXNodeData* static_text_node = nullptr;
     ui::AXNodeData* previous_on_line_node = nullptr;
     std::string static_text;
-    uint32_t current_link_index = 0;
-    uint32_t current_image_index = 0;
-    uint32_t current_highlight_index = 0;
-    uint32_t current_text_field_index = 0;
     LineHelper line_helper(text_runs_);
+    bool pdf_forms_enabled =
+        base::FeatureList::IsEnabled(chrome_pdf::features::kAccessiblePDFForm);
 
     for (size_t text_run_index = 0; text_run_index < text_runs_.size();
          ++text_run_index) {
@@ -404,37 +419,48 @@ class PdfAccessibilityTreeBuilder {
 
       // If the |text_run_index| is less than or equal to the link's
       // text_run_index, then push the link node in the paragraph.
-      if (IsObjectInTextRun(links_, current_link_index, text_run_index)) {
+      if (IsObjectInTextRun(links_, current_link_index_, text_run_index)) {
         FinishStaticNode(&static_text_node, &static_text);
         const ppapi::PdfAccessibilityLinkInfo& link =
-            links_[current_link_index++];
+            links_[current_link_index_++];
         AddLinkToParaNode(link, para_node, &previous_on_line_node,
                           &text_run_index);
 
         if (link.text_run_count == 0)
           continue;
 
-      } else if (IsObjectInTextRun(images_, current_image_index,
+      } else if (IsObjectInTextRun(images_, current_image_index_,
                                    text_run_index)) {
         FinishStaticNode(&static_text_node, &static_text);
-        AddImageToParaNode(images_[current_image_index++], para_node,
+        AddImageToParaNode(images_[current_image_index_++], para_node,
                            &text_run_index);
         continue;
-      } else if (IsObjectInTextRun(highlights_, current_highlight_index,
-                                   text_run_index) &&
-                 base::FeatureList::IsEnabled(
-                     chrome_pdf::features::kAccessiblePDFHighlight)) {
+      } else if (IsObjectInTextRun(highlights_, current_highlight_index_,
+                                   text_run_index)) {
         FinishStaticNode(&static_text_node, &static_text);
-        AddHighlightToParaNode(highlights_[current_highlight_index++],
+        AddHighlightToParaNode(highlights_[current_highlight_index_++],
                                para_node, &previous_on_line_node,
                                &text_run_index);
-      } else if (IsObjectInTextRun(text_fields_, current_text_field_index,
+      } else if (IsObjectInTextRun(text_fields_, current_text_field_index_,
                                    text_run_index) &&
-                 base::FeatureList::IsEnabled(
-                     chrome_pdf::features::kAccessiblePDFForm)) {
+                 pdf_forms_enabled) {
         FinishStaticNode(&static_text_node, &static_text);
-        AddTextFieldToParaNode(text_fields_[current_text_field_index++],
+        AddTextFieldToParaNode(text_fields_[current_text_field_index_++],
                                para_node, &text_run_index);
+        continue;
+      } else if (IsObjectInTextRun(buttons_, current_button_index_,
+                                   text_run_index) &&
+                 pdf_forms_enabled) {
+        FinishStaticNode(&static_text_node, &static_text);
+        AddButtonToParaNode(buttons_[current_button_index_++], para_node,
+                            &text_run_index);
+        continue;
+      } else if (IsObjectInTextRun(choice_fields_, current_choice_field_index_,
+                                   text_run_index) &&
+                 pdf_forms_enabled) {
+        FinishStaticNode(&static_text_node, &static_text);
+        AddChoiceFieldToParaNode(choice_fields_[current_choice_field_index_++],
+                                 para_node, &text_run_index);
         continue;
       } else {
         PP_PdfPageCharacterIndex page_char_index = {
@@ -495,15 +521,7 @@ class PdfAccessibilityTreeBuilder {
       }
     }
 
-    base::span<const ppapi::PdfAccessibilityLinkInfo> remaining_links =
-        base::make_span(links_).subspan(current_link_index);
-    base::span<const ppapi::PdfAccessibilityImageInfo> remaining_images =
-        base::make_span(images_).subspan(current_image_index);
-    base::span<const ppapi::PdfAccessibilityTextFieldInfo>
-        remaining_text_fields =
-            base::make_span(text_fields_).subspan(current_text_field_index);
-    AddRemainingAnnotations(remaining_links, remaining_images,
-                            remaining_text_fields, para_node);
+    AddRemainingAnnotations(para_node);
   }
 
  private:
@@ -553,6 +571,7 @@ class PdfAccessibilityTreeBuilder {
     ui::AXNodeData* static_text_node = CreateNode(
         ax::mojom::Role::kStaticText, ax::mojom::Restriction::kReadOnly,
         render_accessibility_, nodes_);
+    static_text_node->SetNameFrom(ax::mojom::NameFrom::kContents);
     node_id_to_page_char_index_->emplace(static_text_node->id, page_char_index);
     return static_text_node;
   }
@@ -563,6 +582,7 @@ class PdfAccessibilityTreeBuilder {
     ui::AXNodeData* inline_text_box_node = CreateNode(
         ax::mojom::Role::kInlineTextBox, ax::mojom::Restriction::kReadOnly,
         render_accessibility_, nodes_);
+    inline_text_box_node->SetNameFrom(ax::mojom::NameFrom::kContents);
 
     std::string chars__utf8 =
         GetTextRunCharsAsUTF8(text_run, chars_, page_char_index.char_index);
@@ -663,10 +683,20 @@ class PdfAccessibilityTreeBuilder {
     popup_note_node->AddStringAttribute(
         ax::mojom::StringAttribute::kRoleDescription,
         l10n_util::GetStringUTF8(IDS_AX_ROLE_DESCRIPTION_PDF_POPUP_NOTE));
-    popup_note_node->AddStringAttribute(ax::mojom::StringAttribute::kName,
-                                        highlight.note_text);
     popup_note_node->relative_bounds.bounds =
         PpFloatRectToGfxRectF(highlight.bounds);
+
+    ui::AXNodeData* static_popup_note_text_node = CreateNode(
+        ax::mojom::Role::kStaticText, ax::mojom::Restriction::kReadOnly,
+        render_accessibility_, nodes_);
+
+    static_popup_note_text_node->SetNameFrom(ax::mojom::NameFrom::kContents);
+    static_popup_note_text_node->AddStringAttribute(
+        ax::mojom::StringAttribute::kName, highlight.note_text);
+    static_popup_note_text_node->relative_bounds.bounds =
+        PpFloatRectToGfxRectF(highlight.bounds);
+
+    popup_note_node->child_ids.push_back(static_popup_note_text_node->id);
 
     return popup_note_node;
   }
@@ -692,6 +722,150 @@ class PdfAccessibilityTreeBuilder {
     text_field_node->relative_bounds.bounds =
         PpFloatRectToGfxRectF(text_field.bounds);
     return text_field_node;
+  }
+
+  ui::AXNodeData* CreateButtonNode(
+      const ppapi::PdfAccessibilityButtonInfo& button) {
+    ax::mojom::Restriction restriction = button.is_read_only
+                                             ? ax::mojom::Restriction::kReadOnly
+                                             : ax::mojom::Restriction::kNone;
+    ui::AXNodeData* button_node =
+        CreateNode(GetRoleForButtonType(button.type), restriction,
+                   render_accessibility_, nodes_);
+    button_node->AddStringAttribute(ax::mojom::StringAttribute::kName,
+                                    button.name);
+    button_node->AddState(ax::mojom::State::kFocusable);
+
+    if (button.type == PP_PRIVATEBUTTON_RADIOBUTTON ||
+        button.type == PP_PRIVATEBUTTON_CHECKBOX) {
+      ax::mojom::CheckedState checkedState =
+          button.is_checked ? ax::mojom::CheckedState::kTrue
+                            : ax::mojom::CheckedState::kNone;
+      button_node->SetCheckedState(checkedState);
+      button_node->AddStringAttribute(ax::mojom::StringAttribute::kValue,
+                                      button.value);
+      button_node->AddIntAttribute(ax::mojom::IntAttribute::kSetSize,
+                                   button.control_count);
+      button_node->AddIntAttribute(ax::mojom::IntAttribute::kPosInSet,
+                                   button.control_index + 1);
+    }
+
+    button_node->relative_bounds.bounds = PpFloatRectToGfxRectF(button.bounds);
+    return button_node;
+  }
+
+  ui::AXNodeData* CreateListboxOptionNode(
+      const ppapi::PdfAccessibilityChoiceFieldOptionInfo& choice_field_option,
+      ax::mojom::Restriction restriction) {
+    ui::AXNodeData* listbox_option_node =
+        CreateNode(ax::mojom::Role::kListBoxOption, restriction,
+                   render_accessibility_, nodes_);
+
+    listbox_option_node->AddStringAttribute(ax::mojom::StringAttribute::kName,
+                                            choice_field_option.name);
+    listbox_option_node->AddBoolAttribute(ax::mojom::BoolAttribute::kSelected,
+                                          choice_field_option.is_selected);
+    listbox_option_node->AddState(ax::mojom::State::kFocusable);
+    return listbox_option_node;
+  }
+
+  ui::AXNodeData* CreateListboxNode(
+      const ppapi::PdfAccessibilityChoiceFieldInfo& choice_field,
+      ui::AXNodeData* control_node) {
+    ax::mojom::Restriction restriction = choice_field.is_read_only
+                                             ? ax::mojom::Restriction::kReadOnly
+                                             : ax::mojom::Restriction::kNone;
+    ui::AXNodeData* listbox_node = CreateNode(
+        ax::mojom::Role::kListBox, restriction, render_accessibility_, nodes_);
+
+    if (choice_field.type != PP_PRIVATECHOICEFIELD_COMBOBOX) {
+      listbox_node->AddStringAttribute(ax::mojom::StringAttribute::kName,
+                                       choice_field.name);
+    }
+
+    ui::AXNodeData* first_selected_option = nullptr;
+    for (const ppapi::PdfAccessibilityChoiceFieldOptionInfo& option :
+         choice_field.options) {
+      ui::AXNodeData* listbox_option_node =
+          CreateListboxOptionNode(option, restriction);
+      if (!first_selected_option && listbox_option_node->GetBoolAttribute(
+                                        ax::mojom::BoolAttribute::kSelected)) {
+        first_selected_option = listbox_option_node;
+      }
+      // TODO(bug 1030242): add |listbox_option_node| specific bounds here.
+      listbox_option_node->relative_bounds.bounds =
+          PpFloatRectToGfxRectF(choice_field.bounds);
+      listbox_node->child_ids.push_back(listbox_option_node->id);
+    }
+
+    if (control_node && first_selected_option) {
+      control_node->AddIntAttribute(
+          ax::mojom::IntAttribute::kActivedescendantId,
+          first_selected_option->id);
+    }
+
+    if (choice_field.is_multi_select)
+      listbox_node->AddState(ax::mojom::State::kMultiselectable);
+    listbox_node->AddState(ax::mojom::State::kFocusable);
+    listbox_node->relative_bounds.bounds =
+        PpFloatRectToGfxRectF(choice_field.bounds);
+    return listbox_node;
+  }
+
+  ui::AXNodeData* CreateComboboxInputNode(
+      const ppapi::PdfAccessibilityChoiceFieldInfo& choice_field,
+      ax::mojom::Restriction restriction) {
+    ax::mojom::Role input_role = choice_field.has_editable_text_box
+                                     ? ax::mojom::Role::kTextFieldWithComboBox
+                                     : ax::mojom::Role::kComboBoxMenuButton;
+    ui::AXNodeData* combobox_input_node =
+        CreateNode(input_role, restriction, render_accessibility_, nodes_);
+    combobox_input_node->AddStringAttribute(ax::mojom::StringAttribute::kName,
+                                            choice_field.name);
+    for (const ppapi::PdfAccessibilityChoiceFieldOptionInfo& option :
+         choice_field.options) {
+      if (option.is_selected) {
+        combobox_input_node->AddStringAttribute(
+            ax::mojom::StringAttribute::kValue, option.name);
+        break;
+      }
+    }
+
+    combobox_input_node->AddState(ax::mojom::State::kFocusable);
+    combobox_input_node->relative_bounds.bounds =
+        PpFloatRectToGfxRectF(choice_field.bounds);
+    return combobox_input_node;
+  }
+
+  ui::AXNodeData* CreateComboboxNode(
+      const ppapi::PdfAccessibilityChoiceFieldInfo& choice_field) {
+    ax::mojom::Restriction restriction = choice_field.is_read_only
+                                             ? ax::mojom::Restriction::kReadOnly
+                                             : ax::mojom::Restriction::kNone;
+    ui::AXNodeData* combobox_node =
+        CreateNode(ax::mojom::Role::kComboBoxGrouping, restriction,
+                   render_accessibility_, nodes_);
+    ui::AXNodeData* input_element =
+        CreateComboboxInputNode(choice_field, restriction);
+    ui::AXNodeData* list_element =
+        CreateListboxNode(choice_field, input_element);
+    input_element->AddIntListAttribute(
+        ax::mojom::IntListAttribute::kControlsIds,
+        std::vector<int32_t>{list_element->id});
+    combobox_node->child_ids.push_back(input_element->id);
+    combobox_node->child_ids.push_back(list_element->id);
+    combobox_node->AddState(ax::mojom::State::kFocusable);
+    combobox_node->relative_bounds.bounds =
+        PpFloatRectToGfxRectF(choice_field.bounds);
+    return combobox_node;
+  }
+
+  ui::AXNodeData* CreateChoiceFieldNode(
+      const ppapi::PdfAccessibilityChoiceFieldInfo& choice_field) {
+    if (choice_field.type == PP_PRIVATECHOICEFIELD_LISTBOX)
+      return CreateListboxNode(choice_field, nullptr);
+
+    return CreateComboboxNode(choice_field);
   }
 
   void AddTextToAXNode(uint32_t start_text_run_index,
@@ -851,28 +1025,53 @@ class PdfAccessibilityTreeBuilder {
     --(*text_run_index);
   }
 
-  void AddRemainingAnnotations(
-      base::span<const ppapi::PdfAccessibilityLinkInfo> links,
-      base::span<const ppapi::PdfAccessibilityImageInfo> images,
-      base::span<const ppapi::PdfAccessibilityTextFieldInfo> text_fields,
-      ui::AXNodeData* para_node) {
-    // If we have additional links, images or text fields to insert in the tree,
-    // and we don't have a paragraph node, create a new one.
-    if (!para_node &&
-        (!links.empty() || !images.empty() || !text_fields.empty())) {
+  void AddButtonToParaNode(const ppapi::PdfAccessibilityButtonInfo& button,
+                           ui::AXNodeData* para_node,
+                           size_t* text_run_index) {
+    // If the |text_run_index| is less than or equal to the button's text
+    // run index, then push the button ahead of the current text run.
+    ui::AXNodeData* button_node = CreateButtonNode(button);
+    para_node->child_ids.push_back(button_node->id);
+    --(*text_run_index);
+  }
+
+  void AddChoiceFieldToParaNode(
+      const ppapi::PdfAccessibilityChoiceFieldInfo& choice_field,
+      ui::AXNodeData* para_node,
+      size_t* text_run_index) {
+    // If the |text_run_index| is less than or equal to the choice_field's text
+    // run index, then push the choice_field ahead of the current text run.
+    ui::AXNodeData* choice_field_node = CreateChoiceFieldNode(choice_field);
+    para_node->child_ids.push_back(choice_field_node->id);
+    --(*text_run_index);
+  }
+
+  void AddRemainingAnnotations(ui::AXNodeData* para_node) {
+    // If we don't have additional links, images or form fields to insert in the
+    // tree, then return.
+    if (current_link_index_ >= links_.size() &&
+        current_image_index_ >= images_.size() &&
+        current_text_field_index_ >= text_fields_.size() &&
+        current_button_index_ >= buttons_.size() &&
+        current_choice_field_index_ >= choice_fields_.size()) {
+      return;
+    }
+
+    // If we don't have a paragraph node, create a new one.
+    if (!para_node) {
       para_node = CreateNode(ax::mojom::Role::kParagraph,
                              ax::mojom::Restriction::kReadOnly,
                              render_accessibility_, nodes_);
       page_node_->child_ids.push_back(para_node->id);
     }
     // Push all the links not anchored to any text run to the last paragraph.
-    for (const ppapi::PdfAccessibilityLinkInfo& link : links) {
-      ui::AXNodeData* link_node = CreateLinkNode(link);
+    for (size_t i = current_link_index_; i < links_.size(); i++) {
+      ui::AXNodeData* link_node = CreateLinkNode(links_[i]);
       para_node->child_ids.push_back(link_node->id);
     }
     // Push all the images not anchored to any text run to the last paragraph.
-    for (const ppapi::PdfAccessibilityImageInfo& image : images) {
-      ui::AXNodeData* image_node = CreateImageNode(image);
+    for (size_t i = current_image_index_; i < images_.size(); i++) {
+      ui::AXNodeData* image_node = CreateImageNode(images_[i]);
       para_node->child_ids.push_back(image_node->id);
     }
 
@@ -880,10 +1079,25 @@ class PdfAccessibilityTreeBuilder {
             chrome_pdf::features::kAccessiblePDFForm)) {
       // Push all the text fields not anchored to any text run to the last
       // paragraph.
-      for (const ppapi::PdfAccessibilityTextFieldInfo& text_field :
-           text_fields) {
-        ui::AXNodeData* text_field_node = CreateTextFieldNode(text_field);
+      for (size_t i = current_text_field_index_; i < text_fields_.size(); i++) {
+        ui::AXNodeData* text_field_node = CreateTextFieldNode(text_fields_[i]);
         para_node->child_ids.push_back(text_field_node->id);
+      }
+
+      // Push all the buttons not anchored to any text run to the last
+      // paragraph.
+      for (size_t i = current_button_index_; i < buttons_.size(); i++) {
+        ui::AXNodeData* button_node = CreateButtonNode(buttons_[i]);
+        para_node->child_ids.push_back(button_node->id);
+      }
+
+      // Push all the choice fields not anchored to any text run to the last
+      // paragraph.
+      for (size_t i = current_choice_field_index_; i < choice_fields_.size();
+           i++) {
+        ui::AXNodeData* choice_field_node =
+            CreateChoiceFieldNode(choice_fields_[i]);
+        para_node->child_ids.push_back(choice_field_node->id);
       }
     }
   }
@@ -892,9 +1106,17 @@ class PdfAccessibilityTreeBuilder {
   const std::vector<ppapi::PdfAccessibilityTextRunInfo>& text_runs_;
   const std::vector<PP_PrivateAccessibilityCharInfo>& chars_;
   const std::vector<ppapi::PdfAccessibilityLinkInfo>& links_;
+  uint32_t current_link_index_ = 0;
   const std::vector<ppapi::PdfAccessibilityImageInfo>& images_;
+  uint32_t current_image_index_ = 0;
   const std::vector<ppapi::PdfAccessibilityHighlightInfo>& highlights_;
+  uint32_t current_highlight_index_ = 0;
   const std::vector<ppapi::PdfAccessibilityTextFieldInfo>& text_fields_;
+  uint32_t current_text_field_index_ = 0;
+  const std::vector<ppapi::PdfAccessibilityButtonInfo>& buttons_;
+  uint32_t current_button_index_ = 0;
+  const std::vector<ppapi::PdfAccessibilityChoiceFieldInfo>& choice_fields_;
+  uint32_t current_choice_field_index_ = 0;
   const gfx::RectF& page_bounds_;
   uint32_t page_index_;
   ui::AXNodeData* page_node_;
@@ -941,11 +1163,15 @@ bool PdfAccessibilityTree::IsDataFromPluginValid(
   // |text_runs|. The index denotes the position of the link relative to the
   // text runs. The index value equal to the size of |text_runs| indicates that
   // the link should be after the last text run.
+  // |index_in_page| of every |link| should be with in the range of total number
+  // of links, which is size of |links|.
   for (const ppapi::PdfAccessibilityLinkInfo& link : links) {
     base::CheckedNumeric<uint32_t> index = link.text_run_index;
     index += link.text_run_count;
-    if (!index.IsValid() || index.ValueOrDie() > text_runs.size())
+    if (!index.IsValid() || index.ValueOrDie() > text_runs.size() ||
+        link.index_in_page >= links.size()) {
       return false;
+    }
   }
 
   const std::vector<ppapi::PdfAccessibilityImageInfo>& images =
@@ -970,11 +1196,15 @@ bool PdfAccessibilityTree::IsDataFromPluginValid(
 
   // Since highlights also span across text runs similar to links, the
   // validation method is the same.
+  // |index_in_page| of a |highlight| follows the same index validation rules
+  // as of links.
   for (const auto& highlight : highlights) {
     base::CheckedNumeric<uint32_t> index = highlight.text_run_index;
     index += highlight.text_run_count;
-    if (!index.IsValid() || index.ValueOrDie() > text_runs.size())
+    if (!index.IsValid() || index.ValueOrDie() > text_runs.size() ||
+        highlight.index_in_page >= highlights.size()) {
       return false;
+    }
   }
 
   const std::vector<ppapi::PdfAccessibilityTextFieldInfo>& text_fields =
@@ -985,9 +1215,13 @@ bool PdfAccessibilityTree::IsDataFromPluginValid(
   }
   // Text run index of an |text_field| works on the same logic as the text run
   // index of a |link| as mentioned above.
+  // |index_in_page| of a |text_field| follows the same index validation rules
+  // as of links.
   for (const ppapi::PdfAccessibilityTextFieldInfo& text_field : text_fields) {
-    if (text_field.text_run_index > text_runs.size())
+    if (text_field.text_run_index > text_runs.size() ||
+        text_field.index_in_page >= text_fields.size()) {
       return false;
+    }
   }
 
   const std::vector<ppapi::PdfAccessibilityChoiceFieldInfo>& choice_fields =
@@ -999,9 +1233,13 @@ bool PdfAccessibilityTree::IsDataFromPluginValid(
   }
   // Text run index of an |choice_field| works on the same logic as the text run
   // index of a |link| as mentioned above.
+  // |index_in_page| of a |choice_field| follows the same index validation rules
+  // as of links.
   for (const auto& choice_field : choice_fields) {
-    if (choice_field.text_run_index > text_runs.size())
+    if (choice_field.text_run_index > text_runs.size() ||
+        choice_field.index_in_page >= choice_fields.size()) {
       return false;
+    }
   }
 
   const std::vector<ppapi::PdfAccessibilityButtonInfo>& buttons =
@@ -1015,9 +1253,12 @@ bool PdfAccessibilityTree::IsDataFromPluginValid(
        buttons) {
     // Text run index of an |button| works on the same logic as the text run
     // index of a |link| as mentioned above.
-    if (button.text_run_index > text_runs.size())
+    // |index_in_page| of a |button| follows the same index validation rules as
+    // of links.
+    if (button.text_run_index > text_runs.size() ||
+        button.index_in_page >= buttons.size()) {
       return false;
-
+    }
     // For radio button or checkbox, value of |button.control_index| should
     // always be less than |button.control_count|.
     if ((button.type == PP_PrivateButtonType::PP_PRIVATEBUTTON_CHECKBOX ||

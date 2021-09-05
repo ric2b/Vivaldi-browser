@@ -23,10 +23,10 @@
 #include "base/test/test_timeouts.h"
 #include "build/build_config.h"
 #include "content/browser/frame_host/navigation_request.h"
-#include "content/browser/interface_provider_filtering.h"
 #include "content/browser/renderer_host/input/timeout_monitor.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
+#include "content/common/content_navigation_policy.h"
 #include "content/common/frame_messages.h"
 #include "content/public/browser/javascript_dialog_manager.h"
 #include "content/public/browser/render_frame_host.h"
@@ -55,6 +55,8 @@
 #include "content/test/test_content_browser_client.h"
 #include "content/test/test_render_frame_host_factory.h"
 #include "net/base/features.h"
+#include "net/base/ip_address.h"
+#include "net/base/ip_endpoint.h"
 #include "net/base/net_errors.h"
 #include "net/cookies/cookie_constants.h"
 #include "net/dns/mock_host_resolver.h"
@@ -138,6 +140,7 @@ class FirstPartySchemeContentBrowserClient : public TestContentBrowserClient {
 
   void RegisterNonNetworkNavigationURLLoaderFactories(
       int frame_tree_node_id,
+      base::UkmSourceId ukm_source_id,
       NonNetworkURLLoaderFactoryMap* factories) override {
     auto trustme_factory = std::make_unique<network::TestURLLoaderFactory>();
     auto trustmeifembeddingsecure_factory =
@@ -196,6 +199,9 @@ class RenderFrameHostImplBrowserTest : public ContentBrowserTest {
     // is integrated into WebView.
     base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
         switches::kJavaScriptFlags, "--expose_gc");
+
+    base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
+        switches::kEnableBlinkFeatures, "SmsReceiver");
   }
   net::EmbeddedTestServer* https_server() { return &https_server_; }
 
@@ -484,7 +490,7 @@ mojo::ScopedMessagePipeHandle CreateDisconnectedMessagePipeHandle() {
 // Tests that a beforeunload dialog in an iframe doesn't stop the beforeunload
 // timer of a parent frame.
 // TODO(avi): flaky on Linux TSAN: http://crbug.com/795326
-#if defined(OS_LINUX) && defined(THREAD_SANITIZER)
+#if (defined(OS_LINUX) || defined(OS_CHROMEOS)) && defined(THREAD_SANITIZER)
 #define MAYBE_IframeBeforeUnloadParentHang DISABLED_IframeBeforeUnloadParentHang
 #else
 #define MAYBE_IframeBeforeUnloadParentHang IframeBeforeUnloadParentHang
@@ -783,10 +789,13 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBeforeUnloadBrowserTest,
       web_contents()->GetMainFrame()->is_waiting_for_beforeunload_completion());
 
   // The navigation that succeeded was a browser-initiated, main frame
-  // navigation, so it swapped RenderFrameHosts. |main_frame| should now be
-  // pending deletion and waiting for unload ACK, but it should not be waiting
-  // for the beforeunload completion callback.
-  EXPECT_TRUE(main_frame->IsPendingDeletion());
+  // navigation, so it swapped RenderFrameHosts. |main_frame| should either be
+  // in pending deletion and waiting for unload ACK or enter back-forward cache,
+  // but it should not be waiting for the beforeunload completion callback.
+  EXPECT_THAT(
+      main_frame->lifecycle_state(),
+      testing::AnyOf(testing::Eq(LifecycleState::kRunningUnloadHandlers),
+                     testing::Eq(LifecycleState::kInBackForwardCache)));
   EXPECT_FALSE(main_frame->is_waiting_for_beforeunload_completion());
   EXPECT_EQ(0u, main_frame->beforeunload_pending_replies_.size());
   EXPECT_EQ(nullptr, main_frame->GetBeforeUnloadInitiator());
@@ -1304,7 +1313,19 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest, FastNavigationAbort) {
   GURL url(embedded_test_server()->GetURL("/title1.html"));
   EXPECT_TRUE(NavigateToURL(shell(), url));
 
-  // Now make a navigation.
+  // This test only makes sense for navigations that stay in the same
+  // RenderFrame, otherwise the document.open() will run on the previous
+  // page's RenderFrame, and the navigation won't get aborted. We need to
+  // ensure that we won't trigger a same-site cross-RFH navigation.
+  // TODO(crbug.com/1099193): This should also work on cross-RFH same-site
+  // navigations.
+  DisableProactiveBrowsingInstanceSwapFor(
+      shell()->web_contents()->GetMainFrame());
+
+  // Now make a navigation. |observer| will make a document.open() call at
+  // ReadyToCommit time - see
+  // NavigationHandleGrabber::SendingNavigationCommitted(). The navigation
+  // should get aborted because of the document.open() in the navigating RFH.
   NavigationHandleGrabber observer(shell()->web_contents());
   const base::string16 title = base::ASCIIToUTF16("done");
   EXPECT_TRUE(ExecuteScript(shell()->web_contents(),
@@ -1671,6 +1692,7 @@ class DidFinishNavigationObserver : public WebContentsObserver {
 IN_PROC_BROWSER_TEST_F(
     RenderFrameHostImplBrowserTest,
     EarlyInterfaceRequestsFromNewDocumentDispatchedAfterNavigationFinished) {
+  WebContents* web_contents = shell()->web_contents();
   const GURL first_url(embedded_test_server()->GetURL("/title1.html"));
   const GURL second_url(embedded_test_server()->GetURL("/title2.html"));
 
@@ -1692,7 +1714,7 @@ IN_PROC_BROWSER_TEST_F(
   // Replace the |interface_broker_receiver| argument in the next
   // DidCommitProvisionalLoad message coming from the renderer with the
   // rigged |interface_broker_with_pending_requests| from above.
-  ScopedFakeInterfaceBrokerRequestInjector injector(shell()->web_contents());
+  ScopedFakeInterfaceBrokerRequestInjector injector(web_contents);
   injector.set_fake_receiver_for_next_commit(
       std::move(interface_broker_receiver_with_pending_receiver));
 
@@ -1700,24 +1722,29 @@ IN_PROC_BROWSER_TEST_F(
   // dispatched to the RenderFrameHost, WebContentsObserver::DidFinishNavigation
   // will have already been invoked.
   bool did_finish_navigation = false;
-  auto* main_rfh = shell()->web_contents()->GetMainFrame();
+
+  // Start the same-process navigation.
+  TestNavigationManager navigation_manager(web_contents, second_url);
+  shell()->LoadURL(second_url);
+  EXPECT_TRUE(navigation_manager.WaitForResponse());
+  auto* committing_rfh =
+      navigation_manager.GetNavigationHandle()->GetRenderFrameHost();
+
   DidFinishNavigationObserver navigation_finish_observer(
-      main_rfh, base::BindLambdaForTesting([&did_finish_navigation]() {
+      committing_rfh, base::BindLambdaForTesting([&did_finish_navigation]() {
         did_finish_navigation = true;
       }));
 
   base::RunLoop wait_until_interface_request_is_dispatched;
   ScopedInterfaceRequestMonitor monitor(
-      main_rfh, mojom::FrameHostTestInterface::Name_,
+      committing_rfh, mojom::FrameHostTestInterface::Name_,
       base::BindLambdaForTesting([&]() {
         EXPECT_TRUE(did_finish_navigation);
         wait_until_interface_request_is_dispatched.Quit();
       }));
 
-  // Start the same-process navigation.
-  test::ScopedInterfaceFilterBypass filter_bypass;
-  ASSERT_TRUE(NavigateToURL(shell(), second_url));
-  EXPECT_EQ(main_rfh, shell()->web_contents()->GetMainFrame());
+  // Finish the navigation.
+  navigation_manager.WaitForNavigationFinished();
   EXPECT_EQ(second_url, injector.url_of_last_commit());
   EXPECT_TRUE(injector.original_receiver_of_last_commit().is_valid());
 
@@ -1752,7 +1779,6 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
   // this test; then trigger a navigation.
   {
     ScopedFakeInterfaceBrokerRequestInjector injector(shell()->web_contents());
-    test::ScopedInterfaceFilterBypass filter_bypass;
     injector.set_fake_receiver_for_next_commit(
         std::move(interface_broker_receiver));
 
@@ -1760,6 +1786,11 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
     ASSERT_EQ(first_url, injector.url_of_last_commit());
     ASSERT_TRUE(injector.original_receiver_of_last_commit().is_valid());
   }
+
+  // The test below only works for same-RFH navigations, so we need to ensure
+  // that we won't trigger a same-site cross-RFH navigation.
+  DisableProactiveBrowsingInstanceSwapFor(
+      shell()->web_contents()->GetMainFrame());
 
   // Prepare an interface receiver for FrameHostTestInterface.
   mojo::Remote<mojom::FrameHostTestInterface> test_interface;
@@ -1855,7 +1886,7 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
         subframe_url.spec().c_str());
     ASSERT_TRUE(ExecuteScript(shell(), script));
 
-    WaitForLoadStop(shell()->web_contents());
+    EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
 
     FrameTreeNode* root = static_cast<WebContentsImpl*>(shell()->web_contents())
                               ->GetFrameTree()
@@ -1910,7 +1941,7 @@ IN_PROC_BROWSER_TEST_F(
   // empty document regardless of when/how/if the `src` attribute is set.
 
   ASSERT_TRUE(ExecuteScript(shell(), kNavigateToOneThenTwoScript));
-  WaitForLoadStop(shell()->web_contents());
+  EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
 
   FrameTreeNode* root = static_cast<WebContentsImpl*>(shell()->web_contents())
                             ->GetFrameTree()
@@ -2318,6 +2349,11 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
         wait_until_connection_error_loop_1.QuitClosure());
     ASSERT_TRUE(NavigateToURL(shell(), kUrl1));
   }
+
+  // The test below only makes sense for same-RFH navigations, so we need to
+  // ensure that we won't trigger a same-site cross-RFH navigation.
+  DisableProactiveBrowsingInstanceSwapFor(
+      shell()->web_contents()->GetMainFrame());
 
   {
     ScopedFakeInterfaceBrokerRequestInjector injector(shell()->web_contents());
@@ -3482,9 +3518,7 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
   child_rfh->SuddenTerminationDisablerChanged(
       true, blink::mojom::SuddenTerminationDisablerType::kUnloadHandler);
   child_rfh->SetSubframeUnloadTimeoutForTesting(base::TimeDelta::FromDays(7));
-  auto filter_detach = base::MakeRefCounted<DropMessageFilter>(
-      FrameMsgStart, FrameHostMsg_Detach::ID);
-  child_rfh->GetProcess()->AddFilter(filter_detach.get());
+  child_rfh->DoNotDeleteForTesting();
 
   // Open a popup on a.com to keep the process alive.
   OpenPopup(shell(), embedded_test_server()->GetURL("a.com", "/title2.html"),
@@ -3565,17 +3599,20 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest, WebUiReloadAfterCrash) {
   // Check the document is correctly reloaded.
   RenderFrameHostImpl* main_document = wc->GetMainFrame();
   EXPECT_EQ(main_frame_url, main_document->GetLastCommittedURL());
+  // Execute script in an isolated world to avoid causing a Trusted Types
+  // violation due to eval.
   EXPECT_EQ("Graphics Feature Status",
-            EvalJs(main_document, "document.querySelector('h3').textContent"));
+            EvalJs(main_document, "document.querySelector('h3').textContent",
+                   EXECUTE_SCRIPT_DEFAULT_OPTIONS, /*world_id=*/1));
 }
 
 // Start with A(B), navigate A to C. By emulating a slow unload handler B, check
 // the status of IsCurrent for subframes of A i.e., B before and after
 // navigating to C.
+// Test is flaky: https://crbug.com/1114149.
 IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
-                       CheckIsCurrentBeforeAndAfterUnload) {
+                       DISABLED_CheckIsCurrentBeforeAndAfterUnload) {
   IsolateAllSitesForTesting(base::CommandLine::ForCurrentProcess());
-  std::string onunload_script = "window.onunload = function(){ while(1);}";
   GURL url_ab(embedded_test_server()->GetURL(
       "a.com", "/cross_site_iframe_factory.html?a(b)"));
   GURL url_c(embedded_test_server()->GetURL("c.com", "/title1.html"));
@@ -3597,19 +3634,20 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
   // 4) Navigate rfh_a to C.
   EXPECT_TRUE(NavigateToURL(shell(), url_c));
   RenderFrameHostImpl* rfh_c = web_contents()->GetMainFrame();
-  EXPECT_EQ(LifecycleState::kRunningUnloadHandlers, rfh_b->lifecycle_state());
+
+  EXPECT_THAT(rfh_a->lifecycle_state(),
+              testing::AnyOf(testing::Eq(LifecycleState::kReadyToBeDeleted),
+                             testing::Eq(LifecycleState::kInBackForwardCache)));
+  EXPECT_THAT(
+      rfh_b->lifecycle_state(),
+      testing::AnyOf(testing::Eq(LifecycleState::kRunningUnloadHandlers),
+                     testing::Eq(LifecycleState::kInBackForwardCache)));
 
   // 5) Check the IsCurrent state of rfh_a, rfh_b and rfh_c after navigating to
   // C.
   EXPECT_FALSE(rfh_a->IsCurrent());
   EXPECT_FALSE(rfh_b->IsCurrent());
   EXPECT_TRUE(rfh_c->IsCurrent());
-
-  // 6) Resume deletion on rfh_b and run detach on rfh_b to delete its frame.
-  EXPECT_FALSE(delete_rfh_b.deleted());
-  rfh_b->ResumeDeletionForTesting();
-  rfh_b->OnDetach();
-  EXPECT_TRUE(delete_rfh_b.deleted());
 }
 
 // Test the LifecycleState is updated correctly for the main frame during
@@ -3653,7 +3691,10 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
   RenderFrameHostImpl* rfh_b = root_frame_host();
 
   // 6) Check the LifecycleState of both rfh_a and rfh_b after navigating to B.
-  EXPECT_EQ(LifecycleState::kRunningUnloadHandlers, rfh_a->lifecycle_state());
+  EXPECT_THAT(
+      rfh_a->lifecycle_state(),
+      testing::AnyOf(testing::Eq(LifecycleState::kRunningUnloadHandlers),
+                     testing::Eq(LifecycleState::kInBackForwardCache)));
   EXPECT_EQ(LifecycleState::kActive, rfh_b->lifecycle_state());
 }
 
@@ -3695,6 +3736,22 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
   // navigation.
   RenderFrameHostImpl* rfh_d = rfh_c->child_at(0)->current_frame_host();
   EXPECT_EQ(LifecycleState::kActive, rfh_d->lifecycle_state());
+}
+
+// Verify that a new RFH gets marked as having committed a navigation after
+// both normal navigations and error page navigations.
+IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
+                       HasCommittedAnyNavigation) {
+  GURL url_a(embedded_test_server()->GetURL("a.com", "/title1.html"));
+  EXPECT_TRUE(NavigateToURL(shell(), url_a));
+  EXPECT_TRUE(root_frame_host()->has_committed_any_navigation_);
+
+  GURL error_url(embedded_test_server()->GetURL("b.com", "/empty.html"));
+  std::unique_ptr<URLLoaderInterceptor> url_interceptor =
+      URLLoaderInterceptor::SetupRequestFailForURL(error_url,
+                                                   net::ERR_DNS_TIMED_OUT);
+  EXPECT_FALSE(NavigateToURL(shell(), error_url));
+  EXPECT_TRUE(root_frame_host()->has_committed_any_navigation_);
 }
 
 // Test the LifecycleState when a renderer crashes during navigation.
@@ -3743,61 +3800,50 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
   EXPECT_EQ(LifecycleState::kActive, current_rfh->lifecycle_state());
 }
 
-namespace {
+// Check that same site navigation correctly resets document_used_web_otp_.
+IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
+                       SameSiteNavigationResetsDocumentUsedWebOTP) {
+  const GURL first_url(
+      embedded_test_server()->GetURL("/page_with_webotp.html"));
+  const GURL second_url(embedded_test_server()->GetURL("/empty.html"));
 
-// Collects the committed IPAddressSpaces, and makes them available for
-// evaluation. Nothing about the request is modified; this is a read-only
-// interceptor.
-class IPAddressSpaceCollector : public DidCommitNavigationInterceptor {
- public:
-  using CommitData = std::pair<GURL, network::mojom::IPAddressSpace>;
-  using CommitDataVector = std::vector<CommitData>;
+  // Load a URL that maps to the same SiteInstance as the second URL, to make
+  // sure the second navigation will not be cross-process.
+  ASSERT_TRUE(NavigateToURL(shell(), first_url));
 
-  explicit IPAddressSpaceCollector(WebContents* web_contents)
-      : DidCommitNavigationInterceptor(web_contents) {}
-  ~IPAddressSpaceCollector() override = default;
+  RenderFrameHostImpl* main_rfh =
+      static_cast<RenderFrameHostImpl*>(web_contents()->GetMainFrame());
+  EXPECT_TRUE(main_rfh->DocumentUsedWebOTP());
 
-  network::mojom::IPAddressSpace IPAddressSpaceForUrl(const GURL& url) const {
-    for (auto item : commits_) {
-      if (item.first == url)
-        return item.second;
-    }
-    return network::mojom::IPAddressSpace::kUnknown;
-  }
+  ASSERT_TRUE(NavigateToURL(shell(), second_url));
+  EXPECT_FALSE(main_rfh->DocumentUsedWebOTP());
+}
 
-  network::mojom::IPAddressSpace last_ip_address_space() const {
-    return commits_.back().second;
-  }
-
- protected:
-  bool WillProcessDidCommitNavigation(
-      RenderFrameHost* render_frame_host,
-      NavigationRequest* navigation_request,
-      ::FrameHostMsg_DidCommitProvisionalLoad_Params* params,
-      mojom::DidCommitProvisionalLoadInterfaceParamsPtr* interface_params)
-      override {
-    commits_.push_back(
-        CommitData(params->url.spec().c_str(),
-                   navigation_request
-                       ? navigation_request->commit_params().ip_address_space
-                       : network::mojom::IPAddressSpace::kUnknown));
-    return true;
-  }
-
- private:
-  CommitDataVector commits_;
-
-  DISALLOW_COPY_AND_ASSIGN(IPAddressSpaceCollector);
-};
-
-}  // namespace
-
-class RenderFrameHostImplBrowserTestWithNonSecureExternalRequestsBlocked
+// It is hard to test this feature fully at the integration test level. Indeed,
+// there is no good way to inject a fake endpoint value into the URLLoader code
+// that performs the CORS-RFC1918 checks. The most intrusive injection
+// primitive, URLLoaderInterceptor, cannot be made to work as it bypasses the
+// network service entirely. Intercepted subresource requests therefore do not
+// execute the code under test and are never blocked.
+//
+// We are able to intercept top-level navigations, which allows us to test that
+// the correct address space is committed in the client security state for
+// local, private and public IP addresses.
+//
+// We further test that given a client security state with each IP address
+// space, subresource requests served by local IP addresses fail unless
+// initiated from the same address space. This provides integration testing
+// coverage for both success and failure cases of the code under test.
+//
+// Finally, we have unit tests that test all possible combinations of source and
+// destination IP address spaces in services/network/url_loader_unittest.cc.
+// Those cover fetches to other address spaces than local.
+class RenderFrameHostImplBrowserTestWithInsecurePrivateNetworkRequestsBlocked
     : public RenderFrameHostImplBrowserTest {
  public:
-  RenderFrameHostImplBrowserTestWithNonSecureExternalRequestsBlocked() {
+  RenderFrameHostImplBrowserTestWithInsecurePrivateNetworkRequestsBlocked() {
     feature_list_.InitAndEnableFeature(
-        network::features::kBlockNonSecureExternalRequests);
+        network::features::kBlockInsecurePrivateNetworkRequests);
   }
 
  private:
@@ -3806,7 +3852,7 @@ class RenderFrameHostImplBrowserTestWithNonSecureExternalRequestsBlocked
 
 // TODO(https://crbug.com/1014325): Flaky on multiple bots.
 IN_PROC_BROWSER_TEST_F(
-    RenderFrameHostImplBrowserTestWithNonSecureExternalRequestsBlocked,
+    RenderFrameHostImplBrowserTestWithInsecurePrivateNetworkRequestsBlocked,
     DISABLED_ComputeMainFrameIPAddressSpace) {
   // TODO(mkwst): `about:`, `file:`, `data:`, `blob:`, and `filesystem:` URLs
   // are all treated as `kUnknown` today. This is ~incorrect, but safe, as their
@@ -3829,20 +3875,19 @@ IN_PROC_BROWSER_TEST_F(
 
   for (auto test : test_cases) {
     SCOPED_TRACE(test.url);
-    IPAddressSpaceCollector collector(shell()->web_contents());
     EXPECT_TRUE(NavigateToURL(shell(), test.url));
     RenderFrameHostImpl* rfhi = static_cast<RenderFrameHostImpl*>(
         shell()->web_contents()->GetMainFrame());
-    EXPECT_EQ(test.expected_internal, collector.last_ip_address_space());
+    EXPECT_EQ(test.expected_internal,
+              rfhi->last_committed_client_security_state()->ip_address_space);
     EXPECT_EQ(test.expected_web_facing, EvalJs(rfhi, "document.addressSpace"));
   }
 }
 
 IN_PROC_BROWSER_TEST_F(
-    RenderFrameHostImplBrowserTestWithNonSecureExternalRequestsBlocked,
+    RenderFrameHostImplBrowserTestWithInsecurePrivateNetworkRequestsBlocked,
     ComputeIFrameLoopbackIPAddressSpace) {
   {
-    IPAddressSpaceCollector collector(shell()->web_contents());
     base::string16 expected_title(base::UTF8ToUTF16("LOADED"));
     TitleWatcher title_watcher(shell()->web_contents(), expected_title);
     EXPECT_TRUE(
@@ -3863,8 +3908,9 @@ IN_PROC_BROWSER_TEST_F(
         // via `RenderFrameImpl::CommitSyncNavigation`. This means that we don't
         // calculate the value correctly on the browser-side, but do correctly
         // inherit from the initiator on the Blink-side.
-        EXPECT_EQ(network::mojom::IPAddressSpace::kUnknown,
-                  collector.IPAddressSpaceForUrl(frame->GetLastCommittedURL()));
+        EXPECT_EQ(
+            network::mojom::IPAddressSpace::kUnknown,
+            rfhi->last_committed_client_security_state()->ip_address_space);
         EXPECT_EQ("local", EvalJs(rfhi, "document.addressSpace"));
       } else if (frame->GetLastCommittedURL().SchemeIsFileSystem() ||
                  frame->GetLastCommittedURL().SchemeIsBlob() ||
@@ -3873,14 +3919,16 @@ IN_PROC_BROWSER_TEST_F(
         // TODO(986744): `data:`, `blob:`, `filesystem:`, and `about:srcdoc`
         // should all inherit the IPAddressSpace from the document
         // that initiated a navigation. Right now, we treat them as `kPublic`.
-        EXPECT_EQ(network::mojom::IPAddressSpace::kUnknown,
-                  collector.IPAddressSpaceForUrl(frame->GetLastCommittedURL()));
+        EXPECT_EQ(
+            network::mojom::IPAddressSpace::kUnknown,
+            rfhi->last_committed_client_security_state()->ip_address_space);
         EXPECT_EQ("public", EvalJs(rfhi, "document.addressSpace"));
       } else {
         // TODO(mkwst): Once the above two TODOs are resolved, this branch will
         // be the correct expectation for all the frames in this test.
-        EXPECT_EQ(network::mojom::IPAddressSpace::kLocal,
-                  collector.IPAddressSpaceForUrl(frame->GetLastCommittedURL()));
+        EXPECT_EQ(
+            network::mojom::IPAddressSpace::kLocal,
+            rfhi->last_committed_client_security_state()->ip_address_space);
         EXPECT_EQ("local", EvalJs(rfhi, "document.addressSpace"));
       }
     }
@@ -3889,7 +3937,6 @@ IN_PROC_BROWSER_TEST_F(
   // Loading from loopback that asserts publicness: `data:`, `blob:`,
   // `filesystem:`, `about:blank`, and `about:srcdoc` all inherit the assertion.
   {
-    IPAddressSpaceCollector collector(shell()->web_contents());
     base::string16 expected_title(base::UTF8ToUTF16("LOADED"));
     TitleWatcher title_watcher(shell()->web_contents(), expected_title);
     EXPECT_TRUE(NavigateToURL(shell(), embedded_test_server()->GetURL(
@@ -3906,8 +3953,9 @@ IN_PROC_BROWSER_TEST_F(
         // `RenderFrameImpl::CommitSyncNavigation`. This means that we don't
         // calculate the value correctly on the browser-side, but do correctly
         // inherit from the initiator on the Blink-side.
-        EXPECT_EQ(network::mojom::IPAddressSpace::kUnknown,
-                  collector.IPAddressSpaceForUrl(frame->GetLastCommittedURL()));
+        EXPECT_EQ(
+            network::mojom::IPAddressSpace::kUnknown,
+            rfhi->last_committed_client_security_state()->ip_address_space);
         EXPECT_EQ("public", EvalJs(rfhi, "document.addressSpace"));
       } else if (frame->GetLastCommittedURL().SchemeIsFileSystem() ||
                  frame->GetLastCommittedURL().SchemeIsBlob() ||
@@ -3916,16 +3964,301 @@ IN_PROC_BROWSER_TEST_F(
         // TODO(986744): `data:`, `blob:`, `filesystem:`, and `about:srcdoc`
         // should all inherit the IPAddressSpace from the document
         // that initiated a navigation. Right now, we treat them as `kUnknown`.
-        EXPECT_EQ(network::mojom::IPAddressSpace::kUnknown,
-                  collector.IPAddressSpaceForUrl(frame->GetLastCommittedURL()));
+        EXPECT_EQ(
+            network::mojom::IPAddressSpace::kUnknown,
+            rfhi->last_committed_client_security_state()->ip_address_space);
         EXPECT_EQ("public", EvalJs(rfhi, "document.addressSpace"));
       } else {
-        EXPECT_EQ(network::mojom::IPAddressSpace::kPublic,
-                  collector.IPAddressSpaceForUrl(frame->GetLastCommittedURL()));
+        EXPECT_EQ(
+            network::mojom::IPAddressSpace::kPublic,
+            rfhi->last_committed_client_security_state()->ip_address_space);
         EXPECT_EQ("public", EvalJs(rfhi, "document.addressSpace"));
       }
     }
   }
+}
+
+namespace {
+
+// Returns a snippet of Javascript that fetch()es the given URL.
+//
+// The snippet evaluates to a boolean promise which resolves to true iff the
+// fetch was successful. The promise never rejects, as doing so makes it hard
+// to assert failure.
+std::string FetchSubresourceScript(const std::string& url_spec) {
+  return base::ReplaceStringPlaceholders(
+      R"(fetch("$1").then(
+           response => response.ok,
+           error => {
+             console.log('Error fetching "$1"', error);
+             return false;
+           });
+      )",
+      {url_spec}, nullptr);
+}
+
+// Returns an IP address in the private address space.
+net::IPAddress PrivateAddress() {
+  return net::IPAddress(10, 0, 1, 2);
+}
+
+// Returns an IP address in the public address space.
+net::IPAddress PublicAddress() {
+  return net::IPAddress(40, 0, 1, 2);
+}
+
+// Minimal response headers for an intercepted response to be successful.
+constexpr base::StringPiece kMinimalResponseHeaders =  // force line break
+    R"(HTTP/1.0 200 OK
+Content-type: text/html
+
+)";
+
+// Minimal response body containing an HTML document.
+constexpr base::StringPiece kMinimalHtmlBody = R"(
+<html>
+<head></head>
+<body></body>
+</html>
+)";
+
+// Wraps the URLLoaderInterceptor method of the same name, asserts success.
+//
+// NOTE: ASSERT_* macros can only be used in functions returning void.
+void WriteResponseBody(base::StringPiece body,
+                       network::mojom::URLLoaderClient* client) {
+  ASSERT_EQ(content::URLLoaderInterceptor::WriteResponseBody(body, client),
+            MOJO_RESULT_OK);
+}
+
+// Helper for InterceptorWithFakeEndpoint.
+bool MaybeInterceptWithFakeEndpoint(
+    const GURL& intercepted_url,
+    const net::IPEndPoint& endpoint,
+    content::URLLoaderInterceptor::RequestParams* params) {
+  const GURL& request_url = params->url_request.url;
+  if (request_url != intercepted_url) {
+    LOG(INFO) << "MaybeInterceptWithFakeEndpoint: ignoring request to "
+              << request_url;
+    return false;
+  }
+
+  LOG(INFO) << "MaybeInterceptWithFakeEndpoint: intercepting request to "
+            << request_url;
+
+  auto response = network::mojom::URLResponseHead::New();
+  response->headers = base::MakeRefCounted<net::HttpResponseHeaders>(
+      net::HttpUtil::AssembleRawHeaders(kMinimalResponseHeaders));
+  response->headers->GetMimeType(&response->mime_type);
+  response->remote_endpoint = endpoint;
+  params->client->OnReceiveResponse(std::move(response));
+
+  WriteResponseBody(kMinimalHtmlBody, params->client.get());
+  return true;
+}
+
+// The returned interceptor intercepts requests to |url|, fakes its network
+// endpoint to reflect the value of |endpoint|, and responds OK with a minimal
+// HTML body.
+std::unique_ptr<content::URLLoaderInterceptor> InterceptorWithFakeEndpoint(
+    const GURL& url,
+    const net::IPEndPoint& endpoint) {
+  LOG(INFO) << "Starting to intercept requests to " << url
+            << " with fake endpoint " << endpoint.ToString();
+  return std::make_unique<content::URLLoaderInterceptor>(
+      base::BindRepeating(&MaybeInterceptWithFakeEndpoint, url, endpoint));
+}
+
+}  // namespace
+
+// This test mimics the tests below, with the blocking feature disabled. It
+// verifies that by default requests:
+//  - from an insecure page with the "treat-as-public-address" CSP directive
+//  - to a local IP address
+// are not blocked.
+IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
+                       PrivateNetworkRequestIsNotBlockedByDefault) {
+  // Unfortunately for us, http://localhost is considered secure. Fortunately,
+  // the host resolver in these tests is set to resolve anything to 127.0.0.1.
+  // We use http://foo.test, which is not considered secure.
+  EXPECT_TRUE(NavigateToURL(
+      shell(), embedded_test_server()->GetURL(
+                   "foo.test", "/empty-treat-as-public-address.html")));
+
+  const auto& security_state =
+      root_frame_host()->last_committed_client_security_state();
+  ASSERT_FALSE(security_state.is_null());
+  EXPECT_FALSE(security_state->is_web_secure_context);
+  EXPECT_EQ(network::mojom::IPAddressSpace::kPublic,
+            security_state->ip_address_space);
+
+  // Check that the page can load a local resource.
+  EXPECT_EQ(true,
+            EvalJs(root_frame_host(), FetchSubresourceScript("image.jpg")));
+}
+
+// This test verifies that when the right feature is enabled but the policy
+// disables it, requests:
+//  - from an insecure page with the "treat-as-public-address" CSP directive
+//  - to a local IP address
+// are not blocked.
+IN_PROC_BROWSER_TEST_F(
+    RenderFrameHostImplBrowserTestWithInsecurePrivateNetworkRequestsBlocked,
+    FromInsecureTreatAsPublicToLocalWithPolicySetToAllowIsNotBlocked) {
+  // Localhost is treated as secure, even when loaded over naked HTTP.
+  // This is easier than using the HTTPS test server, since that server cannot
+  // lie about its domain name, so we have to use localhost anyway.
+  EXPECT_TRUE(NavigateToURL(
+      shell(), embedded_test_server()->GetURL(
+                   "foo.test", "/empty-treat-as-public-address.html")));
+
+  // TODO(crbug.com/986744): Disable policy and fix test expectation once
+  // policies are correctly wired up to the code under test.
+
+  const auto& security_state =
+      root_frame_host()->last_committed_client_security_state();
+  ASSERT_FALSE(security_state.is_null());
+  EXPECT_FALSE(security_state->is_web_secure_context);
+  EXPECT_EQ(network::mojom::IPAddressSpace::kPublic,
+            security_state->ip_address_space);
+
+  // Check that the page can load a local resource.
+  // TODO(crbug.com/986744): Expect true once policy wiring is fixed.
+  EXPECT_EQ(false,
+            EvalJs(root_frame_host(), FetchSubresourceScript("image.jpg")));
+}
+
+// This test verifies that when the right feature is enabled, requests:
+//  - from a secure page with the "treat-as-public-address" CSP directive
+//  - to a local IP address
+// are not blocked.
+IN_PROC_BROWSER_TEST_F(
+    RenderFrameHostImplBrowserTestWithInsecurePrivateNetworkRequestsBlocked,
+    FromSecureTreatAsPublicToLocalIsNotBlocked) {
+  // Localhost is treated as secure, even when loaded over naked HTTP.
+  // This is easier than using the HTTPS test server, since that server cannot
+  // lie about its domain name, so we have to use localhost anyway.
+  EXPECT_TRUE(NavigateToURL(
+      shell(),
+      embedded_test_server()->GetURL("/empty-treat-as-public-address.html")));
+
+  const auto& security_state =
+      root_frame_host()->last_committed_client_security_state();
+  ASSERT_FALSE(security_state.is_null());
+  EXPECT_TRUE(security_state->is_web_secure_context);
+  EXPECT_EQ(network::mojom::IPAddressSpace::kPublic,
+            security_state->ip_address_space);
+
+  // Check that the page can load a local resource.
+  EXPECT_EQ(true,
+            EvalJs(root_frame_host(), FetchSubresourceScript("image.jpg")));
+}
+
+// This test verifies that when the right feature is enabled, requests:
+//  - from an insecure page with the "treat-as-public-address" CSP directive
+//  - to a local IP address
+// are blocked.
+IN_PROC_BROWSER_TEST_F(
+    RenderFrameHostImplBrowserTestWithInsecurePrivateNetworkRequestsBlocked,
+    FromInsecureTreatAsPublicToLocalIsBlocked) {
+  // Unfortunately for us, http://localhost is considered secure. Fortunately,
+  // the host resolver in these tests is set to resolve anything to 127.0.0.1.
+  // We use http://foo.test, which is not considered secure.
+  EXPECT_TRUE(NavigateToURL(
+      shell(), embedded_test_server()->GetURL(
+                   "foo.test", "/empty-treat-as-public-address.html")));
+
+  const auto& security_state =
+      root_frame_host()->last_committed_client_security_state();
+  ASSERT_FALSE(security_state.is_null());
+  EXPECT_FALSE(security_state->is_web_secure_context);
+  EXPECT_EQ(network::mojom::IPAddressSpace::kPublic,
+            security_state->ip_address_space);
+
+  // Check that the page cannot load a local resource.
+  EXPECT_EQ(false,
+            EvalJs(root_frame_host(), FetchSubresourceScript("image.jpg")));
+}
+
+// This test verifies that when the right feature is enabled, requests:
+//  - from an insecure page served by a public IP address
+//  - to local IP addresses
+//  are blocked.
+IN_PROC_BROWSER_TEST_F(
+    RenderFrameHostImplBrowserTestWithInsecurePrivateNetworkRequestsBlocked,
+    FromInsecurePublicToLocalIsBlocked) {
+  // Intercept the page load and pretend it came from a public IP.
+
+  const GURL url = embedded_test_server()->GetURL("foo.test", "/index.html");
+
+  // Use the same port as the server, so that the fetch is not cross-origin.
+  auto interceptor = InterceptorWithFakeEndpoint(
+      url, net::IPEndPoint(PublicAddress(), embedded_test_server()->port()));
+
+  EXPECT_TRUE(NavigateToURL(shell(), url));
+
+  const auto& security_state =
+      root_frame_host()->last_committed_client_security_state();
+  ASSERT_FALSE(security_state.is_null());
+  EXPECT_FALSE(security_state->is_web_secure_context);
+  EXPECT_EQ(network::mojom::IPAddressSpace::kPublic,
+            security_state->ip_address_space);
+
+  // Check that the page cannot load a local resource.
+  EXPECT_EQ(false,
+            EvalJs(root_frame_host(), FetchSubresourceScript("image.jpg")));
+}
+
+// This test verifies that when the right feature is enabled, requests:
+//  - from an insecure page served by a private IP address
+//  - to local IP addresses
+//  are blocked.
+IN_PROC_BROWSER_TEST_F(
+    RenderFrameHostImplBrowserTestWithInsecurePrivateNetworkRequestsBlocked,
+    FromInsecurePrivateToLocalIsBlocked) {
+  // Intercept the page load and pretend it came from a private IP.
+
+  const GURL url = embedded_test_server()->GetURL("foo.test", "/index.html");
+
+  // Use the same port as the server, so that the fetch is not cross-origin.
+  auto interceptor = InterceptorWithFakeEndpoint(
+      url, net::IPEndPoint(PrivateAddress(), embedded_test_server()->port()));
+
+  EXPECT_TRUE(NavigateToURL(shell(), url));
+
+  const auto& security_state =
+      root_frame_host()->last_committed_client_security_state();
+  ASSERT_FALSE(security_state.is_null());
+  EXPECT_FALSE(security_state->is_web_secure_context);
+  EXPECT_EQ(network::mojom::IPAddressSpace::kPrivate,
+            security_state->ip_address_space);
+
+  // Check that the page cannot load a local resource.
+  EXPECT_EQ(false,
+            EvalJs(root_frame_host(), FetchSubresourceScript("image.jpg")));
+}
+
+// This test verifies that when the right feature is enabled, requests:
+//  - from an insecure page served by a local IP address
+//  - to local IP addresses
+//  are not blocked.
+IN_PROC_BROWSER_TEST_F(
+    RenderFrameHostImplBrowserTestWithInsecurePrivateNetworkRequestsBlocked,
+    FromInsecureLocalToLocalIsNotBlocked) {
+  const GURL url = embedded_test_server()->GetURL("foo.test", "/empty.html");
+
+  EXPECT_TRUE(NavigateToURL(shell(), url));
+
+  const auto& security_state =
+      root_frame_host()->last_committed_client_security_state();
+  ASSERT_FALSE(security_state.is_null());
+  EXPECT_FALSE(security_state->is_web_secure_context);
+  EXPECT_EQ(network::mojom::IPAddressSpace::kLocal,
+            security_state->ip_address_space);
+
+  // Check that the page can load a local resource.
+  EXPECT_EQ(true,
+            EvalJs(root_frame_host(), FetchSubresourceScript("image.jpg")));
 }
 
 namespace {
@@ -4032,8 +4365,6 @@ IN_PROC_BROWSER_TEST_F(ContentBrowserTest, LoadingStateResetOnNavigation) {
   GURL url2(embedded_test_server()->GetURL("/document2"));
 
   WebContents* web_contents = shell()->web_contents();
-  RenderFrameHostImpl* rfhi =
-      static_cast<RenderFrameHostImpl*>(web_contents->GetMainFrame());
 
   base::RunLoop loop_until_onload;
   DocumentOnLoadObserver onload_observer(web_contents,
@@ -4041,7 +4372,8 @@ IN_PROC_BROWSER_TEST_F(ContentBrowserTest, LoadingStateResetOnNavigation) {
   shell()->LoadURL(url1);
   loop_until_onload.Run();
 
-  EXPECT_TRUE(rfhi->IsDOMContentLoaded());
+  EXPECT_TRUE(static_cast<RenderFrameHostImpl*>(web_contents->GetMainFrame())
+                  ->IsDOMContentLoaded());
   EXPECT_TRUE(web_contents->IsDocumentOnLoadCompletedInMainFrame());
 
   // Expect that the loading state will be reset after a navigation.
@@ -4055,8 +4387,8 @@ IN_PROC_BROWSER_TEST_F(ContentBrowserTest, LoadingStateResetOnNavigation) {
       "Content-Type: text/html; charset=utf-8\r\n"
       "\r\n");
   navigation_observer.WaitForNavigationFinished();
-
-  EXPECT_FALSE(rfhi->IsDOMContentLoaded());
+  EXPECT_FALSE(static_cast<RenderFrameHostImpl*>(web_contents->GetMainFrame())
+                   ->IsDOMContentLoaded());
   EXPECT_FALSE(web_contents->IsDocumentOnLoadCompletedInMainFrame());
 }
 

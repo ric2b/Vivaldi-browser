@@ -19,18 +19,19 @@
 #include "base/containers/flat_set.h"
 #include "base/files/file_path.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/metrics/ukm_source_id.h"
 #include "base/optional.h"
 #include "base/strings/string_piece.h"
 #include "base/time/time.h"
 #include "base/util/type_safety/strong_alias.h"
 #include "build/build_config.h"
+#include "components/download/public/common/quarantine_connection.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/allow_service_worker_result.h"
 #include "content/public/browser/certificate_request_result_type.h"
 #include "content/public/browser/generated_code_cache_settings.h"
 #include "content/public/browser/storage_partition_config.h"
 #include "content/public/common/page_visibility_state.h"
-#include "content/public/common/previews_state.h"
 #include "content/public/common/window_container_type.mojom-forward.h"
 #include "device/vr/buildflags/buildflags.h"
 #include "media/base/video_codecs.h"
@@ -46,6 +47,7 @@
 #include "services/network/public/mojom/url_loader_factory.mojom-forward.h"
 #include "services/network/public/mojom/websocket.mojom-forward.h"
 #include "storage/browser/file_system/file_system_context.h"
+#include "third_party/blink/public/common/loader/previews_state.h"
 #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
 #include "ui/accessibility/ax_mode.h"
 #include "ui/base/page_transition_types.h"
@@ -55,7 +57,7 @@
 #include "url/origin.h"
 #include "url/url_constants.h"
 
-#if (defined(OS_POSIX) && !defined(OS_MACOSX)) || defined(OS_FUCHSIA)
+#if (defined(OS_POSIX) && !defined(OS_MAC)) || defined(OS_FUCHSIA)
 #include "base/posix/global_descriptors.h"
 #endif
 
@@ -74,6 +76,7 @@ using LoginAuthRequiredCallback =
 
 namespace base {
 class CommandLine;
+class DictionaryValue;
 class FilePath;
 class SequencedTaskRunner;
 }  // namespace base
@@ -117,7 +120,6 @@ class TrustedHeaderClient;
 namespace service_manager {
 class Identity;
 struct Manifest;
-enum class SandboxType;
 class Service;
 
 template <typename...>
@@ -151,6 +153,9 @@ struct ResourceRequest;
 
 namespace sandbox {
 class TargetPolicy;
+namespace policy {
+enum class SandboxType;
+}  // namespace policy
 }  // namespace sandbox
 
 namespace ui {
@@ -218,6 +223,10 @@ struct PepperPluginInfo;
 struct Referrer;
 struct SocketPermissionRequest;
 struct WebPreferences;
+
+#if defined(OS_ANDROID)
+class TtsEnvironmentAndroid;
+#endif
 
 #if defined(OS_CHROMEOS)
 class TtsControllerDelegate;
@@ -359,9 +368,9 @@ class CONTENT_EXPORT ContentBrowserClient {
   // isolation is enabled for this URL, and is a bug workaround.
   //
   // TODO(nick): Remove this function once https://crbug.com/160576 is fixed,
-  // and origin lock can be applied to all URLs.
-  virtual bool ShouldLockToOrigin(BrowserContext* browser_context,
-                                  const GURL& effective_url);
+  // and ProcessLock can be applied to all URLs.
+  virtual bool ShouldLockProcess(BrowserContext* browser_context,
+                                 const GURL& effective_url);
 
   // Returns a boolean indicating whether the WebUI |scheme| requires its
   // process to be locked to the WebUI origin.
@@ -413,12 +422,12 @@ class CONTENT_EXPORT ContentBrowserClient {
   //
   // This method may be called in the following cases:
   // - The default factory to be used by a frame or worker.  In this case both
-  //   the |origin| and |request_initiator_site_lock| are the origin of the
+  //   the |origin| and |request_initiator_origin_lock| are the origin of the
   //   frame or worker (or the origin that is being committed in the frame).
   // - An isolated-world-specific factory for origins covered via
   //   RenderFrameHost::MarkIsolatedWorldAsRequiringSeparateURLLoaderFactory.
   //   In this case |origin| is the origin of the isolated world and the
-  //   |request_initiator_site_lock| is the origin committed in the frame.
+  //   |request_initiator_origin_lock| is the origin committed in the frame.
   virtual void OverrideURLLoaderFactoryParams(
       BrowserContext* browser_context,
       const url::Origin& origin,
@@ -573,6 +582,11 @@ class CONTENT_EXPORT ContentBrowserClient {
 
   // Returns a client GUID used for virus scanning.
   virtual std::string GetApplicationClientGUIDForQuarantineCheck();
+
+  // Gets a callback which can connect to a Quarantine Service instance if
+  // available.
+  virtual download::QuarantineConnectionCallback
+  GetQuarantineConnectionCallback();
 
   // Returns the locale used by the application.
   // This is called on the UI and IO threads.
@@ -729,9 +743,15 @@ class CONTENT_EXPORT ContentBrowserClient {
   virtual void OnTrustAnchorUsed(BrowserContext* browser_context) {}
 #endif
 
+  // Notification that a signed certificate timestamp (SCT) report was enqueued.
+  // Allows an embedder to implement their own behavior for auditing SCTs.
+  virtual void OnSCTReportReady(BrowserContext* browser_context,
+                                const std::string& cache_key) {}
+
   // Allows the embedder to override the LocationProvider implementation.
   // Return nullptr to indicate the default one for the platform should be
-  // created.
+  // created. This is used by Qt, see
+  // https://bugs.chromium.org/p/chromium/issues/detail?id=725057#c7
   virtual std::unique_ptr<device::LocationProvider>
   OverrideSystemLocationProvider();
 
@@ -871,6 +891,13 @@ class CONTENT_EXPORT ContentBrowserClient {
   // to the embedder to update it if it wants.
   virtual void OverrideWebkitPrefs(RenderViewHost* render_view_host,
                                    WebPreferences* prefs) {}
+
+  // Similar to OverrideWebkitPrefs, but is only called after navigations. Some
+  // attributes in WebPreferences might need its value updated after navigation,
+  // and this method will give the opportunity for embedder to update them.
+  // Returns true if some values |prefs| changed due to embedder override.
+  virtual bool OverrideWebPreferencesAfterNavigation(WebContents* web_contents,
+                                                     WebPreferences* prefs);
 
   // Notifies that BrowserURLHandler has been created, so that the embedder can
   // optionally add their own handlers.
@@ -1146,12 +1173,12 @@ class CONTENT_EXPORT ContentBrowserClient {
 
   // Populates |mappings| with all files that need to be mapped before launching
   // a child process.
-#if (defined(OS_POSIX) && !defined(OS_MACOSX)) || defined(OS_FUCHSIA)
+#if (defined(OS_POSIX) && !defined(OS_MAC)) || defined(OS_FUCHSIA)
   virtual void GetAdditionalMappedFilesForChildProcess(
       const base::CommandLine& command_line,
       int child_process_id,
       content::PosixFileDescriptorInfo* mappings) {}
-#endif  // defined(OS_POSIX) && !defined(OS_MACOSX) || defined(OS_FUCHSIA)
+#endif  // defined(OS_POSIX) && !defined(OS_MAC) || defined(OS_FUCHSIA)
 
 #if defined(OS_WIN)
   // Defines flags that can be passed to PreSpawnRenderer.
@@ -1170,7 +1197,7 @@ class CONTENT_EXPORT ContentBrowserClient {
   // empty string if this sandboxed process type does not support living inside
   // an AppContainer. Called on PROCESS_LAUNCHER thread.
   virtual base::string16 GetAppContainerSidForSandboxType(
-      service_manager::SandboxType sandbox_type);
+      sandbox::policy::SandboxType sandbox_type);
 
   // Returns whether renderer code integrity is enabled.
   // This is called on the UI thread.
@@ -1213,10 +1240,14 @@ class CONTENT_EXPORT ContentBrowserClient {
   // Service. Only called when the Network Service is enabled.
   // Note that a RenderFrameHost or RenderProcessHost aren't passed in because
   // these can change during a navigation (e.g. depending on redirects).
+  //
+  // |ukm_source_id| can be used to record UKM events associated with the
+  // navigation.
   using NonNetworkURLLoaderFactoryMap =
       std::map<std::string, std::unique_ptr<network::mojom::URLLoaderFactory>>;
   virtual void RegisterNonNetworkNavigationURLLoaderFactories(
       int frame_tree_node_id,
+      base::UkmSourceId ukm_source_id,
       NonNetworkURLLoaderFactoryMap* factories);
 
   // Allows the embedder to register per-scheme URLLoaderFactory
@@ -1484,6 +1515,14 @@ class CONTENT_EXPORT ContentBrowserClient {
   // persistent storage location differs from the cache storage location.
   virtual std::vector<base::FilePath> GetNetworkContextsParentDirectory();
 
+  // Called once during initialization of NetworkService to provide constants
+  // to NetLog.  (Though it may be called multiples times if NetworkService
+  // crashes and needs to be reinitialized).  The return value is merged with
+  // |GetNetConstants()| and passed to FileNetLogObserver - see documentation
+  // of |FileNetLogObserver::CreateBounded()| for more information.  The
+  // convention is to put new constants under a subdict at the key "clientInfo".
+  virtual base::DictionaryValue GetNetLogConstants();
+
 #if defined(OS_ANDROID)
   // Only used by Android WebView.
   // Returns:
@@ -1662,14 +1701,17 @@ class CONTENT_EXPORT ContentBrowserClient {
   // and the browser cannot create sandboxed Storage Service instances.
   virtual base::FilePath GetSandboxedStorageServiceDataDirectory();
 
+  // Returns true if the audio service should be sandboxed. false otherwise.
+  virtual bool ShouldSandboxAudioService();
+
   // Asks the embedder for the PreviewsState which says which previews should
   // be enabled for the given navigation. The PreviewsState is a bitmask of
   // potentially several Previews optimizations. |initial_state| is used to
   // keep sub-frame navigation state consistent with main frame state.
   // |current_navigation_url| is the URL that is currently being navigated to,
   // and can differ from GetURL() in |navigation_handle| on redirects.
-  virtual content::PreviewsState DetermineAllowedPreviews(
-      content::PreviewsState initial_state,
+  virtual blink::PreviewsState DetermineAllowedPreviews(
+      blink::PreviewsState initial_state,
       content::NavigationHandle* navigation_handle,
       const GURL& current_navigation_url);
 
@@ -1677,8 +1719,8 @@ class CONTENT_EXPORT ContentBrowserClient {
   // renderer. |initial_state| was pre-determined by |DetermineAllowedPreviews|.
   // |navigation_handle| is the corresponding navigation object.
   // |response_headers| are the response headers related to this navigation.
-  virtual content::PreviewsState DetermineCommittedPreviews(
-      content::PreviewsState initial_state,
+  virtual blink::PreviewsState DetermineCommittedPreviews(
+      blink::PreviewsState initial_state,
       content::NavigationHandle* navigation_handle,
       const net::HttpResponseHeaders* response_headers);
 
@@ -1710,9 +1752,9 @@ class CONTENT_EXPORT ContentBrowserClient {
 
   // Returns whether given |url| has to be blocked. It's used only for renderer
   // debug URLs, as other requests are handled via NavigationThrottlers and
-  // blacklist policies are applied there.
-  virtual bool IsRendererDebugURLBlacklisted(const GURL& url,
-                                             BrowserContext* context);
+  // blocklist policies are applied there.
+  virtual bool ShouldBlockRendererDebugURL(const GURL& url,
+                                           BrowserContext* context);
 
   // Returns the default accessibility mode for the given browser context.
   virtual ui::AXMode GetAXModeForBrowserContext(
@@ -1728,6 +1770,10 @@ class CONTENT_EXPORT ContentBrowserClient {
 
   // Returns kNone by default.
   virtual WideColorGamutHeuristic GetWideColorGamutHeuristic();
+
+  // Creates the TtsEnvironmentAndroid. A return value of null results in using
+  // a default implementation.
+  virtual std::unique_ptr<TtsEnvironmentAndroid> CreateTtsEnvironmentAndroid();
 #endif
 
   // Obtains the list of MIME types that are for plugins with external handlers.
@@ -1842,6 +1888,14 @@ class CONTENT_EXPORT ContentBrowserClient {
   // inherit the parent COEP value implicitly, similar to "blob:"
   virtual bool ShouldInheritCrossOriginEmbedderPolicyImplicitly(
       const GURL& url);
+
+  // Returns the private network request policy to apply to |url|.
+  //
+  // |browser_context| must not be nullptr. Caller retains ownership.
+  // |url| is the URL of a navigation ready to commit.
+  virtual network::mojom::PrivateNetworkRequestPolicy
+  GetPrivateNetworkRequestPolicy(BrowserContext* browser_context,
+                                 const GURL& url);
 
   // Returns the URL-Keyed Metrics service for chrome:ukm.
   virtual ukm::UkmService* GetUkmService();

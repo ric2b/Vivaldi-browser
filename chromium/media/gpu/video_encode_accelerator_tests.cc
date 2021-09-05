@@ -8,6 +8,7 @@
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/strings/string_number_conversions.h"
 #include "media/base/media_util.h"
 #include "media/base/test_data_util.h"
 #include "media/base/video_bitrate_allocation.h"
@@ -19,8 +20,10 @@
 #include "media/gpu/test/video_encoder/video_encoder.h"
 #include "media/gpu/test/video_encoder/video_encoder_client.h"
 #include "media/gpu/test/video_encoder/video_encoder_test_environment.h"
+#include "media/gpu/test/video_frame_file_writer.h"
 #include "media/gpu/test/video_frame_helpers.h"
 #include "media/gpu/test/video_frame_validator.h"
+#include "media/gpu/test/video_test_environment.h"
 #include "media/gpu/test/video_test_helpers.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -35,7 +38,8 @@ namespace {
 constexpr const char* usage_msg =
     "usage: video_encode_accelerator_tests\n"
     "           [--codec=<codec>] [--disable_validator]\n"
-    "           [--output_bitstream] [--output_folder=<filepath>]\n"
+    "           [--output_bitstream] [--output_images=(all|corrupt)]\n"
+    "           [--output_format=(png|yuv)] [--output_folder=<filepath>]\n"
     "           [-v=<level>] [--vmodule=<config>] [--gtest_help] [--help]\n"
     "           [<video path>] [<video metadata path>]\n";
 
@@ -54,10 +58,16 @@ constexpr const char* help_msg =
     "  --disable_validator  disable validation of encoded bitstream.\n\n"
     "  --output_bitstream   save the output bitstream in either H264 AnnexB\n"
     "                       format (for H264) or IVF format (for vp8 and vp9)\n"
-    "                       to <output_folder>/<testname>/<filename> +\n"
-    "                       .(h264|ivf).\n"
-    "  --output_folder      set the basic folder used to store the output\n"
-    "                       stream. The default is the current directory.\n"
+    "                       to <output_folder>/<testname>."
+    "  --output_images      in addition to saving the full encoded bitstream,\n"
+    "                       it's also possible to dump individual frames to\n"
+    "                       <output_folder>/<testname>, possible values\n"
+    "                       are \"all|corrupt\"\n"
+    "  --output_format      set the format of images saved to disk, supported\n"
+    "                       formats are \"png\" (default) and \"yuv\".\n"
+    "  --output_limit       limit the number of images saved to disk.\n"
+    "  --output_folder      set the basic folder used to store test artifacts\n"
+    "                       The default is the current directory.\n"
     "   -v                  enable verbose mode, e.g. -v=2.\n"
     "  --vmodule            enable verbose mode for the specified module,\n"
     "                       e.g. --vmodule=*media/gpu*=2.\n\n"
@@ -81,11 +91,12 @@ class VideoEncoderTest : public ::testing::Test {
  public:
   std::unique_ptr<VideoEncoder> CreateVideoEncoder(
       Video* video,
-      VideoEncoderClientConfig config) {
+      const VideoEncoderClientConfig& config) {
     LOG_ASSERT(video);
 
     auto video_encoder =
-        VideoEncoder::Create(config, CreateBitstreamProcessors(video, config));
+        VideoEncoder::Create(config, g_env->GetGpuMemoryBufferFactory(),
+                             CreateBitstreamProcessors(video, config));
     LOG_ASSERT(video_encoder);
 
     if (!video_encoder->Initialize(video))
@@ -97,14 +108,30 @@ class VideoEncoderTest : public ::testing::Test {
  private:
   std::vector<std::unique_ptr<BitstreamProcessor>> CreateBitstreamProcessors(
       Video* video,
-      VideoEncoderClientConfig config) {
+      const VideoEncoderClientConfig& config) {
     std::vector<std::unique_ptr<BitstreamProcessor>> bitstream_processors;
+    const gfx::Rect visible_rect(video->Resolution());
+    const VideoCodec codec =
+        VideoCodecProfileToVideoCodec(config.output_profile);
+    if (g_env->SaveOutputBitstream()) {
+      base::FilePath::StringPieceType extension =
+          codec == VideoCodec::kCodecH264 ? FILE_PATH_LITERAL("h264")
+                                          : FILE_PATH_LITERAL("ivf");
+      auto output_bitstream_filepath =
+          g_env->OutputFolder()
+              .Append(g_env->GetTestOutputFilePath())
+              .Append(video->FilePath().BaseName().ReplaceExtension(extension));
+      auto bitstream_writer = BitstreamFileWriter::Create(
+          output_bitstream_filepath, codec, visible_rect.size(),
+          config.framerate, config.num_frames_to_encode);
+      LOG_ASSERT(bitstream_writer);
+      bitstream_processors.emplace_back(std::move(bitstream_writer));
+    }
+
     if (!g_env->IsBitstreamValidatorEnabled()) {
       return bitstream_processors;
     }
 
-    const gfx::Rect visible_rect(video->Resolution());
-    VideoCodec codec = VideoCodecProfileToVideoCodec(config.output_profile);
     switch (codec) {
       case kCodecH264:
         bitstream_processors.emplace_back(
@@ -132,36 +159,40 @@ class VideoEncoderTest : public ::testing::Test {
         VideoColorSpace(), kNoTransformation, visible_rect.size(), visible_rect,
         visible_rect.size(), EmptyExtraData(), EncryptionScheme::kUnencrypted);
     std::vector<std::unique_ptr<VideoFrameProcessor>> video_frame_processors;
-
     raw_data_helper_ = RawDataHelper::Create(video);
     if (!raw_data_helper_) {
       LOG(ERROR) << "Failed to create raw data helper";
       return bitstream_processors;
     }
 
-    // TODO(hiroh): Add corrupt frame processors.
     VideoFrameValidator::GetModelFrameCB get_model_frame_cb =
         base::BindRepeating(&VideoEncoderTest::GetModelFrame,
                             base::Unretained(this));
-    auto psnr_validator = PSNRVideoFrameValidator::Create(get_model_frame_cb);
-    auto ssim_validator = SSIMVideoFrameValidator::Create(get_model_frame_cb);
-    video_frame_processors.push_back(std::move(psnr_validator));
+
+    // Attach a video frame writer to store individual frames to disk if
+    // requested.
+    std::unique_ptr<VideoFrameProcessor> image_writer;
+    auto frame_output_config = g_env->ImageOutputConfig();
+    base::FilePath output_folder = base::FilePath(g_env->OutputFolder())
+                                       .Append(g_env->GetTestOutputFilePath());
+    if (frame_output_config.output_mode != FrameOutputMode::kNone) {
+      image_writer = VideoFrameFileWriter::Create(
+          output_folder, frame_output_config.output_format,
+          frame_output_config.output_limit);
+      LOG_ASSERT(image_writer);
+      if (frame_output_config.output_mode == FrameOutputMode::kAll)
+        video_frame_processors.push_back(std::move(image_writer));
+    }
+    auto ssim_validator = SSIMVideoFrameValidator::Create(
+        get_model_frame_cb, std::move(image_writer),
+        VideoFrameValidator::ValidationMode::kAverage);
+    LOG_ASSERT(ssim_validator);
     video_frame_processors.push_back(std::move(ssim_validator));
     auto bitstream_validator = BitstreamValidator::Create(
         decoder_config, config.num_frames_to_encode - 1,
         std::move(video_frame_processors));
     LOG_ASSERT(bitstream_validator);
     bitstream_processors.emplace_back(std::move(bitstream_validator));
-
-    auto output_bitstream_filepath = g_env->OutputBitstreamFilePath();
-    if (output_bitstream_filepath) {
-      auto bitstream_writer = BitstreamFileWriter::Create(
-          *output_bitstream_filepath, codec, visible_rect.size(),
-          config.framerate, config.num_frames_to_encode);
-      LOG_ASSERT(bitstream_writer);
-      bitstream_processors.emplace_back(std::move(bitstream_writer));
-    }
-
     return bitstream_processors;
   }
 
@@ -182,10 +213,8 @@ class VideoEncoderTest : public ::testing::Test {
 // Encode video from start to end. Wait for the kFlushDone event at the end of
 // the stream, that notifies us all frames have been encoded.
 TEST_F(VideoEncoderTest, FlushAtEndOfStream) {
-  VideoEncoderClientConfig config = VideoEncoderClientConfig();
-  config.framerate = g_env->Video()->FrameRate();
-  config.output_profile = g_env->Profile();
-  config.num_frames_to_encode = g_env->Video()->NumFrames();
+  VideoEncoderClientConfig config(g_env->Video(), g_env->Profile(),
+                                  g_env->Bitrate());
   auto encoder = CreateVideoEncoder(g_env->Video(), config);
 
   encoder->Encode();
@@ -201,7 +230,8 @@ TEST_F(VideoEncoderTest, FlushAtEndOfStream) {
 // resolution. The test only verifies initialization and doesn't do any
 // encoding.
 TEST_F(VideoEncoderTest, Initialize) {
-  VideoEncoderClientConfig config = VideoEncoderClientConfig();
+  VideoEncoderClientConfig config(g_env->Video(), g_env->Profile(),
+                                  g_env->Bitrate());
   auto encoder = CreateVideoEncoder(g_env->Video(), config);
 
   EXPECT_EQ(encoder->GetEventCount(VideoEncoder::kInitialized), 1u);
@@ -212,10 +242,27 @@ TEST_F(VideoEncoderTest, Initialize) {
 // of scope at the end of the test. The test will pass if no asserts or crashes
 // are triggered upon destroying.
 TEST_F(VideoEncoderTest, DestroyBeforeInitialize) {
-  VideoEncoderClientConfig config = VideoEncoderClientConfig();
-  auto video_encoder = VideoEncoder::Create(config);
+  VideoEncoderClientConfig config(g_env->Video(), g_env->Profile(),
+                                  g_env->Bitrate());
+  auto video_encoder =
+      VideoEncoder::Create(config, g_env->GetGpuMemoryBufferFactory());
 
   EXPECT_NE(video_encoder, nullptr);
+}
+
+// Encode video from start to end. Multiple buffer encodes will be queued in the
+// encoder, without waiting for the result of the previous encode requests.
+TEST_F(VideoEncoderTest, FlushAtEndOfStream_MultipleOutstandingDecodes) {
+  VideoEncoderClientConfig config(g_env->Video(), g_env->Profile());
+  config.max_outstanding_encode_requests = 4;
+  auto encoder = CreateVideoEncoder(g_env->Video(), config);
+
+  encoder->Encode();
+  EXPECT_TRUE(encoder->WaitForFlushDone());
+
+  EXPECT_EQ(encoder->GetFlushDoneCount(), 1u);
+  EXPECT_EQ(encoder->GetFrameReleasedCount(), g_env->Video()->NumFrames());
+  EXPECT_TRUE(encoder->WaitForBitstreamProcessors());
 }
 
 // Encode multiple videos simultaneously from start to finish.
@@ -223,11 +270,8 @@ TEST_F(VideoEncoderTest, FlushAtEndOfStream_MultipleConcurrentEncodes) {
   // The minimal number of concurrent encoders we expect to be supported.
   constexpr size_t kMinSupportedConcurrentEncoders = 3;
 
-  VideoEncoderClientConfig config = VideoEncoderClientConfig();
-  config.framerate = g_env->Video()->FrameRate();
-  config.output_profile = g_env->Profile();
-  config.num_frames_to_encode = g_env->Video()->NumFrames();
-
+  VideoEncoderClientConfig config(g_env->Video(), g_env->Profile(),
+                                  g_env->Bitrate());
   std::vector<std::unique_ptr<VideoEncoder>> encoders(
       kMinSupportedConcurrentEncoders);
   for (size_t i = 0; i < kMinSupportedConcurrentEncoders; ++i)
@@ -246,9 +290,8 @@ TEST_F(VideoEncoderTest, FlushAtEndOfStream_MultipleConcurrentEncodes) {
 }
 
 TEST_F(VideoEncoderTest, BitrateCheck) {
-  VideoEncoderClientConfig config = VideoEncoderClientConfig();
-  config.framerate = g_env->Video()->FrameRate();
-  config.output_profile = g_env->Profile();
+  VideoEncoderClientConfig config(g_env->Video(), g_env->Profile(),
+                                  g_env->Bitrate());
   config.num_frames_to_encode = kNumFramesToEncodeForBitrateCheck;
   auto encoder = CreateVideoEncoder(g_env->Video(), config);
 
@@ -263,9 +306,8 @@ TEST_F(VideoEncoderTest, BitrateCheck) {
 }
 
 TEST_F(VideoEncoderTest, DynamicBitrateChange) {
-  VideoEncoderClientConfig config;
-  config.framerate = g_env->Video()->FrameRate();
-  config.output_profile = g_env->Profile();
+  VideoEncoderClientConfig config(g_env->Video(), g_env->Profile(),
+                                  g_env->Bitrate());
   config.num_frames_to_encode = kNumFramesToEncodeForBitrateCheck * 2;
   auto encoder = CreateVideoEncoder(g_env->Video(), config);
 
@@ -293,9 +335,8 @@ TEST_F(VideoEncoderTest, DynamicBitrateChange) {
 }
 
 TEST_F(VideoEncoderTest, DynamicFramerateChange) {
-  VideoEncoderClientConfig config;
-  config.framerate = g_env->Video()->FrameRate();
-  config.output_profile = g_env->Profile();
+  VideoEncoderClientConfig config(g_env->Video(), g_env->Profile(),
+                                  g_env->Bitrate());
   config.num_frames_to_encode = kNumFramesToEncodeForBitrateCheck * 2;
   auto encoder = CreateVideoEncoder(g_env->Video(), config);
 
@@ -320,6 +361,24 @@ TEST_F(VideoEncoderTest, DynamicFramerateChange) {
 
   EXPECT_EQ(encoder->GetFlushDoneCount(), 1u);
   EXPECT_EQ(encoder->GetFrameReleasedCount(), config.num_frames_to_encode);
+  EXPECT_TRUE(encoder->WaitForBitstreamProcessors());
+}
+
+TEST_F(VideoEncoderTest, FlushAtEndOfStream_NV12Dmabuf) {
+  auto nv12_video = g_env->Video()->ConvertToNV12();
+  ASSERT_TRUE(nv12_video);
+
+  VideoEncoderClientConfig config(nv12_video.get(), g_env->Profile(),
+                                  g_env->Bitrate());
+  config.input_storage_type =
+      VideoEncodeAccelerator::Config::StorageType::kDmabuf;
+
+  auto encoder = CreateVideoEncoder(nv12_video.get(), config);
+
+  encoder->Encode();
+  EXPECT_TRUE(encoder->WaitForFlushDone());
+  EXPECT_EQ(encoder->GetFlushDoneCount(), 1u);
+  EXPECT_EQ(encoder->GetFrameReleasedCount(), nv12_video->NumFrames());
   EXPECT_TRUE(encoder->WaitForBitstreamProcessors());
 }
 }  // namespace test
@@ -348,6 +407,7 @@ int main(int argc, char** argv) {
       (args.size() >= 2) ? base::FilePath(args[1]) : base::FilePath();
   std::string codec = "h264";
   bool output_bitstream = false;
+  media::test::FrameOutputConfig frame_output_config;
   base::FilePath output_folder =
       base::FilePath(base::FilePath::kCurrentDirectory);
 
@@ -367,6 +427,35 @@ int main(int argc, char** argv) {
       enable_bitstream_validator = false;
     } else if (it->first == "output_bitstream") {
       output_bitstream = true;
+    } else if (it->first == "output_images") {
+      if (it->second == "all") {
+        frame_output_config.output_mode = media::test::FrameOutputMode::kAll;
+      } else if (it->second == "corrupt") {
+        frame_output_config.output_mode =
+            media::test::FrameOutputMode::kCorrupt;
+      } else {
+        std::cout << "unknown image output mode \"" << it->second
+                  << "\", possible values are \"all|corrupt\"\n";
+        return EXIT_FAILURE;
+      }
+    } else if (it->first == "output_format") {
+      if (it->second == "png") {
+        frame_output_config.output_format =
+            media::test::VideoFrameFileWriter::OutputFormat::kPNG;
+      } else if (it->second == "yuv") {
+        frame_output_config.output_format =
+            media::test::VideoFrameFileWriter::OutputFormat::kYUV;
+      } else {
+        std::cout << "unknown frame output format \"" << it->second
+                  << "\", possible values are \"png|yuv\"\n";
+        return EXIT_FAILURE;
+      }
+    } else if (it->first == "output_limit") {
+      if (!base::StringToUint64(it->second,
+                                &frame_output_config.output_limit)) {
+        std::cout << "invalid number \"" << it->second << "\n";
+        return EXIT_FAILURE;
+      }
     } else if (it->first == "output_folder") {
       output_folder = base::FilePath(it->second);
     } else {
@@ -382,7 +471,8 @@ int main(int argc, char** argv) {
   media::test::VideoEncoderTestEnvironment* test_environment =
       media::test::VideoEncoderTestEnvironment::Create(
           video_path, video_metadata_path, enable_bitstream_validator,
-          output_folder, codec, output_bitstream);
+          output_folder, codec, output_bitstream, frame_output_config);
+
   if (!test_environment)
     return EXIT_FAILURE;
 

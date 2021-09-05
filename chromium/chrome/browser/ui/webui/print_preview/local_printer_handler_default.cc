@@ -21,7 +21,7 @@
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include "components/printing/browser/printer_capabilities_mac.h"
 #include "printing/printing_features.h"
 #endif
@@ -67,7 +67,7 @@ PrinterList LocalPrinterHandlerDefault::EnumeratePrintersAsync(
 #endif
 
   scoped_refptr<PrintBackend> print_backend(
-      PrintBackend::CreateInstance(nullptr, locale));
+      PrintBackend::CreateInstance(locale));
 
   PrinterList printer_list;
   print_backend->EnumeratePrinters(&printer_list);
@@ -79,7 +79,7 @@ base::Value LocalPrinterHandlerDefault::FetchCapabilitiesAsync(
     const std::string& device_name,
     const std::string& locale) {
   PrinterSemanticCapsAndDefaults::Papers user_defined_papers;
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   if (base::FeatureList::IsEnabled(features::kEnableCustomMacPaperSizes))
     user_defined_papers = GetMacCustomPaperSizes();
 #endif
@@ -91,7 +91,7 @@ base::Value LocalPrinterHandlerDefault::FetchCapabilitiesAsync(
 #endif
 
   scoped_refptr<PrintBackend> print_backend(
-      PrintBackend::CreateInstance(nullptr, locale));
+      PrintBackend::CreateInstance(locale));
 
   VLOG(1) << "Get printer capabilities start for " << device_name;
 
@@ -116,7 +116,7 @@ std::string LocalPrinterHandlerDefault::GetDefaultPrinterAsync(
 #endif
 
   scoped_refptr<PrintBackend> print_backend(
-      PrintBackend::CreateInstance(nullptr, locale));
+      PrintBackend::CreateInstance(locale));
 
   std::string default_printer = print_backend->GetDefaultPrinterName();
   VLOG(1) << "Default Printer: " << default_printer;

@@ -9,6 +9,7 @@
 
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
+#include "third_party/blink/renderer/core/frame/web_feature.h"
 #include "third_party/blink/renderer/core/layout/layout_block_flow.h"
 #include "third_party/blink/renderer/core/layout/layout_inline.h"
 #include "third_party/blink/renderer/core/layout/layout_object.h"
@@ -43,6 +44,87 @@
 namespace blink {
 
 namespace {
+
+bool IsLeftAligned(const ComputedStyle& style) {
+  switch (style.GetTextAlign()) {
+    case ETextAlign::kStart:
+      return IsLtr(style.Direction());
+    case ETextAlign::kEnd:
+      return IsRtl(style.Direction());
+    case ETextAlign::kLeft:
+    case ETextAlign::kWebkitLeft:
+      return true;
+    case ETextAlign::kCenter:
+    case ETextAlign::kWebkitCenter:
+    case ETextAlign::kJustify:
+    case ETextAlign::kRight:
+    case ETextAlign::kWebkitRight:
+      return false;
+  }
+  NOTREACHED();
+  return false;
+}
+
+bool HasLetterSpacingWorkAround(const LayoutObject* layout_object,
+                                bool first_line,
+                                const LayoutBlockFlow* block_flow) {
+  // All we need to know is whether it computes to 0 or not, so any
+  // |maxmimum_value| can work.
+  const LayoutUnit maximum_value(100);
+  if (MinimumValueForLength(block_flow->StyleRef(first_line).TextIndent(),
+                            maximum_value))
+    return true;
+
+  // Margin/padding maybe applied to <span> or to the containing block. Sum up
+  // to the containing block. ex.:
+  //   <div style="letter-spacing: 1em">
+  //     <span style="margin-left: 1em>text</span>
+  //   </div>
+  LayoutUnit margin_padding_start;
+  LayoutUnit margin_padding_end;
+  DCHECK(!layout_object->IsText());
+  for (;; layout_object = layout_object->Parent()) {
+    const ComputedStyle& style = layout_object->StyleRef(first_line);
+    if (style.MayHavePadding() || style.MayHaveMargin()) {
+      margin_padding_start +=
+          MinimumValueForLength(style.MarginStart(), maximum_value) +
+          MinimumValueForLength(style.PaddingStart(), maximum_value);
+      margin_padding_end +=
+          MinimumValueForLength(style.MarginEnd(), maximum_value) +
+          MinimumValueForLength(style.PaddingEnd(), maximum_value);
+    }
+    if (layout_object == block_flow)
+      break;
+  }
+  return margin_padding_start != margin_padding_end;
+}
+
+bool ShouldReportLetterSpacingUseCounter(const LayoutObject* layout_object,
+                                         bool first_line,
+                                         const LayoutBlockFlow* block_flow) {
+  DCHECK(layout_object->IsText());
+  layout_object = layout_object->Parent();
+  const ComputedStyle& style = layout_object->StyleRef(first_line);
+  DCHECK(style.GetFont().GetFontDescription().LetterSpacing());
+
+  // Count only when the containing block has `letter-spacing`. For now, we
+  // don't count cases like:
+  //   <div><span style="letter-spacing: 1em">text</span></div>
+  const ComputedStyle& block_style = block_flow->StyleRef(first_line);
+  if (layout_object != block_flow &&
+      !block_style.GetFont().GetFontDescription().LetterSpacing())
+    return false;
+
+  if (((layout_object->HasBoxDecorationBackground() ||
+        block_flow->HasBoxDecorationBackground() ||
+        !IsLeftAligned(block_style)) &&
+       HasLetterSpacingWorkAround(layout_object, first_line, block_flow)) ||
+      // Workaround for `text-decoration` is complicated, just include all.
+      !style.AppliedTextDecorations().IsEmpty())
+    return true;
+
+  return false;
+}
 
 // Estimate the number of NGInlineItem to minimize the vector expansions.
 unsigned EstimateInlineItemsCount(const LayoutBlockFlow& block) {
@@ -428,6 +510,8 @@ class NGInlineNodeDataEditor final {
         layout_text_(layout_text) {
     DCHECK(layout_text_.HasValidInlineItems());
   }
+  NGInlineNodeDataEditor(const NGInlineNodeDataEditor&) = delete;
+  NGInlineNodeDataEditor& operator=(const NGInlineNodeDataEditor&) = delete;
 
   LayoutBlockFlow* GetLayoutBlockFlow() const { return block_flow_; }
 
@@ -658,8 +742,6 @@ class NGInlineNodeDataEditor final {
   const LayoutText& layout_text_;
   unsigned start_offset_ = 0;
   unsigned end_offset_ = 0;
-
-  DISALLOW_COPY_AND_ASSIGN(NGInlineNodeDataEditor);
 };
 
 // static
@@ -989,7 +1071,7 @@ void NGInlineNode::SegmentBidiRuns(NGInlineNodeData* data) const {
 void NGInlineNode::ShapeText(NGInlineItemsData* data,
                              const String* previous_text,
                              const Vector<NGInlineItem>* previous_items) const {
-  TRACE_EVENT0("blink", "NGInlineNode::ShapeText");
+  TRACE_EVENT0("fonts", "NGInlineNode::ShapeText");
   const String& text_content = data->text_content;
   Vector<NGInlineItem>* items = &data->items;
 
@@ -1109,8 +1191,17 @@ void NGInlineNode::ShapeText(NGInlineItemsData* data,
     scoped_refptr<ShapeResult> shape_result =
         shaper.Shape(start_item, end_offset);
 
-    if (UNLIKELY(spacing.SetSpacing(font.GetFontDescription())))
+    if (UNLIKELY(spacing.SetSpacing(font))) {
       shape_result->ApplySpacing(spacing);
+      if (spacing.LetterSpacing() &&
+          ShouldReportLetterSpacingUseCounter(
+              start_item.GetLayoutObject(),
+              start_item.StyleVariant() == NGStyleVariant::kFirstLine,
+              GetLayoutBlockFlow())) {
+        UseCounter::Count(GetDocument(),
+                          WebFeature::kLastLetterSpacingAffectsRendering);
+      }
+    }
 
     // If the text is from one item, use the ShapeResult as is.
     if (end_offset == start_item.EndOffset()) {
@@ -1581,10 +1672,15 @@ static LayoutUnit ComputeContentSize(
       break;
 
     LayoutUnit inline_size = line_info.Width();
+#if DCHECK_IS_ON()
     // Text measurement is done using floats which may introduce small rounding
     // errors for near-saturated values.
-    DCHECK_EQ(inline_size.Round(),
-              line_info.ComputeWidth().ClampNegativeToZero().Round());
+    // See http://crbug.com/1112560
+    if (!LayoutUnit(line_info.ComputeWidthInFloat()).MightBeSaturated()) {
+      DCHECK_EQ(inline_size.Round(),
+                line_info.ComputeWidth().ClampNegativeToZero().Round());
+    }
+#endif
 
     for (const NGInlineItemResult& item_result : line_info.Results()) {
       DCHECK(item_result.item);
@@ -1684,6 +1780,14 @@ void NGInlineNode::CheckConsistency() const {
            item.Style() == item.GetLayoutObject()->Style());
   }
 #endif
+}
+
+bool NGInlineNode::ShouldReportLetterSpacingUseCounterForTesting(
+    const LayoutObject* layout_object,
+    bool first_line,
+    const LayoutBlockFlow* block_flow) {
+  return ShouldReportLetterSpacingUseCounter(layout_object, first_line,
+                                             block_flow);
 }
 
 String NGInlineNode::ToString() const {

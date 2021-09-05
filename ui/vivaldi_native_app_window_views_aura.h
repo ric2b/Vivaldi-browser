@@ -26,7 +26,7 @@ class VivaldiNativeAppWindowViewsAura : public VivaldiNativeAppWindowViews {
       const ui::WindowShowState restore_state) const;
 
   // WidgetDelegate implementation.
-  views::NonClientFrameView* CreateNonClientFrameView(
+  std::unique_ptr<views::NonClientFrameView> CreateNonClientFrameView(
       views::Widget* widget) override;
 
   // VivaldiNativeAppWindowViews implementation.

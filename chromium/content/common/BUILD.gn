@@ -56,11 +56,6 @@ source_set("common") {
     "android/use_zoom_for_dsf_policy_android.cc",
     "appcache_interfaces.cc",
     "appcache_interfaces.h",
-    "ax_content_node_data.cc",
-    "ax_content_node_data.h",
-    "ax_content_tree_data.cc",
-    "ax_content_tree_data.h",
-    "ax_content_tree_update.h",
     "ax_serialization_utils.cc",
     "ax_serialization_utils.h",
     "background_fetch/background_fetch_types.cc",
@@ -126,7 +121,6 @@ source_set("common") {
     "input/gesture_event_stream_validator.cc",
     "input/gesture_event_stream_validator.h",
     "input/input_event_ack_state.cc",
-    "input/input_event_dispatch_type.h",
     "input/input_event_stream_validator.cc",
     "input/input_event_stream_validator.h",
     "input/synthetic_gesture_params.cc",
@@ -189,9 +183,9 @@ source_set("common") {
     "skia_utils.cc",
     "skia_utils.h",
     "state_transitions.h",
-    "text_input_client_messages.h",
     "thread_pool_util.cc",
     "thread_pool_util.h",
+    "trace_utils.h",
     "unfreezable_frame_messages.h",
     "unique_name_helper.cc",
     "unique_name_helper.h",
@@ -199,8 +193,6 @@ source_set("common") {
     "url_schemes.h",
     "user_agent.cc",
     "view_messages.h",
-    "visual_properties.cc",
-    "visual_properties.h",
     "web_package/signed_exchange_utils.cc",
     "web_package/signed_exchange_utils.h",
     "widget_messages.h",
@@ -218,15 +210,17 @@ source_set("common") {
     "//cc/ipc",
     "//gpu/command_buffer/common",
     "//ipc",
+    "//sandbox/policy",
     "//services/network:network_service",
     "//services/service_manager/public/cpp",
-    "//services/service_manager/sandbox",
     "//third_party/blink/public:blink_headers",
     "//third_party/blink/public/common",
     "//ui/accessibility",
     "//ui/accessibility/mojom",
     "//ui/base/cursor:cursor_base",
     "//ui/base/cursor/mojom:cursor_type",
+    "//ui/base/dragdrop/mojom:mojom_headers",
+    "//ui/base/dragdrop/mojom:mojom_shared",
     "//ui/events/ipc",
   ]
   deps = [
@@ -234,6 +228,7 @@ source_set("common") {
     "//base",
     "//base/third_party/dynamic_annotations",
     "//build:branding_buildflags",
+    "//build:lacros_buildflags",
     "//build/util:webkit_version",
     "//components/discardable_memory/common",
     "//components/services/filesystem/public/mojom",
@@ -313,8 +308,8 @@ source_set("common") {
   if (is_android && use_seccomp_bpf) {
     set_sources_assignment_filter([])
     sources += [
-      "//services/service_manager/sandbox/linux/bpf_base_policy_linux.cc",
-      "//services/service_manager/sandbox/linux/bpf_base_policy_linux.h",
+      "//sandbox/policy/linux/bpf_base_policy_linux.cc",
+      "//sandbox/policy/linux/bpf_base_policy_linux.h",
     ]
     set_sources_assignment_filter(sources_assignment_filter)
   }
@@ -352,7 +347,7 @@ source_set("common") {
     sources -= [ "cursors/webcursor_aura.cc" ]
   }
 
-  if (is_linux) {
+  if (is_linux || is_chromeos) {
     sources += [
       "zygote/sandbox_support_linux.cc",
       "zygote/send_zygote_child_ping_linux.cc",
@@ -436,10 +431,8 @@ mojom("mojo_bindings") {
   disable_variants = true
 
   sources = [
+    "agent_scheduling_group.mojom",
     "associated_interfaces.mojom",
-    "ax_content_node_data.mojom",
-    "ax_content_tree_data.mojom",
-    "ax_content_tree_update.mojom",
     "child_process.mojom",
     "document_scoped_interface_bundle.mojom",
     "dom_automation_controller.mojom",
@@ -452,8 +445,6 @@ mojom("mojo_bindings") {
     "histogram_fetcher.mojom",
     "input/input_injector.mojom",
     "media/media_log_records.mojom",
-    "media/renderer_audio_input_stream_factory.mojom",
-    "media/renderer_audio_output_stream_factory.mojom",
     "native_types.mojom",
     "navigation_client.mojom",
     "navigation_params.mojom",
@@ -465,6 +456,7 @@ mojom("mojo_bindings") {
     "renderer.mojom",
     "renderer_host.mojom",
     "renderer_variations_configuration.mojom",
+    "web_ui.mojom",
   ]
 
   enabled_features = []
@@ -479,57 +471,6 @@ mojom("mojo_bindings") {
   }
 
   cpp_typemaps = [
-    {
-      types = [
-        {
-          mojom = "ax.mojom.AXContentNodeData"
-          cpp = "::content::AXContentNodeData"
-        },
-      ]
-      traits_headers =
-          [ "//content/common/ax_content_node_data_mojom_traits.h" ]
-      traits_sources =
-          [ "//content/common/ax_content_node_data_mojom_traits.cc" ]
-      traits_public_deps = [
-        ":mojo_bindings_shared",
-        "//ui/accessibility",
-      ]
-      traits_deps = [ "//ui/accessibility/mojom" ]
-    },
-    {
-      types = [
-        {
-          mojom = "ax.mojom.AXContentTreeData"
-          cpp = "::content::AXContentTreeData"
-        },
-      ]
-      traits_headers =
-          [ "//content/common/ax_content_tree_data_mojom_traits.h" ]
-      traits_sources =
-          [ "//content/common/ax_content_tree_data_mojom_traits.cc" ]
-      traits_public_deps = [
-        ":mojo_bindings_shared",
-        "//ui/accessibility",
-      ]
-      traits_deps = [ "//ui/accessibility/mojom" ]
-    },
-    {
-      types = [
-        {
-          mojom = "ax.mojom.AXContentTreeUpdate"
-          cpp = "::content::AXContentTreeUpdate"
-        },
-      ]
-      traits_headers =
-          [ "//content/common/ax_content_tree_update_mojom_traits.h" ]
-      traits_sources =
-          [ "//content/common/ax_content_tree_update_mojom_traits.cc" ]
-      traits_public_deps = [
-        ":mojo_bindings_shared",
-        "//ui/accessibility",
-      ]
-      traits_deps = [ "//ui/accessibility/mojom" ]
-    },
     {
       types = [
         {
@@ -598,7 +539,7 @@ mojom("mojo_bindings") {
         },
         {
           mojom = "content.mojom.VisualProperties"
-          cpp = "::content::VisualProperties"
+          cpp = "::blink::VisualProperties"
         },
         {
           mojom = "content.mojom.WebCursor"
@@ -619,7 +560,7 @@ mojom("mojo_bindings") {
         "//content/common/input/synthetic_smooth_drag_gesture_params.h",
         "//content/common/input/synthetic_smooth_scroll_gesture_params.h",
         "//content/common/input/synthetic_tap_gesture_params.h",
-        "//content/common/visual_properties.h",
+        "//third_party/blink/public/common/widget/visual_properties.h",
         "//content/public/common/web_preferences.h",
         "//net/base/network_change_notifier.h",
         "//third_party/blink/public/common/input/web_coalesced_input_event_mojom_traits.h",

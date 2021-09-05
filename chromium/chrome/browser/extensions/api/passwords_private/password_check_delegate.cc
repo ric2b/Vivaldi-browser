@@ -39,6 +39,8 @@
 #include "components/password_manager/core/browser/ui/compromised_credentials_manager.h"
 #include "components/password_manager/core/browser/ui/credential_utils.h"
 #include "components/password_manager/core/browser/ui/saved_passwords_presenter.h"
+#include "components/password_manager/core/browser/well_known_change_password_util.h"
+#include "components/password_manager/core/common/password_manager_features.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "components/url_formatter/elide_url.h"
@@ -64,6 +66,11 @@ using CompromisedCredentialsView =
 using SavedPasswordsView =
     password_manager::SavedPasswordsPresenter::SavedPasswordsView;
 using State = password_manager::BulkLeakCheckService::State;
+
+std::unique_ptr<std::string> GetChangePasswordUrl(const GURL& url) {
+  return std::make_unique<std::string>(
+      password_manager::CreateChangePasswordUrl(url).spec());
+}
 
 }  // namespace
 
@@ -259,14 +266,14 @@ PasswordCheckDelegate::GetCompromisedCredentials() {
       api_credential.is_android_credential = true;
       // |formatted_orgin|, |detailed_origin| and |change_password_url| need
       // special handling for Android. Here we use affiliation information
-      // instead of the signon_realm.
+      // instead of the origin.
       const PasswordForm& android_form =
           compromised_credentials_manager_.GetSavedPasswordsFor(credential)[0];
       if (!android_form.app_display_name.empty()) {
         api_credential.formatted_origin = android_form.app_display_name;
         api_credential.detailed_origin = android_form.app_display_name;
         api_credential.change_password_url =
-            std::make_unique<std::string>(android_form.affiliated_web_realm);
+            GetChangePasswordUrl(GURL(android_form.affiliated_web_realm));
       } else {
         // In case no affiliation information could be obtained show the
         // formatted package name to the user. An empty change_password_url will
@@ -280,7 +287,7 @@ PasswordCheckDelegate::GetCompromisedCredentials() {
       api_credential.is_android_credential = false;
       api_credential.formatted_origin =
           base::UTF16ToUTF8(url_formatter::FormatUrl(
-              GURL(credential.signon_realm),
+              credential.url.GetOrigin(),
               url_formatter::kFormatUrlOmitDefaults |
                   url_formatter::kFormatUrlOmitHTTPS |
                   url_formatter::kFormatUrlOmitTrivialSubdomains |
@@ -288,9 +295,8 @@ PasswordCheckDelegate::GetCompromisedCredentials() {
               net::UnescapeRule::SPACES, nullptr, nullptr, nullptr));
       api_credential.detailed_origin =
           base::UTF16ToUTF8(url_formatter::FormatUrlForSecurityDisplay(
-              GURL(credential.signon_realm)));
-      api_credential.change_password_url =
-          std::make_unique<std::string>(credential.signon_realm);
+              credential.url.GetOrigin()));
+      api_credential.change_password_url = GetChangePasswordUrl(credential.url);
     }
 
     api_credential.id =

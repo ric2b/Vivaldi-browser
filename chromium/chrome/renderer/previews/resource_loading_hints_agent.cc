@@ -70,22 +70,35 @@ void ResourceLoadingHintsAgent::DidCreateNewDocument() {
   if (!GetDocumentURL().SchemeIsHTTPOrHTTPS())
     return;
 
-  if (subresource_patterns_to_block_.empty())
-    return;
-
   blink::WebLocalFrame* web_frame = render_frame()->GetWebFrame();
   DCHECK(web_frame);
 
-  std::unique_ptr<blink::WebLoadingHintsProvider> loading_hints =
-      std::make_unique<blink::WebLoadingHintsProvider>(
-          ukm_source_id_.value(),
-          convert_to_web_vector(subresource_patterns_to_block_));
+  if (!subresource_patterns_to_block_.empty()) {
+    std::unique_ptr<blink::WebLoadingHintsProvider> loading_hints =
+        std::make_unique<blink::WebLoadingHintsProvider>(
+            ukm_source_id_.value(),
+            convert_to_web_vector(subresource_patterns_to_block_));
 
-  web_frame->GetDocumentLoader()->SetLoadingHintsProvider(
-      std::move(loading_hints));
-  // Once the hints are sent to the document loader, clear the local copy to
-  // prevent accidental reuse.
-  subresource_patterns_to_block_.clear();
+    web_frame->GetDocumentLoader()->SetLoadingHintsProvider(
+        std::move(loading_hints));
+    // Once the hints are sent to the document loader, clear the local copy to
+    // prevent accidental reuse.
+    subresource_patterns_to_block_.clear();
+  }
+
+  // Pass the optimization hints for Blink to LocalFrame.
+  // TODO(https://crbug.com/1113980): Onion-soupify the optimization guide for
+  // Blink so that we can directly pass the hints without mojom variant
+  // conversion.
+  if (blink_optimization_guide_hints_ &&
+      blink_optimization_guide_hints_->delay_async_script_execution_hints) {
+    web_frame->SetOptimizationGuideHints(
+        blink_optimization_guide_hints_->delay_async_script_execution_hints
+            ->delay_type);
+  }
+  // Once the hints are sent to the local frame, clear the local copy to prevent
+  // accidental reuse.
+  blink_optimization_guide_hints_.reset();
 }
 
 void ResourceLoadingHintsAgent::OnDestruct() {
@@ -108,10 +121,6 @@ void ResourceLoadingHintsAgent::SetResourceLoadingHints(
     blink::mojom::PreviewsResourceLoadingHintsPtr resource_loading_hints) {
   if (!IsMainFrame())
     return;
-
-  UMA_HISTOGRAM_COUNTS_100(
-      "ResourceLoadingHints.CountBlockedSubresourcePatterns",
-      resource_loading_hints->subresources_to_block.size());
 
   ukm_source_id_ = resource_loading_hints->ukm_source_id;
 
@@ -145,6 +154,13 @@ void ResourceLoadingHintsAgent::SetLiteVideoHint(
       lite_video::LiteVideoHintAgent::Get(render_frame());
   if (lite_video_hint_agent)
     lite_video_hint_agent->SetLiteVideoHint(std::move(lite_video_hint));
+}
+
+void ResourceLoadingHintsAgent::SetBlinkOptimizationGuideHints(
+    blink::mojom::BlinkOptimizationGuideHintsPtr hints) {
+  if (!IsMainFrame())
+    return;
+  blink_optimization_guide_hints_ = std::move(hints);
 }
 
 void ResourceLoadingHintsAgent::StopThrottlingMediaRequests() {

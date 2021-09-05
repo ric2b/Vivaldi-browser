@@ -48,6 +48,12 @@ Polymer({
       type: Boolean,
       value: false,
     },
+
+    /**
+     * Whether the input is invalid.
+     * @private
+     */
+    inputInvalid_: Boolean,
   },
 
   /** @private {?PasswordManagerProxy} */
@@ -84,7 +90,7 @@ Polymer({
     this.passwordManager_
         .changeCompromisedCredential(
             assert(this.item), this.$.passwordInput.value)
-        .then(() => {
+        .finally(() => {
           this.close();
         });
   },
@@ -128,8 +134,7 @@ Polymer({
    * @return {string} The text to be displayed as the dialog's footnote.
    */
   getFootnote_() {
-    return this.i18n(
-        'editCompromisedPasswordFootnote', this.item.formattedOrigin);
+    return this.i18n('editPasswordFootnote', this.item.formattedOrigin);
   },
 
   /**

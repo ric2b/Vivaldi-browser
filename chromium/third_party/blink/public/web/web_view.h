@@ -36,6 +36,7 @@
 #include "third_party/blink/public/mojom/input/focus_type.mojom-shared.h"
 #include "third_party/blink/public/mojom/page/page.mojom-shared.h"
 #include "third_party/blink/public/mojom/page/page_visibility_state.mojom-shared.h"
+#include "third_party/blink/public/mojom/widget/screen_orientation.mojom-shared.h"
 #include "third_party/blink/public/platform/cross_variant_mojo_util.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -47,6 +48,7 @@ struct BrowserControlsParams;
 }
 
 namespace gfx {
+class ColorSpace;
 class Point;
 class PointF;
 class Rect;
@@ -67,10 +69,9 @@ class WebSettings;
 class WebString;
 class WebViewClient;
 class WebWidget;
-struct WebDeviceEmulationParams;
+struct DeviceEmulationParams;
 struct WebRect;
 struct WebSize;
-struct WebTextAutosizerPageInfo;
 struct WebWindowFeatures;
 
 class WebView {
@@ -93,6 +94,7 @@ class WebView {
   //
   // clients may be null, but should both be null or not together.
   // |is_hidden| defines the initial visibility of the page.
+  // [is_inside_portal] defines whether the page is inside_portal.
   // |compositing_enabled| dictates whether accelerated compositing should be
   // enabled for the page. It must be false if no clients are provided, or if a
   // LayerTreeView will not be set for the WebWidget.
@@ -104,6 +106,7 @@ class WebView {
   BLINK_EXPORT static WebView* Create(
       WebViewClient*,
       bool is_hidden,
+      bool is_inside_portal,
       bool compositing_enabled,
       WebView* opener,
       CrossVariantMojoAssociatedReceiver<mojom::PageBroadcastInterfaceBase>
@@ -132,6 +135,11 @@ class WebView {
 
   // Initializes the various client interfaces.
   virtual void SetPrerendererClient(WebPrerendererClient*) = 0;
+
+  // Called when some JS code has instructed the window associated to the main
+  // frame to close, which will result in a request to the browser to close the
+  // RenderWidget associated to it.
+  virtual void CloseWindowSoon() = 0;
 
   // Options -------------------------------------------------------------
 
@@ -315,20 +323,21 @@ class WebView {
 
   virtual WebSize GetSize() = 0;
 
+  // Override the screen orientation override.
+  virtual void SetScreenOrientationOverrideForTesting(
+      base::Optional<blink::mojom::ScreenOrientation> orientation) = 0;
+
   // Auto-Resize -----------------------------------------------------------
 
-  // In auto-resize mode, the view is automatically adjusted to fit the html
-  // content within the given bounds.
-  virtual void EnableAutoResizeMode(const WebSize& min_size,
-                                    const WebSize& max_size) = 0;
+  // Return the state of the auto resize mode.
+  virtual bool AutoResizeMode() = 0;
 
-  // Turn off auto-resize.
-  virtual void DisableAutoResizeMode() = 0;
+  // Enable auto resize.
+  virtual void EnableAutoResizeForTesting(const gfx::Size& min_size,
+                                          const gfx::Size& max_size) = 0;
 
-  // Media ---------------------------------------------------------------
-
-  // Notifies WebView when audio is started or stopped.
-  virtual void AudioStateChanged(bool is_audio_playing) = 0;
+  // Disable auto resize.
+  virtual void DisableAutoResizeForTesting(const gfx::Size& new_size) = 0;
 
   // Data exchange -------------------------------------------------------
 
@@ -365,11 +374,10 @@ class WebView {
   // Developer tools -----------------------------------------------------
 
   // Enables device emulation as specified in params.
-  virtual void EnableDeviceEmulation(const WebDeviceEmulationParams&) = 0;
+  virtual void EnableDeviceEmulation(const DeviceEmulationParams&) = 0;
 
   // Cancel emulation started via |enableDeviceEmulation| call.
   virtual void DisableDeviceEmulation() = 0;
-
 
   // Context menu --------------------------------------------------------
 
@@ -409,6 +417,9 @@ class WebView {
   // well.
   virtual void SetBaseBackgroundColor(SkColor) {}
 
+  virtual void SetDeviceColorSpaceForTesting(
+      const gfx::ColorSpace& color_space) = 0;
+
   // Scheduling -----------------------------------------------------------
 
   virtual PageScheduler* Scheduler() const = 0;
@@ -419,6 +430,21 @@ class WebView {
   virtual void SetVisibilityState(mojom::PageVisibilityState visibility_state,
                                   bool is_initial_state) = 0;
   virtual mojom::PageVisibilityState GetVisibilityState() = 0;
+
+  // PageLifecycleState ----------------------------------------------------
+
+  // Sets the |visibility| and |pagehide_dispatch| properties for the
+  // PageLifecycleState of this page from a new page's commit. Should only be
+  // called from a main-frame same-site navigation where we did a proactive
+  // BrowsingInstance swap and we're reusing the old page's process.
+  // Note that unlike SetPageLifecycleState in PageBroadcast/WebViewImpl, we
+  // don't need to pass a callback here to notify the browser site that the
+  // PageLifecycleState has been successfully updated.
+  // TODO(rakina): When it's possible to pass PageLifecycleState here, pass
+  // PageLifecycleState instead.
+  virtual void SetPageLifecycleStateFromNewPageCommit(
+      mojom::PageVisibilityState visibility,
+      mojom::PagehideDispatch pagehide_dispatch) = 0;
 
   // Page Importance Signals ----------------------------------------------
 
@@ -476,13 +502,6 @@ class WebView {
   virtual WebFrameWidget* MainFrameWidget() = 0;
 
   // Portals --------------------------------------------------------------
-
-  // Informs the page that it is inside a portal.
-  virtual void SetInsidePortal(bool inside_portal) = 0;
-
-  // Use to transfer TextAutosizer state from the local main frame renderer to
-  // remote main frame renderers.
-  virtual void SetTextAutosizerPageInfo(const WebTextAutosizerPageInfo&) {}
 
  protected:
   ~WebView() = default;

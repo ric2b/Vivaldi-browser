@@ -15,6 +15,7 @@
 #include "components/password_manager/core/browser/compromised_credentials_table.h"
 #include "components/password_manager/core/browser/ui/credential_utils.h"
 #include "components/password_manager/core/browser/ui/saved_passwords_presenter.h"
+#include "components/password_manager/core/common/password_manager_features.h"
 
 namespace password_manager {
 
@@ -70,6 +71,23 @@ CredentialPasswordsMap JoinCompromisedCredentialsWithSavedPasswords(
     SavedPasswordsPresenter::SavedPasswordsView saved_passwords) {
   CredentialPasswordsMap credentials_to_forms;
 
+  bool mark_all_credentials_leaked_for_testing =
+      base::GetFieldTrialParamByFeatureAsBool(
+          password_manager::features::kPasswordChangeInSettings,
+          password_manager::features::
+              kPasswordChangeInSettingsWithForcedWarningForEverySite,
+          false);
+  if (mark_all_credentials_leaked_for_testing) {
+    for (const auto& form : saved_passwords) {
+      CredentialView compromised_credential(form);
+      auto& credential_to_form = credentials_to_forms[compromised_credential];
+      credential_to_form.type = CompromiseTypeFlags::kCredentialLeaked;
+      credential_to_form.forms.push_back(form);
+      credential_to_form.latest_time = form.date_created;
+    }
+    return credentials_to_forms;
+  }
+
   // Since a single (signon_realm, username) pair might have multiple
   // corresponding entries in saved_passwords, we are using a multiset and doing
   // look-up via equal_range. In most cases the resulting |range| should have a
@@ -120,8 +138,31 @@ std::vector<CredentialWithPassword> ExtractCompromisedCredentials(
 
 }  // namespace
 
+CredentialView::CredentialView(std::string signon_realm,
+                               GURL url,
+                               base::string16 username,
+                               base::string16 password)
+    : signon_realm(std::move(signon_realm)),
+      url(std::move(url)),
+      username(std::move(username)),
+      password(std::move(password)) {}
+
+CredentialView::CredentialView(const autofill::PasswordForm& form)
+    : signon_realm(form.signon_realm),
+      url(form.url),
+      username(form.username_value),
+      password(form.password_value) {}
+
+CredentialView::CredentialView(const CredentialView& credential) = default;
+CredentialView::CredentialView(CredentialView&& credential) = default;
+CredentialView& CredentialView::operator=(const CredentialView& credential) =
+    default;
+CredentialView& CredentialView::operator=(CredentialView&& credential) =
+    default;
+CredentialView::~CredentialView() = default;
+
 CredentialWithPassword::CredentialWithPassword(const CredentialView& credential)
-    : CredentialView(std::move(credential)) {}
+    : CredentialView(credential) {}
 CredentialWithPassword::~CredentialWithPassword() = default;
 CredentialWithPassword::CredentialWithPassword(
     const CredentialWithPassword& other) = default;
@@ -129,12 +170,13 @@ CredentialWithPassword::CredentialWithPassword(
 CredentialWithPassword::CredentialWithPassword(CredentialWithPassword&& other) =
     default;
 CredentialWithPassword::CredentialWithPassword(
-    const CompromisedCredentials& credential) {
-  username = credential.username;
-  signon_realm = credential.signon_realm;
-  create_time = credential.create_time;
-  compromise_type = ConvertCompromiseType(credential.compromise_type);
-}
+    const CompromisedCredentials& credential)
+    : CredentialView(credential.signon_realm,
+                     GURL(credential.signon_realm),
+                     credential.username,
+                     /*password=*/{}),
+      create_time(credential.create_time),
+      compromise_type(ConvertCompromiseType(credential.compromise_type)) {}
 
 CredentialWithPassword& CredentialWithPassword::operator=(
     const CredentialWithPassword& other) = default;

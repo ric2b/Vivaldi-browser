@@ -8,7 +8,7 @@
 <link rel="import" href="../../prefs/prefs.html">
 <link rel="import" href="../os_route.html">
 <link rel="import" href="../../router.html">
-<link rel="import" href="../../settings_page/main_page_behavior.html">
+<link rel="import" href="../os_settings_page/main_page_behavior.html">
 <link rel="import" href="../../settings_page/settings_animated_pages.html">
 <link rel="import" href="../../settings_page/settings_section.html">
 <link rel="import" href="../../settings_page/settings_subpage.html">
@@ -63,7 +63,7 @@
       }
 
       iron-icon[icon='settings:check-circle'] {
-        fill: var(--cros-default-icon-color-prominent);
+        fill: var(--cros-icon-color-prominent);
       }
 
       iron-icon[icon='cr:error'] {
@@ -207,7 +207,9 @@
         </div>
 <if expr="_google_chrome">
         <div class="secondary">
-          <a href="$i18n{aboutTermsURL}">$i18n{aboutProductTos}</a>
+          <a href="$i18n{aboutTermsURL}" target="_blank">
+            $i18n{aboutProductTos}
+          </a>
         </div>
 </if>
       </div>

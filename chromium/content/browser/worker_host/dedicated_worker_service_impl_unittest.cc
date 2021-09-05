@@ -20,6 +20,8 @@
 #include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "third_party/blink/public/common/features.h"
+#include "third_party/blink/public/common/tokens/tokens.h"
+#include "third_party/blink/public/common/tokens/tokens_mojom_traits.h"
 #include "third_party/blink/public/mojom/worker/dedicated_worker_host_factory.mojom.h"
 #include "third_party/blink/public/mojom/worker/worker_main_script_load_params.mojom.h"
 
@@ -46,12 +48,14 @@ class MockDedicatedWorker
 
     if (base::FeatureList::IsEnabled(blink::features::kPlzDedicatedWorker)) {
       factory_->CreateWorkerHostAndStartScriptLoad(
+          blink::DedicatedWorkerToken(),
           /*script_url=*/GURL(), network::mojom::CredentialsMode::kSameOrigin,
           blink::mojom::FetchClientSettingsObject::New(),
           mojo::PendingRemote<blink::mojom::BlobURLToken>(),
           receiver_.BindNewPipeAndPassRemote());
     } else {
       factory_->CreateWorkerHost(
+          blink::DedicatedWorkerToken(),
           browser_interface_broker_.BindNewPipeAndPassReceiver(),
           base::BindOnce([](const network::CrossOriginEmbedderPolicy&) {}));
     }
@@ -159,14 +163,13 @@ class TestDedicatedWorkerServiceObserver
 
   // DedicatedWorkerService::Observer:
   void OnWorkerCreated(
-      DedicatedWorkerId dedicated_worker_id,
+      const blink::DedicatedWorkerToken& token,
       int worker_process_id,
       GlobalFrameRoutingId ancestor_render_frame_host_id) override {
     bool inserted =
         dedicated_worker_infos_
-            .emplace(dedicated_worker_id,
-                     DedicatedWorkerInfo{worker_process_id,
-                                         ancestor_render_frame_host_id})
+            .emplace(token, DedicatedWorkerInfo{worker_process_id,
+                                                ancestor_render_frame_host_id})
             .second;
     DCHECK(inserted);
 
@@ -174,15 +177,15 @@ class TestDedicatedWorkerServiceObserver
       std::move(on_worker_event_callback_).Run();
   }
   void OnBeforeWorkerDestroyed(
-      DedicatedWorkerId dedicated_worker_id,
+      const blink::DedicatedWorkerToken& token,
       GlobalFrameRoutingId ancestor_render_frame_host_id) override {
-    size_t removed = dedicated_worker_infos_.erase(dedicated_worker_id);
+    size_t removed = dedicated_worker_infos_.erase(token);
     DCHECK_EQ(removed, 1u);
 
     if (on_worker_event_callback_)
       std::move(on_worker_event_callback_).Run();
   }
-  void OnFinalResponseURLDetermined(DedicatedWorkerId dedicated_worker_id,
+  void OnFinalResponseURLDetermined(const blink::DedicatedWorkerToken& token,
                                     const GURL& url) override {}
 
   void RunUntilWorkerEvent() {
@@ -191,7 +194,7 @@ class TestDedicatedWorkerServiceObserver
     run_loop.Run();
   }
 
-  const base::flat_map<DedicatedWorkerId, DedicatedWorkerInfo>&
+  const base::flat_map<blink::DedicatedWorkerToken, DedicatedWorkerInfo>&
   dedicated_worker_infos() const {
     return dedicated_worker_infos_;
   }
@@ -201,7 +204,7 @@ class TestDedicatedWorkerServiceObserver
   // is called.
   base::OnceClosure on_worker_event_callback_;
 
-  base::flat_map<DedicatedWorkerId, DedicatedWorkerInfo>
+  base::flat_map<blink::DedicatedWorkerToken, DedicatedWorkerInfo>
       dedicated_worker_infos_;
 };
 

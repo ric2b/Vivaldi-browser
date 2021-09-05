@@ -21,6 +21,7 @@
 <translation id="1150565364351027703">Sólgleraugu</translation>
 <translation id="115443833402798225">Hangul Ahnmatae</translation>
 <translation id="1155759005174418845">Katalónskt</translation>
+<translation id="1172970565351728681">Um <ph name="REMAINING_TIME" /> eftir</translation>
 <translation id="1173894706177603556">Endurnefna</translation>
 <translation id="117624967391683467">Afritar <ph name="FILE_NAME" />...</translation>
 <translation id="1178581264944972037">Gera hlé</translation>
@@ -106,7 +107,6 @@
 <translation id="2085470240340828803">Skrá með heitið „<ph name="FILENAME" />“ er þegar fyrir hendi. Hvað viltu gera?</translation>
 <translation id="2121825465123208577">Breyta stærð</translation>
 <translation id="2136953289241069843">Umritun (namaste → नमस्कार)</translation>
-<translation id="2138867954865495510">Ekki tókst að opna „<ph name="PATH" />“: <ph name="ERROR_MESSAGE" /></translation>
 <translation id="2163152940313951844">Ógildur stafur: <ph name="CHARACTER_NAME" /></translation>
 <translation id="2164862903024139959">Víetnamskt lyklaborð (TCVN)</translation>
 <translation id="2168214441502403371">Persneskt lyklaborð</translation>
@@ -198,6 +198,7 @@
 <translation id="3236289833370040187">Eignarhald verður flutt á <ph name="DESTINATION_DOMAIN" />.</translation>
 <translation id="3241720467332021590">Írska</translation>
 <translation id="3245321423178950146">Óþekktur flytjandi</translation>
+<translation id="3248185426436836442">Í bið</translation>
 <translation id="3252266817569339921">Franskt</translation>
 <translation id="3254434849914415189">Veldu sjálfgefið forrit fyrir <ph name="FILE_TYPE" />-skrár:</translation>
 <translation id="3264582393905923483">Samhengi</translation>
@@ -208,6 +209,7 @@
 <translation id="3335337277364016868">Upptökuár</translation>
 <translation id="3338239663705455570">Slóvenskt lyklaborð</translation>
 <translation id="3353984535370177728">Veldu möppu til að hlaða inn</translation>
+<translation id="3356580349448036450">Ljúka</translation>
 <translation id="3399597614303179694">Makedónskt lyklaborð</translation>
 <translation id="3414856743105198592">Ef lausi geymslumiðillinn er forsniðinn eru öll gögn hreinsuð af honum. Viltu halda áfram?</translation>
 <translation id="3437801641691368414">Búin til</translation>
@@ -243,6 +245,7 @@
 <translation id="3780536599611287598">Þú hefur ekki heimild til að færa skrár í „<ph name="FOLDER_NAME" />“.</translation>
 <translation id="3786301125658655746">Þú ert ekki á netinu</translation>
 <translation id="3789841737615482174">Setja upp</translation>
+<translation id="3793469551756281394">Um <ph name="REMAINING_TIME_HOUR" /> <ph name="REMAINING_TIME_MINUTE" /> eftir</translation>
 <translation id="3798449238516105146">Útgáfa</translation>
 <translation id="3801082500826908679">Færeyska</translation>
 <translation id="3809272675881623365">Kanína</translation>
@@ -299,6 +302,7 @@
 <translation id="4481711095103932593">Þessari möppu er deilt með Windows</translation>
 <translation id="4487088045714738411">Belgískt lyklaborð</translation>
 <translation id="4522570452068850558">Upplýsingar</translation>
+<translation id="4542387084127299777">Ekki tókst að opna „<ph name="PATH" />“</translation>
 <translation id="4552678318981539154">Kaupa meira geymslurými</translation>
 <translation id="4559767610552730302">Gláka</translation>
 <translation id="4572815280350369984"><ph name="FILE_TYPE" /> skrá</translation>
@@ -510,6 +514,7 @@
 <translation id="6629841649550503054">Allt afritað á <ph name="BEGIN_LINK" />Google Drive!<ph name="END_LINK" /></translation>
 <translation id="6643016212128521049">Hreinsa</translation>
 <translation id="6650726141019353908">Bleikt fiðrildi</translation>
+<translation id="6657585470893396449">Aðgangsorð</translation>
 <translation id="6710213216561001401">Til baka</translation>
 <translation id="6718273304615422081">Þjappar...</translation>
 <translation id="6751256176799620176">Ein mappa valin</translation>
@@ -550,7 +555,6 @@
 <translation id="7012943028104619157"><ph name="ROOT_TITLE" /> (<ph name="ROOT_SUMMARY" />)</translation>
 <translation id="7014174261166285193">Uppsetningin mistókst.</translation>
 <translation id="7040138676081995583">Opna með...</translation>
-<translation id="7059566040011178088">Minna en <ph name="REMAINING_TIME" /></translation>
 <translation id="7100897339030255923"><ph name="COUNT" /> atriði valin</translation>
 <translation id="7106346894903675391">Kaupa meira geymslurými...</translation>
 <translation id="7126604456862387217">„&lt;b&gt;<ph name="SEARCH_STRING" />&lt;/b&gt;“ – &lt;em&gt;leita í Drive&lt;/em&gt;</translation>
@@ -661,7 +665,6 @@
 <translation id="8193175696669055101">Gerð tækis</translation>
 <translation id="8208580316430297579">Listaverk</translation>
 <translation id="8223479393428528563">Til að vista þessar skrár fyrir notkun án nettengingar skaltu tengjast netinu aftur, hægrismella á skrárnar og velja kostinn <ph name="OFFLINE_CHECKBOX_NAME" />.</translation>
-<translation id="8231972167769262174">Um <ph name="REMAINING_TIME" /></translation>
 <translation id="8249296373107784235">Hætta</translation>
 <translation id="8261506727792406068">Eyða</translation>
 <translation id="8269755669432358899">Draga saman svæði með ábendingum fyrir skrár</translation>
@@ -724,6 +727,7 @@
 <translation id="9065203028668620118">Breyta</translation>
 <translation id="9099674669267916096">Síðufjöldi</translation>
 <translation id="9110990317705400362">Við erum sífellt að leita leiða við að gera vefnotkun öruggari fyrir þig. Áður var það þannig að hvaða vefsvæði sem var gat birt kvaðningu um að þú bættir viðbót við vafrann. Í nýjustu útgáfum Google Chrome þarf notandinn að taka sérstaklega fram að Chrome eigi að setja upp viðbætur með því að bæta þeim við í gegnum síðuna Viðbætur. <ph name="BEGIN_LINK" />Frekari upplýsingar<ph name="END_LINK" /></translation>
+<translation id="9111102763498581341">Taka úr lás</translation>
 <translation id="912419004897138677">Kóðari</translation>
 <translation id="9129931661813833980">Festa möppu</translation>
 <translation id="9130775360844693113">Meðlimir „<ph name="DESTINATION_NAME" />“ fá aðgang að þessum atriðum.</translation>

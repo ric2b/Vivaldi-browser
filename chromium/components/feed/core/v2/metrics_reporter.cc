@@ -43,8 +43,32 @@ void ReportContentSuggestionsOpened(int index_in_stream) {
 }
 
 void ReportUserActionHistogram(FeedUserActionType action_type) {
-  base::UmaHistogramEnumeration("ContentSuggestions.Feed.UserAction",
+  base::UmaHistogramEnumeration("ContentSuggestions.Feed.UserActions",
                                 action_type);
+}
+
+std::string LoadLatencyStepName(LoadLatencyTimes::StepKind kind) {
+  switch (kind) {
+    case LoadLatencyTimes::kTaskExecution:
+      return "TaskStart";
+    case LoadLatencyTimes::kLoadFromStore:
+      return "LoadFromStore";
+    case LoadLatencyTimes::kUploadActions:
+      return "ActionUpload";
+    case LoadLatencyTimes::kQueryRequest:
+      return "QueryRequest";
+    case LoadLatencyTimes::kStreamViewed:
+      return "StreamView";
+  }
+}
+
+void ReportLoadLatencies(std::unique_ptr<LoadLatencyTimes> latencies) {
+  for (const LoadLatencyTimes::Step& step : latencies->steps()) {
+    base::UmaHistogramCustomTimes(
+        "ContentSuggestions.Feed.LoadStepLatency." +
+            LoadLatencyStepName(step.kind),
+        step.latency, base::TimeDelta::FromMilliseconds(50), kLoadTimeout, 50);
+  }
 }
 
 }  // namespace
@@ -90,6 +114,7 @@ void MetricsReporter::FinalizeVisit() {
     return;
   engaged_reported_ = false;
   engaged_simple_reported_ = false;
+  scrolled_reported_ = false;
   TrackTimeSpentInFeed(false);
 }
 
@@ -146,7 +171,30 @@ void MetricsReporter::ContentSliceViewed(SurfaceId surface_id,
                                          int index_in_stream) {
   base::UmaHistogramExactLinear("NewTabPage.ContentSuggestions.Shown",
                                 index_in_stream, kMaxSuggestionsTotal);
+}
 
+void MetricsReporter::FeedViewed(SurfaceId surface_id) {
+  if (load_latencies_) {
+    load_latencies_->StepComplete(LoadLatencyTimes::kStreamViewed);
+
+    // Log latencies for debugging.
+    if (VLOG_IS_ON(2)) {
+      for (const LoadLatencyTimes::Step& step : load_latencies_->steps()) {
+        DVLOG(2) << "LoadStepLatency." << LoadLatencyStepName(step.kind)
+                 << " = " << step.latency;
+      }
+    }
+
+    if (!load_latencies_recorded_) {
+      // Use |load_latencies_recorded_| to only report load latencies once.
+      // This generally will be the worst-case, since caches are likely to be
+      // cold, a network request is more likely to be required, and Chrome
+      // may be working on initializing other systems.
+      load_latencies_recorded_ = true;
+      ReportLoadLatencies(std::move(load_latencies_));
+    }
+    load_latencies_ = nullptr;
+  }
   ReportOpenFeedIfNeeded(surface_id, true);
 }
 
@@ -157,6 +205,11 @@ void MetricsReporter::OpenAction(int index_in_stream) {
       base::UserMetricsAction("ContentSuggestions.Feed.CardAction.Open"));
   ReportContentSuggestionsOpened(index_in_stream);
   RecordInteraction();
+}
+
+void MetricsReporter::OpenVisitComplete(base::TimeDelta visit_time) {
+  base::UmaHistogramLongTimes("ContentSuggestions.Feed.VisitDuration",
+                              visit_time);
 }
 
 void MetricsReporter::OpenInNewTabAction(int index_in_stream) {
@@ -231,9 +284,16 @@ void MetricsReporter::ContextMenuOpened() {
       "ContentSuggestions.Feed.CardAction.ContextMenu"));
 }
 
+void MetricsReporter::EphemeralStreamChange() {
+  ReportUserActionHistogram(FeedUserActionType::kEphemeralChange);
+}
+
+void MetricsReporter::EphemeralStreamChangeRejected() {
+  ReportUserActionHistogram(FeedUserActionType::kEphemeralChangeRejected);
+}
+
 void MetricsReporter::SurfaceOpened(SurfaceId surface_id) {
   ReportPersistentDataIfDayIsDone();
-
   surfaces_waiting_for_content_.emplace(surface_id, clock_->NowTicks());
   ReportUserActionHistogram(FeedUserActionType::kOpenedFeedSurface);
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
@@ -269,6 +329,7 @@ void MetricsReporter::ReportOpenFeedIfNeeded(SurfaceId surface_id,
     return;
   base::TimeDelta latency = clock_->NowTicks() - iter->second;
   surfaces_waiting_for_content_.erase(iter);
+
   if (success) {
     base::UmaHistogramCustomTimes(
         "ContentSuggestions.Feed.UserJourney.OpenFeed.SuccessDuration", latency,
@@ -344,10 +405,13 @@ void MetricsReporter::NetworkRequestComplete(NetworkRequestType type,
   }
 }
 
-void MetricsReporter::OnLoadStream(LoadStreamStatus load_from_store_status,
-                                   LoadStreamStatus final_status) {
+void MetricsReporter::OnLoadStream(
+    LoadStreamStatus load_from_store_status,
+    LoadStreamStatus final_status,
+    std::unique_ptr<LoadLatencyTimes> load_latencies) {
   DVLOG(1) << "OnLoadStream load_from_store_status=" << load_from_store_status
            << " final_status=" << final_status;
+  load_latencies_ = std::move(load_latencies);
   base::UmaHistogramEnumeration(
       "ContentSuggestions.Feed.LoadStreamStatus.Initial", final_status);
   if (load_from_store_status != LoadStreamStatus::kNoStatus) {
@@ -380,6 +444,11 @@ void MetricsReporter::OnLoadMore(LoadStreamStatus status) {
       "ContentSuggestions.Feed.LoadStreamStatus.LoadMore", status);
 }
 
+void MetricsReporter::OnImageFetched(int net_error_or_http_status) {
+  base::UmaHistogramSparse("ContentSuggestions.Feed.ImageFetchStatus",
+                           net_error_or_http_status);
+}
+
 void MetricsReporter::OnUploadActionsBatch(UploadActionsBatchStatus status) {
   DVLOG(1) << "UploadActionsBatchStatus: " << status;
   base::UmaHistogramEnumeration(
@@ -390,6 +459,17 @@ void MetricsReporter::OnUploadActions(UploadActionsStatus status) {
   DVLOG(1) << "UploadActionsTask finished with status " << status;
   base::UmaHistogramEnumeration("ContentSuggestions.Feed.UploadActionsStatus",
                                 status);
+}
+
+void MetricsReporter::ActivityLoggingEnabled(
+    bool response_has_logging_enabled) {
+  base::UmaHistogramBoolean("ContentSuggestions.Feed.ActivityLoggingEnabled",
+                            response_has_logging_enabled);
+}
+
+void MetricsReporter::NoticeCardFulfilled(bool response_has_notice_card) {
+  base::UmaHistogramBoolean("ContentSuggestions.Feed.NoticeCardFulfilled",
+                            response_has_notice_card);
 }
 
 void MetricsReporter::SurfaceReceivedContent(SurfaceId surface_id) {

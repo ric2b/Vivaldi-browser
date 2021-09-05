@@ -14,6 +14,7 @@
 #include "base/unguessable_token.h"
 #include "base/values.h"
 #include "build/build_config.h"
+#include "build/lacros_buildflags.h"
 #include "content/browser/devtools/browser_devtools_agent_host.h"
 #include "content/browser/devtools/devtools_agent_host_impl.h"
 #include "content/browser/devtools/devtools_manager.h"
@@ -85,6 +86,7 @@ std::unique_ptr<Target::TargetInfo> CreateInfo(DevToolsAgentHost* host) {
           .SetUrl(host->GetURL().spec())
           .SetType(host->GetType())
           .SetAttached(host->IsAttached())
+          .SetCanAccessOpener(host->CanAccessOpener())
           .Build();
   if (!host->GetOpenerId().empty())
     target_info->SetOpenerId(host->GetOpenerId());
@@ -105,7 +107,7 @@ static std::string TerminationStatusToString(base::TerminationStatus status) {
       return "crashed";
     case base::TERMINATION_STATUS_STILL_RUNNING:
       return "still running";
-#if defined(OS_CHROMEOS)
+#if defined(OS_CHROMEOS) || BUILDFLAG(IS_LACROS)
     // Used for the case when oom-killer kills a process on ChromeOS.
     case base::TERMINATION_STATUS_PROCESS_WAS_KILLED_BY_OOM:
       return "oom killed";
@@ -465,7 +467,7 @@ class TargetHandler::Session : public DevToolsAgentHostClient {
       // was introduced. Try a DCHECK instead and possibly remove the check.
       if (!handler_->root_session_->HasChildSession(id_))
         return;
-      handler_->root_session_->GetClient()->DispatchProtocolMessage(
+      GetRootClient()->DispatchProtocolMessage(
           handler_->root_session_->GetAgentHost(), message);
       return;
     }
@@ -481,6 +483,26 @@ class TargetHandler::Session : public DevToolsAgentHostClient {
   void AgentHostClosed(DevToolsAgentHost* agent_host) override {
     DCHECK(agent_host == agent_host_.get());
     Detach(true);
+  }
+
+  bool MayAttachToURL(const GURL& url, bool is_webui) override {
+    return GetRootClient()->MayAttachToURL(url, is_webui);
+  }
+
+  bool MayAttachToBrowser() override {
+    return GetRootClient()->MayAttachToBrowser();
+  }
+
+  bool MayReadLocalFiles() override {
+    return GetRootClient()->MayReadLocalFiles();
+  }
+
+  bool MayWriteLocalFiles() override {
+    return GetRootClient()->MayWriteLocalFiles();
+  }
+
+  content::DevToolsAgentHostClient* GetRootClient() {
+    return handler_->root_session_->GetClient();
   }
 
   TargetHandler* handler_;

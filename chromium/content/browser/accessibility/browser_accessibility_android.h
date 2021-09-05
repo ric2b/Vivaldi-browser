@@ -13,7 +13,6 @@
 
 #include "base/android/scoped_java_ref.h"
 #include "base/macros.h"
-#include "base/timer/elapsed_timer.h"
 #include "content/browser/accessibility/browser_accessibility.h"
 #include "ui/accessibility/platform/ax_platform_node.h"
 
@@ -46,6 +45,7 @@ class CONTENT_EXPORT BrowserAccessibilityAndroid : public BrowserAccessibility {
   bool IsHierarchical() const;
   bool IsLink() const;
   bool IsMultiLine() const;
+  bool IsMultiselectable() const;
   bool IsRangeType() const;
   bool IsScrollable() const;
   bool IsSelected() const;
@@ -88,6 +88,9 @@ class CONTENT_EXPORT BrowserAccessibilityAndroid : public BrowserAccessibility {
   std::string GetRoleString() const;
 
   base::string16 GetContentInvalidErrorMessage() const;
+
+  base::string16 GetStateDescription() const;
+  base::string16 GetMultiselectableStateDescription() const;
 
   base::string16 GetRoleDescription() const;
 
@@ -161,11 +164,6 @@ class CONTENT_EXPORT BrowserAccessibilityAndroid : public BrowserAccessibility {
   // and end offsets.
   void GetSuggestions(std::vector<int>* suggestion_starts,
                       std::vector<int>* suggestion_ends) const;
-
-  // Used to keep track of when to stop reporting content_invalid.
-  // Timer only applies if node has focus.
-  void ResetContentInvalidTimer();
-  base::ElapsedTimer content_invalid_timer_ = base::ElapsedTimer();
 
  private:
   // This gives BrowserAccessibility::Create access to the class constructor.

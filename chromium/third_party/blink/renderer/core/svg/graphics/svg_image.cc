@@ -168,6 +168,8 @@ SVGImage::SVGImage(ImageObserver* observer, bool is_multipart)
       has_pending_timeline_rewind_(false) {}
 
 SVGImage::~SVGImage() {
+  AllowDestroyingLayoutObjectInFinalizerScope scope;
+
   if (frame_client_)
     frame_client_->ClearImage();
 
@@ -869,7 +871,7 @@ Image::SizeAvailability SVGImage::DataChanged(bool all_data_received) {
                                              base::UnguessableToken::Create(),
                                              nullptr, nullptr);
     frame->SetView(MakeGarbageCollected<LocalFrameView>(*frame));
-    frame->Init();
+    frame->Init(nullptr);
   }
 
   FrameLoader& loader = frame->Loader();
@@ -922,6 +924,33 @@ bool SVGImage::IsSizeAvailable() {
 
 String SVGImage::FilenameExtension() const {
   return "svg";
+}
+
+SkBitmap SVGImage::AsSkBitmapForCursor(float device_scale_factor) {
+  // The size should be scaled by the device scale factor for the cursor so that
+  // the SVG can be drawn at the correct resolution for a crisp image on high
+  // DPI displays. Scaling the size here causes the SVG to be rasterized at the
+  // correct resolution and causes the canvas that it is rasterized into being
+  // the correct size so that the cursor is not clipped.
+  IntSize scaled_size = Size();
+  scaled_size.Scale(device_scale_factor);
+
+  auto builder =
+      CreatePaintImageBuilder().set_completion_state(completion_state());
+  PopulatePaintRecordForCurrentFrameForContainer(builder, NullURL(),
+                                                 scaled_size);
+
+  PaintImage paint_image = builder.TakePaintImage();
+  if (!paint_image)
+    return {};
+
+  sk_sp<SkImage> sk_image = paint_image.GetSkImage();
+  if (!sk_image)
+    return {};
+
+  SkBitmap bitmap;
+  sk_image->asLegacyBitmap(&bitmap);
+  return bitmap;
 }
 
 }  // namespace blink

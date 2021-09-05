@@ -791,7 +791,7 @@ static void TestDrawSingleHighBitDepthPNGOnCanvas(
   float* actual_pixels = static_cast<float*>(buffer_view->BaseAddress());
 
   sk_sp<SkImage> decoded_image =
-      resource_content->GetImage()->PaintImageForCurrentFrame().GetSkImage();
+      resource_content->GetImage()->PaintImageForCurrentFrame().GetSwSkImage();
   ASSERT_EQ(kRGBA_F16_SkColorType, decoded_image->colorType());
   sk_sp<SkImage> color_converted_image = decoded_image->makeColorSpace(
       context->ColorParamsForTest().GetSkColorSpaceForSkSurfaces());
@@ -1045,6 +1045,7 @@ TEST_F(CanvasRenderingContext2DTest,
 
 TEST_F(CanvasRenderingContext2DTest,
        UnacceleratedIfNormalLatencyWillReadFrequently) {
+  RuntimeEnabledFeatures::SetNewCanvas2DAPIEnabled(true);
   CreateContext(kNonOpaque, kNormalLatency,
                 ReadFrequencyMode::kWillReadFrequency);
   DrawSomething();
@@ -1055,11 +1056,27 @@ TEST_F(CanvasRenderingContext2DTest,
 
 TEST_F(CanvasRenderingContext2DTest,
        UnacceleratedIfLowLatencyWillReadFrequently) {
+  RuntimeEnabledFeatures::SetNewCanvas2DAPIEnabled(true);
   CreateContext(kNonOpaque, kLowLatency, ReadFrequencyMode::kWillReadFrequency);
   // No need to set-up the layer bridge when testing low latency mode.
   DrawSomething();
   EXPECT_TRUE(Context2D()->getContextAttributes()->willReadFrequently());
   EXPECT_FALSE(CanvasElement().GetCanvas2DLayerBridge()->IsAccelerated());
+}
+
+TEST_F(CanvasRenderingContext2DTest, RemainAcceleratedAfterGetImageData) {
+  RuntimeEnabledFeatures::SetNewCanvas2DAPIEnabled(true);
+  CreateContext(kNonOpaque);
+  IntSize size(10, 10);
+  auto fake_accelerate_surface = std::make_unique<FakeCanvas2DLayerBridge>(
+      size, CanvasColorParams(), RasterModeHint::kPreferGPU);
+  CanvasElement().SetResourceProviderForTesting(
+      nullptr, std::move(fake_accelerate_surface), size);
+
+  DrawSomething();
+  NonThrowableExceptionState exception_state;
+  Context2D()->getImageData(0, 0, 1, 1, exception_state);
+  EXPECT_TRUE(CanvasElement().GetCanvas2DLayerBridge()->IsAccelerated());
 }
 
 class CanvasRenderingContext2DTestAccelerated

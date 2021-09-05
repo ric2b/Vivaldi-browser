@@ -11,6 +11,7 @@
 #include "base/callback.h"
 #include "base/optional.h"
 #include "components/autofill_assistant/browser/actions/action_delegate.h"
+#include "components/autofill_assistant/browser/actions/action_delegate_util.h"
 #include "components/autofill_assistant/browser/batch_element_checker.h"
 #include "components/autofill_assistant/browser/client_status.h"
 #include "components/autofill_assistant/browser/field_formatter.h"
@@ -223,9 +224,9 @@ void RequiredFieldsFallbackHandler::SetFallbackFieldValuesSequentially(
   const RequiredField& required_field = required_fields_[required_fields_index];
 
   if (required_field.value_expression.empty()) {
-    action_delegate_->SetFieldValue(
-        required_field.selector, "", required_field.fill_strategy,
-        required_field.delay_in_millisecond,
+    ActionDelegateUtil::SetFieldValue(
+        action_delegate_, required_field.selector, "",
+        required_field.fill_strategy, required_field.delay_in_millisecond,
         base::BindOnce(&RequiredFieldsFallbackHandler::OnSetFallbackFieldValue,
                        weak_ptr_factory_.GetWeakPtr(), required_fields_index));
     return;
@@ -247,8 +248,8 @@ void RequiredFieldsFallbackHandler::SetFallbackFieldValuesSequentially(
       // default: TAP
       click_type = ClickType::TAP;
     }
-    action_delegate_->ClickOrTapElement(
-        required_field.selector, click_type,
+    ActionDelegateUtil::ClickOrTapElement(
+        action_delegate_, required_field.selector, click_type,
         base::BindOnce(
             &RequiredFieldsFallbackHandler::OnClickOrTapFallbackElement,
             weak_ptr_factory_.GetWeakPtr(), fallback_value.value(),
@@ -293,9 +294,9 @@ void RequiredFieldsFallbackHandler::OnGetFallbackFieldTag(
     return;
   }
 
-  action_delegate_->SetFieldValue(
-      required_field.selector, value, required_field.fill_strategy,
-      required_field.delay_in_millisecond,
+  ActionDelegateUtil::SetFieldValue(
+      action_delegate_, required_field.selector, value,
+      required_field.fill_strategy, required_field.delay_in_millisecond,
       base::BindOnce(&RequiredFieldsFallbackHandler::OnSetFallbackFieldValue,
                      weak_ptr_factory_.GetWeakPtr(), required_fields_index));
 }
@@ -349,8 +350,8 @@ void RequiredFieldsFallbackHandler::OnShortWaitForElement(
     // default: TAP
     click_type = ClickType::TAP;
   }
-  action_delegate_->ClickOrTapElement(
-      selector_to_click, click_type,
+  ActionDelegateUtil::ClickOrTapElement(
+      action_delegate_, selector_to_click, click_type,
       base::BindOnce(&RequiredFieldsFallbackHandler::OnSetFallbackFieldValue,
                      weak_ptr_factory_.GetWeakPtr(), required_fields_index));
 }

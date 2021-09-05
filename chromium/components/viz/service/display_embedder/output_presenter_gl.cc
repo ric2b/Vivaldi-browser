@@ -73,9 +73,9 @@ bool PresenterImageGL::Initialize(
     uint32_t shared_image_usage) {
   auto mailbox = gpu::Mailbox::GenerateForSharedImage();
 
-  if (!factory->CreateSharedImage(mailbox, format, size, color_space,
-                                  deps->GetSurfaceHandle(),
-                                  shared_image_usage)) {
+  if (!factory->CreateSharedImage(
+          mailbox, format, size, color_space, kTopLeft_GrSurfaceOrigin,
+          kPremul_SkAlphaType, deps->GetSurfaceHandle(), shared_image_usage)) {
     DLOG(ERROR) << "CreateSharedImage failed.";
     return false;
   }
@@ -219,7 +219,7 @@ OutputPresenterGL::OutputPresenterGL(scoped_refptr<gl::GLSurface> gl_surface,
   // used, and the gfx::BufferFormat specified in Reshape should be used
   // instead, because it may be updated to reflect changes in the content being
   // displayed (e.g, HDR content appearing on-screen).
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
   image_format_ = BGRA_8888;
 #else
 #if defined(USE_OZONE)
@@ -347,7 +347,7 @@ void OutputPresenterGL::CommitOverlayPlanes(
 std::vector<OutputPresenter::OverlayData> OutputPresenterGL::ScheduleOverlays(
     SkiaOutputSurface::OverlayList overlays) {
   std::vector<OverlayData> pending_overlays;
-#if defined(OS_ANDROID) || defined(OS_MACOSX)
+#if defined(OS_ANDROID) || defined(OS_APPLE) || defined(USE_OZONE)
   // Note while reading through this for-loop that |overlay| has different
   // types on different platforms. On Android and Ozone it is an
   // OverlayCandidate, on Windows it is a DCLayerOverlay, and on macOS it is
@@ -380,7 +380,7 @@ std::vector<OutputPresenter::OverlayData> OutputPresenterGL::ScheduleOverlays(
                                     std::move(shared_image_access));
     }
 
-#if defined(OS_ANDROID)
+#if defined(OS_ANDROID) || defined(USE_OZONE)
     if (gl_image) {
       DCHECK(!overlay.gpu_fence_id);
       gl_surface_->ScheduleOverlayPlane(
@@ -388,7 +388,7 @@ std::vector<OutputPresenter::OverlayData> OutputPresenterGL::ScheduleOverlays(
           ToNearestRect(overlay.display_rect), overlay.uv_rect,
           !overlay.is_opaque, nullptr /* gpu_fence */);
     }
-#elif defined(OS_MACOSX)
+#elif defined(OS_APPLE)
     gl_surface_->ScheduleCALayer(ui::CARendererLayerParams(
         overlay.shared_state->is_clipped,
         gfx::ToEnclosingRect(overlay.shared_state->clip_rect),
@@ -400,7 +400,7 @@ std::vector<OutputPresenter::OverlayData> OutputPresenterGL::ScheduleOverlays(
         overlay.shared_state->opacity, overlay.filter));
 #endif
   }
-#endif  //  defined(OS_ANDROID) || defined(OS_MACOSX)
+#endif  //  defined(OS_ANDROID) || defined(OS_APPLE) || defined(USE_OZONE)
 
   return pending_overlays;
 }

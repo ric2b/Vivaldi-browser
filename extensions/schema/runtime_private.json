@@ -67,6 +67,10 @@
           "guest": {
             "description": "true if this is the guest profile, otherwise false. ",
             "type": "boolean"
+          },
+          "customAvatar": {
+            "description": "Link to a HTTP-loadble custom avatar, if available.",
+            "type": "string"
           }
         }
       },
@@ -251,17 +255,13 @@
       {
         "name": "getUserProfiles",
         "type": "function",
-        "description": "Get all registered user profiles.",
+        "description": "Get all or just the active registered user profile(s).",
         "parameters": [
           {
-            "type": "integer",
-            "name": "avatarWidth",
-            "description": "Width to scale the avatar image to. 0 for no scaling."
-          },
-          {
-            "type": "integer",
-            "name": "avatarHeight",
-            "description": "Height to scale the avatar image to. 0 for no scaling"
+            "type": "boolean",
+            "name": "activeOnly",
+            "optional":  true,
+            "description": "If true, only return the active profile."
           },
           {
             "type": "function",

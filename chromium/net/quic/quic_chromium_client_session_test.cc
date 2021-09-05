@@ -36,6 +36,7 @@
 #include "net/quic/quic_crypto_client_stream_factory.h"
 #include "net/quic/quic_http_utils.h"
 #include "net/quic/quic_server_info.h"
+#include "net/quic/quic_session_key.h"
 #include "net/quic/quic_test_packet_maker.h"
 #include "net/quic/test_quic_crypto_client_config_handle.h"
 #include "net/socket/datagram_client_socket.h"
@@ -205,8 +206,8 @@ class QuicChromiumClientSessionTest
         /*cert_verify_flags=*/0, quic::test::DefaultQuicConfig(),
         std::make_unique<TestQuicCryptoClientConfigHandle>(&crypto_config_),
         "CONNECTION_UNKNOWN", base::TimeTicks::Now(), base::TimeTicks::Now(),
-        &push_promise_index_, &test_push_delegate_,
-        base::DefaultTickClock::GetInstance(),
+        std::make_unique<quic::QuicClientPushPromiseIndex>(),
+        &test_push_delegate_, base::DefaultTickClock::GetInstance(),
         base::ThreadTaskRunnerHandle::Get().get(),
         /*socket_performance_watcher=*/nullptr, &net_log_));
     if (connectivity_monitor_) {
@@ -291,7 +292,6 @@ class QuicChromiumClientSessionTest
   quic::test::MockAlarmFactory alarm_factory_;
   std::unique_ptr<TransportSecurityState> transport_security_state_;
   MockCryptoClientStreamFactory crypto_client_stream_factory_;
-  quic::QuicClientPushPromiseIndex push_promise_index_;
   QuicSessionKey session_key_;
   HostPortPair destination_;
   std::unique_ptr<TestingQuicChromiumClientSession> session_;
@@ -1553,9 +1553,13 @@ TEST_P(QuicChromiumClientSessionTest, GoAwayReceived) {
 
   // After receiving a GoAway, I should no longer be able to create outgoing
   // streams.
-  session_->connection()->OnGoAwayFrame(
-      quic::QuicGoAwayFrame(quic::kInvalidControlFrameId,
-                            quic::QUIC_PEER_GOING_AWAY, 1u, "Going away."));
+  if (VersionUsesHttp3(version_.transport_version)) {
+    session_->OnHttp3GoAway(0);
+  } else {
+    session_->connection()->OnGoAwayFrame(
+        quic::QuicGoAwayFrame(quic::kInvalidControlFrameId,
+                              quic::QUIC_PEER_GOING_AWAY, 1u, "Going away."));
+  }
   EXPECT_EQ(nullptr, QuicChromiumClientSessionPeer::CreateOutgoingStream(
                          session_.get()));
 }
@@ -1581,34 +1585,42 @@ TEST_P(QuicChromiumClientSessionTest, CanPool) {
   CompleteCryptoHandshake();
   session_->OnProofVerifyDetailsAvailable(details);
 
-  EXPECT_TRUE(session_->CanPool("www.example.org", PRIVACY_MODE_DISABLED,
-                                SocketTag(), NetworkIsolationKey(),
-                                false /* disable_secure_dns */));
-  EXPECT_FALSE(session_->CanPool("www.example.org", PRIVACY_MODE_ENABLED,
-                                 SocketTag(), NetworkIsolationKey(),
-                                 false /* disable_secure_dns */));
-  EXPECT_FALSE(session_->CanPool("www.example.org", PRIVACY_MODE_DISABLED,
-                                 SocketTag(), NetworkIsolationKey(),
-                                 true /* disable_secure_dns */));
+  EXPECT_TRUE(session_->CanPool(
+      "www.example.org",
+      QuicSessionKey("foo", 1234, PRIVACY_MODE_DISABLED, SocketTag(),
+                     NetworkIsolationKey(), false /* disable_secure_dns */)));
+  EXPECT_FALSE(session_->CanPool(
+      "www.example.org",
+      QuicSessionKey("foo", 1234, PRIVACY_MODE_ENABLED, SocketTag(),
+                     NetworkIsolationKey(), false /* disable_secure_dns */)));
+  EXPECT_FALSE(session_->CanPool(
+      "www.example.org",
+      QuicSessionKey("foo", 1234, PRIVACY_MODE_DISABLED, SocketTag(),
+                     NetworkIsolationKey(), true /* disable_secure_dns */)));
 #if defined(OS_ANDROID)
   SocketTag tag1(SocketTag::UNSET_UID, 0x12345678);
   SocketTag tag2(getuid(), 0x87654321);
-  EXPECT_FALSE(session_->CanPool("www.example.org", PRIVACY_MODE_DISABLED, tag1,
-                                 NetworkIsolationKey(),
-                                 false /* disable_secure_dns */));
-  EXPECT_FALSE(session_->CanPool("www.example.org", PRIVACY_MODE_DISABLED, tag2,
-                                 NetworkIsolationKey(),
-                                 false /* disable_secure_dns */));
+  EXPECT_FALSE(session_->CanPool(
+      "www.example.org",
+      QuicSessionKey("foo", 1234, PRIVACY_MODE_DISABLED, tag1,
+                     NetworkIsolationKey(), false /* disable_secure_dns */)));
+  EXPECT_FALSE(session_->CanPool(
+      "www.example.org",
+      QuicSessionKey("foo", 1234, PRIVACY_MODE_DISABLED, tag2,
+                     NetworkIsolationKey(), false /* disable_secure_dns */)));
 #endif
-  EXPECT_TRUE(session_->CanPool("mail.example.org", PRIVACY_MODE_DISABLED,
-                                SocketTag(), NetworkIsolationKey(),
-                                false /* disable_secure_dns */));
-  EXPECT_TRUE(session_->CanPool("mail.example.com", PRIVACY_MODE_DISABLED,
-                                SocketTag(), NetworkIsolationKey(),
-                                false /* disable_secure_dns */));
-  EXPECT_FALSE(session_->CanPool("mail.google.com", PRIVACY_MODE_DISABLED,
-                                 SocketTag(), NetworkIsolationKey(),
-                                 false /* disable_secure_dns */));
+  EXPECT_TRUE(session_->CanPool(
+      "mail.example.org",
+      QuicSessionKey("foo", 1234, PRIVACY_MODE_DISABLED, SocketTag(),
+                     NetworkIsolationKey(), false /* disable_secure_dns */)));
+  EXPECT_TRUE(session_->CanPool(
+      "mail.example.com",
+      QuicSessionKey("foo", 1234, PRIVACY_MODE_DISABLED, SocketTag(),
+                     NetworkIsolationKey(), false /* disable_secure_dns */)));
+  EXPECT_FALSE(session_->CanPool(
+      "mail.google.com",
+      QuicSessionKey("foo", 1234, PRIVACY_MODE_DISABLED, SocketTag(),
+                     NetworkIsolationKey(), false /* disable_secure_dns */)));
 
   const auto kOriginFoo = url::Origin::Create(GURL("http://foo.test/"));
 
@@ -1617,19 +1629,21 @@ TEST_P(QuicChromiumClientSessionTest, CanPool) {
     base::test::ScopedFeatureList feature_list;
     feature_list.InitAndDisableFeature(
         features::kPartitionConnectionsByNetworkIsolationKey);
-    EXPECT_TRUE(session_->CanPool("mail.example.com", PRIVACY_MODE_DISABLED,
-                                  SocketTag(),
-                                  NetworkIsolationKey(kOriginFoo, kOriginFoo),
-                                  false /* disable_secure_dns */));
+    EXPECT_TRUE(session_->CanPool(
+        "mail.example.com",
+        QuicSessionKey("foo", 1234, PRIVACY_MODE_DISABLED, SocketTag(),
+                       NetworkIsolationKey(kOriginFoo, kOriginFoo),
+                       false /* disable_secure_dns */)));
   }
   {
     base::test::ScopedFeatureList feature_list;
     feature_list.InitAndEnableFeature(
         features::kPartitionConnectionsByNetworkIsolationKey);
-    EXPECT_FALSE(session_->CanPool("mail.example.com", PRIVACY_MODE_DISABLED,
-                                   SocketTag(),
-                                   NetworkIsolationKey(kOriginFoo, kOriginFoo),
-                                   false /* disable_secure_dns */));
+    EXPECT_FALSE(session_->CanPool(
+        "mail.example.com",
+        QuicSessionKey("foo", 1234, PRIVACY_MODE_DISABLED, SocketTag(),
+                       NetworkIsolationKey(kOriginFoo, kOriginFoo),
+                       false /* disable_secure_dns */)));
   }
 }
 
@@ -1638,7 +1652,8 @@ TEST_P(QuicChromiumClientSessionTest, CanPoolExpectCT) {
   feature_list.InitWithFeatures(
       /* enabled_features */
       {TransportSecurityState::kDynamicExpectCTFeature,
-       features::kPartitionExpectCTStateByNetworkIsolationKey},
+       features::kPartitionExpectCTStateByNetworkIsolationKey,
+       features::kPartitionConnectionsByNetworkIsolationKey},
       /* disabled_features */
       {});
 
@@ -1681,9 +1696,10 @@ TEST_P(QuicChromiumClientSessionTest, CanPoolExpectCT) {
   session_->OnProofVerifyDetailsAvailable(details);
 
   // Pooling succeeds if CT isn't required.
-  EXPECT_TRUE(session_->CanPool("www.example.org", PRIVACY_MODE_DISABLED,
-                                SocketTag(), network_isolation_key,
-                                false /* disable_secure_dns */));
+  EXPECT_TRUE(session_->CanPool(
+      "www.example.org",
+      QuicSessionKey("foo", 1234, PRIVACY_MODE_DISABLED, SocketTag(),
+                     network_isolation_key, false /* disable_secure_dns */)));
 
   // Adding Expect-CT data for different NetworkIsolationKeys should have no
   // effect.
@@ -1694,18 +1710,20 @@ TEST_P(QuicChromiumClientSessionTest, CanPoolExpectCT) {
   transport_security_state_->AddExpectCT(
       "www.example.org", expiry, true /* enforce */, GURL() /* report_url */,
       NetworkIsolationKey());
-  EXPECT_TRUE(session_->CanPool("www.example.org", PRIVACY_MODE_DISABLED,
-                                SocketTag(), network_isolation_key,
-                                false /* disable_secure_dns */));
+  EXPECT_TRUE(session_->CanPool(
+      "www.example.org",
+      QuicSessionKey("foo", 1234, PRIVACY_MODE_DISABLED, SocketTag(),
+                     network_isolation_key, false /* disable_secure_dns */)));
 
   // Adding Expect-CT data for the same NetworkIsolationKey should prevent
   // pooling.
   transport_security_state_->AddExpectCT(
       "www.example.org", expiry, true /* enforce */, GURL() /* report_url */,
       network_isolation_key);
-  EXPECT_FALSE(session_->CanPool("www.example.org", PRIVACY_MODE_DISABLED,
-                                 SocketTag(), network_isolation_key,
-                                 false /* disable_secure_dns */));
+  EXPECT_FALSE(session_->CanPool(
+      "www.example.org",
+      QuicSessionKey("foo", 1234, PRIVACY_MODE_DISABLED, SocketTag(),
+                     network_isolation_key, false /* disable_secure_dns */)));
 }
 
 // Much as above, but uses a non-empty NetworkIsolationKey.
@@ -1743,38 +1761,47 @@ TEST_P(QuicChromiumClientSessionTest, CanPoolWithNetworkIsolationKey) {
   CompleteCryptoHandshake();
   session_->OnProofVerifyDetailsAvailable(details);
 
-  EXPECT_TRUE(session_->CanPool("www.example.org", PRIVACY_MODE_DISABLED,
-                                SocketTag(), kNetworkIsolationKey1,
-                                false /* disable_secure_dns */));
-  EXPECT_FALSE(session_->CanPool("www.example.org", PRIVACY_MODE_ENABLED,
-                                 SocketTag(), kNetworkIsolationKey1,
-                                 false /* disable_secure_dns */));
+  EXPECT_TRUE(session_->CanPool(
+      "www.example.org",
+      QuicSessionKey("foo", 1234, PRIVACY_MODE_DISABLED, SocketTag(),
+                     kNetworkIsolationKey1, false /* disable_secure_dns */)));
+  EXPECT_FALSE(session_->CanPool(
+      "www.example.org",
+      QuicSessionKey("foo", 1234, PRIVACY_MODE_ENABLED, SocketTag(),
+                     kNetworkIsolationKey1, false /* disable_secure_dns */)));
 #if defined(OS_ANDROID)
   SocketTag tag1(SocketTag::UNSET_UID, 0x12345678);
   SocketTag tag2(getuid(), 0x87654321);
-  EXPECT_FALSE(session_->CanPool("www.example.org", PRIVACY_MODE_DISABLED, tag1,
-                                 kNetworkIsolationKey1,
-                                 false /* disable_secure_dns */));
-  EXPECT_FALSE(session_->CanPool("www.example.org", PRIVACY_MODE_DISABLED, tag2,
-                                 kNetworkIsolationKey1,
-                                 false /* disable_secure_dns */));
+  EXPECT_FALSE(session_->CanPool(
+      "www.example.org",
+      QuicSessionKey("foo", 1234, PRIVACY_MODE_DISABLED, tag1,
+                     kNetworkIsolationKey1, false /* disable_secure_dns */)));
+  EXPECT_FALSE(session_->CanPool(
+      "www.example.org",
+      QuicSessionKey("foo", 1234, PRIVACY_MODE_DISABLED, tag2,
+                     kNetworkIsolationKey1, false /* disable_secure_dns */)));
 #endif
-  EXPECT_TRUE(session_->CanPool("mail.example.org", PRIVACY_MODE_DISABLED,
-                                SocketTag(), kNetworkIsolationKey1,
-                                false /* disable_secure_dns */));
-  EXPECT_TRUE(session_->CanPool("mail.example.com", PRIVACY_MODE_DISABLED,
-                                SocketTag(), kNetworkIsolationKey1,
-                                false /* disable_secure_dns */));
-  EXPECT_FALSE(session_->CanPool("mail.google.com", PRIVACY_MODE_DISABLED,
-                                 SocketTag(), kNetworkIsolationKey1,
-                                 false /* disable_secure_dns */));
+  EXPECT_TRUE(session_->CanPool(
+      "mail.example.org",
+      QuicSessionKey("foo", 1234, PRIVACY_MODE_DISABLED, SocketTag(),
+                     kNetworkIsolationKey1, false /* disable_secure_dns */)));
+  EXPECT_TRUE(session_->CanPool(
+      "mail.example.com",
+      QuicSessionKey("foo", 1234, PRIVACY_MODE_DISABLED, SocketTag(),
+                     kNetworkIsolationKey1, false /* disable_secure_dns */)));
+  EXPECT_FALSE(session_->CanPool(
+      "mail.google.com",
+      QuicSessionKey("foo", 1234, PRIVACY_MODE_DISABLED, SocketTag(),
+                     kNetworkIsolationKey1, false /* disable_secure_dns */)));
 
-  EXPECT_FALSE(session_->CanPool("mail.example.com", PRIVACY_MODE_DISABLED,
-                                 SocketTag(), kNetworkIsolationKey2,
-                                 false /* disable_secure_dns */));
-  EXPECT_FALSE(session_->CanPool("mail.example.com", PRIVACY_MODE_DISABLED,
-                                 SocketTag(), NetworkIsolationKey(),
-                                 false /* disable_secure_dns */));
+  EXPECT_FALSE(session_->CanPool(
+      "mail.example.com",
+      QuicSessionKey("foo", 1234, PRIVACY_MODE_DISABLED, SocketTag(),
+                     kNetworkIsolationKey2, false /* disable_secure_dns */)));
+  EXPECT_FALSE(session_->CanPool(
+      "mail.example.com",
+      QuicSessionKey("foo", 1234, PRIVACY_MODE_DISABLED, SocketTag(),
+                     NetworkIsolationKey(), false /* disable_secure_dns */)));
 }
 
 TEST_P(QuicChromiumClientSessionTest, ConnectionNotPooledWithDifferentPin) {
@@ -1814,9 +1841,10 @@ TEST_P(QuicChromiumClientSessionTest, ConnectionNotPooledWithDifferentPin) {
   session_->OnProofVerifyDetailsAvailable(details);
   QuicChromiumClientSessionPeer::SetHostname(session_.get(), kNoPinsHost);
 
-  EXPECT_FALSE(session_->CanPool(kPreloadedPKPHost, PRIVACY_MODE_DISABLED,
-                                 SocketTag(), NetworkIsolationKey(),
-                                 false /* disable_secure_dns */));
+  EXPECT_FALSE(session_->CanPool(
+      kPreloadedPKPHost,
+      QuicSessionKey("foo", 1234, PRIVACY_MODE_DISABLED, SocketTag(),
+                     NetworkIsolationKey(), false /* disable_secure_dns */)));
 }
 
 TEST_P(QuicChromiumClientSessionTest, ConnectionPooledWithMatchingPin) {
@@ -1847,9 +1875,10 @@ TEST_P(QuicChromiumClientSessionTest, ConnectionPooledWithMatchingPin) {
   session_->OnProofVerifyDetailsAvailable(details);
   QuicChromiumClientSessionPeer::SetHostname(session_.get(), "www.example.org");
 
-  EXPECT_TRUE(session_->CanPool("mail.example.org", PRIVACY_MODE_DISABLED,
-                                SocketTag(), NetworkIsolationKey(),
-                                false /* disable_secure_dns */));
+  EXPECT_TRUE(session_->CanPool(
+      "mail.example.org",
+      QuicSessionKey("foo", 1234, PRIVACY_MODE_DISABLED, SocketTag(),
+                     NetworkIsolationKey(), false /* disable_secure_dns */)));
 }
 
 TEST_P(QuicChromiumClientSessionTest, MigrateToSocket) {
@@ -1870,8 +1899,7 @@ TEST_P(QuicChromiumClientSessionTest, MigrateToSocket) {
   std::unique_ptr<quic::QuicEncryptedPacket> client_ping;
   std::unique_ptr<quic::QuicEncryptedPacket> ack_and_data_out;
   if (VersionUsesHttp3(version_.transport_version)) {
-    client_ping =
-        client_maker_.MakeAckAndPingPacket(packet_num++, false, 1, 1, 1);
+    client_ping = client_maker_.MakeAckAndPingPacket(packet_num++, false, 1, 1);
   } else {
     client_ping = client_maker_.MakePingPacket(packet_num++, true);
   }
@@ -1988,7 +2016,7 @@ TEST_P(QuicChromiumClientSessionTest, MigrateToSocketMaxReaders) {
 TEST_P(QuicChromiumClientSessionTest, MigrateToSocketReadError) {
   std::unique_ptr<quic::QuicEncryptedPacket> settings_packet;
   std::unique_ptr<quic::QuicEncryptedPacket> client_ping =
-      client_maker_.MakeAckAndPingPacket(2, false, 1, 1, 1);
+      client_maker_.MakeAckAndPingPacket(2, false, 1, 1);
   std::unique_ptr<quic::QuicEncryptedPacket> initial_ping;
   std::vector<MockWrite> old_writes;
   std::vector<MockRead> old_reads;
@@ -2099,8 +2127,7 @@ TEST_P(QuicChromiumClientSessionTest, RetransmittableOnWireTimeout) {
   quic_data.AddWrite(SYNCHRONOUS,
                      client_maker_.MakePingPacket(packet_num++, true));
 
-  quic_data.AddRead(ASYNC,
-                    server_maker_.MakeAckPacket(1, packet_num - 1, 1, 1));
+  quic_data.AddRead(ASYNC, server_maker_.MakeAckPacket(1, packet_num - 1, 1));
 
   quic_data.AddWrite(SYNCHRONOUS,
                      client_maker_.MakePingPacket(packet_num++, false));
@@ -2368,6 +2395,79 @@ TEST_P(QuicChromiumClientSessionTest,
 
   session_.reset();
   EXPECT_EQ(0u, connectivity_monitor_->GetNumDegradingSessions());
+}
+
+TEST_P(QuicChromiumClientSessionTest, WriteErrorDuringCryptoConnect) {
+  // Add a connectivity monitor for testing.
+  default_network_ = kDefaultNetworkForTests;
+  connectivity_monitor_ =
+      std::make_unique<QuicConnectivityMonitor>(default_network_);
+
+  // Use unmocked crypto stream to do crypto connect.
+  crypto_client_stream_factory_.set_handshake_mode(
+      MockCryptoClientStream::COLD_START_WITH_CHLO_SENT);
+
+  MockQuicData quic_data(version_);
+  // Trigger a packet write error when sending packets in crypto connect.
+  quic_data.AddWrite(SYNCHRONOUS, ERR_ADDRESS_UNREACHABLE);
+  quic_data.AddRead(ASYNC, ERR_IO_PENDING);
+  quic_data.AddRead(ASYNC, OK);  // EOF
+  quic_data.AddSocketDataToFactory(&socket_factory_);
+
+  Initialize();
+  ASSERT_THAT(session_->CryptoConnect(callback_.callback()),
+              IsError(ERR_QUIC_HANDSHAKE_FAILED));
+  // Verify error count is properly recorded.
+  EXPECT_EQ(1u, connectivity_monitor_->GetCountForWriteErrorCode(
+                    ERR_ADDRESS_UNREACHABLE));
+  EXPECT_EQ(0u, connectivity_monitor_->GetCountForWriteErrorCode(
+                    ERR_CONNECTION_RESET));
+
+  // Simulate a default network change, write error stats should be reset.
+  connectivity_monitor_->OnDefaultNetworkUpdated(kNewNetworkForTests);
+  EXPECT_EQ(0u, connectivity_monitor_->GetCountForWriteErrorCode(
+                    ERR_ADDRESS_UNREACHABLE));
+}
+
+TEST_P(QuicChromiumClientSessionTest, WriteErrorAfterHandshakeConfirmed) {
+  // Add a connectivity monitor for testing.
+  default_network_ = NetworkChangeNotifier::kInvalidNetworkHandle;
+  connectivity_monitor_ =
+      std::make_unique<QuicConnectivityMonitor>(default_network_);
+
+  MockQuicData quic_data(version_);
+  int packet_num = 1;
+  if (version_.HasIetfQuicFrames()) {
+    quic_data.AddWrite(SYNCHRONOUS,
+                       client_maker_.MakeInitialSettingsPacket(packet_num++));
+  }
+  // When sending the PING packet, trigger a packet write error.
+  quic_data.AddWrite(SYNCHRONOUS, ERR_CONNECTION_RESET);
+  quic_data.AddRead(ASYNC, ERR_IO_PENDING);
+  quic_data.AddRead(ASYNC, OK);  // EOF
+  quic_data.AddSocketDataToFactory(&socket_factory_);
+
+  Initialize();
+  CompleteCryptoHandshake();
+
+  // Send a ping so that client has outgoing traffic before receiving packets.
+  session_->SendPing();
+
+  // Verify error count is properly recorded.
+  EXPECT_EQ(1u, connectivity_monitor_->GetCountForWriteErrorCode(
+                    ERR_CONNECTION_RESET));
+  EXPECT_EQ(0u, connectivity_monitor_->GetCountForWriteErrorCode(
+                    ERR_ADDRESS_UNREACHABLE));
+
+  connectivity_monitor_->OnIPAddressChanged();
+
+  // If network handle is supported, IP Address change is a no-op. Otherwise it
+  // clears all stats.
+  size_t expected_error_count =
+      NetworkChangeNotifier::AreNetworkHandlesSupported() ? 1u : 0u;
+  EXPECT_EQ(
+      expected_error_count,
+      connectivity_monitor_->GetCountForWriteErrorCode(ERR_CONNECTION_RESET));
 }
 
 }  // namespace

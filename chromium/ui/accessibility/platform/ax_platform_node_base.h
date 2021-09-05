@@ -74,12 +74,24 @@ class AX_EXPORT AXPlatformNodeBase : public AXPlatformNode {
   // the list of its parent's children, or its parent doesn't have children.
   virtual base::Optional<int> GetIndexInParent();
 
+  // Returns a stack of ancestors of this node. The node at the top of the stack
+  // is the top most ancestor.
+  base::stack<gfx::NativeViewAccessible> GetAncestors();
+
+  // Returns an optional integer indicating the logical order of this node
+  // compared to another node or returns an empty optional if the nodes
+  // are not comparable.
+  //    0: if this position is logically equivalent to the other node
+  //   <0: if this position is logically less than (before) the other node
+  //   >0: if this position is logically greater than (after) the other node
+  base::Optional<int> CompareTo(AXPlatformNodeBase& other);
+
   // AXPlatformNode.
   void Destroy() override;
   gfx::NativeViewAccessible GetNativeViewAccessible() override;
   void NotifyAccessibilityEvent(ax::mojom::Event event_type) override;
 
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
   void AnnounceText(const base::string16& text) override;
 #endif
 
@@ -235,10 +247,6 @@ class AX_EXPORT AXPlatformNodeBase : public AXPlatformNode {
   // Returns true if this node can be scrolled in the vertical direction.
   bool IsVerticallyScrollable() const;
 
-  // Returns true if this node has a role of StaticText, LineBreak, or
-  // InlineTextBox
-  bool IsTextOnlyObject() const;
-
   // See AXNodeData::IsTextField().
   bool IsTextField() const;
 
@@ -247,6 +255,9 @@ class AX_EXPORT AXPlatformNodeBase : public AXPlatformNode {
 
   // See AXNodeData::IsRichTextField().
   bool IsRichTextField() const;
+
+  // See AXNode::IsText().
+  bool IsText() const;
 
   // Determines whether an element should be exposed with checkable state, and
   // possibly the checked state. Examples are check box and radio button.
@@ -349,6 +360,7 @@ class AX_EXPORT AXPlatformNodeBase : public AXPlatformNode {
 
  protected:
   bool IsDocument() const;
+
   bool IsSelectionItemSupported() const;
 
   // Get the range value text, which might come from aria-valuetext or

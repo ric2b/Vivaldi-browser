@@ -512,26 +512,26 @@ void UserMediaRequest::Start() {
     controller_->RequestUserMedia(this);
 }
 
-void UserMediaRequest::Succeed(MediaStreamDescriptor* stream_descriptor,
-                               bool pan_tilt_zoom_allowed) {
+void UserMediaRequest::Succeed(MediaStreamDescriptor* stream_descriptor) {
   DCHECK(!is_resolved_);
   if (!GetExecutionContext())
     return;
 
-  MediaStream* stream = MediaStream::Create(
-      GetExecutionContext(), stream_descriptor, pan_tilt_zoom_allowed);
+  MediaStream::Create(GetExecutionContext(), stream_descriptor,
+                      WTF::Bind(&UserMediaRequest::OnMediaStreamInitialized,
+                                WrapPersistent(this)));
+}
+
+void UserMediaRequest::OnMediaStreamInitialized(MediaStream* stream) {
+  DCHECK(!is_resolved_);
 
   MediaStreamTrackVector audio_tracks = stream->getAudioTracks();
-  for (MediaStreamTrackVector::iterator iter = audio_tracks.begin();
-       iter != audio_tracks.end(); ++iter) {
-    (*iter)->SetConstraints(audio_);
-  }
+  for (const auto& audio_track : audio_tracks)
+    audio_track->SetConstraints(audio_);
 
   MediaStreamTrackVector video_tracks = stream->getVideoTracks();
-  for (MediaStreamTrackVector::iterator iter = video_tracks.begin();
-       iter != video_tracks.end(); ++iter) {
-    (*iter)->SetConstraints(video_);
-  }
+  for (const auto& video_track : video_tracks)
+    video_track->SetConstraints(video_);
 
   callbacks_->OnSuccess(nullptr, stream);
   is_resolved_ = true;

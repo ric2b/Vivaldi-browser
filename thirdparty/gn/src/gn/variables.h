@@ -314,6 +314,10 @@ extern const char kSources[];
 extern const char kSources_HelpShort[];
 extern const char kSources_Help[];
 
+extern const char kSwiftflags[];
+extern const char kSwiftflags_HelpShort[];
+extern const char* kSwiftflags_Help;
+
 extern const char kXcodeTestApplicationName[];
 extern const char kXcodeTestApplicationName_HelpShort[];
 extern const char kXcodeTestApplicationName_Help[];

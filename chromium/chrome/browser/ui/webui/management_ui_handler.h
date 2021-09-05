@@ -39,7 +39,6 @@ extern const char kManagementCrostini[];
 extern const char kManagementCrostiniContainerConfiguration[];
 extern const char kManagementReportExtensions[];
 extern const char kManagementReportAndroidApplications[];
-extern const char kManagementReportProxyServer[];
 #endif  // defined(OS_CHROMEOS)
 
 extern const char kCloudReportingExtensionId[];
@@ -68,6 +67,8 @@ extern const char kManagementOnFileDownloadedEvent[];
 extern const char kManagementOnFileDownloadedVisibleData[];
 extern const char kManagementOnBulkDataEntryEvent[];
 extern const char kManagementOnBulkDataEntryVisibleData[];
+extern const char kManagementOnPageVisitedEvent[];
+extern const char kManagementOnPageVisitedVisibleData[];
 
 extern const char kPolicyKeyReportMachineIdData[];
 extern const char kPolicyKeyReportUserIdData[];
@@ -146,20 +147,28 @@ class ManagementUIHandler : public content::WebUIMessageHandler,
                               const policy::StatusCollector* collector,
                               const policy::SystemLogUploader* uploader,
                               Profile* profile) const;
+  // Virtual for testing
+  virtual bool IsUpdateRequiredEol() const;
+  // Adds device return instructions for a managed user as an update is required
+  // as per device policy but the device cannot be updated due to End of Life
+  // (Auto Update Expiration).
+  void AddUpdateRequiredEolInfo(base::Value* response) const;
+
+  // Adds a boolean which indicates if there's a proxy on the device enforced by
+  // the admin. If true, a warning will be added to the transparency panel to
+  // inform the user that the admin may be able to see their network traffic.
+  void AddProxyServerPrivacyDisclosure(base::Value* response) const;
 #endif  // defined(OS_CHROMEOS)
  private:
   void GetManagementStatus(Profile* profile, base::Value* status) const;
 
 #if defined(OS_CHROMEOS)
   void HandleGetDeviceReportingInfo(const base::ListValue* args);
-#endif  // defined(OS_CHROMEOS)
-
-  void HandleGetExtensions(const base::ListValue* args);
-
-#if defined(OS_CHROMEOS)
+  void HandleGetPluginVmDataCollectionStatus(const base::ListValue* args);
   void HandleGetLocalTrustRootsInfo(const base::ListValue* args);
 #endif  // defined(OS_CHROMEOS)
 
+  void HandleGetExtensions(const base::ListValue* args);
   void HandleGetContextualManagedData(const base::ListValue* args);
   void HandleGetThreatProtectionInfo(const base::ListValue* args);
   void HandleInitBrowserReportingInfo(const base::ListValue* args);
@@ -170,6 +179,9 @@ class ManagementUIHandler : public content::WebUIMessageHandler,
   void OnFetchComplete(const GURL& url, const SkBitmap* bitmap) override;
 
   void NotifyBrowserReportingInfoUpdated();
+#if defined(OS_CHROMEOS)
+  void NotifyPluginVmDataCollectionUpdated();
+#endif  // defined(OS_CHROMEOS)
   void NotifyThreatProtectionInfoUpdated();
 
   // extensions::ExtensionRegistryObserver implementation.

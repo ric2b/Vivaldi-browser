@@ -494,6 +494,25 @@ cr.define('device_page_tests', function() {
             height: 2000,
             refreshRate: 75,
           },
+          // Include 3 copies of 3000x2000 mode to emulate duplicated modes
+          // reported by some monitors.  Only one is marked 'isNative'.
+          {
+            deviceScaleFactor: 1.0,
+            widthInNativePixels: 3000,
+            heightInNativePixels: 2000,
+            width: 3000,
+            height: 2000,
+            refreshRate: 100,
+          },
+          {
+            isNative: true,
+            deviceScaleFactor: 1.0,
+            widthInNativePixels: 3000,
+            heightInNativePixels: 2000,
+            width: 3000,
+            height: 2000,
+            refreshRate: 100,
+          },
           {
             deviceScaleFactor: 1.0,
             widthInNativePixels: 3000,
@@ -561,7 +580,7 @@ cr.define('device_page_tests', function() {
       const reverseScrollToggle =
           pointersPage.$$('#enableReverseScrollingToggle');
       assertEquals(expected, reverseScrollToggle.checked);
-      expectNotEquals(
+      expectEquals(
           expected, devicePage.prefs.settings.touchpad.natural_scroll.value);
     }
 
@@ -665,7 +684,7 @@ cr.define('device_page_tests', function() {
       });
 
       test('link doesn\'t activate control', function() {
-        expectReverseScrollValue(pointersPage, true);
+        expectReverseScrollValue(pointersPage, false);
 
         // Tapping the link shouldn't enable the radio button.
         const reverseScrollLabel =
@@ -675,22 +694,22 @@ cr.define('device_page_tests', function() {
         // Prevent actually opening a link, which would block test.
         a.removeAttribute('href');
         a.click();
-        expectReverseScrollValue(pointersPage, true);
+        expectReverseScrollValue(pointersPage, false);
 
         // Check specifically clicking toggle changes pref.
         const reverseScrollToggle =
             pointersPage.$$('#enableReverseScrollingToggle');
         reverseScrollToggle.click();
-        expectReverseScrollValue(pointersPage, false);
-        devicePage.set('prefs.settings.touchpad.natural_scroll.value', false);
         expectReverseScrollValue(pointersPage, true);
+        devicePage.set('prefs.settings.touchpad.natural_scroll.value', false);
+        expectReverseScrollValue(pointersPage, false);
 
         // Check specifically clicking the row changes pref.
         const reverseScrollSettings = pointersPage.$$('#reverseScrollRow');
-        reverseScrollToggle.click();
-        expectReverseScrollValue(pointersPage, false);
-        devicePage.set('prefs.settings.touchpad.natural_scroll.value', false);
+        reverseScrollSettings.click();
         expectReverseScrollValue(pointersPage, true);
+        devicePage.set('prefs.settings.touchpad.natural_scroll.value', false);
+        expectReverseScrollValue(pointersPage, false);
       });
     });
 
@@ -904,12 +923,6 @@ cr.define('device_page_tests', function() {
             expectTrue(displayPage.showMirror_(false, displayPage.displays));
             expectFalse(displayPage.isMirrored_(displayPage.displays));
 
-            // Set display identification highlights for the selected display as
-            // there are now multiple displays.
-            expectEquals(
-                displayPage.displays[0].id,
-                browserProxy.lastHighlightedDisplayId_);
-
             // Verify unified desktop only shown when enabled.
             expectTrue(displayPage.showUnifiedDesktop_(
                 true, true, displayPage.displays));
@@ -923,12 +936,14 @@ cr.define('device_page_tests', function() {
             // Verify the display modes are parsed correctly.
 
             // 5 total modes, 2 parent modes.
-            expectEquals(5, displayPage.modeToParentModeMap_.size);
+            expectEquals(7, displayPage.modeToParentModeMap_.size);
             expectEquals(0, displayPage.modeToParentModeMap_.get(0));
             expectEquals(0, displayPage.modeToParentModeMap_.get(1));
-            expectEquals(2, displayPage.modeToParentModeMap_.get(2));
-            expectEquals(2, displayPage.modeToParentModeMap_.get(3));
-            expectEquals(2, displayPage.modeToParentModeMap_.get(4));
+            expectEquals(5, displayPage.modeToParentModeMap_.get(2));
+            expectEquals(5, displayPage.modeToParentModeMap_.get(3));
+            expectEquals(5, displayPage.modeToParentModeMap_.get(4));
+            expectEquals(5, displayPage.modeToParentModeMap_.get(5));
+            expectEquals(5, displayPage.modeToParentModeMap_.get(6));
 
             // Two resolution options, one for each parent mode.
             expectEquals(2, displayPage.refreshRateList_.length);
@@ -938,7 +953,7 @@ cr.define('device_page_tests', function() {
             expectEquals(
                 2, displayPage.parentModeToRefreshRateMap_.get(0).length);
             expectEquals(
-                3, displayPage.parentModeToRefreshRateMap_.get(2).length);
+                3, displayPage.parentModeToRefreshRateMap_.get(5).length);
 
             // Ambient EQ never shown on non-internal display regardless of
             // whether it is enabled.
@@ -983,12 +998,6 @@ cr.define('device_page_tests', function() {
                 displayPage.displays[1].id, displayPage.primaryDisplayId);
             expectEquals(90, displayPage.displays[1].rotation);
 
-            // Change the display that display identification highlight renders
-            // on to the newly selected display.
-            expectEquals(
-                displayPage.displays[1].id,
-                browserProxy.lastHighlightedDisplayId_);
-
             // Mirror the displays.
             displayPage.onMirroredTap_({target: {blur: function() {}}});
             fakeSystemDisplay.onDisplayChanged.callListeners();
@@ -1010,12 +1019,6 @@ cr.define('device_page_tests', function() {
             expectTrue(displayPage.displays[0].isPrimary);
             expectTrue(displayPage.showMirror_(false, displayPage.displays));
             expectTrue(displayPage.isMirrored_(displayPage.displays));
-
-            // setSelectedDisplay is called on a new display id even though no
-            // display identification highlight is generated in mirrored mode.
-            expectEquals(
-                displayPage.displays[0].id,
-                browserProxy.lastHighlightedDisplayId_);
 
             // Verify that the arrangement section is shown while mirroring.
             expectTrue(!!displayPage.$$('#arrangement-section'));
@@ -1051,13 +1054,6 @@ cr.define('device_page_tests', function() {
 
             // Navigate back to the display page.
             return showAndGetDeviceSubpage('display', settings.routes.DISPLAY);
-          })
-          .then(function() {
-            // Moving back into the display page should call setSelectedDisplay
-            // with selectedDisplay_.
-            expectEquals(
-                displayPage.selectedDisplay.id,
-                browserProxy.lastHighlightedDisplayId_);
           });
     });
 
@@ -2235,26 +2231,6 @@ cr.define('device_page_tests', function() {
         cr.webUIListenerCallback('storage-apps-size-changed', '59.5 KB');
         Polymer.dom.flush();
         assertEquals('59.5 KB', getStorageItemSubLabelFromId('appsSize'));
-      });
-
-      test('dlc size', async function() {
-        // The dlc row is hidden by default.
-        assertTrue(isHidden(storagePage.$$('#downloadedContentSize')));
-
-        // Send dlc callback with a size that is not null.
-        cr.webUIListenerCallback('storage-dlcs-size-changed', true, '59.5 KB');
-        Polymer.dom.flush();
-        assertFalse(isHidden(storagePage.$$('#downloadedContentSize')));
-        assertEquals(
-            'Manage downloaded content',
-            getStorageItemLabelFromId('downloadedContentSize'));
-        assertEquals(
-            '59.5 KB', getStorageItemSubLabelFromId('downloadedContentSize'));
-
-        // Simulate absence of dlc.
-        cr.webUIListenerCallback('storage-dlcs-size-changed', false, '0 B');
-        Polymer.dom.flush();
-        assertTrue(isHidden(storagePage.$$('#downloadedContentSize')));
       });
 
       test('other users size', async function() {

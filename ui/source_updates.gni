@@ -1,6 +1,6 @@
 import("//build/config/ui.gni")
 
-update_template_instance("//content/public/browser:browser_sources") {
+update_target("//content/public/browser:browser_sources") {
   sources += [
     "//vivaldi/ui/content/vivaldi_event_hooks.cc",
     "//vivaldi/ui/content/vivaldi_event_hooks.h",

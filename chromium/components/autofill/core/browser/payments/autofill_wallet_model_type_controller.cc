@@ -8,11 +8,23 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/feature_list.h"
+#include "build/build_config.h"
 #include "components/autofill/core/common/autofill_prefs.h"
 #include "components/prefs/pref_service.h"
 #include "components/sync/driver/sync_auth_util.h"
 #include "components/sync/driver/sync_service.h"
+#include "components/sync/driver/sync_user_settings.h"
 #include "google_apis/gaia/google_service_auth_error.h"
+
+namespace {
+
+#if defined(OS_ANDROID)
+constexpr base::Feature kWalletRequiresFirstSyncSetupComplete{
+    "WalletRequiresFirstSyncSetupComplete", base::FEATURE_ENABLED_BY_DEFAULT};
+#endif
+
+}  // namespace
 
 namespace browser_sync {
 
@@ -87,6 +99,15 @@ AutofillWalletModelTypeController::GetPreconditionState() const {
           autofill::prefs::kAutofillWalletImportEnabled) &&
       pref_service_->GetBoolean(autofill::prefs::kAutofillCreditCardEnabled) &&
       !sync_service_->GetAuthError().IsPersistentError();
+#if defined(OS_ANDROID)
+  if (base::FeatureList::IsEnabled(kWalletRequiresFirstSyncSetupComplete)) {
+    // On Android, it's also required that the initial Sync setup is complete
+    // (i.e. the user has previously opted in to Sync-the-feature, even if it's
+    // not enabled right now).
+    preconditions_met &=
+        sync_service_->GetUserSettings()->IsFirstSetupComplete();
+  }
+#endif
   return preconditions_met ? PreconditionState::kPreconditionsMet
                            : PreconditionState::kMustStopAndClearData;
 }

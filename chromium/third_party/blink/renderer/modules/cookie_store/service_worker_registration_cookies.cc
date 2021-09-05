@@ -17,8 +17,6 @@ namespace {
 class ServiceWorkerRegistrationCookiesImpl final
     : public GarbageCollected<ServiceWorkerRegistrationCookiesImpl>,
       public Supplement<ServiceWorkerRegistration> {
-  USING_GARBAGE_COLLECTED_MIXIN(ServiceWorkerRegistrationCookiesImpl);
-
  public:
   static const char kSupplementName[];
 
@@ -49,7 +47,7 @@ class ServiceWorkerRegistrationCookiesImpl final
 
       // TODO(crbug.com/839117): Remove once Expose on partial interface is
       // supported or Origin Trial as ended.
-      if (!execution_context->IsDocument() &&
+      if (!execution_context->IsWindow() &&
           !execution_context->IsServiceWorkerGlobalScope()) {
         return nullptr;
       }

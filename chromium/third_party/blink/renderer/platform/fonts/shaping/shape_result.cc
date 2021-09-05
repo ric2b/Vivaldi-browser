@@ -47,6 +47,7 @@
 #include "third_party/blink/renderer/platform/fonts/shaping/shape_result_inline_headers.h"
 #include "third_party/blink/renderer/platform/fonts/shaping/shape_result_spacing.h"
 #include "third_party/blink/renderer/platform/text/text_break_iterator.h"
+#include "third_party/blink/renderer/platform/wtf/size_assertions.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
 
 namespace blink {
@@ -60,9 +61,7 @@ struct SameSizeAsHarfBuzzRunGlyphData {
   float advance;
 };
 
-static_assert(sizeof(HarfBuzzRunGlyphData) ==
-                  sizeof(SameSizeAsHarfBuzzRunGlyphData),
-              "HarfBuzzRunGlyphData should stay small");
+ASSERT_SIZE(HarfBuzzRunGlyphData, SameSizeAsHarfBuzzRunGlyphData);
 
 unsigned ShapeResult::RunInfo::NextSafeToBreakOffset(unsigned offset) const {
   DCHECK_LE(offset, num_characters_);
@@ -854,8 +853,9 @@ void ShapeResult::ApplySpacingImpl(
         continue;
       }
 
-      space = spacing.ComputeSpacing(
-          run_start_index + glyph_data.character_index, offset);
+      space =
+          spacing.ComputeSpacing(run_start_index + glyph_data.character_index,
+                                 run->font_data_->GetAdvanceOverride(), offset);
       glyph_data.advance += space;
       total_space_for_run += space;
 
@@ -1259,6 +1259,7 @@ unsigned ShapeResult::CopyRangeInternal(unsigned run_index,
       std::min(end_offset, EndIndex()) - std::max(start_offset, StartIndex());
 
   unsigned target_run_size_before = target->runs_.size();
+  bool should_merge = !target->runs_.IsEmpty();
   for (; run_index < runs_.size(); run_index++) {
     const auto& run = runs_[run_index];
     unsigned run_start = run->start_index_;
@@ -1273,7 +1274,14 @@ unsigned ShapeResult::CopyRangeInternal(unsigned run_index,
       sub_run->start_index_ += index_diff;
       target->width_ += sub_run->width_;
       target->num_glyphs_ += sub_run->glyph_data_.size();
-      target->runs_.push_back(std::move(sub_run));
+      if (auto merged_run =
+              should_merge ? target->runs_.back()->MergeIfPossible(*sub_run)
+                           : scoped_refptr<RunInfo>()) {
+        target->runs_.back() = std::move(merged_run);
+      } else {
+        target->runs_.push_back(std::move(sub_run));
+      }
+      should_merge = false;
 
       // No need to process runs after the end of the range.
       if ((!Rtl() && end_offset <= run_end) ||
@@ -1872,7 +1880,7 @@ void ShapeResult::ComputeRunInkBounds(const ShapeResult::RunInfo& run,
   auto glyph_offsets = run.glyph_data_.GetOffsets<has_non_zero_glyph_offsets>();
   const SimpleFontData& current_font_data = *run.font_data_;
   unsigned num_glyphs = run.glyph_data_.size();
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
   Vector<Glyph, 256> glyphs(num_glyphs);
   unsigned i = 0;
   for (const auto& glyph_data : run.glyph_data_)
@@ -1884,7 +1892,7 @@ void ShapeResult::ComputeRunInkBounds(const ShapeResult::RunInfo& run,
   GlyphBoundsAccumulator bounds(run_advance);
   for (unsigned j = 0; j < num_glyphs; ++j) {
     const HarfBuzzRunGlyphData& glyph_data = run.glyph_data_[j];
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
     FloatRect glyph_bounds = current_font_data.BoundsForGlyph(glyph_data.glyph);
 #else
     FloatRect glyph_bounds(bounds_list[j]);

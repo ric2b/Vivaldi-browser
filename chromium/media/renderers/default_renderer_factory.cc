@@ -21,7 +21,7 @@
 #include "platform_media/renderer/decoders/ipc_demuxer.h"
 #include "platform_media/renderer/decoders/pass_through_audio_decoder.h"
 #include "platform_media/renderer/decoders/pass_through_video_decoder.h"
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include "platform_media/renderer/decoders/mac/at_audio_decoder.h"
 #include "platform_media/renderer/decoders/mac/viv_video_decoder.h"
 #endif
@@ -71,7 +71,7 @@ DefaultRendererFactory::CreateAudioDecoders(
     audio_decoders.push_back(
         std::make_unique<PassThroughAudioDecoder>(media_task_runner));
   } else {
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
     audio_decoders.push_back(
         std::make_unique<ATAudioDecoder>(media_task_runner));
 #elif defined(OS_WIN)
@@ -115,10 +115,10 @@ DefaultRendererFactory::CreateVideoDecoders(
 #endif
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   video_decoders.push_back(
     VivVideoDecoder::Create(media_task_runner, media_log_));
-#endif // OS_MACOSX
+#endif // OS_MAC
 #if defined(OS_WIN)
   if (!mf_session_) {
     mf_session_ = InitializeMediaFoundation();

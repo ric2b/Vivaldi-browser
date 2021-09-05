@@ -26,6 +26,11 @@ const base::Feature kDismissPromos{"DismissNtpPromos",
 const base::Feature kIframeOneGoogleBar{"IframeOneGoogleBar",
                                         base::FEATURE_DISABLED_BY_DEFAULT};
 
+// If enabled, queries that are frequently repeated by the user (and are
+// expected to be issued again) are shown as most visited tiles.
+const base::Feature kNtpRepeatableQueries{"NtpRepeatableQueries",
+                                          base::FEATURE_DISABLED_BY_DEFAULT};
+
 // If enabled, the iframed OneGooleBar shows the overlays modally with a
 // backdrop.
 const base::Feature kOneGoogleBarModalOverlays{
@@ -44,7 +49,7 @@ const base::Feature kRealboxUseGoogleGIcon{"NtpRealboxUseGoogleGIcon",
 // If enabled, the search box in the middle of the NTP will accept input
 // directly (i.e. not be a "fake" box) and search results will show directly
 // below the non-fake input ("realbox").
-const base::Feature kRealbox{"NtpRealbox", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kRealbox{"NtpRealbox", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // If enabled, shows Vasco suggestion chips in the NTP below fakebox/realbox
 // despite other config except DisableSearchSuggestChips below.
@@ -67,6 +72,9 @@ const base::Feature kWebUIRealbox{"WebUIRealbox",
 // If enabled, the Doodle will be shown on themed and dark mode NTPs.
 const base::Feature kWebUIThemeModeDoodles{"WebUIThemeModeDoodles",
                                            base::FEATURE_ENABLED_BY_DEFAULT};
+
+// If enabled, modules will be shown.
+const base::Feature kModules{"NtpModules", base::FEATURE_DISABLED_BY_DEFAULT};
 
 bool IsRealboxEnabled() {
   if (!base::FeatureList::IsEnabled(omnibox::kNewSearchFeatures))

@@ -7,10 +7,7 @@
 
 #include "content/public/common/common_param_traits.h"
 #include "content/public/common/page_visibility_state.h"
-#include "content/public/common/screen_info.h"
 #include "ipc/ipc_message_macros.h"
-#include "third_party/blink/public/platform/web_text_autosizer_page_info.h"
-#include "ui/gfx/geometry/rect.h"
 
 // IPC messages for page-level actions.
 // TODO(https://crbug.com/775827): Convert to mojo.
@@ -29,18 +26,8 @@ IPC_MESSAGE_ROUTED2(PageMsg_SetHistoryOffsetAndLength,
                     int /* history_offset */,
                     int /* history_length */)
 
-IPC_MESSAGE_ROUTED1(PageMsg_AudioStateChanged, bool /* is_audio_playing */)
-
-// blink::TextAutosizer changes in the main frame's renderer.
-IPC_MESSAGE_ROUTED1(PageMsg_UpdateTextAutosizerPageInfoForRemoteMainFrames,
-                    blink::WebTextAutosizerPageInfo /* page_info */)
-
 // Sends updated preferences to the renderer.
 IPC_MESSAGE_ROUTED1(PageMsg_SetRendererPrefs, blink::mojom::RendererPreferences)
-
-// Sent to all renderers when a portal web contents is activated or if a
-// web contents is adopted as a portal.
-IPC_MESSAGE_ROUTED1(PageMsg_SetInsidePortal, bool /* inside_portal */)
 
 // -----------------------------------------------------------------------------
 // Messages sent from the renderer to the browser.

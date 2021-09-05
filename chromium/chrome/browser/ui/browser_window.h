@@ -94,7 +94,14 @@ enum class ShowTranslateBubbleResult {
   EDITABLE_FIELD_IS_ACTIVE,
 };
 
-enum class BrowserThemeChangeType { kBrowserTheme, kNativeTheme };
+enum class BrowserThemeChangeType {
+  // User changes the browser theme.
+  kBrowserTheme,
+  // User changes the OS native theme.
+  kNativeTheme,
+  // A web app sets a theme color at launch, or changes theme color.
+  kWebAppTheme
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 // BrowserWindow interface
@@ -294,7 +301,7 @@ class BrowserWindow : public ui::BaseWindow {
   // Called from toolbar subviews during their show/hide animations.
   virtual void ToolbarSizeChanged(bool is_animating) = 0;
 
-  // Called when the accociated window's tab dragging status changed.
+  // Called when the associated window's tab dragging status changed.
   virtual void TabDraggingStatusChanged(bool is_dragging) = 0;
 
   // Focuses the app menu like it was a menu bar.
@@ -496,6 +503,12 @@ class BrowserWindow : public ui::BaseWindow {
   virtual std::unique_ptr<content::EyeDropper> OpenEyeDropper(
       content::RenderFrameHost* frame,
       content::EyeDropperListener* listener) = 0;
+
+  // Shows a confirmation dialog about enabling caret browsing.
+  virtual void ShowCaretBrowsingDialog() = 0;
+
+  // Create and open the tab search bubble.
+  virtual void CreateTabSearchBubble() = 0;
 
  protected:
   friend class BrowserCloseManager;

@@ -78,17 +78,30 @@ inline LayoutUnit FragmentainerSpaceAtBfcStart(const NGConstraintSpace& space) {
   return space.FragmentainerBlockSize() - space.FragmentainerOffsetAtBfc();
 }
 
-// Adjust a box strut (margins, borders, scrollbars, and/or padding) to take
-// fragmentation into account. Leading block margin, border, scrollbar or
-// padding should only take up space in the first fragment generated from a
-// node.
-inline void AdjustForFragmentation(const NGBlockBreakToken* break_token,
-                                   NGBoxStrut* box_strut) {
-  if (LIKELY(!break_token))
+// Adjust margins to take fragmentation into account. Leading/trailing block
+// margins must be applied to at most one fragment each. Leading block margins
+// come before the first fragment (if at all; see below), and trailing block
+// margins come right after the fragment that has any trailing padding+border
+// (note that this may not be the final fragment, if children overflow; see
+// below). For all other fragments, leading/trailing block margins must be
+// ignored.
+inline void AdjustMarginsForFragmentation(const NGBlockBreakToken* break_token,
+                                          NGBoxStrut* box_strut) {
+  if (!break_token)
     return;
-  if (break_token->IsBreakBefore())
-    return;
-  box_strut->block_start = LayoutUnit();
+
+  // Leading block margins are truncated if they come right after an unforced
+  // break (except for floats; floats never truncate margins). And they should
+  // only occur in front of the first fragment.
+  if (!break_token->IsBreakBefore() ||
+      (!break_token->IsForcedBreak() && !break_token->InputNode().IsFloating()))
+    box_strut->block_start = LayoutUnit();
+
+  // If we're past the block end, we are in a parallel flow (caused by content
+  // overflow), and any trailing block margin has already been applied in the
+  // fragmentainer where the block actually ended.
+  if (break_token->IsAtBlockEnd())
+    box_strut->block_end = LayoutUnit();
 }
 
 // Set up a child's constraint space builder for block fragmentation. The child
@@ -110,10 +123,6 @@ void SetupFragmentBuilderForFragmentation(
     const NGBlockBreakToken* previous_break_token,
     NGBoxFragmentBuilder*);
 
-inline void SetupFragmentBuilderForFragmentation(const NGConstraintSpace&,
-                                                 const NGInlineBreakToken*,
-                                                 NGLineBoxFragmentBuilder*) {}
-
 // Return true if the node is fully grown at its current size.
 // |current_total_block_size| is the total block-size of the node, as if all
 // fragments were stitched together.
@@ -131,7 +140,13 @@ bool IsNodeFullyGrown(NGBlockNode,
 // do, since any block-size specified in CSS applies to the entire box,
 // regardless of fragmentation. This function will update the block-size to the
 // actual fragment size, by examining possible breakpoints, if necessary.
-void FinishFragmentation(NGBlockNode node,
+//
+// Return true if successful. If false is returned, it means that we ran out of
+// space at a less-than-ideal location - in this case between the last child and
+// the block-end padding / border. Furthermore, this also means that we know
+// that we have a better earlier breakpoint, so the correct response to 'false'
+// is to abort layout, then relayout and break earlier.
+bool FinishFragmentation(NGBlockNode node,
                          const NGConstraintSpace&,
                          const NGBlockBreakToken* previous_break_token,
                          const NGBoxStrut& border_padding,
@@ -243,6 +258,14 @@ bool AttemptSoftBreak(const NGConstraintSpace&,
                       LayoutUnit fragmentainer_block_offset,
                       NGBreakAppeal appeal_before,
                       NGBoxFragmentBuilder*);
+
+// Calculate the constraint space for columns of a multi-column layout.
+NGConstraintSpace CreateConstraintSpaceForColumns(
+    const NGConstraintSpace& parent_space,
+    WritingMode writing_mode,
+    const LogicalSize& column_size,
+    bool is_first_fragmentainer,
+    bool balance_columns);
 
 // Return the adjusted child margin to be applied at the end of a fragment.
 // Margins should collapse with the fragmentainer boundary. |bfc_block_offset|

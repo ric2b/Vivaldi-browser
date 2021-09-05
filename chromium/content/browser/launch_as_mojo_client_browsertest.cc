@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/base_switches.h"
+#include "base/cfi_buildflags.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
@@ -21,6 +23,10 @@
 #include "mojo/public/mojom/base/binder.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
+#if defined(USE_OZONE)
+#include "ui/ozone/public/ozone_switches.h"
+#endif
+
 namespace content {
 namespace {
 
@@ -30,6 +36,22 @@ const char kShellExecutableName[] = "content_shell.exe";
 const char kShellExecutableName[] = "content_shell";
 const char kMojoCoreLibraryName[] = "libmojo_core.so";
 #endif
+
+const char* kSwitchesToCopy[] = {
+#if defined(USE_OZONE)
+    // Keep the kOzonePlatform switch that the Ozone must use.
+    switches::kOzonePlatform,
+#endif
+    // Some tests use custom cmdline that doesn't hold switches from previous
+    // cmdline. Only a couple of switches are copied. That can result in
+    // incorrect initialization of a process. For example, the work that we do
+    // to have use_x11 && use_ozone, requires UseOzonePlatform feature flag to
+    // be passed to all the process to ensure correct path is chosen.
+    // TODO(https://crbug.com/1096425): update this comment once USE_X11 goes
+    // away.
+    switches::kEnableFeatures,
+    switches::kDisableFeatures,
+};
 
 base::FilePath GetCurrentDirectory() {
   base::FilePath current_directory;
@@ -55,6 +77,9 @@ class LaunchAsMojoClientBrowserTest : public ContentBrowserTest {
         GetFilePathNextToCurrentExecutable(kShellExecutableName));
     command_line.AppendSwitchPath(switches::kContentShellDataPath,
                                   temp_dir_.GetPath());
+    const base::CommandLine& cmdline = *base::CommandLine::ForCurrentProcess();
+    command_line.CopySwitchesFrom(cmdline, kSwitchesToCopy,
+                                  base::size(kSwitchesToCopy));
     return command_line;
   }
 
@@ -80,7 +105,7 @@ class LaunchAsMojoClientBrowserTest : public ContentBrowserTest {
     return controller;
   }
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
   base::FilePath GetMojoCoreLibraryPath() {
     return GetFilePathNextToCurrentExecutable(kMojoCoreLibraryName);
   }
@@ -141,8 +166,14 @@ IN_PROC_BROWSER_TEST_F(LaunchAsMojoClientBrowserTest, LaunchAndBindInterface) {
 // spurious uninitialized memory reads inside base::PlatformThread due to what
 // appears to be poor interaction among MSan, PlatformThread's thread_local
 // storage, and Mojo's use of dlopen().
-#if defined(OS_LINUX) && !defined(MEMORY_SANITIZER)
-IN_PROC_BROWSER_TEST_F(LaunchAsMojoClientBrowserTest, WithMojoCoreLibrary) {
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
+#if defined(MEMORY_SANITIZER) || BUILDFLAG(CFI_ICALL_CHECK)
+#define MAYBE_WithMojoCoreLibrary DISABLED_WithMojoCoreLibrary
+#else
+#define MAYBE_WithMojoCoreLibrary WithMojoCoreLibrary
+#endif
+IN_PROC_BROWSER_TEST_F(LaunchAsMojoClientBrowserTest,
+                       MAYBE_WithMojoCoreLibrary) {
   // Instructs a newly launched Content Shell browser to initialize Mojo Core
   // dynamically from a shared library, rather than using the version linked
   // into the Content Shell binary.
@@ -171,7 +202,7 @@ IN_PROC_BROWSER_TEST_F(LaunchAsMojoClientBrowserTest, WithMojoCoreLibrary) {
 
   shell_controller->ShutDown();
 }
-#endif  // defined(OS_LINUX) && !defined(MEMORY_SANITIZER)
+#endif  // defined(OS_LINUX) || defined(OS_CHROMEOS)
 
 }  // namespace
 }  // namespace content

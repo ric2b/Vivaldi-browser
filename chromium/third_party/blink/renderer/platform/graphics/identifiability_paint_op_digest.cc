@@ -4,6 +4,8 @@
 
 #include "third_party/blink/renderer/platform/graphics/identifiability_paint_op_digest.h"
 
+#include <cstring>
+
 #include "gpu/command_buffer/client/raster_interface.h"
 #include "third_party/blink/public/common/privacy_budget/identifiability_metrics.h"
 #include "third_party/blink/public/common/privacy_budget/identifiability_study_participation.h"
@@ -14,6 +16,14 @@
 
 namespace blink {
 
+namespace {
+
+// To minimize performance impact, don't exceed kMaxDigestOps during the
+// lifetime of this IdentifiabilityPaintOpDigest object.
+constexpr int kMaxDigestOps = 1 << 20;
+
+}  // namespace
+
 // Storage for serialized PaintOp state.
 Vector<char>& SerializationBuffer() {
   DEFINE_THREAD_SAFE_STATIC_LOCAL(ThreadSpecific<Vector<char>>,
@@ -22,7 +32,12 @@ Vector<char>& SerializationBuffer() {
 }
 
 IdentifiabilityPaintOpDigest::IdentifiabilityPaintOpDigest(IntSize size)
-    : size_(size),
+    : IdentifiabilityPaintOpDigest(size, kMaxDigestOps) {}
+
+IdentifiabilityPaintOpDigest::IdentifiabilityPaintOpDigest(IntSize size,
+                                                           int max_digest_ops)
+    : max_digest_ops_(max_digest_ops),
+      size_(size),
       paint_cache_(cc::ClientPaintCache::kNoCachingBudget),
       nodraw_canvas_(size_.Width(), size_.Height()),
       serialize_options_(&image_provider_,
@@ -35,6 +50,7 @@ IdentifiabilityPaintOpDigest::IdentifiabilityPaintOpDigest(IntSize size)
                          /*content_supports_distance_field_text=*/false,
                          /*max_texture_size=*/0,
                          /*original_ctm=*/SkMatrix::I()) {
+  serialize_options_.for_identifiability_study = true;
   constexpr size_t kInitialSize = 16 * 1024;
   if (IsUserInIdentifiabilityStudy() &&
       SerializationBuffer().size() < kInitialSize)
@@ -48,11 +64,12 @@ constexpr size_t IdentifiabilityPaintOpDigest::kInfiniteOps;
 void IdentifiabilityPaintOpDigest::MaybeUpdateDigest(
     const sk_sp<const cc::PaintRecord>& paint_record,
     const size_t num_ops_to_visit) {
-  // To minimize performance impact, don't exceed kMaxDigestOps during the
-  // lifetime of this IdentifiabilityPaintOpDigest object.
-  constexpr int kMaxDigestOps = 1 << 20;
-  if (!IsUserInIdentifiabilityStudy() || total_ops_digested_ > kMaxDigestOps)
+  if (!IsUserInIdentifiabilityStudy())
     return;
+  if (total_ops_digested_ >= max_digest_ops_) {
+    encountered_skipped_ops_ = true;
+    return;
+  }
 
   // Determine how many PaintOps we'll need to digest after the initial digests
   // that are skipped.
@@ -73,9 +90,15 @@ void IdentifiabilityPaintOpDigest::MaybeUpdateDigest(
       break;
 
     // To capture font fallback identifiability, we capture text draw operations
-    // at the 2D context layer.
-    if (op->GetType() == cc::PaintOpType::DrawTextBlob)
+    // at the 2D context layer. We still need to modify the token builder digest
+    // since we want to track the relative ordering of text operations and other
+    // operations.
+    if (op->GetType() == cc::PaintOpType::DrawTextBlob) {
+      constexpr uint64_t kDrawTextBlobValue =
+          UINT64_C(0x8c1587a34065ea3b);  // Picked form a hat.
+      builder_.AddValue(kDrawTextBlobValue);
       continue;
+    }
 
     // DrawRecord PaintOps contain nested PaintOps.
     if (op->GetType() == cc::PaintOpType::DrawRecord) {
@@ -84,17 +107,20 @@ void IdentifiabilityPaintOpDigest::MaybeUpdateDigest(
       continue;
     }
 
+    std::memset(SerializationBuffer().data(), 0, SerializationBuffer().size());
     size_t serialized_size;
     while ((serialized_size = op->Serialize(SerializationBuffer().data(),
                                             SerializationBuffer().size(),
                                             serialize_options_)) == 0) {
       constexpr size_t kMaxBufferSize =
           gpu::raster::RasterInterface::kDefaultMaxOpSizeHint << 2;
-      if (SerializationBuffer().size() >= kMaxBufferSize)
+      if (SerializationBuffer().size() >= kMaxBufferSize) {
+        encountered_skipped_ops_ = true;
         return;
+      }
       SerializationBuffer().Grow(SerializationBuffer().size() << 1);
     }
-    digest_ ^= IdentifiabilityDigestOfBytes(base::as_bytes(
+    builder_.AddAtomic(base::as_bytes(
         base::make_span(SerializationBuffer().data(), serialized_size)));
     total_ops_digested_++;
     cur_ops_digested++;
@@ -106,6 +132,7 @@ cc::ImageProvider::ScopedResult
 IdentifiabilityPaintOpDigest::IdentifiabilityImageProvider::GetRasterContent(
     const cc::DrawImage& draw_image) {
   // TODO(crbug.com/973801): Compute digests on images.
+  outer_->encountered_partially_digested_image_ = true;
   return ScopedResult();
 }
 

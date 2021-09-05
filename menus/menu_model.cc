@@ -16,8 +16,9 @@ Menu_Node* AsMutable(const Menu_Node* node) {
   return const_cast<Menu_Node*>(node);
 }
 
-Menu_Model::Menu_Model(content::BrowserContext* context)
+Menu_Model::Menu_Model(content::BrowserContext* context, Mode mode)
     : context_(context),
+      mode_(mode),
       root_(Menu_Node::root_node_guid(), Menu_Node::root_node_id()) {}
 
 Menu_Model::~Menu_Model() {
@@ -235,6 +236,30 @@ bool Menu_Model::SetTitle(Menu_Node* node, const base::string16& title) {
 
   node->SetTitle(title);
   node->SetHasCustomTitle(true);
+
+  Save();
+
+  for (auto& observer : observers_)
+    observer.MenuModelChanged(this, -1, menu->action());
+
+  return true;
+}
+
+
+bool Menu_Model::SetParameter(Menu_Node* node, const std::string& parameter) {
+  if (node->parameter() == parameter) {
+    return true;
+  }
+
+  const Menu_Node* menu = node->GetMenu();
+  if (!menu) {
+    NOTREACHED();
+    return false;
+  }
+
+  RemoveBundleTag(node, false);
+
+  node->SetParameter(parameter);
 
   Save();
 

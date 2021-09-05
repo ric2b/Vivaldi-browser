@@ -41,7 +41,7 @@ bool SetMaximizedIfPossible(gfx::Rect* bounds,
       return true;
     }
   }
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
   // If we're lower resolution, always maximize, except on Mac.
   if (display_bounds.width() < 1920 && display_bounds.height() < 1080) {
     *show_state = ui::SHOW_STATE_MAXIMIZED;

@@ -6,6 +6,7 @@
 <translation id="1012173283529841972">Listaelem</translation>
 <translation id="1013742170491673792">keresés</translation>
 <translation id="1014370462248694370">Csúsztassa két ujját jobbra</translation>
+<translation id="1016393160682012902">Nyomja le a kívánt gombot az eszköz billentyűzetén, a frissíthető Braille-billentyűzeten, vagy válassza ki a kívánt érintési kézmozdulatot, ha szeretné megtanulni a funkcióját. A kilépéshez nyomja le a Control és a W vagy az Escape gombot.</translation>
 <translation id="1022586497894531524">Először használja a ChromeVox hangos visszajelzését? Ez a rövid útmutató elmagyarázza a ChromeVox legfontosabb kezdő lépéseit.</translation>
 <translation id="1025074108959230262">Beragadó mód kikapcsolva</translation>
 <translation id="1031961866430398710">majd</translation>
@@ -504,7 +505,6 @@
 <translation id="489907760999452556">Belső link</translation>
 <translation id="4909019435900810068">Ugrás visszább egy szóval</translation>
 <translation id="4911349081560453449">Nincs előző jelölőnégyzet</translation>
-<translation id="4915087353619183190">A Tanuló mód indítása. Nyomja le a kívánt gombot az eszköz billentyűzetén, a frissíthető Braille-billentyűzeten, vagy válassza ki a kívánt érintési kézmozdulatot, ha szeretné megtanulni a funkcióját. A kilépéshez nyomja le a Control és a W vagy az Escape gombot.</translation>
 <translation id="492295894462528572">Előszó</translation>
 <translation id="495046168593986294">Görgetés felfelé</translation>
 <translation id="495170559598752135">Műveletek</translation>
@@ -647,6 +647,7 @@
 <translation id="6017514345406065928">Zöld</translation>
 <translation id="602001110135236999">Görgetés balra</translation>
 <translation id="6034000775414344507">Világosszürke</translation>
+<translation id="6036135911048686884">Felfedezés érintéssel</translation>
 <translation id="6037602951055904232">Pászt előre</translation>
 <translation id="6044160928851315051">Képernyő sötétítése</translation>
 <translation id="6082768461603900813">Alapvető navigáció</translation>
@@ -922,6 +923,7 @@
 <translation id="8345569862449483843">{COUNT,plural, =1{kettős kereszt}other{# kettős kereszt jel}}</translation>
 <translation id="8378855320830505539">Terület</translation>
 <translation id="8382679411218029383">Automatikus kiegészítés soron belül és listaként</translation>
+<translation id="8394908167088220973">Lejátszás/szüneteltetés</translation>
 <translation id="8428213095426709021">Beállítások</translation>
 <translation id="8428603554127842284"><ph name="DEPTH" />. szint</translation>
 <translation id="8430049249787218991">menüsor</translation>
@@ -966,6 +968,7 @@
 <translation id="8770473310765924354">kilépés a strukturált tartalmakból, például táblázatokból</translation>
 <translation id="8779057862865475116">Nincs előző link</translation>
 <translation id="8796411681063377102">Következő 3. szintű fejléc</translation>
+<translation id="8823311177246872527"><ph name="TOTALPAGES" />/<ph name="CURRENTPAGE" />. oldal</translation>
 <translation id="8825828890761629845">szlghird</translation>
 <translation id="8851136666856101339">fő</translation>
 <translation id="8882002077197914455">Sorfejléc</translation>

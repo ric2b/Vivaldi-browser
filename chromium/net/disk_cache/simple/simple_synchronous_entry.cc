@@ -1159,13 +1159,8 @@ bool SimpleSynchronousEntry::MaybeCreateFile(int file_index,
 }
 
 bool SimpleSynchronousEntry::OpenFiles(SimpleEntryStat* out_entry_stat) {
-  base::Time file_1_open_start;
-
   for (int i = 0; i < kSimpleEntryNormalFileCount; ++i) {
     base::File::Error error;
-
-    if (i == 1)
-      file_1_open_start = base::Time::Now();
 
     if (!MaybeOpenFile(i, &error)) {
       RecordSyncOpenResult(cache_type_, OPEN_ENTRY_PLATFORM_FILE_ERROR);
@@ -1180,7 +1175,6 @@ bool SimpleSynchronousEntry::OpenFiles(SimpleEntryStat* out_entry_stat) {
 
   have_open_files_ = true;
 
-  base::Time after_open_files = base::Time::Now();
   for (int i = 0; i < kSimpleEntryNormalFileCount; ++i) {
     if (empty_file_omitted_[i]) {
       out_entry_stat->set_data_size(i + 1, 0);
@@ -1216,24 +1210,6 @@ bool SimpleSynchronousEntry::OpenFiles(SimpleEntryStat* out_entry_stat) {
       return false;
     }
     out_entry_stat->set_data_size(i + 1, static_cast<int>(file_info.size));
-
-    // In case where we do know the key, report how long it took us to open
-    // file 1 (for stream 2), splitting the time between different size
-    // categories.
-    if (i == 1 && !key_.empty()) {
-      int32_t data_size = GetDataSizeFromFileSize(
-          key_.size(), static_cast<int>(file_info.size));
-      base::TimeDelta file_1_open_elapsed =
-          after_open_files - file_1_open_start;
-      if (data_size <= 32) {
-        SIMPLE_CACHE_UMA(TIMES, "DiskOpenStream2TinyLatency", cache_type_,
-                         file_1_open_elapsed);
-
-      } else {
-        SIMPLE_CACHE_UMA(TIMES, "DiskOpenStream2NonTinyLatency", cache_type_,
-                         file_1_open_elapsed);
-      }
-    }
   }
 
   return true;
@@ -1271,10 +1247,8 @@ void SimpleSynchronousEntry::CloseFile(int index) {
     // this before calling SimpleFileTracker::Close, since that would make the
     // name available to other threads.
     if (entry_file_key_.doom_generation != 0u) {
-      base::DeleteFile(
-          path_.AppendASCII(
-              GetFilenameFromEntryFileKeyAndFileIndex(entry_file_key_, index)),
-          false);
+      base::DeleteFile(path_.AppendASCII(
+          GetFilenameFromEntryFileKeyAndFileIndex(entry_file_key_, index)));
     }
     file_tracker_->Close(this, SubFileForFileIndex(index));
   }
@@ -1415,21 +1389,15 @@ int SimpleSynchronousEntry::InitializeForOpen(
   }
   out_entry_stat->set_sparse_data_size(sparse_data_size);
 
-  bool removed_stream2 = false;
   const int stream2_file_index = GetFileIndexFromStreamIndex(2);
   DCHECK(CanOmitEmptyFile(stream2_file_index));
   if (!empty_file_omitted_[stream2_file_index] &&
       out_entry_stat->data_size(2) == 0) {
-    DVLOG(1) << "Removing empty stream 2 file.";
     CloseFile(stream2_file_index);
     DeleteFileForEntryHash(path_, entry_file_key_.entry_hash,
                            stream2_file_index);
     empty_file_omitted_[stream2_file_index] = true;
-    removed_stream2 = true;
   }
-
-  SIMPLE_CACHE_UMA(BOOLEAN, "EntryOpenedAndStream2Removed", cache_type_,
-                   removed_stream2);
 
   RecordSyncOpenResult(cache_type_, OPEN_ENTRY_SUCCESS);
   initialized_ = true;
@@ -1691,7 +1659,7 @@ bool SimpleSynchronousEntry::DeleteFileForEntryHash(const FilePath& path,
                                                     const int file_index) {
   FilePath to_delete = path.AppendASCII(GetFilenameFromEntryFileKeyAndFileIndex(
       SimpleFileTracker::EntryFileKey(entry_hash), file_index));
-  return base::DeleteFile(to_delete, false);
+  return base::DeleteFile(to_delete);
 }
 
 // static

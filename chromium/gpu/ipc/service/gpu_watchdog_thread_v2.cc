@@ -9,24 +9,46 @@
 #include "base/bind_helpers.h"
 #include "base/bit_cast.h"
 #include "base/debug/alias.h"
+#include "base/debug/dump_without_crashing.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop_current.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/native_library.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/power_monitor/power_monitor.h"
+#include "base/process/process.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/system/sys_info.h"
+#include "base/task/current_thread.h"
 #include "base/threading/platform_thread.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "gpu/config/gpu_crash_keys.h"
 #include "gpu/config/gpu_finch_features.h"
+#include "gpu/ipc/common/result_codes.h"
+
+#if defined(OS_WIN)
+#include "base/win/windows_version.h"
+#endif
 
 namespace gpu {
+#if defined(OS_WIN)
+base::TimeDelta GetGpuWatchdogTimeoutBasedOnCpuCores() {
+  if (base::win::GetVersion() >= base::win::Version::WIN10) {
+    int num_of_processors = base::SysInfo::NumberOfProcessors();
+
+    if (num_of_processors > 8)
+      return (kGpuWatchdogTimeout - base::TimeDelta::FromSeconds(10));
+    else if (num_of_processors <= 4)
+      return kGpuWatchdogTimeout + base::TimeDelta::FromSeconds(5);
+  }
+
+  return kGpuWatchdogTimeout;
+}
+#endif
 
 GpuWatchdogThreadImplV2::GpuWatchdogThreadImplV2(
     base::TimeDelta timeout,
@@ -37,7 +59,7 @@ GpuWatchdogThreadImplV2::GpuWatchdogThreadImplV2(
       max_extra_cycles_before_kill_(max_extra_cycles_before_kill),
       is_test_mode_(is_test_mode),
       watched_gpu_task_runner_(base::ThreadTaskRunnerHandle::Get()) {
-  base::MessageLoopCurrent::Get()->AddTaskObserver(this);
+  base::CurrentThread::Get()->AddTaskObserver(this);
   num_of_processors_ = base::SysInfo::NumberOfProcessors();
 
 #if defined(OS_WIN)
@@ -71,7 +93,7 @@ GpuWatchdogThreadImplV2::~GpuWatchdogThreadImplV2() {
 
   Stop();  // stop the watchdog thread
 
-  base::MessageLoopCurrent::Get()->RemoveTaskObserver(this);
+  base::CurrentThread::Get()->RemoveTaskObserver(this);
   base::PowerMonitor::RemoveObserver(this);
   GpuWatchdogHistogram(GpuWatchdogThreadEvent::kGpuWatchdogEnd);
 #if defined(OS_WIN)
@@ -111,7 +133,14 @@ std::unique_ptr<GpuWatchdogThreadImplV2> GpuWatchdogThreadImplV2::Create(
     const char kNewTimeOutParam[] = "new_time_out";
     const char kMaxExtraCyclesBeforeKillParam[] =
         "max_extra_cycles_before_kill";
-#if defined(OS_WIN) || defined(OS_MACOSX)
+
+#if defined(OS_WIN)
+    // The purpose of finch on Windows is to know the impact of the number of
+    // CPU cores while the rest of platforms are to try a different watchdog
+    // timeout length.
+    gpu_watchdog_timeout = GetGpuWatchdogTimeoutBasedOnCpuCores();
+    constexpr int kFinchMaxExtraCyclesBeforeKill = 0;
+#elif defined(OS_MAC)
     constexpr int kFinchMaxExtraCyclesBeforeKill = 1;
 #else
     constexpr int kFinchMaxExtraCyclesBeforeKill = 2;
@@ -119,7 +148,7 @@ std::unique_ptr<GpuWatchdogThreadImplV2> GpuWatchdogThreadImplV2::Create(
 
     int timeout = base::GetFieldTrialParamByFeatureAsInt(
         features::kGpuWatchdogV2NewTimeout, kNewTimeOutParam,
-        kGpuWatchdogTimeout.InSeconds());
+        gpu_watchdog_timeout.InSeconds());
     gpu_watchdog_timeout = base::TimeDelta::FromSeconds(timeout);
 
     max_extra_cycles_before_kill = base::GetFieldTrialParamByFeatureAsInt(
@@ -655,8 +684,12 @@ void GpuWatchdogThreadImplV2::DeliberatelyTerminateToRecoverFromHang() {
   auto last_arm_disarm_counter = ReadArmDisarmCounter();
   base::debug::Alias(&last_arm_disarm_counter);
 
-  // Deliberately crash the process to create a crash dump.
-  *static_cast<volatile int*>(nullptr) = 0x1337;
+  // Use RESULT_CODE_HUNG so this crash is separated from other
+  // EXCEPTION_ACCESS_VIOLATION buckets for UMA analysis.
+  // Create a crash dump first. TerminateCurrentProcessImmediately will not
+  // create a dump.
+  base::debug::DumpWithoutCrashing();
+  base::Process::TerminateCurrentProcessImmediately(RESULT_CODE_HUNG);
 }
 
 void GpuWatchdogThreadImplV2::GpuWatchdogHistogram(
@@ -817,12 +850,14 @@ void GpuWatchdogThreadImplV2::WatchedThreadGetsExtraTimeoutHistogram(
 }
 
 bool GpuWatchdogThreadImplV2::WithinOneMinFromPowerResumed() {
-  size_t count = base::TimeDelta::FromSeconds(60) / watchdog_timeout_;
+  size_t count = base::ClampFloor<size_t>(base::TimeDelta::FromMinutes(1) /
+                                          watchdog_timeout_);
   return power_resumed_event_ && num_of_timeout_after_power_resume_ <= count;
 }
 
 bool GpuWatchdogThreadImplV2::WithinOneMinFromForegrounded() {
-  size_t count = base::TimeDelta::FromSeconds(60) / watchdog_timeout_;
+  size_t count = base::ClampFloor<size_t>(base::TimeDelta::FromMinutes(1) /
+                                          watchdog_timeout_);
   return foregrounded_event_ && num_of_timeout_after_foregrounded_ <= count;
 }
 

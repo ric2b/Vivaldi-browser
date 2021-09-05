@@ -117,7 +117,7 @@ const char kDisableHighResTimer[] = "disable-highres-timer";
 const char kDisableUsbKeyboardDetect[]      = "disable-usb-keyboard-detect";
 #endif
 
-#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+#if defined(OS_LINUX) && !defined(OS_CHROMEOS) && !BUILDFLAG(IS_LACROS)
 // The /dev/shm partition is too small in certain VM environments, causing
 // Chrome to fail or crash (see http://crbug.com/715363). Use this flag to
 // work-around this issue (a temporary directory will always be used to create
@@ -140,6 +140,16 @@ const char kEnableReachedCodeProfiler[] = "enable-reached-code-profiler";
 // Specifies the profiling interval in microseconds for reached code profiler.
 const char kReachedCodeSamplingIntervalUs[] =
     "reached-code-sampling-interval-us";
+
+// Default country code to be used for search engine localization.
+const char kDefaultCountryCodeAtInstall[] = "default-country-code";
+
+// Adds additional thread idle time information into the trace event output.
+const char kEnableIdleTracing[] = "enable-idle-tracing";
+
+// The field trial parameters and their values when testing changes locally.
+const char kForceFieldTrialParams[] = "force-fieldtrial-params";
+
 #endif
 
 #if defined(OS_LINUX)

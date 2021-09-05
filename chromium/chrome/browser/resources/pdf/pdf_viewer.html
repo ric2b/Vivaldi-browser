@@ -1,6 +1,44 @@
-<style include="pdf-viewer-shared-style">
+<style include="pdf-viewer-shared-style cr-hidden-style">
+  :host {
+    --viewer-pdf-sidenav-width: 300px;
+  }
+
+  viewer-pdf-sidenav,
+  viewer-pdf-toolbar-new {
+    --pdf-toolbar-text-color: rgb(241, 241, 241);
+  }
+
   viewer-pdf-toolbar,
   viewer-pdf-toolbar-new {
+    --active-button-bg: rgba(255, 255, 255, 0.24);
+  }
+
+  #sidenav-container {
+    overflow: hidden;
+    transition: width 250ms cubic-bezier(.6, 0, 0, 1), visibility 250ms;
+    visibility: visible;
+    width: var(--viewer-pdf-sidenav-width);
+  }
+
+  #sidenav-container[closed] {
+    transition: width 200ms cubic-bezier(.6, 0, 0, 1), visibility 200ms;
+    visibility: hidden;
+    width: 0;
+  }
+
+  #content-focus-rectangle {
+    border: 2px solid var(--google-grey-600);
+    border-radius: 2px;
+    box-sizing: border-box;
+    height: 100%;
+    pointer-events: none;
+    position: fixed;
+    width: 100%;
+    /* z-index for this should be higher than toolbar. */
+    z-index: 5;
+  }
+
+  viewer-pdf-toolbar {
     position: fixed;
     width: 100%;
     z-index: 4;
@@ -17,39 +55,137 @@
       display: none;
     }
   }
+
+  /* Styles only applying when the pdfViewerUpdateEnabled flag is on. */
+
+  viewer-pdf-toolbar-new {
+    z-index: 1;
+  }
+
+  :host-context([pdf-viewer-update-enabled]):host {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    width: 100%;
+  }
+
+  #container {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  :host-context([pdf-viewer-update-enabled]) #plugin {
+    position: initial;
+  }
+
+  :host-context([pdf-viewer-update-enabled]) #content {
+    height: 100%;
+    left: 0;
+    position: sticky;
+    top: 0;
+    z-index: initial;
+  }
+
+  :host-context([pdf-viewer-update-enabled]) #sizer {
+    top: 0;
+    width: 100%;
+    z-index: initial;
+  }
+
+  #main {
+    flex: 1;
+    overflow: auto;
+    position: relative;
+  }
 </style>
 
 <template is="dom-if" if="[[!pdfViewerUpdateEnabled_]]">
   <viewer-pdf-toolbar id="toolbar" strings="[[strings]]"
-      annotation-available="[[annotationAvailable_]]"
       bookmarks="[[bookmarks_]]" doc-title="[[title_]]"
       has-edits="[[hasEdits_]]"
       has-entered-annotation-mode="[[hasEnteredAnnotationMode_]]"
+      pdf-form-save-enabled="[[pdfFormSaveEnabled_]]"
+      printing-enabled="[[printingEnabled_]]"
       is-form-field-focused="[[isFormFieldFocused_]]"
+      doc-length="[[docLength_]]" page-no="[[pageNo_]]"
+      load-progress="[[loadProgress_]]"
+<if expr="chromeos">
+      annotation-available="[[annotationAvailable_]]"
+      ink-controller="[[inkController_]]"
+      pdf-annotations-enabled="[[pdfAnnotationsEnabled_]]"
+</if>
+      on-change-page-and-xy="onChangePageAndXy_"
+      on-change-page="onChangePage_"
+      on-dropdown-opened="onDropdownOpened_"
+      on-navigate="onNavigate_"
       on-save="onToolbarSave_" on-print="onPrint_"
+<if expr="chromeos">
       on-annotation-mode-toggled="onAnnotationModeToggled_"
-      on-annotation-tool-changed="onAnnotationToolChanged_"
-      on-rotate-right="rotateClockwise" on-undo="onUndo_" on-redo="onRedo_"
-      hidden>
+</if>
+      on-rotate-right="rotateClockwise" hidden>
   </viewer-pdf-toolbar>
 </template>
 <template is="dom-if" if="[[pdfViewerUpdateEnabled_]]">
-  <viewer-pdf-toolbar-new id="toolbar" hidden>
+  <viewer-pdf-toolbar-new id="toolbar"
+    doc-title="[[title_]]" doc-length="[[docLength_]]" page-no="[[pageNo_]]"
+    load-progress="[[loadProgress_]]" has-edits="[[hasEdits_]]"
+    has-entered-annotation-mode="[[hasEnteredAnnotationMode_]]"
+    pdf-form-save-enabled="[[pdfFormSaveEnabled_]]"
+    printing-enabled="[[printingEnabled_]]"
+    is-form-field-focused="[[isFormFieldFocused_]]"
+    viewport-zoom="[[viewportZoom_]]"
+<if expr="chromeos">
+    annotation-available="[[annotationAvailable_]]"
+    ink-controller="[[inkController_]]"
+    pdf-annotations-enabled="[[pdfAnnotationsEnabled_]]"
+</if>
+    on-change-page="onChangePage_"
+    on-display-annotations-changed="onDisplayAnnotationsChanged_"
+    on-dropdown-opened="onDropdownOpened_"
+    on-fit-to-changed="onFitToChanged"
+    on-sidenav-toggle-click="onSidenavToggleClick_"
+    on-two-up-view-changed="onTwoUpViewChanged_"
+    on-zoom-changed="onZoomChanged" on-zoom-in="onZoomIn"
+    on-zoom-out="onZoomOut" on-rotate-left="rotateCounterclockwise"
+<if expr="chromeos">
+    on-annotation-mode-toggled="onAnnotationModeToggled_"
+</if>
+    on-print="onPrint_" on-save="onToolbarSave_" hidden>
   </viewer-pdf-toolbar-new>
 </template>
 
-<div id="sizer"></div>
+<template is="dom-if" if="[[pdfViewerUpdateEnabled_]]">
+  <div id="container">
+    <div id="sidenav-container" closed$="[[sidenavCollapsed_]]">
+      <viewer-pdf-sidenav id="sidenav"
+          bookmarks="[[bookmarks_]]" doc-length="[[docLength_]]"
+          on-change-page="onChangePage_"
+          on-change-page-and-xy="onChangePageAndXy_"
+          on-navigate="onNavigate_">
+      </viewer-pdf-sidenav>
+    </div>
+    <div id="main" on-scroll="onScroll_">
+      <div id="sizer"></div>
+      <div id="content"></div>
+    </div>
+  </div>
+</template>
+
+<template is="dom-if" if="[[!pdfViewerUpdateEnabled_]]">
+  <div id="sizer"></div>
+</template>
+
 <viewer-password-screen id="password-screen"
     on-password-submitted="onPasswordSubmitted_">
 </viewer-password-screen>
 
-<viewer-zoom-toolbar id="zoom-toolbar" strings="[[strings]]"
-    annotation-mode="[[annotationMode_]]"
-    on-fit-to-changed="onFitToChanged"
-    on-two-up-view-changed="onTwoUpViewChanged_"
-    on-zoom-in="onZoomIn" on-zoom-out="onZoomOut"
-    hidden>
-</viewer-zoom-toolbar>
+<template is="dom-if" if="[[!pdfViewerUpdateEnabled_]]">
+  <viewer-zoom-toolbar id="zoom-toolbar"
+      on-fit-to-changed="onFitToChanged"
+      on-zoom-in="onZoomIn" on-zoom-out="onZoomOut">
+  </viewer-zoom-toolbar>
+</template>
 
 <viewer-error-screen id="error-screen"></viewer-error-screen>
 
@@ -57,5 +193,8 @@
 <viewer-form-warning id="form-warning"></viewer-form-warning>
 </if>
 
-<div id="content"></div>
+<template is="dom-if" if="[[!pdfViewerUpdateEnabled_]]">
+  <div id="content"></div>
+</template>
 
+<div id="content-focus-rectangle" hidden$="[[!documentHasFocus_]]"></div>

@@ -6,6 +6,7 @@
 <translation id="1012173283529841972">Element listy</translation>
 <translation id="1013742170491673792">srched</translation>
 <translation id="1014370462248694370">Przesuń dwoma palcami w prawo</translation>
+<translation id="1016393160682012902">Naciśnij klawisz na klawiaturze QWERTY lub na monitorze brajlowskim albo wykonaj gest dotykowy, by poznać jego funkcję. Przytrzymaj Control i naciśnij W lub Escape, by wyłączyć tryb informacyjny.</translation>
 <translation id="1022586497894531524">Korzystasz z czytnika ChromeVox po raz pierwszy? Pomoże Ci ten krótki samouczek.</translation>
 <translation id="1025074108959230262">Tryb klawiszy trwałych wyłączony</translation>
 <translation id="1031961866430398710">następnie</translation>
@@ -504,7 +505,6 @@
 <translation id="489907760999452556">Link wewnętrzny</translation>
 <translation id="4909019435900810068">Przejdź jedno słowo wstecz</translation>
 <translation id="4911349081560453449">Nie ma poprzedniego pola wyboru</translation>
-<translation id="4915087353619183190">Włączam tryb informacyjny. Naciśnij klawisz na klawiaturze QWERTY lub na monitorze brajlowskim albo wykonaj gest dotykowy, by poznać jego funkcję. Przytrzymaj Control i naciśnij W lub Escape, by wyłączyć tryb informacyjny.</translation>
 <translation id="492295894462528572">Przedmowa</translation>
 <translation id="495046168593986294">Przewiń w górę</translation>
 <translation id="495170559598752135">Czynności</translation>
@@ -647,6 +647,7 @@
 <translation id="6017514345406065928">Zielony</translation>
 <translation id="602001110135236999">Przewiń w lewo</translation>
 <translation id="6034000775414344507">Jasnoszary</translation>
+<translation id="6036135911048686884">Dotknij, by poznać.</translation>
 <translation id="6037602951055904232">Przesuń do przodu</translation>
 <translation id="6044160928851315051">Wygaś ekran</translation>
 <translation id="6082768461603900813">Podstawowa nawigacja</translation>
@@ -716,7 +717,7 @@
 <translation id="6696967141280706829">Wstęp</translation>
 <translation id="6697092096875747123">Poprzednie pole złożone</translation>
 <translation id="6702609185760332517">{COUNT,plural, =1{wykrzyknik}few{# wykrzykniki}many{# wykrzykników}other{# wykrzyknika}}</translation>
-<translation id="6710213216561001401">Wstecz</translation>
+<translation id="6710213216561001401">Poprzedni</translation>
 <translation id="6714813999819678458">Poprzedni nagłówek poziomu 2</translation>
 <translation id="6730312624811567147">Klawisz wyszukiwania i strzałka w lewo lub prawo to klawisz Home lub End. Klawisz wyszukiwania, Control i strzałka w lewo lub prawo to Control z klawiszem Home lub End. Klawisz wyszukiwania i strzałka w górę lub w dół to klawisz Page Up lub Page Down</translation>
 <translation id="6736510033526053669">karta została utworzona</translation>
@@ -922,6 +923,7 @@
 <translation id="8345569862449483843">{COUNT,plural, =1{funt}few{# znaki funta}many{# znaków funta}other{# pound signs}}</translation>
 <translation id="8378855320830505539">Region</translation>
 <translation id="8382679411218029383">Autouzupełnianie tekstu i listy</translation>
+<translation id="8394908167088220973">Odtwórz/wstrzymaj multimedia</translation>
 <translation id="8428213095426709021">Ustawienia</translation>
 <translation id="8428603554127842284">poziom <ph name="DEPTH" /></translation>
 <translation id="8430049249787218991">mnubr</translation>
@@ -966,6 +968,7 @@
 <translation id="8770473310765924354">zamknij treści strukturalne, na przykład tabele</translation>
 <translation id="8779057862865475116">Nie ma poprzedniego linku</translation>
 <translation id="8796411681063377102">Następny nagłówek poziomu 3</translation>
+<translation id="8823311177246872527">Strona <ph name="CURRENTPAGE" /> z <ph name="TOTALPAGES" /></translation>
 <translation id="8825828890761629845">bnr</translation>
 <translation id="8851136666856101339">główny</translation>
 <translation id="8882002077197914455">Nagłówek wiersza</translation>

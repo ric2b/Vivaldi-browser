@@ -6,6 +6,7 @@
 <translation id="1012173283529841972">સૂચિ આઇટમ</translation>
 <translation id="1013742170491673792">srched</translation>
 <translation id="1014370462248694370">બે આંગળી જમણી બાજુ સ્વાઇપ કરો</translation>
+<translation id="1016393160682012902">કોઈ qwerty કી, રિફ્રેશ કરી શકાય એવી બ્રેઇલ કી અથવા ટચ સંકેતના કાર્ય જાણવા માટે તેને દબાવો. 'w' વડે 'control' કી દબાવો અથવા બહાર નીકળવા માટે 'escape' કી દબાવો.</translation>
 <translation id="1022586497894531524">શું તમે ChromeVoxના બોલાયેલ પ્રતિસાદનો પહેલી વાર ઉપયોગ કરી રહ્યા છો? આ ઝડપી ટ્યૂટૉરિઅલ ChromeVox શરૂ કરવા માટેની જરૂરી બાબતો સમજાવે છે.</translation>
 <translation id="1025074108959230262">સ્ટીકી મોડ અક્ષમ કર્યો</translation>
 <translation id="1031961866430398710">પછી</translation>
@@ -434,7 +435,7 @@
 <translation id="4275397969489577657">ઇવેન્ટ સ્ટ્રીમ લૉગિંગ ચાલુ કરો</translation>
 <translation id="4278486392851938658">મુલાકાત લીધેલી કોઈ પાછલી લિંક નથી</translation>
 <translation id="4281245629646759298">આછો પીળો</translation>
-<translation id="4289540628985791613">વિહંગાવલોકન</translation>
+<translation id="4289540628985791613">ઓવરવ્યૂ</translation>
 <translation id="4300318234632215983">લિંકની પાછળનાં URL ની ઘોષણા કરો</translation>
 <translation id="4322625298640984693">સિયેના</translation>
 <translation id="4342180618051828363">{COUNT,plural, =1{ટપકું }=3{પદલોપ}one{# ટપકાં}other{# ટપકાં}}</translation>
@@ -504,7 +505,6 @@
 <translation id="489907760999452556">આંતરિક લિંક</translation>
 <translation id="4909019435900810068">એક શબ્દ પાછળ ખસેડો</translation>
 <translation id="4911349081560453449">કોઈ પાછલું ચેકબૉક્સ નથી</translation>
-<translation id="4915087353619183190">જાણો મોડ શરૂ કરી રહ્યું છે. qwerty કી, રિફ્રેશ યોગ્ય બ્રેઇલ કી અથવા સ્પર્શ સંકેતના કાર્યને જાણવા માટે તેને દબાવો. બહાર નીકળવા માટે wની સાથે control અથવા escape દબાવો.</translation>
 <translation id="492295894462528572">આમુખ</translation>
 <translation id="495046168593986294">ઉપર સ્ક્રોલ કરો</translation>
 <translation id="495170559598752135">ક્રિયાઓ</translation>
@@ -647,6 +647,7 @@
 <translation id="6017514345406065928">લીલો</translation>
 <translation id="602001110135236999">ડાબે સ્ક્રોલ કરો</translation>
 <translation id="6034000775414344507">આછો ગ્રે</translation>
+<translation id="6036135911048686884">ટચ વિશે વધુ જાણો</translation>
 <translation id="6037602951055904232">આગળની તરફ પેન કરો</translation>
 <translation id="6044160928851315051">ડાર્ક કરેલી સ્ક્રીન</translation>
 <translation id="6082768461603900813">મૂળભૂત નૅવિગેશન</translation>
@@ -923,6 +924,7 @@
 <translation id="8345569862449483843">{COUNT,plural, =1{પાઉન્ડ}one{# પાઉન્ડની નિશાની}other{# પાઉન્ડની નિશાની}}</translation>
 <translation id="8378855320830505539">પ્રદેશ</translation>
 <translation id="8382679411218029383">સ્વતઃપૂર્ણ ઇનલાઇન અને સૂચિ</translation>
+<translation id="8394908167088220973">મીડિયા ચલાવો/થોભાવો</translation>
 <translation id="8428213095426709021">સેટિંગ્સ</translation>
 <translation id="8428603554127842284">સ્તર <ph name="DEPTH" /></translation>
 <translation id="8430049249787218991">mnubr</translation>
@@ -967,6 +969,7 @@
 <translation id="8770473310765924354">ગણિત કે ટેબલ જેવા કન્ટેન્ટમાંથી બહાર નીકળો</translation>
 <translation id="8779057862865475116">કોઈ પાછલી લિંક નથી</translation>
 <translation id="8796411681063377102">આગલા સ્તર 3 નું મથાળું</translation>
+<translation id="8823311177246872527"><ph name="TOTALPAGES" />માંથી <ph name="CURRENTPAGE" /> પેજ</translation>
 <translation id="8825828890761629845">bnr</translation>
 <translation id="8851136666856101339">મુખ્ય</translation>
 <translation id="8882002077197914455">પંક્તિ હેડર</translation>

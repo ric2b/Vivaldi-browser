@@ -65,6 +65,8 @@ constexpr base::FilePath::CharType kBluetoothLogsFilePathOld[] =
 constexpr char kBluetoothLogsAttachmentName[] = "bluetooth_logs.bz2";
 constexpr char kBluetoothLogsAttachmentNameOld[] = "bluetooth_logs.old.bz2";
 
+constexpr int kKaleidoscopeProductId = 5192933;
+
 // Getting the filename of a blob prepends a "C:\fakepath" to the filename.
 // This is undesirable, strip it if it exists.
 std::string StripFakepath(const std::string& path) {
@@ -126,7 +128,8 @@ void FeedbackPrivateAPI::RequestFeedbackForFlow(
     const GURL& page_url,
     api::feedback_private::FeedbackFlow flow,
     bool from_assistant,
-    bool include_bluetooth_logs) {
+    bool include_bluetooth_logs,
+    bool from_kaleidoscope) {
   if (browser_context_ && EventRouter::Get(browser_context_)) {
     FeedbackInfo info;
     info.description = description_template;
@@ -154,13 +157,19 @@ void FeedbackPrivateAPI::RequestFeedbackForFlow(
       info.trace_id = std::make_unique<int>(manager->RequestTrace());
     }
     info.flow = flow;
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
     const bool use_system_window_frame = true;
 #else
     const bool use_system_window_frame = false;
 #endif
     info.use_system_window_frame =
         std::make_unique<bool>(use_system_window_frame);
+
+    // If the feedback is from Kaleidoscope then this should use a custom
+    // product ID.
+    if (from_kaleidoscope) {
+      info.product_id = std::make_unique<int>(kKaleidoscopeProductId);
+    }
 
     std::unique_ptr<base::ListValue> args =
         feedback_private::OnFeedbackRequested::Create(info);

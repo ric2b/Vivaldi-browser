@@ -51,8 +51,8 @@ class PaymentRequest : public mojom::PaymentRequest,
     virtual void OnCanMakePaymentReturned() = 0;
     virtual void OnHasEnrolledInstrumentCalled() = 0;
     virtual void OnHasEnrolledInstrumentReturned() = 0;
-    virtual void OnShowAppsReady(
-        base::WeakPtr<PaymentRequest> payment_request) {}
+    virtual void OnAppListReady(base::WeakPtr<PaymentRequest> payment_request) {
+    }
     virtual void OnNotSupportedError() = 0;
     virtual void OnConnectionTerminated() = 0;
     virtual void OnAbortCalled() = 0;
@@ -83,7 +83,7 @@ class PaymentRequest : public mojom::PaymentRequest,
   void Abort() override;
   void Complete(mojom::PaymentComplete result) override;
   void CanMakePayment() override;
-  void HasEnrolledInstrument(bool per_method_quota) override;
+  void HasEnrolledInstrument() override;
 
   // PaymentHandlerHost::Delegate
   bool ChangePaymentMethod(const std::string& method_name,
@@ -111,6 +111,12 @@ class PaymentRequest : public mojom::PaymentRequest,
   // another document, but before the PaymentRequest is destroyed.
   void DidStartMainFrameNavigationToDifferentDocument(bool is_user_initiated);
 
+  // Called when the frame attached to this PaymentRequest is about to be
+  // destroyed. This is used to clean up before the RenderFrameHost is actually
+  // destroyed because some objects held by the PaymentRequest (e.g.
+  // InternalAuthenticator) must be out-lived by the RenderFrameHost.
+  void RenderFrameDeleted(content::RenderFrameHost* render_frame_host);
+
   // As a result of a browser-side error or renderer-initiated mojo channel
   // closure (e.g. there was an error on the renderer side, or payment was
   // successful), this method is called. It is responsible for cleaning up,
@@ -130,6 +136,10 @@ class PaymentRequest : public mojom::PaymentRequest,
 
   content::WebContents* web_contents() { return web_contents_; }
 
+  const content::GlobalFrameRoutingId& initiator_frame_routing_id() {
+    return initiator_frame_routing_id_;
+  }
+
   bool skipped_payment_request_ui() { return skipped_payment_request_ui_; }
   bool is_show_user_gesture() const { return is_show_user_gesture_; }
 
@@ -138,6 +148,8 @@ class PaymentRequest : public mojom::PaymentRequest,
 
   PaymentRequestSpec* spec() const { return spec_.get(); }
   PaymentRequestState* state() const { return state_.get(); }
+
+  base::WeakPtr<PaymentRequest> GetWeakPtr();
 
  private:
   // Returns true after init() has been called and the mojo connection has been
@@ -169,8 +181,7 @@ class PaymentRequest : public mojom::PaymentRequest,
 
   // The callback for PaymentRequestState::HasEnrolledInstrument. Checks for
   // query quota and may send QUERY_QUOTA_EXCEEDED.
-  void HasEnrolledInstrumentCallback(bool per_method_quota,
-                                     bool has_enrolled_instrument);
+  void HasEnrolledInstrumentCallback(bool has_enrolled_instrument);
 
   // The callback for PaymentRequestState::AreRequestedMethodsSupported.
   void AreRequestedMethodsSupportedCallback(bool methods_supported,

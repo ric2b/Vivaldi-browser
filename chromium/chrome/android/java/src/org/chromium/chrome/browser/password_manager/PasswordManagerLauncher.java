@@ -7,19 +7,21 @@ package org.chromium.chrome.browser.password_manager;
 import android.app.Activity;
 
 import com.google.android.gms.common.ConnectionResult;
+import com.google.android.gms.common.GoogleApiAvailability;
 
+import org.chromium.base.ContextUtils;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.browser.AppHooks;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
-import org.chromium.chrome.browser.password_manager.settings.PasswordSettings;
 import org.chromium.chrome.browser.preferences.Pref;
-import org.chromium.chrome.browser.preferences.PrefServiceBridge;
-import org.chromium.chrome.browser.settings.SettingsLauncher;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.settings.SettingsLauncherImpl;
 import org.chromium.chrome.browser.signin.IdentityServicesProvider;
 import org.chromium.chrome.browser.sync.ProfileSyncService;
+import org.chromium.components.signin.identitymanager.IdentityManager;
 import org.chromium.components.sync.ModelType;
+import org.chromium.components.user_prefs.UserPrefs;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.base.WindowAndroid;
 
@@ -49,20 +51,20 @@ public class PasswordManagerLauncher {
      */
     public static void showPasswordSettings(
             Activity activity, @ManagePasswordsReferrer int referrer) {
-        RecordHistogram.recordEnumeratedHistogram("PasswordManager.ManagePasswordsReferrer",
-                referrer, ManagePasswordsReferrer.MAX_VALUE + 1);
         if (isSyncingPasswordsWithoutCustomPassphrase()) {
             RecordHistogram.recordEnumeratedHistogram(
                     "PasswordManager.ManagePasswordsReferrerSignedInAndSyncing", referrer,
                     ManagePasswordsReferrer.MAX_VALUE + 1);
-            if (!PrefServiceBridge.getInstance().isManagedPreference(
-                        Pref.CREDENTIALS_ENABLE_SERVICE)) {
+            if (!UserPrefs.get(Profile.getLastUsedRegularProfile())
+                            .isManagedPreference(Pref.CREDENTIALS_ENABLE_SERVICE)) {
                 if (tryShowingTheGooglePasswordManager(activity)) return;
+            }
+            if (ChromeFeatureList.isEnabled(ChromeFeatureList.PASSWORD_CHANGE_IN_SETTINGS)) {
+                PasswordScriptsFetcherBridge.prewarmCache();
             }
         }
 
-        SettingsLauncher settingsLauncher = new SettingsLauncherImpl();
-        settingsLauncher.launchSettingsActivity(activity, PasswordSettings.class);
+        PasswordManagerHelper.showPasswordSettings(activity, referrer, new SettingsLauncherImpl());
     }
 
     @CalledByNative
@@ -75,7 +77,9 @@ public class PasswordManagerLauncher {
     }
 
     public static boolean isSyncingPasswordsWithoutCustomPassphrase() {
-        if (!IdentityServicesProvider.get().getIdentityManager().hasPrimaryAccount()) return false;
+        IdentityManager identityManager = IdentityServicesProvider.get().getIdentityManager(
+                Profile.getLastUsedRegularProfile());
+        if (!identityManager.hasPrimaryAccount()) return false;
 
         ProfileSyncService profileSyncService = ProfileSyncService.get();
         if (profileSyncService == null
@@ -96,7 +100,9 @@ public class PasswordManagerLauncher {
         int minGooglePlayServicesVersion = ChromeFeatureList.getFieldTrialParamByFeatureAsInt(
                 GOOGLE_ACCOUNT_PWM_UI, MIN_GOOGLE_PLAY_SERVICES_VERSION_PARAM,
                 DEFAULT_MIN_GOOGLE_PLAY_SERVICES_APK_VERSION);
-        if (AppHooks.get().isGoogleApiAvailableWithMinApkVersion(minGooglePlayServicesVersion)
+
+        if (GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(
+                    ContextUtils.getApplicationContext(), minGooglePlayServicesVersion)
                 != ConnectionResult.SUCCESS) {
             return false;
         }

@@ -7,8 +7,10 @@
 
 #include "services/network/public/mojom/content_security_policy.mojom-shared.h"
 #include "third_party/blink/public/common/feature_policy/feature_policy.h"
+#include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/mojom/ad_tagging/ad_frame.mojom-shared.h"
 #include "third_party/blink/public/mojom/frame/frame_owner_element_type.mojom-shared.h"
+#include "third_party/blink/public/mojom/frame/user_activation_notification_type.mojom-shared.h"
 #include "third_party/blink/public/mojom/frame/user_activation_update_types.mojom-shared.h"
 #include "third_party/blink/public/mojom/security_context/insecure_request_policy.mojom-shared.h"
 #include "third_party/blink/public/web/web_frame.h"
@@ -107,8 +109,9 @@ class WebRemoteFrame : public WebFrame {
   // Set sandbox flags replicated from another process.
   virtual void SetReplicatedSandboxFlags(network::mojom::WebSandboxFlags) = 0;
 
-  // Set frame |name| replicated from another process.
-  virtual void SetReplicatedName(const WebString&) = 0;
+  // Set frame |name| and |unique_name| replicated from another process.
+  virtual void SetReplicatedName(const WebString& name,
+                                 const WebString& unique_name) = 0;
 
   // Sets the FeaturePolicy header and the FeatureState (from opener) for the
   // main frame. Once a non-empty |opener_feature_state| is set, it can no
@@ -116,7 +119,7 @@ class WebRemoteFrame : public WebFrame {
   // down the FeatureState cannot be modified either).
   virtual void SetReplicatedFeaturePolicyHeaderAndOpenerPolicies(
       const ParsedFeaturePolicy& parsed_header,
-      const FeaturePolicy::FeatureState& opener_feature_state) = 0;
+      const FeaturePolicyFeatureState& opener_feature_state) = 0;
 
   // Adds |header| to the set of replicated CSP headers.
   virtual void AddReplicatedContentSecurityPolicyHeader(
@@ -144,11 +147,24 @@ class WebRemoteFrame : public WebFrame {
 
   // Update the user activation state in appropriate part of this frame's
   // "local" frame tree (ancestors-only vs all-nodes).
-  virtual void UpdateUserActivationState(mojom::UserActivationUpdateType) = 0;
+  //
+  // The |notification_type| parameter is used for histograms, only for the case
+  // |update_state == kNotifyActivation|.
+  virtual void UpdateUserActivationState(
+      mojom::UserActivationUpdateType update_type,
+      mojom::UserActivationNotificationType notification_type) = 0;
 
   virtual void SetHadStickyUserActivationBeforeNavigation(bool value) = 0;
 
   virtual WebRect GetCompositingRect() = 0;
+
+  // Unique name is an opaque identifier for maintaining association with
+  // session restore state for this frame.
+  virtual WebString UniqueName() const = 0;
+
+  RemoteFrameToken GetRemoteFrameToken() const {
+    return RemoteFrameToken(GetFrameToken());
+  }
 
  protected:
   explicit WebRemoteFrame(mojom::TreeScopeType scope,

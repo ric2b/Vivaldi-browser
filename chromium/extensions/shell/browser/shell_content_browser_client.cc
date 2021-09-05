@@ -8,14 +8,11 @@
 
 #include <utility>
 
-#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/stl_util.h"
 #include "components/guest_view/browser/guest_view_message_filter.h"
 #include "components/nacl/common/buildflags.h"
 #include "content/public/browser/browser_main_runner.h"
-#include "content/public/browser/browser_task_traits.h"
-#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/site_instance.h"
@@ -35,7 +32,6 @@
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/guest_view/extensions_guest_view_message_filter.h"
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
-#include "extensions/browser/info_map.h"
 #include "extensions/browser/process_map.h"
 #include "extensions/browser/url_loader_factory_manager.h"
 #include "extensions/common/constants.h"
@@ -161,13 +157,6 @@ void ShellContentBrowserClient::SiteInstanceGotProcess(
       ->Insert(extension->id(),
                site_instance->GetProcess()->GetID(),
                site_instance->GetId());
-
-  content::GetIOThreadTaskRunner({})->PostTask(
-      FROM_HERE,
-      base::BindOnce(&InfoMap::RegisterExtensionProcess,
-                     browser_main_parts_->extension_system()->info_map(),
-                     extension->id(), site_instance->GetProcess()->GetID(),
-                     site_instance->GetId()));
 }
 
 void ShellContentBrowserClient::SiteInstanceDeleting(
@@ -185,13 +174,6 @@ void ShellContentBrowserClient::SiteInstanceDeleting(
       ->Remove(extension->id(),
                site_instance->GetProcess()->GetID(),
                site_instance->GetId());
-
-  content::GetIOThreadTaskRunner({})->PostTask(
-      FROM_HERE,
-      base::BindOnce(&InfoMap::UnregisterExtensionProcess,
-                     browser_main_parts_->extension_system()->info_map(),
-                     extension->id(), site_instance->GetProcess()->GetID(),
-                     site_instance->GetId()));
 }
 
 void ShellContentBrowserClient::AppendExtraCommandLineSwitches(
@@ -255,13 +237,14 @@ ShellContentBrowserClient::GetNavigationUIData(
 
 void ShellContentBrowserClient::RegisterNonNetworkNavigationURLLoaderFactories(
     int frame_tree_node_id,
+    base::UkmSourceId ukm_source_id,
     NonNetworkURLLoaderFactoryMap* factories) {
   content::WebContents* web_contents =
       content::WebContents::FromFrameTreeNodeId(frame_tree_node_id);
   factories->emplace(
       extensions::kExtensionScheme,
       extensions::CreateExtensionNavigationURLLoaderFactory(
-          web_contents->GetBrowserContext(),
+          web_contents->GetBrowserContext(), ukm_source_id,
           !!extensions::WebViewGuest::FromWebContents(web_contents)));
 }
 
@@ -345,6 +328,11 @@ void ShellContentBrowserClient::OverrideURLLoaderFactoryParams(
       browser_context, origin, is_for_isolated_world, factory_params);
 }
 
+base::FilePath
+ShellContentBrowserClient::GetSandboxedStorageServiceDataDirectory() {
+  return GetBrowserContext()->GetPath();
+}
+
 std::string ShellContentBrowserClient::GetUserAgent() {
   // Must contain a user agent string for version sniffing. For example,
   // pluginless WebRTC Hangouts checks the Chrome version number.
@@ -362,7 +350,7 @@ ShellContentBrowserClient::CreateShellBrowserMainParts(
 void ShellContentBrowserClient::AppendRendererSwitches(
     base::CommandLine* command_line) {
   static const char* const kSwitchNames[] = {
-      switches::kWhitelistedExtensionID,
+      switches::kAllowlistedExtensionID,
       // TODO(jamescook): Should we check here if the process is in the
       // extension service process map, or can we assume all renderers are
       // extension renderers?

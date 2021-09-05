@@ -12,7 +12,6 @@
 #include "base/callback_list.h"
 #include "base/containers/mru_cache.h"
 #include "base/gtest_prod_util.h"
-#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observer.h"
 #include "base/task/cancelable_task_tracker.h"
@@ -45,6 +44,8 @@ class FaviconCache : public history::HistoryServiceObserver {
   FaviconCache(favicon::FaviconService* favicon_service,
                history::HistoryService* history_service);
   ~FaviconCache() override;
+  FaviconCache(const FaviconCache&) = delete;
+  FaviconCache& operator=(const FaviconCache&) = delete;
 
   // These methods fetch favicons by the |page_url| or |icon_url| respectively.
   // If the correct favicon is already cached, these methods return the image
@@ -145,13 +146,11 @@ class FaviconCache : public history::HistoryServiceObserver {
   base::MRUCache<Request, bool> responses_without_favicons_;
 
   // Subscription for notifications of changes to favicons.
-  std::unique_ptr<base::CallbackList<void(const std::set<GURL>&,
-                                          const GURL&)>::Subscription>
+  std::unique_ptr<
+      history::HistoryService::FaviconsChangedCallbackList::Subscription>
       favicons_changed_subscription_;
 
   base::WeakPtrFactory<FaviconCache> weak_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(FaviconCache);
 };
 
 #endif  // COMPONENTS_OMNIBOX_BROWSER_FAVICON_CACHE_H_

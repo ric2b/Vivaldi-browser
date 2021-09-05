@@ -214,7 +214,7 @@ void ExtensionSystemImpl::Shared::Init(bool extensions_enabled) {
   extension_service_.reset(new ExtensionService(
       profile_, base::CommandLine::ForCurrentProcess(),
       profile_->GetPath().AppendASCII(extensions::kInstallDirectoryName),
-      ExtensionPrefs::Get(profile_), Blacklist::Get(profile_),
+      ExtensionPrefs::Get(profile_), Blocklist::Get(profile_),
       autoupdate_enabled, extensions_enabled, &ready_));
 
   uninstall_ping_sender_.reset(new UninstallPingSender(
@@ -234,9 +234,6 @@ void ExtensionSystemImpl::Shared::Init(bool extensions_enabled) {
       content_verifier_->Start();
     info_map()->SetContentVerifier(content_verifier_.get());
 #if defined(OS_CHROMEOS)
-    if (chromeos::ProfileHelper::IsLockScreenAppProfile(profile_))
-      info_map()->SetIsLockScreenContext(true);
-
     // This class is used to check the permissions of the force-installed
     // extensions inside the managed-guest session. It updates the local state
     // perf with the result, a boolean value deciding whether the full warning

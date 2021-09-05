@@ -37,10 +37,10 @@ void AddCommonStrings(base::Value* dict) {
       {"pageReload", IDS_PDF_PAGE_RELOAD_BUTTON},
       {"tooltipFitToPage", IDS_PDF_TOOLTIP_FIT_PAGE},
       {"tooltipFitToWidth", IDS_PDF_TOOLTIP_FIT_WIDTH},
-      {"tooltipTwoUpViewDisable", IDS_PDF_TOOLTIP_TWO_UP_VIEW_DISABLE},
-      {"tooltipTwoUpViewEnable", IDS_PDF_TOOLTIP_TWO_UP_VIEW_ENABLE},
       {"tooltipZoomIn", IDS_PDF_TOOLTIP_ZOOM_IN},
       {"tooltipZoomOut", IDS_PDF_TOOLTIP_ZOOM_OUT},
+      {"twoUpViewDisable", IDS_PDF_TWO_UP_VIEW_DISABLE},
+      {"twoUpViewEnable", IDS_PDF_TWO_UP_VIEW_ENABLE},
   };
   for (const auto& resource : kPdfResources)
     dict->SetStringKey(resource.name, l10n_util::GetStringUTF16(resource.id));
@@ -59,9 +59,13 @@ void AddPdfViewerStrings(base::Value* dict) {
     {"passwordInvalid", IDS_PDF_PASSWORD_INVALID},
     {"passwordPrompt", IDS_PDF_NEED_PASSWORD},
     {"passwordSubmit", IDS_PDF_PASSWORD_SUBMIT},
+    {"tooltipDocumentOutline", IDS_PDF_TOOLTIP_DOCUMENT_OUTLINE},
     {"tooltipDownload", IDS_PDF_TOOLTIP_DOWNLOAD},
     {"tooltipPrint", IDS_PDF_TOOLTIP_PRINT},
     {"tooltipRotateCW", IDS_PDF_TOOLTIP_ROTATE_CW},
+    {"tooltipRotateCCW", IDS_PDF_TOOLTIP_ROTATE_CCW},
+    {"tooltipThumbnails", IDS_PDF_TOOLTIP_THUMBNAILS},
+    {"annotationsShowToggle", IDS_PDF_ANNOTATIONS_SHOW_TOGGLE},
 #if defined(OS_CHROMEOS)
     {"tooltipAnnotate", IDS_PDF_ANNOTATION_ANNOTATE},
     {"annotationDocumentTooLarge", IDS_PDF_ANNOTATION_DOCUMENT_TOO_LARGE},
@@ -152,9 +156,6 @@ void AddAdditionalData(base::Value* dict) {
   dict->SetKey("pdfFormSaveEnabled",
                base::Value(base::FeatureList::IsEnabled(
                    chrome_pdf::features::kSaveEditedPDFForm)));
-  dict->SetKey("pdfTwoUpViewEnabled",
-               base::Value(base::FeatureList::IsEnabled(
-                   chrome_pdf::features::kPDFTwoUpView)));
   dict->SetStringKey(
       "pdfViewerUpdateEnabledAttribute",
       base::FeatureList::IsEnabled(chrome_pdf::features::kPDFViewerUpdate)

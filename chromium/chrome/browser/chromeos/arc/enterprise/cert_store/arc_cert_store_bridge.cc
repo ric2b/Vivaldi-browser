@@ -13,7 +13,7 @@
 #include "base/callback.h"
 #include "base/logging.h"
 #include "base/memory/singleton.h"
-#include "chrome/browser/chromeos/platform_keys/key_permissions.h"
+#include "chrome/browser/chromeos/platform_keys/key_permissions/key_permissions_manager_impl.h"
 #include "chrome/browser/chromeos/platform_keys/platform_keys_service.h"
 #include "chrome/browser/net/nss_context.h"
 #include "chrome/browser/policy/profile_policy_connector.h"
@@ -82,8 +82,8 @@ bool IsCertificateAllowed(const scoped_refptr<net::X509Certificate>& cert,
   std::string spki_der = chromeos::platform_keys::GetSubjectPublicKeyInfo(cert);
   std::string public_key_spki_der_b64;
   base::Base64Encode(spki_der, &public_key_spki_der_b64);
-  if (!chromeos::KeyPermissions::IsCorporateKeyForProfile(
-          public_key_spki_der_b64, prefs)) {
+  if (!chromeos::platform_keys::KeyPermissionsManagerImpl::
+          IsCorporateKeyForProfile(public_key_spki_der_b64, prefs)) {
     DVLOG(1) << "Certificate is not allowed to be used by ARC.";
     return false;
   }
@@ -304,8 +304,8 @@ void ArcCertStoreBridge::UpdateFromKeyPermissionsPolicy() {
   DVLOG(1) << "ArcCertStoreBridge::UpdateFromKeyPermissionsPolicy";
 
   std::vector<std::string> app_ids =
-      chromeos::KeyPermissions::GetCorporateKeyUsageAllowedAppIds(
-          policy_service_);
+      chromeos::platform_keys::KeyPermissionsManagerImpl::
+          GetCorporateKeyUsageAllowedAppIds(policy_service_);
   std::vector<std::string> permissions;
   for (const auto& app_id : app_ids) {
     if (LooksLikeAndroidPackageName(app_id))

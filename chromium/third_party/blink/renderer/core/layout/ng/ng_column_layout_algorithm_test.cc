@@ -78,10 +78,15 @@ TEST_F(NGColumnLayoutAlgorithmTest, EmptyMulticol) {
   const auto* fragment = iterator.NextChild();
   ASSERT_TRUE(fragment);
   EXPECT_EQ(PhysicalSize(210, 100), fragment->Size());
+  EXPECT_EQ(1UL, fragment->Children().size());
   EXPECT_FALSE(iterator.NextChild());
 
-  // There should be nothing inside the multicol container.
-  ASSERT_FALSE(FragmentChildIterator(fragment).NextChild());
+  // A multicol container will always create at least one fragmentainer.
+  fragment = FragmentChildIterator(fragment).NextChild();
+  ASSERT_TRUE(fragment);
+  EXPECT_EQ(PhysicalSize(100, 100), fragment->Size());
+  EXPECT_EQ(0UL, fragment->Children().size());
+
   EXPECT_FALSE(iterator.NextChild());
 }
 
@@ -362,6 +367,7 @@ TEST_F(NGColumnLayoutAlgorithmTest, ZeroHeight) {
   String expectation = R"DUMP(.:: LayoutNG Physical Fragment Tree ::.
   offset:unplaced size:1000x0
     offset:0,0 size:320x0
+      offset:0,0 size:100x1
 )DUMP";
   EXPECT_EQ(expectation, dump);
 }
@@ -1694,8 +1700,7 @@ TEST_F(NGColumnLayoutAlgorithmTest, LineAtColumnBoundaryInFirstBlock) {
   EXPECT_EQ(expectation, dump);
 }
 
-// TODO(crbug.com/915929): Fix inline-level float fragmentation.
-TEST_F(NGColumnLayoutAlgorithmTest, DISABLED_LinesAndFloatsMulticol) {
+TEST_F(NGColumnLayoutAlgorithmTest, LinesAndFloatsMulticol) {
   SetBodyInnerHTML(R"HTML(
     <style>
       #parent {
@@ -1728,9 +1733,7 @@ TEST_F(NGColumnLayoutAlgorithmTest, DISABLED_LinesAndFloatsMulticol) {
     offset:0,0 size:320x70
       offset:0,0 size:100x70
         offset:0,0 size:0x20
-        offset:0,20 size:10x50
         offset:10,20 size:0x20
-        offset:10,40 size:11x30
         offset:21,40 size:0x20
       offset:110,0 size:100x70
         offset:0,0 size:10x70
@@ -1743,8 +1746,7 @@ TEST_F(NGColumnLayoutAlgorithmTest, DISABLED_LinesAndFloatsMulticol) {
   EXPECT_EQ(expectation, dump);
 }
 
-// TODO(crbug.com/915929): Fix inline-level float fragmentation.
-TEST_F(NGColumnLayoutAlgorithmTest, DISABLED_FloatBelowLastLineInColumn) {
+TEST_F(NGColumnLayoutAlgorithmTest, FloatBelowLastLineInColumn) {
   SetBodyInnerHTML(R"HTML(
     <style>
       #parent {
@@ -1778,13 +1780,11 @@ TEST_F(NGColumnLayoutAlgorithmTest, DISABLED_FloatBelowLastLineInColumn) {
         offset:0,0 size:0x20
         offset:0,20 size:0x20
         offset:0,40 size:0x20
-        offset:0,60 size:11x10
       offset:110,0 size:100x70
-        offset:0,0 size:11x70
         offset:11,0 size:0x20
         offset:11,20 size:0x20
       offset:220,0 size:100x70
-        offset:0,0 size:11x40
+        offset:0,0 size:11x50
 )DUMP";
   EXPECT_EQ(expectation, dump);
 }
@@ -2053,9 +2053,7 @@ TEST_F(NGColumnLayoutAlgorithmTest, UnsatisfiableOrphansAndWidows) {
   EXPECT_EQ(expectation, dump);
 }
 
-// TODO(1079031): Re-enable once layout for fragmented positioned elements is
-// complete.
-TEST_F(NGColumnLayoutAlgorithmTest, DISABLED_WidowsAndAbspos) {
+TEST_F(NGColumnLayoutAlgorithmTest, WidowsAndAbspos) {
   SetBodyInnerHTML(R"HTML(
     <style>
       #parent {
@@ -2083,6 +2081,8 @@ TEST_F(NGColumnLayoutAlgorithmTest, DISABLED_WidowsAndAbspos) {
     </div>
   )HTML");
 
+  // TODO(bebeaudr): The OOF positioned element should start in the second
+  // column rather than the first.
   String dump = DumpFragmentTree(GetElementById("container"));
   String expectation = R"DUMP(.:: LayoutNG Physical Fragment Tree ::.
   offset:unplaced size:1000x70
@@ -2091,12 +2091,13 @@ TEST_F(NGColumnLayoutAlgorithmTest, DISABLED_WidowsAndAbspos) {
         offset:0,0 size:100x70
           offset:0,0 size:0x20
           offset:0,20 size:0x20
+        offset:0,40 size:33x30
       offset:110,0 size:100x70
         offset:0,0 size:100x60
           offset:0,0 size:0x20
           offset:0,20 size:0x20
           offset:0,40 size:0x20
-          offset:0,40 size:33x33
+        offset:0,0 size:33x3
 )DUMP";
   EXPECT_EQ(expectation, dump);
 }
@@ -2232,8 +2233,7 @@ TEST_F(NGColumnLayoutAlgorithmTest, BreakBetweenLinesNotBefore3) {
   EXPECT_EQ(expectation, dump);
 }
 
-// TODO(crbug.com/915929): Fix inline-level float fragmentation.
-TEST_F(NGColumnLayoutAlgorithmTest, DISABLED_FloatInBlockMovedByOrphans) {
+TEST_F(NGColumnLayoutAlgorithmTest, FloatInBlockMovedByOrphans) {
   SetBodyInnerHTML(R"HTML(
     <style>
       #parent {
@@ -2268,14 +2268,12 @@ TEST_F(NGColumnLayoutAlgorithmTest, DISABLED_FloatInBlockMovedByOrphans) {
       offset:110,0 size:100x70
         offset:0,0 size:77x40
           offset:0,0 size:0x20
-          offset:0,20 size:10x10
           offset:10,20 size:0x20
 )DUMP";
   EXPECT_EQ(expectation, dump);
 }
 
-// TODO(crbug.com/915929): Fix inline-level float fragmentation.
-TEST_F(NGColumnLayoutAlgorithmTest, DISABLED_FloatMovedWithWidows) {
+TEST_F(NGColumnLayoutAlgorithmTest, FloatMovedWithWidows) {
   SetBodyInnerHTML(R"HTML(
     <style>
       #parent {
@@ -2310,7 +2308,6 @@ TEST_F(NGColumnLayoutAlgorithmTest, DISABLED_FloatMovedWithWidows) {
       offset:110,0 size:100x90
         offset:0,0 size:0x20
         offset:0,20 size:0x20
-        offset:0,40 size:10x10
         offset:10,40 size:0x20
         offset:0,60 size:0x20
 )DUMP";
@@ -3054,6 +3051,7 @@ TEST_F(NGColumnLayoutAlgorithmTest, ColumnBalancingEmpty) {
   String expectation = R"DUMP(.:: LayoutNG Physical Fragment Tree ::.
   offset:unplaced size:1000x0
     offset:0,0 size:320x0
+      offset:0,0 size:100x1
 )DUMP";
   EXPECT_EQ(expectation, dump);
 }
@@ -3154,7 +3152,7 @@ TEST_F(NGColumnLayoutAlgorithmTest, ColumnBalancingSingleLineInNestedSpanner) {
     </style>
     <div id="container">
       <div id="parent">
-        <div style="columns:2;">
+        <div style="columns:2; column-gap:0;">
           <div style="column-span:all;">
             <br>
           </div>
@@ -3169,6 +3167,7 @@ TEST_F(NGColumnLayoutAlgorithmTest, ColumnBalancingSingleLineInNestedSpanner) {
     offset:0,0 size:320x20
       offset:0,0 size:100x20
         offset:0,0 size:100x20
+          offset:0,0 size:50x1
           offset:0,0 size:100x20
             offset:0,0 size:0x20
 )DUMP";
@@ -3986,6 +3985,7 @@ TEST_F(NGColumnLayoutAlgorithmTest, NestedNoInnerContent) {
       offset:0,0 size:100x50
         offset:0,0 size:5x20
         offset:0,20 size:100x30
+          offset:1,1 size:44x29
       offset:110,0 size:100x50
         offset:0,0 size:100x50
       offset:220,0 size:100x50
@@ -4319,6 +4319,7 @@ TEST_F(NGColumnLayoutAlgorithmTest, NestedWithTallSpanner) {
     offset:0,0 size:320x100
       offset:0,0 size:100x100
         offset:0,0 size:100x100
+          offset:0,0 size:45x1
           offset:0,0 size:22x100
       offset:110,0 size:100x100
         offset:0,0 size:100x35
@@ -4330,9 +4331,7 @@ TEST_F(NGColumnLayoutAlgorithmTest, NestedWithTallSpanner) {
   EXPECT_EQ(expectation, dump);
 }
 
-// TODO(1079031): Re-enable once layout for fragmented positioned elements is
-// complete.
-TEST_F(NGColumnLayoutAlgorithmTest, DISABLED_AbsposFitsInOneColumn) {
+TEST_F(NGColumnLayoutAlgorithmTest, AbsposFitsInOneColumn) {
   SetBodyInnerHTML(R"HTML(
     <div id="container">
       <div style="columns:3; width:320px; height:100px; column-gap:10px; column-fill:auto;">
@@ -4349,7 +4348,7 @@ TEST_F(NGColumnLayoutAlgorithmTest, DISABLED_AbsposFitsInOneColumn) {
     offset:0,0 size:320x100
       offset:0,0 size:100x100
         offset:0,0 size:222x100
-          offset:0,0 size:111x50
+        offset:0,0 size:111x50
       offset:110,0 size:100x100
         offset:0,0 size:222x100
       offset:220,0 size:100x100
@@ -4471,8 +4470,7 @@ TEST_F(NGColumnLayoutAlgorithmTest, SpannerWithContent) {
   EXPECT_EQ(expectation, dump);
 }
 
-// TODO(crbug.com/1066617): Fix crash during pre-paint.
-TEST_F(NGColumnLayoutAlgorithmTest, DISABLED_TwoSpannersPercentWidth) {
+TEST_F(NGColumnLayoutAlgorithmTest, TwoSpannersPercentWidth) {
   SetBodyInnerHTML(R"HTML(
     <style>
       #parent {
@@ -4609,6 +4607,7 @@ TEST_F(NGColumnLayoutAlgorithmTest, SpannerAtStart) {
   String expectation = R"DUMP(.:: LayoutNG Physical Fragment Tree ::.
   offset:unplaced size:1000x86
     offset:0,0 size:322x86
+      offset:1,1 size:100x1
       offset:1,1 size:320x44
       offset:1,45 size:100x40
         offset:0,0 size:100x20
@@ -4683,6 +4682,7 @@ TEST_F(NGColumnLayoutAlgorithmTest, SpannerAlone) {
   String expectation = R"DUMP(.:: LayoutNG Physical Fragment Tree ::.
   offset:unplaced size:1000x46
     offset:0,0 size:322x46
+      offset:1,1 size:100x1
       offset:1,1 size:320x44
 )DUMP";
   EXPECT_EQ(expectation, dump);
@@ -4717,6 +4717,8 @@ TEST_F(NGColumnLayoutAlgorithmTest, SpannerInBlock) {
       offset:1,1 size:100x1
         offset:0,0 size:11x0
       offset:1,1 size:320x44
+      offset:1,45 size:100x1
+        offset:0,0 size:11x0
 )DUMP";
   EXPECT_EQ(expectation, dump);
 }
@@ -4796,6 +4798,7 @@ TEST_F(NGColumnLayoutAlgorithmTest, SpannerInBlockWithSiblings) {
         offset:0,0 size:11x0
       offset:1,1 size:320x44
       offset:1,45 size:100x40
+        offset:0,0 size:11x0
         offset:0,0 size:100x20
         offset:0,20 size:100x20
       offset:111,45 size:100x40
@@ -4830,6 +4833,7 @@ TEST_F(NGColumnLayoutAlgorithmTest, SpannerMargins) {
   String expectation = R"DUMP(.:: LayoutNG Physical Fragment Tree ::.
   offset:unplaced size:1000x130
     offset:0,0 size:320x130
+      offset:0,0 size:100x1
       offset:10,10 size:33x10
       offset:0,30 size:100x20
         offset:0,0 size:100x20
@@ -4866,6 +4870,7 @@ TEST_F(NGColumnLayoutAlgorithmTest, SpannerMarginsRtl) {
   String expectation = R"DUMP(.:: LayoutNG Physical Fragment Tree ::.
   offset:unplaced size:1000x130
     offset:0,0 size:320x130
+      offset:220,0 size:100x1
       offset:277,10 size:33x10
       offset:220,30 size:100x20
         offset:0,0 size:100x20
@@ -4958,8 +4963,7 @@ TEST_F(NGColumnLayoutAlgorithmTest, MarginAndBorderTopWithSpanner) {
   EXPECT_EQ(expectation, dump);
 }
 
-// TODO(crbug.com/1066617): Fix crash during pre-paint.
-TEST_F(NGColumnLayoutAlgorithmTest, DISABLED_BreakInsideSpannerWithMargins) {
+TEST_F(NGColumnLayoutAlgorithmTest, BreakInsideSpannerWithMargins) {
   SetBodyInnerHTML(R"HTML(
     <style>
       #parent {
@@ -4972,7 +4976,7 @@ TEST_F(NGColumnLayoutAlgorithmTest, DISABLED_BreakInsideSpannerWithMargins) {
     </style>
     <div id="container">
       <div id="parent">
-        <div style="columns:2;">
+        <div style="columns:2; column-gap:0;">
           <div style="column-span:all; margin-top:10px; margin-bottom:20px; width:33px; height:100px;"></div>
           <div style="column-span:all; width:44px; height:10px;"></div>
       </div>
@@ -4985,6 +4989,7 @@ TEST_F(NGColumnLayoutAlgorithmTest, DISABLED_BreakInsideSpannerWithMargins) {
     offset:0,0 size:320x100
       offset:0,0 size:100x100
         offset:0,0 size:100x100
+          offset:0,0 size:50x1
           offset:0,10 size:33x90
       offset:110,0 size:100x100
         offset:0,0 size:100x40
@@ -5192,7 +5197,7 @@ TEST_F(NGColumnLayoutAlgorithmTest, ForcedBreakBetweenSpanners) {
   SetBodyInnerHTML(R"HTML(
     <style>
       .outer { columns:3; height:100px; column-fill:auto; column-gap:10px; width:320px; }
-      .inner { columns:2; }
+      .inner { columns:2; column-gap:0; }
     </style>
     <div id="container">
       <div class="outer">
@@ -5210,6 +5215,7 @@ TEST_F(NGColumnLayoutAlgorithmTest, ForcedBreakBetweenSpanners) {
     offset:0,0 size:320x100
       offset:0,0 size:100x100
         offset:0,0 size:100x100
+          offset:0,0 size:50x1
           offset:0,0 size:55x40
       offset:110,0 size:100x100
         offset:0,0 size:100x40
@@ -5224,7 +5230,7 @@ TEST_F(NGColumnLayoutAlgorithmTest, ForcedBreakBetweenSpanners2) {
   SetBodyInnerHTML(R"HTML(
     <style>
       .outer { columns:3; height:100px; column-fill:auto; column-gap:10px; width:320px; }
-      .inner { columns:2; }
+      .inner { columns:2; column-gap:0; }
     </style>
     <div id="container">
       <div class="outer">
@@ -5242,6 +5248,7 @@ TEST_F(NGColumnLayoutAlgorithmTest, ForcedBreakBetweenSpanners2) {
     offset:0,0 size:320x100
       offset:0,0 size:100x100
         offset:0,0 size:100x100
+          offset:0,0 size:50x1
           offset:0,0 size:55x40
       offset:110,0 size:100x100
         offset:0,0 size:100x40
@@ -5257,7 +5264,7 @@ TEST_F(NGColumnLayoutAlgorithmTest, ForcedBreakBetweenSpanners3) {
   SetBodyInnerHTML(R"HTML(
     <style>
       .outer { columns:3; height:100px; column-fill:auto; column-gap:10px; width:320px; }
-      .inner { columns:2; }
+      .inner { columns:2; column-gap:0; }
     </style>
     <div id="container">
       <div class="outer">
@@ -5278,6 +5285,7 @@ TEST_F(NGColumnLayoutAlgorithmTest, ForcedBreakBetweenSpanners3) {
     offset:0,0 size:320x100
       offset:0,0 size:100x100
         offset:0,0 size:100x100
+          offset:0,0 size:50x1
           offset:0,0 size:55x40
             offset:0,0 size:33x10
             offset:0,10 size:44x10
@@ -5295,7 +5303,7 @@ TEST_F(NGColumnLayoutAlgorithmTest, ForcedBreakBetweenSpanners4) {
   SetBodyInnerHTML(R"HTML(
     <style>
       .outer { columns:3; height:100px; column-fill:auto; column-gap:10px; width:320px; }
-      .inner { columns:2; }
+      .inner { columns:2; column-gap:0; }
     </style>
     <div id="container">
       <div class="outer">
@@ -5316,6 +5324,7 @@ TEST_F(NGColumnLayoutAlgorithmTest, ForcedBreakBetweenSpanners4) {
     offset:0,0 size:320x100
       offset:0,0 size:100x100
         offset:0,0 size:100x100
+          offset:0,0 size:50x1
           offset:0,0 size:55x40
       offset:110,0 size:100x100
         offset:0,0 size:100x40
@@ -5333,7 +5342,7 @@ TEST_F(NGColumnLayoutAlgorithmTest, ForcedBreakBetweenSpanners5) {
   SetBodyInnerHTML(R"HTML(
     <style>
       .outer { columns:3; height:100px; column-fill:auto; column-gap:10px; width:320px; }
-      .inner { columns:2; }
+      .inner { columns:2; column-gap:0; }
     </style>
     <div id="container">
       <div class="outer">
@@ -5351,6 +5360,7 @@ TEST_F(NGColumnLayoutAlgorithmTest, ForcedBreakBetweenSpanners5) {
     offset:0,0 size:320x100
       offset:0,0 size:100x100
         offset:0,0 size:100x100
+          offset:0,0 size:50x1
           offset:0,0 size:55x40
       offset:110,0 size:100x100
         offset:0,0 size:100x50
@@ -5366,7 +5376,7 @@ TEST_F(NGColumnLayoutAlgorithmTest, SoftBreakBetweenSpanners) {
   SetBodyInnerHTML(R"HTML(
     <style>
       .outer { columns:3; height:100px; column-fill:auto; column-gap:10px; width:320px; }
-      .inner { columns:2; }
+      .inner { columns:2; column-gap:0; }
     </style>
     <div id="container">
       <div class="outer">
@@ -5384,6 +5394,7 @@ TEST_F(NGColumnLayoutAlgorithmTest, SoftBreakBetweenSpanners) {
     offset:0,0 size:320x100
       offset:0,0 size:100x100
         offset:0,0 size:100x100
+          offset:0,0 size:50x1
           offset:0,0 size:55x60
       offset:110,0 size:100x100
         offset:0,0 size:100x60
@@ -5400,7 +5411,7 @@ TEST_F(NGColumnLayoutAlgorithmTest, SoftBreakBetweenSpanners2) {
   SetBodyInnerHTML(R"HTML(
     <style>
       .outer { columns:3; height:100px; column-fill:auto; column-gap:10px; width:320px; }
-      .inner { columns:2; }
+      .inner { columns:2; column-gap:0; }
     </style>
     <div id="container">
       <div class="outer">
@@ -5418,6 +5429,7 @@ TEST_F(NGColumnLayoutAlgorithmTest, SoftBreakBetweenSpanners2) {
     offset:0,0 size:320x100
       offset:0,0 size:100x100
         offset:0,0 size:100x100
+          offset:0,0 size:50x1
           offset:0,0 size:55x60
       offset:110,0 size:100x100
         offset:0,0 size:100x60
@@ -5426,8 +5438,7 @@ TEST_F(NGColumnLayoutAlgorithmTest, SoftBreakBetweenSpanners2) {
   EXPECT_EQ(expectation, dump);
 }
 
-// TODO(crbug.com/1066617): Fix crash during pre-paint.
-TEST_F(NGColumnLayoutAlgorithmTest, DISABLED_AvoidSoftBreakBetweenSpanners) {
+TEST_F(NGColumnLayoutAlgorithmTest, AvoidSoftBreakBetweenSpanners) {
   // There are three spanners in a nested multicol. The first two could fit in
   // the same outer column, but the third one is too tall, and we also don't
   // want to break before that one.So we should break between the two first
@@ -5435,7 +5446,7 @@ TEST_F(NGColumnLayoutAlgorithmTest, DISABLED_AvoidSoftBreakBetweenSpanners) {
   SetBodyInnerHTML(R"HTML(
     <style>
       .outer { columns:3; height:100px; column-fill:auto; column-gap:10px; width:320px; }
-      .inner { columns:2; }
+      .inner { columns:2; column-gap:0; }
     </style>
     <div id="container">
       <div class="outer">
@@ -5454,6 +5465,7 @@ TEST_F(NGColumnLayoutAlgorithmTest, DISABLED_AvoidSoftBreakBetweenSpanners) {
     offset:0,0 size:320x100
       offset:0,0 size:100x100
         offset:0,0 size:100x100
+          offset:0,0 size:50x1
           offset:0,0 size:55x40
       offset:110,0 size:100x100
         offset:0,0 size:100x100
@@ -5463,8 +5475,7 @@ TEST_F(NGColumnLayoutAlgorithmTest, DISABLED_AvoidSoftBreakBetweenSpanners) {
   EXPECT_EQ(expectation, dump);
 }
 
-// TODO(crbug.com/1066617): Fix crash during pre-paint.
-TEST_F(NGColumnLayoutAlgorithmTest, DISABLED_AvoidSoftBreakBetweenSpanners2) {
+TEST_F(NGColumnLayoutAlgorithmTest, AvoidSoftBreakBetweenSpanners2) {
   // There are two spanners in a nested multicol. They won't fit in the same
   // outer column, but we don't want to break inside the second one, and also
   // not between the spanners. The first spanner is breakable, so we should
@@ -5472,7 +5483,7 @@ TEST_F(NGColumnLayoutAlgorithmTest, DISABLED_AvoidSoftBreakBetweenSpanners2) {
   SetBodyInnerHTML(R"HTML(
     <style>
       .outer { columns:3; height:100px; column-fill:auto; column-gap:10px; width:320px; }
-      .inner { columns:2; }
+      .inner { columns:2; column-gap:0; }
       .content { break-inside:avoid; height:20px; }
     </style>
     <div id="container">
@@ -5495,6 +5506,7 @@ TEST_F(NGColumnLayoutAlgorithmTest, DISABLED_AvoidSoftBreakBetweenSpanners2) {
     offset:0,0 size:320x100
       offset:0,0 size:100x100
         offset:0,0 size:100x100
+          offset:0,0 size:50x1
           offset:0,0 size:11x100
             offset:0,0 size:22x20
             offset:0,20 size:33x20
@@ -5507,8 +5519,7 @@ TEST_F(NGColumnLayoutAlgorithmTest, DISABLED_AvoidSoftBreakBetweenSpanners2) {
   EXPECT_EQ(expectation, dump);
 }
 
-// TODO(crbug.com/1066617): Fix crash during pre-paint.
-TEST_F(NGColumnLayoutAlgorithmTest, DISABLED_AvoidSoftBreakBetweenSpanners3) {
+TEST_F(NGColumnLayoutAlgorithmTest, AvoidSoftBreakBetweenSpanners3) {
   // Violate orphans and widows requests rather than break-between avoidance
   // requests.
   SetBodyInnerHTML(R"HTML(
@@ -5523,7 +5534,7 @@ TEST_F(NGColumnLayoutAlgorithmTest, DISABLED_AvoidSoftBreakBetweenSpanners3) {
         orphans: 3;
         widows: 3;
       }
-      .inner { columns:2; }
+      .inner { columns:2; column-gap:0; }
     </style>
     <div id="container">
       <div class="outer">
@@ -5545,6 +5556,7 @@ TEST_F(NGColumnLayoutAlgorithmTest, DISABLED_AvoidSoftBreakBetweenSpanners3) {
     offset:0,0 size:320x100
       offset:0,0 size:100x100
         offset:0,0 size:100x100
+          offset:0,0 size:50x1
           offset:0,0 size:11x100
             offset:0,0 size:0x20
             offset:0,20 size:0x20
@@ -5608,7 +5620,7 @@ TEST_F(NGColumnLayoutAlgorithmTest, SpannerAsMulticol) {
   SetBodyInnerHTML(R"HTML(
     <style>
       .outer { columns:3; height:50px; column-fill:auto; width:320px; }
-      .middle { columns:3; height:140px; column-fill:auto; }
+      .middle { columns:2; height:140px; column-fill:auto; }
       .inner { column-span:all; columns:2; height:80px; column-fill:auto; }
       .outer, .middle, .inner { column-gap:10px; }
       .content { break-inside:avoid; height:20px; }
@@ -5635,6 +5647,7 @@ TEST_F(NGColumnLayoutAlgorithmTest, SpannerAsMulticol) {
     offset:0,0 size:320x50
       offset:0,0 size:100x50
         offset:0,0 size:100x50
+          offset:0,0 size:45x1
           offset:0,0 size:100x50
             offset:0,0 size:45x50
               offset:0,0 size:131x20

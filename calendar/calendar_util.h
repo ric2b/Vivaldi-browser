@@ -1,0 +1,30 @@
+// Copyright (c) 2020 Vivaldi. All rights reserved.
+
+#ifndef CALENDAR_CALENDAR_UTIL_H_
+#define CALENDAR_CALENDAR_UTIL_H_
+
+#include "calendar/event_type.h"
+#include "extensions/schema/calendar.h"
+
+namespace calendar {
+
+class EventRow;
+
+using extensions::vivaldi::calendar::CreateDetails;
+using extensions::vivaldi::calendar::CreateInviteRow;
+using extensions::vivaldi::calendar::CreateNotificationRow;
+
+EventRow GetEventRow(const CreateDetails& event);
+EventExceptionType CreateEventException(
+    const CreateDetails::EventExceptionsType& exception);
+bool GetIdAsInt64(const base::string16& id_string, int64_t* id);
+bool GetStdStringAsInt64(const std::string& id_string, int64_t* id);
+
+NotificationToCreate CreateNotificationRow(
+    const CreateNotificationRow& notification);
+
+InviteToCreate CreateInviteRow(const CreateInviteRow& invite);
+
+}  // namespace calendar
+
+#endif  // CALENDAR_CALENDAR_UTIL_H_

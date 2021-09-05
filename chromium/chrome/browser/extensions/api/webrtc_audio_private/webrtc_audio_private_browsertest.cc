@@ -136,7 +136,7 @@ class WebrtcAudioPrivateTest : public AudioWaitingExtensionTest {
   GURL source_url_;
 };
 
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
 // http://crbug.com/334579
 IN_PROC_BROWSER_TEST_F(WebrtcAudioPrivateTest, GetSinks) {
   AudioDeviceDescriptions devices;
@@ -181,7 +181,7 @@ IN_PROC_BROWSER_TEST_F(WebrtcAudioPrivateTest, GetSinks) {
     EXPECT_TRUE(dict->HasKey("sampleRate"));
   }
 }
-#endif  // OS_MACOSX
+#endif  // OS_MAC
 
 IN_PROC_BROWSER_TEST_F(WebrtcAudioPrivateTest, GetAssociatedSink) {
   // Get the list of input devices. We can cheat in the unit test and

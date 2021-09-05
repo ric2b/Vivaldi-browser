@@ -18,9 +18,9 @@
 #include "media/gpu/mac/vt_video_decode_accelerator_mac.h"
 #include "sandbox/mac/seatbelt.h"
 #include "sandbox/mac/seatbelt_exec.h"
-#include "services/service_manager/sandbox/mac/sandbox_mac.h"
-#include "services/service_manager/sandbox/sandbox.h"
-#include "services/service_manager/sandbox/sandbox_type.h"
+#include "sandbox/policy/mac/sandbox_mac.h"
+#include "sandbox/policy/sandbox.h"
+#include "sandbox/policy/sandbox_type.h"
 #include "ui/gl/init/gl_factory.h"
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
@@ -34,10 +34,25 @@ namespace {
 
 // Helper method to make a closure from a closure.
 base::OnceClosure MaybeWrapWithGPUSandboxHook(
-    service_manager::SandboxType sandbox_type,
+    sandbox::policy::SandboxType sandbox_type,
     base::OnceClosure original) {
-  if (sandbox_type == service_manager::SandboxType::kGpu) {
-    return base::BindOnce(
+  if (sandbox_type == sandbox::policy::SandboxType::kRenderer) {
+    return base::BindOnce([](base::OnceClosure arg) {
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+        media::InitializeAudioToolbox();
+#endif  // defined(USE_SYSTEM_PROPRIETARY_CODECS)
+
+        // Invoke original hook.
+        if (!arg.is_null())
+            std::move(arg).Run();
+      },
+      std::move(original));
+  }
+    
+  if (sandbox_type != sandbox::policy::SandboxType::kGpu)
+    return original;
+
+  return base::BindOnce(
       [](base::OnceClosure arg) {
         // We need to gather GPUInfo and compute GpuFeatureInfo here, so we can
         // decide if initializing core profile or compatibility profile GL,
@@ -81,32 +96,17 @@ base::OnceClosure MaybeWrapWithGPUSandboxHook(
           std::move(arg).Run();
       },
       std::move(original));
-    } else if (sandbox_type == service_manager::SandboxType::kRenderer) {
-      return base::BindOnce([](base::OnceClosure arg) {
-
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-        media::InitializeAudioToolbox();
-#endif  // defined(USE_SYSTEM_PROPRIETARY_CODECS)
-
-        // Invoke original hook.
-        if (!arg.is_null())
-            std::move(arg).Run();
-      },
-      std::move(original));
-    } else {
-      return original;
-    }
 }
 
 // Fill in |sandbox_type| based on the command line.  Returns false if the
 // current process type doesn't need to be sandboxed or if the sandbox was
 // disabled from the command line.
-bool GetSandboxTypeFromCommandLine(service_manager::SandboxType* sandbox_type) {
+bool GetSandboxTypeFromCommandLine(sandbox::policy::SandboxType* sandbox_type) {
   DCHECK(sandbox_type);
 
   auto* command_line = base::CommandLine::ForCurrentProcess();
-  *sandbox_type = service_manager::SandboxTypeFromCommandLine(*command_line);
-  if (service_manager::IsUnsandboxedSandboxType(*sandbox_type))
+  *sandbox_type = sandbox::policy::SandboxTypeFromCommandLine(*command_line);
+  if (IsUnsandboxedSandboxType(*sandbox_type))
     return false;
 
   if (command_line->HasSwitch(sandbox::switches::kSeatbeltClientName)) {
@@ -120,17 +120,17 @@ bool GetSandboxTypeFromCommandLine(service_manager::SandboxType* sandbox_type) {
 
 }  // namespace
 
-bool InitializeSandbox(service_manager::SandboxType sandbox_type) {
-  return service_manager::Sandbox::Initialize(
+bool InitializeSandbox(sandbox::policy::SandboxType sandbox_type) {
+  return sandbox::policy::Sandbox::Initialize(
       sandbox_type,
       MaybeWrapWithGPUSandboxHook(sandbox_type, base::OnceClosure()));
 }
 
 bool InitializeSandbox(base::OnceClosure post_warmup_hook) {
-  service_manager::SandboxType sandbox_type =
-      service_manager::SandboxType::kNoSandbox;
+  sandbox::policy::SandboxType sandbox_type =
+      sandbox::policy::SandboxType::kNoSandbox;
   return !GetSandboxTypeFromCommandLine(&sandbox_type) ||
-         service_manager::Sandbox::Initialize(
+         sandbox::policy::Sandbox::Initialize(
              sandbox_type, MaybeWrapWithGPUSandboxHook(
                                sandbox_type, std::move(post_warmup_hook)));
 }

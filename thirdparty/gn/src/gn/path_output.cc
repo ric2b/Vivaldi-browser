@@ -78,6 +78,14 @@ void PathOutput::WriteFile(std::ostream& out, const OutputFile& file) const {
 }
 
 void PathOutput::WriteFiles(std::ostream& out,
+                            const std::vector<SourceFile>& files) const {
+  for (const auto& file : files) {
+    out << " ";
+    WriteFile(out, file);
+  }
+}
+
+void PathOutput::WriteFiles(std::ostream& out,
                             const std::vector<OutputFile>& files) const {
   for (const auto& file : files) {
     out << " ";

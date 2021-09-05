@@ -178,11 +178,10 @@ TEST_F(DownloadItemModelTest, InterruptedStatus) {
                 "interrupt reason mismatch");
 
   SetupDownloadItemDefaults();
-  for (unsigned i = 0; i < base::size(kTestCases); ++i) {
-    const TestCase& test_case = kTestCases[i];
+  for (const auto& test_case : kTestCases) {
     SetupInterruptedDownloadItem(test_case.reason);
-    EXPECT_STREQ(test_case.expected_status,
-                 base::UTF16ToUTF8(model().GetStatusText()).c_str());
+    EXPECT_EQ(test_case.expected_status,
+              base::UTF16ToUTF8(model().GetStatusText()));
   }
 }
 
@@ -257,11 +256,10 @@ TEST_F(DownloadItemModelTest, InterruptTooltip) {
                 "interrupt reason mismatch");
 
   SetupDownloadItemDefaults();
-  for (unsigned i = 0; i < base::size(kTestCases); ++i) {
-    const TestCase& test_case = kTestCases[i];
+  for (const auto& test_case : kTestCases) {
     SetupInterruptedDownloadItem(test_case.reason);
-    EXPECT_STREQ(test_case.expected_tooltip,
-                 base::UTF16ToUTF8(model().GetTooltipText()).c_str());
+    EXPECT_EQ(test_case.expected_tooltip,
+              base::UTF16ToUTF8(model().GetTooltipText()));
   }
 }
 
@@ -315,8 +313,7 @@ TEST_F(DownloadItemModelTest, InProgressStatus) {
 
   SetupDownloadItemDefaults();
 
-  for (unsigned i = 0; i < base::size(kTestCases); i++) {
-    const TestCase& test_case = kTestCases[i];
+  for (const auto& test_case : kTestCases) {
     Mock::VerifyAndClearExpectations(&item());
     Mock::VerifyAndClearExpectations(&model());
     EXPECT_CALL(item(), GetReceivedBytes())
@@ -332,8 +329,8 @@ TEST_F(DownloadItemModelTest, InProgressStatus) {
     EXPECT_CALL(item(), IsPaused())
         .WillRepeatedly(Return(test_case.is_paused));
 
-    EXPECT_STREQ(test_case.expected_status,
-                 base::UTF16ToUTF8(model().GetStatusText()).c_str());
+    EXPECT_EQ(test_case.expected_status,
+              base::UTF16ToUTF8(model().GetStatusText()));
   }
 }
 
@@ -433,8 +430,7 @@ TEST_F(DownloadItemModelTest, ShouldRemoveFromShelfWhenComplete) {
 
   SetupDownloadItemDefaults();
 
-  for (unsigned i = 0; i < base::size(kTestCases); i++) {
-    const TestCase& test_case = kTestCases[i];
+  for (const auto& test_case : kTestCases) {
     EXPECT_CALL(item(), GetOpenWhenComplete())
         .WillRepeatedly(Return(test_case.is_auto_open));
     EXPECT_CALL(item(), GetState())
@@ -445,8 +441,58 @@ TEST_F(DownloadItemModelTest, ShouldRemoveFromShelfWhenComplete) {
         .WillRepeatedly(Return(test_case.auto_opened));
 
     EXPECT_EQ(test_case.expected_result,
-              model().ShouldRemoveFromShelfWhenComplete())
-        << "Test case: " << i;
+              model().ShouldRemoveFromShelfWhenComplete());
+    Mock::VerifyAndClearExpectations(&item());
+    Mock::VerifyAndClearExpectations(&model());
+  }
+}
+
+TEST_F(DownloadItemModelTest, ShouldShowDropdown) {
+  // A few aliases for DownloadDangerTypes since the full names are fairly
+  // verbose.
+  download::DownloadDangerType safe =
+      download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS;
+  download::DownloadDangerType dangerous_file =
+      download::DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE;
+  download::DownloadDangerType dangerous_content =
+      download::DOWNLOAD_DANGER_TYPE_DANGEROUS_CONTENT;
+  download::DownloadDangerType blocked_encrypted =
+      download::DOWNLOAD_DANGER_TYPE_BLOCKED_PASSWORD_PROTECTED;
+  download::DownloadDangerType blocked_too_large =
+      download::DOWNLOAD_DANGER_TYPE_BLOCKED_TOO_LARGE;
+  download::DownloadDangerType blocked_sensitive =
+      download::DOWNLOAD_DANGER_TYPE_SENSITIVE_CONTENT_BLOCK;
+  download::DownloadDangerType blocked_filetype =
+      download::DOWNLOAD_DANGER_TYPE_BLOCKED_UNSUPPORTED_FILETYPE;
+
+  const struct TestCase {
+    DownloadItem::DownloadState state;        // Expectation for GetState()
+    download::DownloadDangerType danger_type; // Expectation for GetDangerType()
+    bool is_dangerous;        // Expectation for IsDangerous()
+    bool expected_result;
+  } kTestCases[] = {
+    //                                            .--- Is dangerous.
+    // Download state         Danger type         |      .--- Expected result.
+    {DownloadItem::COMPLETE,  safe,              false, true},
+    {DownloadItem::COMPLETE,  dangerous_file,    true,  false},
+    {DownloadItem::CANCELLED, dangerous_file,    true,  true},
+    {DownloadItem::COMPLETE,  dangerous_content, true,  true},
+    {DownloadItem::COMPLETE,  blocked_encrypted, true,  false},
+    {DownloadItem::COMPLETE,  blocked_too_large, true,  false},
+    {DownloadItem::COMPLETE,  blocked_sensitive, true,  false},
+    {DownloadItem::COMPLETE,  blocked_filetype,  true,  false},
+  };
+
+  SetupDownloadItemDefaults();
+
+  for (const auto& test_case : kTestCases) {
+    EXPECT_CALL(item(), GetState()).WillRepeatedly(Return(test_case.state));
+    EXPECT_CALL(item(), GetDangerType())
+        .WillRepeatedly(Return(test_case.danger_type));
+    EXPECT_CALL(item(), IsDangerous())
+        .WillRepeatedly(Return(test_case.is_dangerous));
+
+    EXPECT_EQ(test_case.expected_result, model().ShouldShowDropdown());
     Mock::VerifyAndClearExpectations(&item());
     Mock::VerifyAndClearExpectations(&model());
   }

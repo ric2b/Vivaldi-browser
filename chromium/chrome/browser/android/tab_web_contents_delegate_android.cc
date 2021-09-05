@@ -37,15 +37,14 @@
 #include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
 #include "chrome/browser/password_manager/chrome_password_manager_client.h"
 #include "chrome/browser/picture_in_picture/picture_in_picture_window_manager.h"
-#include "chrome/browser/prerender/prerender_manager.h"
 #include "chrome/browser/prerender/prerender_manager_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/safe_browsing/safe_browsing_navigation_observer.h"
 #include "chrome/browser/ssl/security_state_tab_helper.h"
 #include "chrome/browser/ui/android/device_dialog/bluetooth_chooser_android.h"
 #include "chrome/browser/ui/android/device_dialog/bluetooth_scanning_prompt_android.h"
+#include "chrome/browser/ui/android/infobars/chrome_confirm_infobar.h"
 #include "chrome/browser/ui/android/infobars/framebust_block_infobar.h"
-#include "chrome/browser/ui/android/sms/sms_infobar.h"
 #include "chrome/browser/ui/android/tab_model/tab_model_list.h"
 #include "chrome/browser/ui/autofill/chrome_autofill_client.h"
 #include "chrome/browser/ui/blocked_content/chrome_popup_navigation_delegate.h"
@@ -59,6 +58,7 @@
 #include "components/autofill/content/browser/content_autofill_driver_factory.h"
 #include "components/blocked_content/popup_blocker.h"
 #include "components/blocked_content/popup_tracker.h"
+#include "components/browser_ui/sms/android/sms_infobar.h"
 #include "components/browser_ui/util/android/url_constants.h"
 #include "components/find_in_page/find_notification_details.h"
 #include "components/find_in_page/find_tab_helper.h"
@@ -67,6 +67,7 @@
 #include "components/javascript_dialogs/tab_modal_dialog_manager.h"
 #include "components/navigation_interception/intercept_navigation_delegate.h"
 #include "components/paint_preview/buildflags/buildflags.h"
+#include "components/prerender/browser/prerender_manager.h"
 #include "components/security_state/content/content_utils.h"
 #include "content/public/browser/file_select_listener.h"
 #include "content/public/browser/navigation_entry.h"
@@ -181,7 +182,7 @@ void TabWebContentsDelegateAndroid::PortalWebContentsCreated(
 
 void TabWebContentsDelegateAndroid::RunFileChooser(
     content::RenderFrameHost* render_frame_host,
-    std::unique_ptr<content::FileSelectListener> listener,
+    scoped_refptr<content::FileSelectListener> listener,
     const FileChooserParams& params) {
   if (vr::VrTabHelper::IsUiSuppressedInVr(
           WebContents::FromRenderFrameHost(render_frame_host),
@@ -212,8 +213,10 @@ void TabWebContentsDelegateAndroid::CreateSmsPrompt(
     base::OnceClosure on_confirm,
     base::OnceClosure on_cancel) {
   auto* web_contents = content::WebContents::FromRenderFrameHost(host);
-  SmsInfoBar::Create(web_contents, origin, one_time_code, std::move(on_confirm),
-                     std::move(on_cancel));
+  sms::SmsInfoBar::Create(
+      web_contents, InfoBarService::FromWebContents(web_contents),
+      ChromeConfirmInfoBar::GetResourceIdMapper(), origin, one_time_code,
+      std::move(on_confirm), std::move(on_cancel));
 }
 
 std::unique_ptr<content::BluetoothScanningPrompt>
@@ -310,9 +313,9 @@ TabWebContentsDelegateAndroid::GetJavaScriptDialogManager(
 
 void TabWebContentsDelegateAndroid::AdjustPreviewsStateForNavigation(
     content::WebContents* web_contents,
-    content::PreviewsState* previews_state) {
+    blink::PreviewsState* previews_state) {
   if (GetDisplayMode(web_contents) != blink::mojom::DisplayMode::kBrowser) {
-    *previews_state = content::PREVIEWS_OFF;
+    *previews_state = blink::PreviewsTypes::PREVIEWS_OFF;
   }
 }
 
@@ -384,17 +387,6 @@ WebContents* TabWebContentsDelegateAndroid::OpenURLFromTab(
   }
 
   if (disposition == WindowOpenDisposition::CURRENT_TAB) {
-    // Only prerender for a current-tab navigation to avoid session storage
-    // namespace issues.
-    prerender::PrerenderManager::Params prerender_params(
-        popup_delegate->nav_params(), source);
-    prerender::PrerenderManager* prerender_manager =
-        prerender::PrerenderManagerFactory::GetForBrowserContext(profile);
-    if (prerender_manager && prerender_manager->MaybeUsePrerenderedPage(
-                                 params.url, &prerender_params)) {
-      return prerender_params.replaced_contents;
-    }
-
     // Ask the parent to handle in-place opening.
     return WebContentsDelegateAndroid::OpenURLFromTab(source, params);
   }
@@ -537,7 +529,7 @@ void TabWebContentsDelegateAndroid::PrintCrossProcessSubframe(
 #endif
 
 #if BUILDFLAG(ENABLE_PAINT_PREVIEW)
-void TabWebContentsDelegateAndroid::CapturePaintPreviewOfCrossProcessSubframe(
+void TabWebContentsDelegateAndroid::CapturePaintPreviewOfSubframe(
     content::WebContents* web_contents,
     const gfx::Rect& rect,
     const base::UnguessableToken& guid,

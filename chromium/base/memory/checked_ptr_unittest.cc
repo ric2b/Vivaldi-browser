@@ -10,7 +10,14 @@
 #include <type_traits>
 #include <utility>
 
+#include "base/allocator/partition_allocator/checked_ptr_support.h"
+#include "base/allocator/partition_allocator/partition_alloc.h"
+#include "base/allocator/partition_allocator/partition_alloc_features.h"
+#include "base/allocator/partition_allocator/partition_tag.h"
+#include "base/logging.h"
+#include "base/partition_alloc_buildflags.h"
 #include "build/build_config.h"
+#include "build/buildflag.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 using testing::Test;
@@ -51,6 +58,8 @@ static_assert(
     std::is_trivially_default_constructible<CheckedPtr<std::string>>::value,
     "CheckedPtr should be trivially default constructible");
 
+// Don't use base::internal for testing CheckedPtr API, to test if code outside
+// this namespace calls the correct functions from this namespace.
 namespace {
 
 static int g_wrap_raw_ptr_cnt = INT_MIN;
@@ -504,6 +513,86 @@ TEST_F(CheckedPtrTest, Cast) {
   EXPECT_EQ(checked_derived_ptr4->d, 1024);
 }
 
+TEST_F(CheckedPtrTest, UpcastConvertible) {
+  {
+    Derived derived_val(42, 84, 1024);
+    CheckedPtr<Derived> checked_derived_ptr = &derived_val;
+
+    CheckedPtr<Base1> checked_base1_ptr(checked_derived_ptr);
+    EXPECT_EQ(checked_base1_ptr->b1, 42);
+    CheckedPtr<Base2> checked_base2_ptr(checked_derived_ptr);
+    EXPECT_EQ(checked_base2_ptr->b2, 84);
+
+    checked_base1_ptr = checked_derived_ptr;
+    EXPECT_EQ(checked_base1_ptr->b1, 42);
+    checked_base2_ptr = checked_derived_ptr;
+    EXPECT_EQ(checked_base2_ptr->b2, 84);
+
+    EXPECT_EQ(checked_base1_ptr, checked_derived_ptr);
+    EXPECT_EQ(checked_base2_ptr, checked_derived_ptr);
+  }
+
+  {
+    Derived derived_val(42, 84, 1024);
+    CheckedPtr<Derived> checked_derived_ptr = &derived_val;
+
+    CheckedPtr<Base1> checked_base1_ptr(std::move(checked_derived_ptr));
+    EXPECT_EQ(checked_base1_ptr->b1, 42);
+    CheckedPtr<Base2> checked_base2_ptr(std::move(checked_derived_ptr));
+    EXPECT_EQ(checked_base2_ptr->b2, 84);
+
+    checked_base1_ptr = std::move(checked_derived_ptr);
+    EXPECT_EQ(checked_base1_ptr->b1, 42);
+    checked_base2_ptr = std::move(checked_derived_ptr);
+    EXPECT_EQ(checked_base2_ptr->b2, 84);
+
+    EXPECT_EQ(checked_base1_ptr, checked_derived_ptr);
+    EXPECT_EQ(checked_base2_ptr, checked_derived_ptr);
+  }
+}
+
+TEST_F(CheckedPtrTest, UpcastNotConvertible) {
+  class Base {};
+  class Derived : private Base {};
+  class Unrelated {};
+  EXPECT_FALSE(
+      (std::is_convertible<CheckedPtr<Derived>, CheckedPtr<Base>>::value));
+  EXPECT_FALSE(
+      (std::is_convertible<CheckedPtr<Unrelated>, CheckedPtr<Base>>::value));
+  EXPECT_FALSE(
+      (std::is_convertible<CheckedPtr<Unrelated>, CheckedPtr<void>>::value));
+  EXPECT_FALSE(
+      (std::is_convertible<CheckedPtr<void>, CheckedPtr<Unrelated>>::value));
+  EXPECT_FALSE(
+      (std::is_convertible<CheckedPtr<int64_t>, CheckedPtr<int32_t>>::value));
+  EXPECT_FALSE(
+      (std::is_convertible<CheckedPtr<int16_t>, CheckedPtr<int32_t>>::value));
+}
+
+TEST_F(CheckedPtrTest, UpcastPerformance) {
+  {
+    Derived derived_val(42, 84, 1024);
+    CountingCheckedPtr<Derived> checked_derived_ptr = &derived_val;
+    CountingCheckedPtr<Base1> checked_base1_ptr(checked_derived_ptr);
+    CountingCheckedPtr<Base2> checked_base2_ptr(checked_derived_ptr);
+    checked_base1_ptr = checked_derived_ptr;
+    checked_base2_ptr = checked_derived_ptr;
+  }
+
+  {
+    Derived derived_val(42, 84, 1024);
+    CountingCheckedPtr<Derived> checked_derived_ptr = &derived_val;
+    CountingCheckedPtr<Base1> checked_base1_ptr(std::move(checked_derived_ptr));
+    CountingCheckedPtr<Base2> checked_base2_ptr(std::move(checked_derived_ptr));
+    checked_base1_ptr = std::move(checked_derived_ptr);
+    checked_base2_ptr = std::move(checked_derived_ptr);
+  }
+
+  EXPECT_EQ(g_get_for_comparison_cnt, 0);
+  EXPECT_EQ(g_get_for_extraction_cnt, 0);
+  EXPECT_EQ(g_get_for_dereference_cnt, 0);
+}
+
 TEST_F(CheckedPtrTest, CustomSwap) {
   int foo1, foo2;
   CountingCheckedPtr<int> ptr1(&foo1);
@@ -613,101 +702,190 @@ TEST_F(CheckedPtrTest, AssignmentFromNullptr) {
   EXPECT_EQ(g_get_for_dereference_cnt, 0);
 }
 
-#if defined(ARCH_CPU_64_BITS) && !defined(OS_NACL)
-
-namespace {
-
-struct CheckedPtr2ImplPartitionAllocSupportEnabled
-    : base::internal::CheckedPtr2ImplPartitionAllocSupport {
-  static bool EnabledForPtr(void* ptr) { return true; }
-};
-
-using CheckedPtr2ImplEnabled = base::internal::CheckedPtr2Impl<
-    CheckedPtr2ImplPartitionAllocSupportEnabled>;
-
 }  // namespace
 
-TEST(CheckedPtr2Impl, WrapNull) {
-  ASSERT_EQ(base::internal::CheckedPtr2Impl<>::GetWrappedNullPtr(), 0u);
-  ASSERT_EQ(base::internal::CheckedPtr2Impl<>::WrapRawPtr(nullptr), 0u);
-}
+#if defined(ARCH_CPU_64_BITS) && !defined(OS_NACL)
 
-TEST(CheckedPtr2Impl, SafelyUnwrapNull) {
-  ASSERT_EQ(CheckedPtr2ImplEnabled::SafelyUnwrapPtrForExtraction(0), nullptr);
-}
+namespace base {
+namespace internal {
 
-TEST(CheckedPtr2Impl, WrapAndSafelyUnwrap) {
-  char bytes[] = {0x12, 0x23, 0x34, 0x45, 0x56, 0x67, 0xBA, 0x42, 0x78, 0x89};
-#if !CHECKED_PTR2_PROTECTION_ENABLED
-  // If protection is disabled, wrap & unwrap will read at the pointer, not
-  // before it.
-  bytes[8] = bytes[6];
-  bytes[9] = bytes[7];
+static constexpr size_t kTagOffsetForTest = 2;
+
+struct CheckedPtr2OrMTEImplPartitionAllocSupportForTest {
+  static bool EnabledForPtr(void* ptr) { return !!ptr; }
+
+  static ALWAYS_INLINE void* TagPointer(void* ptr) {
+    return static_cast<char*>(ptr) - kTagOffsetForTest;
+  }
+
+#if CHECKED_PTR2_AVOID_BRANCH_WHEN_CHECKING_ENABLED
+  static constexpr size_t TagOffset() { return kTagOffsetForTest; }
 #endif
-  void* ptr = bytes + sizeof(uintptr_t);
+};
+
+using CheckedPtr2OrMTEImplForTest =
+    CheckedPtr2OrMTEImpl<CheckedPtr2OrMTEImplPartitionAllocSupportForTest>;
+
+TEST(CheckedPtr2OrMTEImpl, WrapNull) {
+  ASSERT_EQ(CheckedPtr2OrMTEImplForTest::GetWrappedNullPtr(), 0u);
+  ASSERT_EQ(CheckedPtr2OrMTEImplForTest::WrapRawPtr(nullptr), 0u);
+}
+
+TEST(CheckedPtr2OrMTEImpl, SafelyUnwrapNull) {
+  ASSERT_EQ(CheckedPtr2OrMTEImplForTest::SafelyUnwrapPtrForExtraction(0),
+            nullptr);
+}
+
+TEST(CheckedPtr2OrMTEImpl, WrapAndSafelyUnwrap) {
+  // Create a fake allocation, with first 2B for generation.
+  // It is ok to use a fake allocation, instead of PartitionAlloc, because
+  // CheckedPtr2OrMTEImplForTest fakes the functionality is enabled for this
+  // pointer and points to the tag appropriately.
+  char bytes[] = {0xBA, 0x42, 0x78, 0x89};
+  void* ptr = bytes + kTagOffsetForTest;
+  ASSERT_EQ(0x78, *static_cast<char*>(ptr));
   uintptr_t addr = reinterpret_cast<uintptr_t>(ptr);
 
   uintptr_t set_top_bit = 0x0000000000000000;
-  uintptr_t mask = 0xFFFFFFFFFFFFFFFF;
 #if CHECKED_PTR2_AVOID_BRANCH_WHEN_CHECKING_ENABLED
   set_top_bit = 0x8000000000000000;
-#if !CHECKED_PTR2_PROTECTION_ENABLED
-  mask = 0x0000FFFFFFFFFFFF;
 #endif
-#endif
+  uintptr_t mask = 0xFFFFFFFFFFFFFFFF;
+  if (sizeof(PartitionTag) < 2)
+    mask = 0x00FFFFFFFFFFFFFF;
 
-  uintptr_t wrapped = CheckedPtr2ImplEnabled::WrapRawPtr(ptr);
-  // First 2 bytes in the preceding word will be used as generation (in reverse
+  uintptr_t wrapped = CheckedPtr2OrMTEImplForTest::WrapRawPtr(ptr);
+  // The bytes before the allocation will be used as generation (in reverse
   // order due to little-endianness).
 #if CHECKED_PTR2_USE_NO_OP_WRAPPER
   ASSERT_EQ(wrapped, addr);
   std::ignore = set_top_bit;
   std::ignore = mask;
 #else
-  ASSERT_EQ(wrapped, (addr | 0x42BA000000000000 | set_top_bit) & mask);
+  ASSERT_EQ(wrapped, (addr | 0x42BA000000000000) & mask | set_top_bit);
 #endif
-  ASSERT_EQ(CheckedPtr2ImplEnabled::SafelyUnwrapPtrInternal(wrapped), addr);
+  ASSERT_EQ(CheckedPtr2OrMTEImplForTest::SafelyUnwrapPtrForDereference(wrapped),
+            ptr);
 
-  bytes[7] |= 0x80;
-#if !CHECKED_PTR2_PROTECTION_ENABLED
-  bytes[9] = bytes[7];
-#endif
-  wrapped = CheckedPtr2ImplEnabled::WrapRawPtr(ptr);
+  // Modify the generation in the fake allocation.
+  bytes[0] |= 0x40;
+  wrapped = CheckedPtr2OrMTEImplForTest::WrapRawPtr(ptr);
 #if CHECKED_PTR2_USE_NO_OP_WRAPPER
   ASSERT_EQ(wrapped, addr);
 #else
-  ASSERT_EQ(wrapped, (addr | 0xC2BA000000000000 | set_top_bit) & mask);
+  ASSERT_EQ(wrapped, (addr | 0x42FA000000000000) & mask | set_top_bit);
 #endif
-  ASSERT_EQ(CheckedPtr2ImplEnabled::SafelyUnwrapPtrInternal(wrapped), addr);
+  ASSERT_EQ(CheckedPtr2OrMTEImplForTest::SafelyUnwrapPtrForDereference(wrapped),
+            ptr);
 
 #if CHECKED_PTR2_AVOID_BRANCH_WHEN_DEREFERENCING
-  bytes[6] = 0;
-  bytes[7] = 0;
-#if !CHECKED_PTR2_PROTECTION_ENABLED
-  bytes[8] = bytes[6];
-  bytes[9] = bytes[7];
-#endif
-  mask = 0xFFFFFFFFFFFFFFFF;
+  // Clear the generation associated with the fake allocation.
+  bytes[0] = 0;
+  bytes[1] = 0;
 #if CHECKED_PTR2_AVOID_BRANCH_WHEN_CHECKING_ENABLED
-  mask = 0x7FFFFFFFFFFFFFFF;
-#if !CHECKED_PTR2_PROTECTION_ENABLED
-  mask = 0x0000FFFFFFFFFFFF;
-#endif
+  mask &= 0x7FFFFFFFFFFFFFFF;
 #endif
 
   // Mask out the top bit, because in some cases (not all), it may differ.
-  ASSERT_EQ(CheckedPtr2ImplEnabled::SafelyUnwrapPtrInternal(wrapped) & mask,
-            wrapped & mask);
-#endif
+  ASSERT_EQ(
+      reinterpret_cast<uintptr_t>(
+          CheckedPtr2OrMTEImplForTest::SafelyUnwrapPtrForDereference(wrapped)) &
+          mask,
+      wrapped & mask);
+#endif  // CHECKED_PTR2_AVOID_BRANCH_WHEN_DEREFERENCING
 }
 
-TEST(CheckedPtr2Impl, SafelyUnwrapDisabled) {
-  char bytes[] = {0x12, 0x23, 0x34, 0x45, 0x56, 0x67, 0xBA, 0x42, 0x78, 0x89};
-  void* ptr = bytes + sizeof(uintptr_t);
+TEST(CheckedPtr2OrMTEImpl, SafelyUnwrapDisabled) {
+  // Create a fake allocation, with first 2B for generation.
+  // It is ok to use a fake allocation, instead of PartitionAlloc, because
+  // CheckedPtr2OrMTEImplForTest fakes the functionality is enabled for this
+  // pointer and points to the tag appropriately.
+  char bytes[] = {0xBA, 0x42, 0x78, 0x89};
+  void* ptr = bytes + kTagOffsetForTest;
+  ASSERT_EQ(0x78, *static_cast<char*>(ptr));
   uintptr_t addr = reinterpret_cast<uintptr_t>(ptr);
-  ASSERT_EQ(CheckedPtr2ImplEnabled::SafelyUnwrapPtrInternal(addr), addr);
+  ASSERT_EQ(CheckedPtr2OrMTEImplForTest::SafelyUnwrapPtrForDereference(addr),
+            ptr);
 }
+
+TEST(CheckedPtr2OrMTEImpl, CrashOnGenerationMismatch) {
+  // Create a fake allocation, with first 2B for generation.
+  // It is ok to use a fake allocation, instead of PartitionAlloc, because
+  // CheckedPtr2OrMTEImplForTest fakes the functionality is enabled for this
+  // pointer and points to the tag appropriately.
+  char bytes[] = {0xBA, 0x42, 0x78, 0x89};
+  CheckedPtr<char, CheckedPtr2OrMTEImplForTest> ptr = bytes + kTagOffsetForTest;
+  EXPECT_TRUE(*ptr == 0x78);
+  // Clobber the generation associated with the fake allocation.
+  bytes[0] = 0;
+  EXPECT_DEATH_IF_SUPPORTED(if (*ptr == 0x78) return, "");
+}
+
+void HandleOOM(size_t unused_size) {
+  LOG(FATAL) << "Out of memory";
+}
+
+// This test works only when PartitionAlloc is used, when tags are enabled.
+// Don't enable it when MEMORY_TOOL_REPLACES_ALLOCATOR is defined, because it
+// makes PartitionAlloc take a different path that doesn't provide tags, thus no
+// crash on UaF, thus missing the EXPECT_DEATH_IF_SUPPORTED expectation.
+#if BUILDFLAG(USE_PARTITION_ALLOC) && ENABLE_CHECKED_PTR2_OR_MTE_IMPL && \
+    !defined(MEMORY_TOOL_REPLACES_ALLOCATOR)
+
+TEST(CheckedPtr2OrMTEImpl, CrashOnUseAfterFree) {
+  // This test works only if GigaCage is enabled. Bail out otherwise.
+  if (!IsPartitionAllocGigaCageEnabled())
+    return;
+
+  // TODO(bartekn): Avoid using PartitionAlloc API directly. Switch to
+  // new/delete once PartitionAlloc Everywhere is fully enabled.
+  PartitionAllocGlobalInit(HandleOOM);
+  PartitionAllocator<ThreadSafe> allocator;
+  allocator.init();
+  void* raw_ptr = allocator.root()->Alloc(sizeof(int), "int");
+  // Use the actual CheckedPtr implementation, not a test substitute, to
+  // exercise real PartitionAlloc paths.
+  CheckedPtr<int> ptr = static_cast<int*>(raw_ptr);
+  *ptr = 42;
+  EXPECT_TRUE(*ptr == 42);
+  allocator.root()->Free(raw_ptr);
+  EXPECT_DEATH_IF_SUPPORTED(if (*ptr == 42) return, "");
+}
+
+#ifdef ENABLE_TAG_FOR_MTE_CHECKED_PTR
+TEST(CheckedPtr2OrMTEImpl, CrashOnUseAfterFree_WithOffset) {
+  // This test works only if GigaCage is enabled. Bail out otherwise.
+  if (!IsPartitionAllocGigaCageEnabled())
+    return;
+
+  // TODO(bartekn): Avoid using PartitionAlloc API directly. Switch to
+  // new/delete once PartitionAlloc Everywhere is fully enabled.
+  PartitionAllocGlobalInit(HandleOOM);
+  PartitionAllocator<ThreadSafe> allocator;
+  allocator.init();
+  const uint8_t kSize = 100;
+  void* raw_ptr = allocator.root()->Alloc(kSize * sizeof(uint8_t), "uint8_t");
+  // Use the actual CheckedPtr implementation, not a test substitute, to
+  // exercise real PartitionAlloc paths.
+  CheckedPtr<uint8_t> ptrs[kSize];
+  for (uint8_t i = 0; i < kSize; ++i) {
+    ptrs[i] = static_cast<uint8_t*>(raw_ptr) + i;
+  }
+  for (uint8_t i = 0; i < kSize; ++i) {
+    *ptrs[i] = 42 + i;
+    EXPECT_TRUE(*ptrs[i] == 42 + i);
+  }
+  allocator.root()->Free(raw_ptr);
+  for (uint8_t i = 0; i < kSize; i += 15) {
+    EXPECT_DEATH_IF_SUPPORTED(if (*ptrs[i] == 42 + i) return, "");
+  }
+}
+#endif  // ENABLE_TAG_FOR_MTE_CHECKED_PTR
+
+#endif  // BUILDFLAG(USE_PARTITION_ALLOC) && ENABLE_CHECKED_PTR2_OR_MTE_IMPL &&
+        // !defined(MEMORY_TOOL_REPLACES_ALLOCATOR)
+
+}  // namespace internal
+}  // namespace base
 
 #endif  // defined(ARCH_CPU_64_BITS) && !defined(OS_NACL)
-
-}  // namespace

@@ -1,18 +1,25 @@
 include_rules = [
   "+chrome/browser/browser_controls/android",
   "+chrome/browser/enterprise",
+  "+chrome/browser/feedback/android",
   "+chrome/browser/flags/android",
   "+chrome/browser/fullscreen/android",
   "+chrome/browser/notifications",
+  "+chrome/browser/password_manager/android",
+  "+chrome/browser/policy/android",
   "+chrome/browser/preferences/android/java",
+  "+chrome/browser/safe_browsing/android",
   "+chrome/browser/safety_check/android",
   "+chrome/browser/settings/android",
   "+chrome/browser/ui/android/favicon/java",
   "+chrome/browser/ui/android/native_page",
   "+chrome/browser/ui/messages/android",
   "+chrome/browser/util/android/java",
-  "+chrome/browser/xsurface/android",
+  "+chrome/browser/video_tutorials/android",
+  "+chrome/browser/webauthn/android",
   "+components/browser_ui/android/bottomsheet",
+  "+components/browser_ui/banners/android",
+  "+components/browser_ui/display_cutout/android",
   "+components/browser_ui/media/android",
   "+components/browser_ui/modaldialog/android",
   "+components/browser_ui/share/android",
@@ -39,7 +46,9 @@ include_rules = [
   "+components/signin/core/browser/android",
   "+components/signin/public/android",
   "+components/spellcheck/browser",
+  "+components/strictmode/android",
   "+components/subresource_filter/android",
+  "+components/translate/content/android",
   "+components/user_prefs/android",
   "+components/viz/common/java",
   "+components/webapk/android",
@@ -49,3 +58,9 @@ include_rules = [
   "+services/device/public",
   "+services/media_session/public",
 ]
+
+specific_include_rules = {
+  "chrome/android/java/src/org/chromium/chrome/browser/AppHooks.java": [
+    "+chrome/browser/xsurface/android",
+  ],
+}

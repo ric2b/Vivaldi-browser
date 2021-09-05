@@ -19,6 +19,8 @@ import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.util.TokenHolder;
 
+import org.vivaldi.browser.common.VivaldiUtils;
+
 /**
  * Handles showing and hiding a scrim when url bar focus changes.
  */
@@ -39,6 +41,9 @@ public class LocationBarFocusScrimHandler implements UrlFocusChangeListener {
     private final Runnable mClickDelegate;
     private final Context mContext;
     private NightModeStateProvider mNightModeStateProvider;
+
+    // Vivaldi
+    private final int mTopMargin;
 
     /**
      *
@@ -93,6 +98,8 @@ public class LocationBarFocusScrimHandler implements UrlFocusChangeListener {
                               .with(ScrimProperties.VISIBILITY_CALLBACK, visibilityChangeCallback)
                               .with(ScrimProperties.BACKGROUND_COLOR, ScrimProperties.INVALID_COLOR)
                               .build();
+        // Vivaldi
+        mTopMargin = topMargin;
     }
 
     @Override
@@ -104,6 +111,9 @@ public class LocationBarFocusScrimHandler implements UrlFocusChangeListener {
                 useLightColor ? mLightScrimColor : ScrimProperties.INVALID_COLOR);
 
         if (hasFocus && !showScrimAfterAnimationCompletes()) {
+            // Note(david@vivaldi.com): Handle the correct top margin.
+            mScrimModel.set(
+                    ScrimProperties.TOP_MARGIN, VivaldiUtils.isTopToolbarOn() ? mTopMargin : 0);
             mScrimCoordinator.showScrim(mScrimModel);
             mScrimShown = true;
         } else if (!hasFocus && mScrimShown) {

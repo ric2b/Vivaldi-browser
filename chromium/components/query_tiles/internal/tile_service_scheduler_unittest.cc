@@ -1,7 +1,8 @@
 // Copyright 2020 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
-#include "components/query_tiles/internal/tile_service_scheduler.h"
+
+#include "components/query_tiles/internal/tile_service_scheduler_impl.h"
 
 #include <utility>
 #include <vector>
@@ -13,11 +14,15 @@
 #include "base/test/simple_test_tick_clock.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_mock_time_task_runner.h"
+#include "components/prefs/pref_service.h"
 #include "components/prefs/testing_pref_service.h"
+#include "components/query_tiles/internal/black_hole_log_sink.h"
 #include "components/query_tiles/internal/tile_config.h"
 #include "components/query_tiles/internal/tile_store.h"
 #include "components/query_tiles/switches.h"
 #include "components/query_tiles/test/test_utils.h"
+#include "components/query_tiles/tile_service_prefs.h"
+#include "net/base/backoff_entry_serializer.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -55,10 +60,11 @@ class TileServiceSchedulerTest : public testing::Test {
     EXPECT_TRUE(base::Time::FromString("05/18/20 01:00:00 AM", &fake_now));
     clock_.SetNow(fake_now);
     query_tiles::RegisterPrefs(prefs()->registry());
+    log_sink_ = std::make_unique<test::BlackHoleLogSink>();
     auto policy = std::make_unique<net::BackoffEntry::Policy>(kTestPolicy);
-    tile_service_scheduler_ =
-        TileServiceScheduler::Create(&mocked_native_scheduler_, &prefs_,
-                                     &clock_, &tick_clock_, std::move(policy));
+    tile_service_scheduler_ = std::make_unique<TileServiceSchedulerImpl>(
+        &mocked_native_scheduler_, &prefs_, &clock_, &tick_clock_,
+        std::move(policy), log_sink_.get());
     EXPECT_CALL(
         *native_scheduler(),
         Cancel(static_cast<int>(background_task::TaskIds::QUERY_TILE_JOB_ID)));
@@ -97,7 +103,7 @@ class TileServiceSchedulerTest : public testing::Test {
   base::SimpleTestTickClock tick_clock_;
   TestingPrefServiceSimple prefs_;
   MockBackgroundTaskScheduler mocked_native_scheduler_;
-
+  std::unique_ptr<LogSink> log_sink_;
   std::unique_ptr<TileServiceScheduler> tile_service_scheduler_;
 };
 

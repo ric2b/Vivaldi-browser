@@ -224,7 +224,7 @@ class ResourceFile {
     DCHECK(!file_path.empty());
     DCHECK(file_path.IsAbsolute());
   }
-  ~ResourceFile() { base::DeleteFile(file_path_, false); }
+  ~ResourceFile() { base::DeleteFile(file_path_); }
 
   const base::FilePath& file_path() const { return file_path_; }
 
@@ -1048,7 +1048,7 @@ class NotificationPlatformBridgeLinuxImpl
   std::string server_name_;
   base::Version server_version_;
 
-  base::Closure connected_signals_barrier_;
+  base::RepeatingClosure connected_signals_barrier_;
 
   // Whether ConnectToSignal() is in progress.
   bool connect_signals_in_progress_ = false;

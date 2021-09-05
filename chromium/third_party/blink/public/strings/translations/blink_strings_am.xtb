@@ -16,6 +16,7 @@
 <translation id="1335095011850992622">ክሬዲቶች</translation>
 <translation id="1342835525016946179">ጽሑፍ</translation>
 <translation id="1359897965706325498">ሰንደቅ</translation>
+<translation id="1480676835519562650">በብዛት ሊመረጥ የሚችል፣ <ph name="SELECTED" /> ከ<ph name="COUNT" /> ተመርጠዋል።</translation>
 <translation id="1589122976691792535">ክልል</translation>
 <translation id="1591562245178063882">በዚህ ወር</translation>
 <translation id="1637811476055996098">ፋይሎችን ይምረጡ</translation>
@@ -51,6 +52,7 @@
 <translation id="248395913932153421">ቀን</translation>
 <translation id="2507943997699731163">እባክዎ ይህን መስክ ይሙሉት።</translation>
 <translation id="2508569020611168319">የትር ዝርዝር</translation>
+<translation id="2530182415807757784">በብዛት ሊመረጥ የሚችል፣ ምንም አልተመረጠም።</translation>
 <translation id="2561842179657104141">ተጨማሪ የማህደረ መረጃ ቁጥጥሮችን አሳይ</translation>
 <translation id="2572483411312390101">አጫውት</translation>
 <translation id="2613802280814924224">እባክዎ የሚሰራ ዋጋ ያስገቡ። የሚቀርበው ዋጋ <ph name="VALID_VALUE" /> ነው።</translation>
@@ -102,7 +104,6 @@
 <translation id="4248100235867064564">የምናሌ አሞሌ</translation>
 <translation id="4360991593054037559">እባክዎ የሚሰራ ዋጋ ያስገቡ። ሁለቱ የሚቀርቡ ዋጋዎች <ph name="VALID_VALUE_LOW" /> እና <ph name="VALID_VALUE_HIGHER" /> ናቸው።</translation>
 <translation id="4384583879834880242">ጥያቄ እና መልስ</translation>
-<translation id="4413860115965805769">የምናሌ አዝራር</translation>
 <translation id="4444765639179266822">እንዲህ የሚል ይመስላል፦ <ph name="OCR_TEXT" /></translation>
 <translation id="4446524499724042288">የሙዳየ ቃላት ዋቢ</translation>
 <translation id="4522570452068850558">ዝርዝሮች</translation>

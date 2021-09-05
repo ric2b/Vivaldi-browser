@@ -7,6 +7,7 @@ import("//components/feed/features.gni")
 if (enable_feed_in_chrome) {
   feed_deps = [
     "//base:base_java",
+    "//chrome/android/feed:chrome_feed_java_resources",
     "//components/feed/core/proto:proto_java",
     "//third_party/android_deps:android_support_v7_appcompat_java",
     "//third_party/android_deps:androidx_annotation_annotation_java",
@@ -16,8 +17,8 @@ if (enable_feed_in_chrome) {
     "//third_party/android_deps:androidx_recyclerview_recyclerview_java",
     "//third_party/android_deps:androidx_swiperefreshlayout_swiperefreshlayout_java",
     "//third_party/android_deps:com_google_code_findbugs_jsr305_java",
-    "//third_party/android_deps:com_google_protobuf_protobuf_javalite_java",
     "//third_party/android_deps:javax_inject_javax_inject_java",
+    "//third_party/android_deps:protobuf_lite_runtime_java",
   ]
 
   feed_java_sources = [
@@ -373,9 +374,10 @@ if (enable_feed_in_chrome) {
     "//chrome/android/feed/core/java/src/org/chromium/chrome/browser/feed/library/sharedstream/scroll/ScrollListenerNotifier.java",
     "//chrome/android/feed/core/java/src/org/chromium/chrome/browser/feed/library/sharedstream/scroll/ScrollLogger.java",
     "//chrome/android/feed/core/java/src/org/chromium/chrome/browser/feed/library/sharedstream/scroll/ScrollRestoreHelper.java",
-    "//chrome/android/feed/core/java/src/org/chromium/chrome/browser/feed/library/sharedstream/scroll/ScrollTracker.java",
+    "//chrome/android/feed/core/java/src/org/chromium/chrome/browser/feed/shared/FeedFeatures.java",
     "//chrome/android/feed/core/java/src/org/chromium/chrome/browser/feed/shared/FeedSurfaceDelegate.java",
     "//chrome/android/feed/core/java/src/org/chromium/chrome/browser/feed/shared/FeedSurfaceProvider.java",
+    "//chrome/android/feed/core/java/src/org/chromium/chrome/browser/feed/shared/ScrollTracker.java",
     "//chrome/android/feed/core/java/src/org/chromium/chrome/browser/feed/shared/stream/Header.java",
     "//chrome/android/feed/core/java/src/org/chromium/chrome/browser/feed/shared/stream/NonDismissibleHeader.java",
     "//chrome/android/feed/core/java/src/org/chromium/chrome/browser/feed/shared/stream/Stream.java",
@@ -384,6 +386,7 @@ if (enable_feed_in_chrome) {
     "//chrome/android/feed/core/java/src/org/chromium/chrome/browser/feed/tooltip/BasicTooltipSupportedApi.java",
     "//chrome/android/feed/core/java/src/org/chromium/chrome/browser/feed/tooltip/FeedTooltipUtils.java",
     "//chrome/android/feed/core/java/src/org/chromium/chrome/browser/feed/v2/CardMenuBottomSheetContent.java",
+    "//chrome/android/feed/core/java/src/org/chromium/chrome/browser/feed/v2/FeedImageFetchClient.java",
     "//chrome/android/feed/core/java/src/org/chromium/chrome/browser/feed/v2/FeedListContentManager.java",
     "//chrome/android/feed/core/java/src/org/chromium/chrome/browser/feed/v2/FeedServiceBridge.java",
     "//chrome/android/feed/core/java/src/org/chromium/chrome/browser/feed/v2/FeedSliceViewTracker.java",
@@ -637,7 +640,6 @@ if (enable_feed_in_chrome) {
     "//chrome/android/feed/core/javatests/src/org/chromium/chrome/browser/feed/library/sharedstream/scroll/ScrollListenerNotifierTest.java",
     "//chrome/android/feed/core/javatests/src/org/chromium/chrome/browser/feed/library/sharedstream/scroll/ScrollLoggerTest.java",
     "//chrome/android/feed/core/javatests/src/org/chromium/chrome/browser/feed/library/sharedstream/scroll/ScrollRestoreHelperTest.java",
-    "//chrome/android/feed/core/javatests/src/org/chromium/chrome/browser/feed/library/sharedstream/scroll/ScrollTrackerTest.java",
     "//chrome/android/feed/core/javatests/src/org/chromium/chrome/browser/feed/shared/ui/MaterialSpinnerViewTest.java",
     "junit/src/org/chromium/chrome/browser/feed/FeedApplicationInfoTest.java",
     "junit/src/org/chromium/chrome/browser/feed/FeedContentStorageTest.java",
@@ -648,9 +650,12 @@ if (enable_feed_in_chrome) {
     "junit/src/org/chromium/chrome/browser/feed/FutureTaskConsumerTest.java",
     "junit/src/org/chromium/chrome/browser/feed/NtpStreamLifecycleManagerTest.java",
     "junit/src/org/chromium/chrome/browser/feed/action/FeedActionHandlerTest.java",
+    "junit/src/org/chromium/chrome/browser/feed/shared/ScrollTrackerTest.java",
+    "junit/src/org/chromium/chrome/browser/feed/v2/FakeLinearLayoutManager.java",
     "junit/src/org/chromium/chrome/browser/feed/v2/FeedListContentManagerTest.java",
     "junit/src/org/chromium/chrome/browser/feed/v2/FeedSliceViewTrackerTest.java",
     "junit/src/org/chromium/chrome/browser/feed/v2/FeedStreamSurfaceTest.java",
+    "junit/src/org/chromium/chrome/browser/feed/v2/FeedStreamTest.java",
     "junit/src/org/chromium/chrome/browser/feed/v2/NativeViewListRendererTest.java",
   ]
 

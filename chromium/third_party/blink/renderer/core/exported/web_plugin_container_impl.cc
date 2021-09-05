@@ -51,10 +51,10 @@
 #include "third_party/blink/public/web/web_print_preset_options.h"
 #include "third_party/blink/public/web/web_view_client.h"
 #include "third_party/blink/renderer/bindings/core/v8/sanitize_script_errors.h"
-#include "third_party/blink/renderer/bindings/core/v8/script_controller.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_source_code.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_element.h"
+#include "third_party/blink/renderer/core/clipboard/clipboard_utilities.h"
 #include "third_party/blink/renderer/core/clipboard/data_object.h"
 #include "third_party/blink/renderer/core/clipboard/data_transfer.h"
 #include "third_party/blink/renderer/core/clipboard/system_clipboard.h"
@@ -74,6 +74,7 @@
 #include "third_party/blink/renderer/core/frame/csp/content_security_policy.h"
 #include "third_party/blink/renderer/core/frame/event_handler_registry.h"
 #include "third_party/blink/renderer/core/frame/find_in_page.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/frame/web_local_frame_impl.h"
@@ -92,6 +93,7 @@
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/page/scrolling/scrolling_coordinator.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
+#include "third_party/blink/renderer/core/script/classic_script.h"
 #include "third_party/blink/renderer/core/scroll/scroll_animator_base.h"
 #include "third_party/blink/renderer/core/scroll/scrollbar_theme.h"
 #include "third_party/blink/renderer/platform/exported/wrapped_resource_response.h"
@@ -113,7 +115,7 @@ namespace blink {
 
 namespace {
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 const WebInputEvent::Modifiers kEditingModifier = WebInputEvent::kMetaKey;
 #else
 const WebInputEvent::Modifiers kEditingModifier = WebInputEvent::kControlKey;
@@ -150,22 +152,25 @@ void WebPluginContainerImpl::Paint(GraphicsContext& context,
   if (!cull_rect.Intersects(FrameRect()))
     return;
 
+  IntRect visual_rect = FrameRect();
+  visual_rect.Move(paint_offset);
+
   if (WantsWheelEvents()) {
     context.GetPaintController().RecordScrollHitTestData(
         *GetLayoutEmbeddedContent(), DisplayItem::kPluginScrollHitTest, nullptr,
-        GetLayoutEmbeddedContent()->FirstFragment().VisualRect());
+        visual_rect);
   }
 
   if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled() && layer_) {
     layer_->SetBounds(gfx::Size(Size()));
     layer_->SetIsDrawable(true);
     layer_->SetHitTestable(true);
-    auto offset = GetLayoutEmbeddedContent()->ReplacedContentRect().offset;
+    auto offset = RoundedIntPoint(
+        GetLayoutEmbeddedContent()->ReplacedContentRect().offset);
     // When compositing is after paint, composited plugins should have their
     // layers inserted rather than invoking WebPlugin::paint.
     RecordForeignLayer(context, *element_->GetLayoutObject(),
-                       DisplayItem::kForeignLayerPlugin, layer_,
-                       FloatPoint(offset));
+                       DisplayItem::kForeignLayerPlugin, layer_, offset);
     return;
   }
 
@@ -174,7 +179,7 @@ void WebPluginContainerImpl::Paint(GraphicsContext& context,
     return;
 
   DrawingRecorder recorder(context, *element_->GetLayoutObject(),
-                           DisplayItem::kWebPlugin);
+                           DisplayItem::kWebPlugin, visual_rect);
   context.Save();
 
   // The plugin is positioned in the root frame's coordinates, so it needs to
@@ -377,9 +382,8 @@ void WebPluginContainerImpl::PrintPage(int page_number, GraphicsContext& gc) {
           gc, *element_->GetLayoutObject(), DisplayItem::kWebPlugin))
     return;
 
-  // TODO(wkorman): Do we still need print_rect at all?
   DrawingRecorder recorder(gc, *element_->GetLayoutObject(),
-                           DisplayItem::kWebPlugin);
+                           DisplayItem::kWebPlugin, FrameRect());
   gc.Save();
 
   cc::PaintCanvas* canvas = gc.Canvas();
@@ -396,8 +400,13 @@ void WebPluginContainerImpl::Copy() {
     return;
 
   LocalFrame* frame = element_->GetDocument().GetFrame();
-  frame->GetSystemClipboard()->WriteHTML(
-      web_plugin_->SelectionAsMarkup(), KURL(), web_plugin_->SelectionAsText());
+  frame->GetSystemClipboard()->WriteHTML(web_plugin_->SelectionAsMarkup(),
+                                         KURL());
+  // TODO(dsleeps): consider consolidating ReplaceNBSPWithSpace into
+  // WritePlainText. WriteHTML always used ReplaceNBSOWithSpace before writing.
+  String text = web_plugin_->SelectionAsText();
+  ReplaceNBSPWithSpace(text);
+  frame->GetSystemClipboard()->WritePlainText(text);
   frame->GetSystemClipboard()->CommitWrite();
 }
 
@@ -509,6 +518,7 @@ v8::Local<v8::Object> WebPluginContainerImpl::V8ObjectForElement() {
   return v8::Local<v8::Object>::Cast(v8value);
 }
 
+// TODO(hiroshige): Consider merging with LocalFrame::ExecuteJavaScriptURL().
 WebString WebPluginContainerImpl::ExecuteScriptURL(const WebURL& url,
                                                    bool popups_allowed) {
   LocalFrame* frame = element_->GetDocument().GetFrame();
@@ -521,7 +531,7 @@ WebString WebPluginContainerImpl::ExecuteScriptURL(const WebURL& url,
   String script = DecodeURLEscapeSequences(kurl.GetString(),
                                            DecodeURLMode::kUTF8OrIsomorphic);
 
-  if (!element_->GetDocument().GetContentSecurityPolicy()->AllowInline(
+  if (!element_->GetExecutionContext()->GetContentSecurityPolicy()->AllowInline(
           ContentSecurityPolicy::InlineType::kNavigation, element_, script,
           String() /* nonce */, element_->GetDocument().Url(),
           OrdinalNumber())) {
@@ -529,14 +539,16 @@ WebString WebPluginContainerImpl::ExecuteScriptURL(const WebURL& url,
   }
   script = script.Substring(strlen("javascript:"));
 
-  if (popups_allowed)
-    LocalFrame::NotifyUserActivation(frame);
+  if (popups_allowed) {
+    LocalFrame::NotifyUserActivation(
+        frame, mojom::blink::UserActivationNotificationType::kPlugin);
+  }
 
   v8::HandleScope handle_scope(ToIsolate(frame));
   v8::Local<v8::Value> result =
-      frame->GetScriptController().ExecuteScriptInMainWorldAndReturnValue(
-          ScriptSourceCode(script, ScriptSourceLocationType::kJavascriptUrl),
-          KURL(), SanitizeScriptErrors::kSanitize);
+      ClassicScript::CreateUnspecifiedScript(
+          ScriptSourceCode(script, ScriptSourceLocationType::kJavascriptUrl))
+          ->RunScriptAndReturnValue(frame);
 
   // Failure is reported as a null string.
   if (result.IsEmpty() || !result->IsString())
@@ -546,14 +558,16 @@ WebString WebPluginContainerImpl::ExecuteScriptURL(const WebURL& url,
 
 void WebPluginContainerImpl::LoadFrameRequest(const WebURLRequest& request,
                                               const WebString& target) {
-  LocalFrame* frame = element_->GetDocument().GetFrame();
-  if (!frame || !frame->Loader().GetDocumentLoader())
-    return;  // FIXME: send a notification in this case?
+  LocalDOMWindow* window = element_->GetDocument().domWindow();
+  if (!window)
+    return;
 
-  FrameLoadRequest frame_request(frame->GetDocument(),
-                                 request.ToResourceRequest());
+  FrameLoadRequest frame_request(window, request.ToResourceRequest());
   Frame* target_frame =
-      frame->Tree().FindOrCreateFrameForNavigation(frame_request, target).frame;
+      window->GetFrame()
+          ->Tree()
+          .FindOrCreateFrameForNavigation(frame_request, target)
+          .frame;
   if (target_frame)
     target_frame->Navigate(frame_request, WebFrameLoadType::kStandard);
 }

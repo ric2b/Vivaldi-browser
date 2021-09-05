@@ -311,7 +311,7 @@ const Value* Value::FindPath(
 
 const Value* Value::FindPath(span<const std::string_view> path) const {
   const Value* cur = this;
-  for (const std::string_view component : path) {
+  for (const std::string_view& component : path) {
     if (!cur->is_dict() || (cur = cur->FindKey(component)) == nullptr)
       return nullptr;
   }

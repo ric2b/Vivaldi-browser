@@ -13,7 +13,6 @@
 #include "cc/input/overscroll_behavior.h"
 #include "content/common/content_export.h"
 #include "content/common/content_param_traits.h"
-#include "content/common/input/input_event_dispatch_type.h"
 #include "content/common/input/synthetic_gesture_params.h"
 #include "content/common/input/synthetic_pinch_gesture_params.h"
 #include "content/common/input/synthetic_pointer_action_list_params.h"
@@ -51,8 +50,6 @@ IPC_ENUM_TRAITS_MAX_VALUE(
 IPC_ENUM_TRAITS_MAX_VALUE(
     content::SyntheticPointerActionParams::Button,
     content::SyntheticPointerActionParams::Button::BUTTON_MAX)
-IPC_ENUM_TRAITS_MAX_VALUE(content::InputEventDispatchType,
-                          content::InputEventDispatchType::DISPATCH_TYPE_MAX)
 
 IPC_STRUCT_TRAITS_BEGIN(content::SyntheticGestureParams)
   IPC_STRUCT_TRAITS_MEMBER(gesture_source_type)
@@ -74,7 +71,7 @@ IPC_STRUCT_TRAITS_BEGIN(content::SyntheticSmoothScrollGestureParams)
   IPC_STRUCT_TRAITS_MEMBER(fling_velocity_x)
   IPC_STRUCT_TRAITS_MEMBER(fling_velocity_y)
   IPC_STRUCT_TRAITS_MEMBER(granularity)
-  IPC_STRUCT_TRAITS_MEMBER(key_modifiers)
+  IPC_STRUCT_TRAITS_MEMBER(modifiers)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(content::SyntheticPinchGestureParams)

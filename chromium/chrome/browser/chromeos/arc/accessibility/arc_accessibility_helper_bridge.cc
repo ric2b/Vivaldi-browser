@@ -12,6 +12,7 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/memory/singleton.h"
+#include "base/metrics/histogram_functions.h"
 #include "chrome/browser/chromeos/arc/accessibility/arc_accessibility_util.h"
 #include "chrome/browser/chromeos/arc/accessibility/geometry_util.h"
 #include "chrome/browser/profiles/profile.h"
@@ -318,6 +319,7 @@ void ArcAccessibilityHelperBridge::OnSetNativeChromeVoxArcSupportProcessed(
   }
 
   UpdateWindowProperties(window);
+  base::UmaHistogramBoolean("Arc.AccessibilityWithTalkBack", !enabled);
 }
 
 bool ArcAccessibilityHelperBridge::RefreshTreeIfInActiveWindow(
@@ -336,8 +338,6 @@ bool ArcAccessibilityHelperBridge::RefreshTreeIfInActiveWindow(
 
   arc::mojom::AccessibilityWindowKeyPtr window_key =
       arc::mojom::AccessibilityWindowKey::New();
-  // TODO(hirokisato): At this moment, sometimes window_id from wayland hasn't
-  // been sent from Chrome. Add a listener for this.
   if (exo::GetShellClientAccessibilityId(active_window).has_value()) {
     window_key->set_window_id(
         exo::GetShellClientAccessibilityId(active_window).value());
@@ -523,6 +523,8 @@ bool ArcAccessibilityHelperBridge::IsScreenReaderEnabled() const {
 
 void ArcAccessibilityHelperBridge::OnTaskDestroyed(int32_t task_id) {
   trees_.erase(KeyForTaskId(task_id));
+  base::EraseIf(window_id_to_task_id_,
+                [task_id](auto it) { return it.second == task_id; });
 }
 
 void ArcAccessibilityHelperBridge::OnAndroidVirtualKeyboardVisibilityChanged(
@@ -574,6 +576,22 @@ void ArcAccessibilityHelperBridge::OnWindowActivated(
   bool talkback_enabled = !native_chromevox_enabled_;
   if (talkback_enabled && lost_arc != gained_arc)
     DispatchCustomSpokenFeedbackToggled(gained_arc);
+
+  if (lost_arc)
+    lost_active->RemoveObserver(this);
+  if (gained_arc) {
+    UpdateWindowIdMapping(gained_active);
+    gained_active->AddObserver(this);
+  }
+}
+
+void ArcAccessibilityHelperBridge::OnWindowPropertyChanged(aura::Window* window,
+                                                           const void* key,
+                                                           intptr_t old) {
+  // We are only interested in changes to |kClientAccessibilityIdKey|,
+  // but that constant is not accessible outside shell_surface.cc.
+  // So we react to all property changes.
+  UpdateWindowIdMapping(window);
 }
 
 void ArcAccessibilityHelperBridge::InvokeUpdateEnabledFeatureForTesting() {
@@ -723,12 +741,18 @@ void ArcAccessibilityHelperBridge::UpdateEnabledFeature() {
     return;
 
   exo::WMHelper* wm_helper = exo::WMHelper::GetInstance();
+  aura::Window* active_window = GetActiveWindow();
+  bool is_arc_active = arc::IsArcAppWindow(active_window);
   if (add_activation_observer) {
     wm_helper->AddActivationObserver(this);
     activation_observer_added_ = true;
+    if (is_arc_active)
+      active_window->AddObserver(this);
   } else {
     activation_observer_added_ = false;
     wm_helper->RemoveActivationObserver(this);
+    if (is_arc_active)
+      active_window->RemoveObserver(this);
   }
 }
 
@@ -848,10 +872,12 @@ void ArcAccessibilityHelperBridge::HandleFilterTypeAllEvent(
       if (task_id != event_data->task_id)
         return;
     } else {
-      // Event data does not have task ID. Check window ID instead.
-      auto window_id = exo::GetShellClientAccessibilityId(active_window);
-      if (window_id != event_data->window_id)
+      // Event data does not have task ID. Get task ID from window ID instead.
+      auto task_id_itr = window_id_to_task_id_.find(event_data->window_id);
+      if (task_id_itr == window_id_to_task_id_.end() ||
+          task_id != task_id_itr->second) {
         return;
+      }
     }
 
     auto key = KeyForTaskId(task_id);
@@ -860,6 +886,12 @@ void ArcAccessibilityHelperBridge::HandleFilterTypeAllEvent(
     if (!tree_source) {
       tree_source = CreateFromKey(key, active_window);
       SetChildAxTreeIDForWindow(active_window, tree_source->ax_tree_id());
+      if (chromeos::AccessibilityManager::Get() &&
+          chromeos::AccessibilityManager::Get()->IsSpokenFeedbackEnabled()) {
+        // Record metrics only when SpokenFeedback is enabled in order to
+        // compare this with TalkBack usage.
+        base::UmaHistogramBoolean("Arc.AccessibilityWithTalkBack", false);
+      }
     } else {
       tree_source->set_device_scale_factor(
           DeviceScaleFactorFromWindow(active_window));
@@ -901,6 +933,37 @@ void ArcAccessibilityHelperBridge::HandleFilterTypeAllEvent(
       }
     }
   }
+}
+
+void ArcAccessibilityHelperBridge::UpdateWindowIdMapping(aura::Window* window) {
+  const auto window_id = exo::GetShellClientAccessibilityId(window);
+  if (!window_id.has_value())
+    return;
+
+  if (window_id_to_task_id_.find(window_id.value()) !=
+      window_id_to_task_id_.end()) {
+    // We already know this window ID.
+    return;
+  }
+
+  const int32_t task_id = arc::GetWindowTaskId(window);
+  if (task_id == kNoTaskId)
+    return;
+
+  window_id_to_task_id_[window_id.value()] = task_id;
+
+  // The window ID is new to us. Request the entire tree.
+  arc::mojom::AccessibilityWindowKeyPtr window_key =
+      arc::mojom::AccessibilityWindowKey::New();
+  window_key->set_window_id(window_id.value());
+
+  auto* const instance =
+      ARC_GET_INSTANCE_FOR_METHOD(arc_bridge_service_->accessibility_helper(),
+                                  RequestSendAccessibilityTree);
+  if (!instance)
+    return;
+
+  instance->RequestSendAccessibilityTree(std::move(window_key));
 }
 
 void ArcAccessibilityHelperBridge::DispatchEventTextAnnouncement(

@@ -240,17 +240,28 @@ FuchsiaCdm::SessionCallbacks& FuchsiaCdm::SessionCallbacks::operator=(
     SessionCallbacks&&) = default;
 
 FuchsiaCdm::FuchsiaCdm(fuchsia::media::drm::ContentDecryptionModulePtr cdm,
+                       ReadyCB ready_cb,
                        SessionCallbacks callbacks)
     : cdm_(std::move(cdm)),
+      ready_cb_(std::move(ready_cb)),
       session_callbacks_(std::move(callbacks)),
       decryptor_(cdm_.get()) {
   DCHECK(cdm_);
+  cdm_.events().OnProvisioned =
+      fit::bind_member(this, &FuchsiaCdm::OnProvisioned);
   cdm_.set_error_handler([this](zx_status_t status) {
     ZX_LOG(ERROR, status) << "The fuchsia.media.drm.ContentDecryptionModule"
                           << " channel was terminated.";
 
     // Reject all the pending promises.
     promises_.Clear();
+
+    // If the channel closed prior to invoking the ready_cb_, we should invoke
+    // it here with failure.
+    if (ready_cb_) {
+      std::move(ready_cb_).Run(
+          false, "ContentDecryptionModule closed prior to being ready");
+    }
   });
 }
 
@@ -344,6 +355,12 @@ void FuchsiaCdm::CreateSessionAndGenerateRequest(
       init_data_type, init_data,
       base::BindOnce(&FuchsiaCdm::OnGenerateLicenseRequestStatus,
                      base::Unretained(this), session_ptr, promise_id));
+}
+
+void FuchsiaCdm::OnProvisioned() {
+  if (ready_cb_) {
+    std::move(ready_cb_).Run(true, "");
+  }
 }
 
 void FuchsiaCdm::OnCreateSession(std::unique_ptr<CdmSession> session,
@@ -448,16 +465,11 @@ CdmContext* FuchsiaCdm::GetCdmContext() {
 
 std::unique_ptr<CallbackRegistration> FuchsiaCdm::RegisterEventCB(
     EventCB event_cb) {
-  NOTIMPLEMENTED();
-  return nullptr;
+  return event_callbacks_.Register(std::move(event_cb));
 }
 
 Decryptor* FuchsiaCdm::GetDecryptor() {
   return &decryptor_;
-}
-
-int FuchsiaCdm::GetCdmId() const {
-  return kInvalidCdmId;
 }
 
 FuchsiaCdmContext* FuchsiaCdm::GetFuchsiaCdmContext() {
@@ -465,7 +477,7 @@ FuchsiaCdmContext* FuchsiaCdm::GetFuchsiaCdmContext() {
 }
 
 void FuchsiaCdm::OnNewKey() {
-  decryptor_.OnNewKey();
+  event_callbacks_.Notify(Event::kHasAdditionalUsableKey);
   {
     base::AutoLock auto_lock(new_key_cb_for_video_lock_);
     if (new_key_cb_for_video_)

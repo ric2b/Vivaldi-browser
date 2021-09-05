@@ -835,7 +835,7 @@ void FlexLayout::AllocateFlexSpace(
       if (flex_weight > 0) {
         // Round up so we give slightly greater weight to earlier views.
         flex_amount =
-            gfx::ToCeiledInt(remaining * flex_weight / float{flex_total});
+            base::ClampCeil(remaining * flex_weight / float{flex_total});
       }
       flex_total -= flex_weight;
 

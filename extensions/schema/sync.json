@@ -220,6 +220,51 @@
         ]
       },
       {
+        "name": "backupEncryptionToken",
+        "type": "function",
+        "description": "Saves the token derived from the encryption password to a file",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "target_file",
+            "description": "The file to which the token should be saved"
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "result",
+                "type": "boolean"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "restoreEncryptionToken",
+        "type": "function",
+        "description": "Uses a previously backed-up token to set up encryption",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "source_file",
+            "description": "The file from which the token should be recovered"
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "result",
+                "type": "boolean",
+                "description": "Whether the file was read successfully. Failure may still occur if the retrieved token is incorrect."
+              }
+            ]
+          }
+        ]
+      },
+      {
         "name": "getDefaultSessionName",
         "type": "function",
         "description": "Returns the device name as determined by the OS.",

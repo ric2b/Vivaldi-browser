@@ -4,7 +4,6 @@
 
 import("//build/config/android/config.gni")
 import("//build/config/arm.gni")
-import("//build/config/jumbo.gni")
 import("//build/config/ui.gni")
 import("//media/media_options.gni")
 
@@ -14,11 +13,19 @@ if (is_android) {
   # This is bundled into //media, so all dependencies should be on //media.
   # APK targets that depend on this indirectly, should also
   # depend on :media_java to get the corresponding Java classes.
-  jumbo_source_set("android") {
+  source_set("android") {
     visibility = [
       "//media",
       "//media/filters",
     ]
+
+    if (is_android) {
+      visibility += [
+        "//gpu/command_buffer/service:gles2_sources",
+        "//gpu/command_buffer/service:android_texture_owner_unittests",
+      ]
+    }
+
     sources = [
       "android_cdm_factory.cc",
       "android_cdm_factory.h",
@@ -154,7 +161,7 @@ if (is_android) {
   }
 
   android_resources("media_java_resources") {
-    custom_package = "org.chromium.media"
+    create_srcjar = false
     sources = [ "java/res/raw/empty.wav" ]
   }
 
@@ -172,6 +179,7 @@ if (is_android) {
       ":java_switches",
       "//media/base:java_enums",
     ]
+    resources_package = "org.chromium.media"
     sources = [
       "java/src/org/chromium/media/AudioManagerAndroid.java",
       "java/src/org/chromium/media/AudioTrackOutputStream.java",
@@ -211,6 +219,7 @@ if (is_android) {
       ":media_java",
       "//base:base_java",
       "//base:base_java_test_support",
+      "//third_party/android_deps:androidx_test_runner_java",
       "//third_party/junit",
     ]
   }

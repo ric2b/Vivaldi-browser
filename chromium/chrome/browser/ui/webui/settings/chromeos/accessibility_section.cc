@@ -6,6 +6,7 @@
 
 #include "ash/public/cpp/ash_features.h"
 #include "ash/public/cpp/ash_pref_names.h"
+#include "ash/public/cpp/tablet_mode.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/no_destructor.h"
@@ -74,12 +75,6 @@ const std::vector<SearchConcept>& GetA11ySearchConcepts() {
        mojom::SearchResultType::kSetting,
        {.setting = mojom::Setting::kChromeVox},
        {IDS_OS_SETTINGS_TAG_A11y_CHROMEVOX_ALT1, SearchConcept::kAltTagEnd}},
-      {IDS_OS_SETTINGS_TAG_A11Y_TABLET_NAVIGATION_BUTTONS,
-       mojom::kManageAccessibilitySubpagePath,
-       mojom::SearchResultIcon::kA11y,
-       mojom::SearchResultDefaultRank::kMedium,
-       mojom::SearchResultType::kSetting,
-       {.setting = mojom::Setting::kTabletNavigationButtons}},
       {IDS_OS_SETTINGS_TAG_A11Y_MONO_AUDIO,
        mojom::kManageAccessibilitySubpagePath,
        mojom::SearchResultIcon::kA11y,
@@ -217,6 +212,19 @@ const std::vector<SearchConcept>& GetA11ySwitchAccessSearchConcepts() {
   return *tags;
 }
 
+const std::vector<SearchConcept>&
+GetA11yTabletNavigationButtonSearchConcepts() {
+  static const base::NoDestructor<std::vector<SearchConcept>> tags({
+      {IDS_OS_SETTINGS_TAG_A11Y_TABLET_NAVIGATION_BUTTONS,
+       mojom::kManageAccessibilitySubpagePath,
+       mojom::SearchResultIcon::kA11y,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSetting,
+       {.setting = mojom::Setting::kTabletNavigationButtons}},
+  });
+  return *tags;
+}
+
 const std::vector<SearchConcept>& GetA11ySwitchAccessOnSearchConcepts() {
   static const base::NoDestructor<std::vector<SearchConcept>> tags({
       {IDS_OS_SETTINGS_TAG_A11Y_SWITCH_ACCESS_ASSIGNMENT,
@@ -312,6 +320,11 @@ bool IsSwitchAccessTextAllowed() {
       ::switches::kEnableExperimentalAccessibilitySwitchAccessText);
 }
 
+bool AreTabletNavigationButtonsAllowed() {
+  return ash::features::IsHideShelfControlsInTabletModeEnabled() &&
+         ash::TabletMode::IsBoardTypeMarkedAsTabletCapable();
+}
+
 }  // namespace
 
 AccessibilitySection::AccessibilitySection(
@@ -322,6 +335,9 @@ AccessibilitySection::AccessibilitySection(
       pref_service_(pref_service) {
   SearchTagRegistry::ScopedTagUpdater updater = registry()->StartUpdate();
   updater.AddSearchTags(GetA11ySearchConcepts());
+
+  if (AreTabletNavigationButtonsAllowed())
+    updater.AddSearchTags(GetA11yTabletNavigationButtonSearchConcepts());
 
   pref_change_registrar_.Init(pref_service_);
   pref_change_registrar_.Add(
@@ -359,13 +375,15 @@ void AccessibilitySection::AddLoadTimeData(
        IDS_SETTINGS_LARGE_MOUSE_CURSOR_SIZE_DEFAULT_LABEL},
       {"largeMouseCursorSizeLargeLabel",
        IDS_SETTINGS_LARGE_MOUSE_CURSOR_SIZE_LARGE_LABEL},
-      {"cursorColorEnabledLabel", IDS_SETTINGS_CURSOR_COLOR_ENABLED_LABEL},
       {"cursorColorOptionsLabel", IDS_SETTINGS_CURSOR_COLOR_OPTIONS_LABEL},
+      {"cursorColorBlack", IDS_SETTINGS_CURSOR_COLOR_BLACK},
       {"cursorColorRed", IDS_SETTINGS_CURSOR_COLOR_RED},
-      {"cursorColorOrange", IDS_SETTINGS_CURSOR_COLOR_ORANGE},
+      {"cursorColorYellow", IDS_SETTINGS_CURSOR_COLOR_YELLOW},
       {"cursorColorGreen", IDS_SETTINGS_CURSOR_COLOR_GREEN},
+      {"cursorColorCyan", IDS_SETTINGS_CURSOR_COLOR_CYAN},
       {"cursorColorBlue", IDS_SETTINGS_CURSOR_COLOR_BLUE},
-      {"cursorColorPurple", IDS_SETTINGS_CURSOR_COLOR_PURPLE},
+      {"cursorColorMagenta", IDS_SETTINGS_CURSOR_COLOR_MAGENTA},
+      {"cursorColorPink", IDS_SETTINGS_CURSOR_COLOR_PINK},
       {"highContrastLabel", IDS_SETTINGS_HIGH_CONTRAST_LABEL},
       {"stickyKeysLabel", IDS_SETTINGS_STICKY_KEYS_LABEL},
       {"chromeVoxLabel", IDS_SETTINGS_CHROMEVOX_LABEL},
@@ -438,6 +456,8 @@ void AccessibilitySection::AddLoadTimeData(
       {"manageSwitchAccessSettings",
        IDS_SETTINGS_MANAGE_SWITCH_ACCESS_SETTINGS},
       {"switchAssignmentHeading", IDS_SETTINGS_SWITCH_ASSIGNMENT_HEADING},
+      {"switchAssignOptionPlaceholder",
+       IDS_SETTINGS_SWITCH_ASSIGN_OPTION_PLACEHOLDER},
       {"switchAssignOptionNone", IDS_SETTINGS_SWITCH_ASSIGN_OPTION_NONE},
       {"switchAssignOptionSpace", IDS_SETTINGS_SWITCH_ASSIGN_OPTION_SPACE},
       {"switchAssignOptionEnter", IDS_SETTINGS_SWITCH_ASSIGN_OPTION_ENTER},
@@ -520,6 +540,8 @@ void AccessibilitySection::AddLoadTimeData(
        IDS_SETTINGS_CAPTIONS_ENABLE_LIVE_CAPTION_TITLE},
       {"captionsEnableLiveCaptionSubtitle",
        IDS_SETTINGS_CAPTIONS_ENABLE_LIVE_CAPTION_SUBTITLE},
+      {"caretBrowsingTitle", IDS_SETTINGS_ENABLE_CARET_BROWSING_TITLE},
+      {"caretBrowsingSubtitle", IDS_SETTINGS_ENABLE_CARET_BROWSING_SUBTITLE},
   };
   AddLocalizedStringsBulk(html_source, kLocalizedStrings);
 
@@ -535,9 +557,8 @@ void AccessibilitySection::AddLoadTimeData(
   html_source->AddBoolean("showExperimentalA11yLabels",
                           AreExperimentalA11yLabelsAllowed());
 
-  html_source->AddBoolean(
-      "showTabletModeShelfNavigationButtonsSettings",
-      ash::features::IsHideShelfControlsInTabletModeEnabled());
+  html_source->AddBoolean("showTabletModeShelfNavigationButtonsSettings",
+                          AreTabletNavigationButtonsAllowed());
 
   html_source->AddString("tabletModeShelfNavigationButtonsLearnMoreUrl",
                          chrome::kTabletModeGesturesLearnMoreURL);

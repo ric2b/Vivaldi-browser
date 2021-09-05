@@ -24,7 +24,9 @@
 #include "third_party/blink/renderer/core/frame/find_in_page.h"
 #include "third_party/blink/renderer/core/frame/frame_test_helpers.h"
 #include "third_party/blink/renderer/core/frame/web_local_frame_impl.h"
+#include "third_party/blink/renderer/core/geometry/dom_rect.h"
 #include "third_party/blink/renderer/core/html/html_template_element.h"
+#include "third_party/blink/renderer/core/paint/compositing/paint_layer_compositor.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
 #include "third_party/blink/renderer/core/testing/core_unit_test_helper.h"
@@ -669,69 +671,6 @@ TEST_F(DisplayLockContextTest,
 
   EXPECT_TRUE(container->GetDisplayLockContext()->IsLocked());
   EXPECT_TRUE(child->GetDisplayLockContext()->IsLocked());
-}
-
-TEST_F(DisplayLockContextTest,
-       FindInPageNavigateLockedMatchesRespectsActivatable) {
-  ResizeAndFocus();
-  SetHtmlInnerHTML(R"HTML(
-    <style>
-    div {
-      width: 100px;
-      height: 100px;
-      contain: style layout paint;
-    }
-    </style>
-    <body>
-      <div id="container">
-        <div id="one">result</div>
-        <div id="two"><b>r</b>esult</div>
-        <div id="three">r<i>esul</i>t</div>
-      </div>
-    </body>
-  )HTML");
-
-  auto* div_one = GetDocument().getElementById("one");
-  auto* div_two = GetDocument().getElementById("two");
-  auto* div_three = GetDocument().getElementById("three");
-  // Lock three divs, make #div_two non-activatable.
-  LockElement(*div_one, true /* activatable */);
-  LockElement(*div_two, false /* activatable */);
-  LockElement(*div_three, true /* activatable */);
-
-  DisplayLockTestFindInPageClient client;
-  client.SetFrame(LocalMainFrame());
-  WebString search_text(String("result"));
-
-  auto text_rect = [](Element* element) {
-    return ComputeTextRect(EphemeralRange::RangeOfContents(*element));
-  };
-
-  // Find result in #one.
-  Find(search_text, client);
-  EXPECT_EQ(2, client.Count());
-  EXPECT_EQ(1, client.ActiveIndex());
-  EXPECT_EQ(text_rect(div_one), client.ActiveMatchRect());
-  // Pretend that the event unlocked the element.
-  CommitElement(*div_one);
-
-  // Going forward from #one would go to #three.
-  Find(search_text, client, false /* new_session */);
-  EXPECT_EQ(2, client.Count());
-  EXPECT_EQ(2, client.ActiveIndex());
-  EXPECT_EQ(text_rect(div_three), client.ActiveMatchRect());
-  // Pretend that the event unlocked the element.
-  CommitElement(*div_three);
-
-  // Going backwards from #three would go to #one.
-  client.Reset();
-  auto find_options = FindOptions();
-  find_options->forward = false;
-  GetFindInPage()->Find(FAKE_FIND_ID, search_text, find_options->Clone());
-  test::RunPendingTasks();
-  EXPECT_EQ(2, client.Count());
-  EXPECT_EQ(1, client.ActiveIndex());
-  EXPECT_EQ(text_rect(div_one), client.ActiveMatchRect());
 }
 
 TEST_F(DisplayLockContextTest, CallUpdateStyleAndLayoutAfterChange) {
@@ -2098,7 +2037,7 @@ TEST_F(DisplayLockContextRenderingTest, ObjectsNeedingLayoutConsidersLocks) {
   EXPECT_EQ(total_count, 10u);
 
   GetDocument().getElementById("e")->setAttribute(html_names::kStyleAttr,
-                                                  "content-visibility: auto");
+                                                  "content-visibility: hidden");
   UpdateAllLifecyclePhasesForTest();
 
   // Note that the dirty_all call propagate the dirty bit from the unlocked
@@ -2114,7 +2053,7 @@ TEST_F(DisplayLockContextRenderingTest, ObjectsNeedingLayoutConsidersLocks) {
   EXPECT_EQ(total_count, 8u);
 
   GetDocument().getElementById("a")->setAttribute(html_names::kStyleAttr,
-                                                  "content-visibility: auto");
+                                                  "content-visibility: hidden");
   UpdateAllLifecyclePhasesForTest();
 
   // Note that this dirty_all call is now not propagating the dirty bits at all,
@@ -2127,6 +2066,138 @@ TEST_F(DisplayLockContextRenderingTest, ObjectsNeedingLayoutConsidersLocks) {
   // view);
   EXPECT_EQ(dirty_count, 0u);
   EXPECT_EQ(total_count, 4u);
+}
+
+TEST_F(DisplayLockContextRenderingTest,
+       PaintDirtyBitsNotPropagatedAcrossBoundary) {
+  SetHtmlInnerHTML(R"HTML(
+    <style>
+    .locked { content-visibility: hidden; }
+    div { contain: paint; }
+    </style>
+    <div id=parent>
+      <div id=lockable>
+        <div id=child>
+          <div id=grandchild></div>
+        </div>
+      </div>
+    </div>
+  )HTML");
+
+  auto* parent = GetDocument().getElementById("parent");
+  auto* lockable = GetDocument().getElementById("lockable");
+  auto* child = GetDocument().getElementById("child");
+  auto* grandchild = GetDocument().getElementById("grandchild");
+
+  auto* parent_box = ToLayoutBoxModelObject(parent->GetLayoutObject());
+  auto* lockable_box = ToLayoutBoxModelObject(lockable->GetLayoutObject());
+  auto* child_box = ToLayoutBoxModelObject(child->GetLayoutObject());
+  auto* grandchild_box = ToLayoutBoxModelObject(grandchild->GetLayoutObject());
+
+  ASSERT_TRUE(parent_box);
+  ASSERT_TRUE(lockable_box);
+  ASSERT_TRUE(child_box);
+  ASSERT_TRUE(grandchild_box);
+
+  ASSERT_TRUE(parent_box->HasSelfPaintingLayer());
+  ASSERT_TRUE(lockable_box->HasSelfPaintingLayer());
+  ASSERT_TRUE(child_box->HasSelfPaintingLayer());
+  ASSERT_TRUE(grandchild_box->HasSelfPaintingLayer());
+
+  auto* parent_layer = parent_box->Layer();
+  auto* lockable_layer = lockable_box->Layer();
+  auto* child_layer = child_box->Layer();
+  auto* grandchild_layer = grandchild_box->Layer();
+
+  EXPECT_FALSE(parent_layer->SelfOrDescendantNeedsRepaint());
+  EXPECT_FALSE(lockable_layer->SelfOrDescendantNeedsRepaint());
+  EXPECT_FALSE(child_layer->SelfOrDescendantNeedsRepaint());
+  EXPECT_FALSE(grandchild_layer->SelfOrDescendantNeedsRepaint());
+
+  lockable->classList().Add("locked");
+  GetDocument().UpdateStyleAndLayout(DocumentUpdateReason::kTest);
+
+  // Lockable layer needs repainting after locking.
+  EXPECT_FALSE(parent_layer->SelfNeedsRepaint());
+  EXPECT_TRUE(lockable_layer->SelfNeedsRepaint());
+  EXPECT_FALSE(child_layer->SelfNeedsRepaint());
+  EXPECT_FALSE(grandchild_layer->SelfNeedsRepaint());
+
+  // Breadcrumbs are set from the lockable layer.
+  EXPECT_TRUE(parent_layer->DescendantNeedsRepaint());
+  EXPECT_FALSE(lockable_layer->DescendantNeedsRepaint());
+  EXPECT_FALSE(child_layer->DescendantNeedsRepaint());
+  EXPECT_FALSE(grandchild_layer->DescendantNeedsRepaint());
+
+  UpdateAllLifecyclePhasesForTest();
+
+  // Everything is clean.
+  EXPECT_FALSE(parent_layer->SelfNeedsRepaint());
+  EXPECT_FALSE(lockable_layer->SelfNeedsRepaint());
+  EXPECT_FALSE(child_layer->SelfNeedsRepaint());
+  EXPECT_FALSE(grandchild_layer->SelfNeedsRepaint());
+
+  // Breadcrumbs are clean as well.
+  EXPECT_FALSE(parent_layer->DescendantNeedsRepaint());
+  EXPECT_FALSE(lockable_layer->DescendantNeedsRepaint());
+  EXPECT_FALSE(child_layer->DescendantNeedsRepaint());
+  EXPECT_FALSE(grandchild_layer->DescendantNeedsRepaint());
+
+  grandchild_layer->SetNeedsRepaint();
+
+  // Grandchild needs repaint, so everything else should be clean.
+  EXPECT_FALSE(parent_layer->SelfNeedsRepaint());
+  EXPECT_FALSE(lockable_layer->SelfNeedsRepaint());
+  EXPECT_FALSE(child_layer->SelfNeedsRepaint());
+  EXPECT_TRUE(grandchild_layer->SelfNeedsRepaint());
+
+  // Breadcrumbs are set from the lockable layer but are stopped at the locked
+  // boundary.
+  EXPECT_FALSE(parent_layer->DescendantNeedsRepaint());
+  EXPECT_TRUE(lockable_layer->DescendantNeedsRepaint());
+  EXPECT_TRUE(child_layer->DescendantNeedsRepaint());
+  EXPECT_FALSE(grandchild_layer->DescendantNeedsRepaint());
+
+  // Updating the lifecycle does not clean the dirty bits.
+  UpdateAllLifecyclePhasesForTest();
+
+  EXPECT_FALSE(parent_layer->SelfNeedsRepaint());
+  EXPECT_FALSE(lockable_layer->SelfNeedsRepaint());
+  EXPECT_FALSE(child_layer->SelfNeedsRepaint());
+  EXPECT_TRUE(grandchild_layer->SelfNeedsRepaint());
+
+  EXPECT_FALSE(parent_layer->DescendantNeedsRepaint());
+  EXPECT_TRUE(lockable_layer->DescendantNeedsRepaint());
+  EXPECT_TRUE(child_layer->DescendantNeedsRepaint());
+  EXPECT_FALSE(grandchild_layer->DescendantNeedsRepaint());
+
+  // Unlocking causes lockable to repaint itself.
+  lockable->classList().Remove("locked");
+  GetDocument().UpdateStyleAndLayout(DocumentUpdateReason::kTest);
+
+  EXPECT_FALSE(parent_layer->SelfNeedsRepaint());
+  EXPECT_TRUE(lockable_layer->SelfNeedsRepaint());
+  EXPECT_FALSE(child_layer->SelfNeedsRepaint());
+  EXPECT_TRUE(grandchild_layer->SelfNeedsRepaint());
+
+  EXPECT_TRUE(parent_layer->DescendantNeedsRepaint());
+  EXPECT_TRUE(lockable_layer->DescendantNeedsRepaint());
+  EXPECT_TRUE(child_layer->DescendantNeedsRepaint());
+  EXPECT_FALSE(grandchild_layer->DescendantNeedsRepaint());
+
+  UpdateAllLifecyclePhasesForTest();
+
+  // Everything should be clean.
+  EXPECT_FALSE(parent_layer->SelfNeedsRepaint());
+  EXPECT_FALSE(lockable_layer->SelfNeedsRepaint());
+  EXPECT_FALSE(child_layer->SelfNeedsRepaint());
+  EXPECT_FALSE(grandchild_layer->SelfNeedsRepaint());
+
+  // Breadcrumbs are clean as well.
+  EXPECT_FALSE(parent_layer->DescendantNeedsRepaint());
+  EXPECT_FALSE(lockable_layer->DescendantNeedsRepaint());
+  EXPECT_FALSE(child_layer->DescendantNeedsRepaint());
+  EXPECT_FALSE(grandchild_layer->DescendantNeedsRepaint());
 }
 
 TEST_F(DisplayLockContextRenderingTest,
@@ -2150,19 +2221,8 @@ TEST_F(DisplayLockContextRenderingTest,
   auto* unrelated_element = GetDocument().getElementById("unrelated");
   auto* outer_element = GetDocument().getElementById("outer");
 
-  // Ensure that the visibility switch happens.
-  RunStartOfLifecycleTasks();
-
-  // Now that the intersection observer notifications switch the visibility of
-  // the context, we expect to see dirty layout bits to be propagated.
-  EXPECT_TRUE(outer_element->GetLayoutObject()->NeedsLayout());
-  EXPECT_FALSE(outer_element->GetLayoutObject()->SelfNeedsLayout());
-  EXPECT_TRUE(unrelated_element->GetLayoutObject()->NeedsLayout());
-  EXPECT_FALSE(unrelated_element->GetLayoutObject()->SelfNeedsLayout());
-  EXPECT_TRUE(inner_element->GetLayoutObject()->NeedsLayout());
-  EXPECT_FALSE(inner_element->GetLayoutObject()->SelfNeedsLayout());
-
-  // Clear the layout.
+  // Ensure that the visibility switch happens. This would also clear the
+  // layout.
   UpdateAllLifecyclePhasesForTest();
   EXPECT_FALSE(outer_element->GetLayoutObject()->NeedsLayout());
   EXPECT_FALSE(outer_element->GetLayoutObject()->SelfNeedsLayout());
@@ -2281,19 +2341,8 @@ TEST_F(DisplayLockContextRenderingTest, NestedLockDoesHideWhenItIsOffscreen) {
   auto* unrelated_element = GetDocument().getElementById("unrelated");
   auto* outer_element = GetDocument().getElementById("outer");
 
-  // Ensure that the visibility switch happens.
-  RunStartOfLifecycleTasks();
-
-  // Now that the intersection observer notifications switch the visibility of
-  // the context, we expect to see dirty layout bits to be propagated.
-  EXPECT_TRUE(outer_element->GetLayoutObject()->NeedsLayout());
-  EXPECT_FALSE(outer_element->GetLayoutObject()->SelfNeedsLayout());
-  EXPECT_TRUE(unrelated_element->GetLayoutObject()->NeedsLayout());
-  EXPECT_FALSE(unrelated_element->GetLayoutObject()->SelfNeedsLayout());
-  EXPECT_TRUE(inner_element->GetLayoutObject()->NeedsLayout());
-  EXPECT_FALSE(inner_element->GetLayoutObject()->SelfNeedsLayout());
-
-  // Clear the layout.
+  // Ensure that the visibility switch happens. This would also clear the
+  // layout.
   UpdateAllLifecyclePhasesForTest();
   EXPECT_FALSE(outer_element->GetLayoutObject()->NeedsLayout());
   EXPECT_FALSE(outer_element->GetLayoutObject()->SelfNeedsLayout());
@@ -2855,6 +2904,43 @@ TEST_F(DisplayLockContextRenderingTest,
     EXPECT_TRUE(element->GetDisplayLockContext()->IsLocked());
     EXPECT_GT(GetDocument().scrollingElement()->scrollTop(), 19000.);
   }
+}
+
+TEST_F(DisplayLockContextRenderingTest, FirstAutoFramePaintsInViewport) {
+  SetHtmlInnerHTML(R"HTML(
+    <style>
+      .spacer { height: 10000px }
+      .auto {
+        content-visibility: auto;
+        contain-intrinsic-size: 1px 200px;
+      }
+      .auto > div { height: 100px }
+    </style>
+
+    <div id=visible><div>content</div></div>
+    <div class=spacer></div>
+    <div id=hidden><div>content</div></div>
+  )HTML");
+
+  auto* visible = GetDocument().getElementById("visible");
+  auto* hidden = GetDocument().getElementById("hidden");
+
+  visible->classList().Add("auto");
+  hidden->classList().Add("auto");
+
+  UpdateAllLifecyclePhasesForTest();
+
+  EXPECT_FALSE(visible->GetDisplayLockContext()->IsLocked());
+  EXPECT_TRUE(hidden->GetDisplayLockContext()->IsLocked());
+
+  EXPECT_FALSE(visible->GetLayoutObject()->SelfNeedsLayout());
+  EXPECT_FALSE(hidden->GetLayoutObject()->SelfNeedsLayout());
+
+  auto* visible_rect = visible->getBoundingClientRect();
+  auto* hidden_rect = hidden->getBoundingClientRect();
+
+  EXPECT_FLOAT_EQ(visible_rect->height(), 100);
+  EXPECT_FLOAT_EQ(hidden_rect->height(), 200);
 }
 
 class DisplayLockContextLegacyRenderingTest

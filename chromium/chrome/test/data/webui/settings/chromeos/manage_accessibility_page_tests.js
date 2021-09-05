@@ -84,9 +84,21 @@ suite('ManageAccessibilityPageTests', function() {
     assertFalse(row.hidden);
   });
 
+  test('tablet mode buttons visible', function() {
+    loadTimeData.overrideValues({
+      isKioskModeActive: false,
+      showTabletModeShelfNavigationButtonsSettings: true,
+    });
+    initPage();
+    Polymer.dom.flush();
+
+    assertTrue(isVisible(page.$$('#shelfNavigationButtonsEnabledControl')));
+  });
+
   test('some parts are hidden in kiosk mode', function() {
     loadTimeData.overrideValues({
       isKioskModeActive: true,
+      showTabletModeShelfNavigationButtonsSettings: true,
     });
     initPage();
     // Add mouse and touchpad to show some hidden settings.
@@ -97,7 +109,13 @@ suite('ManageAccessibilityPageTests', function() {
     // Accessibility learn more link should be hidden.
     assertFalse(isVisible(page.$$('setings-localized-link')));
 
-    const allowed_subpages = ['selectToSpeakSubpageButton', 'ttsSubpageButton'];
+    // Shelf navigation buttons are not shown in kiosk mode, even if
+    // showTabletModeShelfNavigationButtonsSettings is true.
+    assertFalse(isVisible(page.$$('#shelfNavigationButtonsEnabledControl')));
+
+    const allowed_subpages = [
+      'chromeVoxSubpageButton', 'selectToSpeakSubpageButton', 'ttsSubpageButton'
+    ];
 
     const subpages = page.root.querySelectorAll('cr-link-row');
     subpages.forEach(function(subpage) {

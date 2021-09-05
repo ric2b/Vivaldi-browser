@@ -17,6 +17,7 @@
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
+#include "content/browser/frame_host/cross_origin_opener_policy_status.h"
 #include "content/browser/frame_host/navigation_controller_impl.h"
 #include "content/browser/frame_host/navigation_entry_impl.h"
 #include "content/browser/frame_host/navigation_throttle_runner.h"
@@ -36,7 +37,6 @@
 #include "content/public/browser/peak_gpu_memory_tracker.h"
 #include "content/public/browser/render_process_host_observer.h"
 #include "content/public/common/impression.h"
-#include "content/public/common/previews_state.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "mojo/public/cpp/bindings/pending_associated_remote.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
@@ -46,12 +46,20 @@
 #include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/network/public/cpp/origin_policy.h"
 #include "services/network/public/mojom/blocked_by_response_reason.mojom-shared.h"
+#include "services/network/public/mojom/content_security_policy.mojom.h"
 #include "services/network/public/mojom/web_sandbox_flags.mojom-shared.h"
+#include "third_party/blink/public/common/loader/previews_state.h"
 
 #if defined(OS_ANDROID)
 #include "base/android/scoped_java_ref.h"
 #include "content/browser/android/navigation_handle_proxy.h"
 #endif
+
+namespace base {
+namespace trace_event {
+class TracedValue;
+}  // namespace trace_event
+}  // namespace base
 
 namespace network {
 class ResourceRequestBody;
@@ -64,7 +72,6 @@ namespace content {
 
 class AppCacheNavigationHandle;
 class CrossOriginEmbedderPolicyReporter;
-class CrossOriginOpenerPolicyReporter;
 class WebBundleHandleTracker;
 class WebBundleNavigationInfo;
 class FrameNavigationEntry;
@@ -75,26 +82,6 @@ class NavigatorDelegate;
 class PrefetchedSignedExchangeCache;
 class ServiceWorkerMainResourceHandle;
 struct SubresourceLoaderParams;
-
-// A structure that groups information about how COOP has interacted with the
-// navigation. These are used to trigger a number of mechanisms such as name
-// clearing or reporting.
-struct CrossOriginOpenerPolicyStatus {
-  // Set to true whenever the Cross-Origin-Opener-Policy spec requires a
-  // "BrowsingContext group" swap:
-  // https://gist.github.com/annevk/6f2dd8c79c77123f39797f6bdac43f3e
-  // This forces the new RenderFrameHost to use a different BrowsingInstance
-  // than the current one. If other pages had JavaScript references to the
-  // Window object for the frame (via window.opener, window.open(), et cetera),
-  // those references will be broken; window.name will also be reset to an empty
-  // string.
-  bool require_browsing_instance_swap = false;
-
-  // When a page has a reachable opener and COOP triggers a browsing instance
-  // swap we potentially break the page. This is one of the case that can be
-  // reported using the COOP reporting API.
-  bool had_opener_before_browsing_instance_swap = false;
-};
 
 // A UI thread object that owns a navigation request until it commits. It
 // ensures the UI thread can start a navigation request in the
@@ -225,6 +212,10 @@ class CONTENT_EXPORT NavigationRequest
 
   static NavigationRequest* From(NavigationHandle* handle);
 
+  // If |type| is a reload, returns the equivalent ReloadType. Otherwise returns
+  // ReloadType::NONE.
+  static ReloadType NavigationTypeToReloadType(mojom::NavigationType type);
+
   ~NavigationRequest() override;
 
   // Returns true if this request's URL matches |origin| and the request state
@@ -323,7 +314,7 @@ class CONTENT_EXPORT NavigationRequest
   bool IsSameProcess() override;
   int GetNavigationEntryOffset() override;
   void RegisterSubresourceOverride(
-      mojom::TransferrableURLLoaderPtr transferrable_loader) override;
+      blink::mojom::TransferrableURLLoaderPtr transferrable_loader) override;
   GlobalFrameRoutingId GetPreviousRenderFrameHostId() override;
   bool IsServedFromBackForwardCache() override;
   void SetIsOverridingUserAgent(bool override_ua) override;
@@ -332,6 +323,8 @@ class CONTENT_EXPORT NavigationRequest
   // Called on the UI thread by the Navigator to start the navigation.
   // The NavigationRequest can be deleted while BeginNavigation() is called.
   void BeginNavigation();
+
+  void ForceCSPForResponse(const std::string& csp);
 
   const mojom::CommonNavigationParams& common_params() const {
     return *common_params_;
@@ -348,6 +341,16 @@ class CONTENT_EXPORT NavigationRequest
   // Updates the navigation start time.
   void set_navigation_start_time(const base::TimeTicks& time) {
     common_params_->navigation_start = time;
+  }
+
+  bool did_same_site_proactive_browsing_instance_swap() {
+    return did_same_site_proactive_browsing_instance_swap_;
+  }
+
+  void set_did_same_site_proactive_browsing_instance_swap(
+      bool did_same_site_proactive_browsing_instance_swap) {
+    did_same_site_proactive_browsing_instance_swap_ =
+        did_same_site_proactive_browsing_instance_swap;
   }
 
   NavigationURLLoader* loader_for_testing() const { return loader_.get(); }
@@ -621,15 +624,17 @@ class CONTENT_EXPORT NavigationRequest
 
   bool ua_change_requires_reload() const { return ua_change_requires_reload_; }
 
+  const network::mojom::ContentSecurityPolicy* required_csp() {
+    return required_csp_.get();
+  }
+  void SetRequiredCSP(network::mojom::ContentSecurityPolicyPtr csp);
+  network::mojom::ContentSecurityPolicyPtr TakeRequiredCSP();
+
   CrossOriginEmbedderPolicyReporter* coep_reporter() {
     return coep_reporter_.get();
   }
-  CrossOriginOpenerPolicyReporter* coop_reporter() {
-    return coop_reporter_.get();
-  }
 
   std::unique_ptr<CrossOriginEmbedderPolicyReporter> TakeCoepReporter();
-  std::unique_ptr<CrossOriginOpenerPolicyReporter> TakeCoopReporter();
 
   // Returns UKM SourceId for the page we are navigating away from.
   // Equal to GetRenderFrameHost()->GetPageUkmSourceId() for subframe
@@ -659,12 +664,40 @@ class CONTENT_EXPORT NavigationRequest
   base::Optional<network::mojom::WebSandboxFlags> SandboxFlagsToCommit();
 
   // Returns the coop status information relevant to the current navigation.
-  const CrossOriginOpenerPolicyStatus& coop_status() const;
+  CrossOriginOpenerPolicyStatus& coop_status() { return coop_status_; }
 
   // Whether the navigation was sent to be committed in a renderer by the
   // RenderFrameHost. This can either be for the commit of a successful
   // navigation or an error page.
   bool IsWaitingToCommit();
+
+  // Returns true if |url| and |base_url| represent a WebView
+  // loadDataWithBaseUrl navigation.
+  static bool IsLoadDataWithBaseURL(const GURL& url, const GURL& base_url);
+
+  // Returns true if |common_params| represents a WebView loadDataWithBaseUrl
+  // navigation.
+  static bool IsLoadDataWithBaseURL(
+      const mojom::CommonNavigationParams& common_params);
+
+  // Will calculate an *approximation* of the origin that this NavigationRequest
+  // will commit.  (An "approximation", because sandboxing is not taken into
+  // account - see https://crbug.com/1041376.  The approximation is still good
+  // enough for |request_initiator_origin_lock| in
+  // network::mojom::URLLoaderFactoryParams.)
+  //
+  // This method depends on GetRenderFrameHost() and therefore can only be
+  // called after a response has been delivered for processing, or after the
+  // navigation fails with an error page.
+  //
+  // TODO(lukasza, arthursonzogni): https://crbug.com/888079: Once the browser
+  // process is able to calculate the exact origin to commit, the method below
+  // should be renamed to something like GetOriginToCommit().
+  url::Origin GetOriginForURLLoaderFactory();
+
+  // Add information about this NavigationRequest to |traced_value| for
+  // tracing purposes.
+  void AsValueInto(base::trace_event::TracedValue* traced_value);
 
  private:
   friend class NavigationRequestTest;
@@ -836,6 +869,13 @@ class CONTENT_EXPORT NavigationRequest
   // Inform the RenderProcessHost to no longer expect a navigation.
   void ResetExpectedProcess();
 
+  // If this is a same-site main-frame navigation where we did a proactive
+  // BrowsingInstance swap but we're reusing the old page's process, we need
+  // to send the routing ID and the updated lifecycle state of the old page so
+  // that we can run pagehide and visibilitychange handlers of the old page
+  // when we commit the new page.
+  void AddOldPageInfoToCommitParamsIfNeeded();
+
   // Compute the history offset of the new document compared to the current one.
   // See navigation_history_offset_ for more details.
   int EstimateHistoryOffset();
@@ -965,16 +1005,17 @@ class CONTENT_EXPORT NavigationRequest
   }
 
   // Returns true if the contents of |common_params_| requires
-  // |source_site_instance_| to be set. This is used to ensure that data:
-  // URLs with valid initiator origins always have |source_site_instance_| set
-  // so that site isolation enforcements work properly.
-  bool RequiresSourceSiteInstance() const;
+  // |source_site_instance_| to be set. This is used to ensure that data: and
+  // about:blank URLs with valid initiator origins always have
+  // |source_site_instance_| set so that site isolation enforcements work
+  // properly.
+  bool RequiresInitiatorBasedSourceSiteInstance() const;
 
   // Sets |source_site_instance_| to a SiteInstance that is derived from
   // |common_params_->initiator_origin| and related to the |frame_tree_node_|'s
   // current SiteInstance. |source_site_instance_| is only set if it doesn't
-  // already have a value, |common_params_->initiator_origin| has a valid
-  // origin, and RequiresSourceSiteInstance() return true.
+  // already have a value and RequiresInitiatorBasedSourceSiteInstance() returns
+  // true.
   void SetSourceSiteInstanceToInitiatorIfNeeded();
 
   // See RestartBackForwardCachedNavigation.
@@ -983,9 +1024,8 @@ class CONTENT_EXPORT NavigationRequest
   void ForceEnableOriginTrials(const std::vector<std::string>& trials) override;
 
   void CreateCoepReporter(StoragePartition* storage_partition);
-  void CreateCoopReporter(StoragePartition* storage_partition);
 
-  base::Optional<network::mojom::BlockedByResponseReason> IsBlockedByResponse();
+  base::Optional<network::mojom::BlockedByResponseReason> EnforceCOEP();
 
   bool IsOverridingUserAgent() const {
     return commit_params_->is_overriding_user_agent || entry_overrides_ua_;
@@ -1018,14 +1058,6 @@ class CONTENT_EXPORT NavigationRequest
   // Set |state_| to |state| and also DCHECK that this state transition is
   // valid.
   void SetState(NavigationState state);
-
-  // Make sure COOP is relevant or clear the COOP headers.
-  void SanitizeCoopHeaders();
-
-  // Updates the internal coop_status assuming the page navigated to has
-  // cross-origin-opener-policy |coop| and cross-origin-embedder-policy |coep|.
-  void UpdateCoopStatus(network::mojom::CrossOriginOpenerPolicyValue coop,
-                        network::mojom::CrossOriginEmbedderPolicyValue coep);
 
   FrameTreeNode* const frame_tree_node_;
 
@@ -1063,6 +1095,7 @@ class CONTENT_EXPORT NavigationRequest
   scoped_refptr<network::SharedURLLoaderFactory> blob_url_loader_factory_;
 
   NavigationState state_;
+  bool is_navigation_started_ = false;
 
   std::unique_ptr<NavigationURLLoader> loader_;
 
@@ -1151,7 +1184,7 @@ class CONTENT_EXPORT NavigationRequest
   // See comment on accessor.
   const base::UnguessableToken devtools_navigation_token_;
 
-  base::Optional<std::vector<mojom::TransferrableURLLoaderPtr>>
+  base::Optional<std::vector<blink::mojom::TransferrableURLLoaderPtr>>
       subresource_overrides_;
 
   // The NavigationClient interface for that requested this navigation in the
@@ -1269,8 +1302,11 @@ class CONTENT_EXPORT NavigationRequest
   // Which proxy server was used for this navigation, if any.
   net::ProxyServer proxy_server_;
 
-  // The unique id to identify the NavigationHandle with.
-  int64_t navigation_handle_id_ = 0;
+  // Unique id that identifies the navigation for which this NavigationRequest
+  // is created.
+  const int64_t navigation_id_ = ++unique_id_counter_;
+  // static member for generating the unique id above.
+  static int64_t unique_id_counter_;
 
   // Manages the lifetime of a pre-created ServiceWorkerContainerHost until a
   // corresponding container is created in the renderer.
@@ -1281,7 +1317,8 @@ class CONTENT_EXPORT NavigationRequest
 
   // The subscription to the notification of the changing of the render
   // process's blocked state.
-  std::unique_ptr<base::CallbackList<void(bool)>::Subscription>
+  std::unique_ptr<
+      RenderProcessHost::BlockStateChangedCallbackList::Subscription>
       render_process_blocked_state_changed_subscription_;
 
   // The headers used for the request. The value of this comes from
@@ -1347,8 +1384,11 @@ class CONTENT_EXPORT NavigationRequest
   // at the network request level.
   network::mojom::ClientSecurityStatePtr client_security_state_;
 
+  // Holds the required CSP for this navigation. This will be moved into
+  // the RenderFrameHost at DidCommitNavigation time.
+  network::mojom::ContentSecurityPolicyPtr required_csp_;
+
   std::unique_ptr<CrossOriginEmbedderPolicyReporter> coep_reporter_;
-  std::unique_ptr<CrossOriginOpenerPolicyReporter> coop_reporter_;
 
   std::unique_ptr<PeakGpuMemoryTracker> loading_mem_tracker_ = nullptr;
 
@@ -1366,6 +1406,10 @@ class CONTENT_EXPORT NavigationRequest
   // If true, changes to the user-agent override require a reload. If false, a
   // reload is not necessary.
   bool ua_change_requires_reload_ = true;
+
+  // Whether we're doing a same-site proactive BrowsingInstance swap for this
+  // navigation.
+  bool did_same_site_proactive_browsing_instance_swap_ = false;
 
   // Observers listening to cookie access notifications for the network requests
   // made by this navigation.

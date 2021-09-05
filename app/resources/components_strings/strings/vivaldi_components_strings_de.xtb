@@ -4,7 +4,6 @@
 <translation id="1038842779957582377">Unbekannter Name</translation>
 <translation id="1089439967362294234">Passwort ändern</translation>
 <translation id="1110994991967754504">Berechtigung für <ph name="PERMISSION_NAME" /> auswählen</translation>
-<translation id="1152921474424827756">Rufen Sie eine <ph name="BEGIN_LINK" />im Google Cache gespeicherte Kopie<ph name="END_LINK" /> von <ph name="URL" /> auf.</translation>
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> hat die Verbindung unerwartet geschlossen.</translation>
 <translation id="1161325031994447685">WLAN-Verbindung erneut herstellen</translation>
 <translation id="1175364870820465910">&amp;Drucken...</translation>
@@ -22,9 +21,7 @@
 <translation id="1834321415901700177">Diese Website enthält schädliche Programme</translation>
 <translation id="1916770123977586577">Laden Sie diese Seite neu, um die aktualisierten Einstellungen für diese Website zu übernehmen</translation>
 <translation id="1919345977826869612">Werbung</translation>
-<translation id="194030505837763158">Besuchen Sie die Seite <ph name="LINK" />.</translation>
 <translation id="1974060860693918893">Erweitert</translation>
-<translation id="2030481566774242610">Meinten Sie <ph name="LINK" />?</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Proxy und Firewall prüfen<ph name="END_LINK" /></translation>
 <translation id="2091887806945687916">Ton</translation>
 <translation id="2119505898009119320">Ausgestellt für: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
@@ -100,6 +97,7 @@
 <translation id="4235360514405112390">Gültig</translation>
 <translation id="4250431568374086873">Die Verbindung zu dieser Website ist nicht volkommen sicher</translation>
 <translation id="4265872034478892965">Von Ihrem Administrator zugelassen</translation>
+<translation id="4305666528087210886">Zugriff auf die Datei nicht möglich</translation>
 <translation id="4312866146174492540">Blockieren (Standardeinstellung)</translation>
 <translation id="4356973930735388585">Angreifer könnten auf dieser Website versuchen, gefährliche Programme auf Ihrem Computer zu installieren, um Ihre Daten zu stehlen oder zu löschen (z.B. Fotos, Passwörter, Nachrichten und Kreditkartendaten).</translation>
 <translation id="4408413947728134509">Cookies <ph name="NUM_COOKIES" /></translation>
@@ -126,8 +124,7 @@
 <translation id="5115563688576182185">(64-Bit)</translation>
 <translation id="5287240709317226393">Cookies anzeigen</translation>
 <translation id="5355557959165512791">Sie können <ph name="SITE" /> zurzeit nicht aufrufen, da das Zertifikat widerrufen wurde. Netzwerkfehler und Angriffe sind in der Regel nur vorübergehend, sodass die Seite wahrscheinlich später wieder funktioniert.</translation>
-<translation id="5386426401304769735">Die Zertifikatskette für diese Website enthält ein Zertifikat mit SHA-1-Signatur.</translation>
-<translation id="5431657950005405462">Ihre Datei wurde nicht gefunden</translation>
+<translation id="5386426401304769735">Die Zertifikatskette für diese Site enthält ein mit SHA-1 signiertes Zertifikat.</translation>
 <translation id="5452270690849572955">Die Seite wurde auf <ph name="HOST_NAME" /> nicht gefunden</translation>
 <translation id="5457113250005438886">Ungültig</translation>
 <translation id="5492298309214877701">Diese Website im Intranet des Unternehmens, der Organisation oder der Schule hat die gleiche URL wie eine externe Website.
@@ -173,7 +170,6 @@
 <translation id="6897140037006041989">User-Agent</translation>
 <translation id="7053983685419859001">Blockieren</translation>
 <translation id="7079718277001814089">Diese Website enthält Malware</translation>
-<translation id="7090678807593890770">Bei Google nach <ph name="LINK" /> suchen</translation>
 <translation id="7108819624672055576">Von einer Erweiterung zugelassen</translation>
 <translation id="7111012039238467737">(Gültig)</translation>
 <translation id="7113310725918019676"><ph name="BLOCKED_TYPE" /> von <ph name="DOMAIN" /> zulassen</translation>
@@ -197,7 +193,6 @@
 <translation id="7716424297397655342">Diese Website kann nicht aus dem Cache geladen werden</translation>
 <translation id="7758069387465995638">Möglicherweise wurde die Verbindung von einer Firewall oder Antivirensoftware blockiert.</translation>
 <translation id="7800304661137206267">Die Verbindung ist mit <ph name="CIPHER" /> verschlüsselt; für die Nachrichtenauthentifizierung wird <ph name="MAC" /> verwendet und als Mechanismus für den Schlüsselaustausch <ph name="KX" />.</translation>
-<translation id="7802523362929240268">Website ist vertrauenswürdig</translation>
 <translation id="7834399512844817676"><ph name="SITE" /> schützt Ihre Daten in der Regel durch Verschlüsselung. Als Vivaldi dieses Mal versuchte, eine Verbindung zu <ph name="SITE" /> herzustellen, sendete die Website ungewöhnliche und falsche Informationen zurück, um sich zu identifizieren. Entweder versucht ein Angreifer, sich als <ph name="SITE" /> auszugeben, oder die Verbindung wurde durch eine WLAN-Anmeldeseite unterbrochen. Da Vivaldi die Verbindung vor dem Austausch von Daten unterbrochen hat, sind Ihre Informationen weiterhin sicher.</translation>
 <translation id="7878562273885520351">Ihr Passwort könnte kompromittiert sein</translation>
 <translation id="7951415247503192394">(32-Bit)</translation>
@@ -229,6 +224,7 @@
 <translation id="9011424611726486705">Website-Einstellungen öffnen</translation>
 <translation id="9025348182339809926">(Ungültig)</translation>
 <translation id="9039213469156557790">Darüber hinaus enthält diese Seite auch andere Ressourcen, die nicht sicher sind. Diese Ressourcen können von anderen während der Übertragung abgefangen und von einem Angreifer modifiziert werden, um das Verhalten der Seite zu ändern.</translation>
+<translation id="9062620674789239642">Eventuell wurde sie verschoben, bearbeitet oder gelöscht.</translation>
 <translation id="9069693763241529744">Von einer Erweiterung blockiert</translation>
 <translation id="9169664750068251925">Auf dieser Website immer blockieren</translation>
 <translation id="9180553614777056266">Werbeblocker</translation>

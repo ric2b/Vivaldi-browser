@@ -10,6 +10,7 @@ import * as metrics from './metrics.js';
  * @enum {string}
  */
 export const ErrorType = {
+  BROKEN_THUMBNAIL: 'broken-thumbnail',
   UNCAUGHT_PROMISE: 'uncaught-promise',
 };
 
@@ -25,8 +26,8 @@ export const ErrorLevel = {
 /**
  * Error reported in testing run.
  * @typedef {{
- *   type: ErrorType,
- *   level: ErrorLevel,
+ *   type: !ErrorType,
+ *   level: !ErrorLevel,
  *   stack: string,
  *   time: number,
  * }}
@@ -51,12 +52,26 @@ export let TestingErrorCallback;
 export let StackFrame;
 
 /**
+ * Throws when a method is not implemented.
+ */
+export class NotImplementedError extends Error {
+  /**
+   * @param {string=} message
+   * @public
+   */
+  constructor(message = 'Method is not implemented') {
+    super(message);
+    this.name = this.constructor.name;
+  }
+}
+
+/**
  * Converts v8 CallSite object to StackFrame.
  * @param {!CallSite} callsite
  * @return {!StackFrame}
  */
 function toStackFrame(callsite) {
-  // TODO(crbug/1072700): Handle native frame.
+  // TODO(crbug.com/1072700): Handle native frame.
   let fileName = callsite.getFileName() || 'unknown';
   if (fileName.startsWith(window.location.origin)) {
     fileName = fileName.substring(window.location.origin.length + 1);
@@ -151,11 +166,19 @@ const triggeredErrorSet = new Set();
 /**
  * Reports error either through test error callback in test run or to error
  * metrics in non test run.
- * @param {ErrorType} type
- * @param {ErrorLevel} level
+ * @param {!ErrorType} type
+ * @param {!ErrorLevel} level
  * @param {!Error} error
  */
 export function reportError(type, level, error) {
+  // uncaught promise is already logged in console
+  if (type !== ErrorType.UNCAUGHT_PROMISE) {
+    if (level === ErrorLevel.ERROR) {
+      console.error(type, error);
+    } else {
+      console.warn(type, error);
+    }
+  }
   const time = Date.now();
   const frames = getStackFrames(error);
   const errorName = error.name;
@@ -174,7 +197,6 @@ export function reportError(type, level, error) {
     onTestingError({type, level, stack: formatErrorStack(error), time});
     return;
   }
-  metrics.log(
-      metrics.Type.ERROR, type, level, errorName, fileName, funcName, lineNo,
-      colNo);
+  metrics.sendErrorEvent(
+      {type, level, errorName, fileName, funcName, lineNo, colNo});
 }

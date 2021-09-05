@@ -20,7 +20,7 @@
 #include "platform_media/renderer/decoders/ipc_demuxer.h"
 #include "platform_media/test/test_pipeline_host.h"
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include "base/mac/mac_util.h"
 #endif
 
@@ -84,7 +84,7 @@ class PlatformMediaPipelineIntegrationTest
      }
    }
    static bool IsEnabled() {
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
     return true;
 #elif defined(OS_WIN)
     if (base::win::GetVersion() >= base::win::Version::WIN7)
@@ -132,7 +132,7 @@ class PlatformMediaPipelineIntegrationTest
   }
 };
 
-#if defined(OS_MACOSX) || defined(OS_WIN)
+#if defined(OS_MAC) || defined(OS_WIN)
 TEST_F(PlatformMediaPipelineIntegrationTest, BasicPlayback) {
   if (!IsEnabled())
     return;
@@ -143,7 +143,7 @@ TEST_F(PlatformMediaPipelineIntegrationTest, BasicPlayback) {
 
   ASSERT_TRUE(WaitUntilOnEnded());
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   EXPECT_EQ("bd1d880e4934bf76c0bb34450cd0f173", GetVideoHash());
   EXPECT_EQ("-0.51,0.54,1.03,0.85,-0.08,-0.22,", GetAudioHash());
 #elif defined(OS_WIN)
@@ -163,7 +163,7 @@ TEST_F(PlatformMediaPipelineIntegrationTest, BasicPlayback_16x9_Aspect) {
 
   ASSERT_TRUE(WaitUntilOnEnded());
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   EXPECT_EQ("e9a2e53ef2c16757962cc58d37de69e7", GetVideoHash());
   EXPECT_EQ("-3.66,-2.08,0.22,2.09,0.64,-0.90,", GetAudioHash());
 #elif defined(OS_WIN)
@@ -182,7 +182,7 @@ TEST_F(PlatformMediaPipelineIntegrationTest, BasicPlayback_VideoOnly) {
 
   ASSERT_TRUE(WaitUntilOnEnded());
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   // On OS X, the expected hashes can be different, because our solution
   // doesn't necessarily process frames one by one, see AVFMediaDecoder.
   EXPECT_EQ("e7832270a91e8de7945b5724eec2cbcb", GetVideoHash());
@@ -201,7 +201,7 @@ TEST_F(PlatformMediaPipelineIntegrationTest, BasicPlayback_M4A) {
 
   ASSERT_TRUE(WaitUntilOnEnded());
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
     EXPECT_EQ("-5.29,-5.47,-5.05,-4.33,-2.99,-3.79,", GetAudioHash());
 #elif defined(OS_WIN)
   EXPECT_EQ("0.46,1.72,4.26,4.57,3.39,1.54,", GetAudioHash());
@@ -418,7 +418,7 @@ TEST_F(PlatformMediaPipelineIntegrationTest, BasicPlaybackPositiveStartTime) {
             demuxer_->GetStartTime());
 }
 
-#endif  // defined(OS_MACOSX) || defined(OS_WIN)
+#endif  // defined(OS_MAC) || defined(OS_WIN)
 
 
 TEST_F(PlatformMediaPipelineIntegrationTest, BasicPlayback_MediaSource_MP4_AudioOnly) {

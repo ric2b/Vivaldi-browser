@@ -14,6 +14,7 @@
 #include "gn/rust_variables.h"
 #include "gn/scope.h"
 #include "gn/settings.h"
+#include "gn/swift_values_generator.h"
 #include "gn/value_extractors.h"
 #include "gn/variables.h"
 
@@ -67,8 +68,15 @@ void BinaryTargetGenerator::DoRun() {
     return;
 
   if (target_->source_types_used().RustSourceUsed()) {
-    RustTargetGenerator rustgen(target_, scope_, function_call_, err_);
+    RustValuesGenerator rustgen(target_, scope_, function_call_, err_);
     rustgen.Run();
+    if (err_->has_error())
+      return;
+  }
+
+  if (target_->source_types_used().SwiftSourceUsed()) {
+    SwiftValuesGenerator swiftgen(target_, scope_, err_);
+    swiftgen.Run();
     if (err_->has_error())
       return;
   }
@@ -87,6 +95,7 @@ bool BinaryTargetGenerator::FillSources() {
     const auto& source = target_->sources()[i];
     switch (source.type()) {
       case SourceFile::SOURCE_CPP:
+      case SourceFile::SOURCE_MODULEMAP:
       case SourceFile::SOURCE_H:
       case SourceFile::SOURCE_C:
       case SourceFile::SOURCE_M:
@@ -98,9 +107,11 @@ bool BinaryTargetGenerator::FillSources() {
       case SourceFile::SOURCE_GO:
       case SourceFile::SOURCE_RS:
       case SourceFile::SOURCE_RC:
+      case SourceFile::SOURCE_SWIFT:
         // These are allowed.
         break;
       case SourceFile::SOURCE_UNKNOWN:
+      case SourceFile::SOURCE_SWIFTMODULE:
       case SourceFile::SOURCE_NUMTYPES:
         *err_ =
             Err(scope_->GetValue(variables::kSources, true)->list_value()[i],

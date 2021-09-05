@@ -36,11 +36,9 @@
 #include "chrome/browser/ui/app_list/arc/arc_app_utils.h"
 #include "chrome/browser/ui/app_list/internal_app/internal_app_metadata.h"
 #include "chrome/browser/ui/ash/launcher/arc_app_shelf_id.h"
-#include "chrome/browser/ui/ash/launcher/arc_shelf_context_menu.h"
 #include "chrome/browser/ui/ash/launcher/browser_shortcut_launcher_item_controller.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
 #include "chrome/browser/ui/ash/launcher/extension_shelf_context_menu.h"
-#include "chrome/browser/ui/ash/launcher/internal_app_shelf_context_menu.h"
 #include "chrome/browser/web_applications/components/web_app_provider_base.h"
 #include "chrome/browser/web_applications/test/test_system_web_app_manager.h"
 #include "chrome/browser/web_applications/test/test_web_app_provider.h"
@@ -66,6 +64,12 @@ using crostini::CrostiniTestHelper;
 using web_app::ProviderType;
 
 namespace {
+
+ash::ShelfItemDelegate::AppMenuItems GetAppMenuItems(
+    ash::ShelfItemDelegate* delegate,
+    int event_flags) {
+  return delegate->GetAppMenuItems(event_flags, base::NullCallback());
+}
 
 bool IsItemPresentInMenu(ui::MenuModel* menu, int command_id) {
   ui::MenuModel* model = menu;
@@ -321,7 +325,7 @@ TEST_P(ShelfContextMenuTest, ArcLauncherMenusCheck) {
   ash::ShelfItemDelegate* item_delegate =
       model()->GetShelfItemDelegate(shelf_id);
   ASSERT_TRUE(item_delegate);
-  EXPECT_TRUE(item_delegate->GetAppMenuItems(0 /* event_flags */).empty());
+  EXPECT_TRUE(GetAppMenuItems(item_delegate, 0 /* event_flags */).empty());
 
   const int64_t display_id = GetPrimaryDisplay().id();
   std::unique_ptr<ui::MenuModel> menu =
@@ -344,9 +348,9 @@ TEST_P(ShelfContextMenuTest, ArcLauncherMenusCheck) {
 
   item_delegate = model()->GetShelfItemDelegate(shelf_id);
   ASSERT_TRUE(item_delegate);
-  auto menu_list = item_delegate->GetAppMenuItems(0 /* event_flags */);
+  auto menu_list = GetAppMenuItems(item_delegate, 0 /* event_flags */);
   ASSERT_EQ(1U, menu_list.size());
-  EXPECT_EQ(base::UTF8ToUTF16(app_name), menu_list[0].first);
+  EXPECT_EQ(base::UTF8ToUTF16(app_name), menu_list[0].title);
 
   menu = GetContextMenu(item_delegate, display_id);
   ASSERT_TRUE(menu);
@@ -373,9 +377,9 @@ TEST_P(ShelfContextMenuTest, ArcLauncherMenusCheck) {
       model()->GetShelfItemDelegate(shelf_id2);
   ASSERT_TRUE(item_delegate2);
 
-  menu_list = item_delegate2->GetAppMenuItems(0 /* event_flags */);
+  menu_list = GetAppMenuItems(item_delegate2, 0 /* event_flags */);
   ASSERT_EQ(1U, menu_list.size());
-  EXPECT_EQ(base::UTF8ToUTF16(app_name2), menu_list[0].first);
+  EXPECT_EQ(base::UTF8ToUTF16(app_name2), menu_list[0].title);
 
   menu = GetContextMenu(item_delegate2, display_id);
   ASSERT_TRUE(menu);
@@ -431,14 +435,14 @@ TEST_P(ShelfContextMenuTest, ArcLauncherMenusCheck) {
     EXPECT_FALSE(IsItemEnabledInMenu(menu.get(), ash::SHOW_APP_INFO));
     EXPECT_FALSE(IsItemEnabledInMenu(menu.get(), ash::UNINSTALL));
 
-    menu_list = item_delegate3->GetAppMenuItems(0 /* event_flags */);
+    menu_list = GetAppMenuItems(item_delegate3, 0 /* event_flags */);
     ASSERT_EQ(i + 1, menu_list.size());
 
     // Ensure custom names are set in the app menu items. Note, they are
     // in reverse order, based on activation order.
     for (uint32_t j = 0; j <= i; ++j) {
       EXPECT_EQ(base::UTF8ToUTF16(GetAppNameInShelfGroup(3 + j)),
-                menu_list[i - j].first);
+                menu_list[i - j].title);
     }
   }
 }
@@ -457,7 +461,7 @@ TEST_P(ShelfContextMenuTest, ArcLauncherSuspendAppMenu) {
   ash::ShelfItemDelegate* item_delegate =
       model()->GetShelfItemDelegate(shelf_id);
   ASSERT_TRUE(item_delegate);
-  EXPECT_TRUE(item_delegate->GetAppMenuItems(0 /* event_flags */).empty());
+  EXPECT_TRUE(GetAppMenuItems(item_delegate, 0 /* event_flags */).empty());
 
   const int64_t display_id = GetPrimaryDisplay().id();
   std::unique_ptr<ui::MenuModel> menu =
@@ -616,7 +620,7 @@ TEST_P(ShelfContextMenuTest, InternalAppShelfContextMenuOptionsNumber) {
 // Checks some properties for crostini's terminal app's context menu,
 // specifically that every menu item has an icon.
 TEST_P(ShelfContextMenuTest, CrostiniTerminalApp) {
-  const std::string app_id = crostini::GetTerminalId();
+  const std::string app_id = crostini::kCrostiniTerminalSystemAppId;
   crostini::CrostiniManager::GetForProfile(profile())->AddRunningVmForTesting(
       crostini::kCrostiniDefaultVmName);
 

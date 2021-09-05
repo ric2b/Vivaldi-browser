@@ -8,11 +8,15 @@
 #include "base/path_service.h"
 #include "base/process/launch.h"
 #include "base/process/process.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
+#include "base/win/registry.h"
+#include "chrome/updater/constants.h"
 #include "chrome/updater/updater_version.h"
 #include "chrome/updater/util.h"
+#include "chrome/updater/win/constants.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace updater {
@@ -60,28 +64,53 @@ base::FilePath GetExecutablePath() {
   return GetProductPath().AppendASCII("updater.exe");
 }
 
+base::FilePath GetDataDirPath() {
+  base::FilePath app_data_dir;
+  if (!base::PathService::Get(base::DIR_LOCAL_APP_DATA, &app_data_dir))
+    return base::FilePath();
+  return app_data_dir.AppendASCII(COMPANY_SHORTNAME_STRING)
+      .AppendASCII(PRODUCT_FULLNAME_STRING);
+}
+
 }  // namespace
 
 void Clean() {
   // TODO(crbug.com/1062288): Delete the Client / ClientState registry keys.
+  base::win::RegKey(HKEY_LOCAL_MACHINE, L"", KEY_SET_VALUE)
+      .DeleteKey(UPDATE_DEV_KEY);
   // TODO(crbug.com/1062288): Delete the COM server items.
   // TODO(crbug.com/1062288): Delete the COM service items.
   // TODO(crbug.com/1062288): Delete the COM interfaces.
   // TODO(crbug.com/1062288): Delete the Wake task.
-  EXPECT_TRUE(base::DeleteFile(GetProductPath(), true));
+  EXPECT_TRUE(base::DeletePathRecursively(GetProductPath()));
+  EXPECT_TRUE(base::DeletePathRecursively(GetDataDirPath()));
 }
 
 void ExpectClean() {
   // TODO(crbug.com/1062288): Assert there are no Client / ClientState registry
   // keys.
+  // TODO(crbug.com/1062288): Assert there is no UpdateDev registry key.
   // TODO(crbug.com/1062288): Assert there are no COM server items.
   // TODO(crbug.com/1062288): Assert there are no COM service items.
   // TODO(crbug.com/1062288): Assert there are no COM interfaces.
   // TODO(crbug.com/1062288): Assert there are no Wake tasks.
 
   // Files must not exist on the file system.
-
   EXPECT_FALSE(base::PathExists(GetProductPath()));
+  EXPECT_FALSE(base::PathExists(GetDataDirPath()));
+}
+
+void EnterTestMode() {
+  // TODO(crbug.com/1119857): Point this to an actual fake server.
+  base::win::RegKey key(HKEY_LOCAL_MACHINE, L"", KEY_SET_VALUE);
+  ASSERT_EQ(key.Create(HKEY_LOCAL_MACHINE, UPDATE_DEV_KEY, KEY_WRITE),
+            ERROR_SUCCESS);
+  ASSERT_EQ(key.WriteValue(base::UTF8ToUTF16(kDevOverrideKeyUrl).c_str(),
+                           L"http://localhost:8367"),
+            ERROR_SUCCESS);
+  ASSERT_EQ(key.WriteValue(base::UTF8ToUTF16(kDevOverrideKeyUseCUP).c_str(),
+                           static_cast<DWORD>(0)),
+            ERROR_SUCCESS);
 }
 
 void ExpectInstalled() {
@@ -94,6 +123,23 @@ void ExpectInstalled() {
 
   // Files must exist on the file system.
   EXPECT_TRUE(base::PathExists(GetProductPath()));
+}
+
+void ExpectActive() {
+  // TODO(crbug.com/1062288): Assert that COM interfaces point to this version.
+
+  // Files must exist on the file system.
+  EXPECT_TRUE(base::PathExists(GetProductPath()));
+}
+
+void RunWake(int expected_exit_code) {
+  const base::FilePath path = GetExecutablePath();
+  ASSERT_FALSE(path.empty());
+  base::CommandLine command_line(path);
+  command_line.AppendSwitch(kWakeSwitch);
+  int exit_code = -1;
+  ASSERT_TRUE(Run(command_line, &exit_code));
+  EXPECT_EQ(exit_code, expected_exit_code);
 }
 
 void Install() {

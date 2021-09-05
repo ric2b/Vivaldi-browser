@@ -14,6 +14,7 @@
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/strings/grit/components_strings.h"
+#include "ui/base/accelerators/menu_label_accelerator_util.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/models/image_model.h"
 #include "url/gurl.h"
@@ -73,7 +74,8 @@ void WebAppMenuModel::Build() {
     AddItem(kUninstallAppCommandId,
             l10n_util::GetStringFUTF16(
                 IDS_UNINSTALL_FROM_OS_LAUNCH_SURFACE,
-                browser()->app_controller()->GetAppShortName()));
+                ui::EscapeMenuLabelAmpersands(
+                    browser()->app_controller()->GetAppShortName())));
   }
 #endif  // !defined(OS_CHROMEOS)
   AddSeparator(ui::LOWER_SEPARATOR);

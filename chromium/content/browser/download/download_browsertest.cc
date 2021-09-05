@@ -162,6 +162,7 @@ class DownloadTestContentBrowserClient : public TestContentBrowserClient {
 
   void RegisterNonNetworkNavigationURLLoaderFactories(
       int frame_tree_node_id,
+      base::UkmSourceId ukm_source_id,
       NonNetworkURLLoaderFactoryMap* factories) override {
     if (!enable_register_non_network_url_loader_)
       return;
@@ -1336,7 +1337,7 @@ class ParallelDownloadTest : public DownloadContentTest {
                               parameters.size, download->GetTargetFilePath());
   }
 
-  // Verifies parallel download completion.
+  // Kicks off the verifies parallel download completion
   void RunCompletionTest(TestDownloadHttpResponse::Parameters& parameters) {
     ErrorStreamCountingObserver observer;
     EXPECT_TRUE(
@@ -1475,7 +1476,7 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest,
   EXPECT_TRUE(ExecuteScript(shell()->web_contents(), script));
   Shell* new_shell = new_shell_observer.GetShell();
   ASSERT_TRUE(new_shell);
-  WaitForLoadStop(new_shell->web_contents());
+  EXPECT_TRUE(WaitForLoadStop(new_shell->web_contents()));
 
   // From the initial tab, navigate the 'foo' window to a download and wait for
   // completion.
@@ -1511,7 +1512,7 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest, InitiatedByWindowOpener_SameSite) {
   EXPECT_TRUE(ExecuteScript(shell()->web_contents(), script));
   Shell* new_shell = new_shell_observer.GetShell();
   ASSERT_TRUE(new_shell);
-  WaitForLoadStop(new_shell->web_contents());
+  EXPECT_TRUE(WaitForLoadStop(new_shell->web_contents()));
 
   // From the initial tab, navigate the 'foo' window to a download and wait for
   // completion.
@@ -1549,7 +1550,7 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest,
   EXPECT_TRUE(ExecuteScript(shell()->web_contents(), script));
   Shell* new_shell = new_shell_observer.GetShell();
   ASSERT_TRUE(new_shell);
-  WaitForLoadStop(new_shell->web_contents());
+  EXPECT_TRUE(WaitForLoadStop(new_shell->web_contents()));
 
   // From the initial tab, navigate the 'foo' window to a download and wait for
   // completion.
@@ -1583,7 +1584,7 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest,
                             "window.open('" + url.spec() + "', 'foo')"));
   Shell* new_shell = new_shell_observer.GetShell();
   ASSERT_TRUE(new_shell);
-  WaitForLoadStop(new_shell->web_contents());
+  EXPECT_TRUE(WaitForLoadStop(new_shell->web_contents()));
 
   // From the initial tab, navigate the 'foo' window to a download and wait for
   // completion.
@@ -1616,7 +1617,7 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest,
                             "window.open('about:blank', 'foo')"));
   Shell* new_shell = new_shell_observer.GetShell();
   ASSERT_TRUE(new_shell);
-  WaitForLoadStop(new_shell->web_contents());
+  EXPECT_TRUE(WaitForLoadStop(new_shell->web_contents()));
 
   // From the initial tab, navigate the 'foo' window to a download and wait for
   // completion.
@@ -2519,7 +2520,7 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest, RestartIfNoPartialFile) {
   {
     base::ScopedAllowBlockingForTesting allow_blocking;
     ASSERT_TRUE(PathExists(download->GetFullPath()));
-    ASSERT_TRUE(base::DeleteFile(download->GetFullPath(), false));
+    ASSERT_TRUE(base::DeleteFile(download->GetFullPath()));
   }
 
   parameters.ClearInjectedErrors();
@@ -2949,7 +2950,7 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest, MAYBE_RemoveResumedDownload) {
 }
 
 // TODO(qinmin): Flaky crashes on ASAN Linux. https://crbug.com/836689
-#if defined(OS_LINUX) && defined(ADDRESS_SANITIZER)
+#if (defined(OS_LINUX) || defined(OS_CHROMEOS)) && defined(ADDRESS_SANITIZER)
 #define MAYBE_CancelResumedDownload DISABLED_CancelResumedDownload
 #else
 #define MAYBE_CancelResumedDownload CancelResumedDownload
@@ -3825,12 +3826,13 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest,
   std::vector<download::DownloadItem*> downloads;
   DownloadManagerForShell(shell())->GetAllDownloads(&downloads);
   ASSERT_EQ(1u, downloads.size());
+  base::FilePath file_name = downloads[0]->GetTargetFilePath().BaseName();
 #if defined(OS_WIN)
-  EXPECT_EQ(FILE_PATH_LITERAL("download.htm"),
-            downloads[0]->GetTargetFilePath().BaseName().value());
+  // Windows file extension depends on system registry.
+  EXPECT_TRUE(file_name.value() == FILE_PATH_LITERAL("download.htm") ||
+              file_name.value() == FILE_PATH_LITERAL("download.html"));
 #else
-  EXPECT_EQ(FILE_PATH_LITERAL("download.html"),
-            downloads[0]->GetTargetFilePath().BaseName().value());
+  EXPECT_EQ(FILE_PATH_LITERAL("download.html"), file_name.value());
 #endif
 
   ASSERT_TRUE(origin_one.ShutdownAndWaitUntilComplete());
@@ -4305,6 +4307,64 @@ IN_PROC_BROWSER_TEST_F(ParallelDownloadTest,
   RunResumptionTestWithParameters(received_slices, kTestRequestCount + 1,
                                   parameters);
 }
+
+#if defined(OS_WIN) || defined(OS_LINUX) || defined(OS_CHROMEOS) || \
+    defined(OS_ANDROID)
+// Flaky https://crbug.com/1105429, https://crbug.com/1106059.
+// Windows probably use a large receiving buffer size and cause the first slice
+// to start at a offset > 0.
+#define MAYBE_MiddleSliceDelayedError DISABLED_MiddleSliceDelayedError
+#else
+#define MAYBE_MiddleSliceDelayedError MiddleSliceDelayedError
+#endif
+// Verify that if the second request fails after the beginning request takes
+// over and completes its slice, download should complete.
+IN_PROC_BROWSER_TEST_F(ParallelDownloadTest, MAYBE_MiddleSliceDelayedError) {
+  scoped_refptr<TestFileErrorInjector> injector(
+      TestFileErrorInjector::Create(DownloadManagerForShell(shell())));
+
+  TestFileErrorInjector::FileErrorInfo err = {
+      TestFileErrorInjector::FILE_OPERATION_WRITE, 0,
+      download::DOWNLOAD_INTERRUPT_REASON_FILE_NO_SPACE};
+  err.data_write_offset = 1699050;
+  injector->InjectError(err);
+  TestDownloadHttpResponse::Parameters parameters;
+  parameters.etag = "ABC";
+  parameters.size = 5097152;
+  parameters.connection_type = net::HttpResponseInfo::CONNECTION_INFO_HTTP1_1;
+  // The 2nd response will be dalyed.
+  parameters.SetResponseForRangeRequest(1699000, 2000000, k404Response,
+                                        true /* is_transient */,
+                                        true /* delay_response */);
+
+  GURL url = TestDownloadHttpResponse::GetNextURLForDownload();
+  GURL server_url = embedded_test_server()->GetURL(url.host(), url.path());
+  TestRequestPauseHandler request_pause_handler;
+  parameters.on_pause_handler = request_pause_handler.GetOnPauseHandler();
+  // Send some data for the first request and pause it so download won't
+  // complete before other parallel requests are created.
+  parameters.pause_offset = kPauseOffset;
+  TestDownloadHttpResponse::StartServing(parameters, server_url);
+
+  download::DownloadItem* download =
+      StartDownloadAndReturnItem(shell(), server_url);
+
+  // Wait for the 3rd request to complete first.
+  test_response_handler()->WaitUntilCompletion(1);
+  // Now resume the first request and wait for it to complete.
+  request_pause_handler.Resume();
+  test_response_handler()->WaitUntilCompletion(2);
+  // Dispatch the delayed response, and wait for download to complete.
+  test_response_handler()->DispatchDelayedResponses();
+  WaitForCompletion(download);
+  test_response_handler()->WaitUntilCompletion(3u);
+  const TestDownloadResponseHandler::CompletedRequests& completed_requests =
+      test_response_handler()->completed_requests();
+  EXPECT_EQ(3u, completed_requests.size());
+  ReadAndVerifyFileContents(parameters.pattern_generator_seed, parameters.size,
+                            download->GetTargetFilePath());
+}
+
 // Test to verify that the browser-side enforcement of X-Frame-Options does
 // not impact downloads. Since XFO is only checked for subframes, this test
 // initiates a download in an iframe and expects it to succeed.

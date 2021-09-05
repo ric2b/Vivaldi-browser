@@ -37,6 +37,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/time/time.h"
 #include "services/network/public/cpp/request_mode.h"
+#include "services/network/public/mojom/url_loader_factory.mojom-blink.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/mime_util/mime_util.h"
 #include "third_party/blink/public/common/thread_safe_browser_interface_broker_proxy.h"
@@ -69,6 +70,7 @@
 #include "third_party/blink/renderer/platform/loader/fetch/resource_loading_log.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_timing_info.h"
 #include "third_party/blink/renderer/platform/loader/fetch/stale_revalidation_resource_client.h"
+#include "third_party/blink/renderer/platform/loader/fetch/subresource_web_bundle.h"
 #include "third_party/blink/renderer/platform/loader/fetch/unique_identifier.h"
 #include "third_party/blink/renderer/platform/mhtml/archive_resource.h"
 #include "third_party/blink/renderer/platform/mhtml/mhtml_archive.h"
@@ -86,8 +88,6 @@
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 #include "third_party/blink/renderer/platform/wtf/wtf.h"
-
-using blink::WebURLRequest;
 
 namespace blink {
 
@@ -253,8 +253,7 @@ ResourceLoadPriority AdjustPriorityWithDeferScriptIntervention(
     return priority_so_far;
   }
 
-  WebURLRequest::PreviewsState context_previews_state =
-      fetch_context.previews_state();
+  PreviewsState context_previews_state = fetch_context.previews_state();
 
   if (type != ResourceType::kScript)
     return priority_so_far;
@@ -267,7 +266,7 @@ ResourceLoadPriority AdjustPriorityWithDeferScriptIntervention(
   // network::mojom::blink::RequestPriority::kLow which is considered delayable
   // by the resource scheduler on the browser side.
   if (RuntimeEnabledFeatures::ForceDeferScriptInterventionEnabled() ||
-      (context_previews_state & WebURLRequest::kDeferAllScriptOn)) {
+      (context_previews_state & PreviewsTypes::kDeferAllScriptOn)) {
     return std::min(priority_so_far, ResourceLoadPriority::kMedium);
   }
   return priority_so_far;
@@ -295,9 +294,9 @@ std::unique_ptr<TracedValue> ResourcePrioritySetData(
 
 // This function corresponds with step 2 substep 7 of
 // https://fetch.spec.whatwg.org/#main-fetch.
-void SetReferrer(
-    ResourceRequest& request,
-    const FetchClientSettingsObject& fetch_client_settings_object) {
+void SetReferrer(ResourceRequest& request,
+                 const FetchClientSettingsObject& fetch_client_settings_object,
+                 UseCounter& use_counter) {
   String referrer_to_use = request.ReferrerString();
   network::mojom::ReferrerPolicy referrer_policy_to_use =
       request.GetReferrerPolicy();
@@ -305,11 +304,42 @@ void SetReferrer(
   if (referrer_to_use == Referrer::ClientReferrerString())
     referrer_to_use = fetch_client_settings_object.GetOutgoingReferrer();
 
-  if (referrer_policy_to_use == network::mojom::ReferrerPolicy::kDefault)
+  bool used_referrer_policy_from_context = false;
+  if (referrer_policy_to_use == network::mojom::ReferrerPolicy::kDefault) {
+    used_referrer_policy_from_context = true;
     referrer_policy_to_use = fetch_client_settings_object.GetReferrerPolicy();
+  }
 
   Referrer generated_referrer = SecurityPolicy::GenerateReferrer(
       referrer_policy_to_use, request.Url(), referrer_to_use);
+
+  // The request's referrer would be different in the absence of <meta
+  // name=referrer> tags with comma-separated-list values exactly when both
+  // 1. the request falls back to its client settings object's policy; and
+  // 2. if we recompute the referrer using the value of the client settings
+  // object's policy, disregarding any policy that came from a meta tag with a
+  // comma-separated value, we obtain a different referrer.
+  if (used_referrer_policy_from_context) {
+    base::Optional<network::mojom::blink::ReferrerPolicy>
+        policy_but_for_meta_tags_with_policy_lists =
+            fetch_client_settings_object
+                .GetReferrerPolicyDisregardingMetaTagsContainingLists();
+
+    bool referrer_would_be_different_absent_meta_tags_with_policy_lists =
+        policy_but_for_meta_tags_with_policy_lists.has_value() &&
+        (generated_referrer.referrer !=
+         SecurityPolicy::GenerateReferrer(
+             *policy_but_for_meta_tags_with_policy_lists, request.Url(),
+             referrer_to_use)
+             .referrer);
+
+    if (referrer_would_be_different_absent_meta_tags_with_policy_lists) {
+      use_counter.CountUse(
+          mojom::WebFeature::
+              kHTMLMetaElementReferrerPolicyMultipleTokensAffectingRequest);
+    }
+  }
+
   request.SetReferrerString(generated_referrer.referrer);
   request.SetReferrerPolicy(generated_referrer.referrer_policy);
 }
@@ -867,7 +897,7 @@ base::Optional<ResourceRequestBlockedReason> ResourceFetcher::PrepareRequest(
   // This may modify params.Url() (via the resource_request argument).
   Context().PopulateResourceRequest(
       resource_type, params.GetClientHintsPreferences(),
-      params.GetResourceWidth(), resource_request, options.initiator_info);
+      params.GetResourceWidth(), resource_request, options);
 
   if (!params.Url().IsValid())
     return ResourceRequestBlockedReason::kOther;
@@ -907,7 +937,8 @@ base::Optional<ResourceRequestBlockedReason> ResourceFetcher::PrepareRequest(
                                              http_names::kGET &&
                                          !params.IsStaleRevalidation());
 
-  SetReferrer(resource_request, properties_->GetFetchClientSettingsObject());
+  SetReferrer(resource_request, properties_->GetFetchClientSettingsObject(),
+              GetUseCounter());
 
   resource_request.SetExternalRequestStateFromRequestorAddressSpace(
       properties_->GetFetchClientSettingsObject().GetAddressSpace());
@@ -1238,10 +1269,19 @@ std::unique_ptr<WebURLLoader> ResourceFetcher::CreateURLLoader(
     const ResourceLoaderOptions& options) {
   DCHECK(!GetProperties().IsDetached());
   DCHECK(loader_factory_);
+  for (auto& bundle : subresource_web_bundles_) {
+    if (!bundle->CanHandleRequest(request.Url()))
+      continue;
+    ResourceLoaderOptions new_options(options);
+    new_options.url_loader_factory = base::MakeRefCounted<base::RefCountedData<
+        mojo::PendingRemote<network::mojom::blink::URLLoaderFactory>>>(
+        bundle->GetURLLoaderFactory());
+    return loader_factory_->CreateURLLoader(request, new_options, task_runner_);
+  }
   return loader_factory_->CreateURLLoader(request, options, task_runner_);
 }
 
-std::unique_ptr<CodeCacheLoader> ResourceFetcher::CreateCodeCacheLoader() {
+std::unique_ptr<WebCodeCacheLoader> ResourceFetcher::CreateCodeCacheLoader() {
   DCHECK(!GetProperties().IsDetached());
   DCHECK(loader_factory_);
   return loader_factory_->CreateCodeCacheLoader();
@@ -1306,6 +1346,10 @@ static bool IsDownloadOrStreamRequest(const ResourceRequest& request) {
 
 Resource* ResourceFetcher::MatchPreload(const FetchParameters& params,
                                         ResourceType type) {
+  // TODO(crbug.com/1099975): PreloadKey should be modified to also take into
+  // account the DOMWrapperWorld corresponding to the resource. This is because
+  // we probably don't want to share preloaded resources across different
+  // DOMWrapperWorlds to ensure predicatable behavior for preloads.
   auto it = preloads_.find(PreloadKey(params.Url(), type));
   if (it == preloads_.end())
     return nullptr;
@@ -2102,8 +2146,14 @@ void ResourceFetcher::EmulateLoadStartedForInspector(
     network::mojom::RequestDestination request_destination,
     const AtomicString& initiator_name) {
   base::AutoReset<bool> r(&is_in_request_resource_, true);
-  if (CachedResource(url))
+  if (CachedResource(url)) {
     return;
+  }
+  if (resource->ErrorOccurred()) {
+    // We should ideally replay the error steps, but we cannot.
+    return;
+  }
+
   ResourceRequest resource_request(url);
   resource_request.SetRequestContext(request_context);
   resource_request.SetRequestDestination(request_destination);
@@ -2126,6 +2176,15 @@ void ResourceFetcher::EmulateLoadStartedForInspector(
                        last_resource_request.Url(), params.Options(),
                        ReportingDisposition::kReport,
                        last_resource_request.GetRedirectInfo());
+  if (resource->GetStatus() == ResourceStatus::kNotStarted ||
+      resource->GetStatus() == ResourceStatus::kPending) {
+    // If the loading has not started, then we return here because loading
+    // related events will be reported to the ResourceLoadObserver. If the
+    // loading is ongoing, then we return here too because the loading
+    // activity is merged.
+    return;
+  }
+  DCHECK_EQ(resource->GetStatus(), ResourceStatus::kCached);
   DidLoadResourceFromMemoryCache(resource, params.GetResourceRequest(),
                                  false /* is_static_data */);
 }
@@ -2182,7 +2241,7 @@ void ResourceFetcher::RevalidateStaleResource(Resource* stale_resource) {
   // requests.
   ResourceRequest request;
   request.CopyHeadFrom(stale_resource->GetResourceRequest());
-  FetchParameters params(std::move(request));
+  FetchParameters params(std::move(request), nullptr /* world */);
   params.SetStaleRevalidation(true);
   params.MutableResourceRequest().SetSkipServiceWorker(true);
   // Stale revalidation resource requests should be very low regardless of
@@ -2205,6 +2264,16 @@ FrameOrWorkerScheduler* ResourceFetcher::GetFrameOrWorkerScheduler() {
   return frame_or_worker_scheduler_.get();
 }
 
+void ResourceFetcher::AddSubresourceWebBundle(
+    SubresourceWebBundle& subresource_web_bundle) {
+  subresource_web_bundles_.insert(&subresource_web_bundle);
+}
+
+void ResourceFetcher::RemoveSubresourceWebBundle(
+    SubresourceWebBundle& subresource_web_bundle) {
+  subresource_web_bundles_.erase(&subresource_web_bundle);
+}
+
 void ResourceFetcher::Trace(Visitor* visitor) const {
   visitor->Trace(context_);
   visitor->Trace(properties_);
@@ -2223,6 +2292,7 @@ void ResourceFetcher::Trace(Visitor* visitor) const {
   visitor->Trace(matched_preloads_);
   visitor->Trace(resource_timing_info_map_);
   visitor->Trace(blob_registry_remote_);
+  visitor->Trace(subresource_web_bundles_);
 }
 
 // static

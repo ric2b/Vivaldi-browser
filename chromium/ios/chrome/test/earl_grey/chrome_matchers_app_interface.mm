@@ -214,6 +214,12 @@ UIView* SubviewWithAccessibilityIdentifier(NSString* accessibility_id,
                     grey_accessibilityTrait(UIAccessibilityTraitHeader), nil);
 }
 
++ (id<GREYMatcher>)navigationBarTitleWithAccessibilityLabelID:(int)labelID {
+  return grey_allOf(
+      grey_accessibilityID(l10n_util::GetNSStringWithFixup(labelID)),
+      grey_kindOfClass([UINavigationBar class]), nil);
+}
+
 + (id<GREYMatcher>)textFieldForCellWithLabelID:(int)messageID {
   return grey_allOf(grey_accessibilityID([l10n_util::GetNSStringWithFixup(
                         messageID) stringByAppendingString:@"_textField"]),
@@ -381,6 +387,11 @@ UIView* SubviewWithAccessibilityIdentifier(NSString* accessibility_id,
       buttonWithAccessibilityLabelID:(IDS_IOS_CONTENT_CONTEXT_OPENLINKNEWTAB)];
 }
 
++ (id<GREYMatcher>)openLinkInNewWindowButton {
+  return [ChromeMatchersAppInterface
+      buttonWithAccessibilityLabelID:(IDS_IOS_CONTENT_CONTEXT_OPENINNEWWINDOW)];
+}
+
 + (id<GREYMatcher>)navigationBarDoneButton {
   return grey_allOf(
       [ChromeMatchersAppInterface
@@ -402,28 +413,12 @@ UIView* SubviewWithAccessibilityIdentifier(NSString* accessibility_id,
                     nil);
 }
 
-+ (id<GREYMatcher>)accountConsistencyConfirmationOKButton {
-  int labelID = IDS_IOS_ACCOUNT_UNIFIED_CONSENT_OK_BUTTON;
-  return [ChromeMatchersAppInterface buttonWithAccessibilityLabelID:labelID];
-}
-
-+ (id<GREYMatcher>)unifiedConsentAddAccountButton {
-  return [ChromeMatchersAppInterface
-      buttonWithAccessibilityLabelID:
-          (IDS_IOS_ACCOUNT_UNIFIED_CONSENT_ADD_ACCOUNT)];
-}
-
 + (id<GREYMatcher>)addAccountButton {
   return grey_accessibilityID(kSettingsAccountsTableViewAddAccountCellId);
 }
 
 + (id<GREYMatcher>)signOutAccountsButton {
   return grey_accessibilityID(kSettingsAccountsTableViewSignoutCellId);
-}
-
-+ (id<GREYMatcher>)signOutAndClearDataAccountsButton {
-  return grey_accessibilityID(
-      kSettingsAccountsTableViewSignoutAndClearDataCellId);
 }
 
 + (id<GREYMatcher>)clearBrowsingDataCell {

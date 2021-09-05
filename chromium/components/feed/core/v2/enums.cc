@@ -33,8 +33,10 @@ std::ostream& operator<<(std::ostream& out, LoadStreamStatus value) {
       return out << "kDataInStoreIsStale";
     case LoadStreamStatus::kDataInStoreIsStaleTimestampInFuture:
       return out << "kDataInStoreIsStaleTimestampInFuture";
-    case LoadStreamStatus::kCannotLoadFromNetworkSupressedForHistoryDelete:
-      return out << "kCannotLoadFromNetworkSupressedForHistoryDelete";
+    case LoadStreamStatus::
+        kCannotLoadFromNetworkSupressedForHistoryDelete_DEPRECATED:
+      return out
+             << "kCannotLoadFromNetworkSupressedForHistoryDelete_DEPRECATED";
     case LoadStreamStatus::kCannotLoadFromNetworkOffline:
       return out << "kCannotLoadFromNetworkOffline";
     case LoadStreamStatus::kCannotLoadFromNetworkThrottled:
@@ -74,6 +76,8 @@ std::ostream& operator<<(std::ostream& out, UploadActionsStatus value) {
       return out << "kUpdatedConsistencyToken";
     case UploadActionsStatus::kFinishedWithoutUpdatingConsistencyToken:
       return out << "kFinishedWithoutUpdatingConsistencyToken";
+    case UploadActionsStatus::kAbortUploadForSignedOutUser:
+      return out << "kAbortUploadForSignedOutUser";
   }
 #else
   return out << (static_cast<int>(value));

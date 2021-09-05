@@ -51,10 +51,6 @@ DocumentBlockedInterstitial::GetTypeForTesting() {
   return DocumentBlockedInterstitial::kTypeForTesting;
 }
 
-bool DocumentBlockedInterstitial::ShouldCreateNewNavigation() const {
-  return true;
-}
-
 bool DocumentBlockedInterstitial::ShouldDisplayURL() const {
   return false;
 }

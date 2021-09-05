@@ -56,7 +56,7 @@ TEST(SetupUtilTest, GetMaxVersionFromArchiveDirTest) {
       installer::GetMaxVersionFromArchiveDir(test_dir.GetPath()));
   ASSERT_EQ(version->GetString(), "1.0.0.0");
 
-  base::DeleteFileRecursively(chrome_dir);
+  base::DeletePathRecursively(chrome_dir);
   ASSERT_FALSE(base::PathExists(chrome_dir)) << chrome_dir.value();
   ASSERT_EQ(installer::GetMaxVersionFromArchiveDir(test_dir.GetPath()),
             nullptr);
@@ -391,7 +391,7 @@ TEST_F(FindArchiveToPatchTest, ProductVersionFound) {
 // missing.
 TEST_F(FindArchiveToPatchTest, MaxVersionFound) {
   // The patch file is absent.
-  ASSERT_TRUE(base::DeleteFile(GetProductVersionArchivePath(), false));
+  ASSERT_TRUE(base::DeleteFile(GetProductVersionArchivePath()));
   base::FilePath patch_source(installer::FindArchiveToPatch(
       *original_state_, *installer_state_, base::Version()));
   EXPECT_EQ(GetMaxVersionArchivePath().value(), patch_source.value());
@@ -407,8 +407,8 @@ TEST_F(FindArchiveToPatchTest, MaxVersionFound) {
 TEST_F(FindArchiveToPatchTest, NoVersionFound) {
   // The product doesn't appear to be installed and no archives are present.
   UninstallProduct();
-  ASSERT_TRUE(base::DeleteFile(GetProductVersionArchivePath(), false));
-  ASSERT_TRUE(base::DeleteFile(GetMaxVersionArchivePath(), false));
+  ASSERT_TRUE(base::DeleteFile(GetProductVersionArchivePath()));
+  ASSERT_TRUE(base::DeleteFile(GetMaxVersionArchivePath()));
 
   base::FilePath patch_source(installer::FindArchiveToPatch(
       *original_state_, *installer_state_, base::Version()));

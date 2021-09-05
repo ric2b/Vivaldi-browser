@@ -22,7 +22,6 @@ import org.chromium.components.embedder_support.util.Origin;
  */
 public class InstalledWebappBridge {
     private static long sNativeInstalledWebappProvider;
-    private static long sNativePermissionResultCallback;
 
     /**
      * A POD class to store the combination of a permission setting and the origin the permission is
@@ -75,17 +74,6 @@ public class InstalledWebappBridge {
     @CalledByNative
     private static int getSettingFromPermission(Permission permission) {
         return permission.setting;
-    }
-
-    @CalledByNative
-    private static boolean shouldDelegateLocationPermission(String url) {
-        TrustedWebActivityPermissionManager manager = TrustedWebActivityPermissionManager.get();
-        Origin origin = Origin.create(Uri.parse(url));
-        if (origin == null) return false;
-        String packageName = manager.getDelegatePackageName(origin);
-        return manager.isRunningTwa()
-                && TrustedWebActivityPermissionManager.hasAndroidLocationPermission(packageName)
-                != null;
     }
 
     @CalledByNative

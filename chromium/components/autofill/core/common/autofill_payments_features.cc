@@ -31,7 +31,7 @@ const base::Feature kAutofillAlwaysReturnCloudTokenizedCard{
 // If enabled, when a server card is unmasked, its info will be cached until
 // page navigation to simplify consecutive fills on the same page.
 const base::Feature kAutofillCacheServerCardInfo{
-    "AutofillCacheServerCardInfo", base::FEATURE_DISABLED_BY_DEFAULT};
+    "AutofillCacheServerCardInfo", base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kAutofillCreditCardAblationExperiment{
     "AutofillCreditCardAblationExperiment", base::FEATURE_DISABLED_BY_DEFAULT};
@@ -40,7 +40,7 @@ const base::Feature kAutofillCreditCardAblationExperiment{
 // credit cards from Google payments.
 const base::Feature kAutofillCreditCardAuthentication{
   "AutofillCreditCardAuthentication",
-#if defined(OS_WIN) || (defined(OS_MACOSX) && !defined(OS_IOS))
+#if defined(OS_WIN) || defined(OS_MAC)
       // Better Auth project is fully launched on Win/Mac.
       base::FEATURE_ENABLED_BY_DEFAULT
 #else
@@ -58,6 +58,11 @@ const base::Feature kAutofillCreditCardUploadFeedback{
 // modified locally.
 const base::Feature kAutofillEnableCardNicknameManagement{
     "AutofillEnableCardNicknameManagement", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// When enabled, shows the Google Pay logo on CVC prompt on Android.
+const base::Feature kAutofillDownstreamCvcPromptUseGooglePayLogo{
+    "AutofillDownstreamCvcPromptUseGooglePayLogo",
+    base::FEATURE_DISABLED_BY_DEFAULT};
 
 // When enabled, the credit card nicknames will be manageable. They can be
 // uploaded to Payments.
@@ -88,7 +93,7 @@ const base::Feature kAutofillEnableStickyPaymentsBubble{
 // app, Autofill will surface these nicknames in suggestions.
 const base::Feature kAutofillEnableSurfacingServerCardNickname{
     "AutofillEnableSurfacingServerCardNickname",
-    base::FEATURE_DISABLED_BY_DEFAULT};
+    base::FEATURE_ENABLED_BY_DEFAULT};
 
 // When enabled, Autofill data related icons will be shown in the status
 // chip in toolbar along with the avatar toolbar button.
@@ -110,12 +115,12 @@ const base::Feature kAutofillSaveCardInfobarEditSupport{
     "AutofillSaveCardInfobarEditSupport", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Controls offering credit card upload to Google Payments. Cannot ever be
-// ENABLED_BY_DEFAULT because it's a country-specific whitelist. There are
-// countries we simply can't turn this on for, and they change over time, so
-// it's important that we can flip a switch and be done instead of having old
-// versions of Chrome forever do the wrong thing. Enabling it by default would
-// mean that any first-run client without a Finch config won't get the
-// overriding command to NOT turn it on, which becomes an issue.
+// ENABLED_BY_DEFAULT because the feature state depends on the user's country.
+// There are countries we simply can't turn this on for, and they change over
+// time, so it's important that we can flip a switch and be done instead of
+// having old versions of Chrome forever do the wrong thing. Enabling it by
+// default would mean that any first-run client without a Finch config won't get
+// the overriding command to NOT turn it on, which becomes an issue.
 const base::Feature kAutofillUpstream{"AutofillUpstream",
                                       base::FEATURE_DISABLED_BY_DEFAULT};
 
@@ -123,7 +128,7 @@ const base::Feature kAutofillUpstreamAllowAllEmailDomains{
     "AutofillUpstreamAllowAllEmailDomains", base::FEATURE_DISABLED_BY_DEFAULT};
 
 bool ShouldShowImprovedUserConsentForCreditCardSave() {
-#if defined(OS_WIN) || defined(OS_MACOSX) || \
+#if defined(OS_WIN) || defined(OS_APPLE) || \
     (defined(OS_LINUX) && !defined(OS_CHROMEOS))
   // The new user consent UI is fully launched on MacOS, Windows and Linux.
   return true;

@@ -16,6 +16,7 @@
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "chrome/browser/media/cast_mirroring_service_host.h"
+#include "chrome/browser/media/cast_remoting_connector.h"
 #include "chrome/browser/media/router/event_page_request_manager.h"
 #include "chrome/browser/media/router/event_page_request_manager_factory.h"
 #include "chrome/browser/media/router/issues_observer.h"
@@ -132,7 +133,7 @@ MediaRouteProviderId FixProviderId(MediaRouteProviderId provider_id) {
 
 DesktopMediaPickerController::Params MakeDesktopPickerParams(
     content::WebContents* web_contents) {
-#ifndef OS_CHROMEOS
+#if !defined(OS_CHROMEOS)
   DCHECK(web_contents);
 #endif
 
@@ -457,6 +458,10 @@ void MediaRouterMojoImpl::GetMediaController(
   media_route_providers_[*provider_id]->CreateMediaRouteController(
       route_id, std::move(controller), std::move(observer),
       std::move(callback));
+}
+
+base::Value MediaRouterMojoImpl::GetLogs() const {
+  return logger_.GetLogsAsValue();
 }
 
 // static
@@ -929,22 +934,13 @@ void MediaRouterMojoImpl::OnProviderConnectionError(
   media_route_providers_.erase(provider_id);
 }
 
-void MediaRouterMojoImpl::OnMediaRemoterCreated(
-    int32_t tab_id,
-    mojo::PendingRemote<media::mojom::MirrorServiceRemoter> remoter,
-    mojo::PendingReceiver<media::mojom::MirrorServiceRemotingSource>
-        source_receiver) {
-  auto it = remoting_sources_.find(SessionID::FromSerializedValue(tab_id));
-  if (it == remoting_sources_.end()) {
-    return;
-  }
-  CastRemotingConnector* connector = it->second;
-  connector->ConnectToService(std::move(source_receiver), std::move(remoter));
-}
-
 void MediaRouterMojoImpl::GetLogger(
     mojo::PendingReceiver<mojom::Logger> receiver) {
   logger_.Bind(std::move(receiver));
+}
+
+LoggerImpl* MediaRouterMojoImpl::GetLogger() {
+  return &logger_;
 }
 
 void MediaRouterMojoImpl::GetLogsAsString(GetLogsAsStringCallback callback) {
@@ -1118,7 +1114,7 @@ void MediaRouterMojoImpl::CreateRouteWithSelectedDesktop(
   DCHECK(!pending_stream_request_);
   pending_stream_request_.emplace();
   PendingStreamRequest& request = *pending_stream_request_;
-#ifndef OS_CHROMEOS
+#if !defined(OS_CHROMEOS)
   DCHECK(web_contents);
   content::RenderFrameHost* const main_frame = web_contents->GetMainFrame();
   request.render_process_id = main_frame->GetProcess()->GetID();

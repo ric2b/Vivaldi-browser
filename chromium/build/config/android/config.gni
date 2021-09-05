@@ -82,10 +82,10 @@ if (is_android || is_chromeos) {
   }
 
   public_android_sdk_root = "//third_party/android_sdk/public"
-  if (android_sdk_release == "q") {
+  if (android_sdk_release == "r") {
     default_android_sdk_root = public_android_sdk_root
-    default_android_sdk_version = 29
-    default_android_sdk_build_tools_version = "29.0.2"
+    default_android_sdk_version = "30"
+    default_android_sdk_build_tools_version = "30.0.1"
     public_android_sdk = true
   }
 
@@ -98,7 +98,7 @@ if (is_android || is_chromeos) {
     # Purposefully repeated so that downstream can change
     # default_android_sdk_root without changing lint version.
     default_lint_android_sdk_root = public_android_sdk_root
-    default_lint_android_sdk_version = 29
+    default_lint_android_sdk_version = 30
   }
 
   if (!defined(default_extras_android_sdk_root)) {
@@ -124,6 +124,17 @@ if (is_android || is_chromeos) {
     }
   }
 
+  if (!defined(material_design_target)) {
+    material_design_target =
+        "//third_party/android_deps:com_google_android_material_material_java"
+  }
+
+  if (!defined(android_protoc_bin)) {
+    android_protoc_bin = "//third_party/android_protoc/protoc"
+    android_proto_runtime =
+        "//third_party/android_deps:com_google_protobuf_protobuf_javalite_java"
+  }
+
   webview_public_framework_dep =
       "//third_party/android_sdk:public_framework_system_java"
   if (!defined(webview_framework_dep)) {
@@ -132,9 +143,6 @@ if (is_android || is_chromeos) {
 
   assert(defined(default_android_sdk_root),
          "SDK release " + android_sdk_release + " not recognized.")
-
-  # Where to write failed expectations for bots to read.
-  android_configuration_failure_dir = "$root_build_dir/failed_expectations"
 
   declare_args() {
     android_ndk_root = default_android_ndk_root
@@ -208,9 +216,6 @@ if (is_android || is_chromeos) {
     # stderr and writes a failure file to $android_configuration_failure_dir:
     fail_on_android_expectations = false
 
-    # Enable the chrome build for devices without touchscreens.
-    notouch_build = false
-
     # Controls whether proguard obfuscation is enabled for targets
     # configured to use it.
     enable_proguard_obfuscation = true
@@ -239,9 +244,6 @@ if (is_android || is_chromeos) {
     # Use hashed symbol names to reduce JNI symbol overhead.
     use_hashed_jni_names = !is_java_debug
 
-    # For local development, it's nice to not fail builds on warnings.
-    java_warnings_as_errors = !is_java_debug
-
     # Desugar lambdas and interfaces methods using Desugar.jar rather than
     # D8/R8. D8/R8 will still be used for backported method desugaring.
     enable_bazel_desugar = true
@@ -250,9 +252,6 @@ if (is_android || is_chromeos) {
     # This will cause an extra classes.dex file to appear in every apk.
     enable_jdk_library_desugaring = false
   }
-
-  # Path to where selected build variables are written to.
-  android_build_vars = "$root_build_dir/build_vars.txt"
 
   # Host stuff -----------------------------------------------------------------
 

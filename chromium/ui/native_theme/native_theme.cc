@@ -41,6 +41,7 @@ NativeThemeColorIdToColorIdMap() {
           kColorBubbleFooterBackground},
         {NTCID::kColorId_ButtonColor, kColorButtonBackground},
         {NTCID::kColorId_ButtonBorderColor, kColorButtonBorder},
+        {NTCID::kColorId_DisabledButtonBorderColor, kColorButtonDisabledBorder},
         {NTCID::kColorId_ButtonDisabledColor,
           kColorButtonDisabledForeground},
         {NTCID::kColorId_ButtonEnabledColor, kColorButtonForeground},
@@ -95,9 +96,10 @@ NativeThemeColorIdToColorIdMap() {
         {NTCID::kColorId_MenuSeparatorColor, kColorMenuSeparator},
         {NTCID::kColorId_TabBottomBorder, kColorTabContentSeparator},
         {NTCID::kColorId_TabTitleColorInactive, kColorTabForeground},
+        {NTCID::kColorId_TabSelectedBorderColor, kColorTabSelectedBorder},
         {NTCID::kColorId_TabTitleColorActive, kColorTabSelectedForeground},
         {NTCID::kColorId_TableBackground, kColorTableBackground},
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
         {NTCID::kColorId_TableBackgroundAlternate,
           kColorTableBackgroundAlternate},
 #endif
@@ -164,7 +166,7 @@ NativeTheme::ExtraParams::ExtraParams(const ExtraParams& other) {
   memcpy(this, &other, sizeof(*this));
 }
 
-#if !defined(OS_WIN) && !defined(OS_MACOSX)
+#if !defined(OS_WIN) && !defined(OS_APPLE)
 // static
 bool NativeTheme::SystemDarkModeSupported() {
   return false;
@@ -198,6 +200,10 @@ SkColor NativeTheme::GetSystemColor(ColorId color_id,
 }
 
 SkColor NativeTheme::GetSystemButtonPressedColor(SkColor base_color) const {
+  return base_color;
+}
+
+SkColor NativeTheme::FocusRingColorForBaseColor(SkColor base_color) const {
   return base_color;
 }
 

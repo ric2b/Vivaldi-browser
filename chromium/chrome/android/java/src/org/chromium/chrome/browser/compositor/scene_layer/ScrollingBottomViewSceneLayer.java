@@ -160,22 +160,7 @@ public class ScrollingBottomViewSceneLayer extends SceneOverlayLayer implements 
             float width, float height, float visibleViewportOffsetY, int orientation) {}
 
     @Override
-    public void onHideLayout() {}
-
-    @Override
     public void getVirtualViews(List<VirtualView> views) {}
-
-    @Override
-    public void tabTitleChanged(int tabId, String title) {}
-
-    @Override
-    public void tabStateInitialized() {}
-
-    @Override
-    public void tabModelSwitched(boolean incognito) {}
-
-    @Override
-    public void tabCreated(long time, boolean incognito, int id, int prevId, boolean selected) {}
 
     @NativeMethods
     interface Natives {

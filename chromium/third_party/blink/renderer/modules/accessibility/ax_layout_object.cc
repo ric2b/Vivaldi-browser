@@ -473,7 +473,7 @@ AccessibilityGrabbedState AXLayoutObject::IsGrabbed() const {
 }
 
 AccessibilitySelectedState AXLayoutObject::IsSelected() const {
-  if (!GetLayoutObject() || !GetNode() || !CanSetSelectedAttribute())
+  if (!GetLayoutObject() || !GetNode() || !IsSubWidget())
     return kSelectedStateUndefined;
 
   // The aria-selected attribute overrides automatic behaviors.
@@ -521,6 +521,18 @@ bool AXLayoutObject::IsSelectedFromFocus() const {
   bool is_selected;
   return !HasAOMPropertyOrARIAAttribute(AOMBooleanProperty::kSelected,
                                         is_selected);
+}
+
+// Returns true if the object is marked user-select:none
+bool AXLayoutObject::IsNotUserSelectable() const {
+  if (!GetLayoutObject())
+    return false;
+
+  const ComputedStyle* style = GetLayoutObject()->Style();
+  if (!style)
+    return false;
+
+  return (style->UserSelect() == EUserSelect::kNone);
 }
 
 // Returns true if the node's aria-selected attribute should be set to true
@@ -922,7 +934,7 @@ String AXLayoutObject::GetText() const {
   return AXNodeObject::GetText();
 }
 
-ax::mojom::blink::TextDirection AXLayoutObject::GetTextDirection() const {
+ax::mojom::blink::WritingDirection AXLayoutObject::GetTextDirection() const {
   if (!GetLayoutObject())
     return AXNodeObject::GetTextDirection();
 
@@ -933,16 +945,16 @@ ax::mojom::blink::TextDirection AXLayoutObject::GetTextDirection() const {
   if (style->IsHorizontalWritingMode()) {
     switch (style->Direction()) {
       case TextDirection::kLtr:
-        return ax::mojom::blink::TextDirection::kLtr;
+        return ax::mojom::blink::WritingDirection::kLtr;
       case TextDirection::kRtl:
-        return ax::mojom::blink::TextDirection::kRtl;
+        return ax::mojom::blink::WritingDirection::kRtl;
     }
   } else {
     switch (style->Direction()) {
       case TextDirection::kLtr:
-        return ax::mojom::blink::TextDirection::kTtb;
+        return ax::mojom::blink::WritingDirection::kTtb;
       case TextDirection::kRtl:
-        return ax::mojom::blink::TextDirection::kBtt;
+        return ax::mojom::blink::WritingDirection::kBtt;
     }
   }
 
@@ -1438,9 +1450,16 @@ AXObject* AXLayoutObject::AccessibilityHitTest(const IntPoint& point) const {
       !layout_object_->IsBox())
     return nullptr;
 
-  // Must be called with lifecycle >= compositing clean.
-  DCHECK_GE(GetDocument()->Lifecycle().GetState(),
-            DocumentLifecycle::kCompositingClean);
+    // Must be called with lifecycle >= compositing clean
+#if DCHECK_IS_ON()
+  if (RuntimeEnabledFeatures::CompositingOptimizationsEnabled()) {
+    DCHECK_GE(GetDocument()->Lifecycle().GetState(),
+              DocumentLifecycle::kPrePaintClean);
+  } else {
+    DCHECK_GE(GetDocument()->Lifecycle().GetState(),
+              DocumentLifecycle::kCompositingAssignmentsClean);
+  }
+#endif
 
   PaintLayer* layer = ToLayoutBox(layout_object_)->Layer();
 

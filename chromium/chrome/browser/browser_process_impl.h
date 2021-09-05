@@ -39,7 +39,6 @@
 #endif
 
 class BatteryMetrics;
-class ChromeFeatureListCreator;
 class ChromeMetricsServicesManagerClient;
 class DevToolsAutoOpener;
 class RemoteDebuggingServer;
@@ -96,7 +95,7 @@ class BrowserProcessImpl : public BrowserProcess,
   void SetQuitClosure(base::OnceClosure quit_closure);
 #endif
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   // Clears the quit closure. Shutdown will not be initiated should the
   // KeepAlive count reach zero. This function may be called more than once.
   // TODO(https://crbug.com/845966): Remove this once the Cocoa first run
@@ -211,7 +210,6 @@ class BrowserProcessImpl : public BrowserProcess,
 
   void CreateWatchdogThread();
   void CreateProfileManager();
-  void CreateLocalState();
   void CreateIconManager();
   void CreateIntranetRedirectDetector();
   void CreateNotificationPlatformBridge();
@@ -225,7 +223,6 @@ class BrowserProcessImpl : public BrowserProcess,
   void CreateStatusTray();
   void CreateBackgroundModeManager();
   void CreateGCMDriver();
-  void CreatePhysicalWebDataSource();
 
   void ApplyDefaultBrowserPolicy();
 
@@ -234,10 +231,11 @@ class BrowserProcessImpl : public BrowserProcess,
   void Pin();
   void Unpin();
 
+  StartupData* const startup_data_;
+
   bool created_watchdog_thread_ = false;
   std::unique_ptr<WatchDogThread> watchdog_thread_;
 
-  bool created_browser_policy_connector_ = false;
   // Must be destroyed after |local_state_|.
   std::unique_ptr<policy::ChromeBrowserPolicyConnector>
       browser_policy_connector_;
@@ -343,12 +341,6 @@ class BrowserProcessImpl : public BrowserProcess,
   std::unique_ptr<DownloadStatusUpdater> download_status_updater_;
 
   scoped_refptr<DownloadRequestLimiter> download_request_limiter_;
-
-  // If non-null, this object holds a pref store that will be taken by
-  // BrowserProcessImpl to create the |local_state_|.
-  ChromeFeatureListCreator* chrome_feature_list_creator_;
-
-  StartupData* startup_data_;
 
   // Ensures that the observers of plugin/print disable/enable state
   // notifications are properly added and removed.

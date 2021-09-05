@@ -49,7 +49,8 @@ class MenuContentAPI : public BrowserContextKeyedAPI,
   friend class BrowserContextKeyedAPIFactory<MenuContentAPI>;
 
   content::BrowserContext* browser_context_;
-  menus::Menu_Model* model_ = nullptr;
+  menus::Menu_Model* main_menu_model_ = nullptr;
+  menus::Menu_Model* context_menu_model_ = nullptr;
 
   // BrowserContextKeyedAPI implementation.
   static const char* service_name() { return "MenuContentAPI"; }
@@ -57,10 +58,14 @@ class MenuContentAPI : public BrowserContextKeyedAPI,
   static const bool kServiceRedirectedInIncognito = true;
 };
 
-class MenuContentGetFunction : public ExtensionFunction {
+class MenuContentGetFunction : public ExtensionFunction,
+                               public ::menus::MenuModelObserver {
  public:
   DECLARE_EXTENSION_FUNCTION("menuContent.get", MENUCONTENT_GET)
   MenuContentGetFunction() = default;
+
+  // ::menus::MenuModelObserver
+  void MenuModelLoaded(menus::Menu_Model* model) override;
 
  private:
   ~MenuContentGetFunction() override = default;

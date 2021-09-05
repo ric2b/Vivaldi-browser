@@ -39,7 +39,6 @@
 #include "components/viz/common/surfaces/parent_local_surface_id_allocator.h"
 #include "content/browser/accessibility/browser_accessibility_manager_android.h"
 #include "content/browser/accessibility/web_contents_accessibility_android.h"
-#include "content/browser/android/content_feature_list.h"
 #include "content/browser/android/gesture_listener_manager.h"
 #include "content/browser/android/ime_adapter_android.h"
 #include "content/browser/android/overscroll_controller_android.h"
@@ -200,7 +199,7 @@ std::string CompressAndSaveBitmap(const std::string& dir,
 
   // If there were errors, don't leave a partial file around.
   if (bytes_written != data.size()) {
-    base::DeleteFile(screenshot_path, false);
+    base::DeleteFile(screenshot_path);
     LOG(ERROR) << "Error writing screenshot file to disk";
     return std::string();
   }
@@ -231,6 +230,7 @@ RenderWidgetHostViewAndroid::RenderWidgetHostViewAndroid(
       synchronous_compositor_client_(nullptr),
       observing_root_window_(false),
       prev_top_shown_pix_(0.f),
+      prev_top_controls_pix_(0.f),
       prev_top_controls_translate_(0.f),
       prev_top_controls_min_height_offset_pix_(0.f),
       prev_bottom_shown_pix_(0.f),
@@ -260,7 +260,7 @@ RenderWidgetHostViewAndroid::RenderWidgetHostViewAndroid(
       delegated_frame_host_->WasShown(
           local_surface_id_allocator_.GetCurrentLocalSurfaceIdAllocation()
               .local_surface_id(),
-          GetCompositorViewportPixelSize());
+          GetCompositorViewportPixelSize(), host()->delegate()->IsFullscreen());
     }
 
     // Let the page-level input event router know about our frame sink ID
@@ -349,7 +349,8 @@ bool RenderWidgetHostViewAndroid::SynchronizeVisualProperties(
     delegated_frame_host_->EmbedSurface(
         local_surface_id_allocator_.GetCurrentLocalSurfaceIdAllocation()
             .local_surface_id(),
-        GetCompositorViewportPixelSize(), deadline_policy);
+        GetCompositorViewportPixelSize(), deadline_policy,
+        host()->delegate()->IsFullscreen());
   }
 
   return host()->SynchronizeVisualProperties();
@@ -489,9 +490,9 @@ void RenderWidgetHostViewAndroid::OnRenderFrameMetadataChangedBeforeActivation(
   max_page_scale_ = metadata.max_page_scale_factor;
   current_surface_size_ = metadata.viewport_size_in_pixels;
 
-  // With SurfaceSync we no longer call EvictFrameIfNecessary on every metadata
-  // change. We must still call UpdateWebViewBackgroundColorIfNecessary to
-  // maintain the associated background color changes.
+  // With SurfaceSync we no longer call evict frame on every metadata change. We
+  // must still call UpdateWebViewBackgroundColorIfNecessary to maintain the
+  // associated background color changes.
   UpdateWebViewBackgroundColorIfNecessary();
 
   if (metadata.new_vertical_scroll_direction !=
@@ -600,8 +601,12 @@ void RenderWidgetHostViewAndroid::
 
 void RenderWidgetHostViewAndroid::OnRootScrollOffsetChanged(
     const gfx::Vector2dF& root_scroll_offset) {
-  if (gesture_listener_manager_)
-    gesture_listener_manager_->OnRootScrollOffsetChanged(root_scroll_offset);
+  if (!gesture_listener_manager_)
+    return;
+  gfx::Vector2dF root_scroll_offset_dip = root_scroll_offset;
+  if (IsUseZoomForDSFEnabled())
+    root_scroll_offset_dip.Scale(1 / view_.GetDipScale());
+  gesture_listener_manager_->OnRootScrollOffsetChanged(root_scroll_offset_dip);
 }
 
 void RenderWidgetHostViewAndroid::Focus() {
@@ -722,18 +727,18 @@ void RenderWidgetHostViewAndroid::OnUpdateTextInputStateCalled(
     TextInputManager* text_input_manager,
     RenderWidgetHostViewBase* updated_view,
     bool did_change_state) {
-  DCHECK_EQ(text_input_manager_, text_input_manager);
-  // If there are no active widgets, the TextInputState.type should be reported
-  // as none.
-  const ui::mojom::TextInputState& state =
-      GetTextInputManager()->GetActiveWidget()
-          ? *GetTextInputManager()->GetTextInputState()
-          : ui::mojom::TextInputState();
-
   if (!ime_adapter_android_)
     return;
 
-  ime_adapter_android_->UpdateState(state);
+  DCHECK_EQ(text_input_manager_, text_input_manager);
+  if (GetTextInputManager()->GetActiveWidget()) {
+    ime_adapter_android_->UpdateState(
+        *GetTextInputManager()->GetTextInputState());
+  } else {
+    // If there are no active widgets, the TextInputState.type should be
+    // reported as none.
+    ime_adapter_android_->UpdateState(ui::mojom::TextInputState());
+  }
 }
 
 void RenderWidgetHostViewAndroid::OnImeCompositionRangeChanged(
@@ -1029,8 +1034,6 @@ void RenderWidgetHostViewAndroid::CopyFromSurface(
 
   if (!using_browser_compositor_) {
     SynchronousCopyContents(src_subrect, output_size, std::move(callback));
-    UMA_HISTOGRAM_TIMES("Compositing.CopyFromSurfaceTimeSynchronous",
-                        base::TimeTicks::Now() - start_time);
     return;
   }
 
@@ -1042,6 +1045,8 @@ void RenderWidgetHostViewAndroid::CopyFromSurface(
              base::TimeTicks start_time, const SkBitmap& bitmap) {
             TRACE_EVENT0(
                 "cc", "RenderWidgetHostViewAndroid::CopyFromSurface finished");
+            // TODO(crbug/1110301): Make the Compositing.CopyFromSurfaceTime
+            // histogram obsolete.
             UMA_HISTOGRAM_TIMES(kAsyncReadBackString,
                                 base::TimeTicks::Now() - start_time);
             std::move(callback).Run(bitmap);
@@ -1080,29 +1085,11 @@ bool RenderWidgetHostViewAndroid::ShouldRouteEvents() const {
          host()->delegate()->GetInputEventRouter();
 }
 
-void RenderWidgetHostViewAndroid::EvictFrameIfNecessary() {
-  if (!host()->delegate()->IsFullscreenForCurrentTab() ||
-      current_surface_size_ == view_.GetPhysicalBackingSize()) {
-    return;
-  }
-  // When we're in a fullscreen and and doing a resize we show black
-  // instead of the incorrectly-sized frame. However when we are just
-  // adjusting the height we keep the frames because it is a less jarring
-  // experience for the user instead frames shown as black.
-  bool is_width_same =
-      current_surface_size_.width() == view_.GetPhysicalBackingSize().width();
-  if (!is_width_same) {
-    EvictDelegatedFrame();
-    SetContentBackgroundColor(SK_ColorBLACK);
-  }
-}
-
 void RenderWidgetHostViewAndroid::UpdateWebViewBackgroundColorIfNecessary() {
   // Android WebView had a bug the BG color was always set to black when
   // fullscreen (see https://crbug.com/961223#c5). As applications came to rely
   // on this behavior, preserve it here.
-  if (!using_browser_compositor_ &&
-      host()->delegate()->IsFullscreenForCurrentTab()) {
+  if (!using_browser_compositor_ && host()->delegate()->IsFullscreen()) {
     SetContentBackgroundColor(SK_ColorBLACK);
   }
 }
@@ -1121,6 +1108,10 @@ bool RenderWidgetHostViewAndroid::RequestRepaintForTesting() {
 void RenderWidgetHostViewAndroid::FrameTokenChangedForSynchronousCompositor(
     uint32_t frame_token,
     const gfx::ScrollOffset& root_scroll_offset) {
+  if (!viz::FrameTokenGT(frame_token, sync_compositor_last_frame_token_))
+    return;
+  sync_compositor_last_frame_token_ = frame_token;
+
   if (host() && frame_token) {
     if (!using_viz_for_webview_) {
       // For viz it's reported through FrameSinkManager.
@@ -1352,10 +1343,14 @@ bool RenderWidgetHostViewAndroid::UpdateControls(
   top_changed |= !cc::MathUtil::IsFloatNearlyTheSame(
       top_min_height_offset_pix, prev_top_controls_min_height_offset_pix_);
 
+  top_changed |= !cc::MathUtil::IsFloatNearlyTheSame(top_controls_pix,
+                                                     prev_top_controls_pix_);
+
   if (top_changed || !controls_initialized_)
     view_.OnTopControlsChanged(top_translate, top_shown_pix,
                                top_min_height_offset_pix);
   prev_top_shown_pix_ = top_shown_pix;
+  prev_top_controls_pix_ = top_controls_pix;
   prev_top_controls_translate_ = top_translate;
   prev_top_controls_min_height_offset_pix_ = top_min_height_offset_pix;
 
@@ -1389,9 +1384,6 @@ void RenderWidgetHostViewAndroid::OnDidUpdateVisualPropertiesComplete(
     delegated_frame_host_->SetTopControlsVisibleHeight(
         metadata.top_controls_height * metadata.top_controls_shown_ratio);
   }
-  // We've just processed new RenderFrameMetadata and potentially embedded a
-  // new surface for that data. Check if we need to evict it.
-  EvictFrameIfNecessary();
 }
 
 void RenderWidgetHostViewAndroid::OnFinishGetContentBitmap(
@@ -1466,7 +1458,7 @@ void RenderWidgetHostViewAndroid::ShowInternal() {
     delegated_frame_host_->WasShown(
         local_surface_id_allocator_.GetCurrentLocalSurfaceIdAllocation()
             .local_surface_id(),
-        GetCompositorViewportPixelSize());
+        GetCompositorViewportPixelSize(), host()->delegate()->IsFullscreen());
   }
 
   if (view_.parent() && view_.GetWindowAndroid()) {
@@ -2025,14 +2017,6 @@ RenderWidgetHostViewAndroid::GetMouseWheelPhaseHandler() {
   return &mouse_wheel_phase_handler_;
 }
 
-void RenderWidgetHostViewAndroid::EvictDelegatedFrame() {
-  if (!delegated_frame_host_)
-    return;
-
-  delegated_frame_host_->EvictDelegatedFrame();
-  current_surface_size_.SetSize(0, 0);
-}
-
 TouchSelectionControllerClientManager*
 RenderWidgetHostViewAndroid::GetTouchSelectionControllerClientManager() {
   return touch_selection_controller_client_manager_.get();
@@ -2088,14 +2072,17 @@ bool RenderWidgetHostViewAndroid::RequiresDoubleTapGestureEvents() const {
   return true;
 }
 
-void RenderWidgetHostViewAndroid::OnPhysicalBackingSizeChanged() {
-  EvictFrameIfNecessary();
+void RenderWidgetHostViewAndroid::OnPhysicalBackingSizeChanged(
+    base::Optional<base::TimeDelta> deadline_override) {
   // We may need to update the background color to match pre-surface-sync
   // behavior of EvictFrameIfNecessary.
   UpdateWebViewBackgroundColorIfNecessary();
+  int64_t deadline_in_frames =
+      deadline_override ? ui::DelegatedFrameHostAndroid::TimeDeltaToFrames(
+                              deadline_override.value())
+                        : ui::DelegatedFrameHostAndroid::ResizeTimeoutFrames();
   SynchronizeVisualProperties(
-      cc::DeadlinePolicy::UseSpecifiedDeadline(
-          ui::DelegatedFrameHostAndroid::ResizeTimeoutFrames()),
+      cc::DeadlinePolicy::UseSpecifiedDeadline(deadline_in_frames),
       base::nullopt);
 }
 
@@ -2165,10 +2152,6 @@ void RenderWidgetHostViewAndroid::OnActivityStarted() {
   DCHECK(observing_root_window_);
   is_window_activity_started_ = true;
   ShowInternal();
-}
-
-void RenderWidgetHostViewAndroid::OnLostResources() {
-  EvictDelegatedFrame();
 }
 
 void RenderWidgetHostViewAndroid::SetTextHandlesHiddenForStylus(
@@ -2350,7 +2333,8 @@ RenderWidgetHostViewAndroid::DidUpdateVisualProperties(
   return viz::ScopedSurfaceIdAllocator(std::move(allocation_task));
 }
 
-void RenderWidgetHostViewAndroid::GetScreenInfo(ScreenInfo* screen_info) {
+void RenderWidgetHostViewAndroid::GetScreenInfo(
+    blink::ScreenInfo* screen_info) {
   bool use_window_wide_color_gamut =
       GetContentClient()->browser()->GetWideColorGamutHeuristic() ==
       ContentBrowserClient::WideColorGamutHeuristic::kUseWindow;

@@ -1,6 +1,7 @@
 This test (crudely) documents Blink's web-exposed CSS properties.  All changes to this list should go through Blink's feature review process: http://www.chromium.org/blink#new-features
 
 
+advanceOverride
 alignContent
 alignItems
 alignSelf
@@ -16,6 +17,7 @@ animationName
 animationPlayState
 animationTimingFunction
 appearance
+ascentOverride
 aspectRatio
 backdropFilter
 backfaceVisibility
@@ -133,6 +135,7 @@ cursor
 cx
 cy
 d
+descentOverride
 direction
 display
 dominantBaseline
@@ -213,6 +216,7 @@ length
 letterSpacing
 lightingColor
 lineBreak
+lineGapOverride
 lineHeight
 lineHeightStep
 listStyle

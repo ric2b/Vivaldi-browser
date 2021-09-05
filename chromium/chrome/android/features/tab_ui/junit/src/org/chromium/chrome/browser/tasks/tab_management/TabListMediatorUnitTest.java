@@ -21,6 +21,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.refEq;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
@@ -62,6 +63,7 @@ import androidx.recyclerview.widget.ItemTouchHelper;
 import androidx.recyclerview.widget.RecyclerView;
 
 import org.junit.After;
+import org.junit.Assume;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -86,6 +88,7 @@ import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
+import org.chromium.chrome.browser.tab.MockTab;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabCreationState;
 import org.chromium.chrome.browser.tab.TabImpl;
@@ -323,9 +326,13 @@ public class TabListMediatorUnitTest {
                 mTabContentManager::getTabThumbnailWithCallback, mTitleProvider,
                 mTabListFaviconProvider, false, null, mGridCardOnClickListenerProvider, null,
                 getClass().getSimpleName(), UiType.CLOSABLE);
-        mMediator.initWithNative(mProfile);
         mMediator.registerOrientationListener(mGridLayoutManager);
         TrackerFactory.setTrackerForTests(mTracker);
+
+        // TabModelObserver is registered when native is ready.
+        assertThat(mTabModelObserverCaptor.getAllValues().isEmpty(), equalTo(true));
+        mMediator.initWithNative(mProfile);
+        assertThat(mTabModelObserverCaptor.getAllValues().isEmpty(), equalTo(false));
     }
 
     @After
@@ -584,7 +591,6 @@ public class TabListMediatorUnitTest {
     public void tabAddition_RestoreNotComplete() {
         initAndAssertAllProperties();
         mMediator.setActionOnAllRelatedTabsForTesting(true);
-        assertThat(mTabModelFilter.isTabModelRestored(), equalTo(false));
 
         TabImpl newTab = prepareTab(TAB3_ID, TAB3_TITLE, TAB3_URL);
         doReturn(mTab1).when(mTabModelFilter).getTabAt(0);
@@ -607,7 +613,7 @@ public class TabListMediatorUnitTest {
         initAndAssertAllProperties();
         mMediator.setActionOnAllRelatedTabsForTesting(true);
         // Mock that tab restoring stage is over.
-        doReturn(true).when(mTabModelFilter).isTabModelRestored();
+        doReturn(true).when(mTabModelSelector).isTabStateInitialized();
         TabListMediator.TabActionListener actionListenerBeforeUpdate =
                 mModel.get(1).model.get(TabProperties.TAB_SELECTED_LISTENER);
 
@@ -637,7 +643,7 @@ public class TabListMediatorUnitTest {
     public void tabAddition_Restore_SyncingTabListModelWithTabModel() {
         setUpForTabGroupOperation(TabListMediatorType.TAB_SWITCHER);
         // Mock that tab restoring stage is over.
-        doReturn(true).when(mTabGroupModelFilter).isTabModelRestored();
+        doReturn(true).when(mTabModelSelector).isTabStateInitialized();
 
         // Mock that tab1 and tab2 are in the same group, and they are being restored. The
         // TabListModel has been cleaned out before the restoring happens. This case could happen
@@ -662,7 +668,7 @@ public class TabListMediatorUnitTest {
     public void tabAddition_GTS() {
         initAndAssertAllProperties();
         mMediator.setActionOnAllRelatedTabsForTesting(true);
-        doReturn(true).when(mTabModelFilter).isTabModelRestored();
+        doReturn(true).when(mTabModelSelector).isTabStateInitialized();
 
         TabImpl newTab = prepareTab(TAB3_ID, TAB3_TITLE, TAB3_URL);
         doReturn(mTab1).when(mTabModelFilter).getTabAt(0);
@@ -686,7 +692,7 @@ public class TabListMediatorUnitTest {
     public void tabAddition_GTS_Skip() {
         initAndAssertAllProperties();
         mMediator.setActionOnAllRelatedTabsForTesting(true);
-        doReturn(true).when(mTabModelFilter).isTabModelRestored();
+        doReturn(true).when(mTabModelSelector).isTabStateInitialized();
 
         // Add a new tab to the group with mTab2.
         TabImpl newTab = prepareTab(TAB3_ID, TAB3_TITLE, TAB3_URL);
@@ -708,7 +714,7 @@ public class TabListMediatorUnitTest {
     public void tabAddition_GTS_Middle() {
         initAndAssertAllProperties();
         mMediator.setActionOnAllRelatedTabsForTesting(true);
-        doReturn(true).when(mTabModelFilter).isTabModelRestored();
+        doReturn(true).when(mTabModelSelector).isTabStateInitialized();
 
         TabImpl newTab = prepareTab(TAB3_ID, TAB3_TITLE, TAB3_URL);
         doReturn(mTab1).when(mTabModelFilter).getTabAt(0);
@@ -731,7 +737,7 @@ public class TabListMediatorUnitTest {
     @Test
     public void tabAddition_Dialog_End() {
         initAndAssertAllProperties();
-        doReturn(true).when(mTabModelFilter).isTabModelRestored();
+        doReturn(true).when(mTabModelSelector).isTabStateInitialized();
 
         TabImpl newTab = prepareTab(TAB3_ID, TAB3_TITLE, TAB3_URL);
         doReturn(3).when(mTabModel).getCount();
@@ -751,7 +757,7 @@ public class TabListMediatorUnitTest {
     @Test
     public void tabAddition_Dialog_Middle() {
         initAndAssertAllProperties();
-        doReturn(true).when(mTabModelFilter).isTabModelRestored();
+        doReturn(true).when(mTabModelSelector).isTabStateInitialized();
 
         TabImpl newTab = prepareTab(TAB3_ID, TAB3_TITLE, TAB3_URL);
         doReturn(3).when(mTabModel).getCount();
@@ -771,7 +777,7 @@ public class TabListMediatorUnitTest {
     @Test
     public void tabAddition_Dialog_Skip() {
         initAndAssertAllProperties();
-        doReturn(true).when(mTabModelFilter).isTabModelRestored();
+        doReturn(true).when(mTabModelSelector).isTabStateInitialized();
 
         TabImpl newTab = prepareTab(TAB3_ID, TAB3_TITLE, TAB3_URL);
         // newTab is of another group.
@@ -788,7 +794,7 @@ public class TabListMediatorUnitTest {
     @Features.DisableFeatures({TAB_GROUPS_CONTINUATION_ANDROID})
     public void tabAddition_Redundant() {
         initAndAssertAllProperties();
-        doReturn(true).when(mTabModelFilter).isTabModelRestored();
+        doReturn(true).when(mTabModelSelector).isTabStateInitialized();
         assertThat(mModel.size(), equalTo(2));
         doReturn(Arrays.asList(mTab1, mTab2)).when(mTabModelFilter).getRelatedTabList(eq(TAB1_ID));
 
@@ -1297,8 +1303,10 @@ public class TabListMediatorUnitTest {
 
         long timestamp1 = 1;
         long timestamp2 = 2;
-        doReturn(timestamp1).when(mTab1).getTimestampMillis();
-        doReturn(timestamp2).when(mTab2).getTimestampMillis();
+        CriticalPersistedTabData criticalPersistedTabData1 = CriticalPersistedTabData.from(mTab1);
+        CriticalPersistedTabData criticalPersistedTabData2 = CriticalPersistedTabData.from(mTab2);
+        doReturn(timestamp1).when(criticalPersistedTabData1).getTimestampMillis();
+        doReturn(timestamp2).when(criticalPersistedTabData2).getTimestampMillis();
         mMediator.resetWithListOfTabs(
                 PseudoTab.getListOfPseudoTab(tabs), /*quickMode =*/false, /*mruMode =*/true);
 
@@ -1308,8 +1316,8 @@ public class TabListMediatorUnitTest {
         assertThat(mMediator.indexOfTab(TAB1_ID), equalTo(1));
         assertThat(mMediator.indexOfTab(TAB2_ID), equalTo(0));
 
-        doReturn(timestamp2).when(mTab1).getTimestampMillis();
-        doReturn(timestamp1).when(mTab2).getTimestampMillis();
+        doReturn(timestamp2).when(criticalPersistedTabData1).getTimestampMillis();
+        doReturn(timestamp1).when(criticalPersistedTabData2).getTimestampMillis();
         mMediator.resetWithListOfTabs(
                 PseudoTab.getListOfPseudoTab(tabs), /*quickMode =*/false, /*mruMode =*/true);
 
@@ -1390,6 +1398,8 @@ public class TabListMediatorUnitTest {
     @Features.EnableFeatures({TAB_GROUPS_CONTINUATION_ANDROID})
     public void updateTabGroupTitle_GTS() {
         setUpForTabGroupOperation(TabListMediatorType.TAB_SWITCHER);
+        setUpTabGroupCardDescriptionString();
+        String targetString = "Expand tab group with 2 tabs.";
         assertThat(mModel.get(POSITION1).model.get(TabProperties.TITLE), equalTo(TAB1_TITLE));
 
         // Mock that tab1 and newTab are in the same group and group root id is TAB1_ID.
@@ -1403,6 +1413,8 @@ public class TabListMediatorUnitTest {
 
         assertThat(mModel.get(POSITION1).model.get(TabProperties.TITLE),
                 equalTo(CUSTOMIZED_DIALOG_TITLE1));
+        assertThat(mModel.get(POSITION1).model.get(TabProperties.CONTENT_DESCRIPTION_STRING),
+                equalTo(targetString));
     }
 
     @Test
@@ -2182,6 +2194,132 @@ public class TabListMediatorUnitTest {
         // triggers.
         mModel.set(new ArrayList<>());
         mCallbackCaptor.getValue().onResult(mFaviconDrawable);
+    }
+
+    @Test(expected = AssertionError.class)
+    public void testGetDomainOnDestroyedTab() {
+        Tab tab = new MockTab(TAB1_ID, false);
+        tab.destroy();
+        TabListMediator.getDomain(tab);
+    }
+
+    @Test
+    @Features.EnableFeatures({TAB_GROUPS_CONTINUATION_ANDROID})
+    public void testTabDescriptionStringSetup() {
+        setUpForTabGroupOperation(TabListMediatorType.TAB_SWITCHER);
+        // Setup the string template.
+        setUpTabGroupCardDescriptionString();
+        String targetString = "Expand tab group with 2 tabs.";
+
+        // Setup a tab group with {tab2, tab3}.
+        List<Tab> tabs = new ArrayList<>();
+        for (int i = 0; i < mTabModel.getCount(); i++) {
+            tabs.add(mTabModel.getTabAt(i));
+        }
+        TabImpl tab3 = prepareTab(TAB3_ID, TAB3_TITLE, TAB3_URL);
+        List<Tab> group1 = new ArrayList<>(Arrays.asList(mTab2, tab3));
+        createTabGroup(group1, TAB2_ID);
+
+        // Reset with show quickly.
+        assertThat(mMediator.resetWithListOfTabs(PseudoTab.getListOfPseudoTab(tabs), false, false),
+                equalTo(true));
+        assertThat(mModel.get(POSITION2).model.get(TabProperties.CONTENT_DESCRIPTION_STRING),
+                equalTo(targetString));
+
+        // Reset without show quickly.
+        mModel.clear();
+        assertThat(mMediator.resetWithListOfTabs(PseudoTab.getListOfPseudoTab(tabs), false, false),
+                equalTo(false));
+        assertThat(mModel.get(POSITION2).model.get(TabProperties.CONTENT_DESCRIPTION_STRING),
+                equalTo(targetString));
+
+        // Set group name.
+        targetString = String.format("Expand %s tab group with 2 tabs.", CUSTOMIZED_DIALOG_TITLE1);
+        mMediator.getTabGroupTitleEditor().storeTabGroupTitle(TAB2_ID, CUSTOMIZED_DIALOG_TITLE1);
+        mMediator.getTabGroupTitleEditor().updateTabGroupTitle(mTab2, CUSTOMIZED_DIALOG_TITLE1);
+        assertThat(mModel.get(POSITION2).model.get(TabProperties.CONTENT_DESCRIPTION_STRING),
+                equalTo(targetString));
+    }
+
+    @Test
+    @Features.EnableFeatures({TAB_GROUPS_CONTINUATION_ANDROID})
+    public void testCloseButtonDescriptionStringSetup_TabSwitcher() {
+        Assume.assumeTrue("The close button changes are gated by a Chrome fast path fieldtrials"
+                        + "flag. Remove this assumption after the fast path flag is removed.",
+                TabUiFeatureUtilities.isLaunchPolishEnabled());
+        setUpForTabGroupOperation(TabListMediatorType.TAB_SWITCHER);
+        setUpCloseButtonDescriptionString(false);
+        String targetString = "Close Tab1 tab";
+
+        List<Tab> tabs = new ArrayList<>();
+        for (int i = 0; i < mTabModel.getCount(); i++) {
+            tabs.add(mTabModel.getTabAt(i));
+        }
+
+        mMediator.resetWithListOfTabs(PseudoTab.getListOfPseudoTab(tabs), false, false);
+        assertThat(mModel.get(POSITION1).model.get(TabProperties.CLOSE_BUTTON_DESCRIPTION_STRING),
+                equalTo(targetString));
+
+        // Create tab group.
+        TabImpl tab3 = prepareTab(TAB3_ID, TAB3_TITLE, TAB3_URL);
+        List<Tab> group1 = new ArrayList<>(Arrays.asList(mTab1, tab3));
+        createTabGroup(group1, TAB1_ID);
+        setUpCloseButtonDescriptionString(true);
+        targetString = "Close tab group with 2 tabs.";
+
+        mMediator.resetWithListOfTabs(PseudoTab.getListOfPseudoTab(tabs), false, false);
+        assertThat(mModel.get(POSITION1).model.get(TabProperties.CLOSE_BUTTON_DESCRIPTION_STRING),
+                equalTo(targetString));
+
+        // Set group name.
+        targetString = String.format("Close %s group with 2 tabs.", CUSTOMIZED_DIALOG_TITLE1);
+        mMediator.getTabGroupTitleEditor().storeTabGroupTitle(TAB1_ID, CUSTOMIZED_DIALOG_TITLE1);
+        mMediator.getTabGroupTitleEditor().updateTabGroupTitle(mTab1, CUSTOMIZED_DIALOG_TITLE1);
+        assertThat(mModel.get(POSITION1).model.get(TabProperties.CLOSE_BUTTON_DESCRIPTION_STRING),
+                equalTo(targetString));
+    }
+
+    private void setUpCloseButtonDescriptionString(boolean isGroup) {
+        if (isGroup) {
+            doAnswer(invocation -> {
+                String title = invocation.getArgument(1);
+                String num = invocation.getArgument(2);
+                return String.format("Close %s group with %s tabs.", title, num);
+            })
+                    .when(mContext)
+                    .getString(anyInt(), anyString(), anyString());
+
+            doAnswer(invocation -> {
+                String num = invocation.getArgument(1);
+                return String.format("Close tab group with %s tabs.", num);
+            })
+                    .when(mContext)
+                    .getString(anyInt(), anyString());
+        } else {
+            doAnswer(invocation -> {
+                String title = invocation.getArgument(1);
+                return String.format("Close %s, tab.", title);
+            })
+                    .when(mContext)
+                    .getString(anyInt(), anyString());
+        }
+    }
+
+    private void setUpTabGroupCardDescriptionString() {
+        doAnswer(invocation -> {
+            String title = invocation.getArgument(1);
+            String num = invocation.getArgument(2);
+            return String.format("Expand %s tab group with %s tabs.", title, num);
+        })
+                .when(mContext)
+                .getString(anyInt(), anyString(), anyString());
+
+        doAnswer(invocation -> {
+            String num = invocation.getArgument(1);
+            return String.format("Expand tab group with %s tabs.", num);
+        })
+                .when(mContext)
+                .getString(anyInt(), anyString());
     }
 
     private void initAndAssertAllProperties() {

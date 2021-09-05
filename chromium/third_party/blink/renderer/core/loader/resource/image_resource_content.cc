@@ -7,6 +7,8 @@
 #include <memory>
 
 #include "base/metrics/histogram_macros.h"
+#include "third_party/blink/public/common/feature_policy/policy_value.h"
+#include "third_party/blink/public/mojom/feature_policy/document_policy_feature.mojom-blink.h"
 #include "third_party/blink/public/mojom/feature_policy/feature_policy_feature.mojom-blink.h"
 #include "third_party/blink/public/mojom/feature_policy/policy_value.mojom-blink.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
@@ -31,8 +33,6 @@ namespace {
 class NullImageResourceInfo final
     : public GarbageCollected<NullImageResourceInfo>,
       public ImageResourceInfo {
-  USING_GARBAGE_COLLECTED_MIXIN(NullImageResourceInfo);
-
  public:
   NullImageResourceInfo() = default;
 
@@ -491,11 +491,11 @@ bool ImageResourceContent::IsAcceptableCompressionRatio(
   if (compression_format == ImageDecoder::kLosslessFormat) {
     // Enforce the lossless image policy.
     bool enabled_by_10k_policy = context.IsFeatureEnabled(
-        mojom::blink::DocumentPolicyFeature::kUnoptimizedLosslessImages,
+        mojom::blink::DocumentPolicyFeature::kLosslessImagesMaxBpp,
         PolicyValue(compression_ratio_10k), ReportOptions::kReportOnFailure,
         g_empty_string, image_url);
     bool enabled_by_1k_policy = context.IsFeatureEnabled(
-        mojom::blink::DocumentPolicyFeature::kUnoptimizedLosslessImagesStrict,
+        mojom::blink::DocumentPolicyFeature::kLosslessImagesStrictMaxBpp,
         PolicyValue(compression_ratio_1k), ReportOptions::kReportOnFailure,
         g_empty_string, image_url);
     return enabled_by_10k_policy && enabled_by_1k_policy;

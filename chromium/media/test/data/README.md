@@ -281,6 +281,9 @@ is converted from four-colors.mp4 by adding an opacity of 0.5 using ffmpeg.
 VP9 encoded video with profile 2 (10-bit, 4:2:0).
 Codec string: vp09.02.10.10.01.02.02.02.00.
 
+#### vp9-hdr-init-segment.mp4
+Init segment for a VP9.2 HDR in MP4 file; from https://crbug.com/1102200#c6
+
 ### AAC test data from MPEG-DASH demoplayer (44100 Hz, stereo)
 Duration of each packet is (1024/44100 Hz), approximately 23.22 ms.
 
@@ -679,6 +682,13 @@ configured with the option --enable-vp9-highbitdepth).
 JSON file that contains all metadata related to test-25fps.vp9_2, used by the
 video_decode_accelerator_tests. This includes the video codec, resolution and
 md5 checksums of individual video frames when converted to the I420 format.
+
+
+### VP9 video with raw vp9 frames
+
+#### buck-1280x720-vp9.webm
+1280x720 version of Big Buck Bunny https://peach.blender.org/ muxed with raw
+vp9 frames (versus superframes).
 
 
 ### VP9 video with show_existing_frame flag

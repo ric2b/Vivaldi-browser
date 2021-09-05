@@ -6,9 +6,13 @@
 
 #import "base/mac/foundation_util.h"
 #include "components/strings/grit/components_strings.h"
+#import "ios/chrome/browser/ui/settings/cells/settings_check_cell.h"
+#import "ios/chrome/browser/ui/settings/safety_check/safety_check_navigation_commands.h"
+#import "ios/chrome/browser/ui/settings/safety_check/safety_check_service_delegate.h"
 #import "ios/chrome/browser/ui/settings/settings_navigation_controller.h"
-#import "ios/chrome/browser/ui/table_view/cells/table_view_detail_icon_item.h"
+#import "ios/chrome/browser/ui/table_view/cells/table_view_link_header_footer_item.h"
 #include "ios/chrome/browser/ui/ui_feature_flags.h"
+#include "ios/chrome/grit/ios_chromium_strings.h"
 #include "ios/chrome/grit/ios_strings.h"
 #include "ui/base/l10n/l10n_util_mac.h"
 
@@ -22,27 +26,49 @@ namespace {
 
 typedef NS_ENUM(NSInteger, SectionIdentifier) {
   SectionIdentifierCheckTypes = kSectionIdentifierEnumZero,
-};
-
-typedef NS_ENUM(NSInteger, ItemType) {
-  ItemTypeUpdates = kItemTypeEnumZero,
-  ItemTypePasswords,
-  ItemTypeSafeBrowsing,
+  SectionIdentifierCheckStart,
 };
 
 }  // namespace
 
-@implementation SafetyCheckTableViewController
+@interface SafetyCheckTableViewController ()
 
-#pragma mark - UIViewController
+// Current state of array of items that form the safety check.
+@property(nonatomic, strong) NSArray<TableViewItem*>* checkTypesItems;
+
+// Header for the safety check page.
+@property(nonatomic, strong)
+    TableViewLinkHeaderFooterItem* safetyCheckHeaderItem;
+
+// Current display state of the check start item.
+@property(nonatomic, strong) TableViewItem* checkStartItem;
+
+@end
+
+@implementation SafetyCheckTableViewController
 
 - (void)viewDidLoad {
   [super viewDidLoad];
   self.tableView.accessibilityIdentifier = kSafetyCheckTableViewId;
   self.title =
       l10n_util::GetNSString(IDS_OPTIONS_ADVANCED_SECTION_TITLE_SAFETY_CHECK);
+}
 
-  [self loadModel];
+#pragma mark - SafetyCheckConsumer
+
+- (void)setCheckItems:(NSArray<TableViewItem*>*)items {
+  _checkTypesItems = items;
+  [self reloadData];
+}
+
+- (void)setSafetyCheckHeaderItem:(TableViewLinkHeaderFooterItem*)item {
+  _safetyCheckHeaderItem = item;
+  [self reloadData];
+}
+
+- (void)setCheckStartItem:(TableViewItem*)item {
+  _checkStartItem = item;
+  [self reloadData];
 }
 
 #pragma mark - ChromeTableViewController
@@ -50,67 +76,69 @@ typedef NS_ENUM(NSInteger, ItemType) {
 - (void)loadModel {
   [super loadModel];
 
-  TableViewModel* model = self.tableViewModel;
+  if (self.checkTypesItems.count) {
+    [self.tableViewModel addSectionWithIdentifier:SectionIdentifierCheckTypes];
+    for (TableViewItem* item in self.checkTypesItems) {
+      [self.tableViewModel addItem:item
+           toSectionWithIdentifier:SectionIdentifierCheckTypes];
+    }
+    if (self.safetyCheckHeaderItem) {
+      [self.tableViewModel setHeader:self.safetyCheckHeaderItem
+            forSectionWithIdentifier:SectionIdentifierCheckTypes];
+    }
+  }
 
-  // Checks performed section.
-  [model addSectionWithIdentifier:SectionIdentifierCheckTypes];
-  [model addItem:[self updatesItem]
-      toSectionWithIdentifier:SectionIdentifierCheckTypes];
-  [model addItem:[self passwordsItem]
-      toSectionWithIdentifier:SectionIdentifierCheckTypes];
-  [model addItem:[self safeBrowsingItem]
-      toSectionWithIdentifier:SectionIdentifierCheckTypes];
+  if (self.checkStartItem) {
+    [self.tableViewModel addSectionWithIdentifier:SectionIdentifierCheckStart];
+    [self.tableViewModel addItem:self.checkStartItem
+         toSectionWithIdentifier:SectionIdentifierCheckStart];
+  }
 }
 
-#pragma mark - Model Objects
+#pragma mark - UIViewController
 
-- (TableViewItem*)updatesItem {
-  return [self iconItemWithType:ItemTypeUpdates
-                        titleID:IDS_IOS_SETTINGS_SAFETY_CHECK_UPDATES_TITLE
-                  iconImageName:nil];
-}
-
-- (TableViewItem*)passwordsItem {
-  return [self iconItemWithType:ItemTypePasswords
-                        titleID:IDS_IOS_SETTINGS_SAFETY_CHECK_PASSWORDS_TITLE
-                  iconImageName:nil];
-}
-
-- (TableViewItem*)safeBrowsingItem {
-  return
-      [self iconItemWithType:ItemTypeSafeBrowsing
-                     titleID:IDS_IOS_SETTINGS_SAFETY_CHECK_SAFE_BROWSING_TITLE
-               iconImageName:nil];
-}
-
-#pragma mark - Item Constructor
-
-// TODO(crbug.com/1078782): Change to custom item to handle safety check
-// behavior.
-// Construct a safety check item row with icon and title.
-- (TableViewDetailIconItem*)iconItemWithType:(NSInteger)type
-                                     titleID:(NSInteger)titleID
-                               iconImageName:(NSString*)iconImageName {
-  TableViewDetailIconItem* iconItem =
-      [[TableViewDetailIconItem alloc] initWithType:type];
-  iconItem.text = l10n_util::GetNSString(titleID);
-  iconItem.iconImageName = iconImageName;
-
-  return iconItem;
+- (void)didMoveToParentViewController:(UIViewController*)parent {
+  [super didMoveToParentViewController:parent];
+  if (!parent) {
+    [self.presentationDelegate safetyCheckTableViewControllerDidRemove:self];
+  }
 }
 
 #pragma mark - UITableViewDelegate
 
-// TODO(crbug.com/1078782): Add cases for updates, passwords, and safe browsing.
 - (void)tableView:(UITableView*)tableView
     didSelectRowAtIndexPath:(NSIndexPath*)indexPath {
   [super tableView:tableView didSelectRowAtIndexPath:indexPath];
-  NSInteger itemType = [self.tableViewModel itemTypeForIndexPath:indexPath];
-  switch (itemType) {
-    case ItemTypeUpdates:
-      break;
-  }
+  TableViewItem* item = [self.tableViewModel itemAtIndexPath:indexPath];
+  [self.serviceDelegate didSelectItem:item];
   [tableView deselectRowAtIndexPath:indexPath animated:YES];
+}
+
+#pragma mark - UITableViewDataSource
+
+- (UITableViewCell*)tableView:(UITableView*)tableView
+        cellForRowAtIndexPath:(NSIndexPath*)indexPath {
+  UITableViewCell* cell = [super tableView:tableView
+                     cellForRowAtIndexPath:indexPath];
+  TableViewItem* item = [self.tableViewModel itemAtIndexPath:indexPath];
+  if ([self.serviceDelegate isItemWithErrorInfo:item]) {
+    SettingsCheckCell* settingsCheckCell =
+        base::mac::ObjCCastStrict<SettingsCheckCell>(cell);
+    settingsCheckCell.infoButton.tag = item.type;
+    [settingsCheckCell.infoButton addTarget:self
+                                     action:@selector(didTapErrorInfoButton:)
+                           forControlEvents:UIControlEventTouchUpInside];
+  }
+  return cell;
+}
+
+#pragma mark - Private
+
+// Called when user tapped on the information button of an
+// item. Shows popover with detailed description of an error if needed.
+- (void)didTapErrorInfoButton:(UIButton*)buttonView {
+  [self.serviceDelegate infoButtonWasTapped:buttonView
+                              usingItemType:buttonView.tag];
 }
 
 @end

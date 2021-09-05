@@ -105,9 +105,10 @@ MarketingOptInScreen* MarketingOptInScreen::Get(ScreenManager* manager) {
       manager->GetScreen(MarketingOptInScreenView::kScreenId));
 }
 
-bool MarketingOptInScreen::MaybeSkip() {
+bool MarketingOptInScreen::MaybeSkip(WizardContext* context) {
   if (!base::FeatureList::IsEnabled(features::kOobeMarketingScreen) ||
-      chrome_user_manager_util::IsPublicSessionOrEphemeralLogin()) {
+      chrome_user_manager_util::IsPublicSessionOrEphemeralLogin() ||
+      IsCurrentUserManaged() /*skip for enterprise and supervised users*/) {
     exit_callback_.Run(Result::NOT_APPLICABLE);
     return true;
   }

@@ -181,7 +181,7 @@ int32_t PPB_Graphics3D_Impl::DoSwapBuffers(const gpu::SyncToken& sync_token,
     bool is_overlay_candidate = use_image_chromium_;
     // TODO(reveman): Get texture target from browser process.
     uint32_t target = GL_TEXTURE_2D;
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
     if (use_image_chromium_)
       target = GL_TEXTURE_RECTANGLE_ARB;
 #endif
@@ -238,10 +238,10 @@ bool PPB_Graphics3D_Impl::InitRaw(
       render_thread->EstablishGpuChannelSync();
   if (!channel)
     return false;
-  // 3D access might be blacklisted.
+  // 3D access might be blocklisted.
   if (channel->gpu_feature_info()
           .status_values[gpu::GPU_FEATURE_TYPE_ACCELERATED_WEBGL] ==
-      gpu::kGpuFeatureStatusBlacklisted) {
+      gpu::kGpuFeatureStatusBlocklisted) {
     return false;
   }
 

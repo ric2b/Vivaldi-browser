@@ -31,7 +31,7 @@ class Origin;
 class PasswordsClientUIDelegate {
  public:
   // Called when the user submits a form containing login information, so the
-  // later requests to save or blacklist can be handled.
+  // later requests to save or blocklist can be handled.
   // This stores the provided object and triggers the UI to prompt the user
   // about whether they would like to save the password.
   virtual void OnPasswordSubmitted(
@@ -66,7 +66,7 @@ class PasswordsClientUIDelegate {
   virtual bool OnChooseCredentials(
       std::vector<std::unique_ptr<autofill::PasswordForm>> local_credentials,
       const url::Origin& origin,
-      const base::Callback<void(const autofill::PasswordForm*)>& callback) = 0;
+      base::OnceCallback<void(const autofill::PasswordForm*)> callback) = 0;
 
   // Called when user is auto signed in to the site. |local_forms[0]| contains
   // the credential returned to the site. |origin| is a URL of the site.

@@ -13,23 +13,16 @@ namespace extensions {
 
 using ContextType = ExtensionApiTest::ContextType;
 
-// TODO(crbug.com/1093066): This test uses the DOM to set and
-// check cookies for one test. Figure out how to isolate that
-// test and adapt the rest of it for a SW-based extension.
-IN_PROC_BROWSER_TEST_F(ExtensionApiTest, Cookies) {
-  ASSERT_TRUE(RunExtensionTestWithArg(
-      "cookies/api",
-      net::cookie_util::IsCookiesWithoutSameSiteMustBeSecureEnabled()
-          ? "true"
-          : "false"))
-      << message_;
+// This test cannot be run by a Service Worked-based extension
+// because it uses the Document object.
+IN_PROC_BROWSER_TEST_F(ExtensionApiTest, ReadFromDocument) {
+  ASSERT_TRUE(RunExtensionTest("cookies/read_from_doc")) << message_;
 }
 
 class CookiesApiTest : public ExtensionApiTest,
                        public testing::WithParamInterface<ContextType> {
  public:
-  void SetUp() override {
-    ExtensionApiTest::SetUp();
+  CookiesApiTest() {
     // Service Workers are currently only available on certain channels, so set
     // the channel for those tests.
     if (GetParam() == ContextType::kServiceWorker)
@@ -43,6 +36,16 @@ class CookiesApiTest : public ExtensionApiTest,
 
   bool RunTestIncognito(const std::string& extension_name) {
     return RunTestWithFlags(extension_name, kFlagEnableIncognito);
+  }
+
+  bool RunTestWithArg(const std::string& extension_name,
+                      const char* custom_arg) {
+    int browser_test_flags = kFlagNone;
+    if (GetParam() == ContextType::kServiceWorker)
+      browser_test_flags |= kFlagRunAsServiceWorkerBasedExtension;
+
+    return RunExtensionTestWithFlagsAndArg(extension_name, custom_arg,
+                                           browser_test_flags, kFlagNone);
   }
 
   bool RunTestWithFlags(const std::string& extension_name,
@@ -63,6 +66,15 @@ INSTANTIATE_TEST_SUITE_P(EventPage,
 INSTANTIATE_TEST_SUITE_P(ServiceWorker,
                          CookiesApiTest,
                          ::testing::Values(ContextType::kServiceWorker));
+
+IN_PROC_BROWSER_TEST_P(CookiesApiTest, Cookies) {
+  ASSERT_TRUE(RunTestWithArg(
+      "cookies/api",
+      net::cookie_util::IsCookiesWithoutSameSiteMustBeSecureEnabled()
+          ? "true"
+          : "false"))
+      << message_;
+}
 
 IN_PROC_BROWSER_TEST_P(CookiesApiTest, CookiesEvents) {
   ASSERT_TRUE(RunTest("cookies/events")) << message_;

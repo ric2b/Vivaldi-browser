@@ -120,9 +120,9 @@ bool IsDownloadAllowedBySafeBrowsing(
   return false;
 }
 
-void InterpretSafeBrowsingVerdict(const base::Callback<void(bool)>& recipient,
+void InterpretSafeBrowsingVerdict(base::OnceCallback<void(bool)> recipient,
                                   safe_browsing::DownloadCheckResult result) {
-  recipient.Run(IsDownloadAllowedBySafeBrowsing(result));
+  std::move(recipient).Run(IsDownloadAllowedBySafeBrowsing(result));
 }
 
 #endif
@@ -184,14 +184,14 @@ void FileSelectHelper::FileSelectedWithExtraInfo(
   std::vector<ui::SelectedFileInfo> files;
   files.push_back(file);
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   base::ThreadPool::PostTask(
       FROM_HERE,
       {base::MayBlock(), base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
       base::BindOnce(&FileSelectHelper::ProcessSelectedFilesMac, this, files));
 #else
   ConvertToFileChooserFileInfoList(files);
-#endif  // defined(OS_MACOSX)
+#endif  // defined(OS_MAC)
 }
 
 void FileSelectHelper::MultiFilesSelected(
@@ -212,14 +212,14 @@ void FileSelectHelper::MultiFilesSelectedWithExtraInfo(
       path = path.DirName();
     profile_->set_last_selected_directory(path);
   }
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   base::ThreadPool::PostTask(
       FROM_HERE,
       {base::MayBlock(), base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
       base::BindOnce(&FileSelectHelper::ProcessSelectedFilesMac, this, files));
 #else
   ConvertToFileChooserFileInfoList(files);
-#endif  // defined(OS_MACOSX)
+#endif  // defined(OS_MAC)
 }
 
 void FileSelectHelper::FileSelectionCanceled(void* params) {
@@ -417,7 +417,7 @@ bool FileSelectHelper::AbortIfWebContentsDestroyed() {
 }
 
 void FileSelectHelper::SetFileSelectListenerForTesting(
-    std::unique_ptr<content::FileSelectListener> listener) {
+    scoped_refptr<content::FileSelectListener> listener) {
   DCHECK(listener);
   DCHECK(!listener_);
   listener_ = std::move(listener);
@@ -498,7 +498,7 @@ FileSelectHelper::GetFileTypesFromAcceptType(
 // static
 void FileSelectHelper::RunFileChooser(
     content::RenderFrameHost* render_frame_host,
-    std::unique_ptr<content::FileSelectListener> listener,
+    scoped_refptr<content::FileSelectListener> listener,
     const FileChooserParams& params) {
   Profile* profile = Profile::FromBrowserContext(
       render_frame_host->GetProcess()->GetBrowserContext());
@@ -526,7 +526,7 @@ void FileSelectHelper::RunFileChooser(
 // static
 void FileSelectHelper::EnumerateDirectory(
     content::WebContents* tab,
-    std::unique_ptr<content::FileSelectListener> listener,
+    scoped_refptr<content::FileSelectListener> listener,
     const base::FilePath& path) {
   Profile* profile = Profile::FromBrowserContext(tab->GetBrowserContext());
   // FileSelectHelper will keep itself alive until it sends the result
@@ -538,7 +538,7 @@ void FileSelectHelper::EnumerateDirectory(
 
 void FileSelectHelper::RunFileChooser(
     content::RenderFrameHost* render_frame_host,
-    std::unique_ptr<content::FileSelectListener> listener,
+    scoped_refptr<content::FileSelectListener> listener,
     FileChooserParamsPtr params) {
   DCHECK(!render_frame_host_);
   DCHECK(!web_contents_);
@@ -634,8 +634,8 @@ void FileSelectHelper::CheckDownloadRequestWithSafeBrowsing(
       alternate_extensions, profile_,
       base::BindOnce(
           &InterpretSafeBrowsingVerdict,
-          base::Bind(&FileSelectHelper::ProceedWithSafeBrowsingVerdict, this,
-                     default_file_path, base::Passed(&params))));
+          base::BindOnce(&FileSelectHelper::ProceedWithSafeBrowsingVerdict,
+                         this, default_file_path, base::Passed(&params))));
 #endif
 }
 
@@ -727,7 +727,7 @@ void FileSelectHelper::RunFileChooserEnd() {
 
 void FileSelectHelper::EnumerateDirectoryImpl(
     content::WebContents* tab,
-    std::unique_ptr<content::FileSelectListener> listener,
+    scoped_refptr<content::FileSelectListener> listener,
     const base::FilePath& path) {
   DCHECK(listener);
   DCHECK(!listener_);

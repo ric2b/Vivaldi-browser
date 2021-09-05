@@ -2,29 +2,46 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//chromeos/components/web_applications/system_apps.gni")
 import("//third_party/closure_compiler/compile_js.gni")
 
 assert(is_chromeos, "Telemetry Extension is Chrome OS only")
 assert(!is_official_build,
        "Telemetry Extension is only built for unofficial builds")
 
-js_type_check("closure_compile") {
+group("closure_compile") {
   deps = [
-    ":trusted",
-    ":untrusted",
-    ":untrusted_worker",
+    ":trusted_closure_compile",
+    ":untrusted_closure_compile",
   ]
+}
+
+js_type_check("trusted_closure_compile") {
+  closure_flags = system_app_closure_flags_strict
+  deps = [ ":trusted" ]
+}
+
+js_type_check("untrusted_closure_compile") {
+  closure_flags = system_app_closure_flags_strict
+  deps = [ ":untrusted" ]
 }
 
 js_library("trusted") {
   sources = [ "trusted.js" ]
-  deps = [ "../mojom:mojom_js_library_for_compile" ]
+  deps = [
+    ":message_types",
+    "../mojom:mojom_js_library_for_compile",
+    "//chromeos/components/system_apps/public/js:message_pipe",
+  ]
 }
 
 js_library("untrusted") {
   sources = [ "untrusted.js" ]
+  deps = [
+    ":message_types",
+    "//chromeos/components/system_apps/public/js:message_pipe",
+  ]
 }
 
-js_library("untrusted_worker") {
-  sources = [ "untrusted_worker.js" ]
+js_library("message_types") {
 }

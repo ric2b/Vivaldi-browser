@@ -38,7 +38,7 @@ class CONTENT_EXPORT GpuDataManagerImplPrivate {
   explicit GpuDataManagerImplPrivate(GpuDataManagerImpl* owner);
   virtual ~GpuDataManagerImplPrivate();
 
-  void BlacklistWebGLForTesting();
+  void BlocklistWebGLForTesting();
   gpu::GPUInfo GetGPUInfo() const;
   gpu::GPUInfo GetGPUInfoForHardwareGpu() const;
   bool GpuAccessAllowed(std::string* reason) const;
@@ -107,8 +107,6 @@ class CONTENT_EXPORT GpuDataManagerImplPrivate {
 
   void BlockDomainFrom3DAPIs(const GURL& url, gpu::DomainGuilt guilt);
   bool Are3DAPIsBlocked(const GURL& top_origin_url,
-                        int render_process_id,
-                        int render_frame_id,
                         ThreeDAPIType requester);
 
   void DisableDomainBlockingFor3DAPIsForTesting();
@@ -148,7 +146,7 @@ class CONTENT_EXPORT GpuDataManagerImplPrivate {
 
   // Indicates the reason that access to a given client API (like
   // WebGL or Pepper 3D) was blocked or not. This state is distinct
-  // from blacklisting of an entire feature.
+  // from blocklisting of an entire feature.
   enum class DomainBlockStatus {
     kBlocked,
     kAllDomainsBlocked,

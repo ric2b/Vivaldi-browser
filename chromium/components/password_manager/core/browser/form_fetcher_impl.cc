@@ -222,7 +222,7 @@ void FormFetcherImpl::SplitResults(
   non_federated_.clear();
   federated_.clear();
   for (auto& form : forms) {
-    if (form->blacklisted_by_user) {
+    if (form->blocked_by_user) {
       // Ignore PSL matches for blacklisted entries.
       if (!form->is_public_suffix_match) {
         is_blacklisted_ = true;
@@ -258,7 +258,8 @@ void FormFetcherImpl::OnGetPasswordStoreResults(
   if (should_migrate_http_passwords_ && results.empty() &&
       form_digest_.url.SchemeIs(url::kHttpsScheme)) {
     http_migrator_ = std::make_unique<HttpPasswordStoreMigrator>(
-        url::Origin::Create(form_digest_.url), client_, this);
+        url::Origin::Create(form_digest_.url),
+        client_->GetProfilePasswordStore(), client_->GetNetworkContext(), this);
     return;
   }
 

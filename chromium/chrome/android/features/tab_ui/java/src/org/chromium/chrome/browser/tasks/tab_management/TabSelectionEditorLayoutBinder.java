@@ -62,6 +62,13 @@ public class TabSelectionEditorLayoutBinder {
                 == propertyKey) {
             view.registerGlobalLayoutListener(model.get(
                     TabSelectionEditorProperties.SELECTION_EDITOR_GLOBAL_LAYOUT_LISTENER));
+        } else if (TabSelectionEditorProperties.TOOLBAR_ACTION_BUTTON_DESCRIPTION_RESOURCE_ID
+                == propertyKey) {
+            view.getToolbar().setActionButtonDescriptionResourceId(model.get(
+                    TabSelectionEditorProperties.TOOLBAR_ACTION_BUTTON_DESCRIPTION_RESOURCE_ID));
+        } else if (TabUiFeatureUtilities.isLaunchPolishEnabled()
+                && TabSelectionEditorProperties.DISMISS_HANDLER == propertyKey) {
+            view.setEditorHideController(model.get(TabSelectionEditorProperties.DISMISS_HANDLER));
         }
     }
 }

@@ -691,17 +691,15 @@ TEST_P(DeepScanningReportingTest, ProcessesResponseCorrectly) {
       malware_result->set_status(
           enterprise_connectors::ContentAnalysisResponse::Result::SUCCESS);
       auto* malware_rule = malware_result->add_triggered_rules();
-      malware_rule->set_action(enterprise_connectors::ContentAnalysisResponse::
-                                   Result::TriggeredRule::BLOCK);
-      malware_rule->set_rule_name("MALWARE");
+      malware_rule->set_action(enterprise_connectors::TriggeredRule::BLOCK);
+      malware_rule->set_rule_name("malware");
 
       auto* dlp_result = response.add_results();
       dlp_result->set_tag("dlp");
       dlp_result->set_status(
           enterprise_connectors::ContentAnalysisResponse::Result::SUCCESS);
       auto* dlp_rule = dlp_result->add_triggered_rules();
-      dlp_rule->set_action(enterprise_connectors::ContentAnalysisResponse::
-                               Result::TriggeredRule::BLOCK);
+      dlp_rule->set_action(enterprise_connectors::TriggeredRule::BLOCK);
       dlp_rule->set_rule_name("dlp_rule");
       dlp_rule->set_rule_id("0");
 
@@ -723,7 +721,8 @@ TEST_P(DeepScanningReportingTest, ProcessesResponseCorrectly) {
         extensions::SafeBrowsingPrivateEventRouter::kTriggerFileDownload,
         /*dlp_verdict*/ dlp_verdict,
         /*mimetypes*/ ExeMimeTypes(),
-        /*size*/ std::string("download contents").size());
+        /*size*/ std::string("download contents").size(),
+        /*result*/ EventResultToString(EventResult::WARNED));
 
     request.Start();
 
@@ -745,7 +744,7 @@ TEST_P(DeepScanningReportingTest, ProcessesResponseCorrectly) {
       response.mutable_dlp_scan_verdict()->set_status(
           DlpDeepScanningVerdict::SUCCESS);
       response.mutable_dlp_scan_verdict()->add_triggered_rules()->set_action(
-          DlpDeepScanningVerdict::TriggeredRule::BLOCK);
+          DlpDeepScanningVerdict::TriggeredRule::WARN);
       download_protection_service_.GetFakeBinaryUploadService()->SetResponse(
           BinaryUploadService::Result::SUCCESS, response);
       dlp_verdict = SensitiveDataVerdictToResult(response.dlp_scan_verdict());
@@ -757,18 +756,15 @@ TEST_P(DeepScanningReportingTest, ProcessesResponseCorrectly) {
       malware_result->set_status(
           enterprise_connectors::ContentAnalysisResponse::Result::SUCCESS);
       auto* malware_rule = malware_result->add_triggered_rules();
-      malware_rule->set_action(enterprise_connectors::ContentAnalysisResponse::
-                                   Result::TriggeredRule::WARN);
-      malware_rule->set_rule_name("UWS");
+      malware_rule->set_action(enterprise_connectors::TriggeredRule::WARN);
+      malware_rule->set_rule_name("uws");
 
       auto* dlp_result = response.add_results();
       dlp_result->set_tag("dlp");
       dlp_result->set_status(
           enterprise_connectors::ContentAnalysisResponse::Result::SUCCESS);
       auto* dlp_rule = dlp_result->add_triggered_rules();
-      dlp_rule->set_action(enterprise_connectors::ContentAnalysisResponse::
-                               Result::TriggeredRule::BLOCK);
-      dlp_rule->set_rule_name("dlp_rule");
+      dlp_rule->set_action(enterprise_connectors::TriggeredRule::WARN);
       dlp_rule->set_rule_name("dlp_rule");
       dlp_rule->set_rule_id("0");
 
@@ -790,7 +786,8 @@ TEST_P(DeepScanningReportingTest, ProcessesResponseCorrectly) {
         extensions::SafeBrowsingPrivateEventRouter::kTriggerFileDownload,
         /*dlp_verdict*/ dlp_verdict,
         /*mimetypes*/ ExeMimeTypes(),
-        /*size*/ std::string("download contents").size());
+        /*size*/ std::string("download contents").size(),
+        /*result*/ EventResultToString(EventResult::WARNED));
 
     request.Start();
 
@@ -822,8 +819,7 @@ TEST_P(DeepScanningReportingTest, ProcessesResponseCorrectly) {
       dlp_result->set_status(
           enterprise_connectors::ContentAnalysisResponse::Result::SUCCESS);
       auto* dlp_rule = dlp_result->add_triggered_rules();
-      dlp_rule->set_action(enterprise_connectors::ContentAnalysisResponse::
-                               Result::TriggeredRule::BLOCK);
+      dlp_rule->set_action(enterprise_connectors::TriggeredRule::BLOCK);
       dlp_rule->set_rule_name("dlp_rule");
       dlp_rule->set_rule_id("0");
 
@@ -843,7 +839,8 @@ TEST_P(DeepScanningReportingTest, ProcessesResponseCorrectly) {
         extensions::SafeBrowsingPrivateEventRouter::kTriggerFileDownload,
         /*dlp_verdict*/ dlp_verdict,
         /*mimetypes*/ ExeMimeTypes(),
-        /*size*/ std::string("download contents").size());
+        /*size*/ std::string("download contents").size(),
+        EventResultToString(EventResult::BLOCKED));
 
     request.Start();
 
@@ -875,8 +872,7 @@ TEST_P(DeepScanningReportingTest, ProcessesResponseCorrectly) {
       dlp_result->set_status(
           enterprise_connectors::ContentAnalysisResponse::Result::SUCCESS);
       auto* dlp_rule = dlp_result->add_triggered_rules();
-      dlp_rule->set_action(enterprise_connectors::ContentAnalysisResponse::
-                               Result::TriggeredRule::WARN);
+      dlp_rule->set_action(enterprise_connectors::TriggeredRule::WARN);
       dlp_rule->set_rule_name("dlp_rule");
       dlp_rule->set_rule_id("0");
 
@@ -896,7 +892,8 @@ TEST_P(DeepScanningReportingTest, ProcessesResponseCorrectly) {
         extensions::SafeBrowsingPrivateEventRouter::kTriggerFileDownload,
         /*dlp_verdict*/ dlp_verdict,
         /*mimetypes*/ ExeMimeTypes(),
-        /*size*/ std::string("download contents").size());
+        /*size*/ std::string("download contents").size(),
+        EventResultToString(EventResult::WARNED));
 
     request.Start();
 
@@ -930,13 +927,11 @@ TEST_P(DeepScanningReportingTest, ProcessesResponseCorrectly) {
       dlp_result->set_status(
           enterprise_connectors::ContentAnalysisResponse::Result::SUCCESS);
       auto* dlp_rule1 = dlp_result->add_triggered_rules();
-      dlp_rule1->set_action(enterprise_connectors::ContentAnalysisResponse::
-                                Result::TriggeredRule::WARN);
+      dlp_rule1->set_action(enterprise_connectors::TriggeredRule::WARN);
       dlp_rule1->set_rule_name("dlp_rule1");
       dlp_rule1->set_rule_id("0");
       auto* dlp_rule2 = dlp_result->add_triggered_rules();
-      dlp_rule2->set_action(enterprise_connectors::ContentAnalysisResponse::
-                                Result::TriggeredRule::BLOCK);
+      dlp_rule2->set_action(enterprise_connectors::TriggeredRule::BLOCK);
       dlp_rule2->set_rule_name("dlp_rule2");
       dlp_rule2->set_rule_id("0");
 
@@ -956,7 +951,8 @@ TEST_P(DeepScanningReportingTest, ProcessesResponseCorrectly) {
         extensions::SafeBrowsingPrivateEventRouter::kTriggerFileDownload,
         /*dlp_verdict*/ dlp_verdict,
         /*mimetypes*/ ExeMimeTypes(),
-        /*size*/ std::string("download contents").size());
+        /*size*/ std::string("download contents").size(),
+        EventResultToString(EventResult::BLOCKED));
 
     request.Start();
 
@@ -1001,7 +997,9 @@ TEST_P(DeepScanningReportingTest, ProcessesResponseCorrectly) {
         /*reason*/
         use_legacy_policies() ? "DLP_SCAN_FAILED" : "ANALYSIS_CONNECTOR_FAILED",
         /*mimetypes*/ ExeMimeTypes(),
-        /*size*/ std::string("download contents").size());
+        /*size*/ std::string("download contents").size(),
+        /*result*/
+        EventResultToString(EventResult::ALLOWED));
 
     request.Start();
 
@@ -1046,7 +1044,9 @@ TEST_P(DeepScanningReportingTest, ProcessesResponseCorrectly) {
         use_legacy_policies() ? "MALWARE_SCAN_FAILED"
                               : "ANALYSIS_CONNECTOR_FAILED",
         /*mimetypes*/ ExeMimeTypes(),
-        /*size*/ std::string("download contents").size());
+        /*size*/ std::string("download contents").size(),
+        /*result*/
+        EventResultToString(EventResult::ALLOWED));
 
     request.Start();
 

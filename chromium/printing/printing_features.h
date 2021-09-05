@@ -19,10 +19,10 @@ namespace features {
 PRINTING_EXPORT extern const base::Feature kAdvancedPpdAttributes;
 #endif  // defined(OS_CHROMEOS)
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 PRINTING_EXPORT extern const base::Feature kCupsIppPrintingBackend;
 PRINTING_EXPORT extern const base::Feature kEnableCustomMacPaperSizes;
-#endif  // defined(OS_MACOSX)
+#endif  // defined(OS_MAC)
 
 #if defined(OS_WIN)
 PRINTING_EXPORT extern const base::Feature kPrintWithReducedRasterization;
@@ -37,8 +37,6 @@ PRINTING_EXPORT bool IsXpsPrintCapabilityRequired();
 // source should be done using XPS printing API instead of with GDI.
 PRINTING_EXPORT bool ShouldPrintUsingXps(bool source_is_pdf);
 #endif  // defined(OS_WIN)
-
-PRINTING_EXPORT extern const base::Feature kUseFrameAssociatedLoaderFactory;
 
 }  // namespace features
 }  // namespace printing

@@ -14,6 +14,7 @@
 #include "base/time/time.h"
 #include "base/util/values/values_util.h"
 #include "base/values.h"
+#include "components/account_id/account_id.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/user_manager/user_manager.h"
@@ -84,6 +85,15 @@ const char kIsEnterpriseManaged[] = "is_enterprise_managed";
 // screen.
 const char kLastInputMethod[] = "last_input_method";
 
+// Key of the PIN auto submit length.
+const char kPinAutosubmitLength[] = "pin_autosubmit_length";
+
+// Key for the PIN auto submit backfill needed indicator.
+const char kPinAutosubmitBackfillNeeded[] = "pin_autosubmit_backfill_needed";
+
+// Sync token for SAML password multi-device sync
+const char kPasswordSyncToken[] = "password_sync_token";
+
 // List containing all the known user preferences keys.
 const char* kReservedKeys[] = {kCanonicalEmail,
                                kGAIAIdKey,
@@ -102,7 +112,10 @@ const char* kReservedKeys[] = {kCanonicalEmail,
                                kLastOnlineSignin,
                                kOfflineSigninLimit,
                                kIsEnterpriseManaged,
-                               kLastInputMethod};
+                               kLastInputMethod,
+                               kPinAutosubmitLength,
+                               kPinAutosubmitBackfillNeeded,
+                               kPasswordSyncToken};
 
 PrefService* GetLocalState() {
   if (!UserManager::IsInitialized())
@@ -673,6 +686,47 @@ void SetUserLastInputMethod(const AccountId& account_id,
 bool GetUserLastInputMethod(const AccountId& account_id,
                             std::string* input_method) {
   return GetStringPref(account_id, kLastInputMethod, input_method);
+}
+
+void SetUserPinLength(const AccountId& account_id, int pin_length) {
+  SetIntegerPref(account_id, kPinAutosubmitLength, pin_length);
+}
+
+int GetUserPinLength(const AccountId& account_id) {
+  int pin_length = 0;
+  if (GetIntegerPref(account_id, kPinAutosubmitLength, &pin_length))
+    return pin_length;
+  return 0;
+}
+
+bool PinAutosubmitIsBackfillNeeded(const AccountId& account_id) {
+  bool backfill_needed;
+  if (GetBooleanPref(account_id, kPinAutosubmitBackfillNeeded,
+                     &backfill_needed))
+    return backfill_needed;
+  // If the pref is not set, the pref needs to be backfilled.
+  return true;
+}
+
+void PinAutosubmitSetBackfillNotNeeded(const AccountId& account_id) {
+  SetBooleanPref(account_id, kPinAutosubmitBackfillNeeded, false);
+}
+
+void PinAutosubmitSetBackfillNeededForTests(const AccountId& account_id) {
+  SetBooleanPref(account_id, kPinAutosubmitBackfillNeeded, true);
+}
+
+void SetPasswordSyncToken(const AccountId& account_id,
+                          const std::string& token) {
+  SetStringPref(account_id, kPasswordSyncToken, token);
+}
+
+std::string GetPasswordSyncToken(const AccountId& account_id) {
+  std::string token;
+  if (GetStringPref(account_id, kPasswordSyncToken, &token))
+    return token;
+  // Return empty string if sync token was not set for the account yet.
+  return std::string();
 }
 
 void RemovePrefs(const AccountId& account_id) {

@@ -21,6 +21,7 @@
 #include "third_party/khronos/GLES2/gl2ext.h"
 #include "third_party/skia/include/core/SkPixelRef.h"
 #include "third_party/skia/include/gpu/GrBackendSurface.h"
+#include "third_party/skia/include/gpu/GrDirectContext.h"
 #include "third_party/skia/include/gpu/gl/GrGLTypes.h"
 #include "ui/gfx/swap_result.h"
 #include "ui/gl/gl_utils.h"
@@ -60,17 +61,12 @@ void FakeSkiaOutputSurface::BindFramebuffer() {
   // TODO(penghuang): remove this method when GLRenderer is removed.
 }
 
-void FakeSkiaOutputSurface::SetDrawRectangle(const gfx::Rect& draw_rectangle) {
-  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  NOTIMPLEMENTED();
-}
-
 void FakeSkiaOutputSurface::Reshape(const gfx::Size& size,
                                     float device_scale_factor,
                                     const gfx::ColorSpace& color_space,
                                     gfx::BufferFormat format,
                                     bool use_stencil) {
-  auto& sk_surface = sk_surfaces_[0];
+  auto& sk_surface = sk_surfaces_[RenderPassId{0}];
   SkColorType color_type = kRGBA_8888_SkColorType;
   SkImageInfo image_info =
       SkImageInfo::Make(size.width(), size.height(), color_type,
@@ -138,9 +134,9 @@ gfx::OverlayTransform FakeSkiaOutputSurface::GetDisplayTransform() {
 
 SkCanvas* FakeSkiaOutputSurface::BeginPaintCurrentFrame() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  auto& sk_surface = sk_surfaces_[0];
+  auto& sk_surface = sk_surfaces_[RenderPassId{0}];
   DCHECK(sk_surface);
-  DCHECK_EQ(current_render_pass_id_, 0u);
+  DCHECK_EQ(current_render_pass_id_, RenderPassId{0u});
   return sk_surface->getCanvas();
 }
 
@@ -196,7 +192,7 @@ SkCanvas* FakeSkiaOutputSurface::BeginPaintRenderPass(
     sk_sp<SkColorSpace> color_space) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   // Make sure there is no unsubmitted PaintFrame or PaintRenderPass.
-  DCHECK_EQ(current_render_pass_id_, 0u);
+  DCHECK_EQ(current_render_pass_id_, RenderPassId{0u});
   auto& sk_surface = sk_surfaces_[id];
 
   if (!sk_surface) {
@@ -215,7 +211,7 @@ gpu::SyncToken FakeSkiaOutputSurface::SubmitPaint(
     base::OnceClosure on_finished) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   sk_surfaces_[current_render_pass_id_]->flushAndSubmit();
-  current_render_pass_id_ = 0;
+  current_render_pass_id_ = RenderPassId{0};
 
   if (on_finished)
     std::move(on_finished).Run();
@@ -276,7 +272,8 @@ void FakeSkiaOutputSurface::CopyOutput(
     auto* sii = context_provider_->SharedImageInterface();
     gpu::Mailbox mailbox = sii->CreateSharedImage(
         ResourceFormat::RGBA_8888, geometry.result_selection.size(),
-        color_space, gpu::SHARED_IMAGE_USAGE_GLES2);
+        color_space, kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType,
+        gpu::SHARED_IMAGE_USAGE_GLES2, gpu::kNullSurfaceHandle);
 
     auto* gl = context_provider_->ContextGL();
     gpu::SyncToken sync_token;
@@ -291,8 +288,9 @@ void FakeSkiaOutputSurface::CopyOutput(
     return;
   }
 
+  GrDirectContext* direct = GrAsDirectContext(gr_context());
   auto copy_image = surface->makeImageSnapshot()->makeSubset(
-      RectToSkIRect(geometry.sampling_bounds));
+      RectToSkIRect(geometry.sampling_bounds), direct);
   // Send copy request by copying into a bitmap.
   SkBitmap bitmap;
   copy_image->asLegacyBitmap(&bitmap);

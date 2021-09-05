@@ -37,9 +37,11 @@
 <translation id="1842960171412779397">selecciona</translation>
 <translation id="1859234291848436338">Direcció de l'escriptura</translation>
 <translation id="1860796786778352021">Tanca la notificació</translation>
+<translation id="186476001994626254">Contingut d'enganxada intel·ligent des del web</translation>
 <translation id="1871244248791675517">Ins</translation>
 <translation id="1884435127456172652"><ph name="NUMBER" />%</translation>
 <translation id="1901303067676059328">Selecciona-ho &amp;tot</translation>
+<translation id="19085484004813472">Aquesta funció és nova</translation>
 <translation id="2006524834898217237">Comprova que el dispositiu estigui connectat a Internet.</translation>
 <translation id="208586643495776849">Torna-ho a provar</translation>
 <translation id="2090963878406559571">Per enviar un número des del lloc web <ph name="ORIGIN" /> al telèfon Android, <ph name="TROUBLESHOOT_LINK" /> a la configuració dels dos dispositius.</translation>
@@ -67,6 +69,7 @@
 <translation id="2570734079541893434">Gestiona la configuració</translation>
 <translation id="2573731672208488250">{HOURS,plural, =1{d'aquí a 1 h}other{d'aquí a # h}}</translation>
 <translation id="2583543531130364912">Calibra la pantalla tàctil</translation>
+<translation id="2586657967955657006">Porta-retalls</translation>
 <translation id="2666092431469916601">Superior</translation>
 <translation id="2701330563083355633">S'ha compartit des del dispositiu <ph name="DEVICE_NAME" /></translation>
 <translation id="271033894570825754">Nou</translation>
@@ -74,6 +77,7 @@
 <translation id="2749082172777216925"><ph name="APP_NAME_INFO" />, <ph name="PRICE" /></translation>
 <translation id="2803313416453193357">Obre la carpeta</translation>
 <translation id="2824719307700604149">{YEARS,plural, =1{Fa 1 any}other{Fa # anys}}</translation>
+<translation id="2878511608894704031">Suprimeix-ho tot</translation>
 <translation id="2907671656515444832">{DAYS,plural, =1{d'aquí a 1 d}other{d'aquí a # d}}</translation>
 <translation id="2931838996092594335">fer clic</translation>
 <translation id="2981684127883932071">S'estan mostrant suggeriments</translation>
@@ -114,6 +118,7 @@
 <translation id="4289300219472526559">Comença a parlar</translation>
 <translation id="430191667033048642"><ph name="MOVED_APP_NAME" /> s'ha mogut a la carpeta <ph name="FOLDER_NAME" />.</translation>
 <translation id="4316910396681052118">TOTES LES APLICACIONS</translation>
+<translation id="4491109536499578614">Imatge</translation>
 <translation id="4588090240171750605">Desplaçament a la dreta</translation>
 <translation id="4631891353005174729"><ph name="APP_NAME_TYPE" />; puntuació en estrelles: <ph name="RATING_SCORE" /></translation>
 <translation id="4648249871170053485"><ph name="APP_NAME" />, recomanació d'aplicació</translation>
@@ -147,6 +152,7 @@
 <translation id="5768079895599174203">{DAYS,plural, =1{1 dia i }other{# dies i }}</translation>
 <translation id="5789643057113097023">.</translation>
 <translation id="5866104238061687188">{YEARS,plural, =1{d'aquí a 1 a}other{d'aquí a # a}}</translation>
+<translation id="588258955323874662">Pantalla completa</translation>
 <translation id="5906667377645263094">{SECONDS,plural, =1{1 segon restant}other{# segons restants}}</translation>
 <translation id="5941711191222866238">Minimitza</translation>
 <translation id="5943826764092288734">{HOURS,plural, =1{1 hora}other{# hores}}</translation>
@@ -170,6 +176,7 @@
 <translation id="6417265370957905582">Assistent de Google</translation>
 <translation id="6430678249303439055">Bloqueja totes les notificacions d'aquesta aplicació</translation>
 <translation id="6483402905448010557">{SECONDS,plural, =1{Fa 1 segon}other{Fa # segons}}</translation>
+<translation id="6503257047630241175">Contingut en RTF</translation>
 <translation id="6539092367496845964">S'ha produït un error. Torna-ho a provar més tard.</translation>
 <translation id="654149438358937226">Bloqueja totes les notificacions</translation>
 <translation id="6567071839949112727">fes clic a l'antecedent</translation>

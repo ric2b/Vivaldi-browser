@@ -10,15 +10,14 @@
 
 #include "base/bind.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop_current.h"
 #include "base/metrics/metrics_hashes.h"
+#include "base/task/current_thread.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "base/test/test_mock_time_task_runner.h"
 #include "base/time/tick_clock.h"
 #include "base/time/time.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/resource_coordinator/local_site_characteristics_data_unittest_utils.h"
 #include "chrome/browser/resource_coordinator/tab_helper.h"
 #include "chrome/browser/resource_coordinator/tab_load_tracker.h"
 #include "chrome/browser/resource_coordinator/tab_manager_web_contents_data.h"
@@ -47,15 +46,14 @@ constexpr TabLoadTracker::LoadingState UNLOADED = LoadingState::UNLOADED;
 constexpr TabLoadTracker::LoadingState LOADING = LoadingState::LOADING;
 constexpr TabLoadTracker::LoadingState LOADED = LoadingState::LOADED;
 
-class TabManagerStatsCollectorTest
-    : public testing::ChromeTestHarnessWithLocalDB {
+class TabManagerStatsCollectorTest : public ChromeRenderViewHostTestHarness {
  protected:
   TabManagerStatsCollectorTest()
       : scoped_context_(
             std::make_unique<base::TestMockTimeTaskRunner::ScopedContext>(
                 task_runner_)),
         scoped_set_tick_clock_for_testing_(task_runner_->GetMockTickClock()) {
-    base::MessageLoopCurrent::Get()->SetTaskRunner(task_runner_);
+    base::CurrentThread::Get()->SetTaskRunner(task_runner_);
 
     // Start with a non-zero time.
     task_runner_->FastForwardBy(base::TimeDelta::FromSeconds(42));
@@ -89,12 +87,8 @@ class TabManagerStatsCollectorTest
     return tab_manager()->GetWebContentsData(contents);
   }
 
-  void RestoreTab(WebContents* contents) {
-    tab_manager()->OnWillRestoreTab(contents);
-  }
-
   void SetUp() override {
-    ChromeTestHarnessWithLocalDB::SetUp();
+    ChromeRenderViewHostTestHarness::SetUp();
 
     // Call the tab manager so that it is created right away.
     tab_manager();
@@ -103,33 +97,7 @@ class TabManagerStatsCollectorTest
   void TearDown() override {
     task_runner_->RunUntilIdle();
     scoped_context_.reset();
-    ChromeTestHarnessWithLocalDB::TearDown();
-  }
-
-  std::unique_ptr<WebContents> CreateWebContentsForUKM(ukm::SourceId id) {
-    std::unique_ptr<WebContents> contents(CreateTestWebContents());
-    ResourceCoordinatorTabHelper::CreateForWebContents(contents.get());
-    ResourceCoordinatorTabHelper::FromWebContents(contents.get())
-        ->SetUkmSourceIdForTest(id);
-    return contents;
-  }
-
-  std::unique_ptr<WebContents> CreateDiscardableWebContents(ukm::SourceId id) {
-    std::unique_ptr<WebContents> web_contents = CreateWebContentsForUKM(id);
-
-    // Commit an URL and mark the tab as "loaded" to allow discarding.
-    content::WebContentsTester::For(web_contents.get())
-        ->NavigateAndCommit(GURL("https://www.example.com"));
-    TabLoadTracker::Get()->TransitionStateForTesting(web_contents.get(),
-                                                     LoadingState::LOADED);
-
-    base::RepeatingClosure run_loop_cb = base::BindRepeating(
-        &base::TestMockTimeTaskRunner::RunUntilIdle, task_runner_);
-
-    testing::WaitForLocalDBEntryToBeInitialized(web_contents.get(),
-                                                run_loop_cb);
-    testing::ExpireLocalDBObservationWindows(web_contents.get());
-    return web_contents;
+    ChromeRenderViewHostTestHarness::TearDown();
   }
 
   scoped_refptr<base::TestMockTimeTaskRunner> task_runner_ =
@@ -359,73 +327,6 @@ TEST_P(TabManagerStatsCollectorTabSwitchTest, HistogramsTabSwitchLoadTime) {
                                                                            : 0);
 }
 
-TEST_P(TabManagerStatsCollectorParameterizedTest,
-       HistogramsExpectedTaskQueueingDuration) {
-  auto* stats_collector = tab_manager_stats_collector();
-
-  const base::TimeDelta kEQT = base::TimeDelta::FromMilliseconds(1);
-  web_contents()->WasShown();
-
-  // No metrics recorded because there is no session restore or background tab
-  // opening.
-  stats_collector->RecordExpectedTaskQueueingDuration(web_contents(), kEQT);
-  histogram_tester_.ExpectTotalCount(
-      TabManagerStatsCollector::
-          kHistogramSessionRestoreForegroundTabExpectedTaskQueueingDuration,
-      0);
-  histogram_tester_.ExpectTotalCount(
-      TabManagerStatsCollector::
-          kHistogramBackgroundTabOpeningForegroundTabExpectedTaskQueueingDuration,
-      0);
-
-  if (should_test_session_restore_)
-    StartSessionRestore();
-  if (should_test_background_tab_opening_)
-    StartBackgroundTabOpeningSession();
-
-  // No metrics recorded because the tab is background.
-  web_contents()->WasHidden();
-  stats_collector->RecordExpectedTaskQueueingDuration(web_contents(), kEQT);
-  histogram_tester_.ExpectTotalCount(
-      TabManagerStatsCollector::
-          kHistogramSessionRestoreForegroundTabExpectedTaskQueueingDuration,
-      0);
-  histogram_tester_.ExpectTotalCount(
-      TabManagerStatsCollector::
-          kHistogramBackgroundTabOpeningForegroundTabExpectedTaskQueueingDuration,
-      0);
-
-  web_contents()->WasShown();
-  stats_collector->RecordExpectedTaskQueueingDuration(web_contents(), kEQT);
-  histogram_tester_.ExpectTotalCount(
-      TabManagerStatsCollector::
-          kHistogramSessionRestoreForegroundTabExpectedTaskQueueingDuration,
-      should_test_session_restore_ && !IsTestingOverlappedSession() ? 1 : 0);
-  histogram_tester_.ExpectTotalCount(
-      TabManagerStatsCollector::
-          kHistogramBackgroundTabOpeningForegroundTabExpectedTaskQueueingDuration,
-      should_test_background_tab_opening_ && !IsTestingOverlappedSession() ? 1
-                                                                           : 0);
-
-  if (should_test_session_restore_)
-    FinishSessionRestore();
-  if (should_test_background_tab_opening_)
-    FinishBackgroundTabOpeningSession();
-
-  // No metrics recorded because there is no session restore or background tab
-  // opening.
-  stats_collector->RecordExpectedTaskQueueingDuration(web_contents(), kEQT);
-  histogram_tester_.ExpectTotalCount(
-      TabManagerStatsCollector::
-          kHistogramSessionRestoreForegroundTabExpectedTaskQueueingDuration,
-      should_test_session_restore_ && !IsTestingOverlappedSession() ? 1 : 0);
-  histogram_tester_.ExpectTotalCount(
-      TabManagerStatsCollector::
-          kHistogramBackgroundTabOpeningForegroundTabExpectedTaskQueueingDuration,
-      should_test_background_tab_opening_ && !IsTestingOverlappedSession() ? 1
-                                                                           : 0);
-}
-
 TEST_P(TabManagerStatsCollectorParameterizedTest, HistogramsTabCount) {
   auto* stats_collector = tab_manager_stats_collector();
 
@@ -577,47 +478,6 @@ TEST_F(TabManagerStatsCollectorTest, HistogramsSessionOverlap) {
                   TabManagerStatsCollector::
                       kHistogramSessionOverlapBackgroundTabOpening),
               ElementsAre(Bucket(false, 1), Bucket(true, 6)));
-}
-
-TEST_F(TabManagerStatsCollectorTest,
-       CollectExpectedTaskQueueingDurationUkmForSessionRestore) {
-  using UkmEntry = ukm::builders::
-      TabManager_SessionRestore_ForegroundTab_ExpectedTaskQueueingDurationInfo;
-  std::unique_ptr<WebContents> tab1(CreateWebContentsForUKM(1));
-  std::unique_ptr<WebContents> tab2(CreateWebContentsForUKM(2));
-  std::unique_ptr<WebContents> tab3(CreateWebContentsForUKM(3));
-
-  EXPECT_EQ(0ul, test_ukm_recorder_.entries_count());
-  StartSessionRestore();
-  tab1->WasShown();
-  tab2->WasHidden();
-  RestoreTab(tab1.get());
-  RestoreTab(tab2.get());
-  tab_manager_stats_collector()->RecordExpectedTaskQueueingDuration(
-      tab1.get(), base::TimeDelta::FromMilliseconds(10));
-  EXPECT_EQ(1ul, test_ukm_recorder_.entries_count());
-  const ukm::mojom::UkmEntry* entry =
-      test_ukm_recorder_.GetEntriesByName(UkmEntry::kEntryName)[0];
-  ukm::TestUkmRecorder::ExpectEntryMetric(
-      entry, UkmEntry::kSessionRestoreTabCountName, 2);
-  ukm::TestUkmRecorder::ExpectEntryMetric(
-      entry, UkmEntry::kExpectedTaskQueueingDurationName, 10);
-  FinishSessionRestore();
-
-  test_ukm_recorder_.Purge();
-  EXPECT_EQ(0ul, test_ukm_recorder_.entries_count());
-
-  StartSessionRestore();
-  tab3->WasShown();
-  RestoreTab(tab3.get());
-  // Do not record EQT UKM for session restore if there is only 1 tab restored.
-  tab_manager_stats_collector()->RecordExpectedTaskQueueingDuration(
-      tab3.get(), base::TimeDelta::FromMilliseconds(10));
-  EXPECT_EQ(0ul, test_ukm_recorder_.entries_count());
-  FinishSessionRestore();
-
-  test_ukm_recorder_.Purge();
-  EXPECT_EQ(0ul, test_ukm_recorder_.entries_count());
 }
 
 }  // namespace resource_coordinator

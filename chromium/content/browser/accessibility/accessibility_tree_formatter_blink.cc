@@ -89,12 +89,14 @@ std::string IntAttrToString(const BrowserAccessibility& node,
       return ui::ToString(static_cast<ax::mojom::Restriction>(value));
     case ax::mojom::IntAttribute::kSortDirection:
       return ui::ToString(static_cast<ax::mojom::SortDirection>(value));
+    case ax::mojom::IntAttribute::kTextAlign:
+      return ui::ToString(static_cast<ax::mojom::TextAlign>(value));
     case ax::mojom::IntAttribute::kTextOverlineStyle:
     case ax::mojom::IntAttribute::kTextStrikethroughStyle:
     case ax::mojom::IntAttribute::kTextUnderlineStyle:
       return ui::ToString(static_cast<ax::mojom::TextDecorationStyle>(value));
     case ax::mojom::IntAttribute::kTextDirection:
-      return ui::ToString(static_cast<ax::mojom::TextDirection>(value));
+      return ui::ToString(static_cast<ax::mojom::WritingDirection>(value));
     case ax::mojom::IntAttribute::kTextPosition:
       return ui::ToString(static_cast<ax::mojom::TextPosition>(value));
     case ax::mojom::IntAttribute::kImageAnnotationStatus:
@@ -164,7 +166,6 @@ void AccessibilityTreeFormatterBlink::AddDefaultFilters(
   // Too flaky: hovered, offscreen
   // States
   AddPropertyFilter(property_filters, "collapsed");
-  AddPropertyFilter(property_filters, "haspopup");
   AddPropertyFilter(property_filters, "invisible");
   AddPropertyFilter(property_filters, "multiline");
   AddPropertyFilter(property_filters, "protected");
@@ -629,6 +630,10 @@ const std::string AccessibilityTreeFormatterBlink::GetDenyString() {
 
 const std::string AccessibilityTreeFormatterBlink::GetDenyNodeString() {
   return "@BLINK-DENY-NODE:";
+}
+
+const std::string AccessibilityTreeFormatterBlink::GetRunUntilEventString() {
+  return "@BLINK-RUN-UNTIL-EVENT:";
 }
 
 }  // namespace content

@@ -38,6 +38,7 @@
 #include "third_party/blink/public/platform/web_url.h"
 #include "third_party/blink/public/platform/web_url_loader_mock_factory.h"
 #include "third_party/blink/public/platform/web_url_response.h"
+#include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/loader/empty_clients.h"
 #include "third_party/blink/renderer/core/loader/resource/mock_image_resource_observer.h"
 #include "third_party/blink/renderer/core/svg/graphics/svg_image.h"
@@ -312,7 +313,8 @@ TEST_F(ImageResourceTest, BitmapMultipartImage) {
   resource_request.SetReferrerPolicy(
       ReferrerPolicyResolveDefault(resource_request.GetReferrerPolicy()));
   resource_request.SetPriority(WebURLRequest::Priority::kLow);
-  ImageResource* image_resource = ImageResource::Create(resource_request);
+  ImageResource* image_resource =
+      ImageResource::Create(resource_request, nullptr /* world */);
   fetcher->StartLoad(image_resource);
 
   ResourceResponse multipart_response(NullURL());
@@ -793,7 +795,8 @@ TEST_F(ImageResourceTest, CancelOnDecodeError) {
   ScopedMockedURLLoad scoped_mocked_url_load(test_url, GetTestFilePath());
 
   ResourceFetcher* fetcher = CreateFetcher();
-  FetchParameters params{ResourceRequest(test_url)};
+  FetchParameters params =
+      FetchParameters::CreateForTest(ResourceRequest(test_url));
   ImageResource* image_resource = ImageResource::Fetch(params, fetcher);
   auto observer =
       std::make_unique<MockImageResourceObserver>(image_resource->GetContent());
@@ -821,7 +824,8 @@ TEST_F(ImageResourceTest, DecodeErrorWithEmptyBody) {
   ScopedMockedURLLoad scoped_mocked_url_load(test_url, GetTestFilePath());
 
   ResourceFetcher* fetcher = CreateFetcher();
-  FetchParameters params{ResourceRequest(test_url)};
+  FetchParameters params =
+      FetchParameters::CreateForTest(ResourceRequest(test_url));
   ImageResource* image_resource = ImageResource::Fetch(params, fetcher);
   auto observer =
       std::make_unique<MockImageResourceObserver>(image_resource->GetContent());
@@ -853,7 +857,8 @@ TEST_F(ImageResourceTest, PartialContentWithoutDimensions) {
 
   ResourceRequest resource_request(test_url);
   resource_request.SetHttpHeaderField("range", "bytes=0-2");
-  FetchParameters params(std::move(resource_request));
+  FetchParameters params =
+      FetchParameters::CreateForTest(std::move(resource_request));
   ResourceFetcher* fetcher = CreateFetcher();
   ImageResource* image_resource = ImageResource::Fetch(params, fetcher);
   auto observer =
@@ -1090,7 +1095,8 @@ class ImageResourceCounterTest : public testing::Test {
     ResourceFetcher* fetcher = CreateFetcher();
     KURL test_url(url);
     ResourceRequest request = ResourceRequest(test_url);
-    FetchParameters fetch_params(std::move(request));
+    FetchParameters fetch_params =
+        FetchParameters::CreateForTest(std::move(request));
     scheduler::FakeTaskRunner* task_runner =
         static_cast<scheduler::FakeTaskRunner*>(fetcher->GetTaskRunner().get());
     task_runner->SetTime(1);

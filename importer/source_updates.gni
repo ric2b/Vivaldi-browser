@@ -1,11 +1,13 @@
 
-if (!is_android) {
+if (vivaldi_build_tests) {
   update_target("//chrome/test:browser_tests") {
     sources += [
       "//vivaldi/importer/viv_importer_browsertest.cpp",
     ]
   }
+}
 
+if (!is_android) {
   update_target("//chrome/browser:browser") {
     sources += [
       "//vivaldi/importer/vivaldi_external_process_importer_client.cc",

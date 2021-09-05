@@ -88,8 +88,10 @@ Command-specific switches
 What gets checked
 
   The .gn file may specify a list of targets to be checked in the list
-  check_targets (see "gn help dotfile"). If a label pattern is specified
-  on the command line, check_targets is not used.
+  check_targets (see "gn help dotfile"). Alternatively, the .gn file may
+  specify a list of targets not to be checked in no_check_targets. If a label
+  pattern is specified on the command line, neither check_targets or
+  no_check_targets is used.
 
   Targets can opt-out from checking with "check_includes = false" (see
   "gn help check_includes").
@@ -225,6 +227,10 @@ int RunCheck(const std::vector<std::string>& args) {
       FilterTargetsByPatterns(all_targets, *setup->check_patterns(),
                               &targets_to_check);
       filtered_by_build_config = targets_to_check.size() != all_targets.size();
+    } else if (setup->no_check_patterns()) {
+      FilterOutTargetsByPatterns(all_targets, *setup->no_check_patterns(),
+                                 &targets_to_check);
+      filtered_by_build_config = targets_to_check.size() != all_targets.size();
     } else {
       // No global filter, check everything.
       targets_to_check = all_targets;
@@ -245,8 +251,8 @@ int RunCheck(const std::vector<std::string>& args) {
     if (filtered_by_build_config) {
       // Tell the user about the implicit filtering since this is obscure.
       OutputString(base::StringPrintf(
-          "%d targets out of %d checked based on the check_targets defined in"
-          " \".gn\".\n",
+          "%d targets out of %d checked based on the check_targets or "
+          "no_check_targets defined in \".gn\".\n",
           static_cast<int>(targets_to_check.size()),
           static_cast<int>(all_targets.size())));
     }

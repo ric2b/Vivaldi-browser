@@ -182,7 +182,7 @@ static_library("test_support") {
     ]
   }
 
-  if (is_linux) {
+  if (is_linux || is_chromeos) {
     sources += [ "test_file_util_linux.cc" ]
     public_deps += [ ":fontconfig_util_linux" ]
     data_deps = [ "//third_party/test_fonts" ]
@@ -192,7 +192,7 @@ static_library("test_support") {
   }
 
   if (is_mac) {
-    libs = [ "AppKit.framework" ]
+    frameworks = [ "AppKit.framework" ]
     sources += [
       "mock_chrome_application_mac.h",
       "mock_chrome_application_mac.mm",
@@ -403,7 +403,7 @@ static_library("run_all_base_unittests") {
   deps = [ ":test_support" ]
 }
 
-if (is_linux) {
+if (is_linux || is_chromeos) {
   source_set("fontconfig_util_linux") {
     sources = [
       "fontconfig_util_linux.cc",
@@ -444,7 +444,7 @@ if (is_linux) {
   }
 }
 
-if (is_fuchsia || is_linux) {
+if (is_fuchsia || is_linux || is_chromeos) {
   shared_library("malloc_wrapper") {
     testonly = true
     sources = [ "malloc_wrapper.cc" ]
@@ -525,7 +525,7 @@ if (is_ios) {
       ":google_test_runner_shared_headers",
       "//base",
     ]
-    libs = [ "UIKit.framework" ]
+    frameworks = [ "UIKit.framework" ]
     configs += [
       "//build/config/compiler:enable_arc",
       "//build/config/ios:xctest_config",

@@ -12,6 +12,7 @@
 #include <tuple>
 
 #include "third_party/blink/public/common/common_export.h"
+#include "third_party/blink/public/common/privacy_budget/identifiable_token.h"
 
 namespace blink {
 
@@ -42,6 +43,25 @@ class IdentifiableSurface {
   // {Type::kReservedInternal, 0} which is not possible for a valid surface.
   static constexpr uint64_t kInvalidHash = 0;
 
+  // HTML canvas readback -- bits [0-3] of the 64-bit input are the context type
+  // (Type::kCanvasReadback), bits [4-6] are skipped ops, sensitive ops, and
+  // partial image ops bits, respectively. The remaining bits are for the canvas
+  // operations digest. If the digest wasn't calculated (there's no digest for
+  // webgl, for instance), the digest field is 0.
+  enum CanvasTaintBit : uint64_t {
+    // At least one drawing operation didn't update the digest -- this is ether
+    // due to performance or resource consumption reasons.
+    kSkipped = UINT64_C(0x10),
+
+    // At least one drawing operation operated on a sensitive string. Sensitive
+    // strings use a 16-bit hash digest.
+    kSensitive = UINT64_C(0x20),
+
+    // At least one drawing operation was only partially digested, for
+    // performance reasons.
+    kPartiallyDigested = UINT64_C(0x40)
+  };
+
   // Type of identifiable surface.
   //
   // Even though the data type is uint64_t, we can only use 8 bits due to how we
@@ -61,6 +81,58 @@ class IdentifiableSurface {
     // CanvasRenderingContextType.
     kCanvasReadback = 2,
 
+    // Represents loading a font locally based on a name lookup that is allowed
+    // to match either a unique name or a family name. This occurs when a
+    // font-family CSS rule doesn't match any @font-face rule. Input is the
+    // combination of the lookup name and the FontSelectionRequest (i.e. weight,
+    // width and slope).
+    kLocalFontLookupByUniqueOrFamilyName = 3,
+
+    // Represents looking up the family name of a generic font. Input is the
+    // combination of the generic font family name, script code and
+    // GenericFamilyType.
+    kGenericFontLookup = 4,
+
+    // Attempt to access extension URLs.
+    kExtensionFileAccess = 5,
+
+    // Extension running content-script.
+    kExtensionContentScript = 6,
+
+    // Represents making a measurement of one of the above surfacess. This
+    // metric is retained even if filtering discards the surface.
+    kMeasuredSurface = 7,
+
+    // WebGL parameter for WebGLRenderingContext.getParameter().
+    kWebGLParameter = 8,
+
+    // Represents a call to |MediaRecorder.isTypeSupported(mimeType)|. Input is
+    // the mime type supplied to the method.
+    kMediaRecorder_IsTypeSupported = 9,
+
+    // Represents a call to |MediaSource.isTypeSupported(mimeType)|. Input is
+    // the mime type supplied to the method.
+    kMediaSource_IsTypeSupported = 10,
+
+    // Represents a call to |HTMLMediaElement.canPlayType(mimeType)|. Input is
+    // the mime type supplied to the method.
+    kHTMLMediaElement_CanPlayType = 11,
+
+    // Represents loading a font locally based on a name lookup that is only
+    // allowed to match a unique name. This occurs in @font-face CSS rules with
+    // a src:local attribute. Input is the combination of the lookup name and
+    // the FontSelectionRequest (i.e. weight, width and slope).
+    kLocalFontLookupByUniqueNameOnly = 12,
+
+    // Represents loading a font locally based on a fallback character. Input is
+    // the combination of the fallback character, FallbackPriority and the
+    // FontSelectionRequest (i.e. weight, width and slope).
+    kLocalFontLookupByFallbackCharacter = 13,
+
+    // Represents loading a font locally as a last resort. Input is the
+    // FontSelectionRequest (i.e. weight, width and slope).
+    kLocalFontLookupAsLastResort = 14,
+
     // We can use values up to and including |kMax|.
     kMax = (1 << kTypeBits) - 1
   };
@@ -78,6 +150,14 @@ class IdentifiableSurface {
   static constexpr IdentifiableSurface FromTypeAndInput(Type type,
                                                         uint64_t input) {
     return IdentifiableSurface(KeyFromSurfaceTypeAndInput(type, input));
+  }
+
+  // Construct an IdentifiableSurface based on a surface type and an input
+  // token.
+  static constexpr IdentifiableSurface FromTypeAndToken(
+      Type type,
+      IdentifiableToken token) {
+    return IdentifiableSurface(KeyFromSurfaceTypeAndInput(type, token.value_));
   }
 
   // Construct an invalid identifiable surface.

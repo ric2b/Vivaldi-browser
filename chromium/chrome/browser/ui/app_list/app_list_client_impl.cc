@@ -55,8 +55,9 @@ bool IsTabletMode() {
 }  // namespace
 
 AppListClientImpl::AppListClientImpl()
-    : app_list_notifier_(std::make_unique<AppListNotifierImpl>()),
-      app_list_controller_(ash::AppListController::Get()) {
+    : app_list_controller_(ash::AppListController::Get()),
+      app_list_notifier_(
+          std::make_unique<AppListNotifierImpl>(app_list_controller_)) {
   app_list_controller_->SetClient(this);
   user_manager::UserManager::Get()->AddSessionStateObserver(this);
 
@@ -128,15 +129,15 @@ void AppListClientImpl::OpenSearchResult(const std::string& result_id,
   // Send training signal to search controller.
   search_controller_->Train(std::move(app_launch_data));
 
-  RecordSearchResultOpenTypeHistogram(
-      launched_from, result->GetSearchResultType(), IsTabletMode());
+  RecordSearchResultOpenTypeHistogram(launched_from, result->metrics_type(),
+                                      IsTabletMode());
 
   if (launch_as_default)
-    RecordDefaultSearchResultOpenTypeHistogram(result->GetSearchResultType());
+    RecordDefaultSearchResultOpenTypeHistogram(result->metrics_type());
 
   if (!search_controller_->GetLastQueryLength() &&
       launched_from == ash::AppListLaunchedFrom::kLaunchedFromSearchBox)
-    RecordZeroStateSuggestionOpenTypeHistogram(result->GetSearchResultType());
+    RecordZeroStateSuggestionOpenTypeHistogram(result->metrics_type());
 
   // OpenResult may cause |result| to be deleted.
   search_controller_->OpenResult(result, event_flags);
@@ -246,24 +247,13 @@ void AppListClientImpl::OnAppListVisibilityChanged(bool visible) {
     search_controller_->AppListShown();
 }
 
-void AppListClientImpl::OnFolderCreated(
+void AppListClientImpl::OnItemAdded(
     int profile_id,
     std::unique_ptr<ash::AppListItemMetadata> item) {
   auto* requested_model_updater = profile_model_mappings_[profile_id];
   if (!requested_model_updater)
     return;
-  DCHECK(item->is_folder);
-  requested_model_updater->OnFolderCreated(std::move(item));
-}
-
-void AppListClientImpl::OnFolderDeleted(
-    int profile_id,
-    std::unique_ptr<ash::AppListItemMetadata> item) {
-  auto* requested_model_updater = profile_model_mappings_[profile_id];
-  if (!requested_model_updater)
-    return;
-  DCHECK(item->is_folder);
-  requested_model_updater->OnFolderDeleted(std::move(item));
+  requested_model_updater->OnItemAdded(std::move(item));
 }
 
 void AppListClientImpl::OnItemUpdated(
@@ -275,14 +265,14 @@ void AppListClientImpl::OnItemUpdated(
   requested_model_updater->OnItemUpdated(std::move(item));
 }
 
-void AppListClientImpl::OnPageBreakItemAdded(
+void AppListClientImpl::OnFolderDeleted(
     int profile_id,
-    const std::string& id,
-    const syncer::StringOrdinal& position) {
+    std::unique_ptr<ash::AppListItemMetadata> item) {
   auto* requested_model_updater = profile_model_mappings_[profile_id];
   if (!requested_model_updater)
     return;
-  requested_model_updater->OnPageBreakItemAdded(id, position);
+  DCHECK(item->is_folder);
+  requested_model_updater->OnFolderDeleted(std::move(item));
 }
 
 void AppListClientImpl::OnPageBreakItemDeleted(int profile_id,

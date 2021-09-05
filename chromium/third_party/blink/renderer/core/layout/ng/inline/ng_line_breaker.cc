@@ -15,6 +15,7 @@
 #include "third_party/blink/renderer/core/layout/ng/ng_floats_utils.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_fragment.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_length_utils.h"
+#include "third_party/blink/renderer/core/layout/ng/ng_physical_box_fragment.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_positioned_float.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_unpositioned_float.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
@@ -145,13 +146,15 @@ void CreateHyphen(NGInlineNode node,
   item_result->hyphen_shape_result = shaper.Shape(&style.GetFont(), direction);
 }
 
-inline void ClearNeedsLayout(const NGInlineItem& item) {
+}  // namespace
+
+inline void NGLineBreaker::ClearNeedsLayout(const NGInlineItem& item) {
+  if (mode_ != NGLineBreakerMode::kContent)
+    return;
   LayoutObject* layout_object = item.GetLayoutObject();
   if (layout_object->NeedsLayout())
     layout_object->ClearNeedsLayout();
 }
-
-}  // namespace
 
 LayoutUnit NGLineBreaker::ComputeAvailableWidth() const {
   LayoutUnit available_width = line_opportunity_.AvailableInlineSize();
@@ -465,9 +468,13 @@ void NGLineBreaker::ComputeLineLocation(NGLineInfo* line_info) const {
   // always positive or 0.
   LayoutUnit available_width = AvailableWidth();
 
+#if DCHECK_IS_ON()
   // Text measurement is done using floats which may introduce small rounding
   // errors for near-saturated values.
-  DCHECK_EQ(position_.Round(), line_info->ComputeWidth().Round());
+  // See http://crbug.com/1098795
+  if (!LayoutUnit(line_info->ComputeWidthInFloat()).MightBeSaturated())
+    DCHECK_EQ(position_.Round(), line_info->ComputeWidth().Round());
+#endif
 
   line_info->SetWidth(available_width, position_);
   line_info->SetBfcOffset(
@@ -996,6 +1003,15 @@ void NGLineBreaker::UpdateShapeResult(const NGLineInfo& line_info,
   item_result->inline_size = item_result->shape_result->SnappedWidth();
 }
 
+void NGLineBreaker::HandleTrailingSpacesIfNeeded(NGLineInfo* line_info) {
+  const Vector<NGInlineItem>& items = Items();
+  if (item_index_ >= items.size())
+    return;
+  const NGInlineItem& item = items[item_index_];
+  if (const ShapeResult* shape_result = item.TextShapeResult())
+    HandleTrailingSpaces(item, *shape_result, line_info);
+}
+
 inline void NGLineBreaker::HandleTrailingSpaces(const NGInlineItem& item,
                                                 NGLineInfo* line_info) {
   const ShapeResult* shape_result = item.TextShapeResult();
@@ -1488,9 +1504,6 @@ void NGLineBreaker::HandleFloat(const NGInlineItem& item,
     return;
   }
 
-  // TODO(ikilpatrick): Add support for float break tokens inside an inline
-  // layout context.
-
   LayoutUnit bfc_block_offset = line_opportunity_.bfc_block_offset;
   NGUnpositionedFloat unpositioned_float(
       NGBlockNode(ToLayoutBox(item.GetLayoutObject())),
@@ -1523,6 +1536,7 @@ void NGLineBreaker::HandleFloat(const NGInlineItem& item,
   //    also is strictly within the non-shape area).
   //  - It will be moved down due to block-start edge alignment.
   //  - It will be moved down due to clearance.
+  //  - An earlier float has been pushed to the next fragmentainer.
   bool float_after_line =
       !can_fit_float ||
       exclusion_space_->LastFloatBlockStart() > bfc_block_offset ||
@@ -1533,23 +1547,44 @@ void NGLineBreaker::HandleFloat(const NGInlineItem& item,
   // higher than any block or floated box generated before.
   if (HasUnpositionedFloats(line_info->Results()) || float_after_line) {
     item_result->has_unpositioned_floats = true;
-  } else {
-    NGPositionedFloat positioned_float =
-        PositionFloat(&unpositioned_float, exclusion_space_);
-    item_result->positioned_float = positioned_float;
-
-    NGLayoutOpportunity opportunity = exclusion_space_->FindLayoutOpportunity(
-        {constraint_space_.BfcOffset().line_offset, bfc_block_offset},
-        constraint_space_.AvailableSize().inline_size);
-
-    DCHECK_EQ(bfc_block_offset, opportunity.rect.BlockStartOffset());
-
-    line_opportunity_ = opportunity.ComputeLineLayoutOpportunity(
-        constraint_space_, line_opportunity_.line_block_size, LayoutUnit());
-    available_width_ = ComputeAvailableWidth();
-
-    DCHECK_GE(AvailableWidth(), LayoutUnit());
+    return;
   }
+
+  NGPositionedFloat positioned_float =
+      PositionFloat(&unpositioned_float, exclusion_space_);
+
+  if (constraint_space_.HasBlockFragmentation()) {
+    if (positioned_float.need_break_before) {
+      // We broke before the float, and there's no fragment. Create a break
+      // token and propagate it all the way to the block container layout
+      // algorithm. The float will start in the next fragmentainer.
+      auto break_before = NGBlockBreakToken::CreateBreakBefore(
+          unpositioned_float.node, /* is_forced_break */ false);
+      RemoveLastItem(line_info);
+      PropagateBreakToken(break_before);
+      return;
+    }
+    // If we broke inside the float, we also need to propagate a break token to
+    // the block container. Layout of the float will resume in the next
+    // fragmentainer.
+    if (scoped_refptr<const NGBreakToken> token =
+            positioned_float.layout_result->PhysicalFragment().BreakToken())
+      PropagateBreakToken(std::move(To<NGBlockBreakToken>(token.get())));
+  }
+
+  item_result->positioned_float = positioned_float;
+
+  NGLayoutOpportunity opportunity = exclusion_space_->FindLayoutOpportunity(
+      {constraint_space_.BfcOffset().line_offset, bfc_block_offset},
+      constraint_space_.AvailableSize().inline_size);
+
+  DCHECK_EQ(bfc_block_offset, opportunity.rect.BlockStartOffset());
+
+  line_opportunity_ = opportunity.ComputeLineLayoutOpportunity(
+      constraint_space_, line_opportunity_.line_block_size, LayoutUnit());
+  available_width_ = ComputeAvailableWidth();
+
+  DCHECK_GE(AvailableWidth(), LayoutUnit());
 }
 
 void NGLineBreaker::HandleOutOfFlowPositioned(const NGInlineItem& item,
@@ -1863,8 +1898,7 @@ void NGLineBreaker::RewindOverflow(unsigned new_end, NGLineInfo* line_info) {
           // and break there.
           // TODO: optimize more?
           Rewind(index, line_info);
-          DCHECK_EQ(static_cast<unsigned>(&item - items.begin()), item_index_);
-          HandleTrailingSpaces(item, line_info);
+          HandleTrailingSpacesIfNeeded(line_info);
 #if DCHECK_IS_ON()
           item_results.back().CheckConsistency(false);
 #endif
@@ -1982,6 +2016,24 @@ void NGLineBreaker::Rewind(unsigned new_end, NGLineInfo* line_info) {
     // and may not be equal to |results[new_end].start_offset|.
     MoveToNextOf(item_results[new_end - 1]);
     trailing_whitespace_ = WhitespaceState::kUnknown;
+    // When space item is followed by empty text, we will break line at empty
+    // text. See http://crbug.com/1104534
+    // Example:
+    //   [0] kOpeNTag 0-0 <i>
+    //   [1] kText 0-10 "012345679"
+    //   [2] kOpenTag 10-10 <b> <= |item_results[new_end - 1]|
+    //   [3] kText 10-10 ""     <= |item_index_|
+    //   [4] kText 10-11 " "
+    //   [5] kCloseTag 11-11 <b>
+    //   [6] kText 11-13 "ab"
+    //   [7] kCloseTag 13-13 <i>
+    // Note: We can have multiple empty |LayoutText| by ::first-letter, nested
+    // <q>, Text.splitText(), etc.
+    const Vector<NGInlineItem>& items = Items();
+    while (item_index_ < items.size() &&
+           items[item_index_].Type() == NGInlineItem::kText &&
+           !items[item_index_].Length())
+      HandleEmptyText(items[item_index_], line_info);
   } else {
     // When rewinding all items, use |results[0].start_offset|.
     const NGInlineItemResult& first_remove = item_results[new_end];
@@ -2045,7 +2097,7 @@ void NGLineBreaker::SetCurrentStyle(const ComputedStyle& style) {
       DCHECK_EQ(break_iterator_.Locale(), style.LocaleForLineBreakIterator());
     }
     ShapeResultSpacing<String> spacing(spacing_.Text());
-    spacing.SetSpacing(style.GetFontDescription());
+    spacing.SetSpacing(style.GetFont());
     DCHECK_EQ(spacing.LetterSpacing(), spacing_.LetterSpacing());
     DCHECK_EQ(spacing.WordSpacing(), spacing_.WordSpacing());
 #endif
@@ -2094,7 +2146,7 @@ void NGLineBreaker::SetCurrentStyle(const ComputedStyle& style) {
     break_iterator_.SetLocale(style.LocaleForLineBreakIterator());
   }
 
-  spacing_.SetSpacing(style.GetFontDescription());
+  spacing_.SetSpacing(style.GetFont());
 }
 
 void NGLineBreaker::MoveToNextOf(const NGInlineItem& item) {
@@ -2130,6 +2182,11 @@ scoped_refptr<NGInlineBreakToken> NGLineBreaker::CreateBreakToken(
       ((is_after_forced_break_ ? NGInlineBreakToken::kIsForcedBreak : 0) |
        (line_info.UseFirstLineStyle() ? NGInlineBreakToken::kUseFirstLineStyle
                                       : 0)));
+}
+
+void NGLineBreaker::PropagateBreakToken(
+    scoped_refptr<const NGBlockBreakToken> token) {
+  propagated_break_tokens_.push_back(std::move(token));
 }
 
 }  // namespace blink

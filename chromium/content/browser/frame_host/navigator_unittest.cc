@@ -127,8 +127,7 @@ TEST_F(NavigatorTest, SimpleRendererInitiatedSameSiteNavigation) {
 
   contents()->NavigateAndCommit(kUrl1);
   EXPECT_TRUE(main_test_rfh()->IsRenderFrameLive());
-  main_test_rfh()->OnMessageReceived(
-      FrameHostMsg_DidStopLoading(main_test_rfh()->GetRoutingID()));
+  main_test_rfh()->DidStopLoading();
 
   // Start a renderer-initiated non-user-initiated navigation.
   EXPECT_FALSE(main_test_rfh()->navigation_request());
@@ -148,12 +147,24 @@ TEST_F(NavigatorTest, SimpleRendererInitiatedSameSiteNavigation) {
   EXPECT_FALSE(request->common_params().has_user_gesture);
   EXPECT_EQ(kUrl2, request->common_params().url);
   EXPECT_FALSE(request->browser_initiated());
-  EXPECT_FALSE(GetSpeculativeRenderFrameHost(node));
+
+  if (CanSameSiteMainFrameNavigationsChangeRenderFrameHosts()) {
+    // If same-site ProactivelySwapBrowsingInstance or main-frame RenderDocument
+    // is enabled, the RFH should change so we should have a speculative RFH.
+    EXPECT_TRUE(GetSpeculativeRenderFrameHost(node));
+    EXPECT_FALSE(GetSpeculativeRenderFrameHost(node)->is_loading());
+  } else {
+    EXPECT_FALSE(GetSpeculativeRenderFrameHost(node));
+  }
   EXPECT_FALSE(main_test_rfh()->is_loading());
 
   // Have the current RenderFrameHost commit the navigation
   navigation->ReadyToCommit();
-  EXPECT_TRUE(main_test_rfh()->is_loading());
+  if (CanSameSiteMainFrameNavigationsChangeRenderFrameHosts()) {
+    EXPECT_TRUE(GetSpeculativeRenderFrameHost(node)->is_loading());
+  } else {
+    EXPECT_TRUE(main_test_rfh()->is_loading());
+  }
   EXPECT_FALSE(node->navigation_request());
 
   // Commit the navigation.
@@ -195,7 +206,7 @@ TEST_F(NavigatorTest, SimpleRendererInitiatedCrossSiteNavigation) {
   EXPECT_EQ(kUrl2, request->common_params().url);
   EXPECT_FALSE(request->browser_initiated());
   if (AreAllSitesIsolatedForTesting() ||
-      IsProactivelySwapBrowsingInstanceEnabled()) {
+      CanCrossSiteNavigationsProactivelySwapBrowsingInstances()) {
     EXPECT_TRUE(GetSpeculativeRenderFrameHost(node));
   } else {
     EXPECT_FALSE(GetSpeculativeRenderFrameHost(node));
@@ -204,7 +215,7 @@ TEST_F(NavigatorTest, SimpleRendererInitiatedCrossSiteNavigation) {
   // Have the current RenderFrameHost commit the navigation.
   navigation->ReadyToCommit();
   if (AreAllSitesIsolatedForTesting() ||
-      IsProactivelySwapBrowsingInstanceEnabled()) {
+      CanCrossSiteNavigationsProactivelySwapBrowsingInstances()) {
     EXPECT_EQ(navigation->GetFinalRenderFrameHost(),
               GetSpeculativeRenderFrameHost(node));
   }
@@ -218,7 +229,7 @@ TEST_F(NavigatorTest, SimpleRendererInitiatedCrossSiteNavigation) {
 
   // The SiteInstance did not change unless site-per-process is enabled.
   if (AreAllSitesIsolatedForTesting() ||
-      IsProactivelySwapBrowsingInstanceEnabled()) {
+      CanCrossSiteNavigationsProactivelySwapBrowsingInstances()) {
     EXPECT_NE(site_instance_id_1, main_test_rfh()->GetSiteInstance()->GetId());
   } else {
     EXPECT_EQ(site_instance_id_1, main_test_rfh()->GetSiteInstance()->GetId());
@@ -623,7 +634,7 @@ TEST_F(NavigatorTest, RendererUserInitiatedNavigationCancel) {
   // Confirm that the speculative RenderFrameHost was destroyed in the non
   // SitePerProcess case.
   if (AreAllSitesIsolatedForTesting() ||
-      IsProactivelySwapBrowsingInstanceEnabled()) {
+      CanCrossSiteNavigationsProactivelySwapBrowsingInstances()) {
     EXPECT_TRUE(GetSpeculativeRenderFrameHost(node));
   } else {
     EXPECT_FALSE(GetSpeculativeRenderFrameHost(node));
@@ -663,7 +674,7 @@ TEST_F(NavigatorTest,
   EXPECT_FALSE(request1->browser_initiated());
   EXPECT_TRUE(request1->common_params().has_user_gesture);
   if (AreAllSitesIsolatedForTesting() ||
-      IsProactivelySwapBrowsingInstanceEnabled()) {
+      CanCrossSiteNavigationsProactivelySwapBrowsingInstances()) {
     EXPECT_TRUE(GetSpeculativeRenderFrameHost(node));
   } else {
     EXPECT_FALSE(GetSpeculativeRenderFrameHost(node));
@@ -684,7 +695,7 @@ TEST_F(NavigatorTest,
   EXPECT_FALSE(request2->browser_initiated());
   EXPECT_FALSE(request2->common_params().has_user_gesture);
   if (AreAllSitesIsolatedForTesting() ||
-      IsProactivelySwapBrowsingInstanceEnabled()) {
+      CanCrossSiteNavigationsProactivelySwapBrowsingInstances()) {
     EXPECT_TRUE(GetSpeculativeRenderFrameHost(node));
   } else {
     EXPECT_FALSE(GetSpeculativeRenderFrameHost(node));
@@ -765,7 +776,7 @@ TEST_F(NavigatorTest,
   EXPECT_FALSE(request1->browser_initiated());
   EXPECT_FALSE(request1->common_params().has_user_gesture);
   if (AreAllSitesIsolatedForTesting() ||
-      IsProactivelySwapBrowsingInstanceEnabled()) {
+      CanCrossSiteNavigationsProactivelySwapBrowsingInstances()) {
     EXPECT_TRUE(GetSpeculativeRenderFrameHost(node));
   } else {
     EXPECT_FALSE(GetSpeculativeRenderFrameHost(node));
@@ -786,7 +797,7 @@ TEST_F(NavigatorTest,
   EXPECT_FALSE(request2->browser_initiated());
   EXPECT_FALSE(request2->common_params().has_user_gesture);
   if (AreAllSitesIsolatedForTesting() ||
-      IsProactivelySwapBrowsingInstanceEnabled()) {
+      CanCrossSiteNavigationsProactivelySwapBrowsingInstances()) {
     EXPECT_TRUE(GetSpeculativeRenderFrameHost(node));
   } else {
     EXPECT_FALSE(GetSpeculativeRenderFrameHost(node));
@@ -801,7 +812,7 @@ TEST_F(NavigatorTest,
 
   // The SiteInstance did not change unless site-per-process is enabled.
   if (AreAllSitesIsolatedForTesting() ||
-      IsProactivelySwapBrowsingInstanceEnabled()) {
+      CanCrossSiteNavigationsProactivelySwapBrowsingInstances()) {
     EXPECT_NE(site_instance_id_0, main_test_rfh()->GetSiteInstance()->GetId());
   } else {
     EXPECT_EQ(site_instance_id_0, main_test_rfh()->GetSiteInstance()->GetId());
@@ -1190,6 +1201,14 @@ TEST_F(NavigatorTest, NavigationRequestDeletedWhenUserInitiatedCommits) {
 
   contents()->NavigateAndCommit(kUrl1);
   FrameTreeNode* node = main_test_rfh()->frame_tree_node();
+
+  // The test below only makes sense if the same-site navigation below will not
+  // create a speculative RFH, so we need to ensure that we won't trigger a
+  // same-site cross-RFH navigation.
+  // Note: this will not disable RenderDocument.
+  // TODO(crbug.com/936696): Skip this test when main-frame RenderDocument is
+  // enabled.
+  DisableProactiveBrowsingInstanceSwapFor(main_test_rfh());
 
   // Navigate same-site.
   auto navigation =

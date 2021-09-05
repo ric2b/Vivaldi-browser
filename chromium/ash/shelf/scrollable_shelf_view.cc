@@ -19,6 +19,7 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/numerics/ranges.h"
 #include "chromeos/constants/chromeos_switches.h"
+#include "ui/base/dragdrop/mojom/drag_drop_types.mojom-shared.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/compositor/animation_throughput_reporter.h"
 #include "ui/compositor/paint_recorder.h"
@@ -757,6 +758,10 @@ bool ScrollableShelfView::IsAnyCornerButtonInkDropActivatedForTest() const {
   return activated_corner_buttons_ > 0;
 }
 
+float ScrollableShelfView::GetScrollUpperBoundForTest() const {
+  return CalculateScrollUpperBound(GetSpaceForIcons());
+}
+
 int ScrollableShelfView::GetSumOfButtonSizeAndSpacing() const {
   return shelf_view_->GetButtonSize() + ShelfConfig::Get()->button_spacing();
 }
@@ -1280,7 +1285,7 @@ void ScrollableShelfView::CreateDragIconProxyByLocationWithNoAnimation(
     int blur_radius) {
   drag_icon_widget_ =
       DragImageView::Create(GetWidget()->GetNativeWindow()->GetRootWindow(),
-                            ui::DragDropTypes::DRAG_EVENT_SOURCE_MOUSE);
+                            ui::mojom::DragEventSource::kMouse);
   DragImageView* drag_icon =
       static_cast<DragImageView*>(drag_icon_widget_->GetContentsView());
   drag_icon->SetImage(icon);

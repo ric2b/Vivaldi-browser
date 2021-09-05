@@ -63,15 +63,15 @@ void UpdateEnabledStateByUserTypeUMA() {
 }
 
 void UpdateOptInActionUMA(OptInActionType type) {
-  UMA_HISTOGRAM_ENUMERATION("Arc.OptInAction", type);
+  base::UmaHistogramEnumeration("Arc.OptInAction", type);
 }
 
 void UpdateOptInCancelUMA(OptInCancelReason reason) {
-  UMA_HISTOGRAM_ENUMERATION("Arc.OptInCancel", reason);
+  base::UmaHistogramEnumeration("Arc.OptInCancel", reason);
 }
 
 void UpdateOptInFlowResultUMA(OptInFlowResult result) {
-  UMA_HISTOGRAM_ENUMERATION("Arc.OptInResult", result);
+  base::UmaHistogramEnumeration("Arc.OptInResult", result);
 }
 
 void UpdateProvisioningResultUMA(ProvisioningResult result,
@@ -81,8 +81,15 @@ void UpdateProvisioningResultUMA(ProvisioningResult result,
       GetHistogramNameByUserType("Arc.Provisioning.Result", profile), result);
 }
 
+void UpdateCloudProvisionFlowErrorUMA(mojom::CloudProvisionFlowError error,
+                                      const Profile* profile) {
+  UMA_HISTOGRAM_ENUMERATION(
+      GetHistogramNameByUserType("Arc.Provisioning.CloudFlowError", profile),
+      error);
+}
+
 void UpdateSecondarySigninResultUMA(ProvisioningResult result) {
-  UMA_HISTOGRAM_ENUMERATION("Arc.Secondary.Signin.Result", result);
+  base::UmaHistogramEnumeration("Arc.Secondary.Signin.Result", result);
 }
 
 void UpdateProvisioningTiming(const base::TimeDelta& elapsed_time,
@@ -180,7 +187,7 @@ void UpdateSilentAuthCodeUMA(OptInSilentAuthCode state) {
 
 void UpdateSupervisionTransitionResultUMA(
     mojom::SupervisionChangeStatus result) {
-  UMA_HISTOGRAM_ENUMERATION("Arc.Supervision.Transition.Result", result);
+  base::UmaHistogramEnumeration("Arc.Supervision.Transition.Result", result);
 }
 
 void UpdateReauthorizationSilentAuthCodeUMA(OptInSilentAuthCode state) {
@@ -205,16 +212,16 @@ std::ostream& operator<<(std::ostream& os, const ProvisioningResult& result) {
     MAP_PROVISIONING_RESULT(GMS_SERVICE_UNAVAILABLE);
     MAP_PROVISIONING_RESULT(GMS_BAD_AUTHENTICATION);
     MAP_PROVISIONING_RESULT(DEVICE_CHECK_IN_FAILED);
-    MAP_PROVISIONING_RESULT(CLOUD_PROVISION_FLOW_FAILED);
+    MAP_PROVISIONING_RESULT(DEPRECATED_CLOUD_PROVISION_FLOW_FAILED);
     MAP_PROVISIONING_RESULT(MOJO_VERSION_MISMATCH);
-    MAP_PROVISIONING_RESULT(MOJO_CALL_TIMEOUT);
+    MAP_PROVISIONING_RESULT(PROVISIONING_TIMEOUT);
     MAP_PROVISIONING_RESULT(DEVICE_CHECK_IN_TIMEOUT);
     MAP_PROVISIONING_RESULT(DEVICE_CHECK_IN_INTERNAL_ERROR);
     MAP_PROVISIONING_RESULT(GMS_SIGN_IN_FAILED);
     MAP_PROVISIONING_RESULT(GMS_SIGN_IN_TIMEOUT);
     MAP_PROVISIONING_RESULT(GMS_SIGN_IN_INTERNAL_ERROR);
-    MAP_PROVISIONING_RESULT(CLOUD_PROVISION_FLOW_TIMEOUT);
-    MAP_PROVISIONING_RESULT(CLOUD_PROVISION_FLOW_INTERNAL_ERROR);
+    MAP_PROVISIONING_RESULT(DEPRECATED_CLOUD_PROVISION_FLOW_TIMEOUT);
+    MAP_PROVISIONING_RESULT(DEPRECATED_CLOUD_PROVISION_FLOW_INTERNAL_ERROR);
     MAP_PROVISIONING_RESULT(ARC_STOPPED);
     MAP_PROVISIONING_RESULT(OVERALL_SIGN_IN_TIMEOUT);
     MAP_PROVISIONING_RESULT(CHROME_SERVER_COMMUNICATION_ERROR);
@@ -223,6 +230,7 @@ std::ostream& operator<<(std::ostream& os, const ProvisioningResult& result) {
     MAP_PROVISIONING_RESULT(SUCCESS_ALREADY_PROVISIONED);
     MAP_PROVISIONING_RESULT(UNSUPPORTED_ACCOUNT_TYPE);
     MAP_PROVISIONING_RESULT(CHROME_ACCOUNT_NOT_FOUND);
+    MAP_PROVISIONING_RESULT(CLOUD_PROVISION_FLOW_ERROR);
   }
 
 #undef MAP_PROVISIONING_RESULT

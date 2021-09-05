@@ -12,12 +12,7 @@ import android.view.ViewGroup;
 
 import androidx.annotation.VisibleForTesting;
 
-import org.chromium.chrome.browser.ntp.cards.SignInPromo;
-import org.chromium.chrome.browser.signin.ProfileDataCache;
-import org.chromium.chrome.browser.signin.SigninPromoController;
-import org.chromium.chrome.browser.signin.SigninPromoUtil;
 import org.chromium.chrome.start_surface.R;
-import org.chromium.components.signin.metrics.SigninAccessPoint;
 
 /** The coordinator to control the loading feed surface. */
 public class FeedLoadingCoordinator {
@@ -31,25 +26,14 @@ public class FeedLoadingCoordinator {
     public FeedLoadingCoordinator(
             Activity activity, ViewGroup parentView, boolean isBackgroundDark) {
         mParentView = parentView;
-        mContext = new ContextThemeWrapper(activity,
-                (isBackgroundDark ? org.chromium.chrome.feed.R.style.Dark
-                                  : org.chromium.chrome.feed.R.style.Light));
+        mContext = new ContextThemeWrapper(
+                activity, (isBackgroundDark ? R.style.Dark : R.style.Light));
     }
 
     public void setUpLoadingView() {
         mFeedLoadingView = (FeedLoadingLayout) LayoutInflater.from(mContext).inflate(
                 R.layout.feed_loading_layout, null, false);
         mParentView.addView(mFeedLoadingView);
-
-        if (SignInPromo.shouldCreatePromo()) {
-            SigninPromoController signinPromoController =
-                    new SigninPromoController(SigninAccessPoint.NTP_CONTENT_SUGGESTIONS);
-            int imageSize =
-                    mContext.getResources().getDimensionPixelSize(R.dimen.user_picture_size);
-            ProfileDataCache profileDataCache = new ProfileDataCache(mContext, imageSize);
-            SigninPromoUtil.setupPromoViewFromCache(signinPromoController, profileDataCache,
-                    mFeedLoadingView.getSigninPromoView(), null);
-        }
     }
 
     void onOverviewShownAtLaunch(long activityCreationTimeMs) {

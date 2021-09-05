@@ -32,12 +32,12 @@
 #include "base/optional.h"
 #include "cc/layers/picture_layer.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
+#include "third_party/blink/public/common/widget/device_emulation_params.h"
 #include "third_party/blink/public/mojom/devtools/inspector_issue.mojom-blink.h"
 #include "third_party/blink/public/mojom/favicon/favicon_url.mojom-blink.h"
 #include "third_party/blink/public/mojom/input/focus_type.mojom-blink.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/web_graphics_context_3d_provider.h"
-#include "third_party/blink/public/web/web_device_emulation_params.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_function.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
@@ -1476,6 +1476,23 @@ void Internals::setAutofilled(Element* element,
       enabled ? WebAutofillState::kAutofilled : WebAutofillState::kNotFilled);
 }
 
+void Internals::setSelectionRangeForNumberType(
+    Element* input_element,
+    uint32_t start,
+    uint32_t end,
+    ExceptionState& exception_state) {
+  DCHECK(input_element);
+  auto* html_input_element = DynamicTo<HTMLInputElement>(input_element);
+  if (!html_input_element) {
+    exception_state.ThrowDOMException(
+        DOMExceptionCode::kInvalidNodeTypeError,
+        "The element provided is not an input element.");
+    return;
+  }
+
+  html_input_element->SetSelectionRangeForTesting(start, end, exception_state);
+}
+
 Range* Internals::rangeFromLocationAndLength(Element* scope,
                                              int range_location,
                                              int range_length) {
@@ -2880,6 +2897,8 @@ DOMRect* Internals::selectionBounds(ExceptionState& exception_state) {
     return nullptr;
   }
 
+  GetFrame()->View()->UpdateLifecycleToLayoutClean(
+      DocumentUpdateReason::kSelection);
   return DOMRect::FromFloatRect(
       FloatRect(GetFrame()->Selection().AbsoluteUnclippedBounds()));
 }
@@ -3317,6 +3336,11 @@ double Internals::monotonicTimeToZeroBasedDocumentTime(
       .InSecondsF();
 }
 
+int64_t Internals::zeroBasedDocumentTimeToMonotonicTime(double dom_event_time) {
+  return document_->Loader()->GetTiming().ZeroBasedDocumentTimeToMonotonicTime(
+      dom_event_time);
+}
+
 int64_t Internals::currentTimeTicks() {
   return base::TimeTicks::Now().since_origin().InMicroseconds();
 }
@@ -3331,14 +3355,6 @@ String Internals::getProgrammaticScrollAnimationState(Node* node) const {
   if (ScrollableArea* scrollable_area = ScrollableAreaForNode(node))
     return scrollable_area->GetProgrammaticScrollAnimator().RunStateAsText();
   return String();
-}
-
-DOMRect* Internals::visualRect(Node* node) {
-  if (!node || !node->GetLayoutObject())
-    return DOMRect::Create();
-
-  return DOMRect::FromFloatRect(
-      FloatRect(node->GetLayoutObject()->FragmentsVisualRectBoundingBox()));
 }
 
 void Internals::crash() {
@@ -3387,6 +3403,10 @@ bool Internals::isTrackingOcclusionForIFrame(HTMLIFrameElement* iframe) const {
     return false;
   RemoteFrame* remote_frame = To<RemoteFrame>(iframe->ContentFrame());
   return remote_frame->View()->NeedsOcclusionTracking();
+}
+
+void Internals::DisableFrequencyCappingForOverlayPopupDetection() const {
+  OverlayInterstitialAdDetector::DisableFrequencyCappingForTesting();
 }
 
 void Internals::addEmbedderCustomElementName(const AtomicString& name,
@@ -3451,7 +3471,7 @@ void Internals::setDeviceEmulationScale(float scale,
         "The document's page cannot be retrieved.");
     return;
   }
-  WebDeviceEmulationParams params;
+  DeviceEmulationParams params;
   params.scale = scale;
   page->GetChromeClient().GetWebView()->EnableDeviceEmulation(params);
 }

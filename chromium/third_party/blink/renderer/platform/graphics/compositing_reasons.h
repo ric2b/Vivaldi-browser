@@ -23,6 +23,7 @@ using CompositingReasons = uint64_t;
   V(Canvas)                                                                   \
   V(Plugin)                                                                   \
   V(IFrame)                                                                   \
+  V(SVGRoot)                                                                  \
   V(BackfaceVisibilityHidden)                                                 \
   V(ActiveTransformAnimation)                                                 \
   V(ActiveOpacityAnimation)                                                   \
@@ -73,7 +74,6 @@ using CompositingReasons = uint64_t;
   used in CompositeAfterPaint. */                                             \
   V(LayerForHorizontalScrollbar)                                              \
   V(LayerForVerticalScrollbar)                                                \
-  V(LayerForOverflowControlsHost)                                             \
   V(LayerForScrollCorner)                                                     \
   V(LayerForScrollingContents)                                                \
   V(LayerForSquashingContents)                                                \
@@ -125,17 +125,13 @@ class PLATFORM_EXPORT CompositingReason {
         kWillChangeBackdropFilter,
 
     kComboAllDirectNonStyleDeterminedReasons =
-        kVideo | kCanvas | kPlugin | kIFrame | kOverflowScrollingParent |
-        kOutOfFlowClipping | kVideoOverlay | kXrOverlay | kRoot |
-        kRootScroller | kScrollDependentPosition |
+        kVideo | kCanvas | kPlugin | kIFrame | kSVGRoot |
+        kOverflowScrollingParent | kOutOfFlowClipping | kVideoOverlay |
+        kXrOverlay | kRoot | kRootScroller | kScrollDependentPosition |
         kBackfaceInvisibility3DAncestor,
 
     kComboAllDirectReasons = kComboAllDirectStyleDeterminedReasons |
                              kComboAllDirectNonStyleDeterminedReasons,
-
-    kComboTransformedRasterizationDisallowedReasons =
-        kComboAllDirectReasons & ~kScrollDependentPosition &
-        ~kTrivial3DTransform & ~kBackfaceVisibilityHidden,
 
     kComboAllCompositedScrollingDeterminedReasons =
         kScrollDependentPosition | kOverflowScrolling,
@@ -157,7 +153,8 @@ class PLATFORM_EXPORT CompositingReason {
         kOverlap | kAssumedOverlap | kOverflowScrollingParent,
 
     kDirectReasonsForPaintOffsetTranslationProperty =
-        kScrollDependentPosition | kVideo | kCanvas | kPlugin | kIFrame,
+        kScrollDependentPosition | kVideo | kCanvas | kPlugin | kIFrame |
+        kSVGRoot,
 
     kDirectReasonsForTransformProperty =
         k3DTransform | kTrivial3DTransform | kWillChangeTransform |

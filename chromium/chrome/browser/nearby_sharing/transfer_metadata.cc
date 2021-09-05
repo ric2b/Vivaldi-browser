@@ -2,7 +2,28 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <utility>
+
 #include "chrome/browser/nearby_sharing/transfer_metadata.h"
+
+// static
+bool TransferMetadata::IsFinalStatus(Status status) {
+  switch (status) {
+    case Status::kAwaitingRemoteAcceptanceFailed:
+    case Status::kComplete:
+    case Status::kFailed:
+    case Status::kRejected:
+    case Status::kCancelled:
+    case Status::kTimedOut:
+    case Status::kMediaUnavailable:
+    case Status::kNotEnoughSpace:
+    case Status::kUnsupportedAttachmentType:
+    case Status::kExternalProviderLaunched:
+      return true;
+    default:
+      return false;
+  }
+}
 
 TransferMetadata::TransferMetadata(Status status,
                                    float progress,
@@ -16,3 +37,8 @@ TransferMetadata::TransferMetadata(Status status,
       is_final_status_(is_final_status) {}
 
 TransferMetadata::~TransferMetadata() = default;
+
+TransferMetadata::TransferMetadata(const TransferMetadata&) = default;
+
+TransferMetadata& TransferMetadata::operator=(const TransferMetadata&) =
+    default;

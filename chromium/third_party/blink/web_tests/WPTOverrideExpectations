@@ -1,5 +1,4 @@
-# tags: [ Android Fuchsia IOS IOS12.2 IOS13.0 Linux Mac Mac10.10 Mac10.11 Mac10.12 Retina
-#         Mac10.13 Win Win7 Win10 ]
+# tags: [ Android Fuchsia Linux Mac Mac10.12 Mac10.13 Win Win7 Win10 ]
 # tags: [ Release Debug ]
 # results: [ Timeout Crash Pass Failure Slow Skip ]
 
@@ -168,7 +167,6 @@ external/wpt/client-hints/accept-ch-stickiness/same-origin-iframe.https.html [ P
 external/wpt/client-hints/accept-ch-stickiness/same-origin-navigation.https.html [ Pass ] # wpt_subtest_failure
 external/wpt/client-hints/sec-ch-ua.https.html [ Pass ] # wpt_subtest_failure
 external/wpt/compat/webkit-box-rtl-flex.html [ Failure ]
-external/wpt/compat/webkit-text-fill-color-property-002.html [ Pass Failure ]
 external/wpt/contacts/contacts-select.https.window.html [ Failure ] # wpt_subtest_failure
 external/wpt/content-security-policy/frame-ancestors/frame-ancestors-nested-cross-in-same-url-allow.html [ Pass Failure ]
 external/wpt/content-security-policy/object-src/object-src-no-url-allowed.html [ Pass Failure ]
@@ -741,18 +739,6 @@ external/wpt/mathml/presentation-markup/mrow/legacy-mrow-like-elements-001.html 
 external/wpt/mathml/presentation-markup/operators/mo-axis-height-1.html [ Failure Pass ] # wpt_subtest_failure
 external/wpt/mathml/presentation-markup/operators/operator-dictionary-001.html [ Failure Pass ] # wpt_subtest_failure
 external/wpt/mathml/presentation-markup/operators/operator-dictionary-002.html [ Failure Pass ] # wpt_subtest_failure
-external/wpt/mathml/presentation-markup/radicals/root-parameters-1.html [ Failure Pass ] # wpt_subtest_failure
-external/wpt/mathml/presentation-markup/scripts/subsup-1.html [ Failure Pass ] # wpt_subtest_failure
-external/wpt/mathml/presentation-markup/scripts/subsup-2.html [ Failure Pass ] # wpt_subtest_failure
-external/wpt/mathml/presentation-markup/scripts/subsup-3.html [ Failure Pass ] # wpt_subtest_failure
-external/wpt/mathml/presentation-markup/scripts/subsup-5.html [ Failure Pass ] # wpt_subtest_failure
-external/wpt/mathml/presentation-markup/scripts/subsup-parameters-1.html [ Failure Pass ] # wpt_subtest_failure
-external/wpt/mathml/presentation-markup/scripts/subsup-parameters-2.html [ Failure Pass ] # wpt_subtest_failure
-external/wpt/mathml/presentation-markup/scripts/underover-1.html [ Failure Pass ] # wpt_subtest_failure
-external/wpt/mathml/presentation-markup/scripts/underover-parameters-1.html [ Failure Pass ] # wpt_subtest_failure
-external/wpt/mathml/presentation-markup/scripts/underover-parameters-2.html [ Failure Pass ] # wpt_subtest_failure
-external/wpt/mathml/presentation-markup/scripts/underover-parameters-3.html [ Failure Pass ] # wpt_subtest_failure
-external/wpt/mathml/presentation-markup/scripts/underover-parameters-4.html [ Failure Pass ] # wpt_subtest_failure
 external/wpt/mathml/presentation-markup/spaces/space-1.html [ Failure Pass ] # wpt_subtest_failure
 external/wpt/mathml/presentation-markup/spaces/space-like-001.html [ Failure Pass ] # wpt_subtest_failure
 external/wpt/mathml/presentation-markup/spaces/space-like-002.html [ Failure Pass ] # wpt_subtest_failure
@@ -775,9 +761,6 @@ external/wpt/mathml/relations/css-styling/mathcolor-003.html [ Failure Pass ]
 external/wpt/mathml/relations/css-styling/mathsize-attribute-css-keywords.html [ Failure Pass ]
 external/wpt/mathml/relations/css-styling/mathsize-attribute-legacy-values.html [ Failure Pass ]
 external/wpt/mathml/relations/css-styling/mathsize-attribute.html [ Failure Pass ]
-external/wpt/mathml/relations/css-styling/padding-border-margin/border-002.html [ Failure Pass ] # wpt_subtest_failure
-external/wpt/mathml/relations/css-styling/padding-border-margin/margin-002.html [ Failure Pass ] # wpt_subtest_failure
-external/wpt/mathml/relations/css-styling/padding-border-margin/padding-002.html [ Failure Pass ] # wpt_subtest_failure
 external/wpt/mathml/relations/css-styling/width-height-001.html [ Failure Pass ] # wpt_subtest_failure
 external/wpt/mathml/relations/html5-tree/color-attributes-1.html [ Failure Pass ]
 external/wpt/mathml/relations/html5-tree/display-1.html [ Failure Pass ] # wpt_subtest_failure

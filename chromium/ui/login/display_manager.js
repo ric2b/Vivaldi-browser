@@ -9,9 +9,9 @@
 // <include src="display_manager_types.js">
 
 // TODO(xiyuan): Find a better to share those constants.
+/** @const */ var SCREEN_WELCOME = 'connect';
 /** @const */ var SCREEN_OOBE_NETWORK = 'network-selection';
 /** @const */ var SCREEN_OOBE_HID_DETECTION = 'hid-detection';
-/** @const */ var SCREEN_OOBE_EULA = 'eula';
 /** @const */ var SCREEN_OOBE_ENABLE_DEBUGGING = 'debugging';
 /** @const */ var SCREEN_OOBE_UPDATE = 'oobe-update';
 /** @const */ var SCREEN_OOBE_RESET = 'reset';
@@ -42,9 +42,10 @@
 /** @const */ var SCREEN_DISCOVER = 'discover';
 /** @const */ var SCREEN_MARKETING_OPT_IN = 'marketing-opt-in';
 
-/* Accelerator identifiers. Must be kept in sync with webui_login_view.cc. */
+/* Accelerator identifiers.
+ * Must be kept in sync with webui_accelerator_mapping.cc.
+ */
 /** @const */ var ACCELERATOR_CANCEL = 'cancel';
-/** @const */ var ACCELERATOR_ENABLE_DEBBUGING = 'debugging';
 /** @const */ var ACCELERATOR_ENROLLMENT = 'enrollment';
 /** @const */ var ACCELERATOR_KIOSK_ENABLE = 'kiosk_enable';
 /** @const */ var ACCELERATOR_VERSION = 'version';
@@ -55,7 +56,6 @@
 /** @const */ var ACCELERATOR_APP_LAUNCH_BAILOUT = 'app_launch_bailout';
 /** @const */ var ACCELERATOR_APP_LAUNCH_NETWORK_CONFIG =
     'app_launch_network_config';
-/** @const */ var ACCELERATOR_DEMO_MODE = "demo_mode";
 /** @const */ var ACCELERATOR_SEND_FEEDBACK = "send_feedback";
 
 /* Possible UI states of the error screen. */
@@ -93,7 +93,6 @@ cr.define('cr.ui.login', function() {
    */
   var RESET_AVAILABLE_SCREEN_GROUP = [
     SCREEN_OOBE_NETWORK,
-    SCREEN_OOBE_EULA,
     SCREEN_OOBE_AUTO_ENROLLMENT_CHECK,
     SCREEN_GAIA_SIGNIN,
     SCREEN_ACCOUNT_PICKER,
@@ -108,19 +107,6 @@ cr.define('cr.ui.login', function() {
     SCREEN_APP_DOWNLOADING,
     SCREEN_DISCOVER,
     SCREEN_MARKETING_OPT_IN,
-  ];
-
-  /**
-   * Group of screens (screen IDs) where enable debuggingscreen invocation is
-   * available. Newer screens using Polymer use the attribute
-   * `enableDebuggingAllowed` in their `ready()` method.
-   * @type Array<string>
-   * @const
-   */
-  var ENABLE_DEBUGGING_AVAILABLE_SCREEN_GROUP = [
-    SCREEN_OOBE_NETWORK,
-    SCREEN_OOBE_EULA,
-    SCREEN_OOBE_UPDATE
   ];
 
   /**
@@ -392,24 +378,12 @@ cr.define('cr.ui.login', function() {
         if (this.currentScreen && this.currentScreen.cancel) {
           this.currentScreen.cancel();
         }
-      } else if (name == ACCELERATOR_ENABLE_DEBBUGING) {
-        if (attributes.enableDebuggingAllowed ||
-            ENABLE_DEBUGGING_AVAILABLE_SCREEN_GROUP.indexOf(currentStepId) !=
-            -1) {
-          chrome.send('toggleEnableDebuggingScreen');
-        }
       } else if (name == ACCELERATOR_ENROLLMENT) {
         if (attributes.startEnrollmentAllowed ||
             currentStepId == SCREEN_GAIA_SIGNIN ||
             currentStepId == SCREEN_PACKAGED_LICENSE ||
             currentStepId == SCREEN_ACCOUNT_PICKER) {
           chrome.send('toggleEnrollmentScreen');
-        } else if (attributes.postponeEnrollmentAllowed ||
-            currentStepId == SCREEN_OOBE_NETWORK ||
-            currentStepId == SCREEN_OOBE_EULA) {
-          // In this case update check will be skipped and OOBE will
-          // proceed straight to enrollment screen when EULA is accepted.
-          chrome.send('skipUpdateEnrollAfterEula');
         } else {
           console.warn('No action for current step ID: ' + currentStepId);
         }
@@ -442,8 +416,6 @@ cr.define('cr.ui.login', function() {
       } else if (name == ACCELERATOR_APP_LAUNCH_NETWORK_CONFIG) {
         if (currentStepId == SCREEN_APP_LAUNCH_SPLASH)
           chrome.send('networkConfigRequest');
-      } else if (name == ACCELERATOR_DEMO_MODE) {
-        this.startDemoModeFlow();
       } else if (name == ACCELERATOR_SEND_FEEDBACK) {
         chrome.send('sendFeedback');
       }
@@ -777,7 +749,12 @@ cr.define('cr.ui.login', function() {
     initializeDemoModeMultiTapListener: function() {
       if (this.displayType_ == DISPLAY_TYPE.OOBE) {
         this.demoModeStartListener_ = new MultiTapDetector(
-            $('outer-container'), 10, this.startDemoModeFlow.bind(this));
+            $('outer-container'), 10, () => {
+              let currentScreen = Oobe.getInstance().currentScreen;
+              if (currentScreen.id === SCREEN_WELCOME) {
+                currentScreen.onSetupDemoModeGesture();
+              }
+        });
       }
     },
 
@@ -861,43 +838,6 @@ cr.define('cr.ui.login', function() {
           function() {  // onCancel
             chrome.send('setDeviceRequisition', ['none']);
           });
-    },
-
-    /**
-     * Starts demo mode flow. Shows the enable demo mode dialog if needed.
-     */
-    startDemoModeFlow: function() {
-      var isDemoModeEnabled = loadTimeData.getBoolean('isDemoModeEnabled');
-      if (!isDemoModeEnabled) {
-        console.warn('Cannot setup demo mode, because it is disabled.');
-        return;
-      }
-
-      var currentStepId = this.screens_[this.currentStep_];
-      var attributes = this.screensAttributes_[this.currentStep_] || {};
-      if (!attributes.enterDemoModeAllowed)
-        return;
-
-      if (!this.enableDemoModeDialog_) {
-        this.enableDemoModeDialog_ =
-            new cr.ui.dialogs.ConfirmDialog(document.body);
-        this.enableDemoModeDialog_.setOkLabel(
-            loadTimeData.getString('enableDemoModeDialogConfirm'));
-        this.enableDemoModeDialog_.setCancelLabel(
-            loadTimeData.getString('enableDemoModeDialogCancel'));
-      }
-      var configuration = Oobe.getInstance().getOobeConfiguration();
-      if (configuration && configuration.enableDemoMode) {
-        // Bypass showing dialog.
-        chrome.send('setupDemoMode');
-      } else {
-        this.enableDemoModeDialog_.showWithTitle(
-            loadTimeData.getString('enableDemoModeDialogTitle'),
-            loadTimeData.getString('enableDemoModeDialogText'),
-            function() {  // onOk
-              chrome.send('setupDemoMode');
-            });
-      }
     },
 
     /**

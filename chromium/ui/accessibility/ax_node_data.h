@@ -195,8 +195,10 @@ struct AX_BASE_EXPORT AXNodeData {
   void SetRestriction(ax::mojom::Restriction restriction);
   ax::mojom::ListStyle GetListStyle() const;
   void SetListStyle(ax::mojom::ListStyle list_style);
-  ax::mojom::TextDirection GetTextDirection() const;
-  void SetTextDirection(ax::mojom::TextDirection text_direction);
+  ax::mojom::TextAlign GetTextAlign() const;
+  void SetTextAlign(ax::mojom::TextAlign text_align);
+  ax::mojom::WritingDirection GetTextDirection() const;
+  void SetTextDirection(ax::mojom::WritingDirection text_direction);
   ax::mojom::ImageAnnotationStatus GetImageAnnotationStatus() const;
   void SetImageAnnotationStatus(ax::mojom::ImageAnnotationStatus status);
 
@@ -211,6 +213,9 @@ struct AX_BASE_EXPORT AXNodeData {
   // Helper to determine if the data belongs to a node that can respond to
   // clicks.
   bool IsClickable() const;
+
+  // Helper to determine if the object is selectable.
+  bool IsSelectable() const;
 
   // Helper to determine if the data has the ignored state or ignored role.
   bool IsIgnored() const;

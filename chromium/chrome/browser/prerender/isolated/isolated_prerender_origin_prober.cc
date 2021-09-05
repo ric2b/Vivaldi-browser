@@ -7,24 +7,60 @@
 #include "base/bind.h"
 #include "base/feature_list.h"
 #include "base/no_destructor.h"
+#include "base/task/post_task.h"
 #include "chrome/browser/availability/availability_prober.h"
 #include "chrome/browser/prerender/isolated/isolated_prerender_params.h"
 #include "chrome/browser/profiles/profile.h"
+#include "content/public/browser/browser_task_traits.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/storage_partition.h"
+#include "mojo/public/cpp/bindings/callback_helpers.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/isolation_info.h"
 #include "net/base/network_isolation_key.h"
 #include "services/network/public/mojom/host_resolver.mojom.h"
 #include "services/network/public/mojom/network_context.mojom.h"
+#include "services/network/public/mojom/tls_socket.mojom.h"
 #include "url/origin.h"
 
 namespace {
 
+net::NetworkTrafficAnnotationTag GetProbingTrafficAnnotation() {
+  return net::DefineNetworkTrafficAnnotation("isolated_prerender_probe", R"(
+        semantics {
+          sender: "Isolated Prerender Probe Loader"
+          description:
+            "Verifies the end to end connection between Chrome and the "
+            "origin site that the user is currently navigating to. This is "
+            "done during a navigation that was previously prerendered over a "
+            "proxy to check that the site is not blocked by middleboxes. "
+            "Such prerenders will be used to prefetch render-blocking "
+            "content before being navigated by the user without impacting "
+            "privacy."
+          trigger:
+            "Used for sites off of Google SRPs (Search Result Pages) only "
+            "for Lite mode users when the experimental feature flag is "
+            "enabled."
+          data: "None."
+          destination: WEBSITE
+        }
+        policy {
+          cookies_allowed: NO
+          setting:
+            "Users can control Lite mode on Android via the settings menu. "
+            "Lite mode is not available on iOS, and on desktop only for "
+            "developer testing."
+          policy_exception_justification: "Not implemented."
+      })");
+}
+
 class DNSProber : public network::mojom::ResolveHostClient {
  public:
-  explicit DNSProber(
-      IsolatedPrerenderOriginProber::OnProbeResultCallback callback)
+  using OnDNSResultsCallback = base::OnceCallback<
+      void(int, const base::Optional<net::AddressList>& resolved_addresses)>;
+
+  explicit DNSProber(OnDNSResultsCallback callback)
       : callback_(std::move(callback)) {
     DCHECK(callback_);
   }
@@ -32,7 +68,7 @@ class DNSProber : public network::mojom::ResolveHostClient {
   ~DNSProber() override {
     if (callback_) {
       // Indicates some kind of mojo error. Play it safe and return no success.
-      std::move(callback_).Run(false);
+      std::move(callback_).Run(net::ERR_FAILED, base::nullopt);
     }
   }
 
@@ -44,12 +80,96 @@ class DNSProber : public network::mojom::ResolveHostClient {
       const net::ResolveErrorInfo& resolve_error_info,
       const base::Optional<net::AddressList>& resolved_addresses) override {
     if (callback_) {
-      std::move(callback_).Run(error == net::OK);
+      std::move(callback_).Run(error, resolved_addresses);
     }
   }
 
  private:
+  OnDNSResultsCallback callback_;
+};
+
+void TLSDropHandler(base::OnceClosure ui_only_callback) {
+  content::GetUIThreadTaskRunner({})->PostTask(FROM_HERE,
+                                               std::move(ui_only_callback));
+}
+
+class TLSProber {
+ public:
+  TLSProber(const GURL& url,
+            IsolatedPrerenderOriginProber::OnProbeResultCallback callback)
+      : url_(url), callback_(std::move(callback)) {}
+  ~TLSProber() { DCHECK(!callback_); }
+
+  network::mojom::NetworkContext::CreateTCPConnectedSocketCallback
+  GetOnTCPConnectedCallback() {
+    network::mojom::NetworkContext::CreateTCPConnectedSocketCallback
+        tcp_handler = base::BindOnce(&TLSProber::OnTCPConnected,
+                                     weak_factory_.GetWeakPtr());
+
+    return mojo::WrapCallbackWithDropHandler(std::move(tcp_handler),
+                                             GetDropHandler());
+  }
+
+  mojo::PendingReceiver<network::mojom::TCPConnectedSocket>
+  GetTCPSocketReceiver() {
+    return tcp_socket_.BindNewPipeAndPassReceiver();
+  }
+
+ private:
+  void OnTCPConnected(int result,
+                      const base::Optional<net::IPEndPoint>& local_addr,
+                      const base::Optional<net::IPEndPoint>& peer_addr,
+                      mojo::ScopedDataPipeConsumerHandle receive_stream,
+                      mojo::ScopedDataPipeProducerHandle send_stream) {
+    if (result != net::OK) {
+      HandleFailure();
+      return;
+    }
+
+    network::mojom::TCPConnectedSocket::UpgradeToTLSCallback tls_handler =
+        base::BindOnce(&TLSProber::OnUpgradeToTLS, weak_factory_.GetWeakPtr());
+
+    tcp_socket_->UpgradeToTLS(
+        net::HostPortPair::FromURL(url_), /*options=*/nullptr,
+        net::MutableNetworkTrafficAnnotationTag(GetProbingTrafficAnnotation()),
+        tls_socket_.BindNewPipeAndPassReceiver(),
+        /*observer=*/mojo::NullRemote(),
+        mojo::WrapCallbackWithDropHandler(std::move(tls_handler),
+                                          GetDropHandler()));
+  }
+
+  void OnUpgradeToTLS(int result,
+                      mojo::ScopedDataPipeConsumerHandle receive_stream,
+                      mojo::ScopedDataPipeProducerHandle send_stream,
+                      const base::Optional<net::SSLInfo>& ssl_info) {
+    std::move(callback_).Run(result == net::OK);
+    delete this;
+  }
+
+  base::OnceClosure GetDropHandler() {
+    // The drop handler is not guaranteed to be run on the original thread. Use
+    // the anon method above to fix that.
+    return base::BindOnce(
+        &TLSDropHandler,
+        base::BindOnce(&TLSProber::HandleFailure, weak_factory_.GetWeakPtr()));
+  }
+
+  void HandleFailure() {
+    std::move(callback_).Run(false);
+    delete this;
+  }
+
+  // The URL of the resource being probed. Only the host:port is used.
+  const GURL url_;
+
+  // The callback to run when the probe is complete.
   IsolatedPrerenderOriginProber::OnProbeResultCallback callback_;
+
+  // Mojo sockets. We only test that both can be connected.
+  mojo::Remote<network::mojom::TCPConnectedSocket> tcp_socket_;
+  mojo::Remote<network::mojom::TLSClientSocket> tls_socket_;
+
+  base::WeakPtrFactory<TLSProber> weak_factory_{this};
 };
 
 void HTTPProbeHelper(
@@ -98,6 +218,16 @@ OriginProbeDelegate* GetOriginProbeDelegate() {
   return delegate.get();
 }
 
+// Allows probing to start after a delay so that browser start isn't slowed.
+void StartCanaryCheck(base::WeakPtr<AvailabilityProber> canary_checker) {
+  // If there is no previously cached result for this network then one should be
+  // started. If the previous result is stale, the prober will start a probe
+  // during |LastProbeWasSuccessful|.
+  if (!canary_checker->LastProbeWasSuccessful().has_value()) {
+    canary_checker->SendNowIfInactive(false);
+  }
+}
+
 }  // namespace
 
 IsolatedPrerenderOriginProber::IsolatedPrerenderOriginProber(Profile* profile)
@@ -137,26 +267,50 @@ IsolatedPrerenderOriginProber::IsolatedPrerenderOriginProber(Profile* profile)
   AvailabilityProber::RetryPolicy retry_policy;
   retry_policy.max_retries = 0;
 
-  canary_check_ = std::make_unique<AvailabilityProber>(
+  tls_canary_check_ = std::make_unique<AvailabilityProber>(
       GetCanaryCheckDelegate(),
       content::BrowserContext::GetDefaultStoragePartition(profile_)
           ->GetURLLoaderFactoryForBrowserProcess(),
       profile_->GetPrefs(),
-      AvailabilityProber::ClientName::kIsolatedPrerenderCanaryCheck,
-      IsolatedPrerenderCanaryCheckURL(), AvailabilityProber::HttpMethod::kGet,
-      net::HttpRequestHeaders(), retry_policy, timeout_policy,
-      traffic_annotation, 10 /* max_cache_entries */,
-      IsolatedPrerenderCanaryCheckCacheLifetime());
+      AvailabilityProber::ClientName::kIsolatedPrerenderTLSCanaryCheck,
+      IsolatedPrerenderTLSCanaryCheckURL(),
+      AvailabilityProber::HttpMethod::kGet, net::HttpRequestHeaders(),
+      retry_policy, timeout_policy, traffic_annotation,
+      10 /* max_cache_entries */, IsolatedPrerenderCanaryCheckCacheLifetime());
+  tls_canary_check_->SetOnCompleteCallback(
+      base::BindOnce(&IsolatedPrerenderOriginProber::OnTLSCanaryCheckComplete,
+                     weak_factory_.GetWeakPtr()));
 
-  // If there is no previously cached result for this network then one should be
-  // started. If the previous result is stale, the prober will start a probe
-  // during |LastProbeWasSuccessful|.
-  if (!canary_check_->LastProbeWasSuccessful().has_value()) {
-    canary_check_->SendNowIfInactive(false);
-  }
+  dns_canary_check_ = std::make_unique<AvailabilityProber>(
+      GetCanaryCheckDelegate(),
+      content::BrowserContext::GetDefaultStoragePartition(profile_)
+          ->GetURLLoaderFactoryForBrowserProcess(),
+      profile_->GetPrefs(),
+      AvailabilityProber::ClientName::kIsolatedPrerenderTLSCanaryCheck,
+      IsolatedPrerenderDNSCanaryCheckURL(),
+      AvailabilityProber::HttpMethod::kGet, net::HttpRequestHeaders(),
+      retry_policy, timeout_policy, traffic_annotation,
+      10 /* max_cache_entries */, IsolatedPrerenderCanaryCheckCacheLifetime());
+
+  // This code is running at browser startup. Start the canary check when we get
+  // the chance, but there's no point in it being ready for the first navigation
+  // since the check won't be done by then anyways.
+  content::GetUIThreadTaskRunner({base::TaskPriority::BEST_EFFORT})
+      ->PostDelayedTask(
+          FROM_HERE,
+          base::BindOnce(&StartCanaryCheck, tls_canary_check_->AsWeakPtr()),
+          base::TimeDelta::FromSeconds(1));
 }
 
 IsolatedPrerenderOriginProber::~IsolatedPrerenderOriginProber() = default;
+
+void IsolatedPrerenderOriginProber::OnTLSCanaryCheckComplete(bool success) {
+  // If the TLS check was not successful, don't bother with the DNS check.
+  if (!success)
+    return;
+
+  StartCanaryCheck(dns_canary_check_->AsWeakPtr());
+}
 
 bool IsolatedPrerenderOriginProber::ShouldProbeOrigins() {
   if (!IsolatedPrerenderProbingEnabled()) {
@@ -165,16 +319,17 @@ bool IsolatedPrerenderOriginProber::ShouldProbeOrigins() {
   if (!IsolatedPrerenderCanaryCheckEnabled()) {
     return true;
   }
-  DCHECK(canary_check_);
+  DCHECK(tls_canary_check_);
+  DCHECK(dns_canary_check_);
 
-  base::Optional<bool> result = canary_check_->LastProbeWasSuccessful();
-  if (!result.has_value()) {
-    // The canary check hasn't completed yet, so this request must probe.
-    return true;
-  }
+  bool tls_success =
+      tls_canary_check_->LastProbeWasSuccessful().value_or(false);
+  bool dns_success =
+      dns_canary_check_->LastProbeWasSuccessful().value_or(false);
 
-  // If the canary check was successful, no probing is needed.
-  return !result.value();
+  // If both checks have completed and succeeded, then no probing is needed. In
+  // every other case, probe.
+  return !(tls_success && dns_success);
 }
 
 void IsolatedPrerenderOriginProber::
@@ -183,8 +338,14 @@ void IsolatedPrerenderOriginProber::
   override_delegate_ = delegate;
 }
 
-bool IsolatedPrerenderOriginProber::IsCanaryCheckCompleteForTesting() const {
-  return canary_check_ && canary_check_->LastProbeWasSuccessful().has_value();
+bool IsolatedPrerenderOriginProber::IsTLSCanaryCheckCompleteForTesting() const {
+  return tls_canary_check_ &&
+         tls_canary_check_->LastProbeWasSuccessful().has_value();
+}
+
+bool IsolatedPrerenderOriginProber::IsDNSCanaryCheckCompleteForTesting() const {
+  return dns_canary_check_ &&
+         dns_canary_check_->LastProbeWasSuccessful().has_value();
 }
 
 void IsolatedPrerenderOriginProber::Probe(const GURL& url,
@@ -196,18 +357,37 @@ void IsolatedPrerenderOriginProber::Probe(const GURL& url,
     probe_url = override_delegate_->OverrideProbeURL(probe_url);
   }
 
-  switch (IsolatedPrerenderOriginProbeMechanism()) {
-    case IsolatedPrerenderOriginProbeType::kDns:
-      DNSProbe(probe_url, std::move(callback));
-      return;
-    case IsolatedPrerenderOriginProbeType::kHttpHead:
+  bool tls_canary_check_success =
+      tls_canary_check_
+          ? tls_canary_check_->LastProbeWasSuccessful().value_or(false)
+          : false;
+
+  if (!tls_canary_check_success) {
+    if (IsolatedPrerenderMustHTTPProbeInsteadOfTLS()) {
       HTTPProbe(probe_url, std::move(callback));
       return;
+    }
+    TLSProbe(probe_url, std::move(callback));
+    return;
   }
+
+  DNSProbe(probe_url, std::move(callback));
 }
 
 void IsolatedPrerenderOriginProber::DNSProbe(const GURL& url,
                                              OnProbeResultCallback callback) {
+  StartDNSResolution(url, std::move(callback), /*also_do_tls_connect=*/false);
+}
+
+void IsolatedPrerenderOriginProber::TLSProbe(const GURL& url,
+                                             OnProbeResultCallback callback) {
+  StartDNSResolution(url, std::move(callback), /*also_do_tls_connect=*/true);
+}
+
+void IsolatedPrerenderOriginProber::StartDNSResolution(
+    const GURL& url,
+    OnProbeResultCallback callback,
+    bool also_do_tls_connect) {
   net::NetworkIsolationKey nik =
       net::IsolationInfo::CreateForInternalRequest(url::Origin::Create(url))
           .network_isolation_key();
@@ -218,7 +398,10 @@ void IsolatedPrerenderOriginProber::DNSProbe(const GURL& url,
   resolve_host_parameters->initial_priority = net::RequestPriority::HIGHEST;
 
   mojo::PendingRemote<network::mojom::ResolveHostClient> client_remote;
-  mojo::MakeSelfOwnedReceiver(std::make_unique<DNSProber>(std::move(callback)),
+  mojo::MakeSelfOwnedReceiver(std::make_unique<DNSProber>(base::BindOnce(
+                                  &IsolatedPrerenderOriginProber::OnDNSResolved,
+                                  weak_factory_.GetWeakPtr(), url,
+                                  std::move(callback), also_do_tls_connect)),
                               client_remote.InitWithNewPipeAndPassReceiver());
 
   content::BrowserContext::GetDefaultStoragePartition(profile_)
@@ -230,34 +413,6 @@ void IsolatedPrerenderOriginProber::DNSProbe(const GURL& url,
 
 void IsolatedPrerenderOriginProber::HTTPProbe(const GURL& url,
                                               OnProbeResultCallback callback) {
-  net::NetworkTrafficAnnotationTag traffic_annotation =
-      net::DefineNetworkTrafficAnnotation("isolated_prerender_probe", R"(
-          semantics {
-            sender: "Isolated Prerender Probe Loader"
-            description:
-              "Verifies the end to end connection between Chrome and the "
-              "origin site that the user is currently navigating to. This is "
-              "done during a navigation that was previously prerendered over a "
-              "proxy to check that the site is not blocked by middleboxes. "
-              "Such prerenders will be used to prefetch render-blocking "
-              "content before being navigated by the user without impacting "
-              "privacy."
-            trigger:
-              "Used for sites off of Google SRPs (Search Result Pages) only "
-              "for Lite mode users when the experimental feature flag is "
-              "enabled."
-            data: "None."
-            destination: WEBSITE
-          }
-          policy {
-            cookies_allowed: NO
-            setting:
-              "Users can control Lite mode on Android via the settings menu. "
-              "Lite mode is not available on iOS, and on desktop only for "
-              "developer testing."
-            policy_exception_justification: "Not implemented."
-        })");
-
   AvailabilityProber::TimeoutPolicy timeout_policy;
   timeout_policy.base_timeout = IsolatedPrerenderProbeTimeout();
   AvailabilityProber::RetryPolicy retry_policy;
@@ -271,7 +426,7 @@ void IsolatedPrerenderOriginProber::HTTPProbe(const GURL& url,
           nullptr /* pref_service */,
           AvailabilityProber::ClientName::kIsolatedPrerenderOriginCheck, url,
           AvailabilityProber::HttpMethod::kHead, net::HttpRequestHeaders(),
-          retry_policy, timeout_policy, traffic_annotation,
+          retry_policy, timeout_policy, GetProbingTrafficAnnotation(),
           0 /* max_cache_entries */,
           base::TimeDelta::FromSeconds(0) /* revalidate_cache_after */);
   AvailabilityProber* prober_ptr = prober.get();
@@ -283,4 +438,50 @@ void IsolatedPrerenderOriginProber::HTTPProbe(const GURL& url,
   prober_ptr->SetOnCompleteCallback(base::BindOnce(std::move(owning_callback)));
 
   prober_ptr->SendNowIfInactive(false /* send_only_in_foreground */);
+}
+
+void IsolatedPrerenderOriginProber::OnDNSResolved(
+    const GURL& url,
+    OnProbeResultCallback callback,
+    bool also_do_tls_connect,
+    int net_error,
+    const base::Optional<net::AddressList>& resolved_addresses) {
+  bool successful = net_error == net::OK && resolved_addresses &&
+                    !resolved_addresses->empty();
+
+  // A TLS connection needs the resolved addresses, so it also fails here.
+  if (!successful) {
+    std::move(callback).Run(false);
+    return;
+  }
+
+  if (!also_do_tls_connect) {
+    std::move(callback).Run(true);
+    return;
+  }
+
+  DoTLSProbeAfterDNSResolution(url, std::move(callback), *resolved_addresses);
+}
+
+void IsolatedPrerenderOriginProber::DoTLSProbeAfterDNSResolution(
+    const GURL& url,
+    OnProbeResultCallback callback,
+    const net::AddressList& addresses) {
+  DCHECK(!addresses.empty());
+
+  std::unique_ptr<TLSProber> prober =
+      std::make_unique<TLSProber>(url, std::move(callback));
+
+  content::BrowserContext::GetDefaultStoragePartition(profile_)
+      ->GetNetworkContext()
+      ->CreateTCPConnectedSocket(
+          /*local_addr=*/base::nullopt, addresses,
+          /*tcp_connected_socket_options=*/nullptr,
+          net::MutableNetworkTrafficAnnotationTag(
+              GetProbingTrafficAnnotation()),
+          prober->GetTCPSocketReceiver(),
+          /*observer=*/mojo::NullRemote(), prober->GetOnTCPConnectedCallback());
+
+  // |prober| manages its own lifetime, using the mojo pipes.
+  prober.release();
 }

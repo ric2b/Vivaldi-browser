@@ -7,6 +7,7 @@
 #include "ash/public/cpp/ash_pref_names.h"
 #include "base/guid.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "chrome/browser/chromeos/input_method/ui/suggestion_details.h"
 #include "chrome/browser/ui/ash/keyboard/chrome_keyboard_controller_client.h"
 #include "chrome/test/base/testing_profile.h"
@@ -74,7 +75,9 @@ class TestSuggestionHandler : public SuggestionHandlerInterface {
     return false;
   }
 
-  void ClickButton(const ui::ime::AssistiveWindowButton& button) override {}
+  void ClickButton(const ui::ime::AssistiveWindowButton& button) override {
+    button_clicked_ = button.id;
+  }
 
   bool SetButtonHighlighted(int context_id,
                             const ui::ime::AssistiveWindowButton& button,
@@ -102,6 +105,9 @@ class TestSuggestionHandler : public SuggestionHandlerInterface {
   void VerifyShowSettingLink(const bool show_setting_link) {
     EXPECT_EQ(show_setting_link_, show_setting_link);
   }
+  void VerifyButtonClicked(const ui::ime::ButtonId id) {
+    EXPECT_EQ(button_clicked_, id);
+  }
 
   bool IsSuggestionAccepted() { return suggestion_accepted_; }
 
@@ -111,6 +117,7 @@ class TestSuggestionHandler : public SuggestionHandlerInterface {
   bool show_annotation_ = false;
   bool show_setting_link_ = false;
   bool suggestion_accepted_ = false;
+  ui::ime::ButtonId button_clicked_ = ui::ime::ButtonId::kNone;
   std::vector<std::string> previous_suggestions_;
 };
 
@@ -152,7 +159,7 @@ class PersonalInfoSuggesterTest : public testing::Test {
 
     chrome_keyboard_controller_client_ =
         ChromeKeyboardControllerClient::CreateForTest();
-    chrome_keyboard_controller_client_->set_keyboard_enabled_for_test(false);
+    chrome_keyboard_controller_client_->set_keyboard_visible_for_test(false);
   }
 
   void SendKeyboardEvent(std::string key) {
@@ -209,7 +216,7 @@ TEST_F(PersonalInfoSuggesterTest, DoNotSuggestEmail) {
 }
 
 TEST_F(PersonalInfoSuggesterTest, DoNotSuggestWhenVirtualKeyboardEnabled) {
-  chrome_keyboard_controller_client_->set_keyboard_enabled_for_test(true);
+  chrome_keyboard_controller_client_->set_keyboard_visible_for_test(true);
   profile_->set_profile_name(base::UTF16ToUTF8(email_));
 
   suggester_->Suggest(base::UTF8ToUTF16("my email is "));
@@ -218,7 +225,7 @@ TEST_F(PersonalInfoSuggesterTest, DoNotSuggestWhenVirtualKeyboardEnabled) {
 
 TEST_F(PersonalInfoSuggesterTest,
        SendsEmailSuggestionToExtensionWhenVirtualKeyboardEnabled) {
-  chrome_keyboard_controller_client_->set_keyboard_enabled_for_test(true);
+  chrome_keyboard_controller_client_->set_keyboard_visible_for_test(true);
   profile_->set_profile_name(base::UTF16ToUTF8(email_));
 
   suggester_->Suggest(base::UTF8ToUTF16("my email is "));
@@ -382,11 +389,25 @@ TEST_F(PersonalInfoSuggesterTest, DoNotSuggestPhoneNumber) {
   suggestion_handler_->VerifySuggestion(base::EmptyString16(), 0);
 }
 
-TEST_F(PersonalInfoSuggesterTest, AcceptSuggestion) {
+TEST_F(PersonalInfoSuggesterTest, AcceptSuggestionWithDownEnter) {
   profile_->set_profile_name(base::UTF16ToUTF8(email_));
 
   suggester_->Suggest(base::UTF8ToUTF16("my email is "));
   SendKeyboardEvent("Down");
+  SendKeyboardEvent("Enter");
+
+  suggestion_handler_->VerifySuggestion(base::EmptyString16(), 0);
+  EXPECT_TRUE(suggestion_handler_->IsSuggestionAccepted());
+}
+
+TEST_F(PersonalInfoSuggesterTest, AcceptSuggestionWithUpEnter) {
+  DictionaryPrefUpdate update(profile_->GetPrefs(),
+                              prefs::kAssistiveInputFeatureSettings);
+  update->SetIntKey(kPersonalInfoSuggesterAcceptanceCount, 1);
+  profile_->set_profile_name(base::UTF16ToUTF8(email_));
+
+  suggester_->Suggest(base::UTF8ToUTF16("my email is "));
+  SendKeyboardEvent("Up");
   SendKeyboardEvent("Enter");
 
   suggestion_handler_->VerifySuggestion(base::EmptyString16(), 0);
@@ -443,15 +464,21 @@ TEST_F(PersonalInfoSuggesterTest, AnnounceSpokenFeedbackWhenChromeVoxIsOn) {
   tts_handler_->VerifyAnnouncement("");
 
   task_environment_.FastForwardBy(base::TimeDelta::FromMilliseconds(1000));
-  tts_handler_->VerifyAnnouncement(base::StringPrintf(
-      "Suggestion %s. Press down to navigate and enter to insert.",
-      base::UTF16ToUTF8(email_).c_str()));
+  tts_handler_->VerifyAnnouncement(
+      "Personal info suggested. Press down arrow to access; escape to ignore.");
 
   SendKeyboardEvent("Down");
   SendKeyboardEvent("Enter");
   task_environment_.FastForwardBy(base::TimeDelta::FromMilliseconds(200));
-  tts_handler_->VerifyAnnouncement(base::StringPrintf(
-      "Inserted suggestion %s.", base::UTF16ToUTF8(email_).c_str()));
+  tts_handler_->VerifyAnnouncement("Suggestion inserted.");
+
+  suggester_->Suggest(base::UTF8ToUTF16("my email is "));
+  task_environment_.FastForwardBy(base::TimeDelta::FromMilliseconds(1500));
+  tts_handler_->VerifyAnnouncement(
+      "Personal info suggested. Press down arrow to access; escape to ignore.");
+  SendKeyboardEvent("Esc");
+  task_environment_.FastForwardBy(base::TimeDelta::FromMilliseconds(200));
+  tts_handler_->VerifyAnnouncement("Suggestion dismissed.");
 }
 
 TEST_F(PersonalInfoSuggesterTest, DoNotShowAnnotationAfterMaxAcceptanceCount) {
@@ -463,24 +490,6 @@ TEST_F(PersonalInfoSuggesterTest, DoNotShowAnnotationAfterMaxAcceptanceCount) {
   }
   suggester_->Suggest(base::UTF8ToUTF16("my email is "));
   suggestion_handler_->VerifyShowAnnotation(false);
-}
-
-TEST_F(PersonalInfoSuggesterTest, DoNotAnnounceAnnotationWhenTabNotShown) {
-  profile_->set_profile_name(base::UTF16ToUTF8(email_));
-  profile_->GetPrefs()->SetBoolean(
-      ash::prefs::kAccessibilitySpokenFeedbackEnabled, true);
-  DictionaryPrefUpdate update(profile_->GetPrefs(),
-                              prefs::kAssistiveInputFeatureSettings);
-  update->SetIntKey(kPersonalInfoSuggesterAcceptanceCount, kMaxAcceptanceCount);
-
-  suggester_->Suggest(base::UTF8ToUTF16("my email is "));
-  suggestion_handler_->VerifyShowAnnotation(false);
-  task_environment_.FastForwardBy(base::TimeDelta::FromMilliseconds(500));
-  tts_handler_->VerifyAnnouncement("");
-
-  task_environment_.FastForwardBy(base::TimeDelta::FromMilliseconds(1000));
-  tts_handler_->VerifyAnnouncement(
-      base::StringPrintf("Suggestion %s. ", base::UTF16ToUTF8(email_).c_str()));
 }
 
 TEST_F(PersonalInfoSuggesterTest, ShowSettingLink) {
@@ -509,6 +518,67 @@ TEST_F(PersonalInfoSuggesterTest, DoNotShowSettingLinkAfterAcceptance) {
   SendKeyboardEvent("Enter");
   suggester_->Suggest(base::UTF8ToUTF16("my email is "));
   suggestion_handler_->VerifyShowSettingLink(false);
+}
+
+TEST_F(PersonalInfoSuggesterTest, ClickSettingsWithDownDownEnter) {
+  DictionaryPrefUpdate update(profile_->GetPrefs(),
+                              prefs::kAssistiveInputFeatureSettings);
+  update->RemoveKey(kPersonalInfoSuggesterShowSettingCount);
+  update->RemoveKey(kPersonalInfoSuggesterAcceptanceCount);
+  profile_->set_profile_name(base::UTF16ToUTF8(email_));
+
+  suggester_->Suggest(base::UTF8ToUTF16("my email is "));
+  SendKeyboardEvent("Down");
+  SendKeyboardEvent("Down");
+  SendKeyboardEvent("Enter");
+
+  suggestion_handler_->VerifyButtonClicked(
+      ui::ime::ButtonId::kSmartInputsSettingLink);
+}
+
+TEST_F(PersonalInfoSuggesterTest, ClickSettingsWithUpEnter) {
+  DictionaryPrefUpdate update(profile_->GetPrefs(),
+                              prefs::kAssistiveInputFeatureSettings);
+  update->RemoveKey(kPersonalInfoSuggesterShowSettingCount);
+  update->RemoveKey(kPersonalInfoSuggesterAcceptanceCount);
+  profile_->set_profile_name(base::UTF16ToUTF8(email_));
+
+  suggester_->Suggest(base::UTF8ToUTF16("my email is "));
+  SendKeyboardEvent("Up");
+  SendKeyboardEvent("Enter");
+
+  suggestion_handler_->VerifyButtonClicked(
+      ui::ime::ButtonId::kSmartInputsSettingLink);
+}
+
+TEST_F(PersonalInfoSuggesterTest, RecordsTimeToAccept) {
+  base::HistogramTester histogram_tester;
+  histogram_tester.ExpectTotalCount(
+      "InputMethod.Assistive.TimeToAccept.PersonalInfo", 0);
+
+  profile_->set_profile_name(base::UTF16ToUTF8(email_));
+
+  EXPECT_TRUE(suggester_->Suggest(base::UTF8ToUTF16("my email is ")));
+
+  // Press "Down" to choose and accept the suggestion.
+  SendKeyboardEvent("Down");
+  SendKeyboardEvent("Enter");
+  histogram_tester.ExpectTotalCount(
+      "InputMethod.Assistive.TimeToAccept.PersonalInfo", 1);
+}
+
+TEST_F(PersonalInfoSuggesterTest, RecordsTimeToDismiss) {
+  base::HistogramTester histogram_tester;
+  histogram_tester.ExpectTotalCount(
+      "InputMethod.Assistive.TimeToAccept.PersonalInfo", 0);
+
+  profile_->set_profile_name(base::UTF16ToUTF8(email_));
+
+  EXPECT_TRUE(suggester_->Suggest(base::UTF8ToUTF16("my email is ")));
+  // Press "Esc" to dismiss.
+  SendKeyboardEvent("Esc");
+  histogram_tester.ExpectTotalCount(
+      "InputMethod.Assistive.TimeToDismiss.PersonalInfo", 1);
 }
 
 }  // namespace chromeos

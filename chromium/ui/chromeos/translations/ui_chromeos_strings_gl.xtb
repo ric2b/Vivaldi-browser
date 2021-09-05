@@ -21,6 +21,7 @@
 <translation id="1150565364351027703">Lentes de sol</translation>
 <translation id="115443833402798225">Hangul Ahnmatae</translation>
 <translation id="1155759005174418845">Catalán</translation>
+<translation id="1172970565351728681">Tempo restante aproximado: <ph name="REMAINING_TIME" /></translation>
 <translation id="1173894706177603556">Cambiar o nome</translation>
 <translation id="117624967391683467">Copiando <ph name="FILE_NAME" />...</translation>
 <translation id="1178581264944972037">Pausar</translation>
@@ -106,7 +107,6 @@
 <translation id="2085470240340828803">Xa existe un ficheiro denominado "<ph name="FILENAME" />". Que queres facer?</translation>
 <translation id="2121825465123208577">Cambiar tamaño</translation>
 <translation id="2136953289241069843">Transliteración (namaste → नमस्कार)</translation>
-<translation id="2138867954865495510">Non se puido abrir "<ph name="PATH" />": <ph name="ERROR_MESSAGE" /></translation>
 <translation id="2163152940313951844">Carácter non válido: <ph name="CHARACTER_NAME" /></translation>
 <translation id="2164862903024139959">Teclado vietnamita (TCVN)</translation>
 <translation id="2168214441502403371">Teclado persa</translation>
@@ -198,6 +198,7 @@
 <translation id="3236289833370040187">A propiedade transferirase a <ph name="DESTINATION_DOMAIN" />.</translation>
 <translation id="3241720467332021590">Irlandés</translation>
 <translation id="3245321423178950146">Artista descoñecido</translation>
+<translation id="3248185426436836442">Pendente</translation>
 <translation id="3252266817569339921">Francés</translation>
 <translation id="3254434849914415189">Selecciona a aplicación predeterminada para os ficheiros <ph name="FILE_TYPE" />:</translation>
 <translation id="3264582393905923483">Contexto</translation>
@@ -208,6 +209,7 @@
 <translation id="3335337277364016868">Ano de gravación</translation>
 <translation id="3338239663705455570">Teclado esloveno</translation>
 <translation id="3353984535370177728">Seleccionar un cartafol para cargar</translation>
+<translation id="3356580349448036450">Completado</translation>
 <translation id="3399597614303179694">Teclado macedonio</translation>
 <translation id="3414856743105198592">Se formatas as unidades extraíbles borraranse todos os datos. Queres continuar?</translation>
 <translation id="3437801641691368414">Hora de creación</translation>
@@ -243,6 +245,7 @@
 <translation id="3780536599611287598">Non tes permiso para mover os ficheiros a "<ph name="FOLDER_NAME" />".</translation>
 <translation id="3786301125658655746">Non tes conexión</translation>
 <translation id="3789841737615482174">Instalar</translation>
+<translation id="3793469551756281394">Tempo restante aproximado: <ph name="REMAINING_TIME_HOUR" /> e <ph name="REMAINING_TIME_MINUTE" /></translation>
 <translation id="3798449238516105146">Versión</translation>
 <translation id="3801082500826908679">Feroés</translation>
 <translation id="3809272675881623365">Coello</translation>
@@ -299,6 +302,7 @@
 <translation id="4481711095103932593">Este cartafol compártese con Windows</translation>
 <translation id="4487088045714738411">Teclado belga</translation>
 <translation id="4522570452068850558">Detalles</translation>
+<translation id="4542387084127299777">Non se puido abrir <ph name="PATH" /></translation>
 <translation id="4552678318981539154">Comprar máis almacenamento</translation>
 <translation id="4559767610552730302">Bokeh</translation>
 <translation id="4572815280350369984">Ficheiro <ph name="FILE_TYPE" /></translation>
@@ -510,6 +514,7 @@
 <translation id="6629841649550503054">Todos os ficheiros teñen unha copia de seguranza en <ph name="BEGIN_LINK" />Google Drive.<ph name="END_LINK" /></translation>
 <translation id="6643016212128521049">Borrar</translation>
 <translation id="6650726141019353908">Bolboreta rosa</translation>
+<translation id="6657585470893396449">Contrasinal</translation>
 <translation id="6710213216561001401">Anterior</translation>
 <translation id="6718273304615422081">Comprimindo...</translation>
 <translation id="6751256176799620176">Seleccionouse 1 cartafol</translation>
@@ -550,7 +555,6 @@
 <translation id="7012943028104619157"><ph name="ROOT_TITLE" /> (<ph name="ROOT_SUMMARY" />)</translation>
 <translation id="7014174261166285193">Non se puido efectuar a instalación.</translation>
 <translation id="7040138676081995583">Abrir con...</translation>
-<translation id="7059566040011178088">Menos de <ph name="REMAINING_TIME" /></translation>
 <translation id="7100897339030255923"><ph name="COUNT" /> elementos seleccionados</translation>
 <translation id="7106346894903675391">Comprar máis almacenamento...</translation>
 <translation id="7126604456862387217">"&lt;b&gt;<ph name="SEARCH_STRING" />&lt;/b&gt;": &lt;em&gt;buscar en Drive&lt;/em&gt;</translation>
@@ -661,7 +665,6 @@
 <translation id="8193175696669055101">Modelo do dispositivo</translation>
 <translation id="8208580316430297579">Material gráfico</translation>
 <translation id="8223479393428528563">Para gardar estes ficheiros para o uso sen conexión, accede en liña, fai clic co botón dereito nos ficheiros e selecciona a opción <ph name="OFFLINE_CHECKBOX_NAME" />.</translation>
-<translation id="8231972167769262174">Aproximadamente <ph name="REMAINING_TIME" /></translation>
 <translation id="8249296373107784235">Cancelar</translation>
 <translation id="8261506727792406068">Eliminar</translation>
 <translation id="8269755669432358899">Contraer paneis de comentarios de ficheiros</translation>
@@ -724,6 +727,7 @@
 <translation id="9065203028668620118">Editar</translation>
 <translation id="9099674669267916096">Número de páxinas</translation>
 <translation id="9110990317705400362">Estamos buscando constantemente maneiras de navegar de xeito máis seguro. Anteriormente calquera sitio web podía solicitarche engadir unha extensión ao teu navegador. Nas versións máis recentes de Google Chrome, debes indicar explicitamente a Chrome que queres instalar estas extensións engadíndoas a través da páxina Extensións. <ph name="BEGIN_LINK" />Máis información<ph name="END_LINK" /></translation>
+<translation id="9111102763498581341">Desbloquear</translation>
 <translation id="912419004897138677">Códec</translation>
 <translation id="9129931661813833980">Fixar cartafol</translation>
 <translation id="9130775360844693113">Os membros de "<ph name="DESTINATION_NAME" />" terán acceso a estes elementos.</translation>

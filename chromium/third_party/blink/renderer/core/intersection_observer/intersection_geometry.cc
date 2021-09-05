@@ -318,7 +318,8 @@ void IntersectionGeometry::ComputeGeometry(const RootGeometry& root_geometry,
   // Map target_rect_ to absolute coordinates for target's document.
   // GeometryMapper is faster, so we use it when possible; otherwise, fall back
   // to LocalToAncestorRect.
-  PropertyTreeState container_properties = PropertyTreeState::Uninitialized();
+  PropertyTreeStateOrAlias container_properties =
+      PropertyTreeState::Uninitialized();
   const LayoutObject* property_container =
       CanUseGeometryMapper(target)
           ? target->GetPropertyContainer(nullptr, &container_properties)
@@ -346,7 +347,7 @@ void IntersectionGeometry::ComputeGeometry(const RootGeometry& root_geometry,
           TransformState::kUnapplyInverseTransformDirection);
       target->GetDocument().GetLayoutView()->MapAncestorToLocal(
           nullptr, implicit_root_to_target_document_transform,
-          kTraverseDocumentBoundaries | kApplyRemoteRootFrameOffset);
+          kTraverseDocumentBoundaries | kApplyRemoteMainFrameTransform);
       TransformationMatrix matrix =
           implicit_root_to_target_document_transform.AccumulatedTransform()
               .Inverse();
@@ -503,7 +504,10 @@ bool IntersectionGeometry::ClipToRoot(const LayoutObject* root,
       } else {
         // Map clip_rect from the coordinate system of the local root frame to
         // the coordinate system of the remote main frame.
-        clip_rect.MoveBy(IntPoint(local_root_frame->RemoteViewportOffset()));
+        clip_rect = PixelSnappedIntRect(
+            local_root_frame->ContentLayoutObject()->LocalToAncestorRect(
+                PhysicalRect(clip_rect), nullptr,
+                kTraverseDocumentBoundaries | kApplyRemoteMainFrameTransform));
         does_intersect &=
             intersection_rect.InclusiveIntersect(PhysicalRect(clip_rect));
       }

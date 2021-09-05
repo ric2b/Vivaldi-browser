@@ -23,12 +23,13 @@
 #include "content/public/test/mock_render_process_host.h"
 #include "content/public/test/test_browser_context.h"
 #include "content/public/test/test_utils.h"
-#include "content/test/not_implemented_network_url_loader_factory.h"
 #include "mojo/public/cpp/bindings/pending_associated_receiver.h"
 #include "mojo/public/cpp/bindings/pending_associated_remote.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "mojo/public/cpp/test_support/test_utils.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/network/public/cpp/features.h"
+#include "services/network/public/cpp/not_implemented_url_loader_factory.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/messaging/message_port_channel.h"
 #include "third_party/blink/public/common/messaging/message_port_descriptor.h"
@@ -37,6 +38,10 @@
 using blink::MessagePortChannel;
 
 namespace content {
+
+namespace {
+const ukm::SourceId kClientUkmSourceId = 12345;
+}  // namespace
 
 class SharedWorkerHostTest : public testing::Test {
  public:
@@ -61,9 +66,8 @@ class SharedWorkerHostTest : public testing::Test {
         network::mojom::ContentSecurityPolicyType::kReport,
         network::mojom::IPAddressSpace::kPublic,
         blink::mojom::SharedWorkerCreationContextType::kSecure);
-    auto host = std::make_unique<SharedWorkerHost>(
-        &service_, service_.shared_worker_id_generator_.GenerateNextId(),
-        instance, &mock_render_process_host_);
+    auto host = std::make_unique<SharedWorkerHost>(&service_, instance,
+                                                   &mock_render_process_host_);
     auto weak_host = host->AsWeakPtr();
     service_.worker_hosts_.insert(std::move(host));
     return weak_host;
@@ -89,7 +93,7 @@ class SharedWorkerHostTest : public testing::Test {
         SubresourceLoaderParams();
     mojo::PendingRemote<network::mojom::URLLoaderFactory> loader_factory_remote;
     mojo::MakeSelfOwnedReceiver(
-        std::make_unique<NotImplementedNetworkURLLoaderFactory>(),
+        std::make_unique<network::NotImplementedURLLoaderFactory>(),
         loader_factory_remote.InitWithNewPipeAndPassReceiver());
     subresource_loader_params->pending_appcache_loader_factory =
         std::move(loader_factory_remote);
@@ -111,7 +115,7 @@ class SharedWorkerHostTest : public testing::Test {
 
     helper_->context()->CreateContainerHostForWorker(
         std::move(host_receiver), mock_render_process_host_.GetID(),
-        std::move(client_remote), ServiceWorkerClientInfo(host->id()));
+        std::move(client_remote), ServiceWorkerClientInfo(host->token()));
     service_worker_handle->OnCreatedContainerHost(std::move(container_info));
     host->SetServiceWorkerHandle(std::move(service_worker_handle));
 
@@ -136,7 +140,7 @@ class SharedWorkerHostTest : public testing::Test {
     MessagePortChannel local_port(port_pair.TakePort0());
     MessagePortChannel remote_port(port_pair.TakePort1());
     host->AddClient(std::move(client), dummy_render_frame_host_id,
-                    std::move(remote_port));
+                    std::move(remote_port), kClientUkmSourceId);
     return local_port;
   }
 

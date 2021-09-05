@@ -21,8 +21,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "chrome/browser/history/history_service_factory.h"
-#include "chrome/browser/prerender/prerender_field_trial.h"
-#include "chrome/browser/prerender/prerender_manager.h"
 #include "chrome/browser/prerender/prerender_test_utils.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/testing_profile.h"
@@ -31,6 +29,8 @@
 #include "components/history/core/browser/url_database.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/autocomplete_result.h"
+#include "components/prerender/browser/prerender_field_trial.h"
+#include "components/prerender/browser/prerender_manager.h"
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/test_utils.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -127,7 +127,7 @@ class AutocompleteActionPredictorTest : public testing::Test {
  public:
   AutocompleteActionPredictorTest()
       : profile_(std::make_unique<TestingProfile>()), predictor_(nullptr) {
-    CHECK(profile_->CreateHistoryService(true, false));
+    CHECK(profile_->CreateHistoryService());
     predictor_ = std::make_unique<AutocompleteActionPredictor>(profile_.get());
     predictor_->CreateLocalCachesFromDatabase();
     profile_->BlockUntilHistoryProcessesPendingRequests();

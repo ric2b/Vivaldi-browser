@@ -8,6 +8,7 @@
 
 #include "gn/build_settings.h"
 #include "gn/err.h"
+#include "gn/frameworks_utils.h"
 #include "gn/label.h"
 #include "gn/source_dir.h"
 #include "gn/source_file.h"
@@ -80,6 +81,11 @@ struct LibFileConverter {
   bool operator()(const Value& v, LibFile* out, Err* err) const {
     if (!v.VerifyTypeIs(Value::STRING, err))
       return false;
+    if (!GetFrameworkName(v.string_value()).empty()) {
+      *err = Err(v, "Unsupported value in libs.",
+                 "Use frameworks to list framework dependencies.");
+      return false;
+    }
     if (v.string_value().find('/') == std::string::npos) {
       *out = LibFile(v.string_value());
     } else {

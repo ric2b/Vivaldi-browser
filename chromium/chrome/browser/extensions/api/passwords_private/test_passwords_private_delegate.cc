@@ -61,17 +61,15 @@ void TestPasswordsPrivateDelegate::GetPasswordExceptionsList(
   std::move(callback).Run(current_exceptions_);
 }
 
-void TestPasswordsPrivateDelegate::ChangeSavedPassword(
-    int id,
-    base::string16 username,
-    base::Optional<base::string16> password) {
-  if (static_cast<size_t>(id) >= current_entries_.size())
-    return;
-
-  // PasswordUiEntry does not contain a password. Thus we are only updating
-  // the username and the length of the password.
-  current_entries_[id].username = base::UTF16ToUTF8(username);
-  SendSavedPasswordsList();
+bool TestPasswordsPrivateDelegate::ChangeSavedPassword(
+    const std::vector<int>& ids,
+    base::string16 new_password) {
+  for (int id : ids) {
+    if (static_cast<size_t>(id) >= current_entries_.size()) {
+      return false;
+    }
+  }
+  return !new_password.empty() && !ids.empty();
 }
 
 void TestPasswordsPrivateDelegate::RemoveSavedPasswords(

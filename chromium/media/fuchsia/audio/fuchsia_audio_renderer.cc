@@ -11,6 +11,7 @@
 #include "base/logging.h"
 #include "base/sequenced_task_runner.h"
 #include "base/threading/sequenced_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "media/base/decoder_buffer.h"
 #include "media/base/renderer_client.h"
 #include "media/filters/decrypting_demuxer_stream.h"
@@ -22,9 +23,9 @@ namespace {
 // nullopt is returned in case the codec is not supported. nullptr is returned
 // for uncompressed PCM streams.
 base::Optional<std::unique_ptr<fuchsia::media::Compression>>
-GetFuchsiaCompressionFromAudioCodec(AudioCodec codec) {
+GetFuchsiaCompressionFromDecoderConfig(AudioDecoderConfig config) {
   auto compression = std::make_unique<fuchsia::media::Compression>();
-  switch (codec) {
+  switch (config.codec()) {
     case kCodecAAC:
       compression->type = fuchsia::media::AUDIO_ENCODING_AAC;
       break;
@@ -47,6 +48,11 @@ GetFuchsiaCompressionFromAudioCodec(AudioCodec codec) {
     default:
       return base::nullopt;
   }
+
+  if (!config.extra_data().empty()) {
+    compression->parameters = config.extra_data();
+  }
+
   return std::move(compression);
 }
 
@@ -78,17 +84,12 @@ constexpr size_t kNumBuffers = 16;
 
 FuchsiaAudioRenderer::FuchsiaAudioRenderer(
     MediaLog* media_log,
-    mojo::PendingRemote<media::mojom::FuchsiaMediaResourceProvider>
-        pending_media_resource_provider)
-    : media_log_(media_log) {
+    fidl::InterfaceHandle<fuchsia::media::AudioConsumer> audio_consumer_handle)
+    : media_log_(media_log),
+      audio_consumer_handle_(std::move(audio_consumer_handle)) {
   DETACH_FROM_THREAD(thread_checker_);
-
-  mojo::Remote<media::mojom::FuchsiaMediaResourceProvider>
-      media_resource_provider;
-  media_resource_provider.Bind(std::move(pending_media_resource_provider));
-  media_resource_provider->CreateAudioConsumer(
-      audio_consumer_handle_.NewRequest());
 }
+
 
 FuchsiaAudioRenderer::~FuchsiaAudioRenderer() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
@@ -116,6 +117,14 @@ void FuchsiaAudioRenderer::Initialize(DemuxerStream* stream,
   RequestAudioConsumerStatus();
 
   InitializeStreamSink(stream->audio_decoder_config());
+
+  // AAC streams require bitstream conversion. Without it the demuxer may
+  // produce decoded stream without ADTS headers which are required for AAC
+  // streams in AudioConsumer.
+  // TODO(crbug.com/1120095): Reconsider this logic.
+  if (stream->audio_decoder_config().codec() == kCodecAAC) {
+    stream->EnableBitstreamConverter();
+  }
 
   // DecryptingDemuxerStream handles both encrypted and clear streams, so
   // initialize it long as we have cdm_context.
@@ -167,7 +176,7 @@ void FuchsiaAudioRenderer::InitializeStreamSink(
     vmos_for_stream_sink.push_back(std::move(readonly_vmo));
   }
 
-  auto compression = GetFuchsiaCompressionFromAudioCodec(config.codec());
+  auto compression = GetFuchsiaCompressionFromDecoderConfig(config);
   if (!compression) {
     LOG(ERROR) << "Unsupported audio codec: " << GetCodecName(config.codec());
     std::move(init_cb_).Run(AUDIO_RENDERER_ERROR);
@@ -307,8 +316,9 @@ bool FuchsiaAudioRenderer::GetWallClockTimes(
 
   base::AutoLock lock(timeline_lock_);
 
-  const bool is_time_moving = state_ == PlaybackState::kPlaying ||
-                              state_ == PlaybackState::kEndOfStream;
+  const bool is_time_moving = (state_ == PlaybackState::kPlaying ||
+                               state_ == PlaybackState::kEndOfStream) &&
+                              (media_delta_ > 0);
 
   if (media_timestamps.empty()) {
     wall_clock_times->push_back(is_time_moving ? now : base::TimeTicks());

@@ -5,6 +5,7 @@
 #include "third_party/blink/renderer/core/frame/csp/content_security_policy.h"
 
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/common/security_context/insecure_request_policy.h"
 #include "third_party/blink/public/mojom/security_context/insecure_request_policy.mojom-blink.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/document_init.h"
@@ -82,7 +83,8 @@ TEST_F(ContentSecurityPolicyTest, ParseInsecureRequestPolicy) {
 
     auto dummy = std::make_unique<DummyPageHolder>();
     dummy->GetDocument().SetURL(secure_url);
-    auto& security_context = dummy->GetDocument().GetSecurityContext();
+    auto& security_context =
+        dummy->GetFrame().DomWindow()->GetSecurityContext();
     security_context.SetSecurityOriginForTesting(secure_origin);
 
     csp->BindToDelegate(
@@ -187,23 +189,6 @@ TEST_F(ContentSecurityPolicyTest, CopyPluginTypesFrom) {
                                      ReportingDisposition::kSuppressReporting));
 }
 
-TEST_F(ContentSecurityPolicyTest, IsFrameAncestorsEnforced) {
-  csp->DidReceiveHeader("script-src 'none';",
-                        ContentSecurityPolicyType::kEnforce,
-                        ContentSecurityPolicySource::kHTTP);
-  EXPECT_FALSE(csp->IsFrameAncestorsEnforced());
-
-  csp->DidReceiveHeader("frame-ancestors 'self'",
-                        ContentSecurityPolicyType::kReport,
-                        ContentSecurityPolicySource::kHTTP);
-  EXPECT_FALSE(csp->IsFrameAncestorsEnforced());
-
-  csp->DidReceiveHeader("frame-ancestors 'self'",
-                        ContentSecurityPolicyType::kEnforce,
-                        ContentSecurityPolicySource::kHTTP);
-  EXPECT_TRUE(csp->IsFrameAncestorsEnforced());
-}
-
 TEST_F(ContentSecurityPolicyTest, IsActiveForConnectionsWithConnectSrc) {
   EXPECT_FALSE(csp->IsActiveForConnections());
   csp->DidReceiveHeader("connect-src 'none';",
@@ -218,20 +203,6 @@ TEST_F(ContentSecurityPolicyTest, IsActiveForConnectionsWithDefaultSrc) {
                         ContentSecurityPolicyType::kEnforce,
                         ContentSecurityPolicySource::kHTTP);
   EXPECT_TRUE(csp->IsActiveForConnections());
-}
-
-// Tests that frame-ancestors directives are discarded from policies
-// delivered in <meta> elements.
-TEST_F(ContentSecurityPolicyTest, FrameAncestorsInMeta) {
-  csp->BindToDelegate(execution_context->GetContentSecurityPolicyDelegate());
-  csp->DidReceiveHeader("frame-ancestors 'none';",
-                        ContentSecurityPolicyType::kEnforce,
-                        ContentSecurityPolicySource::kMeta);
-  EXPECT_FALSE(csp->IsFrameAncestorsEnforced());
-  csp->DidReceiveHeader("frame-ancestors 'none';",
-                        ContentSecurityPolicyType::kEnforce,
-                        ContentSecurityPolicySource::kHTTP);
-  EXPECT_TRUE(csp->IsFrameAncestorsEnforced());
 }
 
 // Tests that sandbox directives are discarded from policies
@@ -1317,9 +1288,9 @@ TEST_F(ContentSecurityPolicyTest, EmptyCSPIsNoOp) {
                                  g_empty_string));
   EXPECT_TRUE(csp->AllowPluginType("application/x-type-1",
                                    "application/x-type-1", example_url));
-  EXPECT_TRUE(csp->AllowPluginTypeForDocument(
-      *document, "application/x-type-1", "application/x-type-1", example_url,
-      ReportingDisposition::kSuppressReporting));
+  EXPECT_TRUE(csp->AllowPluginType("application/x-type-1",
+                                   "application/x-type-1", example_url,
+                                   ReportingDisposition::kSuppressReporting));
 
   ContentSecurityPolicy::DirectiveType types_to_test[] = {
       ContentSecurityPolicy::DirectiveType::kBaseURI,
@@ -1362,8 +1333,6 @@ TEST_F(ContentSecurityPolicyTest, EmptyCSPIsNoOp) {
   EXPECT_TRUE(csp->AllowInline(ContentSecurityPolicy::InlineType::kStyle,
                                element, source, nonce, context_url,
                                ordinal_number));
-  EXPECT_TRUE(csp->AllowAncestors(document->GetFrame(), example_url));
-  EXPECT_FALSE(csp->IsFrameAncestorsEnforced());
   EXPECT_TRUE(csp->AllowRequest(mojom::RequestContextType::SCRIPT,
                                 network::mojom::RequestDestination::kScript,
                                 example_url, nonce, IntegrityMetadataSet(),

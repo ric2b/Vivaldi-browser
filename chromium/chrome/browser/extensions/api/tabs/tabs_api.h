@@ -24,7 +24,6 @@
 class GURL;
 class SkBitmap;
 class TabStripModel;
-
 namespace content {
 class WebContents;
 }
@@ -175,9 +174,20 @@ class TabsReloadFunction : public ExtensionFunction {
   DECLARE_EXTENSION_FUNCTION("tabs.reload", TABS_RELOAD)
 };
 class TabsRemoveFunction : public ExtensionFunction {
-  ~TabsRemoveFunction() override {}
+ public:
+  TabsRemoveFunction();
+  void TabDestroyed();
+
+ private:
+  class WebContentsDestroyedObserver;
+  ~TabsRemoveFunction() override;
   ResponseAction Run() override;
   bool RemoveTab(int tab_id, std::string* error);
+
+  int remaining_tabs_count_ = 0;
+  bool triggered_all_tab_removals_ = false;
+  std::vector<std::unique_ptr<WebContentsDestroyedObserver>>
+      web_contents_destroyed_observers_;
   DECLARE_EXTENSION_FUNCTION("tabs.remove", TABS_REMOVE)
 };
 class TabsDetectLanguageFunction
@@ -226,7 +236,7 @@ class TabsCaptureVisibleTabFunction
   content::WebContents* GetWebContentsForID(int window_id, std::string* error);
 
   // extensions::WebContentsCaptureClient:
-  bool IsScreenshotEnabled() const override;
+  bool IsScreenshotEnabled(content::WebContents* web_contents) const override;
   bool ClientAllowsTransparency() override;
   void OnCaptureSuccess(const SkBitmap& bitmap) override;
   void OnCaptureFailure(CaptureResult result) override;

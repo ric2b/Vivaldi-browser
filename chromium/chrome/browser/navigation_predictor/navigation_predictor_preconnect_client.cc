@@ -11,6 +11,7 @@
 #include "base/metrics/field_trial_params.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
+#include "chrome/browser/navigation_predictor/navigation_predictor_features.h"
 #include "chrome/browser/navigation_predictor/search_engine_preconnector.h"
 #include "chrome/browser/predictors/loading_predictor.h"
 #include "chrome/browser/predictors/loading_predictor_factory.h"
@@ -22,19 +23,6 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "net/base/features.h"
-
-namespace features {
-
-// A holdback that prevents the preconnect to measure benefit of the feature.
-const base::Feature kNavigationPredictorPreconnectHoldback {
-  "NavigationPredictorPreconnectHoldback",
-#if defined(OS_ANDROID)
-      base::FEATURE_DISABLED_BY_DEFAULT
-#else
-      base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-};
-}  // namespace features
 
 namespace {
 
@@ -56,13 +44,22 @@ NavigationPredictorPreconnectClient::~NavigationPredictorPreconnectClient() =
 void NavigationPredictorPreconnectClient::DidFinishNavigation(
     content::NavigationHandle* navigation_handle) {
   if (!navigation_handle->IsInMainFrame() ||
-      !navigation_handle->HasCommitted() || navigation_handle->IsSameDocument())
+      !navigation_handle->HasCommitted() ||
+      (!base::FeatureList::IsEnabled(
+           features::
+               kNavigationPredictorEnablePreconnectOnSameDocumentNavigations) &&
+       navigation_handle->IsSameDocument())) {
+    return;
+  }
+
+  if (!navigation_handle->GetURL().SchemeIsHTTPOrHTTPS())
     return;
 
   // New page, so stop the preconnect timer.
   timer_.Stop();
 
-  if (base::FeatureList::IsEnabled(kPreconnectOnDidFinishNavigation)) {
+  if (base::FeatureList::IsEnabled(kPreconnectOnDidFinishNavigation) ||
+      navigation_handle->IsSameDocument()) {
     int delay_ms = base::GetFieldTrialParamByFeatureAsInt(
         kPreconnectOnDidFinishNavigation, "delay_after_commit_in_ms", 3000);
     if (delay_ms <= 0) {
@@ -158,7 +155,10 @@ void NavigationPredictorPreconnectClient::MaybePreconnectNow(
 
   // The delay beyond the idle socket timeout that net uses when
   // re-preconnecting. If negative, no retries occur.
-  constexpr int retry_delay_ms = 50;
+  const base::TimeDelta retry_delay =
+      base::TimeDelta::FromMilliseconds(base::GetFieldTrialParamByFeatureAsInt(
+          features::kNavigationPredictorPreconnectSocketCompletionTime,
+          "preconnect_socket_completion_time_msec", 50));
 
   // Set/Reset the timer to fire after the preconnect times out. Add an extra
   // delay to make sure the preconnect has expired if it wasn't used.
@@ -167,7 +167,7 @@ void NavigationPredictorPreconnectClient::MaybePreconnectNow(
       base::TimeDelta::FromSeconds(base::GetFieldTrialParamByFeatureAsInt(
           net::features::kNetUnusedIdleSocketTimeout,
           "unused_idle_socket_timeout_seconds", 60)) +
-          base::TimeDelta::FromMilliseconds(retry_delay_ms),
+          retry_delay,
       base::BindOnce(&NavigationPredictorPreconnectClient::MaybePreconnectNow,
                      base::Unretained(this), preconnects_attempted + 1));
 }

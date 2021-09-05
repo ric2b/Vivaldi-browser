@@ -35,14 +35,21 @@ DedicatedWorkerMessagingProxy::DedicatedWorkerMessagingProxy(
     DedicatedWorker* worker_object)
     : ThreadedMessagingProxyBase(execution_context),
       worker_object_(worker_object) {
-  worker_object_proxy_ = std::make_unique<DedicatedWorkerObjectProxy>(
-      this, GetParentExecutionContextTaskRunners());
+  if (worker_object) {
+    // Worker object is only nullptr in tests, which subsequently manually
+    // injects a |worker_object_proxy_|.
+    worker_object_proxy_ = std::make_unique<DedicatedWorkerObjectProxy>(
+        this, GetParentExecutionContextTaskRunners(),
+        worker_object->GetToken());
+  }
 }
 
 DedicatedWorkerMessagingProxy::~DedicatedWorkerMessagingProxy() = default;
 
 void DedicatedWorkerMessagingProxy::StartWorkerGlobalScope(
     std::unique_ptr<GlobalScopeCreationParams> creation_params,
+    std::unique_ptr<WorkerMainScriptLoadParameters>
+        worker_main_script_load_params,
     const WorkerOptions* options,
     const KURL& script_url,
     const FetchClientSettingsObjectSnapshot& outside_settings_object,
@@ -72,8 +79,9 @@ void DedicatedWorkerMessagingProxy::StartWorkerGlobalScope(
           WorkerResourceTimingNotifierImpl::CreateForOutsideResourceFetcher(
               *GetExecutionContext());
       GetWorkerThread()->FetchAndRunClassicScript(
-          script_url, outside_settings_object.CopyData(),
-          resource_timing_notifier, stack_id);
+          script_url, std::move(worker_main_script_load_params),
+          outside_settings_object.CopyData(), resource_timing_notifier,
+          stack_id);
     } else {
       // Legacy code path (to be deprecated, see https://crbug.com/835717):
       GetWorkerThread()->EvaluateClassicScript(
@@ -93,8 +101,9 @@ void DedicatedWorkerMessagingProxy::StartWorkerGlobalScope(
         WorkerResourceTimingNotifierImpl::CreateForOutsideResourceFetcher(
             *GetExecutionContext());
     GetWorkerThread()->FetchAndRunModuleScript(
-        script_url, outside_settings_object.CopyData(),
-        resource_timing_notifier, *credentials_mode, reject_coep_unsafe_none);
+        script_url, std::move(worker_main_script_load_params),
+        outside_settings_object.CopyData(), resource_timing_notifier,
+        *credentials_mode, reject_coep_unsafe_none);
   } else {
     NOTREACHED();
   }

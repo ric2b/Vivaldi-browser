@@ -6,10 +6,12 @@ import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 import {DragManager, DragManagerDelegate, PLACEHOLDER_GROUP_ID, PLACEHOLDER_TAB_ID} from 'chrome://tab-strip/drag_manager.js';
 import {TabElement} from 'chrome://tab-strip/tab.js';
 import {TabGroupElement} from 'chrome://tab-strip/tab_group.js';
+import {TabStripEmbedderProxyImpl} from 'chrome://tab-strip/tab_strip_embedder_proxy.js';
 import {TabData, TabsApiProxyImpl} from 'chrome://tab-strip/tabs_api_proxy.js';
 
 import {assertEquals, assertFalse, assertTrue} from '../chai_assert.js';
 
+import {TestTabStripEmbedderProxy} from './test_tab_strip_embedder_proxy.js';
 import {TestTabsApiProxy} from './test_tabs_api_proxy.js';
 
 /** @implements {DragManagerDelegate} */
@@ -88,6 +90,9 @@ suite('DragManager', () => {
   let dragManager;
   let testTabsApiProxy;
 
+  /** @type {!TestTabStripEmbedderProxy} */
+  let testTabStripEmbedderProxy;
+
   const tabs = [
     {
       active: true,
@@ -134,6 +139,9 @@ suite('DragManager', () => {
     testTabsApiProxy = new TestTabsApiProxy();
     TabsApiProxyImpl.instance_ = testTabsApiProxy;
 
+    testTabStripEmbedderProxy = new TestTabStripEmbedderProxy();
+    TabStripEmbedderProxyImpl.instance_ = testTabStripEmbedderProxy;
+
     delegate = new MockDelegate();
     tabs.forEach(tab => {
       const tabElement = document.createElement('tabstrip-tab');
@@ -150,12 +158,15 @@ suite('DragManager', () => {
   test('DragStartSetsDragImage', () => {
     const draggedElement = delegate.children[0];
     const dragImage = draggedElement.getDragImage();
+    const dragImageCenter = draggedElement.getDragImageCenter();
 
     // Mock the dimensions and position of the element and the drag image.
     const draggedElementRect = {top: 20, left: 30, width: 200, height: 150};
     draggedElement.getBoundingClientRect = () => draggedElementRect;
     const dragImageRect = {top: 20, left: 30, width: 200, height: 150};
     dragImage.getBoundingClientRect = () => dragImageRect;
+    const dragImageCenterRect = {top: 25, left: 25, width: 100, height: 120};
+    dragImageCenter.getBoundingClientRect = () => dragImageCenterRect;
 
     const eventClientX = 100;
     const eventClientY = 50;
@@ -172,26 +183,40 @@ suite('DragManager', () => {
     assertEquals(
         mockDataTransfer.dragImageData.image, draggedElement.getDragImage());
 
-    const xDiffFromCenter =
-        eventClientX - draggedElementRect.left - draggedElementRect.width / 2;
-    const yDiffFromCenter =
-        eventClientY - draggedElementRect.top - draggedElementRect.height / 2;
+    const eventXPercentage =
+        (eventClientX - draggedElementRect.left) / draggedElementRect.width;
+    const eventYPercentage =
+        (eventClientY - draggedElementRect.top) / draggedElementRect.height;
 
+    // Offset should account for any margins or padding between the
+    // dragImageCenter and the dragImage.
+    let dragImageCenterLeftMargin =
+        dragImageCenterRect.left - dragImageRect.left;
+    let dragImageCenterTopMargin = dragImageCenterRect.top - dragImageRect.top;
     if (isChromeOS) {
-      assertEquals(
-          dragImageRect.width / 2 + xDiffFromCenter / 1.2,
-          mockDataTransfer.dragImageData.offsetX);
-      assertEquals(
-          dragImageRect.height / 2 + (yDiffFromCenter - 25) / 1.2,
-          mockDataTransfer.dragImageData.offsetY);
-    } else {
-      assertEquals(
-          dragImageRect.width / 2 + xDiffFromCenter,
-          mockDataTransfer.dragImageData.offsetX);
-      assertEquals(
-          dragImageRect.height / 2 + yDiffFromCenter,
-          mockDataTransfer.dragImageData.offsetY);
+      // Dimensions are scaled on ChromeOS so the margins and paddings are also
+      // scaled.
+      dragImageCenterLeftMargin *= 1.2;
+      dragImageCenterTopMargin *= 1.2;
     }
+
+    // Offset should map event's coordinates to within the dimensions of the
+    // dragImageCenter.
+    const eventXWithinDragImageCenter =
+        eventXPercentage * dragImageCenterRect.width;
+    const eventYWithinDragImageCenter =
+        eventYPercentage * dragImageCenterRect.height;
+
+    let expectedOffsetX =
+        dragImageCenterLeftMargin + eventXWithinDragImageCenter;
+    let expectedOffsetY =
+        dragImageCenterTopMargin + eventYWithinDragImageCenter;
+    if (isChromeOS) {
+      expectedOffsetY -= 25;
+    }
+
+    assertEquals(expectedOffsetX, mockDataTransfer.dragImageData.offsetX);
+    assertEquals(expectedOffsetY, mockDataTransfer.dragImageData.offsetY);
   });
 
   test('DragOverMovesTabs', async () => {
@@ -598,5 +623,70 @@ suite('DragManager', () => {
     // Dragover tab and dragged tab remain in their initial positions.
     assertEquals(draggedTab, delegate.children[draggedIndex]);
     assertEquals(dragOverTab, delegate.children[dragOverIndex]);
+  });
+
+  test('DragLeaveUpdatesElementsAsDraggedOut', () => {
+    let isDraggedOut = false;
+
+    // Mock a tab's setDraggedOut method to ensure it is called.
+    const draggedTab = delegate.children[0];
+    draggedTab.setDraggedOut = (isDraggedOutParam) => {
+      isDraggedOut = isDraggedOutParam;
+    };
+
+    const dataTransfer = new MockDataTransfer();
+    draggedTab.dispatchEvent(new DragEvent('dragstart', {
+      bubbles: true,
+      composed: true,
+      clientX: 100,
+      clientY: 150,
+      dataTransfer,
+    }));
+
+    delegate.dispatchEvent(new DragEvent('dragleave', {dataTransfer}));
+    assertTrue(isDraggedOut);
+
+    delegate.dispatchEvent(new DragEvent('dragover', {dataTransfer}));
+    assertFalse(isDraggedOut);
+  });
+
+  test('DropTabWithoutMovingShowsContextMenu', async () => {
+    const draggedTab = delegate.children[0];
+    const dragDetails = {
+      bubbles: true,
+      composed: true,
+      clientX: 100,
+      clientY: 150,
+      dataTransfer: new MockDataTransfer(),
+    };
+    draggedTab.dispatchEvent(new DragEvent('dragstart', dragDetails));
+    draggedTab.dispatchEvent(new DragEvent('drop', dragDetails));
+
+    assertEquals(
+        1, testTabStripEmbedderProxy.getCallCount('showTabContextMenu'));
+    const [tabId, clientX, clientY] =
+        await testTabStripEmbedderProxy.whenCalled('showTabContextMenu');
+    assertEquals(draggedTab.tab.id, tabId);
+    assertEquals(dragDetails.clientX, clientX);
+    assertEquals(dragDetails.clientY, clientY);
+  });
+
+  test('DropTabAfterMovingDoesNotShowContextMenu', async () => {
+    const draggedTab = delegate.children[0];
+    const dragOverTab = delegate.children[1];
+    const dragDetails = {
+      bubbles: true,
+      composed: true,
+      clientX: 100,
+      clientY: 150,
+      dataTransfer: new MockDataTransfer(),
+    };
+    draggedTab.dispatchEvent(new DragEvent('dragstart', dragDetails));
+    dragOverTab.dispatchEvent(new DragEvent(
+        'dragover', Object.assign({}, dragDetails, {clientX: 200})));
+    draggedTab.dispatchEvent(new DragEvent('drop', dragDetails));
+
+    assertEquals(
+        0, testTabStripEmbedderProxy.getCallCount('showTabContextMenu'));
   });
 });

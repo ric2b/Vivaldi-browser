@@ -6,7 +6,6 @@
 #include <string>
 
 #include "base/time/time.h"
-#include "base/memory/weak_ptr.h"
 #include "components/bookmarks/browser/bookmark_node.h"
 
 namespace bookmarks {
@@ -28,8 +27,6 @@ using RunAfterModelLoadCallback =
     base::OnceCallback<void(BookmarkModel* model)>;
 void RunAfterModelLoad(BookmarkModel* model,
                        RunAfterModelLoadCallback callback);
-
-base::WeakPtr<BookmarkModel> GetModelWeakPtr(BookmarkModel* model);
 
 const std::string& ThumbnailString();
 
@@ -74,6 +71,10 @@ void InitModelNonClonedKeys(BookmarkModel* bookmark_model);
 bool DoesNickExists(const BookmarkModel* model,
                     const std::string& nickname,
                     const BookmarkNode* updated_node);
+
+bool SetBookmarkThumbnail(BookmarkModel* model,
+                          int64_t bookmark_id,
+                          const std::string& url);
 
 // Android-specific functions
 

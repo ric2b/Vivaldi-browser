@@ -38,6 +38,7 @@ grit("resources") {
   ]
   if (is_chromeos) {
     deps += [
+      "//chromeos/components/remote_apps/mojom:mojom_js",
       "//chromeos/services/ime/public/mojom:mojom_js",
       "//chromeos/services/tts/public/mojom:mojom_js",
     ]
@@ -92,10 +93,6 @@ static_library("renderer") {
     "plugins/pdf_plugin_placeholder.h",
     "plugins/plugin_uma.cc",
     "plugins/plugin_uma.h",
-    "prerender/prerender_helper.cc",
-    "prerender/prerender_helper.h",
-    "prerender/prerenderer_client.cc",
-    "prerender/prerenderer_client.h",
     "previews/resource_loading_hints_agent.cc",
     "previews/resource_loading_hints_agent.h",
     "sandbox_status_extension_android.cc",
@@ -156,6 +153,7 @@ static_library("renderer") {
     "//components/page_load_metrics/renderer",
     "//components/paint_preview/buildflags",
     "//components/plugins/renderer",
+    "//components/prerender/renderer",
     "//components/resources:components_resources",
     "//components/safe_browsing:buildflags",
     "//components/safe_browsing/content/renderer:throttles",
@@ -244,7 +242,7 @@ static_library("renderer") {
       "//ppapi/shared_impl",
     ]
 
-    if (is_linux) {
+    if (is_linux || is_chromeos) {
       deps += [ "//components/services/font/public/cpp" ]
     }
   }
@@ -254,36 +252,32 @@ static_library("renderer") {
   }
 
   if (safe_browsing_mode != 0) {
-    deps += [
-      "//components/safe_browsing/content/renderer",
-      "//components/safe_browsing/core/common",
+    sources += [
+      "safe_browsing/features.cc",
+      "safe_browsing/features.h",
+      "safe_browsing/murmurhash3_util.cc",
+      "safe_browsing/murmurhash3_util.h",
+      "safe_browsing/phishing_classifier.cc",
+      "safe_browsing/phishing_classifier.h",
+      "safe_browsing/phishing_classifier_delegate.cc",
+      "safe_browsing/phishing_classifier_delegate.h",
+      "safe_browsing/phishing_dom_feature_extractor.cc",
+      "safe_browsing/phishing_dom_feature_extractor.h",
+      "safe_browsing/phishing_term_feature_extractor.cc",
+      "safe_browsing/phishing_term_feature_extractor.h",
+      "safe_browsing/phishing_url_feature_extractor.cc",
+      "safe_browsing/phishing_url_feature_extractor.h",
+      "safe_browsing/scorer.cc",
+      "safe_browsing/scorer.h",
     ]
-    if (safe_browsing_mode == 1) {
-      sources += [
-        "safe_browsing/features.cc",
-        "safe_browsing/features.h",
-        "safe_browsing/murmurhash3_util.cc",
-        "safe_browsing/murmurhash3_util.h",
-        "safe_browsing/phishing_classifier.cc",
-        "safe_browsing/phishing_classifier.h",
-        "safe_browsing/phishing_classifier_delegate.cc",
-        "safe_browsing/phishing_classifier_delegate.h",
-        "safe_browsing/phishing_dom_feature_extractor.cc",
-        "safe_browsing/phishing_dom_feature_extractor.h",
-        "safe_browsing/phishing_term_feature_extractor.cc",
-        "safe_browsing/phishing_term_feature_extractor.h",
-        "safe_browsing/phishing_url_feature_extractor.cc",
-        "safe_browsing/phishing_url_feature_extractor.h",
-        "safe_browsing/scorer.cc",
-        "safe_browsing/scorer.h",
-      ]
-      deps += [
-        "//chrome/common/safe_browsing:proto",
-        "//components/safe_browsing/core:client_model_proto",
-        "//components/safe_browsing/core:csd_proto",
-        "//third_party/smhasher:murmurhash3",
-      ]
-    }
+    deps += [
+      "//chrome/common/safe_browsing:proto",
+      "//components/safe_browsing/content/renderer",
+      "//components/safe_browsing/core:client_model_proto",
+      "//components/safe_browsing/core:csd_proto",
+      "//components/safe_browsing/core/common",
+      "//third_party/smhasher:murmurhash3",
+    ]
   }
 
   if (enable_extensions) {

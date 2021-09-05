@@ -26,7 +26,7 @@ import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.MinAndroidSdkLevel;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.test.ChromeActivityTestRule;
@@ -93,7 +93,8 @@ public class MenuDirectActionHandlerTest {
 
         TestThreadUtils.runOnUiThreadBlocking(() -> { mTabModelSelector.closeAllTabs(); });
         // Wait for any pending animations for tab closures to complete.
-        CriteriaHelper.pollUiThread(Criteria.equals(0, () -> mTabModelSelector.getTotalTabCount()));
+        CriteriaHelper.pollUiThread(
+                () -> Criteria.checkThat(mTabModelSelector.getTotalTabCount(), Matchers.is(0)));
         assertThat(getDirectActions(),
                 Matchers.containsInAnyOrder("downloads", "help", "new_tab", "preferences"));
     }
@@ -106,11 +107,11 @@ public class MenuDirectActionHandlerTest {
         assertThat(getDirectActions(), Matchers.empty());
 
         // Allow new_tab, then downloads
-        mHandler.whitelistActions(R.id.new_tab_menu_id);
+        mHandler.allowlistActions(R.id.new_tab_menu_id);
 
         assertThat(getDirectActions(), Matchers.contains("new_tab"));
 
-        mHandler.whitelistActions(R.id.downloads_menu_id);
+        mHandler.allowlistActions(R.id.downloads_menu_id);
         assertThat(getDirectActions(), Matchers.containsInAnyOrder("new_tab", "downloads"));
 
         // Other actions cannot be called.
@@ -119,12 +120,12 @@ public class MenuDirectActionHandlerTest {
                     "help", Bundle.EMPTY, (r) -> fail("Unexpected result: " + r)));
         });
 
-        // Allow all actions. This allows "help", never whitelisted explicitly
+        // Allow all actions. This allows "help", never allowlisted explicitly
         mHandler.allowAllActions();
         assertThat(getDirectActions(), Matchers.hasItem("help"));
 
-        // Whitelisting extra actions is ignored and does not hide the other actions.
-        mHandler.whitelistActions(R.id.new_tab_menu_id);
+        // Allowlisting extra actions is ignored and does not hide the other actions.
+        mHandler.allowlistActions(R.id.new_tab_menu_id);
 
         assertThat(getDirectActions(), Matchers.hasItem("help"));
     }

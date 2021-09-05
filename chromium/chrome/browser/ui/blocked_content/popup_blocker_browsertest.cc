@@ -38,6 +38,7 @@
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/blocked_content/list_item_position.h"
 #include "components/blocked_content/popup_blocker_tab_helper.h"
+#include "components/content_settings/browser/page_specific_content_settings.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/embedder_support/switches.h"
 #include "components/javascript_dialogs/app_modal_dialog_controller.h"
@@ -269,8 +270,8 @@ IN_PROC_BROWSER_TEST_F(PopupBlockerBrowserTest, BlockWebContentsCreation) {
                kDontCheckTitle);
 }
 
-#if defined(OS_MACOSX) && defined(ADDRESS_SANITIZER)
-// Flaky on ASAN on Mac. See https://crbug.com/674497.
+// TODO(crbug.com/1115886): Flaky on Mac ASAN and Chrome OS.
+#if (defined(OS_MAC) && defined(ADDRESS_SANITIZER)) || defined(OS_CHROMEOS)
 #define MAYBE_BlockWebContentsCreationIncognito \
   DISABLED_BlockWebContentsCreationIncognito
 #else
@@ -384,7 +385,7 @@ IN_PROC_BROWSER_TEST_F(PopupBlockerBrowserTest, PopupMetrics) {
                            kClickedThroughNoGesture),
       1);
 
-  // Whitelist the site and navigate again.
+  // Allowlist the site and navigate again.
   HostContentSettingsMapFactory::GetForProfile(browser()->profile())
       ->SetContentSettingDefaultScope(url, GURL(), ContentSettingsType::POPUPS,
                                       std::string(), CONTENT_SETTING_ALLOW);
@@ -425,10 +426,10 @@ IN_PROC_BROWSER_TEST_F(PopupBlockerBrowserTest,
                                       std::string(), CONTENT_SETTING_ALLOW);
 
   // Popup from the iframe should be allowed since the top-level URL is
-  // whitelisted.
+  // allowlisted.
   NavigateAndCheckPopupShown(url, kExpectForegroundTab);
 
-  // Whitelist iframe URL instead.
+  // Allowlist iframe URL instead.
   GURL::Replacements replace_host;
   replace_host.SetHostStr("www.a.com");
   GURL frame_url(embedded_test_server()
@@ -476,8 +477,7 @@ class PopupBlockerSpecialPolicyBrowserTest : public PopupBlockerBrowserTest {
 
     policy_map.Set(policy::key::kAllowPopupsDuringPageUnload,
                    policy::POLICY_LEVEL_MANDATORY, policy::POLICY_SCOPE_USER,
-                   policy::POLICY_SOURCE_CLOUD,
-                   std::make_unique<base::Value>(true), nullptr);
+                   policy::POLICY_SOURCE_CLOUD, base::Value(true), nullptr);
     policy_provider_.UpdateChromePolicy(policy_map);
 
 #if defined(OS_CHROMEOS)
@@ -502,6 +502,13 @@ IN_PROC_BROWSER_TEST_F(PopupBlockerSpecialPolicyBrowserTest,
   GURL url(
       embedded_test_server()->GetURL("/popup_blocker/popup-on-unload.html"));
   ui_test_utils::NavigateToURL(browser(), url);
+  // Make sure the same-site navigation below will not create a new
+  // RenderFrameHost, otherwise the unload handler of the old RenderFrameHost
+  // will run after the new RenderFrameHost gets rendered.
+  // TODO(crbug.com/1110744): Support running unload handlers before the new
+  // RenderFrameHost renders on same-site cross-RenderFrameHost navigations.
+  DisableProactiveBrowsingInstanceSwapFor(
+      browser()->tab_strip_model()->GetActiveWebContents()->GetMainFrame());
 
   NavigateAndCheckPopupShown(embedded_test_server()->GetURL("/popup_blocker/"),
                              kExpectPopup);
@@ -562,7 +569,7 @@ IN_PROC_BROWSER_TEST_F(PopupBlockerBrowserTest, MAYBE_WindowFeatures) {
   // Check that the new popup has (roughly) the requested size.
   gfx::Size window_size = popup->GetContainerBounds().size();
   EXPECT_TRUE(349 <= window_size.width() && window_size.width() <= 351);
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
   // Window height computation is off in MacViews: https://crbug.com/846329
   EXPECT_GE(window_size.height(), 249);
   EXPECT_LE(window_size.height(), 253);
@@ -660,7 +667,7 @@ IN_PROC_BROWSER_TEST_F(PopupBlockerBrowserTest, Regress427477) {
   WebContents* tab = browser()->tab_strip_model()->GetActiveWebContents();
 
   tab->GetController().GoBack();
-  content::WaitForLoadStop(tab);
+  EXPECT_TRUE(content::WaitForLoadStop(tab));
 
   ASSERT_EQ(1u, chrome::GetBrowserCount(browser()->profile()));
   ASSERT_EQ(1, browser()->tab_strip_model()->count());
@@ -695,7 +702,7 @@ IN_PROC_BROWSER_TEST_F(PopupBlockerBrowserTest, ModalPopUnder) {
   ASSERT_NE(popup_browser, browser());
 
 // Showing an alert will raise the tab over the popup.
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
   // Mac doesn't activate the browser during modal dialogs, see
   // https://crbug.com/687732 for details.
   ui_test_utils::BrowserActivationWaiter alert_waiter(browser());
@@ -707,24 +714,24 @@ IN_PROC_BROWSER_TEST_F(PopupBlockerBrowserTest, ModalPopUnder) {
   javascript_dialogs::AppModalDialogController* dialog =
       ui_test_utils::WaitForAppModalDialog();
   ASSERT_TRUE(dialog);
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
   if (chrome::FindLastActive() != browser())
     alert_waiter.WaitForActivation();
 #endif
 
 // Verify that after the dialog is closed, the popup is in front again.
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
   ui_test_utils::BrowserActivationWaiter waiter(popup_browser);
 #endif
   javascript_dialogs::AppModalDialogManager::GetInstance()
       ->HandleJavaScriptDialog(tab, true, nullptr);
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
   waiter.WaitForActivation();
 #endif
   ASSERT_EQ(popup_browser, chrome::FindLastActive());
 }
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 // Tests that the print preview dialog can't be used to create popunders. This
 // is due to a bug in MacViews that causes dialogs to activate their parents
 // (https://crbug.com/1073587). For now, test the PopunderBlocker that was
@@ -776,7 +783,7 @@ IN_PROC_BROWSER_TEST_F(PopupBlockerBrowserTest, CtrlEnterKey) {
   ui_test_utils::TabAddedWaiter tab_add(browser());
 
   bool command = false;
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   command = true;
 #endif
 
@@ -802,7 +809,7 @@ IN_PROC_BROWSER_TEST_F(PopupBlockerBrowserTest, TapGestureWithCtrlKey) {
 
   ui_test_utils::TabAddedWaiter tab_add(browser());
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   unsigned modifiers = blink::WebInputEvent::kMetaKey;
 #else
   unsigned modifiers = blink::WebInputEvent::kControlKey;
@@ -868,6 +875,43 @@ IN_PROC_BROWSER_TEST_F(PopupBlockerBrowserTest, PopupsDisableBackForwardCache) {
 
   EXPECT_TRUE(tester.IsDisabledForFrameWithReason(process_id, frame_routing_id,
                                                   "PopupBlockerTabHelper"));
+}
+
+// Make sure the poput is attributed to the right WebContents when it is
+// triggered from a different WebContents. Regression test for
+// https://crbug.com/1128495
+IN_PROC_BROWSER_TEST_F(PopupBlockerBrowserTest,
+                       PopupTriggeredFromDifferentWebContents) {
+  content::BackForwardCacheDisabledTester tester;
+  const GURL url(
+      embedded_test_server()->GetURL("/popup_blocker/popup-in-href.html"));
+  ui_test_utils::NavigateToURL(browser(), url);
+
+  ASSERT_EQ(browser()->tab_strip_model()->count(), 1);
+
+  content::WebContents* tab_1 =
+      browser()->tab_strip_model()->GetActiveWebContents();
+
+  ui_test_utils::TabAddedWaiter tab_Added_waiter(browser());
+  SimulateMouseClickOrTapElementWithId(tab_1, "link");
+
+  tab_Added_waiter.Wait();
+  content::WebContents* tab_2 =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  ASSERT_NE(tab_1, tab_2);
+
+  // We need to make sure the js in the new tab that comes from the href runs
+  // before we perform the checks further down. Since we have no control over
+  // that script we just run some more (that we do control) and wait for it to
+  // finish.
+  EXPECT_TRUE(content::ExecuteScriptWithoutUserGesture(tab_2, ""));
+
+  EXPECT_FALSE(content_settings::PageSpecificContentSettings::GetForFrame(
+                   tab_1->GetMainFrame())
+                   ->IsContentBlocked(ContentSettingsType::POPUPS));
+  EXPECT_TRUE(content_settings::PageSpecificContentSettings::GetForFrame(
+                  tab_2->GetMainFrame())
+                  ->IsContentBlocked(ContentSettingsType::POPUPS));
 }
 
 }  // namespace

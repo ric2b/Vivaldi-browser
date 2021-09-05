@@ -117,10 +117,9 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) NetworkStateHandler
   // Asynchronously sets the technology enabled property for |type|. Only
   // NetworkTypePattern::Primitive, ::Mobile and ::Ethernet are supported.
   // Note: Modifies Manager state. Calls |error_callback| on failure.
-  void SetTechnologyEnabled(
-      const NetworkTypePattern& type,
-      bool enabled,
-      const network_handler::ErrorCallback& error_callback);
+  void SetTechnologyEnabled(const NetworkTypePattern& type,
+                            bool enabled,
+                            network_handler::ErrorCallback error_callback);
 
   // Sets the Tether technology state. Because Tether networks do not represent
   // real Shill networks, this value must be set by the Tether component rather
@@ -137,8 +136,7 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) NetworkStateHandler
   // values are the shill network technology identifiers. See also
   // chromeos::onc::Validator::ValidateGlobalNetworkConfiguration().
   void SetProhibitedTechnologies(
-      const std::vector<std::string>& prohibited_technologies,
-      const network_handler::ErrorCallback& error_callback);
+      const std::vector<std::string>& prohibited_technologies);
 
   // Finds and returns a device state by |device_path| or NULL if not found.
   const DeviceState* GetDeviceState(const std::string& device_path) const;
@@ -352,9 +350,15 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) NetworkStateHandler
   // only set it.
   void SetWakeOnLanEnabled(bool enabled);
 
-  // Sets the HostName property. Note: we do not track this property, we
-  // only set it.
+  // Sets the DHCP HostName property. Note: This does not directly set
+  // |hostname_|, it sets the Shill property and relies on Shill emitting the
+  // change which updates the cached |hostname_|. This ensures that Chrome and
+  // Shill are in sync.
   void SetHostname(const std::string& hostname);
+
+  // Returns the cached DHCP HostName property provided by Shill. Initialized
+  // to an empty string and set once the Manager properties are received.
+  const std::string& hostname() const { return hostname_; }
 
   // Enable or disable network bandwidth throttling, on all interfaces on the
   // system. If |enabled| is true, |upload_rate_kbits| and |download_rate_kbits|
@@ -388,11 +392,11 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) NetworkStateHandler
 
   // Sets |allow_only_policy_networks_to_connect_|,
   // |allow_only_policy_networks_to_connect_if_available_| and
-  // |blacklisted_hex_ssids_| and calls |UpdateBlockedWifiNetworksInternal()|.
+  // |blocked_hex_ssids_| and calls |UpdateBlockedWifiNetworksInternal()|.
   virtual void UpdateBlockedWifiNetworks(
       bool only_managed,
       bool available_only,
-      const std::vector<std::string>& blacklisted_hex_ssids);
+      const std::vector<std::string>& blocked_hex_ssids);
 
   // Returns the NetworkState associated to the wifi device's
   // available_managed_network_path or |nullptr| if no managed network is
@@ -454,11 +458,8 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) NetworkStateHandler
                                 const std::string& ip_config_path,
                                 const base::Value& properties) override;
 
-  // Called by ShillPropertyHandler when the portal check list manager property
-  // changes.
   void CheckPortalListChanged(const std::string& check_portal_list) override;
-
-  // Called by ShillPropertyHandler when a technology list changes.
+  void HostnameChanged(const std::string& hostname) override;
   void TechnologyListChanged() override;
 
   // Called by |shill_property_handler_| when the service or device list has
@@ -478,7 +479,7 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) NetworkStateHandler
   typedef std::map<std::string, std::string> SpecifierGuidMap;
   friend class NetworkStateHandlerTest;
   FRIEND_TEST_ALL_PREFIXES(NetworkStateHandlerTest, NetworkStateHandlerStub);
-  FRIEND_TEST_ALL_PREFIXES(NetworkStateHandlerTest, BlockedByPolicyBlacklisted);
+  FRIEND_TEST_ALL_PREFIXES(NetworkStateHandlerTest, BlockedByPolicyBlocked);
   FRIEND_TEST_ALL_PREFIXES(NetworkStateHandlerTest, BlockedByPolicyOnlyManaged);
   FRIEND_TEST_ALL_PREFIXES(NetworkStateHandlerTest,
                            BlockedByPolicyOnlyManagedIfAvailable);
@@ -619,7 +620,7 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) NetworkStateHandler
   void EnsureTetherDeviceState();
 
   // Updates the network's |blocked_by_policy_| depending on
-  // |allow_only_policy_networks_to_connect_| and |blacklisted_hex_ssids_|.
+  // |allow_only_policy_networks_to_connect_| and |blocked_hex_ssids_|.
   // Returns true if the value changed.
   bool UpdateBlockedByPolicy(NetworkState* network) const;
 
@@ -670,6 +671,9 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) NetworkStateHandler
   // List of interfaces on which portal check is enabled.
   std::string check_portal_list_;
 
+  // DHCP Hostname.
+  std::string hostname_;
+
   // Map of network specifiers to guids. Contains an entry for each
   // NetworkState that is not saved in a profile.
   SpecifierGuidMap specifier_guid_map_;
@@ -697,7 +701,7 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) NetworkStateHandler
   // |ManagedNetworkConfigurationHandler| by calling |UpdateBlockedNetworks()|).
   bool allow_only_policy_networks_to_connect_ = false;
   bool allow_only_policy_networks_to_connect_if_available_ = false;
-  std::vector<std::string> blacklisted_hex_ssids_;
+  std::vector<std::string> blocked_hex_ssids_;
 
   SEQUENCE_CHECKER(sequence_checker_);
 

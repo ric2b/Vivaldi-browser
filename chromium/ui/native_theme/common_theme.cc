@@ -163,6 +163,7 @@ base::Optional<SkColor> GetDarkSchemeColor(NativeTheme::ColorId color_id) {
 
     // TabbedPane
     case NativeTheme::kColorId_TabTitleColorActive:
+    case NativeTheme::kColorId_TabSelectedBorderColor:
       return gfx::kGoogleBlue300;
     case NativeTheme::kColorId_TabTitleColorInactive:
       return gfx::kGoogleGrey500;
@@ -285,7 +286,8 @@ SkColor GetDefaultColor(NativeTheme::ColorId color_id,
       return color_utils::BlendForMinContrast(gfx::kGoogleGrey600, bg, fg)
           .color;
     }
-    case NativeTheme::kColorId_ProminentButtonDisabledColor: {
+    case NativeTheme::kColorId_ProminentButtonDisabledColor:
+    case NativeTheme::kColorId_DisabledButtonBorderColor: {
       const SkColor bg = base_theme->GetSystemColor(
           NativeTheme::kColorId_ButtonColor, color_scheme);
       return color_utils::BlendForMinContrast(bg, bg, base::nullopt, 1.2f)
@@ -427,6 +429,10 @@ SkColor GetDefaultColor(NativeTheme::ColorId color_id,
       return SkColorSetRGB(0xf5, 0xf5, 0xf5);
     case NativeTheme::kColorId_NotificationEmptyPlaceholderIconColor:
       return SkColorSetA(SK_ColorWHITE, 0x60);
+    case NativeTheme::kColorId_NotificationEmptyPlaceholderTextColor:
+      return SkColorSetA(SK_ColorWHITE, gfx::kDisabledControlAlpha);
+    case NativeTheme::kColorId_NotificationInkDropBase:
+      return gfx::kGoogleBlue600;
 #if defined(OS_CHROMEOS)
     case NativeTheme::kColorId_NotificationButtonBackground:
       return SkColorSetA(SK_ColorWHITE, 0.9 * 0xff);
@@ -458,6 +464,7 @@ SkColor GetDefaultColor(NativeTheme::ColorId color_id,
 
     // TabbedPane
     case NativeTheme::kColorId_TabTitleColorActive:
+    case NativeTheme::kColorId_TabSelectedBorderColor:
       return gfx::kGoogleBlue600;
     case NativeTheme::kColorId_TabTitleColorInactive:
       return gfx::kGoogleGrey700;

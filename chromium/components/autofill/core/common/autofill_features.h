@@ -21,7 +21,9 @@ namespace autofill {
 namespace features {
 
 // All features in alphabetical order.
+extern const base::Feature kAutofillAddressEnhancementVotes;
 extern const base::Feature kAutofillAddressNormalizer;
+extern const base::Feature kAutofillAllowDuplicateFormSubmissions;
 extern const base::Feature kAutofillAllowHtmlTypeCountryCodesWithFullNames;
 extern const base::Feature kAutofillAllowNonHttpActivation;
 extern const base::Feature kAutofillAlwaysFillAddresses;
@@ -32,6 +34,7 @@ extern const base::Feature kAutofillEnableAccountWalletStorage;
 extern const base::Feature kAutofillEnableAugmentedPhoneCountryCode;
 extern const base::Feature kAutofillEnableCompanyName;
 extern const base::Feature kAutofillEnableHideSuggestionsUI;
+extern const base::Feature kAutofillEnableSupportForMoreStructureInNames;
 extern const base::Feature kAutofillEnforceMinRequiredFieldsForHeuristics;
 extern const base::Feature kAutofillEnforceMinRequiredFieldsForQuery;
 extern const base::Feature kAutofillEnforceMinRequiredFieldsForUpload;
@@ -46,6 +49,8 @@ extern const base::Feature kAutofillMetadataUploads;
 extern const base::Feature kAutofillOffNoServerData;
 extern const base::Feature kAutofillOverrideWithRaterConsensus;
 extern const base::Feature kAutofillPreferServerNamePredictions;
+extern const base::Feature kAutofillPreventMixedFormsFilling;
+extern const base::Feature kAutofillProbableFormSubmissionInBrowser;
 extern const base::Feature kAutofillProfileClientValidation;
 extern const base::Feature kAutofillProfileImportFromUnfocusableFields;
 extern const base::Feature kAutofillProfileImportFromUnifiedSection;
@@ -61,6 +66,7 @@ extern const base::Feature kAutofillShowAllSuggestionsOnPrefilledForms;
 extern const base::Feature kAutofillShowAutocompleteConsoleWarnings;
 extern const base::Feature kAutofillShowTypePredictions;
 extern const base::Feature kAutofillSkipComparingInferredLabels;
+extern const base::Feature kAutofillSkipFillingFieldsWithChangedValues;
 extern const base::Feature kAutofillTokenPrefixMatching;
 extern const base::Feature kAutofillTouchToFill;
 extern const base::Feature kAutofillUploadThrottling;
@@ -86,11 +92,11 @@ extern const char kAutofillUseMobileLabelDisambiguationParameterShowAll[];
 // Returns whether the Autofill credit card assist infobar should be shown.
 bool IsAutofillCreditCardAssistEnabled();
 
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
 // Returns true if whether the views autofill popup feature is enabled or the
 // we're using the views browser.
 bool IsMacViewsAutofillPopupExperimentEnabled();
-#endif  // defined(OS_MACOSX)
+#endif  // defined(OS_APPLE)
 
 }  // namespace features
 }  // namespace autofill

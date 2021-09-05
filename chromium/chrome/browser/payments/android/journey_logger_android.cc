@@ -90,7 +90,8 @@ void JourneyLoggerAndroid::SetEventOccurred(
     const base::android::JavaParamRef<jobject>& jcaller,
     jint jevent) {
   DCHECK_GE(jevent, 0);
-  DCHECK_LT(jevent, JourneyLogger::Event::EVENT_ENUM_MAX);
+  DCHECK_LE(static_cast<unsigned int>(jevent),
+            static_cast<unsigned int>(JourneyLogger::Event::EVENT_ENUM_MAX));
   journey_logger_.SetEventOccurred(static_cast<JourneyLogger::Event>(jevent));
 }
 
@@ -111,8 +112,12 @@ void JourneyLoggerAndroid::SetRequestedPaymentMethodTypes(
     jboolean requested_basic_card,
     jboolean requested_method_google,
     jboolean requested_method_other) {
+  // TODO(crbug.com/1110320) : secure=payment-confirmation payment method is not
+  // implemented on Android yet.
   journey_logger_.SetRequestedPaymentMethodTypes(
-      requested_basic_card, requested_method_google, requested_method_other);
+      requested_basic_card, requested_method_google,
+      /*requested_method_secure_payment_confirmation=*/false,
+      requested_method_other);
 }
 
 void JourneyLoggerAndroid::SetCompleted(
@@ -151,6 +156,14 @@ void JourneyLoggerAndroid::RecordTransactionAmount(
       ConvertJavaStringToUTF8(env, jvalue), jcompleted);
 }
 
+void JourneyLoggerAndroid::RecordCheckoutStep(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& jcaller,
+    jint jstep) {
+  journey_logger_.RecordCheckoutStep(
+      static_cast<JourneyLogger::CheckoutFunnelStep>(jstep));
+}
+
 void JourneyLoggerAndroid::SetTriggerTime(
     JNIEnv* env,
     const base::android::JavaParamRef<jobject>& jcaller) {
@@ -171,6 +184,7 @@ static jlong JNI_JourneyLogger_InitJourneyLoggerAndroid(
     const JavaParamRef<jobject>& jweb_contents) {
   content::WebContents* web_contents =
       content::WebContents::FromJavaWebContents(jweb_contents);
+  DCHECK(web_contents);  // Verified in Java before invoking this function.
   return reinterpret_cast<jlong>(new JourneyLoggerAndroid(
       jis_incognito, ukm::GetSourceIdForWebContentsDocument(web_contents)));
 }

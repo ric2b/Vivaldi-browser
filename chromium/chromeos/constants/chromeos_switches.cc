@@ -83,6 +83,12 @@ const char kArcDataCleanupOnStart[] = "arc-data-cleanup-on-start";
 // in autotests to resolve racy conditions.
 const char kArcDisableAppSync[] = "arc-disable-app-sync";
 
+// Flag to enables an experiment to allow users to turn on 64-bit support in
+// native bridge on systems that have such support available but not yet enabled
+// by default.
+const char kArcEnableNativeBridge64BitSupportExperiment[] =
+    "arc-enable-native-bridge-64bit-support-experiment";
+
 // Used in autotest to disable GMS-core caches which is on by default.
 const char kArcDisableGmsCoreCache[] = "arc-disable-gms-core-cache";
 
@@ -407,6 +413,14 @@ const char kIgnoreUserProfileMappingForTests[] =
 // chrome://flags
 const char kKernelnextRestrictVMs[] = "kernelnext-restrict-vms";
 
+// If this switch is set, then ash-chrome will pass additional arguments when
+// launching lacros-chrome. The string '####' is used as a delimiter. Example:
+// --lacros-chrome-additional-args="--foo=5####--bar=/tmp/dir name". Will
+// result in two arguments passed to lacros-chrome:
+//   --foo=5
+//   --bar=/tmp/dir name
+const char kLacrosChromeAdditionalArgs[] = "lacros-chrome-additional-args";
+
 // If this switch is set, then ash-chrome will exec the lacros-chrome binary
 // from the indicated path rather than from component updater. Note that the
 // path should be to a directory that contains a binary named 'chrome'.
@@ -559,6 +573,11 @@ const char kWaitForInitialPolicyFetchForTest[] =
 // throttled.
 const char kDisableArcCpuRestriction[] = "disable-arc-cpu-restriction";
 
+// If this switch is passed, the device policy DeviceMinimumVersion
+// assumes that the device has reached Auto Update Expiration. This is useful
+// for testing the policy behaviour on the DUT.
+const char kUpdateRequiredAueForTest[] = "aue-reached-for-update-required-test";
+
 bool WakeOnWifiEnabled() {
   return !base::CommandLine::ForCurrentProcess()->HasSwitch(kDisableWakeOnWifi);
 }
@@ -629,6 +648,11 @@ bool IsUnfilteredBluetoothDevicesEnabled() {
 bool ShouldOobeUseTabletModeFirstRun() {
   return base::CommandLine::ForCurrentProcess()->HasSwitch(
       kOobeForceTabletFirstRun);
+}
+
+bool IsAueReachedForUpdateRequiredForTest() {
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
+      kUpdateRequiredAueForTest);
 }
 
 }  // namespace switches

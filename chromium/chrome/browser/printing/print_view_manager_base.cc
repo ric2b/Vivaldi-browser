@@ -13,10 +13,10 @@
 #include "base/location.h"
 #include "base/memory/read_only_shared_memory_region.h"
 #include "base/memory/ref_counted_memory.h"
-#include "base/message_loop/message_loop_current.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/current_thread.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
@@ -217,7 +217,7 @@ void PrintViewManagerBase::OnPrintSettingsDone(
   }
 
   // Post task so that the query has time to reset the callback before calling
-  // OnDidGetPrintedPagesCount().
+  // DidGetPrintedPagesCount().
   int cookie = printer_query->cookie();
   queue_->QueuePrinterQuery(std::move(printer_query));
   content::GetUIThreadTaskRunner({})->PostTask(
@@ -233,7 +233,7 @@ void PrintViewManagerBase::StartLocalPrintJob(
     PrinterHandler::PrintCallback callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
-  OnDidGetPrintedPagesCount(cookie, page_count);
+  DidGetPrintedPagesCount(cookie, page_count);
 
   if (!PrintJobHasDocument(cookie)) {
     std::move(callback).Run(base::Value("Failed to print"));
@@ -275,9 +275,9 @@ base::string16 PrintViewManagerBase::RenderSourceName() {
   return name;
 }
 
-void PrintViewManagerBase::OnDidGetPrintedPagesCount(int cookie,
-                                                     int number_pages) {
-  PrintManager::OnDidGetPrintedPagesCount(cookie, number_pages);
+void PrintViewManagerBase::DidGetPrintedPagesCount(int32_t cookie,
+                                                   int32_t number_pages) {
+  PrintManager::DidGetPrintedPagesCount(cookie, number_pages);
   OpportunisticallyCreatePrintJob(cookie);
 }
 
@@ -318,12 +318,12 @@ void PrintViewManagerBase::OnComposePdfDone(
 
 void PrintViewManagerBase::OnDidPrintDocument(
     content::RenderFrameHost* render_frame_host,
-    const PrintHostMsg_DidPrintDocument_Params& params,
+    const mojom::DidPrintDocumentParams& params,
     std::unique_ptr<DelayedFrameDispatchHelper> helper) {
   if (!PrintJobHasDocument(params.document_cookie))
     return;
 
-  const mojom::DidPrintContentParams& content = params.content;
+  const mojom::DidPrintContentParams& content = *params.content;
   if (!content.metafile_data_region.IsValid()) {
     NOTREACHED() << "invalid memory handle";
     web_contents()->Stop();

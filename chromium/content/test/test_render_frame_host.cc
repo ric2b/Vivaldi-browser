@@ -27,7 +27,6 @@
 #include "content/test/test_render_view_host.h"
 #include "content/test/test_render_widget_host.h"
 #include "ipc/ipc_message.h"
-#include "mojo/public/cpp/bindings/interface_request.h"
 #include "mojo/public/cpp/bindings/pending_associated_remote.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
@@ -163,7 +162,7 @@ TestRenderFrameHost* TestRenderFrameHost::AppendChild(
 }
 
 void TestRenderFrameHost::Detach() {
-  OnDetach();
+  DetachForTesting();
 }
 
 void TestRenderFrameHost::SimulateNavigationStart(const GURL& url) {
@@ -245,8 +244,8 @@ void TestRenderFrameHost::SimulateFeaturePolicyHeader(
     const std::vector<url::Origin>& allowlist) {
   blink::ParsedFeaturePolicy header(1);
   header[0].feature = feature;
-  header[0].fallback_value = false;
-  header[0].opaque_value = false;
+  header[0].matches_all_origins = false;
+  header[0].matches_opaque_src = false;
   for (const auto& origin : allowlist) {
     header[0].allowed_origins.push_back(origin);
   }
@@ -256,7 +255,8 @@ void TestRenderFrameHost::SimulateFeaturePolicyHeader(
 
 void TestRenderFrameHost::SimulateUserActivation() {
   frame_tree_node()->UpdateUserActivationState(
-      blink::mojom::UserActivationUpdateType::kNotifyActivation);
+      blink::mojom::UserActivationUpdateType::kNotifyActivation,
+      blink::mojom::UserActivationNotificationType::kTest);
 }
 
 const std::vector<std::string>& TestRenderFrameHost::GetConsoleMessages() {
@@ -374,7 +374,9 @@ void TestRenderFrameHost::SendRendererInitiatedNavigationRequest(
           GURL() /* client_side_redirect_url */,
           base::nullopt /* devtools_initiator_info */,
           false /* force_ignore_site_for_cookies */,
-          nullptr /* trust_token_params */, base::nullopt /* impression */);
+          nullptr /* trust_token_params */, base::nullopt /* impression */,
+          base::TimeTicks() /* renderer_before_unload_start */,
+          base::TimeTicks() /* renderer_before_unload_end */);
   auto common_params = CreateCommonNavigationParams();
   common_params->url = url;
   common_params->initiator_origin = GetLastCommittedOrigin();
@@ -533,7 +535,7 @@ TestRenderFrameHost::CreateWebBluetoothServiceForTesting() {
 void TestRenderFrameHost::SendFramePolicy(
     network::mojom::WebSandboxFlags sandbox_flags,
     const blink::ParsedFeaturePolicy& fp_header,
-    const blink::DocumentPolicy::FeatureState& dp_header) {
+    const blink::DocumentPolicyFeatureState& dp_header) {
   DidSetFramePolicyHeaders(sandbox_flags, fp_header, dp_header);
 }
 
@@ -547,7 +549,7 @@ void TestRenderFrameHost::SendCommitNavigation(
     network::mojom::URLLoaderClientEndpointsPtr url_loader_client_endpoints,
     std::unique_ptr<blink::PendingURLLoaderFactoryBundle>
         subresource_loader_factories,
-    base::Optional<std::vector<::content::mojom::TransferrableURLLoaderPtr>>
+    base::Optional<std::vector<blink::mojom::TransferrableURLLoaderPtr>>
         subresource_overrides,
     blink::mojom::ControllerServiceWorkerInfoPtr controller,
     blink::mojom::ServiceWorkerContainerInfoForClientPtr container_info,
@@ -694,7 +696,7 @@ void TestRenderFrameHost::SimulateLoadingCompleted(
     DidFinishLoad(GetLastCommittedURL());
   }
 
-  OnDidStopLoading();
+  DidStopLoading();
 }
 
 }  // namespace content

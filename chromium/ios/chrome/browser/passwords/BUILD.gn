@@ -11,8 +11,12 @@ source_set("passwords") {
     "credential_manager.mm",
     "ios_chrome_bulk_leak_check_service_factory.cc",
     "ios_chrome_bulk_leak_check_service_factory.h",
+    "ios_chrome_change_password_url_service_factory.cc",
+    "ios_chrome_change_password_url_service_factory.h",
     "ios_chrome_password_check_manager.h",
     "ios_chrome_password_check_manager.mm",
+    "ios_chrome_password_check_manager_factory.h",
+    "ios_chrome_password_check_manager_factory.mm",
     "ios_chrome_password_manager_client.h",
     "ios_chrome_password_manager_client.mm",
     "ios_chrome_password_manager_driver.h",
@@ -33,15 +37,18 @@ source_set("passwords") {
     "password_check_observer_bridge.mm",
     "password_controller.h",
     "password_controller.mm",
-    "password_form_filler.h",
     "password_manager_log_router_factory.cc",
     "password_manager_log_router_factory.h",
+    "password_store_observer_bridge.h",
+    "password_store_observer_bridge.mm",
     "password_tab_helper.h",
     "password_tab_helper.mm",
     "save_passwords_consumer.h",
     "save_passwords_consumer.mm",
     "update_password_infobar_controller.h",
     "update_password_infobar_controller.mm",
+    "well_known_change_password_tab_helper.h",
+    "well_known_change_password_tab_helper.mm",
   ]
   deps = [
     ":infobar_delegates",
@@ -80,6 +87,7 @@ source_set("passwords") {
     "//ios/chrome/browser/ssl",
     "//ios/chrome/browser/sync/glue",
     "//ios/chrome/browser/translate:translate",
+    "//ios/chrome/browser/ui:feature_flags",
     "//ios/chrome/browser/ui/alert_coordinator",
     "//ios/chrome/browser/ui/commands",
     "//ios/chrome/browser/ui/elements",
@@ -156,7 +164,7 @@ source_set("passwords_generation_utils") {
     "password_generation_utils.mm",
   ]
   deps = [ "//base:i18n" ]
-  libs = [ "CoreGraphics.framework" ]
+  frameworks = [ "CoreGraphics.framework" ]
 }
 
 source_set("unit_tests") {
@@ -169,6 +177,7 @@ source_set("unit_tests") {
     "js_credential_manager_unittest.mm",
     "password_controller_js_unittest.mm",
     "password_controller_unittest.mm",
+    "well_known_change_password_tab_helper_unittest.mm",
   ]
   deps = [
     ":passwords",
@@ -188,6 +197,7 @@ source_set("unit_tests") {
     "//components/prefs:test_support",
     "//components/safe_browsing/core/common:safe_browsing_prefs",
     "//components/security_state/ios",
+    "//components/ukm:test_support",
     "//google_apis",
     "//ios/chrome/browser/autofill",
     "//ios/chrome/browser/browser_state:test_support",
@@ -204,33 +214,10 @@ source_set("unit_tests") {
     "//ios/web/public/test",
     "//ios/web/public/test/fakes",
     "//net:test_support",
+    "//services/network:test_support",
     "//testing/gtest",
     "//third_party/ocmock",
     "//url",
-  ]
-}
-
-source_set("eg_tests") {
-  defines = [ "CHROME_EARL_GREY_1" ]
-  configs += [ "//build/config/compiler:enable_arc" ]
-  testonly = true
-  sources = [ "credential_manager_egtest.mm" ]
-
-  deps = [
-    ":feature_flags",
-    ":test_support",
-    "//base",
-    "//base/test:test_support",
-    "//components/password_manager/core/common",
-    "//ios/chrome/test/app:test_support",
-    "//ios/chrome/test/earl_grey:test_support",
-    "//ios/testing/earl_grey:earl_grey_support",
-    "//ios/web/public/test/http_server",
-    "//net:test_support",
-  ]
-  libs = [
-    "UIKit.framework",
-    "XCTest.framework",
   ]
 }
 
@@ -254,27 +241,7 @@ source_set("eg2_tests") {
     "//ios/web/public/test/http_server",
     "//net:test_support",
   ]
-  libs = [ "UIKit.framework" ]
-}
-
-source_set("test_support") {
-  defines = [ "CHROME_EARL_GREY_1" ]
-  configs += [ "//build/config/compiler:enable_arc" ]
-  testonly = true
-  sources = [
-    "password_manager_app_interface.h",
-    "password_manager_app_interface.mm",
-  ]
-  deps = [
-    ":passwords",
-    "//base",
-    "//components/autofill/core/common",
-    "//components/keyed_service/core",
-    "//components/password_manager/core/browser",
-    "//ios/chrome/test/app:test_support",
-    "//ios/testing:nserror_support",
-    "//ios/web/public",
-  ]
+  frameworks = [ "UIKit.framework" ]
 }
 
 source_set("eg_app_support+eg2") {

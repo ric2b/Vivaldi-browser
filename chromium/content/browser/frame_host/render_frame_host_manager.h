@@ -46,6 +46,12 @@ class RenderViewHostImpl;
 class RenderWidgetHostView;
 class TestWebContents;
 
+using PageBroadcastMethodCallback =
+    base::RepeatingCallback<void(RenderViewHostImpl*)>;
+
+using RemoteFramesBroadcastMethodCallback =
+    base::RepeatingCallback<void(RenderFrameProxyHost*)>;
+
 // Manages RenderFrameHosts for a FrameTreeNode. It maintains a
 // current_frame_host() which is the content currently visible to the user. When
 // a frame is told to navigate to a different web site (as determined by
@@ -442,6 +448,21 @@ class CONTENT_EXPORT RenderFrameHostManager
   // sent.
   void SendPageMessage(IPC::Message* msg, SiteInstance* instance_to_skip);
 
+  // Executes a PageBroadcast Mojo method to every RenderView in the FrameTree.
+  // This should only be called in the top-level RenderFrameHostManager.
+  // The |callback| is called synchronously and the |instance_to_skip| won't
+  // be referenced after this method returns.
+  void ExecutePageBroadcastMethod(PageBroadcastMethodCallback callback,
+                                  SiteInstance* instance_to_skip = nullptr);
+
+  // Executes a RemoteMainFrame Mojo method to every instance in |proxy_hosts|.
+  // This should only be called in the top-level RenderFrameHostManager.
+  // The |callback| is called synchronously and the |instance_to_skip| won't
+  // be referenced after this method returns.
+  void ExecuteRemoteFramesBroadcastMethod(
+      RemoteFramesBroadcastMethodCallback callback,
+      SiteInstance* instance_to_skip = nullptr);
+
   // Returns a const reference to the map of proxy hosts. The keys are
   // SiteInstance IDs, the values are RenderFrameProxyHosts.
   const RenderFrameProxyHostMap& GetAllProxyHostsForTesting() const {
@@ -459,16 +480,12 @@ class CONTENT_EXPORT RenderFrameHostManager
 
   // Updates the user activation state in all proxies of this frame.  For
   // more details, see the comment on FrameTreeNode::user_activation_state_.
+  //
+  // The |notification_type| parameter is used for histograms, only for the case
+  // |update_state == kNotifyActivation|.
   void UpdateUserActivationState(
-      blink::mojom::UserActivationUpdateType update_type);
-
-  // When a frame transfers user activation to another frame via postMessage,
-  // this is used to inform proxies of the target frame (via IPC) about the
-  // transfer, namely that |source_rfh| is transferring user activation to this
-  // frame.  Note that the IPC isn't sent to |source_rfh|'s process, since it
-  // already knows about the transfer, and it also isn't sent to this frame's
-  // RenderFrame, since that will be handled as part of postMessage.
-  void TransferUserActivationFrom(RenderFrameHostImpl* source_rfh);
+      blink::mojom::UserActivationUpdateType update_type,
+      blink::mojom::UserActivationNotificationType notification_type);
 
   void OnSetHadStickyUserActivationBeforeNavigation(bool value);
 
@@ -487,6 +504,10 @@ class CONTENT_EXPORT RenderFrameHostManager
   // function will never lead to a process being created for the navigation.
   scoped_refptr<SiteInstance> GetSiteInstanceForNavigationRequest(
       NavigationRequest* navigation_request);
+
+  // Returns true if |candidate| is currently on the same web site as dest_url.
+  bool IsCurrentlySameSite(RenderFrameHostImpl* candidate,
+                           const GURL& dest_url);
 
   // Helper to initialize the main RenderFrame if it's not initialized.
   // TODO(https://crbug.com/936696): Remove this. For now debug URLs and
@@ -629,7 +650,8 @@ class CONTENT_EXPORT RenderFrameHostManager
       bool dest_is_view_source_mode,
       bool was_server_redirect,
       bool cross_origin_opener_policy_mismatch,
-      bool should_replace_current_entry);
+      bool should_replace_current_entry,
+      bool* did_same_site_proactive_browsing_instance_swap);
 
   // Returns a descriptor of the appropriate SiteInstance object for the given
   // |dest_url|, possibly reusing the current, source or destination
@@ -691,10 +713,6 @@ class CONTENT_EXPORT RenderFrameHostManager
       const SiteInstanceDescriptor& descriptor,
       SiteInstanceImpl* candidate_instance);
 
-  // Returns true if |candidate| is currently on the same web site as dest_url.
-  bool IsCurrentlySameSite(RenderFrameHostImpl* candidate,
-                           const GURL& dest_url);
-
   // Ensure that we have created all needed proxies for a new RFH with
   // SiteInstance |new_instance|: (1) create swapped-out RVHs and proxies for
   // the new RFH's opener chain if we are staying in the same BrowsingInstance;
@@ -754,6 +772,15 @@ class CONTENT_EXPORT RenderFrameHostManager
   // Initialization for RenderFrameHost uses the same sequence as InitRenderView
   // above.
   bool InitRenderFrame(RenderFrameHostImpl* render_frame_host);
+
+  // Find the routing ID of the frame or proxy that this frame will replace or
+  // |MSG_ROUTING_NONE| if there is none. When initializing a new RenderFrame
+  // for |render_frame_host|, it may be replacing a RenderFrameProxy or another
+  // RenderFrame in the renderer or recovering from a crash. |existing_proxy| is
+  // the proxy for |this| in the destination renderer, nullptr if there is no
+  // proxy. |render_frame_host| is used only for sanity checking.
+  int GetReplacementRoutingId(RenderFrameProxyHost* existing_proxy,
+                              RenderFrameHostImpl* render_frame_host) const;
 
   // Helper to reinitialize the RenderFrame, RenderView, and the opener chain
   // for the provided |render_frame_host|.  Used when the |render_frame_host|

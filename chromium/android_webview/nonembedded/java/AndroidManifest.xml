@@ -8,6 +8,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     package="{{manifest_package|default('com.android.webview')}}"
+    {% if use_isolated_splits is defined and use_isolated_splits == 'true' %}
+    android:isolatedSplits="true"
+    {% endif %}
     tools:ignore="MissingLeanbackLauncher">
 
     <uses-feature android:name="android.hardware.touchscreen"
@@ -36,6 +39,7 @@
                  android_webview/test/shell/AndroidManifest.xml as well. -->
             <!--suppress HardcodedText -->
             <activity android:name="org.chromium.android_webview.devui.MainActivity"
+                      android:windowSoftInputMode="adjustPan"
                       android:visibleToInstantApps="true"
                       android:label="WebView DevTools"
                       android:icon="@drawable/icon_webview"

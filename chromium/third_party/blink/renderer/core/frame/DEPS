@@ -2,19 +2,37 @@ specific_include_rules = {
   "ad_tracker_test.cc": [
     "+base/run_loop.h",
   ],
+  "frame_view.cc": [
+    "+ui/gfx/transform.h"
+  ],
   "local_frame_back_forward_cache_test.cc": [
     "+base/run_loop.h",
   ],
+  "local_frame.h": [
+    "+ui/gfx/transform.h"
+  ],
+  "local_frame.cc": [
+    "+ui/gfx/transform.h"
+  ],
   "local_frame_view.cc": [
     "+cc/tiles/frame_viewer_instrumentation.h",
+    "+components/paint_preview/common/paint_preview_tracker.h",
   ],
   "remote_frame_view.cc": [
     "+components/paint_preview/common/paint_preview_tracker.h",
+    "+printing/buildflags/buildflags.h",
+    "+printing/metafile_skia.h",
   ],
   "visual_viewport.cc": [
     "+cc/layers/solid_color_scrollbar_layer.h",
   ],
   "web_frame_widget_base.cc": [
     "+cc/trees/swap_promise.h",
+  ],
+  "web_frame_widget_base.h": [
+    "+ui/base/mojom/ui_base_types.mojom-shared.h",
+  ],
+  "web_frame_widget_test.cc": [
+    "+components/viz/common/surfaces/parent_local_surface_id_allocator.h",
   ],
 }

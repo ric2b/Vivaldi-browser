@@ -42,7 +42,9 @@ class ContextMenuPostitionDelegate {
 class ContextMenuController : public ui::SimpleMenuModel::Delegate,
                               public ContextMenuPostitionDelegate {
  public:
-  using MenuItem = extensions::vivaldi::context_menu::MenuItem;
+  using Element = extensions::vivaldi::context_menu::Element;
+  using Item = extensions::vivaldi::context_menu::Item;
+  using Container = extensions::vivaldi::context_menu::Container;
   using Params = extensions::vivaldi::context_menu::Show::Params;
 
   class Delegate {
@@ -79,8 +81,12 @@ class ContextMenuController : public ui::SimpleMenuModel::Delegate,
 
  private:
   void InitModel();
-  void PopulateModel(const MenuItem& menuitem, ui::SimpleMenuModel* menu_model);
+  void PopulateModel(const Element& child, ui::SimpleMenuModel* menu_model);
+  ui::SimpleMenuModel* GetContainerModel(const Container& container,
+      ui::SimpleMenuModel* menu_model);
   void SanitizeModel(ui::SimpleMenuModel* menu_model);
+  void SetIcon(int command_id, const std::string& icon,
+               ui::SimpleMenuModel* menu_model);
   void LoadFavicon(int command_id, const std::string& url);
   void OnFaviconDataAvailable(
       int command_id,

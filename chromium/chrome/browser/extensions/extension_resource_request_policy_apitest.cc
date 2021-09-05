@@ -229,7 +229,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionResourceRequestPolicyTest, Audio) {
       << message_;
 }
 
-#if defined(OS_MACOSX) || defined(OS_WIN)
+#if defined(OS_MAC) || defined(OS_WIN)
 // http://crbug.com/238733 - Video is flaky on Mac and Win.
 #define MAYBE_Video DISABLED_Video
 #else
@@ -434,7 +434,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionResourceRequestPolicyTest,
   GURL private_page(
       "chrome-extension://kegmjfcnjamahdnldjmlpachmpielcdk/private.html");
   ASSERT_TRUE(content::ExecuteScript(web_contents, "navigateFrameNow()"));
-  WaitForLoadStop(web_contents);
+  EXPECT_TRUE(WaitForLoadStop(web_contents));
   EXPECT_NE(private_page, web_contents->GetLastCommittedURL());
   std::string content;
   EXPECT_TRUE(ExecuteScriptAndExtractString(

@@ -10,11 +10,16 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/logging.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/stl_util.h"
+#include "base/time/default_tick_clock.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
+#include "chrome/browser/chromeos/accessibility/magnification_manager.h"
 #include "chrome/browser/chromeos/base/locale_util.h"
 #include "chrome/browser/chromeos/customization/customization_document.h"
+#include "chrome/browser/chromeos/login/configuration_keys.h"
+#include "chrome/browser/chromeos/login/demo_mode/demo_setup_controller.h"
 #include "chrome/browser/chromeos/login/oobe_screen.h"
 #include "chrome/browser/chromeos/login/screen_manager.h"
 #include "chrome/browser/chromeos/login/ui/input_events_blocker.h"
@@ -30,16 +35,116 @@
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_thread.h"
 
+namespace chromeos {
 namespace {
 
 constexpr char kUserActionContinueButtonClicked[] = "continue";
+constexpr const char kUserActionEnableSpokenFeedback[] =
+    "accessibility-spoken-feedback-enable";
+constexpr const char kUserActionDisableSpokenFeedback[] =
+    "accessibility-spoken-feedback-disable";
+constexpr const char kUserActionEnableLargeCursor[] =
+    "accessibility-large-cursor-enable";
+constexpr const char kUserActionDisableLargeCursor[] =
+    "accessibility-large-cursor-disable";
+constexpr const char kUserActionEnableHighContrast[] =
+    "accessibility-high-contrast-enable";
+constexpr const char kUserActionDisableHighContrast[] =
+    "accessibility-high-contrast-disable";
+constexpr const char kUserActionEnableScreenMagnifier[] =
+    "accessibility-screen-magnifier-enable";
+constexpr const char kUserActionDisableScreenMagnifier[] =
+    "accessibility-screen-magnifier-disable";
+constexpr const char kUserActionEnableSelectToSpeak[] =
+    "accessibility-select-to-speak-enable";
+constexpr const char kUserActionDisableSelectToSpeak[] =
+    "accessibility-select-to-speak-disable";
+constexpr const char kUserActionEnableDockedMagnifier[] =
+    "accessibility-docked-magnifier-enable";
+constexpr const char kUserActionDisableDockedMagnifier[] =
+    "accessibility-docked-magnifier-disable";
+constexpr const char kUserActionEnableVirtualKeyboard[] =
+    "accessibility-virtual-keyboard-enable";
+constexpr const char kUserActionDisableVirtualKeyboard[] =
+    "accessibility-virtual-keyboard-disable";
+constexpr const char kUserActionSetupDemoMode[] = "setupDemoMode";
+constexpr const char kUserActionSetupDemoModeGesture[] = "setupDemoModeGesture";
+constexpr const char kUserActionEnableDebugging[] = "enableDebugging";
+
+struct WelcomeScreenA11yUserAction {
+  const char* name_;
+  WelcomeScreen::A11yUserAction uma_name_;
+};
+
+const WelcomeScreenA11yUserAction actions[] = {
+    {kUserActionEnableSpokenFeedback,
+     WelcomeScreen::A11yUserAction::kEnableSpokenFeedback},
+    {kUserActionDisableSpokenFeedback,
+     WelcomeScreen::A11yUserAction::kDisableSpokenFeedback},
+    {kUserActionEnableLargeCursor,
+     WelcomeScreen::A11yUserAction::kEnableLargeCursor},
+    {kUserActionDisableLargeCursor,
+     WelcomeScreen::A11yUserAction::kDisableLargeCursor},
+    {kUserActionEnableHighContrast,
+     WelcomeScreen::A11yUserAction::kEnableHighContrast},
+    {kUserActionDisableHighContrast,
+     WelcomeScreen::A11yUserAction::kDisableHighContrast},
+    {kUserActionEnableScreenMagnifier,
+     WelcomeScreen::A11yUserAction::kEnableScreenMagnifier},
+    {kUserActionDisableScreenMagnifier,
+     WelcomeScreen::A11yUserAction::kDisableScreenMagnifier},
+    {kUserActionEnableSelectToSpeak,
+     WelcomeScreen::A11yUserAction::kEnableSelectToSpeak},
+    {kUserActionDisableSelectToSpeak,
+     WelcomeScreen::A11yUserAction::kDisableSelectToSpeak},
+    {kUserActionEnableDockedMagnifier,
+     WelcomeScreen::A11yUserAction::kEnableDockedMagnifier},
+    {kUserActionDisableDockedMagnifier,
+     WelcomeScreen::A11yUserAction::kDisableDockedMagnifier},
+    {kUserActionEnableVirtualKeyboard,
+     WelcomeScreen::A11yUserAction::kEnableVirtualKeyboard},
+    {kUserActionDisableVirtualKeyboard,
+     WelcomeScreen::A11yUserAction::kDisableVirtualKeyboard},
+};
+
+bool IsA11yUserAction(const std::string& action_id) {
+  for (const auto& el : actions) {
+    if (action_id == el.name_) {
+      return true;
+    }
+  }
+  return false;
+}
+
+void RecordA11yUserAction(const std::string& action_id) {
+  for (const auto& el : actions) {
+    if (action_id == el.name_) {
+      base::UmaHistogramEnumeration("OOBE.WelcomeScreen.A11yUserActions",
+                                    el.uma_name_);
+      return;
+    }
+  }
+  NOTREACHED() << "Unexpected action id: " << action_id;
+}
 
 }  // namespace
 
-namespace chromeos {
-
 ///////////////////////////////////////////////////////////////////////////////
 // WelcomeScreen, public:
+
+// static
+std::string WelcomeScreen::GetResultString(Result result) {
+  switch (result) {
+    case Result::NEXT:
+      return "Next";
+    case Result::START_DEMO:
+      return "StartDemo";
+    case Result::SETUP_DEMO:
+      return "SetupDemo";
+    case Result::ENABLE_DEBUGGING:
+      return "EnableDebugging";
+  }
+}
 
 // static
 WelcomeScreen* WelcomeScreen::Get(ScreenManager* manager) {
@@ -48,7 +153,7 @@ WelcomeScreen* WelcomeScreen::Get(ScreenManager* manager) {
 }
 
 WelcomeScreen::WelcomeScreen(WelcomeView* view,
-                             const base::RepeatingClosure& exit_callback)
+                             const ScreenExitCallback& exit_callback)
     : BaseScreen(WelcomeView::kScreenId, OobeScreenPriority::DEFAULT),
       view_(view),
       exit_callback_(exit_callback) {
@@ -190,7 +295,19 @@ void WelcomeScreen::ShowImpl() {
   // Automatically continue if we are using hands-off enrollment.
   if (WizardController::UsingHandsOffEnrollment()) {
     OnUserAction(kUserActionContinueButtonClicked);
-  } else if (view_) {
+    return;
+  }
+
+  // TODO(crbug.com/1105387): Part of initial screen logic.
+  PrefService* prefs = g_browser_process->local_state();
+  if (prefs->GetBoolean(prefs::kDebuggingFeaturesRequested)) {
+    OnEnableDebugging();
+    return;
+  }
+
+  demo_mode_detector_ = std::make_unique<DemoModeDetector>(
+      base::DefaultTickClock::GetInstance(), this);
+  if (view_) {
     view_->Show();
   }
 }
@@ -198,14 +315,90 @@ void WelcomeScreen::ShowImpl() {
 void WelcomeScreen::HideImpl() {
   if (view_)
     view_->Hide();
+  demo_mode_detector_.reset();
 }
 
 void WelcomeScreen::OnUserAction(const std::string& action_id) {
   if (action_id == kUserActionContinueButtonClicked) {
     OnContinueButtonPressed();
+    return;
+  }
+  if (action_id == kUserActionSetupDemoMode) {
+    OnSetupDemoMode();
+    return;
+  }
+  if (action_id == kUserActionEnableDebugging) {
+    OnEnableDebugging();
+    return;
+  }
+  if (action_id == kUserActionSetupDemoModeGesture) {
+    HandleAccelerator(ash::LoginAcceleratorAction::kStartDemoMode);
+    return;
+  }
+  if (IsA11yUserAction(action_id)) {
+    RecordA11yUserAction(action_id);
+    if (action_id == kUserActionEnableSpokenFeedback) {
+      AccessibilityManager::Get()->EnableSpokenFeedback(true);
+    } else if (action_id == kUserActionDisableSpokenFeedback) {
+      AccessibilityManager::Get()->EnableSpokenFeedback(false);
+    } else if (action_id == kUserActionEnableLargeCursor) {
+      AccessibilityManager::Get()->EnableLargeCursor(true);
+    } else if (action_id == kUserActionDisableLargeCursor) {
+      AccessibilityManager::Get()->EnableLargeCursor(false);
+    } else if (action_id == kUserActionEnableHighContrast) {
+      AccessibilityManager::Get()->EnableHighContrast(true);
+    } else if (action_id == kUserActionDisableHighContrast) {
+      AccessibilityManager::Get()->EnableHighContrast(false);
+    } else if (action_id == kUserActionEnableScreenMagnifier) {
+      DCHECK(MagnificationManager::Get());
+      MagnificationManager::Get()->SetMagnifierEnabled(true);
+    } else if (action_id == kUserActionDisableScreenMagnifier) {
+      DCHECK(MagnificationManager::Get());
+      MagnificationManager::Get()->SetMagnifierEnabled(false);
+    } else if (action_id == kUserActionEnableSelectToSpeak) {
+      AccessibilityManager::Get()->SetSelectToSpeakEnabled(true);
+    } else if (action_id == kUserActionDisableSelectToSpeak) {
+      AccessibilityManager::Get()->SetSelectToSpeakEnabled(false);
+    } else if (action_id == kUserActionEnableDockedMagnifier) {
+      DCHECK(MagnificationManager::Get());
+      MagnificationManager::Get()->SetDockedMagnifierEnabled(true);
+    } else if (action_id == kUserActionDisableDockedMagnifier) {
+      DCHECK(MagnificationManager::Get());
+      MagnificationManager::Get()->SetDockedMagnifierEnabled(false);
+    } else if (action_id == kUserActionEnableVirtualKeyboard) {
+      AccessibilityManager::Get()->EnableVirtualKeyboard(true);
+    } else if (action_id == kUserActionDisableVirtualKeyboard) {
+      AccessibilityManager::Get()->EnableVirtualKeyboard(false);
+    }
   } else {
     BaseScreen::OnUserAction(action_id);
   }
+}
+
+bool WelcomeScreen::HandleAccelerator(ash::LoginAcceleratorAction action) {
+  if (action == ash::LoginAcceleratorAction::kStartDemoMode) {
+    if (!DemoSetupController::IsDemoModeAllowed())
+      return true;
+    if (!view_)
+      return true;
+    const auto* key = context()->configuration.FindKeyOfType(
+        configuration::kEnableDemoMode, base::Value::Type::BOOLEAN);
+    const bool value = key && key->GetBool();
+    if (value) {
+      OnSetupDemoMode();
+      return true;
+    }
+
+    view_->ShowDemoModeConfirmationDialog();
+    return true;
+  } else if (action == ash::LoginAcceleratorAction::kStartEnrollment) {
+    context()->enrollment_triggered_early = true;
+    return true;
+  } else if (action == ash::LoginAcceleratorAction::kEnableDebugging) {
+    OnEnableDebugging();
+    return true;
+  }
+  return false;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -225,10 +418,23 @@ void WelcomeScreen::InputMethodChanged(
 // WelcomeScreen, private:
 
 void WelcomeScreen::OnContinueButtonPressed() {
-  if (view_) {
-    view_->StopDemoModeDetection();
-  }
-  exit_callback_.Run();
+  demo_mode_detector_.reset();
+  exit_callback_.Run(Result::NEXT);
+}
+
+void WelcomeScreen::OnShouldStartDemoMode() {
+  demo_mode_detector_.reset();
+  exit_callback_.Run(Result::START_DEMO);
+}
+
+void WelcomeScreen::OnSetupDemoMode() {
+  demo_mode_detector_.reset();
+  exit_callback_.Run(Result::SETUP_DEMO);
+}
+
+void WelcomeScreen::OnEnableDebugging() {
+  demo_mode_detector_.reset();
+  exit_callback_.Run(Result::ENABLE_DEBUGGING);
 }
 
 void WelcomeScreen::OnLanguageChangedCallback(

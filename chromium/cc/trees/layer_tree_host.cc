@@ -46,6 +46,7 @@
 #include "cc/paint/paint_worklet_layer_painter.h"
 #include "cc/resources/ui_resource_manager.h"
 #include "cc/trees/clip_node.h"
+#include "cc/trees/compositor_commit_data.h"
 #include "cc/trees/draw_property_utils.h"
 #include "cc/trees/effect_node.h"
 #include "cc/trees/layer_tree_host_client.h"
@@ -55,7 +56,6 @@
 #include "cc/trees/property_tree_builder.h"
 #include "cc/trees/proxy_main.h"
 #include "cc/trees/render_frame_metadata_observer.h"
-#include "cc/trees/scroll_and_scale_set.h"
 #include "cc/trees/scroll_node.h"
 #include "cc/trees/single_thread_proxy.h"
 #include "cc/trees/swap_promise_manager.h"
@@ -256,7 +256,7 @@ LayerTreeHost::GetScopedEventMetricsMonitor(
 }
 
 void LayerTreeHost::ClearEventsMetrics() {
-  // Take evens metrics and drop them.
+  // Take events metrics and drop them.
   events_metrics_manager_.TakeSavedEventsMetrics();
 }
 
@@ -759,7 +759,7 @@ void LayerTreeHost::RecordGpuRasterizationHistogram(
   }
 
   // Record how widely gpu rasterization is enabled.
-  // This number takes device/gpu whitelisting/backlisting into account.
+  // This number takes device/gpu allowlist/denylist into account.
   // Note that we do not consider the forced gpu rasterization mode, which is
   // mostly used for debugging purposes.
   UMA_HISTOGRAM_BOOLEAN("Renderer4.GpuRasterizationEnabled",
@@ -852,21 +852,23 @@ bool LayerTreeHost::DoUpdateLayers() {
   return did_paint_content;
 }
 
-void LayerTreeHost::ApplyViewportChanges(const ScrollAndScaleSet& info) {
+void LayerTreeHost::ApplyViewportChanges(
+    const CompositorCommitData& commit_data) {
   gfx::ScrollOffset inner_viewport_scroll_delta;
-  if (info.inner_viewport_scroll.element_id)
-    inner_viewport_scroll_delta = info.inner_viewport_scroll.scroll_delta;
+  if (commit_data.inner_viewport_scroll.element_id)
+    inner_viewport_scroll_delta =
+        commit_data.inner_viewport_scroll.scroll_delta;
 
   // When a new scroll-animation starts, it is necessary to check
-  // |info.manipulation_info| to make sure the scroll-animation was started by
-  // an input event.
-  // If there is already an ongoing scroll-animation, then it is necessary to
-  // only look at |info.ongoing_scroll_animation| (since it is possible for the
-  // scroll-animation to continue even if no event was handled).
-  bool new_ongoing_scroll =
-      scroll_animation_.in_progress
-          ? info.ongoing_scroll_animation
-          : (info.ongoing_scroll_animation && info.manipulation_info);
+  // |commit_data.manipulation_info| to make sure the scroll-animation was
+  // started by an input event. If there is already an ongoing scroll-animation,
+  // then it is necessary to only look at |commit_data.ongoing_scroll_animation|
+  // (since it is possible for the scroll-animation to continue even if no event
+  // was handled).
+  bool new_ongoing_scroll = scroll_animation_.in_progress
+                                ? commit_data.ongoing_scroll_animation
+                                : (commit_data.ongoing_scroll_animation &&
+                                   commit_data.manipulation_info);
   if (scroll_animation_.in_progress && !new_ongoing_scroll) {
     scroll_animation_.in_progress = false;
     if (!scroll_animation_.end_notification.is_null())
@@ -875,74 +877,113 @@ void LayerTreeHost::ApplyViewportChanges(const ScrollAndScaleSet& info) {
     scroll_animation_.in_progress = new_ongoing_scroll;
   }
 
-  if (inner_viewport_scroll_delta.IsZero() && info.page_scale_delta == 1.f &&
-      info.elastic_overscroll_delta.IsZero() && !info.top_controls_delta &&
-      !info.bottom_controls_delta &&
-      !info.browser_controls_constraint_changed &&
-      !info.scroll_gesture_did_end &&
-      info.is_pinch_gesture_active == is_pinch_gesture_active_from_impl_) {
+  if (inner_viewport_scroll_delta.IsZero() &&
+      commit_data.page_scale_delta == 1.f &&
+      commit_data.elastic_overscroll_delta.IsZero() &&
+      !commit_data.top_controls_delta && !commit_data.bottom_controls_delta &&
+      !commit_data.browser_controls_constraint_changed &&
+      !commit_data.scroll_gesture_did_end &&
+      commit_data.is_pinch_gesture_active ==
+          is_pinch_gesture_active_from_impl_) {
     return;
   }
-  is_pinch_gesture_active_from_impl_ = info.is_pinch_gesture_active;
+  is_pinch_gesture_active_from_impl_ = commit_data.is_pinch_gesture_active;
 
-  // Preemptively apply the scroll offset and scale delta here before sending
-  // it to the client.  If the client comes back and sets it to the same
-  // value, then the layer can early out without needing a full commit.
   if (auto* inner_scroll = property_trees()->scroll_tree.Node(
           viewport_property_ids_.inner_scroll)) {
-    if (IsUsingLayerLists()) {
-      auto& scroll_tree = property_trees()->scroll_tree;
-      scroll_tree.NotifyDidScroll(
-          inner_scroll->element_id,
-          scroll_tree.current_scroll_offset(inner_scroll->element_id) +
-              inner_viewport_scroll_delta,
-          info.inner_viewport_scroll.snap_target_element_ids);
-    } else if (auto* inner_scroll_layer =
-                   LayerByElementId(inner_scroll->element_id)) {
-      inner_scroll_layer->SetScrollOffsetFromImplSide(
-          inner_scroll_layer->scroll_offset() + inner_viewport_scroll_delta);
-    }
+    UpdateScrollOffsetFromImpl(
+        inner_scroll->element_id, inner_viewport_scroll_delta,
+        commit_data.inner_viewport_scroll.snap_target_element_ids);
   }
 
-  ApplyPageScaleDeltaFromImplSide(info.page_scale_delta);
+  ApplyPageScaleDeltaFromImplSide(commit_data.page_scale_delta);
   SetElasticOverscrollFromImplSide(elastic_overscroll_ +
-                                   info.elastic_overscroll_delta);
+                                   commit_data.elastic_overscroll_delta);
   // TODO(ccameron): pass the elastic overscroll here so that input events
   // may be translated appropriately.
   client_->ApplyViewportChanges(
-      {inner_viewport_scroll_delta, info.elastic_overscroll_delta,
-       info.page_scale_delta, info.is_pinch_gesture_active,
-       info.top_controls_delta, info.bottom_controls_delta,
-       info.browser_controls_constraint, info.scroll_gesture_did_end});
+      {inner_viewport_scroll_delta, commit_data.elastic_overscroll_delta,
+       commit_data.page_scale_delta, commit_data.is_pinch_gesture_active,
+       commit_data.top_controls_delta, commit_data.bottom_controls_delta,
+       commit_data.browser_controls_constraint,
+       commit_data.scroll_gesture_did_end});
   SetNeedsUpdateLayers();
 }
 
 void LayerTreeHost::RecordManipulationTypeCounts(
-    const ScrollAndScaleSet& scroll_info) {
-  client_->RecordManipulationTypeCounts(scroll_info.manipulation_info);
+    const CompositorCommitData& commit_data) {
+  client_->RecordManipulationTypeCounts(commit_data.manipulation_info);
 }
 
 void LayerTreeHost::SendOverscrollAndScrollEndEventsFromImplSide(
-    const ScrollAndScaleSet& info) {
-  if (info.scroll_latched_element_id == ElementId())
+    const CompositorCommitData& commit_data) {
+  if (commit_data.scroll_latched_element_id == ElementId())
     return;
 
-  if (!info.overscroll_delta.IsZero()) {
-    client_->SendOverscrollEventFromImplSide(info.overscroll_delta,
-                                             info.scroll_latched_element_id);
+  if (!commit_data.overscroll_delta.IsZero()) {
+    client_->SendOverscrollEventFromImplSide(
+        commit_data.overscroll_delta, commit_data.scroll_latched_element_id);
   }
-  if (info.scroll_gesture_did_end)
-    client_->SendScrollEndEventFromImplSide(info.scroll_latched_element_id);
+  // TODO(bokan): If a scroll ended and a new one began in the same Blink frame
+  // (e.g. during a long running main thread task), this will erroneously
+  // dispatch the scroll end to the latter (still-scrolling) element.
+  // https://crbug.com/1116780.
+  if (commit_data.scroll_gesture_did_end)
+    client_->SendScrollEndEventFromImplSide(
+        commit_data.scroll_latched_element_id);
 }
 
-void LayerTreeHost::ApplyScrollAndScale(ScrollAndScaleSet* info) {
-  DCHECK(info);
-  TRACE_EVENT0("cc", "LayerTreeHost::ApplyScrollAndScale");
+void LayerTreeHost::UpdateScrollOffsetFromImpl(
+    const ElementId& id,
+    const gfx::ScrollOffset& delta,
+    const base::Optional<TargetSnapAreaElementIds>& snap_target_ids) {
+  if (IsUsingLayerLists()) {
+    auto& scroll_tree = property_trees()->scroll_tree;
+    auto new_offset = scroll_tree.current_scroll_offset(id) + delta;
+    TRACE_EVENT_INSTANT2("cc", "NotifyDidScroll", TRACE_EVENT_SCOPE_THREAD,
+                         "cur_y", scroll_tree.current_scroll_offset(id).y(),
+                         "delta", delta.y());
+    if (auto* scroll_node = scroll_tree.FindNodeFromElementId(id)) {
+      // This update closely follows
+      // blink::PropertyTreeManager::DirectlyUpdateScrollOffsetTransform.
+
+      scroll_tree.SetScrollOffset(id, new_offset);
+      // |blink::PropertyTreeManager::DirectlySetScrollOffset| (called from
+      // |blink::PropertyTreeManager::DirectlyUpdateScrollOffsetTransform|)
+      // marks the layer as needing to push properties in order to clobber
+      // animations, but that is not needed for an impl-side scroll.
+
+      // Update the offset in the transform node.
+      DCHECK(scroll_node->transform_id != TransformTree::kInvalidNodeId);
+      TransformTree& transform_tree = property_trees()->transform_tree;
+      auto* transform_node = transform_tree.Node(scroll_node->transform_id);
+      if (transform_node->scroll_offset != new_offset) {
+        transform_node->scroll_offset = new_offset;
+        transform_node->needs_local_transform_update = true;
+        transform_node->transform_changed = true;
+        transform_tree.set_needs_update(true);
+      }
+
+      // The transform tree has been modified which requires a call to
+      // |LayerTreeHost::UpdateLayers| to update the property trees.
+      SetNeedsUpdateLayers();
+    }
+
+    scroll_tree.NotifyDidScroll(id, new_offset, snap_target_ids);
+  } else if (Layer* layer = LayerByElementId(id)) {
+    layer->SetScrollOffsetFromImplSide(layer->scroll_offset() + delta);
+    SetNeedsUpdateLayers();
+  }
+}
+
+void LayerTreeHost::ApplyCompositorChanges(CompositorCommitData* commit_data) {
+  DCHECK(commit_data);
+  TRACE_EVENT0("cc", "LayerTreeHost::ApplyCompositorChanges");
 
   using perfetto::protos::pbzero::ChromeLatencyInfo;
   using perfetto::protos::pbzero::TrackEvent;
 
-  for (auto& swap_promise : info->swap_promises) {
+  for (auto& swap_promise : commit_data->swap_promises) {
     TRACE_EVENT(
         "input,benchmark", "LatencyInfo.Flow",
         [&swap_promise](perfetto::EventContext ctx) {
@@ -957,37 +998,24 @@ void LayerTreeHost::ApplyScrollAndScale(ScrollAndScaleSet* info) {
 
   if (root_layer_) {
     auto& scroll_tree = property_trees()->scroll_tree;
-    for (auto& scroll : info->scrolls) {
-      if (IsUsingLayerLists()) {
-        TRACE_EVENT_INSTANT2(
-            "cc", "NotifyDidScroll", TRACE_EVENT_SCOPE_THREAD, "cur_y",
-            scroll_tree.current_scroll_offset(scroll.element_id).y(), "delta",
-            scroll.scroll_delta.y());
-        scroll_tree.NotifyDidScroll(
-            scroll.element_id,
-            scroll_tree.current_scroll_offset(scroll.element_id) +
-                scroll.scroll_delta,
-            scroll.snap_target_element_ids);
-      } else if (Layer* layer = LayerByElementId(scroll.element_id)) {
-        layer->SetScrollOffsetFromImplSide(layer->scroll_offset() +
-                                           scroll.scroll_delta);
-        SetNeedsUpdateLayers();
-      }
+    for (auto& scroll : commit_data->scrolls) {
+      UpdateScrollOffsetFromImpl(scroll.element_id, scroll.scroll_delta,
+                                 scroll.snap_target_element_ids);
     }
-    for (auto& scrollbar : info->scrollbars) {
+    for (auto& scrollbar : commit_data->scrollbars) {
       scroll_tree.NotifyDidChangeScrollbarsHidden(scrollbar.element_id,
                                                   scrollbar.hidden);
     }
   }
 
-  SendOverscrollAndScrollEndEventsFromImplSide(*info);
+  SendOverscrollAndScrollEndEventsFromImplSide(*commit_data);
 
   // This needs to happen after scroll deltas have been sent to prevent top
   // controls from clamping the layout viewport both on the compositor and
   // on the main thread.
-  ApplyViewportChanges(*info);
+  ApplyViewportChanges(*commit_data);
 
-  RecordManipulationTypeCounts(*info);
+  RecordManipulationTypeCounts(*commit_data);
 }
 
 void LayerTreeHost::ApplyMutatorEvents(std::unique_ptr<MutatorEvents> events) {
@@ -1335,11 +1363,11 @@ void LayerTreeHost::SetRecordingScaleFactor(float recording_scale_factor) {
   recording_scale_factor_ = recording_scale_factor;
 }
 
-void LayerTreeHost::SetRasterColorSpace(
-    const gfx::ColorSpace& raster_color_space) {
-  if (raster_color_space_ == raster_color_space)
+void LayerTreeHost::SetDisplayColorSpaces(
+    const gfx::DisplayColorSpaces& display_color_spaces) {
+  if (display_color_spaces_ == display_color_spaces)
     return;
-  raster_color_space_ = raster_color_space;
+  display_color_spaces_ = display_color_spaces;
   for (auto* layer : *this)
     layer->SetNeedsDisplay();
 }
@@ -1576,7 +1604,7 @@ void LayerTreeHost::PushLayerTreePropertiesTo(LayerTreeImpl* tree_impl) {
   if (tree_impl->IsActiveTree())
     tree_impl->elastic_overscroll()->PushPendingToActive();
 
-  tree_impl->SetRasterColorSpace(raster_color_space_);
+  tree_impl->SetDisplayColorSpaces(display_color_spaces_);
   tree_impl->SetExternalPageScaleFactor(external_page_scale_factor_);
 
   tree_impl->set_painted_device_scale_factor(painted_device_scale_factor_);
@@ -1625,7 +1653,7 @@ void LayerTreeHost::PushSurfaceRangesTo(LayerTreeImpl* tree_impl) {
 
 void LayerTreeHost::PushLayerTreeHostPropertiesTo(
     LayerTreeHostImpl* host_impl) {
-  host_impl->set_external_pinch_gesture_active(
+  host_impl->GetInputHandler().set_external_pinch_gesture_active(
       is_external_pinch_gesture_active_);
   RecordGpuRasterizationHistogram(host_impl);
 
@@ -1859,6 +1887,11 @@ bool LayerTreeHost::TakeForceSendMetadataRequest() {
   bool force_send_metadata_request = force_send_metadata_request_;
   force_send_metadata_request_ = false;
   return force_send_metadata_request;
+}
+
+void LayerTreeHost::SetEnableFrameRateThrottling(
+    bool enable_frame_rate_throttling) {
+  proxy_->SetEnableFrameRateThrottling(enable_frame_rate_throttling);
 }
 
 }  // namespace cc

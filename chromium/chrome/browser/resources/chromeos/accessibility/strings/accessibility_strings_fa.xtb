@@ -6,6 +6,7 @@
 <translation id="1012173283529841972">مورد فهرست</translation>
 <translation id="1013742170491673792">srched</translation>
 <translation id="1014370462248694370">تند کشیدن دو انگشت به چپ</translation>
+<translation id="1016393160682012902">‏یکی از کلیدهای qwerty، کلید بریل قابل‌بازخوانی، یا اشاره لمسی را برای یادگیری عملکرد آن فشار دهید. برای خارج شدن، دکمه Control را با W یا Escape فشار دهید.</translation>
 <translation id="1022586497894531524">‏اولین بار است که از بازخورد گفتاری ChromeVox استفاده می‌کنید؟ این آموزش گام‌به‌گام سریع، اصول اولیه شروع به کار با ChromeVox را توضیح می‌دهد.</translation>
 <translation id="1025074108959230262">حالت چسبان غیرفعال شد</translation>
 <translation id="1031961866430398710">سپس</translation>
@@ -504,7 +505,6 @@
 <translation id="489907760999452556">پیوند داخلی</translation>
 <translation id="4909019435900810068">یک واژه عقب بروید</translation>
 <translation id="4911349081560453449">کادر تأیید قبلی وجود ندارد</translation>
-<translation id="4915087353619183190">‏درحال شروع حالت یادگیری. یکی از کلیدهای qwerty، کلید بریل قابل‌بازخوانی یا اشاره لمسی را برای یادگیری عملکرد آن فشار دهید. برای خروج کلیدهای control + w یا escape را فشار دهید.</translation>
 <translation id="492295894462528572">پیش‌گفتار</translation>
 <translation id="495046168593986294">پیمایش به بالا</translation>
 <translation id="495170559598752135">کنش‌ها</translation>
@@ -647,6 +647,7 @@
 <translation id="6017514345406065928">سبز</translation>
 <translation id="602001110135236999">پیمایش به چپ</translation>
 <translation id="6034000775414344507">خاکستری کم‌رنگ</translation>
+<translation id="6036135911048686884">کاوش با لمس</translation>
 <translation id="6037602951055904232">حرکت به جلو</translation>
 <translation id="6044160928851315051">تاریک کردن صفحه</translation>
 <translation id="6082768461603900813">پیمایش ساده</translation>
@@ -906,7 +907,7 @@
 <translation id="820469951249669083">رفتن به ردیف بعدی</translation>
 <translation id="8205922869661890178">باز کردن صفحه گزارش برنامه‌نویس</translation>
 <translation id="8212109599554677485">تغییر سبک نمایش به حالت پهلوبه‌پهلو</translation>
-<translation id="8215202828671303819">چند انتخاب</translation>
+<translation id="8215202828671303819">چندانتخابی</translation>
 <translation id="8249864170673238087"><ph name="COLOR" />, <ph name="OPACITY_PERCENTAGE" />% ماتی.</translation>
 <translation id="826825447994856889">مقدمه</translation>
 <translation id="827266600368092403">شروع یا پایان انتخاب</translation>
@@ -923,6 +924,7 @@
 <translation id="8345569862449483843">{COUNT,plural, =1{پوند}one{# علامت پوند}other{# علامت پوند}}</translation>
 <translation id="8378855320830505539">منطقه</translation>
 <translation id="8382679411218029383">تکمیل خودکار درون خطی و فهرست</translation>
+<translation id="8394908167088220973">پخش/مکث رسانه</translation>
 <translation id="8428213095426709021">تنظیمات</translation>
 <translation id="8428603554127842284">سطح <ph name="DEPTH" /></translation>
 <translation id="8430049249787218991">mnubr</translation>
@@ -967,6 +969,7 @@
 <translation id="8770473310765924354">خروج از محتوای سازمان یافته، مانند جداول</translation>
 <translation id="8779057862865475116">پیوند قبلی وجود ندارد</translation>
 <translation id="8796411681063377102">عنوان بعدی سطح ۳</translation>
+<translation id="8823311177246872527">صفحه <ph name="CURRENTPAGE" /> از <ph name="TOTALPAGES" /></translation>
 <translation id="8825828890761629845">bnr</translation>
 <translation id="8851136666856101339">اصلی</translation>
 <translation id="8882002077197914455">عنوان ردیف</translation>

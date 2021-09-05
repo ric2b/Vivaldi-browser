@@ -4,7 +4,6 @@
 <translation id="1038842779957582377">nome desconhecido</translation>
 <translation id="1089439967362294234">Alterar senha</translation>
 <translation id="1110994991967754504">Selecionar autorização para <ph name="PERMISSION_NAME" /></translation>
-<translation id="1152921474424827756">Aceda a uma <ph name="BEGIN_LINK" />cópia em cache<ph name="END_LINK" /> de <ph name="URL" /></translation>
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> fechou a ligação inesperadamente.</translation>
 <translation id="1161325031994447685">Ligar novamente à rede Wi-Fi</translation>
 <translation id="1175364870820465910">Im&amp;primir...</translation>
@@ -22,9 +21,7 @@
 <translation id="1834321415901700177">Este website contém programas prejudiciais</translation>
 <translation id="1916770123977586577">Para aplicar as definições atualizadas a este website, atualize esta página</translation>
 <translation id="1919345977826869612">Publicidade</translation>
-<translation id="194030505837763158">Aceder a <ph name="LINK" /></translation>
 <translation id="1974060860693918893">Avançadas</translation>
-<translation id="2030481566774242610">Será que quis dizer <ph name="LINK" />?</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />A verificar o proxy e a firewall<ph name="END_LINK" /></translation>
 <translation id="2091887806945687916">Som</translation>
 <translation id="2119505898009119320">Emitido em nome de: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
@@ -101,6 +98,7 @@
 <translation id="4235360514405112390">Válido</translation>
 <translation id="4250431568374086873">A ligação a este website não é totalmente segura</translation>
 <translation id="4265872034478892965">Permitida pelo administrador</translation>
+<translation id="4305666528087210886">Não foi possível aceder ao seu ficheiro</translation>
 <translation id="4312866146174492540">Bloquear (pré-definição)</translation>
 <translation id="4356973930735388585">Os utilizadores mal intencionados neste website podem tentar instalar programas perigosos no seu computador que roubem ou eliminem as suas informações (por exemplo, fotografias, senhas, mensagens e cartões de crédito).</translation>
 <translation id="4408413947728134509">Cookies <ph name="NUM_COOKIES" /></translation>
@@ -128,7 +126,6 @@
 <translation id="5287240709317226393">Mostrar cookies</translation>
 <translation id="5355557959165512791">Não pode visitar <ph name="SITE" /> neste momento, porque o certificado foi revogado. Os erros de rede e os ataques são geralmente temporários, pelo que esta página deverá funcionar mais tarde.</translation>
 <translation id="5386426401304769735">A cadeia de certificados inclui um certificado assinado através de SHA-1.</translation>
-<translation id="5431657950005405462">O ficheiro não foi encontrado</translation>
 <translation id="5452270690849572955">Não é possível encontrar esta página de <ph name="HOST_NAME" /></translation>
 <translation id="5457113250005438886">Inválido</translation>
 <translation id="5492298309214877701">Este website na intranet da empresa, da entidade ou da escola tem o mesmo URL que um website externo.
@@ -174,7 +171,6 @@
 <translation id="6897140037006041989">Agente do utilizador</translation>
 <translation id="7053983685419859001">Bloquear</translation>
 <translation id="7079718277001814089">Este website contém um software malicioso</translation>
-<translation id="7090678807593890770">Pesquisar <ph name="LINK" /> no Google</translation>
 <translation id="7108819624672055576">Permitida por uma extensão</translation>
 <translation id="7111012039238467737">(Válido)</translation>
 <translation id="7113310725918019676">Permitir <ph name="BLOCKED_TYPE" /> de <ph name="DOMAIN" /></translation>
@@ -198,7 +194,6 @@
 <translation id="7716424297397655342">Não é possível carregar este website a partir da cache</translation>
 <translation id="7758069387465995638">O software de firewall ou antivírus pode ter bloqueado a ligação.</translation>
 <translation id="7800304661137206267">A ligação é cifrada utilizando <ph name="CIPHER" />, com <ph name="MAC" /> para autenticação de mensagens e <ph name="KX" /> como mecanismo de troca de chaves.</translation>
-<translation id="7802523362929240268">O website é legítimo</translation>
 <translation id="7834399512844817676">Normalmente, o website <ph name="SITE" /> utiliza encriptação para proteger as suas informações. Quando o Vivaldi tentou estabelecer ligação a <ph name="SITE" /> desta vez, o website devolveu credenciais invulgares e incorretas. Isto pode acontecer quando um utilizador mal intencionado tenta simular ser <ph name="SITE" /> ou quando um ecrã de início de sessão Wi-Fi interrompe a ligação. As suas informações continuam seguras porque o Vivaldi interrompeu a ligação antes de qualquer troca de dados.</translation>
 <translation id="7878562273885520351">A sua palavra-passe pode estar comprometida</translation>
 <translation id="7951415247503192394">(32-bits)</translation>
@@ -230,6 +225,7 @@
 <translation id="9011424611726486705">Abrir definições do website</translation>
 <translation id="9025348182339809926">(Inválido)</translation>
 <translation id="9039213469156557790">Além disso, esta página inclui outros recursos que não são seguros. Estes recursos podem ser vistos por outros utilizadores em trânsito e modificados por um utilizador mal intencionado com o intuito de alterar o comportamento da página.</translation>
+<translation id="9062620674789239642">Pode ter sido movido, editado ou eliminado.</translation>
 <translation id="9069693763241529744">Bloqueada por uma extensão</translation>
 <translation id="9169664750068251925">Bloquear sempre neste website</translation>
 <translation id="9180553614777056266">Bloqueador de anúncios</translation>

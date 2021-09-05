@@ -42,6 +42,8 @@
 #include "net/socket/connection_attempts.h"
 #include "net/socket/socket_tag.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
+#include "net/url_request/redirect_info.h"
+#include "net/url_request/referrer_policy.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -58,6 +60,7 @@ struct RedirectInfo;
 class SSLCertRequestInfo;
 class SSLInfo;
 class SSLPrivateKey;
+struct TransportInfo;
 class UploadDataStream;
 class URLRequestContext;
 class URLRequestJob;
@@ -84,56 +87,6 @@ class NET_EXPORT URLRequest : public base::SupportsUserData {
                                           NetworkDelegate* network_delegate,
                                           const std::string& scheme);
 
-  // A ReferrerPolicy for the request can be set with
-  // set_referrer_policy() and controls the contents of the Referer
-  // header when URLRequest follows server redirects. Note that setting
-  // a ReferrerPolicy on the request has no effect on the Referer header
-  // of the initial leg of the request; the caller is responsible for
-  // setting the initial Referer, and the ReferrerPolicy only controls
-  // what happens to the Referer while following redirects.
-  //
-  // NOTE: This enum is persisted to histograms. Do not change or reorder
-  // values.
-  // TODO(~M82): Once the Net.URLRequest.ReferrerPolicyForRequest
-  // metric is retired, remove this notice.
-  enum ReferrerPolicy {
-    // Clear the referrer header if the header value is HTTPS but the request
-    // destination is HTTP. This is the default behavior of URLRequest.
-    CLEAR_REFERRER_ON_TRANSITION_FROM_SECURE_TO_INSECURE = 0,
-    // A slight variant on CLEAR_REFERRER_ON_TRANSITION_FROM_SECURE_TO_INSECURE:
-    // If the request destination is HTTP, an HTTPS referrer will be cleared. If
-    // the request's destination is cross-origin with the referrer (but does not
-    // downgrade), the referrer's granularity will be stripped down to an origin
-    // rather than a full URL. Same-origin requests will send the full referrer.
-    REDUCE_REFERRER_GRANULARITY_ON_TRANSITION_CROSS_ORIGIN = 1,
-    // Strip the referrer down to an origin when the origin of the referrer is
-    // different from the destination's origin.
-    ORIGIN_ONLY_ON_TRANSITION_CROSS_ORIGIN = 2,
-    // Never change the referrer.
-    NEVER_CLEAR_REFERRER = 3,
-    // Strip the referrer down to the origin regardless of the redirect
-    // location.
-    ORIGIN = 4,
-    // Clear the referrer when the request's referrer is cross-origin with
-    // the request's destination.
-    CLEAR_REFERRER_ON_TRANSITION_CROSS_ORIGIN = 5,
-    // Strip the referrer down to the origin, but clear it entirely if the
-    // referrer value is HTTPS and the destination is HTTP.
-    ORIGIN_CLEAR_ON_TRANSITION_FROM_SECURE_TO_INSECURE = 6,
-    // Always clear the referrer regardless of the request destination.
-    NO_REFERRER = 7,
-    MAX_REFERRER_POLICY = NO_REFERRER
-  };
-
-  // First-party URL redirect policy: During server redirects, the first-party
-  // URL for cookies normally doesn't change. However, if the request is a
-  // top-level first-party request, the first-party URL should be updated to the
-  // URL on every redirect.
-  enum FirstPartyURLPolicy {
-    NEVER_CHANGE_FIRST_PARTY_URL,
-    UPDATE_FIRST_PARTY_URL_ON_REDIRECT,
-  };
-
   // Max number of http redirects to follow. The Fetch spec says: "If
   // request's redirect count is twenty, return a network error."
   // https://fetch.spec.whatwg.org/#http-redirect-fetch
@@ -145,6 +98,7 @@ class NET_EXPORT URLRequest : public base::SupportsUserData {
   //
   // The callbacks will be called in the following order:
   //   Start()
+  //    - OnConnected* (zero or more calls, see method comment)
   //    - OnCertificateRequested* (zero or more calls, if the SSL server and/or
   //      SSL proxy requests a client certificate for authentication)
   //    - OnSSLCertificateError* (zero or one call, if the SSL server's
@@ -161,6 +115,25 @@ class NET_EXPORT URLRequest : public base::SupportsUserData {
   // there is an error.
   class NET_EXPORT Delegate {
    public:
+    // Called each time a connection is obtained, before any data is sent.
+    //
+    // |request| is never nullptr. Caller retains ownership.
+    //
+    // |info| describes the newly-obtained connection.
+    //
+    // This may be called several times if the request creates multiple HTTP
+    // transactions, e.g. if the request is redirected. It may also be called
+    // several times per transaction, e.g. if the connection is retried, after
+    // each HTTP auth challenge, or for split HTTP range requests.
+    //
+    // If this returns an error, the request fails with the given error.
+    // Otherwise the request continues unimpeded.
+    // Must not return ERR_IO_PENDING.
+    //
+    // TODO(crbug.com/591068): Allow ERR_IO_PENDING for a potentially-slow
+    // CORS-RFC1918 preflight check.
+    virtual int OnConnected(URLRequest* request, const TransportInfo& info);
+
     // Called upon receiving a redirect.  The delegate may call the request's
     // Cancel method to prevent the redirect from being followed.  Since there
     // may be multiple chained redirects, there may also be more than one
@@ -297,10 +270,11 @@ class NET_EXPORT URLRequest : public base::SupportsUserData {
   // The first-party URL policy to apply when updating the first party URL
   // during redirects. The first-party URL policy may only be changed before
   // Start() is called.
-  FirstPartyURLPolicy first_party_url_policy() const {
+  RedirectInfo::FirstPartyURLPolicy first_party_url_policy() const {
     return first_party_url_policy_;
   }
-  void set_first_party_url_policy(FirstPartyURLPolicy first_party_url_policy);
+  void set_first_party_url_policy(
+      RedirectInfo::FirstPartyURLPolicy first_party_url_policy);
 
   // The origin of the context which initiated the request. This is distinct
   // from the "first party for cookies" discussed above in a number of ways:
@@ -541,7 +515,7 @@ class NET_EXPORT URLRequest : public base::SupportsUserData {
   bool disable_secure_dns() { return disable_secure_dns_; }
 
   void set_maybe_sent_cookies(CookieAccessResultList cookies);
-  void set_maybe_stored_cookies(CookieAndLineStatusList cookies);
+  void set_maybe_stored_cookies(CookieAndLineAccessResultList cookies);
 
   // These lists contain a list of cookies that are associated with the given
   // request, both those that were sent and accepted, and those that were
@@ -558,7 +532,7 @@ class NET_EXPORT URLRequest : public base::SupportsUserData {
     return maybe_sent_cookies_;
   }
   // Populated after the response headers are received.
-  const CookieAndLineStatusList& maybe_stored_cookies() const {
+  const CookieAndLineAccessResultList& maybe_stored_cookies() const {
     return maybe_stored_cookies_;
   }
 
@@ -691,9 +665,9 @@ class NET_EXPORT URLRequest : public base::SupportsUserData {
 
   // Sets a callback that will be invoked each time the request is about to
   // be actually sent and will receive actual request headers that are about
-  // to hit the wire, including SPDY/QUIC internal headers and any additional
-  // request headers set via BeforeSendHeaders hooks. Can only be set once
-  // before the request is started.
+  // to hit the wire, including SPDY/QUIC internal headers.
+  //
+  // Can only be set once before the request is started.
   void SetRequestHeadersCallback(RequestHeadersCallback callback);
 
   // Sets a callback that will be invoked each time the response is received
@@ -817,6 +791,7 @@ class NET_EXPORT URLRequest : public base::SupportsUserData {
 
   // These functions delegate to |delegate_|.  See URLRequest::Delegate for the
   // meaning of these functions.
+  int NotifyConnected(const TransportInfo& info);
   void NotifyAuthRequired(std::unique_ptr<AuthChallengeInfo> auth_info);
   void NotifyCertificateRequested(SSLCertRequestInfo* cert_request_info);
   void NotifySSLCertificateError(int net_error,
@@ -870,7 +845,7 @@ class NET_EXPORT URLRequest : public base::SupportsUserData {
   std::string method_;  // "GET", "POST", etc. Should be all uppercase.
   std::string referrer_;
   ReferrerPolicy referrer_policy_;
-  FirstPartyURLPolicy first_party_url_policy_;
+  RedirectInfo::FirstPartyURLPolicy first_party_url_policy_;
   HttpRequestHeaders extra_request_headers_;
   int load_flags_;  // Flags indicating the request type for the load;
                     // expected values are LOAD_* enums above.
@@ -878,7 +853,7 @@ class NET_EXPORT URLRequest : public base::SupportsUserData {
   bool disable_secure_dns_;
 
   CookieAccessResultList maybe_sent_cookies_;
-  CookieAndLineStatusList maybe_stored_cookies_;
+  CookieAndLineAccessResultList maybe_stored_cookies_;
 
 #if BUILDFLAG(ENABLE_REPORTING)
   int reporting_upload_depth_;

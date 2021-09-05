@@ -244,7 +244,7 @@ IN_PROC_BROWSER_TEST_F(CorsFileOriginBrowserTest, AccessToAnotherFileUrl) {
 
 // TODO(lukasza, nasko): https://crbug.com/981018: Enable this test on Macs
 // after understanding what makes it flakily fail on the mac-rel trybot.
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #define MAYBE_UniversalAccessFromFileUrls DISABLED_UniversalAccessFromFileUrls
 #else
 #define MAYBE_UniversalAccessFromFileUrls UniversalAccessFromFileUrls
@@ -261,10 +261,9 @@ IN_PROC_BROWSER_TEST_F(CorsFileOriginBrowserTest,
       JsReplace(kScript, embedded_test_server()->GetURL("/title2.html"));
 
   // Activate the preference to allow universal access from file URLs.
-  RenderViewHost* rvh = shell()->web_contents()->GetRenderViewHost();
-  WebPreferences prefs = rvh->GetWebkitPreferences();
+  WebPreferences prefs = shell()->web_contents()->GetOrCreateWebPreferences();
   prefs.allow_universal_access_from_file_urls = true;
-  rvh->UpdateWebkitPreferences(prefs);
+  shell()->web_contents()->SetWebPreferences(prefs);
 
   // Navigate to a file: test page.
   GURL page_url = GetTestUrl(nullptr, "title1.html");

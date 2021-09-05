@@ -5,6 +5,7 @@
 import("//build/util/process_version.gni")
 import("//chrome/process_version_rc_template.gni")
 import("//chrome/updater/branding.gni")
+import("//testing/libfuzzer/fuzzer_test.gni")
 import("//testing/test.gni")
 
 # This target builds the updater executable, its installer, and unittests.
@@ -24,10 +25,10 @@ executable("updater") {
   configs += [ "//build/config/win:windowed" ]
 
   deps = [
-    ":install_app",
     ":lib",
     ":version_resources",
     "//build/win:default_exe_manifest",
+    "//chrome/updater:app_install",
     "//chrome/updater:lib",
     "//chrome/updater/win/ui:ui_resources",
   ]
@@ -67,6 +68,8 @@ source_set("constants") {
 source_set("lib") {
   sources = [
     "action_handler.cc",
+    "control_service_out_of_process.cc",
+    "control_service_out_of_process.h",
     "group_policy_manager.cc",
     "group_policy_manager.h",
     "net/net_util.cc",
@@ -76,8 +79,15 @@ source_set("lib") {
     "net/network_fetcher.h",
     "net/network_winhttp.cc",
     "net/network_winhttp.h",
+    "net/proxy_configuration.cc",
+    "net/proxy_configuration.h",
+    "net/proxy_info.cc",
+    "net/proxy_info.h",
     "net/scoped_hinternet.h",
+    "net/scoped_winttp_proxy_info.h",
     "scoped_handle.h",
+    "scoped_impersonation.cc",
+    "scoped_impersonation.h",
     "setup/setup.cc",
     "setup/setup.h",
     "setup/setup_util.cc",
@@ -126,54 +136,38 @@ source_set("install_progress_observer") {
   deps = [ "//base" ]
 }
 
-# This build target is defined to minimize the impact of -Wno-missing-braces
-# compiler switch. In the future it might be possible to isolate the
-# dependency of ATL in the UI so ATL headers are not visible in the
-# compilation units outside the UI itself.
-# TODO(sorin): https://crbug.com/1014311
-source_set("install_app") {
-  sources = [
-    "install_app.cc",
-    "install_app.h",
-  ]
-
-  deps = [
-    ":install_progress_observer",
-    ":lib",
-    "//base",
-    "//base:i18n",
-    "//chrome/updater:base",
-    "//chrome/updater:lib",
-    "//chrome/updater:version_header",
-    "//chrome/updater/win/ui",
-    "//components/prefs",
-    "//components/update_client",
-  ]
-  allow_circular_includes_from = [ "//chrome/updater:lib" ]
-
-  cflags_cc = [ "-Wno-missing-braces" ]
-}
-
 source_set("updater_tests") {
   testonly = true
 
   sources = [
     "group_policy_manager_unittest.cc",
     "net/network_unittest.cc",
+    "net/proxy_configuration_unittest.cc",
+    "net/proxy_info_unittest.cc",
+    "tag_extractor_unittest.cc",
     "util_unittest.cc",
   ]
 
   deps = [
     ":constants",
-    ":install_app",
     ":lib",
+    ":tag_extractor",
     "//base/test:test_support",
+    "//chrome/updater:app_install",
     "//testing/gtest",
+    "//url:url",
   ]
 
   data_deps = [
     ":updater_unittests",
     "//chrome/updater/win/installer:installer_unittest",
+  ]
+
+  data = [
+    "../test/data/signed.exe",
+    "../test/data/signed.exe.gz",
+    "../test/data/tagged_encode_utf8.exe",
+    "../test/data/tagged_magic_utf16.exe",
   ]
 }
 
@@ -189,10 +183,10 @@ test("updater_unittests") {
   ]
 
   deps = [
-    ":install_app",
     ":lib",
     "//base",
     "//base/test:test_support",
+    "//chrome/updater:app_install",
     "//chrome/updater:version_header",
     "//chrome/updater/win/test:test_executables",
     "//chrome/updater/win/test:test_strings",
@@ -200,4 +194,31 @@ test("updater_unittests") {
   ]
 
   data = [ "//chrome/updater/test/data/updater.runtime_deps" ]
+}
+
+source_set("tag_extractor") {
+  public = [ "tag_extractor.h" ]
+
+  sources = [
+    "tag_extractor.cc",
+    "tag_extractor_impl.h",
+  ]
+
+  friend = [
+    ":updater_tests",
+    ":updater_fuzzer",
+  ]
+
+  # In the future, we want to rely on the base numerics headers and
+  # PeImageReader directly, but right now that isn't possible due to the
+  # visibility of the lib, so we depend on the entire base temporarily.
+  deps = [ "//base" ]
+}
+
+fuzzer_test("updater_fuzzer") {
+  sources = [ "tag_extractor_fuzzer.cc" ]
+
+  deps = [ ":tag_extractor" ]
+
+  seed_corpus = "../test/data/tag_extractor_corpus/"
 }

@@ -7,7 +7,6 @@ package org.chromium.chrome.browser.omaha;
 import android.app.Activity;
 import android.app.Instrumentation.ActivityResult;
 import android.content.Context;
-import android.os.Build;
 
 import androidx.test.espresso.intent.Intents;
 import androidx.test.espresso.intent.matcher.IntentMatchers;
@@ -23,7 +22,6 @@ import org.junit.runner.RunWith;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.MinAndroidSdkLevel;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
@@ -143,15 +141,11 @@ public class UpdateMenuItemHelperTest {
     }
 
     private void versionNumbersQueried() {
-        CriteriaHelper.pollInstrumentationThread(
-                new Criteria() {
-                    @Override
-                    public boolean isSatisfied() {
-                        return mMockVersionNumberGetter.askedForCurrentVersion()
-                                && mMockVersionNumberGetter.askedForLatestVersion();
-                    }
-                },
-                MS_TIMEOUT, MS_INTERVAL);
+        CriteriaHelper.pollInstrumentationThread(() -> {
+            Criteria.checkThat(
+                    mMockVersionNumberGetter.askedForCurrentVersion(), Matchers.is(true));
+            Criteria.checkThat(mMockVersionNumberGetter.askedForLatestVersion(), Matchers.is(true));
+        }, MS_TIMEOUT, MS_INTERVAL);
     }
 
     /**
@@ -188,7 +182,6 @@ public class UpdateMenuItemHelperTest {
     @Test
     @MediumTest
     @Feature({"Omaha"})
-    @MinAndroidSdkLevel(Build.VERSION_CODES.LOLLIPOP)
     public void testCurrentVersionIsSame() throws Exception {
         checkUpdateMenuItemIsNotShowing("1.2.3.4", "1.2.3.4");
     }
@@ -196,7 +189,6 @@ public class UpdateMenuItemHelperTest {
     @Test
     @MediumTest
     @Feature({"Omaha"})
-    @MinAndroidSdkLevel(Build.VERSION_CODES.LOLLIPOP)
     public void testCurrentVersionIsNewer() throws Exception {
         checkUpdateMenuItemIsNotShowing("27.0.1453.42", "26.0.1410.49");
     }
@@ -204,7 +196,6 @@ public class UpdateMenuItemHelperTest {
     @Test
     @MediumTest
     @Feature({"Omaha"})
-    @MinAndroidSdkLevel(Build.VERSION_CODES.LOLLIPOP)
     public void testNoVersionKnown() throws Exception {
         checkUpdateMenuItemIsNotShowing("1.2.3.4", "0");
     }
@@ -328,12 +319,8 @@ public class UpdateMenuItemHelperTest {
     }
 
     private void waitForAppMenuDimissedRunnable() {
-        CriteriaHelper.pollInstrumentationThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                return UpdateMenuItemHelper.getInstance()
-                        .getMenuDismissedRunnableExecutedForTests();
-            }
+        CriteriaHelper.pollInstrumentationThread(() -> {
+            return UpdateMenuItemHelper.getInstance().getMenuDismissedRunnableExecutedForTests();
         });
     }
 }

@@ -29,6 +29,7 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
+#include "chrome/browser/first_run/first_run.h"
 #include "chrome/browser/media/router/media_router_dialog_controller.h"
 #include "chrome/browser/media/router/media_router_feature.h"
 #include "chrome/browser/media/router/media_router_metrics.h"
@@ -88,7 +89,7 @@
 #include <windows.h>
 #include "base/win/windows_version.h"
 #include "chrome/browser/password_manager/password_manager_util_win.h"
-#elif defined(OS_MACOSX)
+#elif defined(OS_MAC)
 #include "chrome/browser/password_manager/password_manager_util_mac.h"
 #endif
 
@@ -275,7 +276,7 @@ bool VivaldiUtilitiesAPI::OsReauthCall(
   password_manager::ReauthPurpose purpose) {
 #if defined(OS_WIN)
   return password_manager_util_win::AuthenticateUser(native_window_, purpose);
-#elif defined(OS_MACOSX)
+#elif defined(OS_MAC)
   return password_manager_util_mac::AuthenticateUser(purpose);
 #else
   return true;
@@ -480,14 +481,13 @@ ExtensionFunction::ResponseAction UtilitiesIsUrlValidFunction::Run() {
 
   auto default_protocol_worker = base::MakeRefCounted<
       shell_integration::DefaultProtocolClientWorker>(
-      base::BindRepeating(
-          &UtilitiesIsUrlValidFunction::OnDefaultProtocolClientWorkerFinished,
-          this),
       url.scheme());
 
   // StartCheckIsDefault takes ownership and releases everything once all
   // background activities finishes
-  default_protocol_worker->StartCheckIsDefault();
+  default_protocol_worker->StartCheckIsDefault(base::BindOnce(
+      &UtilitiesIsUrlValidFunction::OnDefaultProtocolClientWorkerFinished,
+      this));
   return RespondLater();
 }
 
@@ -617,6 +617,7 @@ struct FileSelectionOptions {
   base::string16 title;
   ui::SelectFileDialog::Type type = ui::SelectFileDialog::SELECT_OPEN_FILE;
   ui::SelectFileDialog::FileTypeInfo file_type_info;
+  std::string preferences_path;
 };
 
 class FileSelectionRunner : private ui::SelectFileDialog::Listener {
@@ -745,6 +746,7 @@ ExtensionFunction::ResponseAction UtilitiesSelectLocalImageFunction::Run() {
 
   int64_t bookmark_id = 0;
   int preference_index = -1;
+  std::string preference_path;
   if (!!params->params.thumbnail_bookmark_id ==
       !!params->params.preference_path) {
     return RespondNow(Error(
@@ -752,12 +754,15 @@ ExtensionFunction::ResponseAction UtilitiesSelectLocalImageFunction::Run() {
   }
   if (params->params.thumbnail_bookmark_id) {
     if (!base::StringToInt64(*params->params.thumbnail_bookmark_id,
-                             &bookmark_id) ||
-        bookmark_id <= 0) {
+      &bookmark_id) ||
+      bookmark_id <= 0) {
       return RespondNow(
-          Error("thumbnailBookmarkId is not a valid positive integer - " +
-                *params->params.thumbnail_bookmark_id));
+        Error("thumbnailBookmarkId is not a valid positive integer - " +
+          *params->params.thumbnail_bookmark_id));
     }
+  } else if (params->params.set_path_in_prefs &&
+             *params->params.set_path_in_prefs) {
+    preference_path = *params->params.preference_path;
   } else {
     preference_index = VivaldiDataSourcesAPI::FindMappingPreference(
         *params->params.preference_path);
@@ -775,7 +780,8 @@ ExtensionFunction::ResponseAction UtilitiesSelectLocalImageFunction::Run() {
   FileSelectionRunner::Start(
       options,
       base::BindOnce(&UtilitiesSelectLocalImageFunction::OnFileSelected, this,
-                     bookmark_id, preference_index));
+                     bookmark_id, preference_index,
+                     preference_path));
 
   return RespondLater();
 }
@@ -783,6 +789,7 @@ ExtensionFunction::ResponseAction UtilitiesSelectLocalImageFunction::Run() {
 void UtilitiesSelectLocalImageFunction::OnFileSelected(
     int64_t bookmark_id,
     int preference_index,
+    std::string preference_path,
     base::FilePath path) {
   namespace Results = vivaldi::utilities::SelectLocalImage::Results;
 
@@ -791,11 +798,23 @@ void UtilitiesSelectLocalImageFunction::OnFileSelected(
     SendResult(false);
     return;
   }
-
-  VivaldiDataSourcesAPI::UpdateMapping(
+  if (preference_path.empty()) {
+    VivaldiDataSourcesAPI::UpdateMapping(
       browser_context(), bookmark_id, preference_index, std::move(path),
       base::BindOnce(
-          &UtilitiesSelectLocalImageFunction::SendResult, this));
+        &UtilitiesSelectLocalImageFunction::SendResult, this));
+  } else {
+    Profile* profile =
+        Profile::FromBrowserContext(browser_context())->GetOriginalProfile();
+    ::vivaldi::SetImagePathForProfilePath(preference_path, path.AsUTF8Unsafe(),
+                                          profile->GetPath().AsUTF8Unsafe());
+    Respond(ArgumentList(Results::Create(true)));
+
+    extensions::VivaldiRuntimeFeaturesFactory* factory =
+      extensions::VivaldiRuntimeFeaturesFactory::GetInstance();
+
+    factory->OnProfileAvatarChanged(profile->GetPath());
+  }
 }
 
 void UtilitiesSelectLocalImageFunction::SendResult(bool success) {
@@ -955,13 +974,13 @@ void UtilitiesSetVivaldiAsDefaultBrowserFunction::
 ExtensionFunction::ResponseAction
 UtilitiesSetVivaldiAsDefaultBrowserFunction::Run() {
   auto default_browser_worker =
-      base::MakeRefCounted<shell_integration::DefaultBrowserWorker>(
-          base::BindRepeating(&UtilitiesSetVivaldiAsDefaultBrowserFunction::
-                                  OnDefaultBrowserWorkerFinished,
-                              this));
+      base::MakeRefCounted<shell_integration::DefaultBrowserWorker>();
   // StartSetAsDefault takes ownership and releases everything once all
   // background activities finishes.
-  default_browser_worker->StartSetAsDefault();
+  default_browser_worker->StartSetAsDefault(
+      base::BindOnce(&UtilitiesSetVivaldiAsDefaultBrowserFunction::
+                         OnDefaultBrowserWorkerFinished,
+                     this));
   return RespondLater();
 }
 
@@ -984,13 +1003,12 @@ UtilitiesIsVivaldiDefaultBrowserFunction::Run() {
   }
 
   auto default_browser_worker =
-      base::MakeRefCounted<shell_integration::DefaultBrowserWorker>(
-          base::BindRepeating(&UtilitiesIsVivaldiDefaultBrowserFunction::
-                                  OnDefaultBrowserWorkerFinished,
-                              this));
+      base::MakeRefCounted<shell_integration::DefaultBrowserWorker>();
   // StartCheckIsDefault takes ownership and releases everything once all
   // background activities finishes.
-  default_browser_worker->StartCheckIsDefault();
+  default_browser_worker->StartCheckIsDefault(base::BindOnce(
+      &UtilitiesIsVivaldiDefaultBrowserFunction::OnDefaultBrowserWorkerFinished,
+      this));
   return RespondLater();
 }
 
@@ -1501,5 +1519,10 @@ ExtensionFunction::ResponseAction UtilitiesGetMediaAvailableStateFunction::Run()
   return RespondNow(ArgumentList(Results::Create(is_available)));
 }
 
+ExtensionFunction::ResponseAction UtilitiesIsFirstRunFunction::Run() {
+  namespace Results = vivaldi::utilities::IsFirstRun::Results;
+  return RespondNow(
+      ArgumentList(Results::Create(first_run::IsChromeFirstRun())));
+}
 
 }  // namespace extensions

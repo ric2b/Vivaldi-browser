@@ -11,6 +11,7 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "components/payments/content/content_payment_request_delegate.h"
+#include "components/payments/content/secure_payment_confirmation_controller.h"
 
 namespace content {
 class WebContents;
@@ -47,6 +48,8 @@ class ChromePaymentRequestDelegate : public ContentPaymentRequestDelegate {
   bool IsBrowserWindowActive() const override;
 
   // ContentPaymentRequestDelegate:
+  std::unique_ptr<autofill::InternalAuthenticator> CreateInternalAuthenticator()
+      const override;
   scoped_refptr<PaymentManifestWebDataService>
   GetPaymentManifestWebDataService() const override;
   PaymentRequestDisplayManager* GetDisplayManager() override;
@@ -57,15 +60,18 @@ class ChromePaymentRequestDelegate : public ContentPaymentRequestDelegate {
   std::string GetInvalidSslCertificateErrorMessage() override;
   bool SkipUiForBasicCard() const override;
   std::string GetTwaPackageName() const override;
+  PaymentRequestDialog* GetDialogForTesting() override;
 
  protected:
   // Reference to the dialog so that we can satisfy calls to CloseDialog(). This
   // reference is invalid once CloseDialog() has been called on it, because the
-  // dialog will be destroyed. Owned by the views:: dialog machinery. Protected
-  // for testing.
+  // dialog will be destroyed. Some implementations are owned by the views::
+  // dialog machinery. Protected for testing.
   base::WeakPtr<PaymentRequestDialog> shown_dialog_;
 
  private:
+  std::unique_ptr<SecurePaymentConfirmationController> spc_dialog_;
+
   // Not owned but outlives the PaymentRequest object that owns this.
   content::WebContents* web_contents_;
 

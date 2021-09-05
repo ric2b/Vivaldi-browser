@@ -77,19 +77,23 @@ template("chrome_bundle") {
                              "base_module_target",
                              "bundle_name",
                              "compress_shared_libraries",
+                             "enable_lint",
+                             "expected_libs_and_assets",
+                             "expected_libs_and_assets_base",
                              "expected_proguard_config",
+                             "expected_proguard_config_base",
                              "keystore_name",
                              "keystore_password",
                              "keystore_path",
-                             "lint_suppressions_dep",
+                             "lint_baseline_file",
+                             "lint_min_sdk_version",
                              "lint_suppressions_file",
-                             "manifest_package",
+                             "lint_suppressions_dep",
                              "min_sdk_version",
                              "proguard_android_sdk_dep",
                              "sign_bundle",
                              "static_library_provider",
                              "static_library_synchronized_proguard",
-                             "expected_libs_and_assets",
                              "version_code",
                            ])
     command_line_flags_file = "chrome-command-line"
@@ -98,6 +102,18 @@ template("chrome_bundle") {
     extra_modules = _extra_modules
     system_image_locale_allowlist = android_apk_locales
     is_multi_abi = _is_multi_abi
+
+    # Use a consistent baseline so that it is easy to regenerate by deleting the
+    # file and re-building the "android_lint" target.
+    if (defined(enable_lint) && enable_lint) {
+      if (!defined(lint_baseline_file)) {
+        lint_baseline_file = "//chrome/android/expectations/lint-baseline.xml"
+      }
+      if (!defined(lint_suppressions_file)) {
+        lint_suppressions_file =
+            "//chrome/android/expectations/lint-suppressions.xml"
+      }
+    }
 
     # List of DFMs that are installed by default by wrapper scripts, to make
     # testing easier. This removes the need to manually specify, e.g.,

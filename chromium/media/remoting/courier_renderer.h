@@ -6,6 +6,8 @@
 #define MEDIA_REMOTING_COURIER_RENDERER_H_
 
 #include <memory>
+#include <tuple>
+#include <utility>
 
 #include "base/callback.h"
 #include "base/containers/circular_deque.h"
@@ -112,7 +114,6 @@ class CourierRenderer : public Renderer {
   void AcquireRendererDone(std::unique_ptr<pb::RpcMessage> message);
   void InitializeCallback(std::unique_ptr<pb::RpcMessage> message);
   void FlushUntilCallback();
-  void SetCdmCallback(std::unique_ptr<pb::RpcMessage> message);
   void OnTimeUpdate(std::unique_ptr<pb::RpcMessage> message);
   void OnBufferingStateChange(std::unique_ptr<pb::RpcMessage> message);
   void OnAudioConfigChange(std::unique_ptr<pb::RpcMessage> message);
@@ -173,13 +174,15 @@ class CourierRenderer : public Renderer {
 
   // Callbacks.
   PipelineStatusCallback init_workflow_done_callback_;
-  CdmAttachedCB cdm_attached_cb_;
   base::OnceClosure flush_cb_;
 
   VideoRendererSink* const video_renderer_sink_;  // Outlives this class.
 
   // Current playback rate.
   double playback_rate_ = 0;
+
+  // Current volume.
+  float volume_ = 1.0f;
 
   // Ignores updates until this time.
   base::TimeTicks ignore_updates_until_time_;

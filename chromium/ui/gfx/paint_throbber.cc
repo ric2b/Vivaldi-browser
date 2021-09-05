@@ -6,6 +6,7 @@
 
 #include <algorithm>
 
+#include "base/numerics/safe_conversions.h"
 #include "base/time/time.h"
 #include "cc/paint/paint_flags.h"
 #include "third_party/skia/include/core/SkPath.h"
@@ -71,7 +72,8 @@ void CalculateWaitingAngles(const base::TimeDelta& elapsed_time,
   constexpr auto kRevolutionTime = base::TimeDelta::FromMilliseconds(1320);
   int64_t twelve_oclock = 90;
   int64_t finish_angle_cc =
-      twelve_oclock + 360 * elapsed_time / kRevolutionTime;
+      twelve_oclock +
+      base::ClampRound<int64_t>(elapsed_time / kRevolutionTime * 360);
   int64_t start_angle_cc = std::max(finish_angle_cc - 180, twelve_oclock);
 
   // Negate the angles to convert to the clockwise numbers Skia expects.
@@ -93,13 +95,13 @@ void PaintThrobberSpinningWithStartAngle(
   // The sweep angle ranges from -270 to 270 over 1333ms. CSS
   // animation timing functions apply in between key frames, so we have to
   // break up the 1333ms into two keyframes (-270 to 0, then 0 to 270).
-  const double arc_progress =
-      (elapsed_time % kArcTime).InMicrosecondsF() / kArcTime.InMicrosecondsF();
+  const double elapsed_ratio = elapsed_time / kArcTime;
+  const int64_t sweep_frame = base::ClampFloor<int64_t>(elapsed_ratio);
+  const double arc_progress = elapsed_ratio - sweep_frame;
   // This tween is equivalent to cubic-bezier(0.4, 0.0, 0.2, 1).
   double sweep = kMaxArcSize *
                  Tween::CalculateValue(Tween::FAST_OUT_SLOW_IN, arc_progress);
-  const int64_t sweep_keyframe = (elapsed_time / kArcTime) % 2;
-  if (sweep_keyframe == 0)
+  if (sweep_frame % 2 == 0)
     sweep -= kMaxArcSize;
 
   // This part makes sure the sweep is at least 5 degrees long. Roughly
@@ -115,7 +117,7 @@ void PaintThrobberSpinningWithStartAngle(
 
   // To keep the sweep smooth, we have an additional rotation after each
   // arc period has elapsed. See SVG's 'rot' animation.
-  const int64_t rot_keyframe = (elapsed_time / (kArcTime * 2)) % 4;
+  const int64_t rot_keyframe = (sweep_frame / 2) % 4;
   PaintArc(canvas, bounds, color, start_angle + rot_keyframe * kMaxArcSize,
            sweep, stroke_width);
 }
@@ -127,7 +129,8 @@ void PaintThrobberSpinning(Canvas* canvas,
                            SkColor color,
                            const base::TimeDelta& elapsed_time,
                            base::Optional<SkScalar> stroke_width) {
-  const int64_t start_angle = 270 + 360 * elapsed_time / kRotationTime;
+  const int64_t start_angle =
+      270 + base::ClampRound<int64_t>(elapsed_time / kRotationTime * 360);
   PaintThrobberSpinningWithStartAngle(canvas, bounds, color, elapsed_time,
                                       start_angle, stroke_width);
 }
@@ -157,13 +160,13 @@ void PaintThrobberSpinningAfterWaiting(Canvas* canvas,
   if (waiting_state->arc_time_offset.is_zero()) {
     for (int64_t arc_ms = 0; arc_ms <= kArcTime.InMillisecondsRoundedUp();
          ++arc_ms) {
-      double arc_size_progress =
-          std::min(1.0, arc_ms / kArcTime.InMillisecondsF());
+      const base::TimeDelta arc_time =
+          std::min(base::TimeDelta::FromMilliseconds(arc_ms), kArcTime);
       if (kMaxArcSize * Tween::CalculateValue(Tween::FAST_OUT_SLOW_IN,
-                                              arc_size_progress) >=
+                                              arc_time / kArcTime) >=
           waiting_sweep) {
         // Add kArcTime to sidestep the |sweep_keyframe == 0| offset below.
-        waiting_state->arc_time_offset = kArcTime * (arc_size_progress + 1);
+        waiting_state->arc_time_offset = kArcTime + arc_time;
         break;
       }
     }
@@ -171,17 +174,14 @@ void PaintThrobberSpinningAfterWaiting(Canvas* canvas,
 
   // Blend the color between "waiting" and "spinning" states.
   constexpr auto kColorFadeTime = base::TimeDelta::FromMilliseconds(900);
-  float color_progress = 1.0f;
-  if (elapsed_time < kColorFadeTime) {
-    color_progress = float{Tween::CalculateValue(
-        Tween::LINEAR_OUT_SLOW_IN,
-        elapsed_time.InMicrosecondsF() / kColorFadeTime.InMicrosecondsF())};
-  }
+  const float color_progress = float{Tween::CalculateValue(
+      Tween::LINEAR_OUT_SLOW_IN, std::min(elapsed_time / kColorFadeTime, 1.0))};
   const SkColor blend_color =
       color_utils::AlphaBlend(color, waiting_state->color, color_progress);
 
   const int64_t start_angle =
-      waiting_start_angle + 360 * elapsed_time / kRotationTime;
+      waiting_start_angle +
+      base::ClampRound<int64_t>(elapsed_time / kRotationTime * 360);
   const base::TimeDelta effective_elapsed_time =
       elapsed_time + waiting_state->arc_time_offset;
 
@@ -200,9 +200,8 @@ GFX_EXPORT void PaintNewThrobberWaiting(Canvas* canvas,
   // The throbber bounces back and forth. We map the elapsed time to 0->2. Time
   // 0->1 represents when the throbber moves left to right, time 1->2 represents
   // right to left.
-  float time = 2.0f *
-               (elapsed_time % kNewThrobberWaitingCycleTime).InMicrosecondsF() /
-               kNewThrobberWaitingCycleTime.InMicrosecondsF();
+  float time = 2.0f * (elapsed_time % kNewThrobberWaitingCycleTime) /
+               kNewThrobberWaitingCycleTime;
   // 1 -> 2 values mirror back to 1 -> 0 values to represent right-to-left.
   const bool going_back = time > 1.0f;
   if (going_back)

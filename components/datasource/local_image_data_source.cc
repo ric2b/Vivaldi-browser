@@ -7,13 +7,9 @@
 #include "content/public/browser/browser_thread.h"
 
 LocalImageDataClassHandler::LocalImageDataClassHandler(
-    content::BrowserContext* browser_context,
-    extensions::VivaldiDataSourcesAPI::UrlKind url_kind)
-    : data_sources_api_(extensions::VivaldiDataSourcesAPI::FromBrowserContext(
-          browser_context)),
-      url_kind_(url_kind) {
+    VivaldiDataSourcesAPI::UrlKind url_kind)
+    : url_kind_(url_kind) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  DCHECK(data_sources_api_);
 }
 
 LocalImageDataClassHandler::~LocalImageDataClassHandler() {
@@ -21,14 +17,10 @@ LocalImageDataClassHandler::~LocalImageDataClassHandler() {
 }
 
 void LocalImageDataClassHandler::GetData(
+    Profile* profile,
     const std::string& data_id,
     content::URLDataSource::GotDataCallback callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-
-  if (!data_sources_api_) {
-    std::move(callback).Run(nullptr);
-    return;
-  }
-
-  data_sources_api_->GetDataForId(url_kind_, data_id, std::move(callback));
+  VivaldiDataSourcesAPI::GetDataForId(profile, url_kind_, data_id,
+                                      std::move(callback));
 }

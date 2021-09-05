@@ -5,38 +5,22 @@
 module blink.mojom;
 
 import "cc/mojom/touch_action.mojom";
+import "third_party/blink/public/mojom/input/touch_event.mojom";
 import "mojo/public/mojom/base/string16.mojom";
 import "mojo/public/mojom/base/text_direction.mojom";
+import "services/viz/public/mojom/compositing/local_surface_id_allocation.mojom";
 import "third_party/blink/public/mojom/frame/intrinsic_sizing_info.mojom";
 import "third_party/blink/public/mojom/input/input_handler.mojom";
+import "third_party/blink/public/mojom/page/drag.mojom";
+import "third_party/blink/public/mojom/widget/device_emulation_params.mojom";
+import "third_party/blink/public/mojom/widget/visual_properties.mojom";
+import "ui/base/mojom/ui_base_types.mojom";
 import "ui/base/ime/mojom/text_input_state.mojom";
 import "ui/base/cursor/mojom/cursor.mojom";
 import "ui/gfx/geometry/mojom/geometry.mojom";
 
-// "Verb" of a drag-and-drop operation as negotiated between the source and
-// destination. It's typemapped to blink::WebDragOperation.
-enum DragOperation {
-  kNone,
-  kCopy,
-  kLink,
-  kGeneric,
-  kPrivate,
-  kMove,
-  kDelete,
-};
-
-// This struct encodes what drag-and-drop operations are allowed. It's
-// typemapped to blink::WebDragOperationsMask.
-// TODO(https://crbug.com/1082291): Change this to a bitset if/when mojom
-// supports bitset types.
-struct AllowedDragOperations {
-  bool allow_copy;
-  bool allow_link;
-  bool allow_generic;
-  bool allow_private;
-  bool allow_move;
-  bool allow_delete;
-};
+[EnableIf=is_mac]
+import "ui/base/mojom/attributed_string.mojom";
 
 // Implemented in Blink, this interface defines frame-widget-specific methods that
 // will be invoked from the browser process (e.g. blink::WebFrameWidget).
@@ -56,6 +40,12 @@ interface FrameWidget {
   // Notifies the Widget of a drag leave operation.
   DragTargetDragLeave(gfx.mojom.PointF point_in_viewport,
                       gfx.mojom.PointF screen_point);
+
+  // Notifies the Widget of a drag drop operation.
+  DragTargetDrop(DragData drag_data,
+                 gfx.mojom.PointF point_in_viewport,
+                 gfx.mojom.PointF screen_point,
+                 uint32 key_modifiers);
 
   // Notifies the Widget that a drag has terminated.
   DragSourceEndedAt(gfx.mojom.PointF point_in_viewport,
@@ -85,6 +75,26 @@ interface FrameWidget {
   // When a widget is inert, it is unable to process input events.
   // https://html.spec.whatwg.org/multipage/interaction.html#inert
   SetIsInertForSubFrame(bool inert);
+
+  // Requests the word under the given point relative to the origin of the
+  // widget and its baseline point.
+  [EnableIf=is_mac]
+  GetStringAtPoint(gfx.mojom.Point point_in_local_root)
+      => (ui.mojom.AttributedString? string, gfx.mojom.Point baseline_point);
+
+  // Sent to inform the renderer to invoke a context menu.
+  // The parameter specifies the location in the render widget's coordinates.
+  ShowContextMenu(
+      ui.mojom.MenuSourceType source_type, gfx.mojom.Point location);
+
+  // Enables device emulator.
+  EnableDeviceEmulation(DeviceEmulationParams parameters);
+
+  // Disables device emulator.
+  DisableDeviceEmulation();
+
+  // Binds an WidgetCompositor interface.
+  BindWidgetCompositor(pending_receiver<WidgetCompositor> host);
 };
 
 // Implemented in Browser, this interface defines frame-widget-specific methods that
@@ -100,8 +110,9 @@ interface FrameWidgetHost {
   // main-frame's widget for find-in-page zoom.
   ZoomToFindInPageRectInMainFrame(gfx.mojom.Rect rect_to_zoom);
 
-  // Notifies whether there are JavaScript touch event handlers or not.
-  SetHasTouchEventHandlers(bool has_handlers);
+  // Notifies what type of touch event consumers, if any, exist in the renderer,
+  // e.g. JavaScript touch event handlers or hit testable scrollbars.
+  SetHasTouchEventConsumers(TouchEventConsumers touch_event_consumers);
 
   // Sent by a widget to the browser to be used for SVGs inside of <object> and
   // not for iframes. Informs the browser that the current frame's intrinsic
@@ -147,6 +158,14 @@ interface Widget {
     pending_receiver<blink.mojom.WidgetInputHandler> request,
     pending_remote<blink.mojom.WidgetInputHandlerHost> host);
 
+  // Update the visual properties of the widget.
+  UpdateVisualProperties(VisualProperties visual_properties);
+
+  // Informs the widget of its position on the user's screen, as well as
+  // the position of the native window holding the widget.
+  // TODO(danakj): These should be part of UpdateVisualProperties.
+  UpdateScreenRects(gfx.mojom.Rect widget_screen_rect,
+                    gfx.mojom.Rect window_screen_rect) => ();
 };
 
 // Implemented in Browser, this interface defines widget-specific methods that
@@ -171,4 +190,11 @@ interface WidgetHost {
              gfx.mojom.Rect focus_rect,
              mojo_base.mojom.TextDirection focus_dir,
              bool is_anchor_first);
+};
+
+// This interface is bound on the compositor thread.
+interface WidgetCompositor {
+  // Requests that the RenderWidget sends back a response after the next main
+  // frame is generated and presented in the display compositor.
+  VisualStateRequest() => ();
 };

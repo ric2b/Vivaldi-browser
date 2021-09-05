@@ -10,9 +10,16 @@
 #include <vector>
 
 #include "base/check.h"
+#include "base/debug/crash_logging.h"
+#include "base/debug/dump_without_crashing.h"
+#include "base/feature_list.h"
+#include "base/optional.h"
+#include "content/public/common/content_features.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
+#include "net/base/load_flags.h"
 #include "third_party/blink/public/mojom/loader/resource_load_info.mojom-shared.h"
 #include "url/gurl.h"
+#include "url/origin.h"
 #include "url/url_constants.h"
 
 namespace content {
@@ -115,6 +122,39 @@ BoundRemoteMapToPendingRemoteMap(
   return output;
 }
 
+class ScopedRequestCrashKeys {
+ public:
+  explicit ScopedRequestCrashKeys(const network::ResourceRequest& request);
+  ~ScopedRequestCrashKeys();
+
+  ScopedRequestCrashKeys(const ScopedRequestCrashKeys&) = delete;
+  ScopedRequestCrashKeys& operator=(const ScopedRequestCrashKeys&) = delete;
+
+ private:
+  base::debug::ScopedCrashKeyString url_;
+  url::debug::ScopedOriginCrashKey request_initiator_;
+};
+
+base::debug::CrashKeyString* GetRequestUrlCrashKey() {
+  static auto* crash_key = base::debug::AllocateCrashKeyString(
+      "request_url", base::debug::CrashKeySize::Size256);
+  return crash_key;
+}
+
+base::debug::CrashKeyString* GetRequestInitiatorCrashKey() {
+  static auto* crash_key = base::debug::AllocateCrashKeyString(
+      "request_initiator", base::debug::CrashKeySize::Size64);
+  return crash_key;
+}
+
+ScopedRequestCrashKeys::ScopedRequestCrashKeys(
+    const network::ResourceRequest& request)
+    : url_(GetRequestUrlCrashKey(), request.url.possibly_invalid_spec()),
+      request_initiator_(GetRequestInitiatorCrashKey(),
+                         base::OptionalOrNullptr(request.request_initiator)) {}
+
+ScopedRequestCrashKeys::~ScopedRequestCrashKeys() = default;
+
 }  // namespace
 
 ChildPendingURLLoaderFactoryBundle::ChildPendingURLLoaderFactoryBundle() =
@@ -168,6 +208,8 @@ ChildPendingURLLoaderFactoryBundle::CreateFactory() {
       std::move(pending_isolated_world_factories_);
   other->direct_network_factory_remote_ =
       std::move(direct_network_factory_remote_);
+  if (is_deprecated_process_wide_factory_)
+    other->MarkAsDeprecatedProcessWideFactory();
   other->pending_prefetch_loader_factory_ =
       std::move(pending_prefetch_loader_factory_);
   other->bypass_redirect_checks_ = bypass_redirect_checks_;
@@ -198,6 +240,24 @@ network::mojom::URLLoaderFactory* ChildURLLoaderFactoryBundle::GetFactory(
   if (base_result)
     return base_result;
 
+  // All renderer-initiated requests need to provide a value for
+  // |request_initiator| - this is enforced by
+  // CorsURLLoaderFactory::IsValidRequest (see the
+  // InitiatorLockCompatibility::kNoInitiator case).
+  DCHECK(request.request_initiator.has_value());
+  if (is_deprecated_process_wide_factory_) {
+    // The CHECK condition below (in a Renderer process) is also enforced later
+    // (in the NetworkService process) by CorsURLLoaderFactory::IsValidRequest
+    // (see the InitiatorLockCompatibility::kNoLock case) - this enforcement may
+    // result in a renderer kill when the NetworkService is hosted in a separate
+    // process from the Browser process.  Despite the redundancy, we want to
+    // also have the CHECK below, so that the Renderer process terminates
+    // earlier, with a callstack that (unlike the NetworkService
+    // mojo::ReportBadMessage) is hopefully useful for tracking down the source
+    // of the problem.
+    CHECK(request.request_initiator->opaque());
+  }
+
   InitDirectNetworkFactoryIfNecessary();
   DCHECK(direct_network_factory_);
   return direct_network_factory_.get();
@@ -213,7 +273,7 @@ void ChildURLLoaderFactoryBundle::CreateLoaderAndStart(
     const net::MutableNetworkTrafficAnnotationTag& traffic_annotation) {
   auto override_iter = subresource_overrides_.find(request.url);
   if (override_iter != subresource_overrides_.end()) {
-    mojom::TransferrableURLLoaderPtr transferrable_loader =
+    blink::mojom::TransferrableURLLoaderPtr transferrable_loader =
         std::move(override_iter->second);
     subresource_overrides_.erase(override_iter);
 
@@ -243,6 +303,16 @@ void ChildURLLoaderFactoryBundle::CreateLoaderAndStart(
         std::move(client), traffic_annotation);
     return;
   }
+  if (base::FeatureList::IsEnabled(
+          features::kNoStatePrefetchUsingPrefetchLoader) &&
+      (request.load_flags & net::LOAD_PREFETCH) && prefetch_loader_factory_) {
+    // This is no-state prefetch (see
+    // WebURLRequest::GetLoadFlagsForWebUrlRequest).
+    prefetch_loader_factory_->CreateLoaderAndStart(
+        std::move(loader), routing_id, request_id, options, request,
+        std::move(client), traffic_annotation);
+    return;
+  }
 
   URLLoaderFactoryBundle::CreateLoaderAndStart(
       std::move(loader), routing_id, request_id, options, request,
@@ -264,7 +334,10 @@ void ChildURLLoaderFactoryBundle::Update(
   if (info->direct_network_factory_remote()) {
     direct_network_factory_.Bind(
         std::move(info->direct_network_factory_remote()));
+    is_deprecated_process_wide_factory_ =
+        info->is_deprecated_process_wide_factory();
   }
+
   if (info->pending_prefetch_loader_factory()) {
     prefetch_loader_factory_.Bind(
         std::move(info->pending_prefetch_loader_factory()));
@@ -273,7 +346,8 @@ void ChildURLLoaderFactoryBundle::Update(
 }
 
 void ChildURLLoaderFactoryBundle::UpdateSubresourceOverrides(
-    std::vector<mojom::TransferrableURLLoaderPtr>* subresource_overrides) {
+    std::vector<blink::mojom::TransferrableURLLoaderPtr>*
+        subresource_overrides) {
   for (auto& element : *subresource_overrides)
     subresource_overrides_[element->url] = std::move(element);
 }
@@ -335,13 +409,16 @@ ChildURLLoaderFactoryBundle::CloneInternal(bool include_appcache) {
   // Currently there is no need to override subresources from workers,
   // therefore |subresource_overrides| are not shared with the clones.
 
-  return std::make_unique<ChildPendingURLLoaderFactoryBundle>(
+  auto result = std::make_unique<ChildPendingURLLoaderFactoryBundle>(
       std::move(default_factory_pending_remote),
       std::move(appcache_factory_pending_remote),
       CloneRemoteMapToPendingRemoteMap(scheme_specific_factories_),
       CloneRemoteMapToPendingRemoteMap(isolated_world_factories_),
       std::move(direct_network_factory_remote),
       std::move(pending_prefetch_loader_factory), bypass_redirect_checks_);
+  if (is_deprecated_process_wide_factory_)
+    result->MarkAsDeprecatedProcessWideFactory();
+  return result;
 }
 
 std::unique_ptr<ChildPendingURLLoaderFactoryBundle>
@@ -369,12 +446,15 @@ ChildURLLoaderFactoryBundle::PassInterface() {
     pending_prefetch_loader_factory = prefetch_loader_factory_.Unbind();
   }
 
-  return std::make_unique<ChildPendingURLLoaderFactoryBundle>(
+  auto result = std::make_unique<ChildPendingURLLoaderFactoryBundle>(
       std::move(pending_default_factory), std::move(pending_appcache_factory),
       BoundRemoteMapToPendingRemoteMap(std::move(scheme_specific_factories_)),
       BoundRemoteMapToPendingRemoteMap(std::move(isolated_world_factories_)),
       std::move(direct_network_factory_remote),
       std::move(pending_prefetch_loader_factory), bypass_redirect_checks_);
+  if (is_deprecated_process_wide_factory_)
+    result->MarkAsDeprecatedProcessWideFactory();
+  return result;
 }
 
 }  // namespace content

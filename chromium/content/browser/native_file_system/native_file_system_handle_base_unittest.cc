@@ -21,6 +21,8 @@ namespace content {
 using base::test::RunOnceCallback;
 using blink::mojom::PermissionStatus;
 using storage::FileSystemURL;
+using UserActivationState =
+    NativeFileSystemPermissionGrant::UserActivationState;
 
 class TestNativeFileSystemHandle : public NativeFileSystemHandleBase {
  public:
@@ -28,11 +30,7 @@ class TestNativeFileSystemHandle : public NativeFileSystemHandleBase {
                              const BindingContext& context,
                              const storage::FileSystemURL& url,
                              const SharedHandleState& handle_state)
-      : NativeFileSystemHandleBase(manager,
-                                   context,
-                                   url,
-                                   handle_state,
-                                   /*is_directory=*/false) {}
+      : NativeFileSystemHandleBase(manager, context, url, handle_state) {}
 
  private:
   base::WeakPtr<NativeFileSystemHandleBase> AsWeakPtr() override {
@@ -192,9 +190,11 @@ TEST_F(NativeFileSystemHandleBaseTest, RequestWritePermission) {
     testing::InSequence sequence;
     EXPECT_CALL(*write_grant_, GetStatus())
         .WillOnce(testing::Return(PermissionStatus::ASK));
-    EXPECT_CALL(*write_grant_, RequestPermission_(kFrameId, testing::_))
+    EXPECT_CALL(*write_grant_,
+                RequestPermission_(kFrameId, UserActivationState::kRequired,
+                                   testing::_))
         .WillOnce(
-            RunOnceCallback<1>(NativeFileSystemPermissionGrant::
+            RunOnceCallback<2>(NativeFileSystemPermissionGrant::
                                    PermissionRequestOutcome::kUserGranted));
     EXPECT_CALL(*write_grant_, GetStatus())
         .WillOnce(testing::Return(PermissionStatus::GRANTED));

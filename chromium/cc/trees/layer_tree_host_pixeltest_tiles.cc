@@ -20,16 +20,9 @@
 namespace cc {
 namespace {
 
-enum RasterMode {
-  BITMAP,
-  ONE_COPY,
-  GPU,
-  GPU_LOW_BIT_DEPTH,
-};
-
 struct TilesTestConfig {
-  LayerTreeTest::RendererType renderer_type;
-  RasterMode raster_mode;
+  TestRendererType renderer_type;
+  TestRasterType raster_type;
 };
 
 class LayerTreeHostTilesPixelTest
@@ -37,33 +30,13 @@ class LayerTreeHostTilesPixelTest
       public ::testing::WithParamInterface<TilesTestConfig> {
  protected:
   LayerTreeHostTilesPixelTest() : LayerTreePixelTest(renderer_type()) {
-    switch (raster_mode()) {
-      case GPU:
-      case GPU_LOW_BIT_DEPTH:
-        set_gpu_rasterization();
-        break;
-      default:
-        break;
-    }
+    set_raster_type(GetParam().raster_type);
   }
 
-  RendererType renderer_type() const { return GetParam().renderer_type; }
-
-  RasterMode raster_mode() const { return GetParam().raster_mode; }
+  TestRendererType renderer_type() const { return GetParam().renderer_type; }
 
   void InitializeSettings(LayerTreeSettings* settings) override {
     LayerTreePixelTest::InitializeSettings(settings);
-    switch (raster_mode()) {
-      case ONE_COPY:
-        settings->use_zero_copy = false;
-        break;
-      case GPU_LOW_BIT_DEPTH:
-        settings->use_rgba_4444 = true;
-        settings->unpremultiply_and_dither_low_bit_depth_tiles = true;
-        break;
-      default:
-        break;
-    }
 
     settings->use_partial_raster = use_partial_raster_;
   }
@@ -180,27 +153,36 @@ class LayerTreeHostTilesTestPartialInvalidation
 };
 
 std::vector<TilesTestConfig> const kTestCases = {
-    {LayerTreeTest::RENDERER_SOFTWARE, BITMAP},
-    {LayerTreeTest::RENDERER_GL, ONE_COPY},
-    {LayerTreeTest::RENDERER_GL, GPU},
-    {LayerTreeTest::RENDERER_SKIA_GL, ONE_COPY},
-    {LayerTreeTest::RENDERER_SKIA_GL, GPU},
+    {TestRendererType::kSoftware, TestRasterType::kBitmap},
+    {TestRendererType::kGL, TestRasterType::kOneCopy},
+    {TestRendererType::kGL, TestRasterType::kGpu},
+    {TestRendererType::kSkiaGL, TestRasterType::kOneCopy},
+    {TestRendererType::kSkiaGL, TestRasterType::kGpu},
 #if defined(ENABLE_CC_VULKAN_TESTS)
-    {LayerTreeTest::RENDERER_SKIA_VK, ONE_COPY},
-    {LayerTreeTest::RENDERER_SKIA_VK, GPU},
+    {TestRendererType::kSkiaVk, TestRasterType::kOop},
 #endif  // defined(ENABLE_CC_VULKAN_TESTS)
+#if defined(ENABLE_CC_DAWN_TESTS)
+    {TestRendererType::kSkiaDawn, TestRasterType::kOop},
+#endif  // defined(ENABLE_CC_DAWN_TESTS)
 };
 
 INSTANTIATE_TEST_SUITE_P(All,
                          LayerTreeHostTilesTestPartialInvalidation,
                          ::testing::ValuesIn(kTestCases));
 
-TEST_P(LayerTreeHostTilesTestPartialInvalidation, PartialRaster) {
+#if defined(OS_WIN) && defined(ADDRESS_SANITIZER)
+// Flaky on Windows ASAN https://crbug.com/1045521
+#define MAYBE_PartialRaster DISABLED_PartialRaster
+#else
+#define MAYBE_PartialRaster PartialRaster
+#endif
+TEST_P(LayerTreeHostTilesTestPartialInvalidation, MAYBE_PartialRaster) {
   use_partial_raster_ = true;
   RunSingleThreadedPixelTest(
       picture_layer_,
       base::FilePath(FILE_PATH_LITERAL("blue_yellow_partial_flipped.png")));
 }
+#undef MAYBE_PartialRaster
 
 TEST_P(LayerTreeHostTilesTestPartialInvalidation, FullRaster) {
   RunSingleThreadedPixelTest(
@@ -209,11 +191,16 @@ TEST_P(LayerTreeHostTilesTestPartialInvalidation, FullRaster) {
 }
 
 std::vector<TilesTestConfig> const kTestCasesMultiThread = {
-    {LayerTreeTest::RENDERER_GL, ONE_COPY},
-    {LayerTreeTest::RENDERER_SKIA_GL, ONE_COPY},
+    {TestRendererType::kGL, TestRasterType::kOneCopy},
+    {TestRendererType::kSkiaGL, TestRasterType::kOneCopy},
 #if defined(ENABLE_CC_VULKAN_TESTS)
-    {LayerTreeTest::RENDERER_SKIA_VK, ONE_COPY},
+    // TODO(sgilhuly): Switch this to one copy raster once is is supported for
+    // Vulkan in these tests.
+    {TestRendererType::kSkiaVk, TestRasterType::kOop},
 #endif  // defined(ENABLE_CC_VULKAN_TESTS)
+#if defined(ENABLE_CC_DAWN_TESTS)
+    {TestRendererType::kSkiaDawn, TestRasterType::kOop},
+#endif  // defined(ENABLE_CC_DAWN_TESTS)
 };
 
 using LayerTreeHostTilesTestPartialInvalidationMultiThread =
@@ -239,14 +226,22 @@ TEST_P(LayerTreeHostTilesTestPartialInvalidationMultiThread,
       picture_layer_,
       base::FilePath(FILE_PATH_LITERAL("blue_yellow_partial_flipped.png")));
 }
+#undef MAYBE_PartialRaster
 
 TEST_P(LayerTreeHostTilesTestPartialInvalidationMultiThread, FullRaster) {
   RunPixelTest(picture_layer_,
                base::FilePath(FILE_PATH_LITERAL("blue_yellow_flipped.png")));
 }
 
-using LayerTreeHostTilesTestPartialInvalidationLowBitDepth =
-    LayerTreeHostTilesTestPartialInvalidation;
+class LayerTreeHostTilesTestPartialInvalidationLowBitDepth
+    : public LayerTreeHostTilesTestPartialInvalidation {
+ protected:
+  void InitializeSettings(LayerTreeSettings* settings) override {
+    LayerTreeHostTilesPixelTest::InitializeSettings(settings);
+    settings->use_rgba_4444 = true;
+    settings->unpremultiply_and_dither_low_bit_depth_tiles = true;
+  }
+};
 
 // This test doesn't work on Vulkan because on our hardware we can't render to
 // RGBA4444 format using either SwiftShader or native Vulkan. See
@@ -255,8 +250,8 @@ INSTANTIATE_TEST_SUITE_P(
     All,
     LayerTreeHostTilesTestPartialInvalidationLowBitDepth,
     ::testing::Values(
-        TilesTestConfig{LayerTreeTest::RENDERER_SKIA_GL, GPU_LOW_BIT_DEPTH},
-        TilesTestConfig{LayerTreeTest::RENDERER_GL, GPU_LOW_BIT_DEPTH}));
+        TilesTestConfig{TestRendererType::kSkiaGL, TestRasterType::kGpu},
+        TilesTestConfig{TestRendererType::kGL, TestRasterType::kGpu}));
 
 TEST_P(LayerTreeHostTilesTestPartialInvalidationLowBitDepth, PartialRaster) {
   use_partial_raster_ = true;

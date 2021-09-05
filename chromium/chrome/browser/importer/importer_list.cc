@@ -19,7 +19,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "ui/base/l10n/l10n_util.h"
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include <CoreFoundation/CoreFoundation.h>
 
 #include "base/mac/foundation_util.h"
@@ -76,7 +76,7 @@ void DetectBuiltinWindowsProfiles(
 
 #endif  // defined(OS_WIN)
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 void DetectSafariProfiles(std::vector<importer::SourceProfile>* profiles) {
   base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
                                                 base::BlockingType::MAY_BLOCK);
@@ -91,7 +91,7 @@ void DetectSafariProfiles(std::vector<importer::SourceProfile>* profiles) {
   safari.services_supported = items;
   profiles->push_back(safari);
 }
-#endif  // defined(OS_MACOSX)
+#endif  // defined(OS_MAC)
 
 // |locale|: The application locale used for lookups in Firefox's
 // locale-specific search engines feature (see firefox_importer.cc for
@@ -182,7 +182,7 @@ std::vector<importer::SourceProfile> DetectSourceProfilesWorker(
     DetectFirefoxProfiles(locale, &profiles);
     chromiumImporter->DetectChromiumProfiles(&profiles);
   }
-#elif defined(OS_MACOSX)
+#elif defined(OS_MAC)
   if (vivaldi::IsOperaDefaultBrowser()) {
     viv_importer::DetectOperaProfiles(&profiles);
     DetectFirefoxProfiles(locale, &profiles);
@@ -235,7 +235,7 @@ ImporterList::~ImporterList() {
 void ImporterList::DetectSourceProfiles(
     const std::string& locale,
     bool include_interactive_profiles,
-    const base::Closure& profiles_loaded_callback) {
+    base::OnceClosure profiles_loaded_callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   base::ThreadPool::PostTaskAndReplyWithResult(
       FROM_HERE,
@@ -244,7 +244,8 @@ void ImporterList::DetectSourceProfiles(
       base::BindOnce(&DetectSourceProfilesWorker, locale,
                      include_interactive_profiles),
       base::BindOnce(&ImporterList::SourceProfilesLoaded,
-                     weak_ptr_factory_.GetWeakPtr(), profiles_loaded_callback));
+                     weak_ptr_factory_.GetWeakPtr(),
+                     std::move(profiles_loaded_callback)));
 }
 
 const importer::SourceProfile& ImporterList::GetSourceProfileAt(
@@ -254,10 +255,10 @@ const importer::SourceProfile& ImporterList::GetSourceProfileAt(
 }
 
 void ImporterList::SourceProfilesLoaded(
-    const base::Closure& profiles_loaded_callback,
+    base::OnceClosure profiles_loaded_callback,
     const std::vector<importer::SourceProfile>& profiles) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   source_profiles_.assign(profiles.begin(), profiles.end());
-  profiles_loaded_callback.Run();
+  std::move(profiles_loaded_callback).Run();
 }

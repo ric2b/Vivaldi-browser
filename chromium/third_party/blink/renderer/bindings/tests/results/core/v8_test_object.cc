@@ -4283,6 +4283,34 @@ static void HighEntropyDirectUnsignedLongAttributeGetter(const v8::FunctionCallb
   V8SetReturnValueUnsigned(info, cpp_value);
 }
 
+static void HighEntropyDirectDomStringAttributeGetter(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  v8::Local<v8::Object> holder = info.Holder();
+
+  TestObject* impl = V8TestObject::ToImpl(holder);
+
+  ExecutionContext* execution_context = ExecutionContext::ForRelevantRealm(info);
+
+  String cpp_value(impl->highEntropyDirectDomString());
+
+  Dactyloscoper::RecordDirectSurface(execution_context, WebFeature::kTestAttributeHighEntropyDOMString, cpp_value);
+
+  V8SetReturnValueString(info, cpp_value, info.GetIsolate());
+}
+
+static void HighEntropyDirectArrayDomStringAttributeGetter(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  v8::Local<v8::Object> holder = info.Holder();
+
+  TestObject* impl = V8TestObject::ToImpl(holder);
+
+  ExecutionContext* execution_context = ExecutionContext::ForRelevantRealm(info);
+
+  Vector<String> cpp_value(impl->highEntropyDirectArrayDomString());
+
+  Dactyloscoper::RecordDirectSurface(execution_context, WebFeature::kTestAttributeHighEntropyArrayDOMString, cpp_value);
+
+  V8SetReturnValue(info, FreezeV8Object(ToV8(cpp_value, info.Holder(), info.GetIsolate()), info.GetIsolate()));
+}
+
 static void TestInterfaceAttributeAttributeGetter(const v8::FunctionCallbackInfo<v8::Value>& info) {
   v8::Local<v8::Object> holder = info.Holder();
 
@@ -7938,6 +7966,15 @@ static void HighEntropyMethodWithMeasureAsMethod(const v8::FunctionCallbackInfo<
   impl->highEntropyMethodWithMeasureAs();
 }
 
+static void HighEntropyDirectBooleanMethod(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  TestObject* impl = V8TestObject::ToImpl(info.Holder());
+
+  ExecutionContext* execution_context = ExecutionContext::ForRelevantRealm(info);
+  bool result = impl->highEntropyDirectBoolean();
+  Dactyloscoper::RecordDirectSurface(execution_context, WebFeature::kTestMethodHighEntropyDirectNoArgsRetBoolean, result);
+  V8SetReturnValueBool(info, result);
+}
+
 static void CeReactionsNotOverloadedMethodMethod(const v8::FunctionCallbackInfo<v8::Value>& info) {
   ExceptionState exception_state(info.GetIsolate(), ExceptionState::kExecutionContext, "TestObject", "ceReactionsNotOverloadedMethod");
   CEReactionsScope ce_reactions_scope;
@@ -11276,6 +11313,26 @@ void V8TestObject::HighEntropyDirectUnsignedLongAttributeGetterCallback(const v8
   test_object_v8_internal::HighEntropyDirectUnsignedLongAttributeGetter(info);
 }
 
+void V8TestObject::HighEntropyDirectDomStringAttributeGetterCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestObject_highEntropyDirectDomString_Getter");
+
+  ExecutionContext* execution_context_for_measurement = CurrentExecutionContext(info.GetIsolate());
+  UseCounter::Count(execution_context_for_measurement, WebFeature::kTestAttributeHighEntropyDOMString);
+  Dactyloscoper::Record(execution_context_for_measurement, WebFeature::kTestAttributeHighEntropyDOMString);
+
+  test_object_v8_internal::HighEntropyDirectDomStringAttributeGetter(info);
+}
+
+void V8TestObject::HighEntropyDirectArrayDomStringAttributeGetterCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestObject_highEntropyDirectArrayDomString_Getter");
+
+  ExecutionContext* execution_context_for_measurement = CurrentExecutionContext(info.GetIsolate());
+  UseCounter::Count(execution_context_for_measurement, WebFeature::kTestAttributeHighEntropyArrayDOMString);
+  Dactyloscoper::Record(execution_context_for_measurement, WebFeature::kTestAttributeHighEntropyArrayDOMString);
+
+  test_object_v8_internal::HighEntropyDirectArrayDomStringAttributeGetter(info);
+}
+
 void V8TestObject::TestInterfaceAttributeAttributeGetterCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
   RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestObject_testInterfaceAttribute_Getter");
 
@@ -12531,6 +12588,16 @@ void V8TestObject::HighEntropyMethodWithMeasureAsMethodCallback(const v8::Functi
   test_object_v8_internal::HighEntropyMethodWithMeasureAsMethod(info);
 }
 
+void V8TestObject::HighEntropyDirectBooleanMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  BLINK_BINDINGS_TRACE_EVENT("TestObject.highEntropyDirectBoolean");
+  RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestObject_highEntropyDirectBoolean");
+
+  ExecutionContext* execution_context_for_measurement = CurrentExecutionContext(info.GetIsolate());
+  UseCounter::Count(execution_context_for_measurement, WebFeature::kTestMethodHighEntropyDirectNoArgsRetBoolean);
+  Dactyloscoper::Record(execution_context_for_measurement, WebFeature::kTestMethodHighEntropyDirectNoArgsRetBoolean);
+  test_object_v8_internal::HighEntropyDirectBooleanMethod(info);
+}
+
 void V8TestObject::CeReactionsNotOverloadedMethodMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
   BLINK_BINDINGS_TRACE_EVENT("TestObject.ceReactionsNotOverloadedMethod");
   RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestObject_ceReactionsNotOverloadedMethod");
@@ -13143,6 +13210,7 @@ static constexpr V8DOMConfiguration::MethodConfiguration kV8TestObjectMethods[] 
     {"measureAsSameValueOverloadedMethod", V8TestObject::MeasureAsSameValueOverloadedMethodMethodCallback, 0, v8::None, V8DOMConfiguration::kOnPrototype, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kDoNotCheckAccess, V8DOMConfiguration::kHasSideEffect, V8DOMConfiguration::kAllWorlds},
     {"highEntropyMethodWithMeasure", V8TestObject::HighEntropyMethodWithMeasureMethodCallback, 0, v8::None, V8DOMConfiguration::kOnPrototype, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kDoNotCheckAccess, V8DOMConfiguration::kHasSideEffect, V8DOMConfiguration::kAllWorlds},
     {"highEntropyMethodWithMeasureAs", V8TestObject::HighEntropyMethodWithMeasureAsMethodCallback, 0, v8::None, V8DOMConfiguration::kOnPrototype, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kDoNotCheckAccess, V8DOMConfiguration::kHasSideEffect, V8DOMConfiguration::kAllWorlds},
+    {"highEntropyDirectBoolean", V8TestObject::HighEntropyDirectBooleanMethodCallback, 0, v8::None, V8DOMConfiguration::kOnPrototype, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kDoNotCheckAccess, V8DOMConfiguration::kHasSideEffect, V8DOMConfiguration::kAllWorlds},
     {"ceReactionsNotOverloadedMethod", V8TestObject::CeReactionsNotOverloadedMethodMethodCallback, 1, v8::None, V8DOMConfiguration::kOnPrototype, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kDoNotCheckAccess, V8DOMConfiguration::kHasSideEffect, V8DOMConfiguration::kAllWorlds},
     {"ceReactionsOverloadedMethod", V8TestObject::CeReactionsOverloadedMethodMethodCallback, 0, v8::None, V8DOMConfiguration::kOnPrototype, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kDoNotCheckAccess, V8DOMConfiguration::kHasSideEffect, V8DOMConfiguration::kAllWorlds},
     {"deprecateAsMeasureAsSameValueOverloadedMethod", V8TestObject::DeprecateAsMeasureAsSameValueOverloadedMethodMethodCallback, 0, v8::None, V8DOMConfiguration::kOnPrototype, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kDoNotCheckAccess, V8DOMConfiguration::kHasSideEffect, V8DOMConfiguration::kAllWorlds},
@@ -13360,6 +13428,8 @@ static void InstallV8TestObjectTemplate(
       { "highEntropyAttributeWithMeasureAs", V8TestObject::HighEntropyAttributeWithMeasureAsAttributeGetterCallback, V8TestObject::HighEntropyAttributeWithMeasureAsAttributeSetterCallback, static_cast<unsigned>(V8PrivateProperty::CachedAccessor::kNone), static_cast<v8::PropertyAttribute>(v8::None), V8DOMConfiguration::kOnPrototype, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kCheckAccess, V8DOMConfiguration::kCheckAccess, V8DOMConfiguration::kHasSideEffect, V8DOMConfiguration::kAllWorlds },
       { "highEntropyReadonlyAttributeWithMeasureAs", V8TestObject::HighEntropyReadonlyAttributeWithMeasureAsAttributeGetterCallback, nullptr, static_cast<unsigned>(V8PrivateProperty::CachedAccessor::kNone), static_cast<v8::PropertyAttribute>(v8::ReadOnly), V8DOMConfiguration::kOnPrototype, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kCheckAccess, V8DOMConfiguration::kCheckAccess, V8DOMConfiguration::kHasSideEffect, V8DOMConfiguration::kAllWorlds },
       { "highEntropyDirectUnsignedLong", V8TestObject::HighEntropyDirectUnsignedLongAttributeGetterCallback, nullptr, static_cast<unsigned>(V8PrivateProperty::CachedAccessor::kNone), static_cast<v8::PropertyAttribute>(v8::ReadOnly), V8DOMConfiguration::kOnPrototype, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kCheckAccess, V8DOMConfiguration::kCheckAccess, V8DOMConfiguration::kHasSideEffect, V8DOMConfiguration::kAllWorlds },
+      { "highEntropyDirectDomString", V8TestObject::HighEntropyDirectDomStringAttributeGetterCallback, nullptr, static_cast<unsigned>(V8PrivateProperty::CachedAccessor::kNone), static_cast<v8::PropertyAttribute>(v8::ReadOnly), V8DOMConfiguration::kOnPrototype, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kCheckAccess, V8DOMConfiguration::kCheckAccess, V8DOMConfiguration::kHasSideEffect, V8DOMConfiguration::kAllWorlds },
+      { "highEntropyDirectArrayDomString", V8TestObject::HighEntropyDirectArrayDomStringAttributeGetterCallback, nullptr, static_cast<unsigned>(V8PrivateProperty::CachedAccessor::kNone), static_cast<v8::PropertyAttribute>(v8::ReadOnly), V8DOMConfiguration::kOnPrototype, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kCheckAccess, V8DOMConfiguration::kCheckAccess, V8DOMConfiguration::kHasSideEffect, V8DOMConfiguration::kAllWorlds },
       { "testInterfaceAttribute", V8TestObject::TestInterfaceAttributeAttributeGetterCallback, V8TestObject::TestInterfaceAttributeAttributeSetterCallback, static_cast<unsigned>(V8PrivateProperty::CachedAccessor::kNone), static_cast<v8::PropertyAttribute>(v8::None), V8DOMConfiguration::kOnPrototype, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kCheckAccess, V8DOMConfiguration::kCheckAccess, V8DOMConfiguration::kHasSideEffect, V8DOMConfiguration::kAllWorlds },
       { "size", V8TestObject::SizeAttributeGetterCallback, nullptr, static_cast<unsigned>(V8PrivateProperty::CachedAccessor::kNone), static_cast<v8::PropertyAttribute>(v8::DontEnum | v8::ReadOnly), V8DOMConfiguration::kOnPrototype, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kCheckAccess, V8DOMConfiguration::kCheckAccess, V8DOMConfiguration::kHasSideEffect, V8DOMConfiguration::kAllWorlds },
   };

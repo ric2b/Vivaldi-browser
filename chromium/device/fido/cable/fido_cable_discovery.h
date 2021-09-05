@@ -23,6 +23,12 @@
 #include "device/fido/cable/fido_cable_device.h"
 #include "device/fido/fido_device_discovery.h"
 
+namespace network {
+namespace mojom {
+class NetworkContext;
+}
+}  // namespace network
+
 namespace device {
 
 class BluetoothDevice;
@@ -39,7 +45,8 @@ class COMPONENT_EXPORT(DEVICE_FIDO) FidoCableDiscovery
       base::Optional<QRGeneratorKey> qr_generator_key,
       base::Optional<
           base::RepeatingCallback<void(std::unique_ptr<CableDiscoveryData>)>>
-          pairing_callback);
+          pairing_callback,
+      network::mojom::NetworkContext* network_context);
   ~FidoCableDiscovery() override;
 
   // FidoDeviceDiscovery:
@@ -51,11 +58,10 @@ class COMPONENT_EXPORT(DEVICE_FIDO) FidoCableDiscovery
   }
 
  protected:
-  virtual base::Optional<std::unique_ptr<FidoCableHandshakeHandler>>
-  CreateHandshakeHandler(FidoCableDevice* device,
-                         const CableDiscoveryData& discovery_data,
-                         const CableNonce& nonce,
-                         const CableEidArray& eid);
+  virtual std::unique_ptr<FidoCableHandshakeHandler> CreateV1HandshakeHandler(
+      FidoCableDevice* device,
+      const CableDiscoveryData& discovery_data,
+      const CableEidArray& authenticator_eid);
 
  private:
   enum class CableV1DiscoveryEvent : int;
@@ -65,15 +71,16 @@ class COMPONENT_EXPORT(DEVICE_FIDO) FidoCableDiscovery
   struct Result {
     Result();
     Result(const CableDiscoveryData& in_discovery_data,
-           const CableNonce& in_nonce,
            const CableEidArray& in_eid,
+           base::Optional<CableEidArray> decrypted_eid,
            base::Optional<int> ticks_back);
     Result(const Result&);
     ~Result();
 
     CableDiscoveryData discovery_data;
-    CableNonce nonce;
     CableEidArray eid;
+
+    base::Optional<CableEidArray> decrypted_eid;
     // ticks_back is either |base::nullopt|, if the Result is from established
     // discovery pairings, or else contains the number of QR ticks back in time
     // against which the match was found.
@@ -89,7 +96,6 @@ class COMPONENT_EXPORT(DEVICE_FIDO) FidoCableDiscovery
 
     base::Optional<CableEidArray> service_data;
     std::vector<CableEidArray> uuids;
-    base::Optional<CableDiscoveryData> maybe_discovery_data;
   };
 
   static const BluetoothUUID& CableAdvertisementUUID();
@@ -136,7 +142,6 @@ class COMPONENT_EXPORT(DEVICE_FIDO) FidoCableDiscovery
       const BluetoothDevice* device) const;
   base::Optional<Result> GetCableDiscoveryDataFromAuthenticatorEid(
       CableEidArray authenticator_eid) const;
-  bool IsObservedV1Device(const std::string& address) const;
   void RecordCableV1DiscoveryEventOnce(CableV1DiscoveryEvent event);
 
   // FidoDeviceDiscovery:
@@ -184,6 +189,7 @@ class COMPONENT_EXPORT(DEVICE_FIDO) FidoCableDiscovery
   base::Optional<
       base::RepeatingCallback<void(std::unique_ptr<CableDiscoveryData>)>>
       pairing_callback_;
+  network::mojom::NetworkContext* const network_context_;
 
   // observed_devices_ caches the information from observed caBLE devices so
   // that the device-log isn't spammed.

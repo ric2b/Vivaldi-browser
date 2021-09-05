@@ -5,10 +5,11 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_HTML_PORTAL_HTML_PORTAL_ELEMENT_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_HTML_PORTAL_HTML_PORTAL_ELEMENT_H_
 
-#include "base/unguessable_token.h"
+#include "base/optional.h"
 #include "mojo/public/cpp/bindings/associated_receiver.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "mojo/public/cpp/bindings/pending_associated_receiver.h"
+#include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/mojom/portal/portal.mojom-blink-forward.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/core/core_export.h"
@@ -33,9 +34,12 @@ class CORE_EXPORT HTMLPortalElement : public HTMLFrameOwnerElement {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
+  // |portal_token|, |remote_portal| and |portal_client_receiver| are all empty
+  // when an empty HTMLPortalElement is constructed, (it hasn't yet been
+  // attached to an actual contents).
   explicit HTMLPortalElement(
       Document& document,
-      const base::UnguessableToken& portal_token = base::UnguessableToken(),
+      const PortalToken* portal_token = nullptr,
       mojo::PendingAssociatedRemote<mojom::blink::Portal> remote_portal = {},
       mojo::PendingAssociatedReceiver<mojom::blink::PortalClient>
           portal_client_receiver = {});
@@ -62,7 +66,7 @@ class CORE_EXPORT HTMLPortalElement : public HTMLFrameOwnerElement {
   EventListener* onmessageerror();
   void setOnmessageerror(EventListener* listener);
 
-  const base::UnguessableToken& GetToken() const;
+  const PortalToken& GetToken() const;
 
   mojom::blink::FrameOwnerElementType OwnerType() const override {
     return mojom::blink::FrameOwnerElementType::kPortal;
@@ -81,6 +85,13 @@ class CORE_EXPORT HTMLPortalElement : public HTMLFrameOwnerElement {
   void PortalContentsWillBeDestroyed(PortalContents*);
 
  private:
+  // Returns a null string if the checks passed, and a suitable error otherwise.
+  String PreActivateChecksCommon();
+
+  // Performs a default activation (e.g. due to an unprevented click), as
+  // opposed to one requested by invoking HTMLPortalElement::activate.
+  void ActivateDefault();
+
   // Checks whether the Portals feature is enabled for this document, and logs a
   // warning to the developer if not. Doing basically anything with an
   // HTMLPortalElement in a document which doesn't support portals is forbidden.

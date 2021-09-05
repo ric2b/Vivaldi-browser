@@ -23,7 +23,7 @@
 #include "chrome/browser/extensions/extension_sync_data.h"
 #include "chrome/browser/extensions/extension_sync_service.h"
 #include "chrome/browser/extensions/extension_util.h"
-#include "chrome/browser/extensions/test_blacklist.h"
+#include "chrome/browser/extensions/test_blocklist.h"
 #include "chrome/browser/extensions/updater/extension_updater.h"
 #include "chrome/browser/profiles/profile_key.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
@@ -1831,9 +1831,9 @@ TEST_F(ExtensionServiceSyncTest, AppToExtension) {
   EXPECT_TRUE(apps_processor.data().empty());
 }
 
-class BlacklistedExtensionSyncServiceTest : public ExtensionServiceSyncTest {
+class BlocklistedExtensionSyncServiceTest : public ExtensionServiceSyncTest {
  public:
-  BlacklistedExtensionSyncServiceTest() {}
+  BlocklistedExtensionSyncServiceTest() {}
 
   void SetUp() override {
     ExtensionServiceSyncTest::SetUp();
@@ -1845,7 +1845,7 @@ class BlacklistedExtensionSyncServiceTest : public ExtensionServiceSyncTest {
         ProfileSyncServiceFactory::GetForProfile(profile());
     sync_service->GetUserSettings()->SetFirstSetupComplete(kSetSourceFromTest);
 
-    test_blacklist_.Attach(service()->blacklist_);
+    test_blocklist_.Attach(service()->blocklist_);
     service()->Init();
 
     // Load up a simple extension.
@@ -1867,8 +1867,8 @@ class BlacklistedExtensionSyncServiceTest : public ExtensionServiceSyncTest {
     processor_raw_->changes().clear();
   }
 
-  void ForceBlacklistUpdate() {
-    service()->OnBlacklistUpdated();
+  void ForceBlocklistUpdate() {
+    service()->OnBlocklistUpdated();
     content::RunAllTasksUntilIdle();
   }
 
@@ -1878,25 +1878,25 @@ class BlacklistedExtensionSyncServiceTest : public ExtensionServiceSyncTest {
 
   std::string& extension_id() { return extension_id_; }
 
-  extensions::TestBlacklist& test_blacklist() { return test_blacklist_; }
+  extensions::TestBlocklist& test_blocklist() { return test_blocklist_; }
 
  private:
   syncer::FakeSyncChangeProcessor* processor_raw_;
   scoped_refptr<const Extension> extension_;
   std::string extension_id_;
-  extensions::TestBlacklist test_blacklist_;
+  extensions::TestBlocklist test_blocklist_;
 
-  DISALLOW_COPY_AND_ASSIGN(BlacklistedExtensionSyncServiceTest);
+  DISALLOW_COPY_AND_ASSIGN(BlocklistedExtensionSyncServiceTest);
 };
 
-// Test that sync cannot enable blacklisted extensions.
-TEST_F(BlacklistedExtensionSyncServiceTest, SyncBlacklistedExtension) {
+// Test that sync cannot enable blocklisted extensions.
+TEST_F(BlocklistedExtensionSyncServiceTest, SyncBlocklistedExtension) {
   std::string& extension_id = this->extension_id();
 
-  // Blacklist the extension.
-  test_blacklist().SetBlacklistState(extension_id,
-                                     extensions::BLACKLISTED_MALWARE, true);
-  ForceBlacklistUpdate();
+  // Blocklist the extension.
+  test_blocklist().SetBlocklistState(extension_id,
+                                     extensions::BLOCKLISTED_MALWARE, true);
+  ForceBlocklistUpdate();
 
   // Try enabling the extension via sync.
   EnableExtensionFromSync(*extension());
@@ -1907,13 +1907,13 @@ TEST_F(BlacklistedExtensionSyncServiceTest, SyncBlacklistedExtension) {
 }
 
 // Test that some greylisted extensions can be enabled through sync.
-TEST_F(BlacklistedExtensionSyncServiceTest, SyncAllowedGreylistedExtension) {
+TEST_F(BlocklistedExtensionSyncServiceTest, SyncAllowedGreylistedExtension) {
   std::string& extension_id = this->extension_id();
 
   // Greylist the extension.
-  test_blacklist().SetBlacklistState(
-      extension_id, extensions::BLACKLISTED_POTENTIALLY_UNWANTED, true);
-  ForceBlacklistUpdate();
+  test_blocklist().SetBlocklistState(
+      extension_id, extensions::BLOCKLISTED_POTENTIALLY_UNWANTED, true);
+  ForceBlocklistUpdate();
 
   EXPECT_FALSE(registry()->enabled_extensions().GetByID(extension_id));
   {

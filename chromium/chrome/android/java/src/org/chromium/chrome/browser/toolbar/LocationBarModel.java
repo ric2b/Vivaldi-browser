@@ -18,13 +18,13 @@ import org.chromium.base.annotations.NativeMethods;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.compositor.layouts.OverviewModeBehavior;
 import org.chromium.chrome.browser.dom_distiller.DomDistillerTabUtils;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.native_page.NativePageFactory;
 import org.chromium.chrome.browser.ntp.NewTabPage;
 import org.chromium.chrome.browser.offlinepages.OfflinePageUtils;
 import org.chromium.chrome.browser.omnibox.ChromeAutocompleteSchemeClassifier;
 import org.chromium.chrome.browser.omnibox.SearchEngineLogoUtils;
 import org.chromium.chrome.browser.omnibox.UrlBarData;
+import org.chromium.chrome.browser.paint_preview.TabbedPaintPreviewPlayer;
 import org.chromium.chrome.browser.previews.Previews;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
@@ -339,6 +339,11 @@ public class LocationBarModel implements ToolbarDataProvider, ToolbarCommonPrope
     }
 
     @Override
+    public boolean isPaintPreview() {
+        return hasTab() && TabbedPaintPreviewPlayer.get(mTab).isShowingAndNeedsBadge();
+    }
+
+    @Override
     public int getSecurityLevel() {
         Tab tab = getTab();
         return getSecurityLevel(tab, isOfflinePage(), TrustedCdn.getPublisherUrl(tab));
@@ -364,7 +369,8 @@ public class LocationBarModel implements ToolbarDataProvider, ToolbarCommonPrope
                     : SearchEngineIconHandler.get().getDefaultSearchEngineLogoResId();
         }
 
-        return getSecurityIconResource(getSecurityLevel(), !isTablet, isOfflinePage(), isPreview());
+        return getSecurityIconResource(
+                getSecurityLevel(), !isTablet, isOfflinePage(), isPreview(), isPaintPreview());
     }
 
     @VisibleForTesting
@@ -393,8 +399,12 @@ public class LocationBarModel implements ToolbarDataProvider, ToolbarCommonPrope
 
     @VisibleForTesting
     @DrawableRes
-    int getSecurityIconResource(
-            int securityLevel, boolean isSmallDevice, boolean isOfflinePage, boolean isPreview) {
+    int getSecurityIconResource(int securityLevel, boolean isSmallDevice, boolean isOfflinePage,
+            boolean isPreview, boolean isPaintPreview) {
+        // Paint Preview appears on top of WebContents and shows a visual representation of the page
+        // that has been previously stored locally.
+        if (isPaintPreview) return R.drawable.omnibox_info;
+
         // Checking for a preview first because one possible preview type is showing an offline page
         // on a slow connection. In this case, the previews UI takes precedence.
         if (isPreview) {
@@ -426,7 +436,7 @@ public class LocationBarModel implements ToolbarDataProvider, ToolbarCommonPrope
         if (ChromeApplication.isVivaldi()
                 && securityLevel == ConnectionSecurityLevel.NONE
                 && NewTabPage.isNTPUrl(getCurrentUrl()))
-            return Color.TRANSPARENT;
+            return R.color.vivaldi_transparent;
 
         int color = getPrimaryColor();
         boolean needLightIcon = ColorUtils.shouldUseLightForegroundOnBackground(color);
@@ -440,27 +450,6 @@ public class LocationBarModel implements ToolbarDataProvider, ToolbarCommonPrope
             // There will never be a preview in incognito. Always use the darker color rather than
             // incorporating with the block above.
             return R.color.locationbar_status_preview_color;
-        }
-
-        if (!hasTab() || isUsingBrandColor()
-                || ChromeFeatureList.isEnabled(
-                        ChromeFeatureList.OMNIBOX_HIDE_SCHEME_IN_STEADY_STATE)
-                || ChromeFeatureList.isEnabled(
-                        ChromeFeatureList.OMNIBOX_HIDE_TRIVIAL_SUBDOMAINS_IN_STEADY_STATE)) {
-            // For theme colors which are not dark and are also not
-            // light enough to warrant an opaque URL bar, use dark
-            // icons.
-            return ToolbarColors.getThemedToolbarIconTintRes(false);
-        }
-
-        // TODO(https://crbug.com/940134): Change the color here and also #needLightIcon logic.
-        // For the default toolbar color, use a green or red icon.
-        if (securityLevel == ConnectionSecurityLevel.DANGEROUS) {
-            return R.color.google_red_600;
-        }
-
-        if (securityLevel == ConnectionSecurityLevel.SECURE) {
-            return R.color.google_green_600;
         }
 
         return ToolbarColors.getThemedToolbarIconTintRes(false);

@@ -4,8 +4,9 @@
 
 #include "ios/chrome/browser/metrics/ios_chrome_metrics_service_client.h"
 
-#include <stdint.h>
+#import <UIKit/UIKit.h>
 
+#include <stdint.h>
 #include <utility>
 #include <vector>
 
@@ -63,6 +64,7 @@
 #include "ios/chrome/browser/google/google_brand.h"
 #include "ios/chrome/browser/history/history_service_factory.h"
 #include "ios/chrome/browser/metrics/chrome_browser_state_client.h"
+#import "ios/chrome/browser/metrics/ios_chrome_default_browser_metrics_provider.h"
 #include "ios/chrome/browser/metrics/ios_chrome_stability_metrics_provider.h"
 #include "ios/chrome/browser/metrics/mobile_session_shutdown_metrics_provider.h"
 #include "ios/chrome/browser/signin/ios_chrome_signin_status_metrics_provider_delegate.h"
@@ -160,7 +162,8 @@ void IOSChromeMetricsServiceClient::RegisterPrefs(
     PrefRegistrySimple* registry) {
   metrics::MetricsService::RegisterPrefs(registry);
   metrics::StabilityMetricsHelper::RegisterPrefs(registry);
-  metrics::FileMetricsProvider::RegisterPrefs(registry, kBrowserMetricsName);
+  metrics::FileMetricsProvider::RegisterSourcePrefs(registry,
+                                                    kBrowserMetricsName);
   metrics::RegisterMetricsReportingStatePrefs(registry);
   ukm::UkmService::RegisterPrefs(registry);
 }
@@ -269,6 +272,9 @@ void IOSChromeMetricsServiceClient::RegisterMetricsServiceProviders() {
   metrics_service_->RegisterMetricsProvider(
       std::move(stability_metrics_provider));
 
+  metrics_service_->RegisterMetricsProvider(
+      std::make_unique<IOSChromeDefaultBrowserMetricsProvider>());
+
   // NOTE: metrics_state_manager_->IsMetricsReportingEnabled() returns false
   // during local testing. To test locally, modify
   // MetricsServiceAccessor::IsMetricsReportingEnabled() to return true.
@@ -334,9 +340,30 @@ void IOSChromeMetricsServiceClient::CollectFinalHistograms() {
     UMA_HISTOGRAM_MEMORY_KB(
         "Memory.Browser",
         (task_info_data.resident_size - task_info_data.reusable) / 1024);
-    UMA_HISTOGRAM_MEMORY_LARGE_MB(
-        "Memory.Browser.MemoryFootprint",
-        (task_info_data.phys_footprint) / 1024 / 1024);
+    mach_vm_size_t footprint_mb = task_info_data.phys_footprint / 1024 / 1024;
+    UMA_HISTOGRAM_MEMORY_LARGE_MB("Memory.Browser.MemoryFootprint",
+                                  footprint_mb);
+
+    switch (UIApplication.sharedApplication.applicationState) {
+      case UIApplicationStateActive:
+        UMA_HISTOGRAM_MEMORY_LARGE_MB("Memory.Browser.MemoryFootprint.Active",
+                                      footprint_mb);
+        // According to Apple, apps on iPhone 6 and older devices get terminated
+        // by the OS if memory usage crosses 200MB watermark. Obviously this
+        // metric will not be recorded with true on iPhone 6 and older devices.
+        UMA_HISTOGRAM_BOOLEAN(
+            "Memory.Browser.MemoryFootprint.Active.Over200MBWatermark",
+            footprint_mb >= 200);
+        break;
+      case UIApplicationStateInactive:
+        UMA_HISTOGRAM_MEMORY_LARGE_MB("Memory.Browser.MemoryFootprint.Inactive",
+                                      footprint_mb);
+        break;
+      case UIApplicationStateBackground:
+        UMA_HISTOGRAM_MEMORY_LARGE_MB(
+            "Memory.Browser.MemoryFootprint.Background", footprint_mb);
+        break;
+    }
   }
 
   std::move(collect_final_metrics_done_callback_).Run();

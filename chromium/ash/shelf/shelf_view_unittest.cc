@@ -229,7 +229,8 @@ class ShelfItemSelectionTracker : public ShelfItemDelegate {
   void ItemSelected(std::unique_ptr<ui::Event> event,
                     int64_t display_id,
                     ShelfLaunchSource source,
-                    ItemSelectedCallback callback) override {
+                    ItemSelectedCallback callback,
+                    const ItemFilterPredicate& filter_predicate) override {
     item_selected_count_++;
     std::move(callback).Run(item_selected_action_, {});
   }
@@ -401,7 +402,6 @@ class ShelfViewTest : public AshTestBase {
       ShelfItem item = model_->items()[model_index];
       ShelfID id = item.id;
       EXPECT_EQ(id_map[map_index].first, id);
-      EXPECT_EQ(id_map[map_index].second, GetButtonByID(id));
       ++map_index;
     }
     ASSERT_EQ(map_index, id_map.size());
@@ -621,6 +621,17 @@ class ShelfViewTextDirectionTest : public ShelfViewTest,
   DISALLOW_COPY_AND_ASSIGN(ShelfViewTextDirectionTest);
 };
 
+class ShelfViewDragToPinTest : public ShelfViewTest {
+ public:
+  ShelfViewDragToPinTest() {
+    feature_list_.InitAndEnableFeature(features::kDragUnpinnedAppToPin);
+  }
+  ~ShelfViewDragToPinTest() override = default;
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
 TEST_F(ShelfViewTest, VisibleShelfItemsBounds) {
   // Add 3 pinned apps, and a normal app.
   AddAppShortcut();
@@ -731,6 +742,153 @@ TEST_F(ShelfViewTest, SimultaneousDrag) {
   shelf_view_->PointerReleasedOnButton(dragged_button_touch, ShelfView::TOUCH,
                                        false);
   ASSERT_NO_FATAL_FAILURE(CheckModelIDs(id_map));
+}
+
+// Ensure that the behavior of pinning and unpinning by dragging works as
+// expected.
+TEST_F(ShelfViewDragToPinTest, DragAppsToPinAndUnpin) {
+  std::vector<std::pair<ShelfID, views::View*>> id_map;
+  SetupForDragTest(&id_map);
+  int pinned_apps_size = id_map.size();
+
+  const ShelfID open_app_id = AddApp();
+  id_map.push_back(std::make_pair(open_app_id, GetButtonByID(open_app_id)));
+
+  // Run the pinned app at index 1.
+  ShelfItem item = model_->items()[1];
+  item.status = STATUS_RUNNING;
+  model_->Set(1, item);
+  id_map[1].second = GetButtonByID(item.id);
+
+  ASSERT_TRUE(static_cast<ShelfAppButton*>(id_map[1].second)->state() &
+              ShelfAppButton::STATE_RUNNING);
+  ASSERT_FALSE(static_cast<ShelfAppButton*>(id_map[2].second)->state() &
+               ShelfAppButton::STATE_RUNNING);
+  ASSERT_TRUE(GetButtonByID(open_app_id)->state() &
+              ShelfAppButton::STATE_RUNNING);
+  EXPECT_EQ(test_api_->GetSeparatorIndex(), pinned_apps_size - 1);
+
+  // Drag the app at index 1 and move it to the end of the shelf. With separator
+  // available and the app is dragged to the unpinned app side, the dragged open
+  // app should be unpinned and moved to the released position.
+  views::View* dragged_button =
+      SimulateDrag(ShelfView::MOUSE, 1, id_map.size() - 1, false);
+  std::rotate(id_map.begin() + 1, id_map.begin() + 2, id_map.end());
+  ASSERT_NO_FATAL_FAILURE(CheckModelIDs(id_map));
+  shelf_view_->PointerReleasedOnButton(dragged_button, ShelfView::MOUSE, false);
+  EXPECT_FALSE(IsAppPinned(id_map.back().first));
+  --pinned_apps_size;
+
+  // Drag the app at index 2 and move it to the end of the shelf. With separator
+  // available and the app is dragged to the unpinned app side, the dragged app
+  // with no running instance should be unpinned and removed from shelf.
+  dragged_button = SimulateDrag(ShelfView::MOUSE, 2, id_map.size() - 1, false);
+  shelf_view_->PointerReleasedOnButton(dragged_button, ShelfView::MOUSE, false);
+  id_map.erase(id_map.begin() + 2);
+  EXPECT_EQ(id_map.size(), model_->items().size());
+  ASSERT_NO_FATAL_FAILURE(CheckModelIDs(id_map));
+  --pinned_apps_size;
+
+  // Drag an app in unpinned app side and move it to the beginning of the shelf.
+  // With separator available and the app is dragged to the pinned app side, the
+  // dragged app should be pinned and moved to the released position.
+  dragged_button = SimulateDrag(ShelfView::MOUSE, id_map.size() - 2, 0, false);
+  std::rotate(id_map.rbegin() + 1, id_map.rbegin() + 2, id_map.rend());
+  ASSERT_NO_FATAL_FAILURE(CheckModelIDs(id_map));
+  shelf_view_->PointerReleasedOnButton(dragged_button, ShelfView::MOUSE, false);
+  EXPECT_TRUE(IsAppPinned(id_map[0].first));
+  ++pinned_apps_size;
+
+  EXPECT_EQ(test_api_->GetSeparatorIndex(), pinned_apps_size - 1);
+}
+
+// Check that the Browser Shortcut will not be dragged to the unpinned app side
+// or be unpinned by dragging.
+TEST_F(ShelfViewDragToPinTest, BlockBrowserShortcutFromUnpinningByDragging) {
+  std::vector<std::pair<ShelfID, views::View*>> id_map;
+  SetupForDragTest(&id_map);
+  const int pinned_apps_size = id_map.size();
+
+  const ShelfID open_app_id = AddApp();
+  id_map.push_back(std::make_pair(open_app_id, GetButtonByID(open_app_id)));
+
+  EXPECT_TRUE(model_->items()[0].type == TYPE_BROWSER_SHORTCUT);
+  EXPECT_EQ(test_api_->GetSeparatorIndex(), pinned_apps_size - 1);
+
+  // Dragging the browser shortcut to the unpinned app side should not make it
+  // unpinned.
+  views::View* dragged_button =
+      SimulateDrag(ShelfView::MOUSE, 0, id_map.size() - 1, false);
+  std::rotate(id_map.begin(), id_map.begin() + 1,
+              id_map.begin() + pinned_apps_size);
+  ASSERT_NO_FATAL_FAILURE(CheckModelIDs(id_map));
+
+  // When drag pointer released, the browser shortcut should be the last app in
+  // the pinned app side.
+  shelf_view_->PointerReleasedOnButton(dragged_button, ShelfView::MOUSE, false);
+  EXPECT_EQ(model_->items()[pinned_apps_size - 1].type, TYPE_BROWSER_SHORTCUT);
+}
+
+// Check that separator index updates as expected when a drag view is dragged
+// over it.
+TEST_F(ShelfViewDragToPinTest, DragAppAroundSeparator) {
+  std::vector<std::pair<ShelfID, views::View*>> id_map;
+  SetupForDragTest(&id_map);
+  const int pinned_apps_size = id_map.size();
+
+  const ShelfID open_app_id = AddApp();
+  id_map.push_back(std::make_pair(open_app_id, GetButtonByID(open_app_id)));
+  EXPECT_EQ(test_api_->GetSeparatorIndex(), pinned_apps_size - 1);
+  const int button_width =
+      GetButtonByID(open_app_id)->GetBoundsInScreen().width();
+
+  ui::test::EventGenerator* generator = GetEventGenerator();
+
+  // The test makes some assumptions that the shelf is bottom aligned.
+  ASSERT_EQ(shelf_view_->shelf()->alignment(), ShelfAlignment::kBottom);
+
+  // Drag an unpinned open app that is beside the separator around and check
+  // that the separator is correctly placed.
+  ASSERT_EQ(model_->ItemIndexByID(open_app_id),
+            test_api_->GetSeparatorIndex() + 1);
+  gfx::Point unpinned_app_location =
+      GetButtonCenter(GetButtonByID(open_app_id));
+  generator->set_current_screen_location(unpinned_app_location);
+  generator->PressLeftButton();
+  // Drag the mouse slightly to the left. The dragged app will stay at the same
+  // index but the separator will move to the right.
+  generator->MoveMouseBy(-button_width / 4, 0);
+  // In this case, the separator is moved to the end of the shelf so it is set
+  // invisible and the |separator_index_| will be updated to -1.
+  EXPECT_FALSE(test_api_->IsSeparatorVisible());
+  EXPECT_EQ(test_api_->GetSeparatorIndex(), -1);
+  // Drag the mouse slightly to the right where the dragged app will stay at the
+  // same index.
+  generator->MoveMouseBy(button_width / 2, 0);
+  // In this case, because the dragged app is not released or pinned yet,
+  // dragging it back to its original place will show the separator again.
+  EXPECT_EQ(test_api_->GetSeparatorIndex(), pinned_apps_size - 1);
+  generator->ReleaseLeftButton();
+
+  // Drag an pinned app that is beside the separator around and check that the
+  // separator is correctly placed. Check that the dragged app is not a browser
+  // shortcut, which can not be dragged across the separator.
+  ASSERT_NE(model_->items()[pinned_apps_size - 1].type, TYPE_BROWSER_SHORTCUT);
+  ASSERT_EQ(model_->ItemIndexByID(id_map[pinned_apps_size - 1].first),
+            test_api_->GetSeparatorIndex());
+  gfx::Point pinned_app_location =
+      GetButtonCenter(id_map[pinned_apps_size - 1].first);
+  generator->set_current_screen_location(pinned_app_location);
+  generator->PressLeftButton();
+  // Drag the mouse slightly to the right. The dragged app will stay at the same
+  // index but the separator will move to the left.
+  generator->MoveMouseBy(button_width / 4, 0);
+  EXPECT_EQ(test_api_->GetSeparatorIndex(), pinned_apps_size - 2);
+  // Drag the mouse slightly to the left. The dragged app will stay at the same
+  // index but the separator will move to the right.
+  generator->MoveMouseBy(-button_width / 2, 0);
+  EXPECT_EQ(test_api_->GetSeparatorIndex(), pinned_apps_size - 1);
+  generator->ReleaseLeftButton();
 }
 
 // Ensure that clicking on one item and then dragging another works as expected.
@@ -2110,73 +2268,26 @@ class NotificationIndicatorTest : public ShelfViewTest {
   DISALLOW_COPY_AND_ASSIGN(NotificationIndicatorTest);
 };
 
-// Tests that an item has a notification indicator when it recieves a
-// notification.
-TEST_F(NotificationIndicatorTest, AddedItemHasNotificationIndicator) {
-  const ShelfID id_0 = AddApp();
-  const std::string notification_id_0("notification_id_0");
-  const ShelfAppButton* button_0 = GetButtonByID(id_0);
+// Tests that an item has a notification badge indicator when the notification
+// is added and removed.
+TEST_F(NotificationIndicatorTest, ItemHasCorrectNotificationBadgeIndicator) {
+  const ShelfID item_id = AddApp();
+  const ShelfAppButton* shelf_app_button = GetButtonByID(item_id);
 
-  EXPECT_FALSE(GetItemByID(id_0).has_notification);
-  EXPECT_FALSE(button_0->state() & ShelfAppButton::STATE_NOTIFICATION);
+  EXPECT_FALSE(GetItemByID(item_id).has_notification);
+  EXPECT_FALSE(shelf_app_button->state() & ShelfAppButton::STATE_NOTIFICATION);
 
-  // Post a test notification after the item was added.
-  model_->AddNotificationRecord(id_0.app_id, notification_id_0);
+  // Add a notification for the new shelf item.
+  model_->UpdateItemNotification(item_id.app_id, true /* has_badge */);
 
-  EXPECT_TRUE(GetItemByID(id_0).has_notification);
-  EXPECT_TRUE(button_0->state() & ShelfAppButton::STATE_NOTIFICATION);
+  EXPECT_TRUE(GetItemByID(item_id).has_notification);
+  EXPECT_TRUE(shelf_app_button->state() & ShelfAppButton::STATE_NOTIFICATION);
 
-  // Post another notification for a non existing item.
-  const std::string next_app_id(GetNextAppId());
-  const std::string notification_id_1("notification_id_1");
-  model_->AddNotificationRecord(next_app_id, notification_id_1);
+  // Remove notification.
+  model_->UpdateItemNotification(item_id.app_id, false /* has_badge */);
 
-  // Add an item with matching app id.
-  const ShelfID id_1 = AddApp();
-
-  // Ensure that the app id assigned to |id_1| is the same as |next_app_id|.
-  EXPECT_EQ(next_app_id, id_1.app_id);
-  const ShelfAppButton* button_1 = GetButtonByID(id_1);
-  EXPECT_TRUE(GetItemByID(id_1).has_notification);
-  EXPECT_TRUE(button_1->state() & ShelfAppButton::STATE_NOTIFICATION);
-
-  // Remove all notifications.
-  model_->RemoveNotificationRecord(notification_id_0);
-  model_->RemoveNotificationRecord(notification_id_1);
-
-  EXPECT_FALSE(GetItemByID(id_0).has_notification);
-  EXPECT_FALSE(button_0->state() & ShelfAppButton::STATE_NOTIFICATION);
-  EXPECT_FALSE(GetItemByID(id_1).has_notification);
-  EXPECT_FALSE(button_1->state() & ShelfAppButton::STATE_NOTIFICATION);
-}
-
-// Tests that the notification indicator is active until all notifications have
-// been removed.
-TEST_F(NotificationIndicatorTest,
-       NotificationIndicatorStaysActiveUntilNotificationsAreGone) {
-  const ShelfID app = AddApp();
-  const ShelfAppButton* button = GetButtonByID(app);
-
-  // Add two notifications for the same app.
-  const std::string notification_id_0("notification_id_0");
-  model_->AddNotificationRecord(app.app_id, notification_id_0);
-  const std::string notification_id_1("notification_id_1");
-  model_->AddNotificationRecord(app.app_id, notification_id_1);
-
-  EXPECT_TRUE(GetItemByID(app).has_notification);
-  EXPECT_TRUE(button->state() & ShelfAppButton::STATE_NOTIFICATION);
-
-  // Remove one notification, indicator should stay active.
-  model_->RemoveNotificationRecord(notification_id_0);
-
-  EXPECT_TRUE(GetItemByID(app).has_notification);
-  EXPECT_TRUE(button->state() & ShelfAppButton::STATE_NOTIFICATION);
-
-  // Remove the last notification, indicator should not be active.
-  model_->RemoveNotificationRecord(notification_id_1);
-
-  EXPECT_FALSE(GetItemByID(app).has_notification);
-  EXPECT_FALSE(button->state() & ShelfAppButton::STATE_NOTIFICATION);
+  EXPECT_FALSE(GetItemByID(item_id).has_notification);
+  EXPECT_FALSE(shelf_app_button->state() & ShelfAppButton::STATE_NOTIFICATION);
 }
 
 class ShelfViewVisibleBoundsTest : public ShelfViewTest,
@@ -2296,7 +2407,8 @@ class ListMenuShelfItemDelegate : public ShelfItemDelegate {
   void ItemSelected(std::unique_ptr<ui::Event> event,
                     int64_t display_id,
                     ShelfLaunchSource source,
-                    ItemSelectedCallback callback) override {
+                    ItemSelectedCallback callback,
+                    const ItemFilterPredicate& filter_predicate) override {
     // Two items are needed to show a menu; the data in the items is not tested.
     std::move(callback).Run(SHELF_ACTION_NONE, {{}, {}});
   }

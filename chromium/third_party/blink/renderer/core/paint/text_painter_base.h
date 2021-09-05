@@ -7,7 +7,7 @@
 
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/layout/geometry/physical_rect.h"
-#include "third_party/blink/renderer/core/paint/decoration_info.h"
+#include "third_party/blink/renderer/core/paint/text_decoration_info.h"
 #include "third_party/blink/renderer/core/paint/text_paint_style.h"
 #include "third_party/blink/renderer/core/style/applied_text_decoration.h"
 #include "third_party/blink/renderer/core/style/text_decoration_thickness.h"
@@ -36,7 +36,7 @@ class CORE_EXPORT TextPainterBase {
   TextPainterBase(GraphicsContext&,
                   const Font&,
                   const PhysicalOffset& text_origin,
-                  const PhysicalRect& text_bounds,
+                  const PhysicalRect& text_frame_rect,
                   bool horizontal);
   ~TextPainterBase();
 
@@ -53,35 +53,18 @@ class CORE_EXPORT TextPainterBase {
                                     GraphicsContextStateSaver&);
 
   void PaintDecorationsExceptLineThrough(const TextDecorationOffsetBase&,
-                                         const DecorationInfo&,
+                                         TextDecorationInfo&,
                                          const PaintInfo&,
                                          const Vector<AppliedTextDecoration>&,
                                          const TextPaintStyle& text_style,
                                          bool* has_line_through_decoration);
-  void PaintDecorationsOnlyLineThrough(const DecorationInfo&,
+  void PaintDecorationsOnlyLineThrough(TextDecorationInfo&,
                                        const PaintInfo&,
                                        const Vector<AppliedTextDecoration>&,
                                        const TextPaintStyle&);
   void PaintDecorationUnderOrOverLine(GraphicsContext&,
-                                      const DecorationInfo&,
-                                      const AppliedTextDecoration&,
-                                      size_t decoration_info_thickness_index,
-                                      int line_offset,
-                                      float decoration_offset);
-
-  void ComputeDecorationInfo(DecorationInfo&,
-                             const PhysicalOffset& box_origin,
-                             PhysicalOffset local_origin,
-                             LayoutUnit width,
-                             FontBaseline,
-                             const ComputedStyle&,
-                             const ComputedStyle* decorating_box_style);
-
-  float ComputeUnderlineThickness(
-      const ResolvedUnderlinePosition& underline_position,
-      const TextDecorationThickness& applied_decoration_thickness,
-      const ComputedStyle&,
-      const ComputedStyle* decorating_box_style);
+                                      TextDecorationInfo&,
+                                      TextDecoration line);
 
   static Color TextColorForWhiteBackground(Color);
   static TextPaintStyle TextPaintingStyle(const Document&,
@@ -115,7 +98,7 @@ class CORE_EXPORT TextPainterBase {
   GraphicsContext& graphics_context_;
   const Font& font_;
   PhysicalOffset text_origin_;
-  PhysicalRect text_bounds_;
+  PhysicalRect text_frame_rect_;
   bool horizontal_;
   bool has_combined_text_;
   AtomicString emphasis_mark_;

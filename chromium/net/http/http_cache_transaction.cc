@@ -188,7 +188,6 @@ HttpCache::Transaction::Transaction(RequestPriority priority, HttpCache* cache)
       shared_writing_error_(OK),
       cache_entry_status_(CacheEntryStatus::ENTRY_UNDEFINED),
       validation_cause_(VALIDATION_CAUSE_UNDEFINED),
-      cant_conditionalize_zero_freshness_from_memhint_(false),
       recorded_histograms_(false),
       parallel_writing_pattern_(PARALLEL_WRITING_NONE),
       moved_network_transaction_to_writers_(false),
@@ -569,9 +568,15 @@ void HttpCache::Transaction::SetWebSocketHandshakeStreamCreateHelper(
 }
 
 void HttpCache::Transaction::SetBeforeNetworkStartCallback(
-    const BeforeNetworkStartCallback& callback) {
+    BeforeNetworkStartCallback callback) {
   DCHECK(!network_trans_);
-  before_network_start_callback_ = callback;
+  before_network_start_callback_ = std::move(callback);
+}
+
+void HttpCache::Transaction::SetConnectedCallback(
+    const ConnectedCallback& callback) {
+  DCHECK(!network_trans_);
+  connected_callback_ = callback;
 }
 
 void HttpCache::Transaction::SetRequestHeadersCallback(
@@ -1124,7 +1129,6 @@ int HttpCache::Transaction::DoOpenOrCreateEntry() {
     // below --- as we've already dropped the old entry.
     couldnt_conditionalize_request_ = true;
     validation_cause_ = VALIDATION_CAUSE_ZERO_FRESHNESS;
-    cant_conditionalize_zero_freshness_from_memhint_ = true;
     UpdateCacheEntryStatus(CacheEntryStatus::ENTRY_CANT_CONDITIONALIZE);
   }
 
@@ -1684,7 +1688,9 @@ int HttpCache::Transaction::DoSendRequest() {
     return rv;
   }
 
-  network_trans_->SetBeforeNetworkStartCallback(before_network_start_callback_);
+  network_trans_->SetBeforeNetworkStartCallback(
+      std::move(before_network_start_callback_));
+  network_trans_->SetConnectedCallback(connected_callback_);
   network_trans_->SetRequestHeadersCallback(request_headers_callback_);
   network_trans_->SetResponseHeadersCallback(response_headers_callback_);
 
@@ -3486,11 +3492,6 @@ void HttpCache::Transaction::RecordHistograms() {
   if (cache_entry_status_ == CacheEntryStatus::ENTRY_CANT_CONDITIONALIZE) {
     UMA_HISTOGRAM_ENUMERATION("HttpCache.CantConditionalizeCause",
                               validation_cause_, VALIDATION_CAUSE_MAX);
-    if (validation_cause_ == VALIDATION_CAUSE_ZERO_FRESHNESS) {
-      UMA_HISTOGRAM_BOOLEAN(
-          "HttpCache.CantConditionalizeZeroFreshnessFromMemHint",
-          cant_conditionalize_zero_freshness_from_memhint_);
-    }
   }
 
   if (cache_entry_status_ == CacheEntryStatus::ENTRY_OTHER)

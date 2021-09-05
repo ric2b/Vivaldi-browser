@@ -19,11 +19,11 @@ import org.chromium.base.IntentUtils;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.browser.ActivityTabProvider;
 import org.chromium.chrome.browser.ActivityTabProvider.HintlessActivityTabObserver;
-import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.ServiceTabLauncher;
 import org.chromium.chrome.browser.WarmupManager;
 import org.chromium.chrome.browser.WebContentsFactory;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.app.tab_activity_glue.ReparentingDelegateFactory;
 import org.chromium.chrome.browser.browserservices.BrowserServicesIntentDataProvider;
 import org.chromium.chrome.browser.compositor.CompositorViewHolder;
@@ -42,6 +42,7 @@ import org.chromium.chrome.browser.init.StartupTabPreloader;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.lifecycle.InflationObserver;
 import org.chromium.chrome.browser.metrics.UmaSessionStats;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.RedirectHandlerTabHelper;
 import org.chromium.chrome.browser.tab.Tab;
@@ -105,6 +106,8 @@ public class CustomTabActivityTabController implements InflationObserver {
     private final StartupTabPreloader mStartupTabPreloader;
     private final ReparentingTaskProvider mReparentingTaskProvider;
     private final Lazy<CustomTabIncognitoManager> mCustomTabIncognitoManager;
+    private final ProfileProvider mProfileProvider;
+    private final Lazy<AsyncTabParamsManager> mAsyncTabParamsManager;
 
     @Nullable
     private final CustomTabsSessionToken mSession;
@@ -130,7 +133,8 @@ public class CustomTabActivityTabController implements InflationObserver {
             CustomTabNavigationEventObserver tabNavigationEventObserver,
             CustomTabActivityTabProvider tabProvider, StartupTabPreloader startupTabPreloader,
             ReparentingTaskProvider reparentingTaskProvider,
-            Lazy<CustomTabIncognitoManager> customTabIncognitoManager) {
+            Lazy<CustomTabIncognitoManager> customTabIncognitoManager,
+            ProfileProvider profileProvider, Lazy<AsyncTabParamsManager> asyncTabParamsManager) {
         mCustomTabDelegateFactory = customTabDelegateFactory;
         mActivity = activity;
         mConnection = connection;
@@ -148,6 +152,8 @@ public class CustomTabActivityTabController implements InflationObserver {
         mStartupTabPreloader = startupTabPreloader;
         mReparentingTaskProvider = reparentingTaskProvider;
         mCustomTabIncognitoManager = customTabIncognitoManager;
+        mProfileProvider = profileProvider;
+        mAsyncTabParamsManager = asyncTabParamsManager;
 
         mSession = mIntentDataProvider.getSession();
         mIntent = mIntentDataProvider.getIntent();
@@ -268,8 +274,8 @@ public class CustomTabActivityTabController implements InflationObserver {
         }
 
         LoadUrlParams loadUrlParams = new LoadUrlParams(mIntentDataProvider.getUrlToLoad());
-        String referrer = mConnection.getReferrer(mSession, mIntent);
-        if (referrer != null && !referrer.isEmpty()) {
+        String referrer = IntentHandler.getReferrerUrlIncludingExtraHeaders(mIntent);
+        if (!TextUtils.isEmpty(referrer)) {
             loadUrlParams.setReferrer(new Referrer(referrer, ReferrerPolicy.DEFAULT));
         }
 
@@ -339,7 +345,7 @@ public class CustomTabActivityTabController implements InflationObserver {
         // when we have compositor related controllers.
         if (mode == TabCreationMode.HIDDEN) {
             TabReparentingParams params =
-                    (TabReparentingParams) AsyncTabParamsManager.remove(tab.getId());
+                    (TabReparentingParams) mAsyncTabParamsManager.get().remove(tab.getId());
             mReparentingTaskProvider.get(tab).finish(
                     ReparentingDelegateFactory.createReparentingTaskDelegate(
                             mActivity.getCompositorViewHolder(), mActivity.getWindowAndroid(),
@@ -371,7 +377,7 @@ public class CustomTabActivityTabController implements InflationObserver {
     @Nullable
     private Tab getHiddenTab() {
         String url = mIntentDataProvider.getUrlToLoad();
-        String referrerUrl = mConnection.getReferrer(mSession, mIntent);
+        String referrerUrl = IntentHandler.getReferrerUrlIncludingExtraHeaders(mIntent);
         Tab tab = mConnection.takeHiddenTab(mSession, url, referrerUrl);
         if (tab == null) return null;
         RecordHistogram.recordEnumeratedHistogram("CustomTabs.WebContentsStateOnLaunch",
@@ -442,8 +448,10 @@ public class CustomTabActivityTabController implements InflationObserver {
             return mWebContentsFactory.createWebContentsWithWarmRenderer(
                     mCustomTabIncognitoManager.get().getProfile(), false);
         } else {
-            return mWebContentsFactory.createWebContentsWithWarmRenderer(
-                    mIntentDataProvider.isIncognito(), false);
+            Profile profile = mIntentDataProvider.isIncognito()
+                    ? mProfileProvider.getPrimaryOTRProfile()
+                    : mProfileProvider.getLastUsedRegularProfile();
+            return mWebContentsFactory.createWebContentsWithWarmRenderer(profile, false);
         }
     }
 
@@ -451,7 +459,7 @@ public class CustomTabActivityTabController implements InflationObserver {
     private WebContents takeAsyncWebContents() {
         int assignedTabId = IntentUtils.safeGetIntExtra(
                 mIntent, IntentHandler.EXTRA_TAB_ID, Tab.INVALID_TAB_ID);
-        AsyncTabParams asyncParams = AsyncTabParamsManager.remove(assignedTabId);
+        AsyncTabParams asyncParams = mAsyncTabParamsManager.get().remove(assignedTabId);
         if (asyncParams == null) return null;
         return asyncParams.getWebContents();
     }

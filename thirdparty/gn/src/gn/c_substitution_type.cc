@@ -10,18 +10,21 @@
 #include "gn/err.h"
 
 const SubstitutionTypes CSubstitutions = {
-    &CSubstitutionAsmFlags,     &CSubstitutionCFlags,
-    &CSubstitutionCFlagsC,      &CSubstitutionCFlagsCc,
-    &CSubstitutionCFlagsObjC,   &CSubstitutionCFlagsObjCc,
-    &CSubstitutionDefines,      &CSubstitutionFrameworkDirs,
-    &CSubstitutionIncludeDirs,
+    &CSubstitutionAsmFlags,        &CSubstitutionCFlags,
+    &CSubstitutionCFlagsC,         &CSubstitutionCFlagsCc,
+    &CSubstitutionCFlagsObjC,      &CSubstitutionCFlagsObjCc,
+    &CSubstitutionDefines,         &CSubstitutionFrameworkDirs,
+    &CSubstitutionIncludeDirs,     &CSubstitutionSwiftModules,
 
-    &CSubstitutionLinkerInputs, &CSubstitutionLinkerInputsNewline,
-    &CSubstitutionLdFlags,      &CSubstitutionLibs,
-    &CSubstitutionSoLibs,       &CSubstitutionFrameworks,
+    &CSubstitutionLinkerInputs,    &CSubstitutionLinkerInputsNewline,
+    &CSubstitutionLdFlags,         &CSubstitutionLibs,
+    &CSubstitutionSoLibs,          &CSubstitutionFrameworks,
     &CSubstitutionRlibs,
 
     &CSubstitutionArFlags,
+
+    &CSubstitutionSwiftModuleName, &CSubstitutionSwiftBridgeHeader,
+    &CSubstitutionSwiftModuleDirs, &CSubstitutionSwiftFlags,
 };
 
 // Valid for compiler tools.
@@ -47,9 +50,20 @@ const Substitution CSubstitutionLibs = {"{{libs}}", "libs"};
 const Substitution CSubstitutionSoLibs = {"{{solibs}}", "solibs"};
 const Substitution CSubstitutionRlibs = {"{{rlibs}}", "rlibs"};
 const Substitution CSubstitutionFrameworks = {"{{frameworks}}", "frameworks"};
+const Substitution CSubstitutionSwiftModules = {"{{swiftmodules}}",
+                                                "swiftmodules"};
 
 // Valid for alink only.
 const Substitution CSubstitutionArFlags = {"{{arflags}}", "arflags"};
+
+// Valid for swift only.
+const Substitution CSubstitutionSwiftModuleName = {"{{module_name}}",
+                                                   "module_name"};
+const Substitution CSubstitutionSwiftBridgeHeader = {"{{bridge_header}}",
+                                                     "bridge_header"};
+const Substitution CSubstitutionSwiftModuleDirs = {"{{module_dirs}}",
+                                                   "module_dirs"};
+const Substitution CSubstitutionSwiftFlags = {"{{swiftflags}}", "swiftflags"};
 
 bool IsValidCompilerSubstitution(const Substitution* type) {
   return IsValidToolSubstitution(type) || IsValidSourceSubstitution(type) ||
@@ -67,6 +81,22 @@ bool IsValidCompilerOutputsSubstitution(const Substitution* type) {
          IsValidSourceSubstitution(type);
 }
 
+bool IsValidSwiftCompilerSubstitution(const Substitution* type) {
+  return IsValidToolSubstitution(type) ||
+         type == &CSubstitutionSwiftModuleName ||
+         type == &CSubstitutionLinkerInputs ||
+         type == &CSubstitutionIncludeDirs ||
+         type == &CSubstitutionSwiftBridgeHeader ||
+         type == &CSubstitutionSwiftModuleDirs ||
+         type == &CSubstitutionSwiftFlags || type == &CSubstitutionDefines;
+}
+
+bool IsValidSwiftCompilerOutputsSubstitution(const Substitution* type) {
+  return (IsValidSwiftCompilerSubstitution(type) &&
+          type != &SubstitutionOutput) ||
+         IsValidSourceSubstitution(type);
+}
+
 bool IsValidLinkerSubstitution(const Substitution* type) {
   return IsValidToolSubstitution(type) || type == &SubstitutionOutputDir ||
          type == &SubstitutionOutputExtension ||
@@ -74,7 +104,7 @@ bool IsValidLinkerSubstitution(const Substitution* type) {
          type == &CSubstitutionLinkerInputsNewline ||
          type == &CSubstitutionLdFlags || type == &CSubstitutionLibs ||
          type == &CSubstitutionSoLibs || type == &CSubstitutionFrameworks ||
-         type == &CSubstitutionRlibs;
+         type == &CSubstitutionRlibs || type == &CSubstitutionSwiftModules;
 }
 
 bool IsValidLinkerOutputsSubstitution(const Substitution* type) {

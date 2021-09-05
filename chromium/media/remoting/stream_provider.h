@@ -96,7 +96,6 @@ class StreamProvider final : public Demuxer {
 
     // DemuxerStream implementation.
     void Read(ReadCB read_cb) override;
-    bool IsReadPending() const override;
     AudioDecoderConfig audio_decoder_config() override;
     VideoDecoderConfig video_decoder_config() override;
     DemuxerStream::Type type() const override;
@@ -184,11 +183,6 @@ class StreamProvider final : public Demuxer {
     // updated in OnReadUntilCallback() which would get the message that
     // contains how many frames are sent.
     uint32_t total_received_frame_count_ = 0;
-
-    // Indicates whether Audio/VideoDecoderConfig changed and the frames with
-    // the old config are not yet consumed. The new config is stored in the end
-    // of |audio/video_decoder_config_|.
-    bool config_changed_ = false;
 
     // Indicates whether a ReadUntil RPC message was sent without receiving the
     // ReadUntilCallback message yet.

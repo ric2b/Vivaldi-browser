@@ -5,12 +5,17 @@
 #ifndef CHROMEOS_SERVICES_CROS_HEALTHD_PUBLIC_CPP_SERVICE_CONNECTION_H_
 #define CHROMEOS_SERVICES_CROS_HEALTHD_PUBLIC_CPP_SERVICE_CONNECTION_H_
 
+#include <sys/types.h>
+
 #include <cstdint>
 #include <string>
 
+#include "base/callback_forward.h"
 #include "base/optional.h"
 #include "chromeos/services/cros_healthd/public/mojom/cros_healthd.mojom.h"
 #include "chromeos/services/cros_healthd/public/mojom/cros_healthd_events.mojom.h"
+#include "chromeos/services/network_health/public/mojom/network_diagnostics.mojom.h"
+#include "chromeos/services/network_health/public/mojom/network_health.mojom.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 
 namespace chromeos {
@@ -22,6 +27,13 @@ namespace cros_healthd {
 class ServiceConnection {
  public:
   static ServiceConnection* GetInstance();
+
+  using BindNetworkHealthServiceCallback =
+      base::RepeatingCallback<mojo::PendingRemote<
+          chromeos::network_health::mojom::NetworkHealthService>()>;
+  using BindNetworkDiagnosticsRoutinesCallback =
+      base::RepeatingCallback<mojo::PendingRemote<
+          chromeos::network_diagnostics::mojom::NetworkDiagnosticsRoutines>()>;
 
   // Retrieve a list of available diagnostic routines. See
   // src/chromeos/service/cros_healthd/public/mojom/cros_healthd.mojom for
@@ -171,12 +183,19 @@ class ServiceConnection {
       mojo::PendingRemote<mojom::CrosHealthdPowerObserver>
           pending_observer) = 0;
 
-  // Gather pieces of information about the platform. See
+  // Gathers pieces of information about the platform. See
   // src/chromeos/service/cros_healthd/public/mojom/cros_healthd.mojom for
   // details.
   virtual void ProbeTelemetryInfo(
       const std::vector<mojom::ProbeCategoryEnum>& categories_to_test,
       mojom::CrosHealthdProbeService::ProbeTelemetryInfoCallback callback) = 0;
+
+  // Gathers information about a particular process on the device. See
+  // src/chromeos/service/cros_healthd/public/mojom/cros_healthd.mojom for
+  // details.
+  virtual void ProbeProcessInfo(
+      pid_t process_id,
+      mojom::CrosHealthdProbeService::ProbeProcessInfoCallback callback) = 0;
 
   // Binds |service| to an implementation of CrosHealthdDiagnosticsService. In
   // production, this implementation is provided by cros_healthd. See
@@ -191,6 +210,18 @@ class ServiceConnection {
   // details.
   virtual void GetProbeService(
       mojom::CrosHealthdProbeServiceRequest service) = 0;
+
+  // Sets a callback to request binding a PendingRemote to the
+  // NetworkHealthService. This callback is invoked once when it is set, and
+  // anytime the mojo connection to CrosHealthd is disconnected.
+  virtual void SetBindNetworkHealthServiceCallback(
+      BindNetworkHealthServiceCallback callback) = 0;
+
+  // Sets a callback to request binding a PendingRemote to the
+  // NetworkDiagnosticsRoutines interface. This callback is invoked once when it
+  // is set, and anytime the mojo connection to CrosHealthd is disconnected.
+  virtual void SetBindNetworkDiagnosticsRoutinesCallback(
+      BindNetworkDiagnosticsRoutinesCallback callback) = 0;
 
  protected:
   ServiceConnection() = default;

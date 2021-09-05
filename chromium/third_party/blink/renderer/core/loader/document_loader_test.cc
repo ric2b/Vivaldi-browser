@@ -263,26 +263,33 @@ TEST_F(DocumentLoaderSimTest, FramePolicyIntegrityOnNavigationCommit) {
       blink::mojom::blink::FeaturePolicyFeature::kPayment));
 }
 // When runtime feature DocumentPolicy is not enabled, specifying
-// Document-Policy and Require-Document-Policy should have no effect, i.e.
+// Document-Policy, Require-Document-Policy and policy attribute
+// should have no effect, i.e.
 // document load should not be blocked even if the required policy and incoming
 // policy are incompatible and calling
 // |Document::IsFeatureEnabled(DocumentPolicyFeature...)| should always return
 // true.
 TEST_F(DocumentLoaderSimTest, DocumentPolicyNoEffectWhenFlagNotSet) {
   blink::ScopedDocumentPolicyForTest sdp(false);
-  SimRequest::Params params;
-  params.response_http_headers = {
-      {"Document-Policy", "unoptimized-lossless-images;bpp=1.1"}};
+  blink::ScopedDocumentPolicyNegotiationForTest sdpn(false);
 
-  SimRequest main_resource("https://example.com", "text/html");
+  SimRequest::Params main_params;
+  main_params.response_http_headers = {
+      {"Require-Document-Policy", "lossless-images-max-bpp=1.0"}};
+
+  SimRequest::Params iframe_params;
+  iframe_params.response_http_headers = {
+      {"Document-Policy", "lossless-images-max-bpp=1.1"}};
+
+  SimRequest main_resource("https://example.com", "text/html", main_params);
   SimRequest iframe_resource("https://example.com/foo.html", "text/html",
-                             params);
+                             iframe_params);
 
   LoadURL("https://example.com");
   main_resource.Complete(R"(
     <iframe
       src="https://example.com/foo.html"
-      policy="unoptimized-lossless-images;bpp=1.0">
+      policy="lossless-images-max-bpp=1.0">
     </iframe>
   )");
 
@@ -304,18 +311,81 @@ TEST_F(DocumentLoaderSimTest, DocumentPolicyNoEffectWhenFlagNotSet) {
 
   // Unoptimized-lossless-images should still be allowed in main document.
   EXPECT_TRUE(Window().IsFeatureEnabled(
-      mojom::blink::DocumentPolicyFeature::kUnoptimizedLosslessImages,
+      mojom::blink::DocumentPolicyFeature::kLosslessImagesMaxBpp,
       PolicyValue(2.0)));
   EXPECT_TRUE(Window().IsFeatureEnabled(
-      mojom::blink::DocumentPolicyFeature::kUnoptimizedLosslessImages,
+      mojom::blink::DocumentPolicyFeature::kLosslessImagesMaxBpp,
       PolicyValue(1.0)));
 
   // Unoptimized-lossless-images should still be allowed in child document.
   EXPECT_TRUE(child_window->IsFeatureEnabled(
-      mojom::blink::DocumentPolicyFeature::kUnoptimizedLosslessImages,
+      mojom::blink::DocumentPolicyFeature::kLosslessImagesMaxBpp,
       PolicyValue(2.0)));
   EXPECT_TRUE(child_window->IsFeatureEnabled(
-      mojom::blink::DocumentPolicyFeature::kUnoptimizedLosslessImages,
+      mojom::blink::DocumentPolicyFeature::kLosslessImagesMaxBpp,
+      PolicyValue(1.0)));
+}
+
+// When runtime feature DocumentPolicyNegotiation is not enabled, specifying
+// Require-Document-Policy HTTP header and  policy attribute on iframe should
+// have no effect, i.e. document load should not be blocked even if the required
+// policy and incoming policy are incompatible. Document-Policy header should
+// function as normal.
+TEST_F(DocumentLoaderSimTest, DocumentPolicyNegotiationNoEffectWhenFlagNotSet) {
+  blink::ScopedDocumentPolicyForTest sdp(true);
+  blink::ScopedDocumentPolicyNegotiationForTest sdpn(false);
+
+  SimRequest::Params main_params;
+  main_params.response_http_headers = {
+      {"Require-Document-Policy", "lossless-images-max-bpp=1.0"}};
+
+  SimRequest::Params iframe_params;
+  iframe_params.response_http_headers = {
+      {"Document-Policy", "lossless-images-max-bpp=1.1"}};
+
+  SimRequest main_resource("https://example.com", "text/html", main_params);
+  SimRequest iframe_resource("https://example.com/foo.html", "text/html",
+                             iframe_params);
+
+  LoadURL("https://example.com");
+  main_resource.Complete(R"(
+    <iframe
+      src="https://example.com/foo.html"
+      policy="lossless-images-max-bpp=1.0">
+    </iframe>
+  )");
+
+  iframe_resource.Finish();
+  auto* child_frame = To<WebLocalFrameImpl>(MainFrame().FirstChild());
+  auto* child_window = child_frame->GetFrame()->DomWindow();
+  auto& console_messages = static_cast<frame_test_helpers::TestWebFrameClient*>(
+                               child_frame->Client())
+                               ->ConsoleMessages();
+
+  // Should not receive a console error message caused by document policy
+  // violation blocking document load.
+  EXPECT_TRUE(console_messages.IsEmpty());
+
+  EXPECT_EQ(child_window->Url(), KURL("https://example.com/foo.html"));
+
+  EXPECT_FALSE(child_window->document()->IsUseCounted(
+      mojom::WebFeature::kDocumentPolicyCausedPageUnload));
+
+  // Unoptimized-lossless-images should still be allowed in main document.
+  EXPECT_TRUE(Window().IsFeatureEnabled(
+      mojom::blink::DocumentPolicyFeature::kLosslessImagesMaxBpp,
+      PolicyValue(2.0)));
+  EXPECT_TRUE(Window().IsFeatureEnabled(
+      mojom::blink::DocumentPolicyFeature::kLosslessImagesMaxBpp,
+      PolicyValue(1.0)));
+
+  // Unoptimized-lossless-images should NOT be allowed in child document,
+  // with the threshold value specified in Document-Policy header.
+  EXPECT_FALSE(child_window->IsFeatureEnabled(
+      mojom::blink::DocumentPolicyFeature::kLosslessImagesMaxBpp,
+      PolicyValue(2.0)));
+  EXPECT_TRUE(child_window->IsFeatureEnabled(
+      mojom::blink::DocumentPolicyFeature::kLosslessImagesMaxBpp,
       PolicyValue(1.0)));
 }
 
@@ -348,9 +418,10 @@ TEST_F(DocumentLoaderSimTest, ReportRequireDocumentPolicyHeaderParsingError) {
 
 TEST_F(DocumentLoaderSimTest, ReportErrorWhenDocumentPolicyIncompatible) {
   blink::ScopedDocumentPolicyForTest sdp(true);
+  blink::ScopedDocumentPolicyNegotiationForTest sdpn(true);
   SimRequest::Params params;
   params.response_http_headers = {
-      {"Document-Policy", "unoptimized-lossless-images;bpp=1.1"}};
+      {"Document-Policy", "lossless-images-max-bpp=1.1"}};
 
   SimRequest main_resource("https://example.com", "text/html");
   SimRequest iframe_resource("https://example.com/foo.html", "text/html",
@@ -360,7 +431,7 @@ TEST_F(DocumentLoaderSimTest, ReportErrorWhenDocumentPolicyIncompatible) {
   main_resource.Complete(R"(
     <iframe
       src="https://example.com/foo.html"
-      policy="unoptimized-lossless-images;bpp=1.0">
+      policy="lossless-images-max-bpp=1.0">
     </iframe>
   )");
 
@@ -393,10 +464,11 @@ TEST_F(DocumentLoaderSimTest, ReportErrorWhenDocumentPolicyIncompatible) {
 TEST_F(DocumentLoaderSimTest,
        RequireDocumentPolicyHeaderShouldNotAffectCurrentDocument) {
   blink::ScopedDocumentPolicyForTest sdp(true);
+  blink::ScopedDocumentPolicyNegotiationForTest sdpn(true);
   SimRequest::Params params;
   params.response_http_headers = {
-      {"Require-Document-Policy", "unoptimized-lossless-images;bpp=1.0"},
-      {"Document-Policy", "unoptimized-lossless-images;bpp=1.1"}};
+      {"Require-Document-Policy", "lossless-images-max-bpp=1.0"},
+      {"Document-Policy", "lossless-images-max-bpp=1.1"}};
 
   SimRequest main_resource("https://example.com", "text/html", params);
   LoadURL("https://example.com");
@@ -412,7 +484,7 @@ TEST_F(DocumentLoaderSimTest, DocumentPolicyHeaderHistogramTest) {
   SimRequest::Params params;
   params.response_http_headers = {
       {"Document-Policy",
-       "font-display-late-swap, unoptimized-lossless-images;bpp=1.1"}};
+       "font-display-late-swap, lossless-images-max-bpp=1.1"}};
 
   SimRequest main_resource("https://example.com", "text/html", params);
   LoadURL("https://example.com");
@@ -428,6 +500,7 @@ TEST_F(DocumentLoaderSimTest, DocumentPolicyHeaderHistogramTest) {
 
 TEST_F(DocumentLoaderSimTest, DocumentPolicyPolicyAttributeHistogramTest) {
   blink::ScopedDocumentPolicyForTest sdp(true);
+  blink::ScopedDocumentPolicyNegotiationForTest sdpn(true);
   HistogramTester histogram_tester;
 
   SimRequest main_resource("https://example.com", "text/html");
@@ -437,9 +510,9 @@ TEST_F(DocumentLoaderSimTest, DocumentPolicyPolicyAttributeHistogramTest) {
   // occurrence.
   main_resource.Complete(R"(
     <iframe policy="font-display-late-swap"></iframe>
-    <iframe policy="no-font-display-late-swap"></iframe>
+    <iframe policy="font-display-late-swap=?0"></iframe>
     <iframe
-      policy="font-display-late-swap, unoptimized-lossless-images;bpp=1.1">
+      policy="font-display-late-swap, lossless-images-max-bpp=1.1">
     </iframe>
   )");
 
@@ -519,6 +592,7 @@ class DocumentPolicyHeaderUseCounterTest
 
 TEST_P(DocumentPolicyHeaderUseCounterTest, ShouldObserveUseCounterUpdate) {
   blink::ScopedDocumentPolicyForTest sdp(true);
+  blink::ScopedDocumentPolicyNegotiationForTest sdpn(true);
 
   bool has_document_policy_header, has_report_only_header, has_require_header;
   std::tie(has_document_policy_header, has_report_only_header,
@@ -527,15 +601,15 @@ TEST_P(DocumentPolicyHeaderUseCounterTest, ShouldObserveUseCounterUpdate) {
   SimRequest::Params params;
   if (has_document_policy_header) {
     params.response_http_headers.insert("Document-Policy",
-                                        "unoptimized-lossless-images;bpp=1.0");
+                                        "lossless-images-max-bpp=1.0");
   }
   if (has_report_only_header) {
     params.response_http_headers.insert("Document-Policy-Report-Only",
-                                        "unoptimized-lossless-images;bpp=1.0");
+                                        "lossless-images-max-bpp=1.0");
   }
   if (has_require_header) {
     params.response_http_headers.insert("Require-Document-Policy",
-                                        "unoptimized-lossless-images;bpp=1.0");
+                                        "lossless-images-max-bpp=1.0");
   }
   SimRequest main_resource("https://example.com", "text/html", params);
   LoadURL("https://example.com");
@@ -561,17 +635,18 @@ INSTANTIATE_TEST_SUITE_P(DocumentPolicyHeaderValues,
 TEST_F(DocumentLoaderSimTest,
        DocumentPolicyIframePolicyAttributeUseCounterTest) {
   blink::ScopedDocumentPolicyForTest sdp(true);
+  blink::ScopedDocumentPolicyNegotiationForTest sdpn(true);
   SimRequest main_resource("https://example.com", "text/html");
   SimRequest::Params iframe_params;
   iframe_params.response_http_headers = {
-      {"Document-Policy", "unoptimized-lossless-images;bpp=1.0"}};
+      {"Document-Policy", "lossless-images-max-bpp=1.0"}};
   SimRequest iframe_resource("https://example.com/foo.html", "text/html",
                              iframe_params);
   LoadURL("https://example.com");
   main_resource.Complete(R"(
     <iframe
       src="https://example.com/foo.html"
-      policy="unoptimized-lossless-images;bpp=1.0"
+      policy="lossless-images-max-bpp=1.0"
     ></iframe>
   )");
   iframe_resource.Finish();
@@ -592,16 +667,17 @@ TEST_F(DocumentLoaderSimTest,
 
 TEST_F(DocumentLoaderSimTest, RequiredDocumentPolicyUseCounterTest) {
   blink::ScopedDocumentPolicyForTest sdp(true);
+  blink::ScopedDocumentPolicyNegotiationForTest sdpn(true);
 
   SimRequest::Params main_frame_params;
   main_frame_params.response_http_headers = {
-      {"Require-Document-Policy", "unoptimized-lossless-images;bpp=1.0"}};
+      {"Require-Document-Policy", "lossless-images-max-bpp=1.0"}};
   SimRequest main_resource("https://example.com", "text/html",
                            main_frame_params);
 
   SimRequest::Params iframe_params;
   iframe_params.response_http_headers = {
-      {"Document-Policy", "unoptimized-lossless-images;bpp=1.0"}};
+      {"Document-Policy", "lossless-images-max-bpp=1.0"}};
   SimRequest iframe_resource("https://example.com/foo.html", "text/html",
                              iframe_params);
 

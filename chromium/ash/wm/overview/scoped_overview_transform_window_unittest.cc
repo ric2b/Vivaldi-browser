@@ -9,6 +9,7 @@
 #include "ash/test/ash_test_base.h"
 #include "ash/wm/overview/overview_utils.h"
 #include "ash/wm/window_state.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/test/scoped_feature_list.h"
 #include "ui/aura/window.h"
 #include "ui/display/display.h"
@@ -118,7 +119,7 @@ TEST_F(ScopedOverviewTransformWindowTest, TransformedRectIsCenteredWithInset) {
   EXPECT_LE(transformed_rect.x(), bounds.x());
   EXPECT_GE(transformed_rect.right(), bounds.right());
   EXPECT_GE(
-      transformed_rect.y() + gfx::ToCeiledInt(scale * inset) - header_height,
+      transformed_rect.y() + base::ClampCeil(scale * inset) - header_height,
       bounds.y());
   EXPECT_LE(transformed_rect.bottom(), bounds.bottom());
   EXPECT_NEAR(transformed_rect.x() - bounds.x(),

@@ -8,6 +8,7 @@
 #include <memory>
 
 #include "ash/ambient/model/ambient_backend_model_observer.h"
+#include "ash/ambient/ui/ambient_background_image_view.h"
 #include "ash/ash_export.h"
 #include "base/macros.h"
 #include "ui/compositor/layer_animation_observer.h"
@@ -16,10 +17,6 @@
 namespace gfx {
 class ImageSkia;
 }  // namespace gfx
-
-namespace ui {
-class AnimationMetricsReporter;
-}  // namespace ui
 
 namespace ash {
 
@@ -61,8 +58,6 @@ class ASH_EXPORT PhotoView : public views::View,
   // Note that we should be careful when using |delegate_|, as there is no
   // strong guarantee on the life cycle.
   AmbientViewDelegate* const delegate_ = nullptr;
-
-  std::unique_ptr<ui::AnimationMetricsReporter> metrics_reporter_;
 
   // Image containers used for animation. Owned by view hierarchy.
   AmbientBackgroundImageView* image_views_[2]{nullptr, nullptr};

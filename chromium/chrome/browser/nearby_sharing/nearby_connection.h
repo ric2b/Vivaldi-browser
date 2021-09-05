@@ -18,28 +18,27 @@ class NearbyConnection {
  public:
   using ReadCallback =
       base::OnceCallback<void(base::Optional<std::vector<uint8_t>> bytes)>;
-  using WriteCallback = base::OnceCallback<void(bool result)>;
 
   virtual ~NearbyConnection() = default;
 
   // Reads a stream of bytes from the remote device. Invoke |callback| when
-  // there is incoming data or when the socket is closed.
+  // there is incoming data or when the socket is closed. Previously set
+  // callback will be replaced by |callback|. Must not be used on a already
+  // closed connection.
   virtual void Read(ReadCallback callback) = 0;
 
   // Writes an outgoing stream of bytes to the remote device asynchronously.
-  // Invoke |callback| with True if successful, False if failed or socket is
-  // closed.
-  virtual void Write(std::vector<uint8_t> bytes, WriteCallback callback) = 0;
+  // Must not be used on a already closed connection.
+  virtual void Write(std::vector<uint8_t> bytes) = 0;
 
-  // Closes the socket and disconnects from the remote device.
+  // Closes the socket and disconnects from the remote device. This object will
+  // be invalidated after |callback| in SetDisconnectionListener is invoked.
   virtual void Close() = 0;
 
-  // Return True if the socket is closed, False otherwise.
-  virtual bool IsClosed() = 0;
-
   // Listens to the socket being closed. Invoke |callback| when the socket is
-  // closed.
-  virtual void RegisterForDisconnection(base::OnceClosure callback) = 0;
+  // closed. This object will be invalidated after |listener| is invoked.
+  // Previously set listener will be replaced by |listener|.
+  virtual void SetDisconnectionListener(base::OnceClosure listener) = 0;
 };
 
 #endif  // CHROME_BROWSER_NEARBY_SHARING_NEARBY_CONNECTION_H_

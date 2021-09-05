@@ -12,7 +12,6 @@ import android.view.LayoutInflater;
 import android.view.ViewGroup;
 
 import androidx.annotation.Nullable;
-import androidx.annotation.VisibleForTesting;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -67,14 +66,16 @@ class TabSelectionEditorCoordinator {
         /**
          * Configure the Toolbar for TabSelectionEditor. The default button text is "Group".
          * @param actionButtonText Button text for the action button.
+         * @param actionButtonDescriptionResourceId Content description template resource Id for the
+         *         action button. This should be in a plurals form.
          * @param actionProvider The {@link TabSelectionEditorActionProvider} that specifies the
          *         action when action button gets clicked.
          * @param actionButtonEnablingThreshold The minimum threshold to enable the action button.
          *         If it's -1 use the default value.
          * @param navigationProvider The {@link TabSelectionEditorNavigationProvider} that specifies
-         *                           the action when navigation button gets clicked.
          */
         void configureToolbar(@Nullable String actionButtonText,
+                @Nullable Integer actionButtonDescriptionResourceId,
                 @Nullable TabSelectionEditorActionProvider actionProvider,
                 int actionButtonEnablingThreshold,
                 @Nullable TabSelectionEditorNavigationProvider navigationProvider);
@@ -208,8 +209,14 @@ class TabSelectionEditorCoordinator {
     /**
      * @return The {@link TabSelectionEditorLayout} for testing.
      */
-    @VisibleForTesting
-    public TabSelectionEditorLayout getTabSelectionEditorLayoutForTesting() {
+    TabSelectionEditorLayout getTabSelectionEditorLayoutForTesting() {
         return mTabSelectionEditorLayout;
+    }
+
+    /**
+     * @return The {@link TabListRecyclerView} for testing.
+     */
+    TabListRecyclerView getTabListRecyclerViewForTesting() {
+        return mTabListCoordinator.getContainerView();
     }
 }

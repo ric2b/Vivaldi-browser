@@ -10,17 +10,21 @@
 #include "base/containers/flat_map.h"
 #include "base/strings/string16.h"
 #include "build/build_config.h"
+#include "content/public/browser/bluetooth_chooser.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/native_widget_types.h"
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include "content/public/browser/native_web_keyboard_event.h"
 #endif
 
 class GURL;
 
 namespace content {
+class JavaScriptDialogManager;
+class RenderFrameHost;
 class Shell;
+class ShellPlatformDataAura;
 class WebContents;
 
 class ShellPlatformDelegate {
@@ -36,6 +40,11 @@ class ShellPlatformDelegate {
   // Called after creating a Shell instance, with its initial size.
   virtual void CreatePlatformWindow(Shell* shell,
                                     const gfx::Size& initial_size);
+
+  // Notifies of a top-level or nested web contents being created for, or
+  // attached to, the Shell.
+  virtual void DidCreateOrAttachWebContents(Shell* shell,
+                                            WebContents* web_contents);
 
   // Called from the Shell destructor to let each platform do any necessary
   // cleanup.
@@ -65,6 +74,22 @@ class ShellPlatformDelegate {
   // WebContentsObserver.
   virtual void RenderViewReady(Shell* shell);
 
+  // Allows platforms to override the JavascriptDialogManager. By default
+  // returns null, which signals that the Shell should use its own instance.
+  virtual std::unique_ptr<JavaScriptDialogManager>
+  CreateJavaScriptDialogManager(Shell* shell);
+
+  // Allows platforms to create and run a BluetoothChoose. By default returns
+  // null, which means no chooser is run at all.
+  virtual std::unique_ptr<BluetoothChooser> RunBluetoothChooser(
+      Shell* shell,
+      RenderFrameHost* frame,
+      const BluetoothChooser::EventHandler& event_handler);
+
+  // Allows platforms to prevent running insecure content. By default returns
+  // false, only allowing what Shell allows on its own.
+  virtual bool ShouldAllowRunningInsecureContent(Shell* shell);
+
   // Destroy the Shell. Returns true if the ShellPlatformDelegate did the
   // destruction. Returns false if the Shell should destroy itself.
   virtual bool DestroyShell(Shell* shell);
@@ -74,11 +99,13 @@ class ShellPlatformDelegate {
   virtual gfx::NativeWindow GetNativeWindow(Shell* shell);
 #endif
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   // Activate (make key) the native window, and focus the web contents.
   virtual void ActivateContents(Shell* shell, WebContents* contents);
 
-  // Handle
+  virtual void DidNavigateMainFramePostCommit(Shell* shell,
+                                              WebContents* contents);
+
   virtual bool HandleKeyboardEvent(Shell* shell,
                                    WebContents* source,
                                    const NativeWebKeyboardEvent& event);
@@ -99,12 +126,20 @@ class ShellPlatformDelegate {
   void LoadProgressChanged(Shell* shell, double progress);
 #endif
 
+ protected:
+#if defined(USE_AURA) && !defined(TOOLKIT_VIEWS)
+  // Helper to avoid duplicating aura's ShellPlatformDelegate in web tests. If
+  // this hack gets expanded to become more expansive then we should just
+  // duplicate the aura ShellPlatformDelegate code to the web test code impl in
+  // WebTestShellPlatformDelegate.
+  ShellPlatformDataAura* GetShellPlatformDataAura();
+#endif
+
  private:
   // Data held for each Shell instance, since there is one ShellPlatformDelegate
   // for the whole browser process (shared across Shells). This is defined for
   // each platform implementation.
   struct ShellData;
-
   // Holds an instance of ShellData for each Shell.
   base::flat_map<Shell*, ShellData> shell_data_map_;
 

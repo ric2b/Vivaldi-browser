@@ -36,8 +36,8 @@
 #include "third_party/blink/public/platform/web_media_source.h"
 #include "third_party/blink/renderer/bindings/core/v8/active_script_wrappable.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context_lifecycle_observer.h"
-#include "third_party/blink/renderer/core/fileapi/url_registry.h"
 #include "third_party/blink/renderer/core/html/media/media_source.h"
+#include "third_party/blink/renderer/core/html/media/media_source_tracer.h"
 #include "third_party/blink/renderer/core/html/time_ranges.h"
 #include "third_party/blink/renderer/modules/event_target_modules.h"
 #include "third_party/blink/renderer/modules/mediasource/source_buffer.h"
@@ -55,7 +55,6 @@ class MediaSourceImpl final : public EventTargetWithInlineData,
                               public ActiveScriptWrappable<MediaSourceImpl>,
                               public ExecutionContextLifecycleObserver {
   DEFINE_WRAPPERTYPEINFO();
-  USING_GARBAGE_COLLECTED_MIXIN(MediaSourceImpl);
 
  public:
   static const AtomicString& OpenKeyword();
@@ -91,10 +90,10 @@ class MediaSourceImpl final : public EventTargetWithInlineData,
   void setLiveSeekableRange(double start, double end, ExceptionState&);
   void clearLiveSeekableRange(ExceptionState&);
 
-  static bool isTypeSupported(const String& type);
+  static bool isTypeSupported(ExecutionContext* context, const String& type);
 
   // html/media/MediaSource interface implementation
-  bool StartAttachingToMediaElement(HTMLMediaElement*) override;
+  MediaSourceTracer* StartAttachingToMediaElement(HTMLMediaElement*) override;
   void CompleteAttachingToMediaElement(
       std::unique_ptr<WebMediaSource>) override;
   void Close() override;
@@ -115,19 +114,12 @@ class MediaSourceImpl final : public EventTargetWithInlineData,
   // ExecutionContextLifecycleObserver interface
   void ContextDestroyed() override;
 
-  // URLRegistrable interface
-  URLRegistry& Registry() const override;
-
   // Used by SourceBuffer.
   void OpenIfInEndedState();
   bool IsOpen() const;
   void SetSourceBufferActive(SourceBuffer*, bool);
   HTMLMediaElement* MediaElement() const;
   void EndOfStreamAlgorithm(const WebMediaSource::EndOfStreamStatus);
-
-  // Used by MediaSourceRegistry.
-  void AddedToRegistry();
-  void RemovedFromRegistry();
 
   void Trace(Visitor*) const override;
 
@@ -141,6 +133,9 @@ class MediaSourceImpl final : public EventTargetWithInlineData,
                                                          const String& codecs,
                                                          ExceptionState&);
   void ScheduleEvent(const AtomicString& event_name);
+  static void RecordIdentifiabilityMetric(ExecutionContext* context,
+                                          const String& type,
+                                          bool result);
 
   // Implements the duration change algorithm.
   // http://w3c.github.io/media-source/#duration-change-algorithm
@@ -162,8 +157,6 @@ class MediaSourceImpl final : public EventTargetWithInlineData,
   Member<SourceBufferList> active_source_buffers_;
 
   Member<TimeRanges> live_seekable_range_;
-
-  int added_to_registry_counter_;
 };
 
 }  // namespace blink

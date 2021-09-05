@@ -189,6 +189,7 @@ void FrameSequenceTracker::ReportBeginMainFrame(
       begin_main_frame_data_.previous_sequence_delta;
   previous_begin_main_sequence_ = current_begin_main_sequence_;
   current_begin_main_sequence_ = args.frame_id.sequence_number;
+  no_damage_impl_frames_while_expecting_main_ = 0;
 }
 
 void FrameSequenceTracker::ReportMainFrameProcessed(
@@ -376,6 +377,8 @@ void FrameSequenceTracker::ReportFrameEnd(
     begin_impl_frame_data_.previous_sequence = 0;
     if (!IsExpectingMainFrame())
       --aggregated_throughput().frames_expected;
+    else
+      ++no_damage_impl_frames_while_expecting_main_;
   }
   // last_submitted_frame_ == 0 means the last impl frame has been presented.
   if (termination_status_ == TerminationStatus::kScheduledForTermination &&
@@ -447,6 +450,9 @@ void FrameSequenceTracker::ReportFramePresented(
     if (metrics()->GetEffectiveThread() == ThreadType::kCompositor) {
       metrics()->AdvanceTrace(feedback.timestamp);
     }
+
+    metrics()->ComputeJank(FrameSequenceMetrics::ThreadType::kCompositor,
+                           feedback.timestamp, feedback.interval);
   }
 
   if (was_presented) {
@@ -466,6 +472,9 @@ void FrameSequenceTracker::ReportFramePresented(
       if (metrics()->GetEffectiveThread() == ThreadType::kMain) {
         metrics()->AdvanceTrace(feedback.timestamp);
       }
+
+      metrics()->ComputeJank(FrameSequenceMetrics::ThreadType::kMain,
+                             feedback.timestamp, feedback.interval);
     }
 
     if (impl_frames_produced > 0) {
@@ -522,7 +531,7 @@ void FrameSequenceTracker::ReportFramePresented(
                                  : feedback.interval;
       DCHECK(!interval.is_zero()) << TRACKER_DCHECK_MSG;
       constexpr base::TimeDelta kEpsilon = base::TimeDelta::FromMilliseconds(1);
-      int64_t frames = (difference + kEpsilon) / interval;
+      int64_t frames = (difference + kEpsilon).IntDiv(interval);
       metrics_->add_checkerboarded_frames(frames);
     }
 
@@ -603,6 +612,16 @@ void FrameSequenceTracker::ReportMainFrameCausedNoDamage(
       << TRACKER_DCHECK_MSG;
   last_no_main_damage_sequence_ = args.frame_id.sequence_number;
   --main_throughput().frames_expected;
+  // Compute the number of actually expected compositor frames during this main
+  // frame, which produced no damage..
+  DCHECK_GE(aggregated_throughput().frames_expected,
+            no_damage_impl_frames_while_expecting_main_)
+      << TRACKER_DCHECK_MSG;
+  aggregated_throughput().frames_expected -=
+      no_damage_impl_frames_while_expecting_main_;
+  DCHECK_GE(aggregated_throughput().frames_expected,
+            aggregated_throughput().frames_produced)
+      << TRACKER_DCHECK_MSG;
   DCHECK_GE(main_throughput().frames_expected, main_frames_.size())
       << TRACKER_DCHECK_MSG;
 

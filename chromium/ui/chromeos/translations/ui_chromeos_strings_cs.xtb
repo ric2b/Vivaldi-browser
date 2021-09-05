@@ -21,6 +21,7 @@
 <translation id="1150565364351027703">Sluneční brýle</translation>
 <translation id="115443833402798225">Hangul Ahnmatae</translation>
 <translation id="1155759005174418845">katalánština</translation>
+<translation id="1172970565351728681">Zbývá přibližně: <ph name="REMAINING_TIME" /></translation>
 <translation id="1173894706177603556">Přejmenovat</translation>
 <translation id="117624967391683467">Kopírování souboru <ph name="FILE_NAME" />...</translation>
 <translation id="1178581264944972037">Pozastavit</translation>
@@ -106,7 +107,6 @@
 <translation id="2085470240340828803">Soubor s názvem <ph name="FILENAME" /> již existuje. Co chcete udělat?</translation>
 <translation id="2121825465123208577">Změnit velikost</translation>
 <translation id="2136953289241069843">Přepis (namaste → नमस्कार)</translation>
-<translation id="2138867954865495510">Soubor „<ph name="PATH" />“ nelze otevřít: <ph name="ERROR_MESSAGE" /></translation>
 <translation id="2163152940313951844">Neplatný znak: <ph name="CHARACTER_NAME" /></translation>
 <translation id="2164862903024139959">Vietnamská klávesnice (TCVN)</translation>
 <translation id="2168214441502403371">Perská klávesnice</translation>
@@ -198,6 +198,7 @@
 <translation id="3236289833370040187">Vlastnictví bude převedeno na <ph name="DESTINATION_DOMAIN" />.</translation>
 <translation id="3241720467332021590">irština</translation>
 <translation id="3245321423178950146">Neznámý interpret</translation>
+<translation id="3248185426436836442">Nevyřízeno</translation>
 <translation id="3252266817569339921">francouzština</translation>
 <translation id="3254434849914415189">Vyberte pro soubory <ph name="FILE_TYPE" /> výchozí aplikaci:</translation>
 <translation id="3264582393905923483">Kontext</translation>
@@ -208,6 +209,7 @@
 <translation id="3335337277364016868">Rok nahrávky</translation>
 <translation id="3338239663705455570">Slovinská klávesnice</translation>
 <translation id="3353984535370177728">Vyberte složku pro nahrání</translation>
+<translation id="3356580349448036450">Dokončeno</translation>
 <translation id="3399597614303179694">Makedonská klávesnice</translation>
 <translation id="3414856743105198592">Formátování vyměnitelného média vymaže všechna data. Chcete pokračovat?</translation>
 <translation id="3437801641691368414">Čas vytvoření</translation>
@@ -243,6 +245,7 @@
 <translation id="3780536599611287598">K přesunutí souborů do složky „<ph name="FOLDER_NAME" />“ nemáte oprávnění.</translation>
 <translation id="3786301125658655746">Jste offline</translation>
 <translation id="3789841737615482174">Instalovat</translation>
+<translation id="3793469551756281394">Zbývá přibližně: <ph name="REMAINING_TIME_HOUR" /> <ph name="REMAINING_TIME_MINUTE" /></translation>
 <translation id="3798449238516105146">Verze</translation>
 <translation id="3801082500826908679">faerština</translation>
 <translation id="3809272675881623365">Králík</translation>
@@ -299,6 +302,7 @@
 <translation id="4481711095103932593">Tato složka je sdílena se systémem Windows</translation>
 <translation id="4487088045714738411">Belgická klávesnice</translation>
 <translation id="4522570452068850558">Podrobnosti</translation>
+<translation id="4542387084127299777">Soubor „<ph name="PATH" />“ nelze otevřít:</translation>
 <translation id="4552678318981539154">Koupit větší úložiště</translation>
 <translation id="4559767610552730302">Rozostření</translation>
 <translation id="4572815280350369984">Soubor <ph name="FILE_TYPE" /></translation>
@@ -510,6 +514,7 @@
 <translation id="6629841649550503054">Vše je zálohováno na <ph name="BEGIN_LINK" />Disku Google<ph name="END_LINK" />!</translation>
 <translation id="6643016212128521049">Vymazat</translation>
 <translation id="6650726141019353908">Růžový motýl</translation>
+<translation id="6657585470893396449">Heslo</translation>
 <translation id="6710213216561001401">Předchozí</translation>
 <translation id="6718273304615422081">Komprimování...</translation>
 <translation id="6751256176799620176">Je vybrána 1 složka</translation>
@@ -550,7 +555,6 @@
 <translation id="7012943028104619157"><ph name="ROOT_TITLE" /> (<ph name="ROOT_SUMMARY" />)</translation>
 <translation id="7014174261166285193">Instalace se nezdařila.</translation>
 <translation id="7040138676081995583">Otevřít v aplikaci...</translation>
-<translation id="7059566040011178088">Méně než <ph name="REMAINING_TIME" /></translation>
 <translation id="7100897339030255923">Vybrané položky: <ph name="COUNT" /></translation>
 <translation id="7106346894903675391">Koupit větší úložiště...</translation>
 <translation id="7126604456862387217">&lt;b&gt;<ph name="SEARCH_STRING" />&lt;/b&gt; – &lt;em&gt;vyhledat na Disku&lt;/em&gt;</translation>
@@ -661,7 +665,6 @@
 <translation id="8193175696669055101">Model zařízení</translation>
 <translation id="8208580316430297579">Umělecké dílo</translation>
 <translation id="8223479393428528563">Chcete-li tyto soubory uložit pro používání offline, vraťte se zpět online, klikněte na ně pravým tlačítkem a vyberte možnost <ph name="OFFLINE_CHECKBOX_NAME" />.</translation>
-<translation id="8231972167769262174">Asi <ph name="REMAINING_TIME" /></translation>
 <translation id="8249296373107784235">Zrušit</translation>
 <translation id="8261506727792406068">Smazat</translation>
 <translation id="8269755669432358899">Sbalit panely zpětné vazby k souborům</translation>
@@ -724,6 +727,7 @@
 <translation id="9065203028668620118">Upravit</translation>
 <translation id="9099674669267916096">Počet stránek</translation>
 <translation id="9110990317705400362">Neustále hledáme způsoby, jak zvýšit bezpečnost prohlížení. V minulosti vás k přidání rozšíření do prohlížeče mohl vyzvat kterýkoliv web. V nejnovějších verzích Google Chrome musíte Chromu výslovně sdělit, že rozšíření chcete nainstalovat. Učiníte tak tím, že rozšíření přidáte na stránce Rozšíření. <ph name="BEGIN_LINK" />Další informace<ph name="END_LINK" /></translation>
+<translation id="9111102763498581341">Odemknout</translation>
 <translation id="912419004897138677">Kodek</translation>
 <translation id="9129931661813833980">Připnout složku</translation>
 <translation id="9130775360844693113">Členové týmu <ph name="DESTINATION_NAME" /> získají přístup k těmto položkám.</translation>

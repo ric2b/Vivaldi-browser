@@ -248,11 +248,10 @@ ExecutionContext* ExecutionContextFromV8Wrappable(const Range* range) {
 }
 
 ExecutionContext* ExecutionContextFromV8Wrappable(const DOMParser* parser) {
-  return parser->GetDocument() ? parser->GetDocument()->GetExecutionContext()
-                               : nullptr;
+  return parser->GetWindow();
 }
 
-v8::MaybeLocal<v8::Function> CreateNamedConstructorFunction(
+v8::MaybeLocal<v8::Value> CreateNamedConstructorFunction(
     ScriptState* script_state,
     v8::FunctionCallback callback,
     const char* func_name,
@@ -262,6 +261,10 @@ v8::MaybeLocal<v8::Function> CreateNamedConstructorFunction(
   const DOMWrapperWorld& world = script_state->World();
   V8PerIsolateData* per_isolate_data = V8PerIsolateData::From(isolate);
   const void* callback_key = reinterpret_cast<const void*>(callback);
+
+  if (!script_state->ContextIsValid()) {
+    return v8::Undefined(isolate);
+  }
 
   // Named constructors are not interface objcets (despite that they're
   // pretending so), but we reuse the cache of interface objects, which just
@@ -287,7 +290,7 @@ v8::MaybeLocal<v8::Function> CreateNamedConstructorFunction(
   V8PerContextData* per_context_data = V8PerContextData::From(context);
   v8::Local<v8::Function> function;
   if (!function_template->GetFunction(context).ToLocal(&function)) {
-    return v8::MaybeLocal<v8::Function>();
+    return v8::MaybeLocal<v8::Value>();
   }
   v8::Local<v8::Object> prototype_object =
       per_context_data->PrototypeForType(wrapper_type_info);
@@ -298,7 +301,7 @@ v8::MaybeLocal<v8::Function> CreateNamedConstructorFunction(
                static_cast<v8::PropertyAttribute>(v8::ReadOnly | v8::DontEnum |
                                                   v8::DontDelete))
            .To(&did_define)) {
-    return v8::MaybeLocal<v8::Function>();
+    return v8::MaybeLocal<v8::Value>();
   }
   CHECK(did_define);
   return function;
@@ -343,6 +346,82 @@ v8::Local<v8::Array> EnumerateIndexedProperties(v8::Isolate* isolate,
     elements.UncheckedAppend(v8::Integer::New(isolate, i));
   return v8::Array::New(isolate, elements.data(), elements.size());
 }
+
+#if defined(USE_BLINK_V8_BINDING_NEW_IDL_INTERFACE)
+
+template <typename IDLType,
+          typename ArgType,
+          void (Element::*MemFunc)(const QualifiedName&, ArgType)>
+void PerformAttributeSetCEReactionsReflect(
+    const v8::FunctionCallbackInfo<v8::Value>& info,
+    const QualifiedName& content_attribute,
+    const char* interface_name,
+    const char* attribute_name) {
+  v8::Isolate* isolate = info.GetIsolate();
+  ExceptionState exception_state(isolate, ExceptionState::kSetterContext,
+                                 interface_name, attribute_name);
+  if (UNLIKELY(info.Length() < 1)) {
+    exception_state.ThrowTypeError(
+        ExceptionMessages::NotEnoughArguments(1, info.Length()));
+    return;
+  }
+
+  // [Reflect]
+  V0CustomElementProcessingStack::CallbackDeliveryScope v0_custom_element_scope;
+  // [CEReactions]
+  CEReactionsScope ce_reactions_scope;
+
+  Element* blink_receiver = V8Element::ToWrappableUnsafe(info.This());
+  auto&& arg_value = NativeValueTraits<IDLType>::NativeValue(isolate, info[0],
+                                                             exception_state);
+  if (exception_state.HadException())
+    return;
+
+  (blink_receiver->*MemFunc)(content_attribute, arg_value);
+}
+
+void PerformAttributeSetCEReactionsReflectTypeBoolean(
+    const v8::FunctionCallbackInfo<v8::Value>& info,
+    const QualifiedName& content_attribute,
+    const char* interface_name,
+    const char* attribute_name) {
+  PerformAttributeSetCEReactionsReflect<IDLBoolean, bool,
+                                        &Element::SetBooleanAttribute>(
+      info, content_attribute, interface_name, attribute_name);
+}
+
+void PerformAttributeSetCEReactionsReflectTypeString(
+    const v8::FunctionCallbackInfo<v8::Value>& info,
+    const QualifiedName& content_attribute,
+    const char* interface_name,
+    const char* attribute_name) {
+  PerformAttributeSetCEReactionsReflect<IDLStringV2, const AtomicString&,
+                                        &Element::setAttribute>(
+      info, content_attribute, interface_name, attribute_name);
+}
+
+void PerformAttributeSetCEReactionsReflectTypeStringLegacyNullToEmptyString(
+    const v8::FunctionCallbackInfo<v8::Value>& info,
+    const QualifiedName& content_attribute,
+    const char* interface_name,
+    const char* attribute_name) {
+  PerformAttributeSetCEReactionsReflect<IDLStringTreatNullAsEmptyStringV2,
+                                        const AtomicString&,
+                                        &Element::setAttribute>(
+      info, content_attribute, interface_name, attribute_name);
+}
+
+void PerformAttributeSetCEReactionsReflectTypeStringOrNull(
+    const v8::FunctionCallbackInfo<v8::Value>& info,
+    const QualifiedName& content_attribute,
+    const char* interface_name,
+    const char* attribute_name) {
+  PerformAttributeSetCEReactionsReflect<
+      IDLNullable<IDLStringV2>, const AtomicString&, &Element::setAttribute>(
+      info, content_attribute, interface_name, attribute_name);
+}
+
+#endif  // USE_BLINK_V8_BINDING_NEW_IDL_INTERFACE
 
 }  // namespace bindings
 

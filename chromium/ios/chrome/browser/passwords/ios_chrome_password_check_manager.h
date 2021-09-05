@@ -6,6 +6,7 @@
 #define IOS_CHROME_BROWSER_PASSWORDS_IOS_CHROME_PASSWORD_CHECK_MANAGER_H_
 
 #include "base/memory/scoped_refptr.h"
+#include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/observer_list_types.h"
 #include "components/password_manager/core/browser/ui/bulk_leak_check_service_adapter.h"
@@ -14,21 +15,29 @@
 #include "components/password_manager/core/browser/ui/saved_passwords_presenter.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 
+class IOSChromePasswordCheckManager;
+namespace {
+class IOSChromePasswordCheckManagerProxy;
+}
+
 // Enum which represents possible states of Password Check on UI.
 // It's created based on BulkLeakCheckService::State.
 enum class PasswordCheckState {
+  kCanceled,
   kIdle,
+  kNoPasswords,
+  kOffline,
+  kOther,
+  kQuotaLimit,
   kRunning,
   kSignedOut,
-  kOffline,
-  kNoPasswords,
-  kQuotaLimit,
-  kOther,
 };
 
 // This class handles the bulk password check feature.
 class IOSChromePasswordCheckManager
-    : public password_manager::SavedPasswordsPresenter::Observer,
+    : public base::SupportsWeakPtr<IOSChromePasswordCheckManager>,
+      public base::RefCounted<IOSChromePasswordCheckManager>,
+      public password_manager::SavedPasswordsPresenter::Observer,
       public password_manager::CompromisedCredentialsManager::Observer,
       public password_manager::BulkLeakCheckServiceInterface::Observer {
  public:
@@ -40,11 +49,11 @@ class IOSChromePasswordCheckManager
             credentials) {}
   };
 
-  explicit IOSChromePasswordCheckManager(ChromeBrowserState* browser_state);
-  ~IOSChromePasswordCheckManager() override;
-
   // Requests to start a check for compromised passwords.
   void StartPasswordCheck();
+
+  // Stops checking for compromised passwords.
+  void StopPasswordCheck();
 
   // Returns the current state of the password check.
   PasswordCheckState GetPasswordCheckState() const;
@@ -56,12 +65,36 @@ class IOSChromePasswordCheckManager
   std::vector<password_manager::CredentialWithPassword>
   GetCompromisedCredentials() const;
 
+  password_manager::SavedPasswordsPresenter::SavedPasswordsView
+  GetSavedPasswordsFor(
+      const password_manager::CredentialWithPassword& credential) const;
+
+  // Edits password for |form|.
+  void EditPasswordForm(const autofill::PasswordForm& form,
+                        base::StringPiece password);
+
+  // Edits password form using |compromised_credentials_manager_|.
+  void EditCompromisedPasswordForm(const autofill::PasswordForm& form,
+                                   base::StringPiece password);
+
+  // Deletes |form| and its duplicates.
+  void DeletePasswordForm(const autofill::PasswordForm& form);
+
+  // Deletes compromised credentials which are related to |form|.
+  void DeleteCompromisedPasswordForm(const autofill::PasswordForm& form);
+
   void AddObserver(Observer* observer) { observers_.AddObserver(observer); }
   void RemoveObserver(Observer* observer) {
     observers_.RemoveObserver(observer);
   }
 
  private:
+  friend class RefCounted<IOSChromePasswordCheckManager>;
+  friend class IOSChromePasswordCheckManagerProxy;
+
+  explicit IOSChromePasswordCheckManager(ChromeBrowserState* browser_state);
+  ~IOSChromePasswordCheckManager() override;
+
   // password_manager::SavedPasswordsPresenter::Observer:
   void OnSavedPasswordsChanged(
       password_manager::SavedPasswordsPresenter::SavedPasswordsView passwords)
@@ -101,6 +134,18 @@ class IOSChromePasswordCheckManager
   password_manager::BulkLeakCheckServiceAdapter
       bulk_leak_check_service_adapter_;
 
+  // Boolean that remembers whether the delegate is initialized. This is done
+  // when the delegate obtains the list of saved passwords for the first time.
+  bool is_initialized_ = false;
+
+  // Boolean that indicate whether Password Check should be started right after
+  // delegate is initialized.
+  bool start_check_on_init_ = false;
+
+  // Time when password check was started. Used to calculate delay in case
+  // when password check run less than 3 seconds.
+  base::Time start_time_;
+
   // A scoped observer for |saved_passwords_presenter_|.
   ScopedObserver<password_manager::SavedPasswordsPresenter,
                  password_manager::SavedPasswordsPresenter::Observer>
@@ -118,6 +163,8 @@ class IOSChromePasswordCheckManager
 
   // Observers to listen to password check changes.
   base::ObserverList<Observer> observers_;
+
+  base::WeakPtrFactory<IOSChromePasswordCheckManager> weak_ptr_factory_{this};
 };
 
 #endif  // IOS_CHROME_BROWSER_PASSWORDS_IOS_CHROME_PASSWORD_CHECK_MANAGER_H_

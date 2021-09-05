@@ -34,7 +34,9 @@ class AppServiceImpl : public apps::mojom::AppService {
   AppServiceImpl(
       PrefService* profile_prefs,
       const base::FilePath& profile_dir,
-      base::OnceClosure read_completed_for_testing = base::OnceClosure());
+      bool is_share_intents_supported,
+      base::OnceClosure read_completed_for_testing = base::OnceClosure(),
+      base::OnceClosure write_completed_for_testing = base::OnceClosure());
   ~AppServiceImpl() override;
 
   static void RegisterProfilePrefs(PrefRegistrySimple* registry);
@@ -53,7 +55,7 @@ class AppServiceImpl : public apps::mojom::AppService {
   void LoadIcon(apps::mojom::AppType app_type,
                 const std::string& app_id,
                 apps::mojom::IconKeyPtr icon_key,
-                apps::mojom::IconCompression icon_compression,
+                apps::mojom::IconType icon_type,
                 int32_t size_hint_in_dip,
                 bool allow_placeholder_icon,
                 LoadIconCallback callback) override;
@@ -79,6 +81,7 @@ class AppServiceImpl : public apps::mojom::AppService {
                      apps::mojom::PermissionPtr permission) override;
   void Uninstall(apps::mojom::AppType app_type,
                  const std::string& app_id,
+                 apps::mojom::UninstallSource uninstall_source,
                  bool clear_site_data,
                  bool report_abuse) override;
   void PauseApp(apps::mojom::AppType app_type,
@@ -143,6 +146,13 @@ class AppServiceImpl : public apps::mojom::AppService {
 
   base::FilePath profile_dir_;
 
+  // True if the kIntentHandlingSharing flag is on. This is used to see if
+  // we need to convert the stored preferred app to the new version that
+  // supports sharing.
+  // TODO(crbug.com/1092784): remove when the kIntentHandlingSharing flag is
+  // removed.
+  bool is_share_intents_supported_;
+
   // True if need to write preferred apps to file after the current write is
   // completed.
   bool should_write_preferred_apps_to_file_;
@@ -154,9 +164,9 @@ class AppServiceImpl : public apps::mojom::AppService {
   // write operation will be operated in sequence.
   scoped_refptr<base::SequencedTaskRunner> const task_runner_;
 
-  base::OnceClosure write_completed_for_testing_;
-
   base::OnceClosure read_completed_for_testing_;
+
+  base::OnceClosure write_completed_for_testing_;
 
   base::WeakPtrFactory<AppServiceImpl> weak_ptr_factory_{this};
 

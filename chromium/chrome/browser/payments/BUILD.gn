@@ -7,6 +7,7 @@ source_set("browsertests") {
 
   sources = [
     "abort_payment_handler_browsertest.cc",
+    "android_payment_app_factory_browsertest.cc",
     "colocated_payment_manifests_browsertest.cc",
     "empty_parameters_browsertest.cc",
     "has_enrolled_instrument_browsertest.cc",
@@ -14,16 +15,20 @@ source_set("browsertests") {
     "iframe_csp_browsertest.cc",
     "ignore_payment_method_browsertest.cc",
     "journey_logger_browsertest.cc",
+    "load_and_remove_iframe_with_many_payment_requests_browsertest.cc",
     "payment_handler_capabilities_browsertest.cc",
     "payment_handler_change_shipping_address_option_browsertest.cc",
     "payment_handler_enable_delegations_browsertest.cc",
+    "payment_handler_enforce_full_delegation_browsertest.cc",
     "payment_handler_exploit_browsertest.cc",
     "payment_handler_just_in_time_installation_browsertest.cc",
+    "payment_handler_uninstall_browsertest.cc",
     "payment_request_app_store_billing_browsertest.cc",
     "payment_request_can_make_payment_browsertest.cc",
     "payment_request_can_make_payment_event_browsertest.cc",
     "payment_request_minimal_ui_browsertest.cc",
     "sec_fetch_site_browsertest.cc",
+    "secure_payment_confirmation_browsertest.cc",
     "two_payment_requests_browsertest.cc",
   ]
 
@@ -38,6 +43,7 @@ source_set("browsertests") {
     "//components/payments/core",
     "//components/payments/core:test_support",
     "//components/ukm:test_support",
+    "//device/fido:test_support",
   ]
 
   if (is_android) {

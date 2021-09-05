@@ -47,7 +47,7 @@
 #include "media/base/media_switches.h"
 #include "media/capture/capture_switches.h"
 #include "media/media_buildflags.h"
-#include "services/service_manager/sandbox/switches.h"
+#include "sandbox/policy/switches.h"
 #include "third_party/blink/public/common/switches.h"
 #include "third_party/cros_system_api/switches/chrome_switches.h"
 #include "ui/base/ui_base_switches.h"
@@ -80,12 +80,12 @@ void DeriveCommandLine(const GURL& start_url,
   DCHECK_NE(&base_command_line, command_line);
 
   static const char* const kForwardSwitches[] = {
-    service_manager::switches::kDisableGpuSandbox,
-    service_manager::switches::kDisableSeccompFilterSandbox,
-    service_manager::switches::kDisableSetuidSandbox,
-    service_manager::switches::kGpuSandboxAllowSysVShm,
-    service_manager::switches::kGpuSandboxFailuresFatal,
-    service_manager::switches::kNoSandbox,
+    sandbox::policy::switches::kDisableGpuSandbox,
+    sandbox::policy::switches::kDisableSeccompFilterSandbox,
+    sandbox::policy::switches::kDisableSetuidSandbox,
+    sandbox::policy::switches::kGpuSandboxAllowSysVShm,
+    sandbox::policy::switches::kGpuSandboxFailuresFatal,
+    sandbox::policy::switches::kNoSandbox,
     ::switches::kBlinkSettings,
     ::switches::kDisable2dCanvasImageChromium,
     ::switches::kDisableAccelerated2dCanvas,
@@ -121,9 +121,6 @@ void DeriveCommandLine(const GURL& start_url,
     ::switches::kEnableViewport,
     ::switches::kEnableHardwareOverlays,
     ::switches::kEdgeTouchFiltering,
-#if BUILDFLAG(USE_CHROMEOS_MEDIA_ACCELERATION)
-    ::switches::kForceDisableNewAcceleratedVideoDecoder,
-#endif  // BUILDFLAG(USE_CHROMEOS_MEDIA_ACCELERATION)
     ::switches::kHostWindowBounds,
     ::switches::kMainFrameResizesAreOrientationChanges,
     ::switches::kForceDeviceScaleFactor,
@@ -131,6 +128,7 @@ void DeriveCommandLine(const GURL& start_url,
     ::switches::kGpuStartupDialog,
     ::switches::kGpuSandboxStartEarly,
     ::switches::kNumRasterThreads,
+    ::switches::kPlatformDisallowsChromeOSDirectVideoDecoder,
     ::switches::kPpapiFlashArgs,
     ::switches::kPpapiFlashPath,
     ::switches::kPpapiFlashVersion,
@@ -158,6 +156,7 @@ void DeriveCommandLine(const GURL& start_url,
     ::switches::kDisableWebRtcHWDecoding,
     ::switches::kDisableWebRtcHWEncoding,
     ::switches::kOzonePlatform,
+    ash::switches::kAshClearFastInkBuffer,
     ash::switches::kAshEnableTabletMode,
     ash::switches::kAshEnableWaylandServer,
     ash::switches::kAshForceEnableStylusTools,
@@ -234,7 +233,6 @@ void DeriveCommandLine(const GURL& start_url,
 void DeriveEnabledFeatures(base::CommandLine* out_command_line) {
   static const base::Feature* kForwardEnabledFeatures[] = {
       &ash::features::kAutoNightLight,
-      &display::features::kUseHDRTransferFunction,
   };
 
   std::vector<std::string> enabled_features;

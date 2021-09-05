@@ -33,6 +33,7 @@ import org.chromium.ui.resources.ResourceManager;
 import java.util.List;
 
 import org.chromium.chrome.browser.ChromeApplication;
+import org.vivaldi.browser.common.VivaldiUtils;
 
 /**
  * {@link StripLayoutTab} is used to keep track of the strip position and rendering information for
@@ -112,7 +113,9 @@ public class StripLayoutTab implements VirtualView {
     private static final int ANIM_TAB_CLOSE_BUTTON_FADE_MS = 150;
 
     // Close button width
-    private static final int CLOSE_BUTTON_WIDTH_DP = 36;
+    private static final int CLOSE_BUTTON_WIDTH_DP = 20;
+    // Vivaldi
+    private static final int CLOSE_BUTTON_WIDTH_TOTAL_DP = 5;
 
     private int mId = Tab.INVALID_TAB_ID;
 
@@ -259,6 +262,8 @@ public class StripLayoutTab implements VirtualView {
      * @return The Android resource that represents the tab background.
      */
     public int getResourceId() {
+        // Note(david@vivaldi.com): Get appropriate resource when toolbar is at the bottom.
+        if (!VivaldiUtils.isTopToolbarOn()) return R.drawable.bg_tabstrip_tab_bottom;
         return R.drawable.bg_tabstrip_tab;
     }
 
@@ -266,6 +271,9 @@ public class StripLayoutTab implements VirtualView {
      * @return The Android resource that represents the tab outline.
      */
     public int getOutlineResourceId() {
+        // Note(david@vivaldi.com): Get appropriate resource when toolbar is at the bottom.
+        if (!VivaldiUtils.isTopToolbarOn())
+            return R.drawable.bg_tabstrip_background_tab_outline_bottom;
         return R.drawable.bg_tabstrip_background_tab_outline;
     }
 
@@ -533,6 +541,8 @@ public class StripLayoutTab implements VirtualView {
      *         if the button can be clicked.
      */
     public boolean checkCloseHitTest(float x, float y) {
+        // Note(david@vivaldi.com): This will make sure that the resources are loaded correctly.
+        if (ChromeApplication.isVivaldi()) resetCloseRect();
         return mShowingCloseButton ? mCloseButton.checkClicked(x, y) : false;
     }
 
@@ -603,6 +613,8 @@ public class StripLayoutTab implements VirtualView {
         if (!LocalizationUtils.isLayoutRtl()) {
             mClosePlacement.left = getWidth() - CLOSE_BUTTON_WIDTH_DP;
             mClosePlacement.right = mClosePlacement.left + CLOSE_BUTTON_WIDTH_DP;
+            // Vivaldi
+            mClosePlacement.right -= CLOSE_BUTTON_WIDTH_TOTAL_DP;
         } else {
             mClosePlacement.left = 0;
             mClosePlacement.right = CLOSE_BUTTON_WIDTH_DP;

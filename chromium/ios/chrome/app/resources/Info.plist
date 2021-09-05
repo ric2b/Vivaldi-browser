@@ -95,6 +95,8 @@
 		<string>${CHROMIUM_HANDOFF_ID}</string>
 		<string>OpenInChromeIntent</string>
 		<string>SearchInChromeIntent</string>
+        <string>OpenInChromeIncognitoIntent</string>
+		<string>${IOS_MOVE_TAB_ACTIVITY_TYPE}</string>
 	</array>
 	<key>UIBackgroundModes</key>
 	<array>

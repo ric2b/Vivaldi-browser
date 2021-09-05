@@ -37,7 +37,8 @@ namespace autotestPrivate {
     Web,
     MacNative,
     PluginVm,
-    Lacros
+    Lacros,
+    Remote
   };
 
   // A mapping of apps::mojom::Readiness
@@ -75,6 +76,9 @@ namespace autotestPrivate {
 
   // Display orientation type.
   enum RotationType {
+    // RotateAny is the auto-rotation status (not locked to a rotation) for
+    // tablet mode. Not working in clamshell mode.
+    RotateAny,
     Rotate0,
     Rotate90,
     Rotate180,
@@ -539,6 +543,20 @@ namespace autotestPrivate {
   // called. |smoothness| is a percentage number between 0 to 100.
   callback StopSmoothnessTrackingCallback = void (long smoothness);
 
+  // Collected ui::ThroughputTracker data for one animation. It is based on
+  // cc::FrameSequenceMetrics::ThroughputData.
+  dictionary ThroughputTrackerAnimationData {
+    // Number of frames expected to be shown for this animation.
+    long framesExpected;
+    // Number of frames actually shown for this animation.
+    long framesProduced;
+  };
+
+  // Callback invoked to report the collection ui::ThroughputTracker data
+  // after stopThroughputTrackerDataCollection is called.
+  callback StopThroughputTrackerDataCollectionCallback = void
+      (ThroughputTrackerAnimationData[] data);
+
   interface Functions {
     // Must be called to allow autotestPrivateAPI events to be fired.
     static void initializeEvents();
@@ -691,17 +709,6 @@ namespace autotestPrivate {
     // |path|: The path in Downloads to read the import.
     // |callback|: Called when the operation has completed.
     static void importCrostini(DOMString path, VoidCallback callback);
-
-    // TODO(b/156566782): Remove this after M85 branches.
-    // Installs Plugin VM via the installer and then launches the VM.
-    // |imageUrl|: URL to the image to install.
-    // |imageHash|: Hash for the provided image.
-    // |licenseKey|: License key for Plugin VM.
-    // |callback|: Called when the operation has completed.
-    static void installPluginVM(DOMString imageUrl,
-                                DOMString imageHash,
-                                DOMString licenseKey,
-                                VoidCallback callback);
 
     // Sets mock Plugin VM policy.
     // |imageUrl|: URL to the image to install.
@@ -1038,6 +1045,21 @@ namespace autotestPrivate {
         long numCompletions,
         long timeout,
         VoidCallback callback);
+
+    // Disables the automation feature. Note that the event handlers and caches
+    // of automation nodes still remain in the test extension and so the next
+    // automation.getDesktop will miss initialization. The caller should ensure
+    // invalidation of those information (i.e. reloading the entire background
+    // page).
+    static void disableAutomation(VoidCallback callback);
+
+    // Starts to ui::ThroughputTracker data collection for tracked animations.
+    static void startThroughputTrackerDataCollection(VoidCallback callback);
+
+    // Stops ui::ThroughputTracker data collection and reports the collected
+    // data since the start.
+    static void stopThroughputTrackerDataCollection(
+        StopThroughputTrackerDataCollectionCallback callback);
   };
 
   interface Events {

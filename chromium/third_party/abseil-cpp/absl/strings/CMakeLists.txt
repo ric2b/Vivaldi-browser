@@ -475,6 +475,7 @@ absl_cc_test(
   COPTS
     ${ABSL_TEST_COPTS}
   DEPS
+    absl::strings
     absl::str_format_internal
     absl::raw_logging_internal
     absl::int128
@@ -547,6 +548,7 @@ absl_cc_library(
   DEPS
     absl::base
     absl::base_internal
+    absl::compressed_tuple
     absl::core_headers
     absl::endian
     absl::fixed_array

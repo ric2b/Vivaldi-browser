@@ -40,7 +40,7 @@ class OpenXrApiWrapper {
   ~OpenXrApiWrapper();
   bool IsInitialized() const;
 
-  static std::unique_ptr<OpenXrApiWrapper> Create();
+  static std::unique_ptr<OpenXrApiWrapper> Create(XrInstance instance);
 
   static VRTestHook* GetTestHook();
 
@@ -74,7 +74,7 @@ class OpenXrApiWrapper {
 
  private:
   void Reset();
-  bool Initialize();
+  bool Initialize(XrInstance instance);
   void Uninitialize();
 
   XrResult InitializeSystem();
@@ -105,7 +105,9 @@ class OpenXrApiWrapper {
   uint32_t GetRecommendedSwapchainSampleCount() const;
   XrResult UpdateStageBounds();
 
-  bool session_ended_;
+  // The session is running only after xrBeginSession and before xrEndSession.
+  // It is not considered running after creation but before xrBeginSession.
+  bool session_running_;
   bool pending_frame_;
   base::TimeTicks last_process_events_time_;
 
@@ -122,7 +124,6 @@ class OpenXrApiWrapper {
 
   // These objects are valid on successful initialization.
   XrInstance instance_;
-  OpenXRInstanceMetadata instance_metadata_;
   XrSystemId system_;
   std::vector<XrViewConfigurationView> view_configs_;
   XrEnvironmentBlendMode blend_mode_;

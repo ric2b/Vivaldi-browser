@@ -7,10 +7,17 @@ module chrome.mojom;
 // Browser process interface exposed to the renderer for communication about
 // the Live Caption feature.
 interface CaptionHost {
+  // Called when speech recognition service is ready to send transcriptions.
+  OnSpeechRecognitionReady() => (bool success);
+
   // Called when the speech recognition client receives a transcription from the
   // speech service. Returns whether the transcription result was received
   // successfully. Transcriptions will halt if this returns false.
   OnTranscription(TranscriptionResult transcription_result) => (bool success);
+
+  // Called when there is an error in the speech recognition service. Informs
+  // the UI that it should show an error message to the user.
+  OnError();
 };
 
 // A transcription result created by the speech recognition client in the

@@ -2,7 +2,6 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//build/config/jumbo.gni")
 import("//testing/libfuzzer/fuzzer_test.gni")
 import("//third_party/blink/renderer/platform/platform.gni")
 import("//third_party/protobuf/proto_library.gni")
@@ -61,8 +60,8 @@ blink_platform_sources("scheduler") {
     "common/web_resource_loading_task_runner_handle.cc",
     "common/web_thread_scheduler.cc",
     "common/worker_pool.cc",
-    "main_thread/agent_interference_recorder.cc",
-    "main_thread/agent_interference_recorder.h",
+    "main_thread/agent_group_scheduler_impl.cc",
+    "main_thread/agent_group_scheduler_impl.h",
     "main_thread/agent_scheduling_strategy.cc",
     "main_thread/agent_scheduling_strategy.h",
     "main_thread/attribution_group.h",
@@ -103,8 +102,6 @@ blink_platform_sources("scheduler") {
     "main_thread/page_visibility_state.h",
     "main_thread/pending_user_input.cc",
     "main_thread/pending_user_input.h",
-    "main_thread/queueing_time_estimator.cc",
-    "main_thread/queueing_time_estimator.h",
     "main_thread/render_widget_signals.cc",
     "main_thread/render_widget_signals.h",
     "main_thread/resource_loading_task_runner_handle_impl.cc",
@@ -121,6 +118,7 @@ blink_platform_sources("scheduler") {
     "main_thread/web_scoped_virtual_time_pauser.cc",
     "main_thread/widget_scheduler.cc",
     "main_thread/widget_scheduler.h",
+    "public/agent_group_scheduler.h",
     "public/aggregated_metric_reporter.h",
     "public/cooperative_scheduling_manager.h",
     "public/dummy_schedulers.h",
@@ -180,7 +178,7 @@ blink_platform_sources("scheduler") {
   ]
 }
 
-jumbo_source_set("test_support") {
+source_set("test_support") {
   testonly = true
 
   sources = [
@@ -191,8 +189,6 @@ jumbo_source_set("test_support") {
     "test/recording_task_time_observer.cc",
     "test/recording_task_time_observer.h",
     "test/renderer_scheduler_test_support.cc",
-    "test/test_queueing_time_estimator_client.cc",
-    "test/test_queueing_time_estimator_client.h",
     "test/web_fake_thread_scheduler.cc",
     "test/web_fake_widget_scheduler.cc",
     "test/web_fake_widget_scheduler.h",
@@ -210,7 +206,7 @@ jumbo_source_set("test_support") {
   configs += [ "//third_party/blink/renderer/platform:blink_platform_config" ]
 }
 
-jumbo_source_set("unit_tests") {
+source_set("unit_tests") {
   testonly = true
 
   sources = [
@@ -225,7 +221,6 @@ jumbo_source_set("unit_tests") {
     "common/tracing_helper_unittest.cc",
     "common/ukm_task_sampler_unittest.cc",
     "common/worker_pool_unittest.cc",
-    "main_thread/agent_interference_recorder_unittest.cc",
     "main_thread/agent_scheduling_strategy_unittest.cc",
     "main_thread/auto_advancing_virtual_time_domain_unittest.cc",
     "main_thread/deadline_task_runner_unittest.cc",
@@ -238,7 +233,6 @@ jumbo_source_set("unit_tests") {
     "main_thread/memory_purge_manager_unittest.cc",
     "main_thread/page_scheduler_impl_unittest.cc",
     "main_thread/pending_user_input_unittest.cc",
-    "main_thread/queueing_time_estimator_unittest.cc",
     "main_thread/render_widget_signals_unittest.cc",
     "main_thread/user_model_unittest.cc",
     "worker/worker_scheduler_proxy_unittest.cc",
@@ -258,24 +252,7 @@ jumbo_source_set("unit_tests") {
   configs += [ "//third_party/blink/renderer/platform:blink_platform_config" ]
 }
 
-source_set("perf_tests") {
-  testonly = true
-
-  sources = [ "test/queueing_time_estimator_perf_test.cc" ]
-
-  deps = [
-    "//base",
-    "//base/test:test_support",
-    "//testing/gmock",
-    "//testing/gtest",
-    "//testing/perf",
-    "//third_party/blink/public:test_support",
-  ]
-
-  configs += [ "//third_party/blink/renderer/platform:blink_platform_config" ]
-}
-
-jumbo_source_set("scheduler_fuzzer_tests") {
+source_set("scheduler_fuzzer_tests") {
   testonly = true
 
   sources = []
@@ -287,7 +264,7 @@ jumbo_source_set("scheduler_fuzzer_tests") {
     "//third_party/blink/renderer/platform/scheduler:test_support",
   ]
 
-  if (is_linux) {
+  if (is_linux || is_chromeos) {
     sources += [
       "test/fuzzer/sequence_manager_fuzzer_processor.cc",
       "test/fuzzer/sequence_manager_fuzzer_processor.h",

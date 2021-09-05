@@ -16,7 +16,7 @@
 
 namespace bookmarks {
 
-#if !defined(OS_MACOSX)
+#if !defined(OS_APPLE)
 namespace {
 constexpr size_t kMaxVectorPreallocateSize = 10000;
 }  // namespace
@@ -46,7 +46,7 @@ BookmarkNodeData::Element::Element(const Element& other) = default;
 BookmarkNodeData::Element::~Element() {
 }
 
-#if !defined(OS_MACOSX)
+#if !defined(OS_APPLE)
 void BookmarkNodeData::Element::WriteToPickle(base::Pickle* pickle) const {
   pickle->WriteBool(is_url);
   pickle->WriteString(url.spec());
@@ -135,12 +135,12 @@ BookmarkNodeData::BookmarkNodeData(
 BookmarkNodeData::~BookmarkNodeData() {
 }
 
-#if !defined(OS_MACOSX)
+#if !defined(OS_APPLE)
 // static
 bool BookmarkNodeData::ClipboardContainsBookmarks() {
   return ui::Clipboard::GetForCurrentThread()->IsFormatAvailable(
       ui::ClipboardFormatType::GetType(kClipboardFormatString),
-      ui::ClipboardBuffer::kCopyPaste);
+      ui::ClipboardBuffer::kCopyPaste, /* data_dst = */ nullptr);
 }
 #endif
 
@@ -174,7 +174,7 @@ bool BookmarkNodeData::ReadFromTuple(const GURL& url,
   return true;
 }
 
-#if !defined(OS_MACOSX)
+#if !defined(OS_APPLE)
 void BookmarkNodeData::WriteToClipboard() {
   ui::ScopedClipboardWriter scw(ui::ClipboardBuffer::kCopyPaste);
 
@@ -222,7 +222,7 @@ bool BookmarkNodeData::ReadFromClipboard(ui::ClipboardBuffer buffer) {
   std::string data;
   ui::Clipboard* clipboard = ui::Clipboard::GetForCurrentThread();
   clipboard->ReadData(ui::ClipboardFormatType::GetType(kClipboardFormatString),
-                      &data);
+                      /* data_dst = */ nullptr, &data);
 
   if (!data.empty()) {
     base::Pickle pickle(data.data(), static_cast<int>(data.size()));
@@ -232,7 +232,7 @@ bool BookmarkNodeData::ReadFromClipboard(ui::ClipboardBuffer buffer) {
 
   base::string16 title;
   std::string url;
-  clipboard->ReadBookmark(&title, &url);
+  clipboard->ReadBookmark(/* data_dst = */ nullptr, &title, &url);
   if (!url.empty()) {
     Element element;
     element.is_url = true;
@@ -284,7 +284,7 @@ bool BookmarkNodeData::ReadFromPickle(base::Pickle* pickle) {
   return true;
 }
 
-#endif  // OS_MACOSX
+#endif  // OS_APPLE
 
 std::vector<const BookmarkNode*> BookmarkNodeData::GetNodes(
     BookmarkModel* model,

@@ -67,7 +67,7 @@
 #include "net/cert/cert_verify_result.h"
 #include "net/cert/mock_cert_verifier.h"
 #include "net/cookies/canonical_cookie.h"
-#include "net/cookies/cookie_inclusion_status.h"
+#include "net/cookies/cookie_access_result.h"
 #include "net/cookies/cookie_options.h"
 #include "net/cookies/cookie_store.h"
 #include "net/cookies/cookie_util.h"
@@ -103,6 +103,7 @@
 #include "net/test/spawned_test_server/spawned_test_server.h"
 #include "net/test/test_data_directory.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
+#include "net/url_request/referrer_policy.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_builder.h"
 #include "net/url_request/url_request_job_factory.h"
@@ -122,11 +123,11 @@
 #include "services/network/public/mojom/url_loader.mojom-shared.h"
 #include "services/network/test/fake_test_cert_verifier_params_factory.h"
 #include "services/network/test/test_url_loader_client.h"
+#include "services/network/test/udp_socket_test_util.h"
+#include "services/network/test_mojo_proxy_resolver_factory.h"
 #include "services/network/trust_tokens/pending_trust_token_store.h"
 #include "services/network/trust_tokens/trust_token_parameterization.h"
 #include "services/network/trust_tokens/trust_token_store.h"
-#include "services/network/udp_socket_test_util.h"
-#include "test_mojo_proxy_resolver_factory.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
@@ -1364,9 +1365,8 @@ TEST_F(NetworkContextTest, Referrers) {
   ASSERT_TRUE(test_server.Start());
 
   for (bool validate_referrer_policy_on_initial_request : {false, true}) {
-    for (net::URLRequest::ReferrerPolicy referrer_policy :
-         {net::URLRequest::NEVER_CLEAR_REFERRER,
-          net::URLRequest::NO_REFERRER}) {
+    for (net::ReferrerPolicy referrer_policy :
+         {net::ReferrerPolicy::NEVER_CLEAR, net::ReferrerPolicy::NO_REFERRER}) {
       mojom::NetworkContextParamsPtr context_params = CreateContextParams();
       context_params->validate_referrer_policy_on_initial_request =
           validate_referrer_policy_on_initial_request;
@@ -1399,7 +1399,7 @@ TEST_F(NetworkContextTest, Referrers) {
       // If validating referrers, and the referrer policy is not to send
       // referrers, the request should fail.
       if (validate_referrer_policy_on_initial_request &&
-          referrer_policy == net::URLRequest::NO_REFERRER) {
+          referrer_policy == net::ReferrerPolicy::NO_REFERRER) {
         EXPECT_EQ(net::ERR_BLOCKED_BY_CLIENT,
                   client.completion_status().error_code);
         EXPECT_FALSE(client.response_body().is_valid());
@@ -1412,7 +1412,7 @@ TEST_F(NetworkContextTest, Referrers) {
       ASSERT_TRUE(client.response_body().is_valid());
       EXPECT_TRUE(mojo::BlockingCopyToString(client.response_body_release(),
                                              &response_body));
-      if (referrer_policy == net::URLRequest::NO_REFERRER) {
+      if (referrer_policy == net::ReferrerPolicy::NO_REFERRER) {
         // If not validating referrers, and the referrer policy is not to send
         // referrers, the referrer should be cleared.
         EXPECT_EQ("None", response_body);
@@ -1905,6 +1905,116 @@ TEST_F(NetworkContextTest, LookupServerBasicAuthCredentials) {
   EXPECT_FALSE(result.has_value());
 }
 
+#if defined(OS_CHROMEOS)
+base::Optional<net::AuthCredentials> GetProxyAuthCredentials(
+    NetworkContext* network_context,
+    const net::ProxyServer& proxy_server,
+    const std::string& scheme,
+    const std::string& realm) {
+  base::RunLoop run_loop;
+  base::Optional<net::AuthCredentials> result;
+  network_context->LookupProxyAuthCredentials(
+      proxy_server, scheme, realm,
+      base::BindLambdaForTesting(
+          [&](const base::Optional<net::AuthCredentials>& credentials) {
+            result = credentials;
+            run_loop.Quit();
+          }));
+  run_loop.Run();
+  return result;
+}
+
+TEST_F(NetworkContextTest, LookupProxyAuthCredentials) {
+  GURL http_proxy("http://bar.test:1080");
+  GURL https_proxy("https://bar.test:443");
+  GURL http_proxy2("http://bar.test:443");
+  GURL foo_proxy("foo://bar.test:1080");
+  GURL server_origin("http://foo.test:3128");
+
+  std::unique_ptr<NetworkContext> network_context =
+      CreateContextWithParams(CreateContextParams());
+  network_context->SetSplitAuthCacheByNetworkIsolationKey(true);
+  net::HttpAuthCache* cache = network_context->url_request_context()
+                                  ->http_transaction_factory()
+                                  ->GetSession()
+                                  ->http_auth_cache();
+
+  base::string16 user = base::ASCIIToUTF16("user");
+  base::string16 password = base::ASCIIToUTF16("pass");
+  cache->Add(http_proxy, net::HttpAuth::AUTH_PROXY, "Realm",
+             net::HttpAuth::AUTH_SCHEME_BASIC, net::NetworkIsolationKey(),
+             "basic realm=Realm", net::AuthCredentials(user, password),
+             /* path = */ "");
+  cache->Add(https_proxy, net::HttpAuth::AUTH_PROXY, "Realm",
+             net::HttpAuth::AUTH_SCHEME_BASIC, net::NetworkIsolationKey(),
+             "basic realm=Realm", net::AuthCredentials(user, password),
+             /* path = */ "");
+  cache->Add(server_origin, net::HttpAuth::AUTH_SERVER, "Realm",
+             net::HttpAuth::AUTH_SCHEME_BASIC, net::NetworkIsolationKey(),
+             "basic realm=Realm", net::AuthCredentials(user, password),
+             /* path = */ "/");
+  base::Optional<net::AuthCredentials> result = GetProxyAuthCredentials(
+      network_context.get(),
+      net::ProxyServer(net::ProxyServer::Scheme::SCHEME_HTTP,
+                       net::HostPortPair::FromURL(http_proxy)),
+      "bAsIc", "Realm");
+  ASSERT_TRUE(result.has_value());
+  EXPECT_EQ(user, result->username());
+  EXPECT_EQ(password, result->password());
+
+  result = GetProxyAuthCredentials(
+      network_context.get(),
+      net::ProxyServer(net::ProxyServer::Scheme::SCHEME_HTTPS,
+                       net::HostPortPair::FromURL(https_proxy)),
+      "bAsIc", "Realm");
+  ASSERT_TRUE(result.has_value());
+  EXPECT_EQ(user, result->username());
+  EXPECT_EQ(password, result->password());
+
+  // Check that the proxy scheme is taken into account when looking for
+  // credentials
+  result = GetProxyAuthCredentials(
+      network_context.get(),
+      net::ProxyServer(net::ProxyServer::Scheme::SCHEME_HTTP,
+                       net::HostPortPair::FromURL(http_proxy2)),
+      "basic", "Realm");
+  EXPECT_FALSE(result.has_value());
+
+  // Check that the proxy authentication method is taken into account when
+  // looking for credentials
+  result = GetProxyAuthCredentials(
+      network_context.get(),
+      net::ProxyServer(net::ProxyServer::Scheme::SCHEME_HTTP,
+                       net::HostPortPair::FromURL(http_proxy)),
+      "digest", "Realm");
+  EXPECT_FALSE(result.has_value());
+
+  // Check that the realm is taken into account when looking for credentials
+  result = GetProxyAuthCredentials(
+      network_context.get(),
+      net::ProxyServer(net::ProxyServer::Scheme::SCHEME_HTTP,
+                       net::HostPortPair::FromURL(http_proxy)),
+      "basic", "Realm 2");
+  EXPECT_FALSE(result.has_value());
+
+  // All non-https proxies are cached as "http://" proxies
+  result = GetProxyAuthCredentials(
+      network_context.get(),
+      net::ProxyServer(net::ProxyServer::Scheme::SCHEME_HTTP,
+                       net::HostPortPair::FromURL(foo_proxy)),
+      "basic", "Realm");
+  EXPECT_FALSE(result.has_value());
+
+  // Server credentials should not be returned
+  result = GetProxyAuthCredentials(
+      network_context.get(),
+      net::ProxyServer(net::ProxyServer::Scheme::SCHEME_HTTP,
+                       net::HostPortPair::FromURL(server_origin)),
+      "basic", "Realm");
+  EXPECT_FALSE(result.has_value());
+}
+#endif
+
 #if BUILDFLAG(ENABLE_REPORTING)
 TEST_F(NetworkContextTest, ClearReportingCacheReports) {
   auto reporting_context = std::make_unique<net::TestReportingContext>(
@@ -2264,8 +2374,8 @@ TEST_F(NetworkContextTest, ClearEmptyNetworkErrorLoggingWithNoService) {
 
 void SetCookieCallback(base::RunLoop* run_loop,
                        bool* result_out,
-                       net::CookieInclusionStatus result) {
-  *result_out = result.IsInclude();
+                       net::CookieAccessResult result) {
+  *result_out = result.status.IsInclude();
   run_loop->Quit();
 }
 
@@ -2889,7 +2999,7 @@ TEST_F(NetworkContextTest, CreateNetLogExporterUnbounded) {
   // net:: methods.
   EXPECT_NE(std::string::npos, contents.find("ERR_IO_PENDING")) << contents;
 
-  base::DeleteFile(temp_path, false);
+  base::DeleteFile(temp_path);
 }
 
 TEST_F(NetworkContextTest, CreateNetLogExporterErrors) {
@@ -2931,8 +3041,8 @@ TEST_F(NetworkContextTest, CreateNetLogExporterErrors) {
       net::NetLogCaptureMode::kDefault, 100 * 1024, start_callback2.callback());
   EXPECT_EQ(net::ERR_UNEXPECTED, start_callback2.WaitForResult());
 
-  base::DeleteFile(temp_path, false);
-  base::DeleteFile(temp_path2, false);
+  base::DeleteFile(temp_path);
+  base::DeleteFile(temp_path2);
 
   // Forgetting to stop is recovered from.
 }
@@ -2979,7 +3089,7 @@ TEST_F(NetworkContextTest, DestroyNetLogExporterWhileCreatingScratchDir) {
   task_environment_.RunUntilIdle();
 
   EXPECT_FALSE(base::PathExists(path));
-  base::DeleteFile(temp_path, false);
+  base::DeleteFile(temp_path);
 }
 
 net::IPEndPoint CreateExpectedEndPoint(const std::string& address,
@@ -4682,7 +4792,7 @@ TEST_F(NetworkContextTest, ForceReloadProxyConfig) {
 
   EXPECT_NE(std::string::npos, log_contents.find("\"new_config\""))
       << log_contents;
-  base::DeleteFile(net_log_path, false);
+  base::DeleteFile(net_log_path);
 }
 
 TEST_F(NetworkContextTest, ClearBadProxiesCache) {
@@ -5544,7 +5654,15 @@ class NetworkContextMockHostTest : public NetworkContextTest {
   }
 };
 
-TEST_F(NetworkContextMockHostTest, CustomProxyUsesSpecifiedProxyList) {
+#if defined(OS_LINUX)
+// Flaky crashes on Linux: https://crbug.com/1115201
+#define MAYBE_CustomProxyUsesSpecifiedProxyList \
+  DISABLED_CustomProxyUsesSpecifiedProxyList
+#else
+#define MAYBE_CustomProxyUsesSpecifiedProxyList \
+  CustomProxyUsesSpecifiedProxyList
+#endif
+TEST_F(NetworkContextMockHostTest, MAYBE_CustomProxyUsesSpecifiedProxyList) {
   net::EmbeddedTestServer proxy_test_server;
   net::test_server::RegisterDefaultHandlers(&proxy_test_server);
   ASSERT_TRUE(proxy_test_server.Start());
@@ -6620,32 +6738,6 @@ TEST_F(NetworkContextExpectBadMessageTest,
 }
 
 TEST_F(NetworkContextExpectBadMessageTest,
-       FailsTrustTokenBearingRequestFromInsecureContext) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(features::kTrustTokens);
-
-  std::unique_ptr<NetworkContext> network_context =
-      CreateContextWithParams(mojom::NetworkContextParams::New());
-
-  // Allow |network_context|'s Trust Tokens store time to initialize
-  // asynchronously, if necessary.
-  task_environment_.RunUntilIdle();
-
-  ASSERT_TRUE(network_context->trust_token_store());
-
-  ResourceRequest my_request;
-  my_request.request_initiator =
-      url::Origin::Create(GURL("http://insecure-initiator.com"));
-  my_request.trust_token_params =
-      OptionalTrustTokenParams(mojom::TrustTokenParams::New());
-
-  std::unique_ptr<TestURLLoaderClient> client =
-      FetchRequest(my_request, network_context.get());
-
-  AssertBadMessage();
-}
-
-TEST_F(NetworkContextExpectBadMessageTest,
        FailsTrustTokenRedemptionWhenForbidden) {
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitAndEnableFeature(features::kTrustTokens);
@@ -6672,7 +6764,12 @@ TEST_F(NetworkContextExpectBadMessageTest,
       FetchRequest(my_request, network_context.get(), mojom::kURLLoadOptionNone,
                    mojom::kBrowserProcessId, std::move(factory_params));
 
-  AssertBadMessage();
+  // TODO(crbug.com/1118183): This test's expectation is temporarily inverted
+  // since the the ReportBadMessage check is disabled pending investigating a
+  // number of false positives. Once this investigation is finished, we should
+  // flip the test back to expecting a bad message.
+  // AssertBadMessage();
+  EXPECT_FALSE(got_bad_message_);
 }
 
 TEST_F(NetworkContextExpectBadMessageTest,
@@ -6702,7 +6799,12 @@ TEST_F(NetworkContextExpectBadMessageTest,
       FetchRequest(my_request, network_context.get(), mojom::kURLLoadOptionNone,
                    mojom::kBrowserProcessId, std::move(factory_params));
 
-  AssertBadMessage();
+  // TODO(crbug.com/1118183): This test's expectation is temporarily inverted
+  // since the the ReportBadMessage check is disabled pending investigating a
+  // number of false positives. Once this investigation is finished, we should
+  // flip the test back to expecting a bad message.
+  // AssertBadMessage();
+  EXPECT_FALSE(got_bad_message_);
 }
 
 TEST_F(NetworkContextTest,

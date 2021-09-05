@@ -5,6 +5,7 @@
 #include "components/variations/net/variations_http_headers.h"
 
 #include <map>
+#include <memory>
 
 #include "base/bind.h"
 #include "base/macros.h"
@@ -21,6 +22,7 @@
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service.h"
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service_factory.h"
 #include "chrome/browser/predictors/predictors_features.h"
+#include "chrome/browser/predictors/predictors_switches.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/ui/browser.h"
@@ -33,7 +35,7 @@
 #include "components/optimization_guide/proto/hints.pb.h"
 #include "components/signin/public/identity_manager/identity_test_utils.h"
 #include "components/variations/net/variations_http_headers.h"
-#include "components/variations/variations_http_header_provider.h"
+#include "components/variations/variations_ids_provider.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/test/browser_test.h"
@@ -64,7 +66,7 @@ class VariationHeaderSetter : public ChromeBrowserMainExtraParts {
   void PostEarlyInitialization() override {
     // Set up some fake variations.
     auto* variations_provider =
-        variations::VariationsHttpHeaderProvider::GetInstance();
+        variations::VariationsIdsProvider::GetInstance();
     variations_provider->ForceVariationIds({"12", "456", "t789"}, "");
   }
 
@@ -80,7 +82,7 @@ class VariationsHttpHeadersBrowserTest : public InProcessBrowserTest {
 
   void CreatedBrowserMainParts(content::BrowserMainParts* parts) override {
     static_cast<ChromeBrowserMainParts*>(parts)->AddParts(
-        new VariationHeaderSetter());
+        std::make_unique<VariationHeaderSetter>());
   }
 
   void SetUp() override {
@@ -379,10 +381,10 @@ void CreateGoogleSignedInFieldTrial() {
   scoped_refptr<base::FieldTrial> trial_1(CreateTrialAndAssociateId(
       "t1", default_name, variations::GOOGLE_WEB_PROPERTIES_SIGNED_IN, 123));
 
-  auto* variations_http_header_provider =
-      variations::VariationsHttpHeaderProvider::GetInstance();
-  EXPECT_NE(variations_http_header_provider->GetClientDataHeader(true),
-            variations_http_header_provider->GetClientDataHeader(false));
+  auto* variations_ids_provider =
+      variations::VariationsIdsProvider::GetInstance();
+  EXPECT_NE(variations_ids_provider->GetClientDataHeader(true),
+            variations_ids_provider->GetClientDataHeader(false));
 }
 
 }  // namespace
@@ -437,7 +439,7 @@ IN_PROC_BROWSER_TEST_F(VariationsHttpHeadersBrowserTest, UserSignedIn) {
   base::Optional<std::string> header =
       GetReceivedHeader(GetGoogleUrl(), "X-Client-Data");
   ASSERT_TRUE(header);
-  EXPECT_EQ(*header, variations::VariationsHttpHeaderProvider::GetInstance()
+  EXPECT_EQ(*header, variations::VariationsIdsProvider::GetInstance()
                          ->GetClientDataHeader(true));
 }
 
@@ -452,7 +454,7 @@ IN_PROC_BROWSER_TEST_F(VariationsHttpHeadersBrowserTest, UserNotSignedIn) {
   base::Optional<std::string> header =
       GetReceivedHeader(GetGoogleUrl(), "X-Client-Data");
   ASSERT_TRUE(header);
-  EXPECT_EQ(*header, variations::VariationsHttpHeaderProvider::GetInstance()
+  EXPECT_EQ(*header, variations::VariationsIdsProvider::GetInstance()
                          ->GetClientDataHeader(false));
 }
 
@@ -622,6 +624,12 @@ class VariationsHttpHeadersBrowserTestWithOptimizationGuide
     std::vector<base::Feature> disabled = {
         features::kLoadingPredictorUseLocalPredictions};
     feature_list_.InitWithFeaturesAndParameters(enabled, disabled);
+  }
+
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    VariationsHttpHeadersBrowserTest::SetUpCommandLine(command_line);
+    command_line->AppendSwitch(
+        switches::kLoadingPredictorAllowLocalRequestForTesting);
   }
 
   std::unique_ptr<content::TestNavigationManager> NavigateToURLAsync(

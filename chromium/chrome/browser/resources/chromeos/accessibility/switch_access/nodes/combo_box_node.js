@@ -7,27 +7,55 @@
  * TODO(anastasi): Add a test for this class.
  */
 class ComboBoxNode extends NodeWrapper {
-  /** @override */
-  get actions() {
-    return [SwitchAccessMenuAction.INCREMENT, SwitchAccessMenuAction.DECREMENT];
+  /**
+   * @param {!AutomationNode} baseNode
+   * @param {?SARootNode} parent
+   */
+  constructor(baseNode, parent) {
+    super(baseNode, parent);
+
+    /** @private {?RepeatedEventHandler} */
+    this.expandedChangedHandler_;
   }
 
   /** @override */
-  doDefaultAction() {
-    this.performAction(SwitchAccessMenuAction.INCREMENT);
+  get actions() {
+    const actions = super.actions;
+    if (!actions.includes(SwitchAccessMenuAction.INCREMENT) &&
+        !actions.includes(SwitchAccessMenuAction.DECREMENT)) {
+      actions.push(
+          SwitchAccessMenuAction.INCREMENT, SwitchAccessMenuAction.DECREMENT);
+    }
+    return actions;
   }
 
   /** @override */
   onFocus() {
+    if (this.automationNode) {
+      this.expandedChangedHandler_ = new RepeatedEventHandler(
+          this.automationNode, chrome.automation.EventType.EXPANDED_CHANGED,
+          () => this.onExpandedChanged(), {exactMatch: true});
+    }
+
     super.onFocus();
     this.automationNode.focus();
   }
 
   /** @override */
+  onUnfocus() {
+    super.onUnfocus();
+
+    if (this.expandedChangedHandler_) {
+      this.expandedChangedHandler_.stopListening();
+      this.expandedChangedHandler_ = null;
+    }
+  }
+
+  /** @override */
   performAction(action) {
     // The box of options that typically pops up with combo boxes is not
-    // currently represented in the automation tree, so we work around that by
-    // selecting a value without opening the pop-up, using the up and down
+    // currently given a location in the automation tree, so we work around that
+    // by selecting a value without opening the pop-up, using the up and down
     // arrows.
     switch (action) {
       case SwitchAccessMenuAction.DECREMENT:
@@ -37,6 +65,15 @@ class ComboBoxNode extends NodeWrapper {
         EventHelper.simulateKeyPress(EventHelper.KeyCode.DOWN_ARROW);
         return SAConstants.ActionResponse.REMAIN_OPEN;
     }
-    return SAConstants.ActionResponse.NO_ACTION_TAKEN;
+    return super.performAction(action);
+  }
+
+  onExpandedChanged() {
+    // TODO: figure out why a short timeout is needed here.
+    window.setTimeout(() => {
+      if (this.isGroup()) {
+        NavigationManager.enterGroup();
+      }
+    }, 250);
   }
 }

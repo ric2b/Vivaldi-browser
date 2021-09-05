@@ -11,6 +11,7 @@
 #include "base/trace_event/trace_event.h"
 #include "net/http/http_status_code.h"
 #include "net/http/http_util.h"
+#include "net/url_request/redirect_info.h"
 #include "net/url_request/redirect_util.h"
 #include "services/network/public/cpp/cors/cors.h"
 #include "services/network/public/cpp/features.h"
@@ -57,10 +58,11 @@ void CheckThrottleWillNotCauseCorsPreflight(
     if (cors_exempt_header_flat_set.count(header.key) == 0 &&
         initial_cors_exempt_headers.find(header.key) ==
             initial_cors_exempt_headers.end()) {
-      NOTREACHED() << "Throttle added cors exempt header " << header.key
-                   << " but it wasn't configured as cors exempt by the "
-                      "browser. See "
-                   << "StoragePartition::UpdateCorsMitigationList().";
+      NOTREACHED()
+          << "Throttle added cors exempt header " << header.key
+          << " but it wasn't configured as cors exempt by the browser. See "
+             "content::StoragePartitionImpl::InitNetworkContext() and "
+             "content::ContentBrowserClient::ConfigureNetworkContextParams().";
     }
   }
 }
@@ -476,10 +478,8 @@ void ThrottlingURLLoader::StartNow() {
   if (!throttle_will_start_redirect_url_.is_empty()) {
     auto first_party_url_policy =
         start_info_->url_request.update_first_party_url_on_redirect
-            ? net::URLRequest::FirstPartyURLPolicy::
-                  UPDATE_FIRST_PARTY_URL_ON_REDIRECT
-            : net::URLRequest::FirstPartyURLPolicy::
-                  NEVER_CHANGE_FIRST_PARTY_URL;
+            ? net::RedirectInfo::FirstPartyURLPolicy::UPDATE_URL_ON_REDIRECT
+            : net::RedirectInfo::FirstPartyURLPolicy::NEVER_CHANGE_URL;
 
     net::RedirectInfo redirect_info = net::RedirectInfo::ComputeRedirectInfo(
         start_info_->url_request.method, start_info_->url_request.url,

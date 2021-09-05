@@ -136,6 +136,12 @@ extern const char kLogBreadcrumbsName[] = "Log Breadcrumb Events";
 extern const char kLogBreadcrumbsDescription[] =
     "When enabled, breadcrumb events will be logged.";
 
+const char kSyntheticCrashReportsForUteName[] =
+    "Generate synthetic crash reports for UTE";
+const char kSyntheticCrashReportsForUteDescription[] =
+    "When enabled the app will create synthetic crash report when chrome "
+    "starts up after Unexplained Termination Event (UTE).";
+
 const char kBreakpadNoDelayInitialUploadName[] =
     "Remove delay on initial crash upload";
 const char kBreakpadNoDelayInitialUploadDescription[] =
@@ -159,11 +165,6 @@ const char kConfirmInfobarMessagesUIName[] = "Confirm Infobars Messages UI";
 const char kConfirmInfobarMessagesUIDescription[] =
     "When enabled Confirm Infobars use the new Messages UI.";
 
-const char kContainedBVCName[] = "Contained Browser ViewController";
-const char kContainedBVCDescription[] =
-    "When enabled, the BrowserViewController is contained by the TabGrid "
-    "instead of being presented";
-
 const char kCrashRestoreInfobarMessagesUIName[] =
     "Crash Restore Infobars Messages UI";
 const char kCrashRestoreInfobarMessagesUIDescription[] =
@@ -181,10 +182,22 @@ const char kDcheckIsFatalDescription[] =
     "rather than crashing. If enabled, DCHECKs will crash the calling process.";
 #endif  // defined(DCHECK_IS_CONFIGURABLE)
 
+const char kDefaultBrowserSettingsName[] = "Setting to change Default Browser";
+const char kDefaultBrowserSettingsDescription[] =
+    "When enabled, adds a button in the settings to allow changing the default "
+    "browser in the Settings.app.";
+
 const char kDefaultToDesktopOnIPadName[] = "Request desktop version by default";
 const char kDefaultToDesktopOnIPadDescription[] =
     "By default, on iPad, the desktop version of the web sites will be "
     "requested";
+
+const char kDefaultBrowserFullscreenPromoName[] =
+    "Fullscreen modal promo about the default browser feature";
+const char kDefaultBrowserFullscreenPromoDescription[] =
+    "When enabled, will allow for a fullscreen modal promo to be shown to "
+    "users informing them about the default browser feature and providing a "
+    "button that takes users to Settings.app to update their default browser.";
 
 const char kDetectMainThreadFreezeName[] = "Detect freeze in the main thread.";
 const char kDetectMainThreadFreezeDescription[] =
@@ -196,9 +209,10 @@ const char kDisableProgressBarAnimationName[] =
 const char kDisableProgressBarAnimationDescription[] =
     "Disable progress bar animation when a page loads.";
 
-const char kDiscoverFeedInNtpName[] = "Enable Discover feed in new tab page";
+const char kDiscoverFeedInNtpName[] = "Enable new content Suggestion Feed";
 const char kDiscoverFeedInNtpDescription[] =
-    "When enabled, replaces articles feed with Discover feed in new tab page.";
+    "When enabled, replaces articles feed with new content Suggestion Feed in "
+    "the NTP.";
 
 const char kDownloadInfobarMessagesUIName[] = "Download Infobars Messages UI";
 const char kDownloadInfobarMessagesUIDescription[] =
@@ -222,10 +236,21 @@ const char kEnableAutofillCacheServerCardInfoDescription[] =
     "If enabled, when a server card is unmasked, its info will be cached until "
     "page navigation to simplify consecutive fills on the same page.";
 
+const char kEnableAutofillPasswordReauthIOSName[] =
+    "Enable Autofill reauth request for passwords";
+const char kEnableAutofillPasswordReauthIOSDescription[] =
+    "If enabled, when a credential will be filled, the browser will require "
+    "the user to authenticate with the device first.";
+
 const char kEnableClipboardProviderImageSuggestionsName[] =
     "Enable copied image provider";
 const char kEnableClipboardProviderImageSuggestionsDescription[] =
     "Enable suggesting a search for the image copied to the clipboard";
+
+const char kEnableFullPageScreenshotName[] = "Enable fullpage screenshots";
+const char kEnableFullPageScreenshotDescription[] =
+    "Enables the option of capturing an entire webpage as a PDF when a "
+    "screenshot is taken.";
 
 const char kEnableIOSManagedSettingsUIName[] = "Enable IOS Managed Settings UI";
 const char kEnableIOSManagedSettingsUIDescription[] =
@@ -245,11 +270,6 @@ const char kEnableNativeContextMenusDescription[] =
 const char kEnablePersistentDownloadsName[] = "Enable persistent downloads";
 const char kEnablePersistentDownloadsDescription[] =
     "Enables the new, experimental implementation of persistent downloads";
-
-const char kEnableSyncTrustedVaultName[] =
-    "Enable trusted vault sync passphrase type";
-const char kEnableSyncTrustedVaultDescription[] =
-    "Enables the new, experimental passphrase type for sync data";
 
 const char kExpandedTabStripName[] = "Enable expanded tabstrip";
 const char kExpandedTabStripDescription[] =
@@ -299,6 +319,12 @@ const char kInProductHelpDemoModeDescription[] =
     "start. Enabled causes all in-product help promotions to occur. Enabling "
     "an individual promotion causes that promotion but no other promotions to "
     "occur.";
+
+const char kIOSLegacyTLSInterstitialsName[] = "Show legacy TLS interstitials";
+const char kIOSLegacyTLSInterstitialsDescription[] =
+    "When enabled, an interstitial will be shown on main-frame navigations "
+    "that use legacy TLS connections, and subresources using legacy TLS "
+    "connections will be blocked.";
 
 const char kIOSLookalikeUrlNavigationSuggestionsUIName[] =
     "Lookalike URL Navigation Suggestions UI";
@@ -363,10 +389,6 @@ const char kOpenDownloadsInFilesAppDescription[] =
     "the tools menu or after pressing the 'Open in downloads' button invoked "
     "by pressing 'Open In...' after download completes.";
 
-const char kImprovedCookieControlsName[] = "Third-party cookie blocking UI";
-const char kImprovedCookieControlsDescription[] =
-    "Allows user to manage third-party cookie blocking.";
-
 const char kPasswordCheckName[] = "Bulk Password Check";
 const char kPasswordCheckDescription[] =
     "Enables the Bulk Password Check feature for signed-in users.";
@@ -381,10 +403,6 @@ const char kPointerSupportDescription[] =
     "Enables pointer support on tablets on iOS 13.4 and above.";
 #endif  // defined(__IPHONE_13_4)
 
-const char kQRCodeGenerationName[] = "QR Code Generation";
-const char kQRCodeGenerationDescription[] =
-    "Allows the generation of a QR code for a page.";
-
 const char kReloadSadTabName[] = "Reload SadTab automatically";
 const char kReloadSadTabDescription[] =
     "When enabled, the first time the renderer crashes, the page is reloaded "
@@ -395,6 +413,11 @@ const char kSafeBrowsingAvailableDescription[] =
     "When enabled, navigation URLs are compared to Safe Browsing blocklists, "
     "subject to an opt-out preference.";
 
+const char kSafeBrowsingRealTimeLookupName[] = "Enable real-time Safe Browsing";
+const char kSafeBrowsingRealTimeLookupDescription[] =
+    "When enabled, navigation URLs are checked using real-time queries to Safe "
+    "Browsing servers, subject to an opt-in preference.";
+
 const char kSafetyCheckIOSName[] = "Enable safety check on iOS";
 const char kSafetyCheckIOSDescription[] =
     "When enabled, the iOS version of safety check is available in Chrome "
@@ -403,6 +426,12 @@ const char kSafetyCheckIOSDescription[] =
 const char kSaveCardInfobarMessagesUIName[] = "Save Card Infobar Messages UI";
 const char kSaveCardInfobarMessagesUIDescription[] =
     "When enabled, Save Card Infobar uses the new Messages UI.";
+
+const char kScrollToTextIOSName[] = "Enable Scroll to Text";
+const char kScrollToTextIOSDescription[] =
+    "When enabled, opening a URL with a text fragment (e.g., "
+    "example.com/#:~:text=examples) will cause matching text in the page to be "
+    "highlighted and scrolled into view.";
 
 const char kSendTabToSelfName[] = "Send tab to self";
 const char kSendTabToSelfDescription[] =
@@ -421,9 +450,8 @@ const char kSettingsRefreshDescription[] =
 
 const char kSharedHighlightingIOSName[] = "Enable Shared Highlighting features";
 const char kSharedHighlightingIOSDescription[] =
-    "Enables support for Text Fragments (scroll-to-text based on URL "
-    "directive) and a Link to Text option in the Edit Menu which generates "
-    "these URLs.";
+    "Adds a Link to Text option in the Edit Menu which generates URLs with a "
+    "text fragment. Works best with the #scroll-to-text-ios flag.";
 
 const char kShowAutofillTypePredictionsName[] = "Show Autofill predictions";
 const char kShowAutofillTypePredictionsDescription[] =
@@ -484,6 +512,15 @@ const char kWebPageTextAccessibilityName[] =
 const char kWebPageTextAccessibilityDescription[] =
     "When enabled, text in web pages will respect the user's Dynamic Type "
     "setting.";
+
+const char kWellKnownChangePasswordName[] =
+    "Support for .well-known/change-password";
+const char kWellKnownChangePasswordDescription[] =
+    "If enabled the 'change password' button in password checkup redirects to "
+    "the .well-known/change-password path. The path is supposed to point to "
+    "the password change form of the site. When the site doesn't support "
+    ".well-known/change-password it is checked if a fallback url is available. "
+    "Otherwise the user is redirected to the origin.";
 // Please insert your name/description above in alphabetical order.
 
 }  // namespace flag_descriptions

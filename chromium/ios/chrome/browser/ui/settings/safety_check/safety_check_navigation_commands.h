@@ -9,8 +9,22 @@
 // controller.
 @protocol SafetyCheckNavigationCommands
 
-// TODO(crbug.com/1078782): Add navigation commands for updates, passwords, and
-// safe browsing.
+// Shows password issues page.
+- (void)showPasswordIssuesPage;
+
+// Opens Chrome page in App Store for updates.
+- (void)showUpdateOnAppStorePage;
+
+// Shows page with Safe Browsing preference toggle.
+- (void)showSafeBrowsingPreferencePage;
+
+// Shows the error popover with the corresponding |text|.
+- (void)showErrorInfoFrom:(UIButton*)buttonView
+                 withText:(NSAttributedString*)text;
+
+// Called when the user clicks on the information button of the managed
+// setting's UI. Shows a textual bubble with the information of the enterprise.
+- (void)showManagedInfoFrom:(UIButton*)buttonView;
 
 @end
 

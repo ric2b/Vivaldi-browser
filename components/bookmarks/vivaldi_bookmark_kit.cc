@@ -11,7 +11,9 @@
 #include "components/bookmarks/browser/base_bookmark_model_observer.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_model_observer.h"
+#include "components/bookmarks/browser/bookmark_storage.h"
 #include "components/bookmarks/browser/bookmark_utils.h"
+#include "components/bookmarks/browser/titled_url_index.h"
 #include "ui/base/models/tree_node_iterator.h"
 
 namespace bookmarks {
@@ -28,12 +30,6 @@ BookmarkNode* AsMutableNode(const BookmarkNode* node) {
 // Helper to access BookmarkModel private members
 class VivaldiBookmarkModelFriend {
  public:
-  static base::WeakPtr<BookmarkModel> GetModelWeakPtr(BookmarkModel* model) {
-    if (!model)
-      return nullptr;
-    return model->weak_factory_.GetWeakPtr();
-  }
-
   // Android-specific method to change meta that also affect url index
   static void SetNodeMetaInfoWithIndexChange(BookmarkModel* model,
                                              const BookmarkNode* node,
@@ -194,10 +190,6 @@ void RunAfterModelLoad(bookmarks::BookmarkModel* model,
   model->AddObserver(waiter);
 }
 
-base::WeakPtr<BookmarkModel> GetModelWeakPtr(BookmarkModel* model) {
-  return VivaldiBookmarkModelFriend::GetModelWeakPtr(model);
-}
-
 const std::string& ThumbnailString() {
   return GetMetaNames().thumbnail;
 }
@@ -288,6 +280,24 @@ bool DoesNickExists(const BookmarkModel* model,
       return true;
   }
   return false;
+}
+
+bool SetBookmarkThumbnail(BookmarkModel* model,
+                          int64_t bookmark_id,
+                          const std::string& url) {
+  // model should be loaded as bookmark_id comes from it.
+  DCHECK(model->loaded());
+  const BookmarkNode* node = bookmarks::GetBookmarkNodeByID(model, bookmark_id);
+  if (!node) {
+    LOG(ERROR) << "Failed to locate bookmark with id " << bookmark_id;
+    return false;
+  }
+  if (model->is_permanent_node(node)) {
+    LOG(ERROR) << "Cannot modify special bookmark " << bookmark_id;
+    return false;
+  }
+  model->SetNodeMetaInfo(node, GetMetaNames().thumbnail, url);
+  return true;
 }
 
 void SetNodeNickname(BookmarkModel* model,

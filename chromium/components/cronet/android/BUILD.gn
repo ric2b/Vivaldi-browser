@@ -346,6 +346,7 @@ android_library("cronet_impl_fake_base_java") {
     ":cronet_api_java",
     ":cronet_impl_common_base_java",
     ":cronet_impl_java_util_java",
+    "//third_party/android_deps:androidx_annotation_annotation_java",
   ]
 }
 
@@ -375,7 +376,10 @@ android_library("cronet_urlconnection_impl_java") {
     "java/src/org/chromium/net/urlconnection/CronetURLStreamHandlerFactory.java",
     "java/src/org/chromium/net/urlconnection/MessageLoop.java",
   ]
-  deps = [ ":cronet_api_java" ]
+  deps = [
+    ":cronet_api_java",
+    "//third_party/android_deps:androidx_annotation_annotation_java",
+  ]
 }
 
 # cronet_impl_native_base_java.jar - native implementation of the Cronet engine.
@@ -480,9 +484,9 @@ action("cronet_combine_proguard_flags") {
   sources = [
     "//base/android/proguard/chromium_code.flags",
 
-    # Massage the proguard rules to work with AppReduce.
-    "//components/cronet/android/cronet_appreduce_workaround.patch",
+    # Massage the proguard to avoid incompatibilities when building internally.
     "//components/cronet/android/cronet_impl_native_proguard.cfg",
+    "//components/cronet/android/cronet_workaround.patch",
   ]
   outputs = [ "$target_gen_dir/cronet_impl_native_proguard.cfg" ]
   args = [ "--output-file" ] + rebase_path(outputs, root_build_dir) +
@@ -848,7 +852,7 @@ if (!is_component_build) {
 
   android_resources("cronet_test_apk_resources") {
     testonly = true
-    custom_package = "org.chromium.net"
+    create_srcjar = false
     sources = [
       "test/res/values/strings.xml",
       "test/res/xml/network_security_config.xml",
@@ -935,6 +939,7 @@ if (!is_component_build) {
       ":cronet_impl_fake_base_java",
       ":cronet_impl_platform_base_java",
       "//base:base_java_test_support",
+      "//third_party/android_deps:androidx_test_runner_java",
       "//third_party/android_sdk:android_test_base_java",
       "//third_party/android_support_test_runner:runner_java",
       "//third_party/junit",
@@ -1003,6 +1008,7 @@ if (!is_component_build) {
       ":cronet_api_java",
       ":cronet_impl_all_java",
       ":cronet_urlconnection_impl_java",
+      "//third_party/android_deps:androidx_test_runner_java",
       "//third_party/android_sdk:android_test_base_java",
       "//third_party/android_support_test_runner:runner_java",
       "//third_party/hamcrest:hamcrest_core_java",
@@ -1012,6 +1018,11 @@ if (!is_component_build) {
   }
 
   instrumentation_test_apk("cronet_test_instrumentation_apk") {
+    # This is the only Cronet APK with lint enabled. This one was chosen because
+    # it depends on basically all source files.
+    enable_lint = true
+    lint_suppressions_file = "lint-suppressions.xml"
+
     apk_name = "CronetTestInstrumentation"
     android_manifest = "test/javatests/AndroidManifest.xml"
     min_sdk_version = _cronet_min_sdk_version
@@ -1038,6 +1049,7 @@ if (!is_component_build) {
       "//base:base_java_test_support",
       "//net/android:net_java",
       "//net/android:net_java_test_support",
+      "//third_party/android_deps:androidx_test_runner_java",
       "//third_party/android_sdk:android_test_base_java",
       "//third_party/android_sdk:android_test_mock_java",
       "//third_party/android_support_test_runner:runner_java",
@@ -1065,7 +1077,7 @@ if (!is_component_build) {
 
   android_resources("cronet_smoketests_platform_only_apk_resources") {
     testonly = true
-    custom_package = "org.chromium.net"
+    create_srcjar = false
     sources = [
       "test/smoketests/res/platform_only/values/strings.xml",
       "test/smoketests/res/platform_only/xml/network_security_config.xml",
@@ -1089,6 +1101,7 @@ if (!is_component_build) {
       ":cronet_impl_platform_base_java",
       ":cronet_smoketests_platform_only_apk_resources",
       "//base:base_java_test_support",
+      "//third_party/android_deps:androidx_test_runner_java",
       "//third_party/android_sdk:android_test_base_java",
       "//third_party/android_sdk:android_test_mock_java",
       "//third_party/android_support_test_runner:runner_java",
@@ -1123,6 +1136,7 @@ if (!is_component_build) {
       ":cronet_test_apk_resources",
       "//base:base_java",
       "//base:base_java_test_support",
+      "//third_party/android_deps:androidx_test_runner_java",
       "//third_party/android_sdk:android_test_base_java",
       "//third_party/android_sdk:android_test_mock_java",
       "//third_party/android_support_test_runner:runner_java",

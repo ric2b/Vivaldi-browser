@@ -13,7 +13,9 @@
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 
-#include "third_party/blink/renderer/platform/graphics/paint/paint_property_node.h"
+namespace blink { // Vivaldi
+class ClipPaintPropertyNode;
+}
 
 namespace cc {
 class DisplayItemList;
@@ -27,7 +29,6 @@ namespace blink {
 
 class DisplayItemList;
 class PaintChunkSubset;
-class FloatSize;
 class PropertyTreeState;
 class RasterInvalidationTracking;
 
@@ -63,7 +64,6 @@ class PLATFORM_EXPORT PaintChunksToCcLayer {
   static void ConvertInto(const PaintChunkSubset&,
                           const PropertyTreeState& layer_state,
                           const gfx::Vector2dF& layer_offset,
-                          const FloatSize& visual_rect_subpixel_offset,
                           const DisplayItemList&,
                           cc::DisplayItemList&);
 

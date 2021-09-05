@@ -24,6 +24,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
@@ -63,6 +64,7 @@ public class ManualFillingUiCaptureTest {
     @MediumTest
     @DisableFeatures(ChromeFeatureList.AUTOFILL_KEYBOARD_ACCESSORY)
     @Feature({"KeyboardAccessory", "LTR", "UiCatalogue"})
+    @DisabledTest(message = "Flaky, see https://crbug.com/1095672")
     public void testCaptureKeyboardAccessoryWithPasswords()
             throws InterruptedException, TimeoutException {
         mHelper.loadTestPage(false);
@@ -90,6 +92,7 @@ public class ManualFillingUiCaptureTest {
     @MediumTest
     @DisableFeatures(ChromeFeatureList.AUTOFILL_KEYBOARD_ACCESSORY)
     @Feature({"KeyboardAccessory", "RTL", "UiCatalogue"})
+    @DisabledTest(message = "Flaky, see https://crbug.com/1095672")
     public void testCaptureKeyboardAccessoryWithPasswordsRTL()
             throws InterruptedException, TimeoutException {
         mHelper.loadTestPage(true);
@@ -116,6 +119,7 @@ public class ManualFillingUiCaptureTest {
     @MediumTest
     @EnableFeatures(ChromeFeatureList.AUTOFILL_KEYBOARD_ACCESSORY)
     @Feature({"KeyboardAccessoryModern", "LTR", "UiCatalogue"})
+    @DisabledTest(message = "Flaky, see https://crbug.com/1095672")
     public void testCaptureKeyboardAccessoryV2WithPasswords()
             throws InterruptedException, TimeoutException {
         mHelper.loadTestPage(false);
@@ -146,6 +150,7 @@ public class ManualFillingUiCaptureTest {
     @MediumTest
     @EnableFeatures(ChromeFeatureList.AUTOFILL_KEYBOARD_ACCESSORY)
     @Feature({"KeyboardAccessoryModern", "RTL", "UiCatalogue"})
+    @DisabledTest(message = "Flaky, see https://crbug.com/1095672")
     public void testCaptureKeyboardAccessoryV2WithPasswordsRTL()
             throws InterruptedException, TimeoutException {
         mHelper.loadTestPage(true);

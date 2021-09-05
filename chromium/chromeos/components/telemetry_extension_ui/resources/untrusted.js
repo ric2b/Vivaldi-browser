@@ -1,48 +1,112 @@
 // Copyright 2020 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
-var header = document.getElementById('untrusted-title');
-header.textContent = 'Untrusted Telemetry Extension';
-
-// For testing purposes: notify the parent window the iframe has been embedded
-// successfully.
-window.addEventListener('message', event => {
-  if (event.origin.startsWith('chrome://telemetry-extension')) {
-    let data = /** @type {string} */ (event.data);
-    if (data === 'runWebWorker') {
-      runWebWorker();
-    } else if (data === 'hello') {
-      window.parent.postMessage(
-          {'success': true}, 'chrome://telemetry-extension');
-    }
-  }
-});
 
 /**
- * Starts dedicated worker.
+ * @fileoverview
+ *
+ * Diagnostic Processor Support Library (DPSL) is a collection of telemetry and
+ * diagnostics interfaces exposed to third-parties:
+ *
+ *   - chromeos.diagnostics
+ *     | Diagnostics interface for running device diagnostics routines (tests).
+ *
+ *   - chromeos.telemetry
+ *     | Telemetry (a.k.a. Probe) interface for getting device telemetry
+ *     | information.
  */
-function runWebWorker() {
-  if (!window.Worker) {
-    console.error('Error: Worker is not supported!');
-    return;
-  }
 
-  let worker = new Worker('untrusted_worker.js');
+var chromeos = {};
 
-  console.debug('Starting Worker...', worker);
+chromeos.diagnostics = null;
+
+chromeos.telemetry = null;
+
+/**
+ * This is only for testing purposes. Please don't use it in the production,
+ * because we may silently change or remove it.
+ */
+chromeos.test_support = {};
+
+(() => {
+  const messagePipe =
+      new MessagePipe('chrome://telemetry-extension', window.parent);
 
   /**
-   * Registers onmessage event handler.
-   * @param {MessageEvent} event Incoming message event.
+   * DPSL Diagnostics Requester.
    */
-  worker.onmessage = function(event) {
-    let data = /** @type {string} */ (event.data);
+  class DiagnosticsRequester {
+    constructor() {}
 
-    console.debug('Message received from worker:', data);
+    /**
+     * Requests a list of available routines.
+     * @return { !Promise<!Array<!string>> }
+     * @public
+     */
+    async getAvailableRoutines() {
+      const response =
+          /** @type {dpsl_internal.DiagnosticsGetAvailableRoutinesResponse} */ (
+              await messagePipe.sendMessage(
+                  dpsl_internal.Message.DIAGNOSTICS_AVAILABLE_ROUTINES));
+      return response;
+    }
 
-    window.parent.postMessage(
-        {'message': data}, 'chrome://telemetry-extension');
+    /**
+     * Requests a command to be run on a diagnostic routine.
+     * @param { !number } routineId
+     * @param { !string } command
+     * @param { !boolean } includeOutput
+     * @return { !Promise<!Object> }
+     * @public
+     */
+    async sendCommandToRoutine(routineId, command, includeOutput) {
+      const message =
+          /** @type {dpsl_internal.DiagnosticsGetRoutineUpdateRequest} */ ({
+            routineId: routineId,
+            command: command,
+            includeOutput: includeOutput,
+          });
+      const response =
+          /** @type {!Object} */ (await messagePipe.sendMessage(
+              dpsl_internal.Message.DIAGNOSTICS_ROUTINE_UPDATE, message));
+      if (response instanceof Error) {
+        throw response;
+      }
+      return response;
+    }
   };
 
-  worker.postMessage('WebWorker');
-}
+  /**
+   * DPSL Telemetry Requester.
+   */
+  class TelemetryRequester {
+    constructor() {}
+
+    /**
+     * Requests telemetry info.
+     * @param { !Array<!string> } categories
+     * @return { !Object }
+     * @public
+     */
+    async probeTelemetryInfo(categories) {
+      const response =
+          /** @type {dpsl_internal.ProbeTelemetryInfoResponse} */ (
+              await messagePipe.sendMessage(
+                  dpsl_internal.Message.PROBE_TELEMETRY_INFO, categories));
+      if (response instanceof Error) {
+        throw response;
+      }
+      return response;
+    }
+  };
+
+  globalThis.chromeos.diagnostics = new DiagnosticsRequester();
+  globalThis.chromeos.telemetry = new TelemetryRequester();
+
+  globalThis.chromeos.test_support.messagePipe = function() {
+    console.warn(
+        'messagePipe() is a method for testing purposes only. Please',
+        'do not use it, otherwise your app may be broken in the future.');
+    return messagePipe;
+  }
+})();

@@ -26,12 +26,12 @@ import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.MinAndroidSdkLevel;
-import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.accessibility_tab_switcher.OverviewListLayout;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.app.tabmodel.ChromeTabModelFilterFactory;
 import org.chromium.chrome.browser.compositor.overlays.strip.StripLayoutHelper;
 import org.chromium.chrome.browser.flags.ActivityType;
-import org.chromium.chrome.browser.fullscreen.ChromeFullscreenManager;
+import org.chromium.chrome.browser.fullscreen.BrowserControlsManager;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.chromium.chrome.browser.tab.Tab;
@@ -44,6 +44,7 @@ import org.chromium.chrome.browser.tabmodel.TabPersistentStore.TabPersistentStor
 import org.chromium.chrome.browser.tabmodel.TabPersistentStore.TabRestoreDetails;
 import org.chromium.chrome.browser.tabmodel.TestTabModelDirectory.TabModelMetaDataInfo;
 import org.chromium.chrome.browser.tabmodel.TestTabModelDirectory.TabStateInfo;
+import org.chromium.chrome.browser.tabpersistence.TabStateDirectory;
 import org.chromium.chrome.test.ChromeBrowserTestRule;
 import org.chromium.chrome.test.util.browser.tabmodel.MockTabCreator;
 import org.chromium.chrome.test.util.browser.tabmodel.MockTabCreatorManager;
@@ -117,14 +118,17 @@ public class TabPersistentStoreTest {
                             getTabCreatorManager().getTabCreator(false),
                             getTabCreatorManager().getTabCreator(true), null,
                             mTabModelOrderController, null, mTabPersistentStore,
-                            () -> NextTabPolicy.HIERARCHICAL, TestTabModelSelector.this, true);
+                            ()
+                                    -> NextTabPolicy.HIERARCHICAL,
+                            AsyncTabParamsManager.getInstance(), TestTabModelSelector.this, true);
                 }
             };
             TabModelImpl regularTabModel = TestThreadUtils.runOnUiThreadBlocking(callable);
             TabModel incognitoTabModel = new IncognitoTabModel(new IncognitoTabModelImplCreator(
                     getTabCreatorManager().getTabCreator(false),
                     getTabCreatorManager().getTabCreator(true), null, mTabModelOrderController,
-                    null, mTabPersistentStore, () -> NextTabPolicy.HIERARCHICAL, this));
+                    null, mTabPersistentStore,
+                    () -> NextTabPolicy.HIERARCHICAL, AsyncTabParamsManager.getInstance(), this));
             initialize(regularTabModel, incognitoTabModel);
         }
 
@@ -231,7 +235,7 @@ public class TabPersistentStoreTest {
                 }
 
                 @Override
-                protected ChromeFullscreenManager createFullscreenManager() {
+                protected BrowserControlsManager createBrowserControlsManager() {
                     return null;
                 }
 
@@ -251,7 +255,7 @@ public class TabPersistentStoreTest {
         mPreferences = SharedPreferencesManager.getInstance();
         mMockDirectory = new TestTabModelDirectory(
                 mAppContext, "TabPersistentStoreTest", Integer.toString(SELECTOR_INDEX));
-        TabPersistentStore.setBaseStateDirectoryForTests(mMockDirectory.getBaseDirectory());
+        TabStateDirectory.setBaseStateDirectoryForTests(mMockDirectory.getBaseDirectory());
     }
 
     @After

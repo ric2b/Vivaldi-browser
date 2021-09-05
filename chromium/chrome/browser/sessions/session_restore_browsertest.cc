@@ -85,7 +85,7 @@
 #include "ui/base/ui_base_features.h"
 #include "ui/gfx/color_palette.h"
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include "base/mac/scoped_nsautorelease_pool.h"
 #endif
 
@@ -232,7 +232,7 @@ class SessionRestoreTest : public InProcessBrowserTest {
       content::WebContents* contents =
           browser->tab_strip_model()->GetWebContentsAt(i);
       contents->GetController().LoadIfNecessary();
-      content::WaitForLoadStop(contents);
+      EXPECT_TRUE(content::WaitForLoadStop(contents));
     }
   }
 
@@ -376,7 +376,13 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest, RestoredTabsShouldHaveWindow) {
 
 // Verify that restoring a minimized window does not create a blank window.
 // Regression test for https://crbug.com/1018885.
-IN_PROC_BROWSER_TEST_F(SessionRestoreTest, RestoreMinimizedWindow) {
+// TODO(1080602): Flaky on Windows and Linux.
+#if defined(OS_WIN) || defined(OS_LINUX)
+#define MAYBE_RestoreMinimizedWindow DISABLED_RestoreMinimizedWindow
+#else
+#define MAYBE_RestoreMinimizedWindow RestoreMinimizedWindow
+#endif
+IN_PROC_BROWSER_TEST_F(SessionRestoreTest, MAYBE_RestoreMinimizedWindow) {
   // Minimize the window.
   browser()->window()->Minimize();
 
@@ -384,7 +390,7 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest, RestoreMinimizedWindow) {
   Browser* restored = QuitBrowserAndRestore(browser(), 3);
   EXPECT_EQ(1, restored->tab_strip_model()->count());
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   // On macOS, minimized windows are neither active nor shown, to avoid causing
   // space switches during session restore.
   EXPECT_FALSE(restored->window()->IsActive());
@@ -1133,12 +1139,17 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest, RestoreAfterDelete) {
 
 IN_PROC_BROWSER_TEST_F(SessionRestoreTest, StartupPagesWithOnlyNtp) {
   ui_test_utils::NavigateToURL(browser(), GURL(chrome::kChromeUINewTabURL));
+  content::WebContentsDestroyedWatcher original_tab_destroyed_watcher(
+      browser()->tab_strip_model()->GetWebContentsAt(0));
+
   SessionStartupPref pref(SessionStartupPref::URLS);
   pref.urls.push_back(url1_);
   pref.urls.push_back(url2_);
   SessionStartupPref::SetStartupPref(browser()->profile(), pref);
 
   SessionRestore::OpenStartupPagesAfterCrash(browser());
+  // Wait until the original tab finished closing.
+  original_tab_destroyed_watcher.Wait();
 
   ASSERT_EQ(1u, active_browser_list_->size());
   ASSERT_EQ(2, browser()->tab_strip_model()->count());
@@ -1487,7 +1498,7 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest, ActiveIndexUpdatedAtInsert) {
   ASSERT_EQ(new_browser->tab_strip_model()->active_index(), 1);
 }
 
-#if !defined(OS_CHROMEOS) && !defined(OS_MACOSX)
+#if !defined(OS_CHROMEOS) && !defined(OS_MAC)
 // This test doesn't apply to the Mac version; see GetCommandLineForRelaunch
 // for details. It was disabled for a long time so might never have worked on
 // ChromeOS.
@@ -1519,7 +1530,7 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest,
             new_browser->tab_strip_model()->GetActiveWebContents()->GetURL());
 }
 
-#endif  // !defined(OS_CHROMEOS) && !defined(OS_MACOSX)
+#endif  // !defined(OS_CHROMEOS) && !defined(OS_MAC)
 
 // Creates two windows, closes one, restores, make sure only one window open.
 IN_PROC_BROWSER_TEST_F(SessionRestoreTest, TwoWindowsCloseOneRestoreOnlyOne) {
@@ -1669,7 +1680,7 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest, RestorePinnedSelectedTab) {
 // Regression test for crbug.com/240156. When restoring tabs with a navigation,
 // the navigation should take active tab focus.
 // Flaky on Mac. http://crbug.com/656211.
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #define MAYBE_RestoreWithNavigateSelectedTab \
   DISABLED_RestoreWithNavigateSelectedTab
 #else
@@ -1749,12 +1760,17 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest, ClobberRestoreTest) {
   ASSERT_EQ(0, new_browser->tab_strip_model()->active_index());
   // Use the existing tab to navigate to the NTP.
   ui_test_utils::NavigateToURL(new_browser, GURL(chrome::kChromeUINewTabURL));
+  content::WebContentsDestroyedWatcher existing_tab_destroyed_watcher(
+      new_browser->tab_strip_model()->GetWebContentsAt(0));
 
   // Restore the session again, clobbering the existing tab.
   SessionRestore::RestoreSession(
       profile, new_browser,
       SessionRestore::CLOBBER_CURRENT_TAB | SessionRestore::SYNCHRONOUS,
       std::vector<GURL>());
+
+  // Wait until the existing tab finished closing.
+  existing_tab_destroyed_watcher.Wait();
 
   // 2 tabs should have been restored, with the existing tab clobbered, giving
   // us a total of 2 tabs.
@@ -2015,7 +2031,7 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest, RestoreAllBrowsers) {
 
 // PRE_CorrectLoadingOrder is flaky on ChromeOS MSAN and Mac.
 // See http://crbug.com/493167.
-#if (defined(OS_CHROMEOS) && defined(MEMORY_SANITIZER)) || defined(OS_MACOSX)
+#if (defined(OS_CHROMEOS) && defined(MEMORY_SANITIZER)) || defined(OS_MAC)
 #define MAYBE_PRE_CorrectLoadingOrder DISABLED_PRE_CorrectLoadingOrder
 #define MAYBE_CorrectLoadingOrder DISABLED_CorrectLoadingOrder
 #else
@@ -2478,6 +2494,11 @@ IN_PROC_BROWSER_TEST_F(MultiOriginSessionRestoreTest,
   EXPECT_EQ(c_url, subframe->GetLastCommittedURL());
   EXPECT_EQ(c_origin, subframe->GetLastCommittedOrigin());
 
+  // Check that main frame and subframe are in the same BrowsingInstance.
+  content::SiteInstance* subframe_instance_c = subframe->GetSiteInstance();
+  EXPECT_TRUE(new_tab->GetMainFrame()->GetSiteInstance()->IsRelatedSiteInstance(
+      subframe_instance_c));
+
   // Go back - this should reach: a.com(a.com-blank).
   {
     content::TestNavigationObserver nav_observer(new_tab);
@@ -2487,8 +2508,71 @@ IN_PROC_BROWSER_TEST_F(MultiOriginSessionRestoreTest,
   ASSERT_EQ(2u, new_tab->GetAllFrames().size());
   subframe = new_tab->GetAllFrames()[1];
   EXPECT_EQ(GURL(url::kAboutBlankURL), subframe->GetLastCommittedURL());
-  // TODO(lukasza): https://crbug.com/888079: The browser process should tell
-  // the renderer which (initiator-based) origin to commit.  Right now, Blink
-  // just falls back to an opaque origin.
-  EXPECT_TRUE(subframe->GetLastCommittedOrigin().opaque());
+  EXPECT_EQ(a_origin, subframe->GetLastCommittedOrigin());
+
+  // Check that we're still in the same BrowsingInstance.
+  EXPECT_TRUE(new_tab->GetMainFrame()->GetSiteInstance()->IsRelatedSiteInstance(
+      subframe->GetSiteInstance()));
+  EXPECT_TRUE(
+      subframe_instance_c->IsRelatedSiteInstance(subframe->GetSiteInstance()));
+}
+
+// Check that TabManager.TimeSinceTabClosedUntilRestored histogram is not
+// recorded on session restore.
+IN_PROC_BROWSER_TEST_F(SessionRestoreTest,
+                       TimeSinceTabClosedUntilRestoredNotRecorded) {
+  base::HistogramTester histogram_tester;
+  const char kTimeSinceTabClosedUntilRestored[] =
+      "TabManager.TimeSinceTabClosedUntilRestored";
+
+  // Add several tabs to the browser.
+  ui_test_utils::NavigateToURLWithDisposition(
+      browser(), GURL(url::kAboutBlankURL),
+      WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
+  ui_test_utils::NavigateToURLWithDisposition(
+      browser(), GURL(url::kAboutBlankURL),
+      WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
+
+  // Restart the browser and check that the metric is not recorded.
+  EXPECT_EQ(
+      histogram_tester.GetAllSamples(kTimeSinceTabClosedUntilRestored).size(),
+      0U);
+
+  QuitBrowserAndRestoreWithURL(browser(), 1, GURL(), true);
+
+  EXPECT_EQ(
+      histogram_tester.GetAllSamples(kTimeSinceTabClosedUntilRestored).size(),
+      0U);
+}
+
+// Check that TabManager.TimeSinceWindowClosedUntilRestored histogram is not
+// recorded on session restore.
+IN_PROC_BROWSER_TEST_F(SessionRestoreTest,
+                       TimeSinceWindowClosedUntilRestoredNotRecorded) {
+  base::HistogramTester histogram_tester;
+  const char kTimeSinceWindowClosedUntilRestored[] =
+      "TabManager.TimeSinceWindowClosedUntilRestored";
+
+  // Add several tabs to the browser.
+  ui_test_utils::NavigateToURLWithDisposition(
+      browser(), GURL(url::kAboutBlankURL),
+      WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
+  ui_test_utils::NavigateToURLWithDisposition(
+      browser(), GURL(url::kAboutBlankURL),
+      WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
+
+  // Restart the browser and check that the metric is not recorded.
+  EXPECT_EQ(histogram_tester.GetAllSamples(kTimeSinceWindowClosedUntilRestored)
+                .size(),
+            0U);
+
+  QuitBrowserAndRestoreWithURL(browser(), 1, GURL(), true);
+
+  EXPECT_EQ(histogram_tester.GetAllSamples(kTimeSinceWindowClosedUntilRestored)
+                .size(),
+            0U);
 }

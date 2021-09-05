@@ -9,30 +9,36 @@
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
+#include "components/printing/common/print.mojom.h"
 #include "components/printing/common/print_messages.h"
 #include "ipc/ipc_message_utils.h"
 #include "printing/metafile_skia.h"
+#include "printing/mojom/print.mojom.h"
 #include "printing/units.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
 #include "printing/pdf_metafile_cg_mac.h"
 #endif
 
 namespace {
 
-void UpdateMargins(int margins_type, int dpi, PrintMsg_Print_Params* params) {
-  if (margins_type == printing::NO_MARGINS) {
+void UpdateMargins(int margins_type,
+                   int dpi,
+                   printing::mojom::PrintParams* params) {
+  printing::mojom::MarginType type =
+      static_cast<printing::mojom::MarginType>(margins_type);
+  if (type == printing::mojom::MarginType::kNoMargins) {
     params->content_size.SetSize(static_cast<int>((8.5 * dpi)),
                                  static_cast<int>((11.0 * dpi)));
     params->margin_left = 0;
     params->margin_top = 0;
-  } else if (margins_type == printing::PRINTABLE_AREA_MARGINS) {
+  } else if (type == printing::mojom::MarginType::kPrintableAreaMargins) {
     params->content_size.SetSize(static_cast<int>((8.0 * dpi)),
                                  static_cast<int>((10.5 * dpi)));
     params->margin_left = static_cast<int>(0.25 * dpi);
     params->margin_top = static_cast<int>(0.25 * dpi);
-  } else if (margins_type == printing::CUSTOM_MARGINS) {
+  } else if (type == printing::mojom::MarginType::kCustomMargins) {
     params->content_size.SetSize(static_cast<int>((7.9 * dpi)),
                                  static_cast<int>((10.4 * dpi)));
     params->margin_left = static_cast<int>(0.30 * dpi);
@@ -42,7 +48,7 @@ void UpdateMargins(int margins_type, int dpi, PrintMsg_Print_Params* params) {
 
 void UpdatePageSizeAndScaling(const gfx::Size& page_size,
                               int scale_factor,
-                              PrintMsg_Print_Params* params) {
+                              printing::mojom::PrintParams* params) {
   params->page_size = page_size;
   params->scale_factor = static_cast<double>(scale_factor) / 100.0;
 }
@@ -97,18 +103,20 @@ void MockPrinter::ResetPrinter() {
   document_cookie_ = -1;
 }
 
-void MockPrinter::GetDefaultPrintSettings(PrintMsg_Print_Params* params) {
+void MockPrinter::GetDefaultPrintSettings(
+    printing::mojom::PrintParams* params) {
   // Verify this printer is not processing a job.
   // Sorry, this mock printer is very fragile.
   EXPECT_EQ(-1, document_cookie_);
 
   // Assign a unit document cookie and set the print settings.
   document_cookie_ = CreateDocumentCookie();
-  params->Reset();
+  *params = printing::mojom::PrintParams();
   SetPrintParams(params);
 }
 
-void MockPrinter::SetDefaultPrintSettings(const PrintMsg_Print_Params& params) {
+void MockPrinter::SetDefaultPrintSettings(
+    const printing::mojom::PrintParams& params) {
   // Use the same logic as in printing/print_settings.h
   dpi_ = std::max(params.dpi.width(), params.dpi.height());
   selection_only_ = params.selection_only;
@@ -125,7 +133,7 @@ void MockPrinter::SetDefaultPrintSettings(const PrintMsg_Print_Params& params) {
 
 void MockPrinter::UseInvalidSettings() {
   use_invalid_settings_ = true;
-  PrintMsg_Print_Params empty_param;
+  printing::mojom::PrintParams empty_param;
   SetDefaultPrintSettings(empty_param);
 }
 
@@ -196,21 +204,21 @@ void MockPrinter::SetPrintedPagesCount(int cookie, int number_pages) {
 }
 
 void MockPrinter::PrintPage(
-    const PrintHostMsg_DidPrintDocument_Params& params) {
+    const printing::mojom::DidPrintDocumentParams& params) {
   // Verify the input parameter and update the printer status so that the
   // RenderViewTest class can verify the this function finishes without errors.
   EXPECT_EQ(PRINTER_PRINTING, printer_status_);
   EXPECT_EQ(document_cookie_, params.document_cookie);
 
-#if defined(OS_WIN) || defined(OS_MACOSX)
+#if defined(OS_WIN) || defined(OS_APPLE)
   // Load the data sent from a RenderView object and create a PageData object.
-  ASSERT_TRUE(params.content.metafile_data_region.IsValid());
+  ASSERT_TRUE(params.content->metafile_data_region.IsValid());
   base::ReadOnlySharedMemoryMapping mapping =
-      params.content.metafile_data_region.Map();
+      params.content->metafile_data_region.Map();
   ASSERT_TRUE(mapping.IsValid());
   EXPECT_GT(mapping.size(), 0U);
 
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
   printing::PdfMetafileCg metafile;
 #else
   printing::MetafileSkia metafile;
@@ -282,7 +290,7 @@ int MockPrinter::CreateDocumentCookie() {
   return use_invalid_settings_ ? 0 : ++current_document_cookie_;
 }
 
-void MockPrinter::SetPrintParams(PrintMsg_Print_Params* params) {
+void MockPrinter::SetPrintParams(printing::mojom::PrintParams* params) {
   params->dpi = gfx::Size(dpi_, dpi_);
   params->selection_only = selection_only_;
   params->should_print_backgrounds = should_print_backgrounds_;

@@ -8,11 +8,14 @@
 <translation id="1829244130665387512">Leita á síðunni</translation>
 <translation id="2038563949887743358">Kveiktu á borðtölvuútgáfu</translation>
 <translation id="2433507940547922241">Útlit</translation>
+<translation id="2501278716633472235">Fara til baka</translation>
 <translation id="2633278372998075009">Einkaflipar</translation>
 <translation id="3076631378407175873">Höfundarréttur <ph name="YEAR" /> Vivaldi Technologies AS. Öll réttindi áskilin.</translation>
 <translation id="3234355010754616171">Nýr einkaflipi</translation>
 <translation id="3518985090088779359">Samþykkja og halda áfram</translation>
 <translation id="3700829948786686853">Velkomin/n í Vivaldi</translation>
+<translation id="3719826155360621982">Heimasíða</translation>
+<translation id="385051799172605136">Til baka</translation>
 <translation id="4121750346708795461">Með því að nota þetta forrit, samþykkir þú <ph name="BEGIN_LINK1" />Notendaleyfi Vivaldi<ph name="END_LINK1" /> og <ph name="BEGIN_LINK2" /> Persónuverndarstefnu<ph name="END_LINK2" />.</translation>
 <translation id="4243710787042215766">Opna í einkaglugga</translation>
 <translation id="4526803704855831732">Einkaflipar</translation>
@@ -37,6 +40,7 @@ Haltu við orðið sem þú vilt leita að. Þá birtist leitarspjald neðst á 
 <translation id="7519434535192513364">"Ýttu til að leita" er eiginleiki sem virkar þegar Google er sjálfgefin leitarvél. Það sendir orð og umhverfi þess inn í Google leitarvélina. Þú getur slökkt á því í <ph name="BEGIN_LINK" />stillingum<ph name="END_LINK" />.</translation>
 <translation id="7649070708921625228">Hjálp</translation>
 <translation id="804786196054284061">Leyfisskilmálar notenda</translation>
+<translation id="85991616550051997">Fara á heimasíðu</translation>
 <translation id="8820817407110198400">Bókamerki</translation>
 <translation id="9063523880881406963">Slökktu á borðtölvuútgáfu</translation>
 <translation id="9080642952018487277">Fara í einkaham</translation>

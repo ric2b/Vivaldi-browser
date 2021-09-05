@@ -47,7 +47,7 @@ XRFrame::XRFrame(XRSession* session, XRWorldInformation* world_information)
     : world_information_(world_information), session_(session) {}
 
 XRViewerPose* XRFrame::getViewerPose(XRReferenceSpace* reference_space,
-                                     ExceptionState& exception_state) const {
+                                     ExceptionState& exception_state) {
   DVLOG(3) << __func__;
   if (!is_active_) {
     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
@@ -92,8 +92,7 @@ XRViewerPose* XRFrame::getViewerPose(XRReferenceSpace* reference_space,
     return nullptr;
   }
 
-  return MakeGarbageCollected<XRViewerPose>(session(),
-                                            *offset_space_from_viewer);
+  return MakeGarbageCollected<XRViewerPose>(this, *offset_space_from_viewer);
 }
 
 XRAnchorSet* XRFrame::trackedAnchors() const {
@@ -135,6 +134,8 @@ XRLightEstimate* XRFrame::getLightEstimate(
 XRPose* XRFrame::getPose(XRSpace* space,
                          XRSpace* basespace,
                          ExceptionState& exception_state) {
+  DVLOG(2) << __func__;
+
   if (!is_active_) {
     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
                                       kInactiveFrame);
@@ -170,6 +171,10 @@ XRPose* XRFrame::getPose(XRSpace* space,
 void XRFrame::Deactivate() {
   is_active_ = false;
   is_animation_frame_ = false;
+}
+
+bool XRFrame::IsActive() const {
+  return is_active_;
 }
 
 HeapVector<Member<XRHitTestResult>> XRFrame::getHitTestResults(

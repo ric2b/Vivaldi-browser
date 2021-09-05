@@ -21,6 +21,7 @@
 <translation id="1150565364351027703">Сонечныя акуляры</translation>
 <translation id="115443833402798225">Карэйскі алфавіт (хангыль), рэжым AhnMaTae</translation>
 <translation id="1155759005174418845">Каталанская</translation>
+<translation id="1172970565351728681">Прыблізны час да завяршэння: <ph name="REMAINING_TIME" /></translation>
 <translation id="1173894706177603556">Перайменаваць</translation>
 <translation id="117624967391683467">Ідзе капіраванне файла "<ph name="FILE_NAME" />"...</translation>
 <translation id="1178581264944972037">Прыпыніць</translation>
@@ -106,7 +107,6 @@
 <translation id="2085470240340828803">Файл пад назвай "<ph name="FILENAME" />" ужо існуе. Што трэба зрабіць?</translation>
 <translation id="2121825465123208577">Змяніць памер</translation>
 <translation id="2136953289241069843">Транслітарацыя (namaste → नमस्कार)</translation>
-<translation id="2138867954865495510">Не ўдалося адкрыць "<ph name="PATH" />": <ph name="ERROR_MESSAGE" /></translation>
 <translation id="2163152940313951844">Недапушчальны сімвал: <ph name="CHARACTER_NAME" /></translation>
 <translation id="2164862903024139959">В'етнамская клавіятура (TCVN)</translation>
 <translation id="2168214441502403371">Персідская раскладка</translation>
@@ -198,6 +198,7 @@
 <translation id="3236289833370040187">Права ўласнасці будзе перададзена дамену <ph name="DESTINATION_DOMAIN" />.</translation>
 <translation id="3241720467332021590">Ірландская</translation>
 <translation id="3245321423178950146">Невядомы выканаўца</translation>
+<translation id="3248185426436836442">У чаканні</translation>
 <translation id="3252266817569339921">Французская</translation>
 <translation id="3254434849914415189">Выберыце стандартную праграму для файлаў <ph name="FILE_TYPE" />:</translation>
 <translation id="3264582393905923483">Кантэкст</translation>
@@ -208,6 +209,7 @@
 <translation id="3335337277364016868">Год запісу</translation>
 <translation id="3338239663705455570">Славенская клавіятура</translation>
 <translation id="3353984535370177728">Выберыце папку для запампоўвання</translation>
+<translation id="3356580349448036450">Гатова</translation>
 <translation id="3399597614303179694">Македонская клавіятура</translation>
 <translation id="3414856743105198592">Фармаціраванне здымнага носьбіта мультымедыя прывядзе да страты ўсіх даных. Хочаце працягнуць?</translation>
 <translation id="3437801641691368414">Час стварэння</translation>
@@ -243,6 +245,7 @@
 <translation id="3780536599611287598">У вас няма дазволу на перамяшчэнне файлаў у папку "<ph name="FOLDER_NAME" />".</translation>
 <translation id="3786301125658655746">Вы па-за сеткай</translation>
 <translation id="3789841737615482174">Усталяваць</translation>
+<translation id="3793469551756281394">Прыблізны час да завяршэння: <ph name="REMAINING_TIME_HOUR" /> <ph name="REMAINING_TIME_MINUTE" /></translation>
 <translation id="3798449238516105146">Версія</translation>
 <translation id="3801082500826908679">Фарэрская</translation>
 <translation id="3809272675881623365">Трус</translation>
@@ -299,6 +302,7 @@
 <translation id="4481711095103932593">Гэта папка абагулена з Windows</translation>
 <translation id="4487088045714738411">Бельгійская клавіятура</translation>
 <translation id="4522570452068850558">Падрабязнасці</translation>
+<translation id="4542387084127299777">Не ўдалося адкрыць "<ph name="PATH" />"</translation>
 <translation id="4552678318981539154">Купіце больш месца ў сховішчы</translation>
 <translation id="4559767610552730302">Эфект баке</translation>
 <translation id="4572815280350369984">Файл <ph name="FILE_TYPE" /></translation>
@@ -510,6 +514,7 @@
 <translation id="6629841649550503054">Усе даныя скапіраваны на <ph name="BEGIN_LINK" />Google Дыск!<ph name="END_LINK" /></translation>
 <translation id="6643016212128521049">Ачысціць</translation>
 <translation id="6650726141019353908">Ружовы матылёк</translation>
+<translation id="6657585470893396449">Пароль</translation>
 <translation id="6710213216561001401">Назад</translation>
 <translation id="6718273304615422081">Ідзе архіваванне...</translation>
 <translation id="6751256176799620176">Выбрана 1 папка</translation>
@@ -550,7 +555,6 @@
 <translation id="7012943028104619157"><ph name="ROOT_TITLE" /> (<ph name="ROOT_SUMMARY" />)</translation>
 <translation id="7014174261166285193">Памылка ўсталявання.</translation>
 <translation id="7040138676081995583">Адкрыць з дапамогай...</translation>
-<translation id="7059566040011178088">Менш за <ph name="REMAINING_TIME" /></translation>
 <translation id="7100897339030255923">Выбрана элементаў: <ph name="COUNT" /></translation>
 <translation id="7106346894903675391">Купіце больш месца ў сховішчы...</translation>
 <translation id="7126604456862387217">"&lt;b&gt;<ph name="SEARCH_STRING" />&lt;/b&gt;" – &lt;em&gt;пошук на Дыску&lt;/em&gt;</translation>
@@ -661,7 +665,6 @@
 <translation id="8193175696669055101">Мадэль прылады</translation>
 <translation id="8208580316430297579">Плакат</translation>
 <translation id="8223479393428528563">Каб захаваць гэтыя файлы для выкарыстання ў аўтаномным рэжыме, падключыцеся зноў да інтэрнэту, націсніце правай кнопкай мышы на патрэбныя файлы і выберыце параметр <ph name="OFFLINE_CHECKBOX_NAME" />.</translation>
-<translation id="8231972167769262174">Каля <ph name="REMAINING_TIME" /></translation>
 <translation id="8249296373107784235">Скасаваць</translation>
 <translation id="8261506727792406068">Выдаліць</translation>
 <translation id="8269755669432358899">Згарнуць панэлі водгукаў для файлаў</translation>
@@ -724,6 +727,7 @@
 <translation id="9065203028668620118">Змяніць</translation>
 <translation id="9099674669267916096">Колькасць старонак</translation>
 <translation id="9110990317705400362">Мы пастаянна працуем над новымі спосабамі зрабіць працу ў інтэрнэце больш бяспечнай. Раней любы сайт мог прапанаваць вам дадаць пашырэнні ў браўзер. У апошніх версіях Google Chrome пашырэнні трэба дадаваць праз старонку "Пашырэнні", даючы браўзеру яўнае ўказанне, што вы хочаце іх усталяваць. <ph name="BEGIN_LINK" />Даведацца больш<ph name="END_LINK" /></translation>
+<translation id="9111102763498581341">Разблакіраваць</translation>
 <translation id="912419004897138677">Кодэк</translation>
 <translation id="9129931661813833980">Замацаваць папку</translation>
 <translation id="9130775360844693113">Да гэтых элементаў атрымаюць доступ удзельнікі дыска "<ph name="DESTINATION_NAME" />".</translation>

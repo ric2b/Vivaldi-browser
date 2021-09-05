@@ -4,7 +4,6 @@
 
 package org.chromium.chrome.browser.share.screenshot;
 
-import android.support.test.annotation.UiThreadTest;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
@@ -18,9 +17,10 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.Callback;
+import org.chromium.base.test.UiThreadTest;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
-import org.chromium.chrome.browser.share.R;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
+import org.chromium.chrome.test.R;
 import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.components.browser_ui.widget.selectable_list.SelectionDelegate;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
@@ -43,6 +43,7 @@ public class ScreenshotShareSheetViewTest extends DummyUiActivityTestCase {
     private AtomicBoolean mCloseClicked = new AtomicBoolean();
     private AtomicBoolean mShareClicked = new AtomicBoolean();
     private AtomicBoolean mSaveClicked = new AtomicBoolean();
+    private AtomicBoolean mInstallClicked = new AtomicBoolean();
 
     private Callback<Integer> mMockNoArgListener = new Callback<Integer>() {
         @Override
@@ -53,6 +54,8 @@ public class ScreenshotShareSheetViewTest extends DummyUiActivityTestCase {
                 mSaveClicked.set(true);
             } else if (ScreenshotShareSheetViewProperties.NoArgOperation.DELETE == operation) {
                 mCloseClicked.set(true);
+            } else if (ScreenshotShareSheetViewProperties.NoArgOperation.INSTALL == operation) {
+                mInstallClicked.set(true);
             }
         }
     };
@@ -132,6 +135,18 @@ public class ScreenshotShareSheetViewTest extends DummyUiActivityTestCase {
         saveButton.performClick();
         Assert.assertTrue(mSaveClicked.get());
         mSaveClicked.set(false);
+    }
+
+    @Test
+    @MediumTest
+    @UiThreadTest
+    public void testClickToEdit() {
+        View installButton = mScreenshotView.findViewById(R.id.edit);
+
+        Assert.assertFalse(mInstallClicked.get());
+        installButton.performClick();
+        Assert.assertTrue(mInstallClicked.get());
+        mInstallClicked.set(false);
     }
 
     @Override

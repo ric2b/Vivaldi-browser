@@ -34,6 +34,9 @@ extern const base::Feature kAdSamplerTriggerFeature;
 // reports.
 extern const base::Feature kCaptureInlineJavascriptForGoogleAds;
 
+// Enables client side detection on Android.
+extern const base::Feature kClientSideDetectionForAndroid;
+
 // Controls whether to do deep scanning for DLP. If both this feature and
 // the enterprise policies are enabled, the downloaded and uploaded files are
 // sent for scanning.
@@ -73,6 +76,13 @@ extern const base::Feature kSafeBrowsingAvailableOnIOS;
 // Controls whether Safe Browsing uses separate NetworkContexts for each
 // profile.
 extern const base::Feature kSafeBrowsingSeparateNetworkContexts;
+
+// Controls whether the security section is shown on the settings UI on Android.
+extern const base::Feature kSafeBrowsingSecuritySectionUIAndroid;
+
+// Controls whether cookies are removed from certain communications with Safe
+// Browsing.
+extern const base::Feature kSafeBrowsingRemoveCookies;
 
 // Controls the daily quota for the suspicious site trigger.
 extern const base::Feature kSuspiciousSiteTriggerQuotaFeature;
@@ -128,6 +138,9 @@ extern const base::Feature kUseNewDownloadWarnings;
 
 // Controls whether the delayed warning experiment is enabled.
 extern const base::Feature kDelayedWarnings;
+// True if mouse clicks should undelay the warnings immediately when delayed
+// warnings feature is enabled.
+extern const base::FeatureParam<bool> kDelayedWarningsEnableMouseClicks;
 
 base::ListValue GetFeatureStatusList();
 

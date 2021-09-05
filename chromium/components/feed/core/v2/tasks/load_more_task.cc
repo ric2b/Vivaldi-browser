@@ -49,16 +49,21 @@ void LoadMoreTask::Run() {
 
 void LoadMoreTask::UploadActionsComplete(UploadActionsTask::Result result) {
   // Send network request.
+  bool force_signed_out_request =
+      stream_->ShouldForceSignedOutFeedQueryRequest();
   fetch_start_time_ = stream_->GetTickClock()->NowTicks();
   stream_->GetNetwork()->SendQueryRequest(
       CreateFeedQueryLoadMoreRequest(
           stream_->GetRequestMetadata(),
           stream_->GetMetadata()->GetConsistencyToken(),
           stream_->GetModel()->GetNextPageToken()),
-      base::BindOnce(&LoadMoreTask::QueryRequestComplete, GetWeakPtr()));
+      force_signed_out_request,
+      base::BindOnce(&LoadMoreTask::QueryRequestComplete, GetWeakPtr(),
+                     force_signed_out_request));
 }
 
 void LoadMoreTask::QueryRequestComplete(
+    bool was_forced_signed_out_request,
     FeedNetwork::QueryRequestResult result) {
   StreamModel* model = stream_->GetModel();
   DCHECK(model) << "Model was unloaded outside of a Task";
@@ -66,15 +71,20 @@ void LoadMoreTask::QueryRequestComplete(
   if (!result.response_body)
     return Done(LoadStreamStatus::kNoResponseBody);
 
+  bool was_signed_in_request =
+      !was_forced_signed_out_request && stream_->IsSignedIn();
+
   RefreshResponseData translated_response =
       stream_->GetWireResponseTranslator()->TranslateWireResponse(
           *result.response_body,
           StreamModelUpdateRequest::Source::kNetworkLoadMore,
-          stream_->GetClock()->Now());
+          was_signed_in_request, stream_->GetClock()->Now());
 
   if (!translated_response.model_update_request)
     return Done(LoadStreamStatus::kProtoTranslationFailed);
 
+  loaded_new_content_from_network_ =
+      !translated_response.model_update_request->stream_structures.empty();
   model->Update(std::move(translated_response.model_update_request));
 
   if (translated_response.request_schedule)
@@ -84,7 +94,10 @@ void LoadMoreTask::QueryRequestComplete(
 }
 
 void LoadMoreTask::Done(LoadStreamStatus status) {
-  std::move(done_callback_).Run(Result(status));
+  Result result;
+  result.final_status = status;
+  result.loaded_new_content_from_network = loaded_new_content_from_network_;
+  std::move(done_callback_).Run(result);
   TaskComplete();
 }
 

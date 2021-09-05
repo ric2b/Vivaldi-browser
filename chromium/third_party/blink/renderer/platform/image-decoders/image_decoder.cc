@@ -27,6 +27,7 @@
 #include "build/build_config.h"
 #include "media/media_buildflags.h"
 #include "third_party/blink/public/common/features.h"
+#include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/renderer/platform/image-decoders/bmp/bmp_image_decoder.h"
 #include "third_party/blink/renderer/platform/image-decoders/fast_shared_buffer_reader.h"
 #include "third_party/blink/renderer/platform/image-decoders/gif/gif_image_decoder.h"
@@ -60,10 +61,8 @@ cc::ImageType FileExtensionToImageType(String image_extension) {
   if (image_extension == "bmp")
     return cc::ImageType::kBMP;
 #if BUILDFLAG(ENABLE_AV1_DECODER)
-  if (base::FeatureList::IsEnabled(features::kAVIF) &&
-      image_extension == "avif") {
+  if (image_extension == "avif")
     return cc::ImageType::kAVIF;
-  }
 #endif
   return cc::ImageType::kInvalid;
 }
@@ -152,7 +151,8 @@ String SniffMimeTypeInternal(scoped_refptr<SegmentReader> reader) {
 
 }  // namespace
 
-const size_t ImageDecoder::kNoDecodedImageByteLimit;
+const size_t ImageDecoder::kNoDecodedImageByteLimit =
+    Platform::kNoDecodedImageByteLimit;
 
 std::unique_ptr<ImageDecoder> ImageDecoder::Create(
     scoped_refptr<SegmentReader> data,
@@ -161,20 +161,15 @@ std::unique_ptr<ImageDecoder> ImageDecoder::Create(
     HighBitDepthDecodingOption high_bit_depth_decoding_option,
     const ColorBehavior& color_behavior,
     const OverrideAllowDecodeToYuv allow_decode_to_yuv,
-    const SkISize& desired_size) {
+    const SkISize& desired_size,
+    AnimationOption animation_option) {
   auto type = SniffMimeTypeInternal(data);
   if (type.IsEmpty())
     return nullptr;
 
-  // On low end devices, always decode to 8888.
-  if (high_bit_depth_decoding_option == kHighBitDepthToHalfFloat &&
-      Platform::Current() && Platform::Current()->IsLowEndDevice()) {
-    high_bit_depth_decoding_option = kDefaultBitDepth;
-  }
-
   return CreateByMimeType(type, std::move(data), data_complete, alpha_option,
                           high_bit_depth_decoding_option, color_behavior,
-                          allow_decode_to_yuv, desired_size);
+                          allow_decode_to_yuv, desired_size, animation_option);
 }
 
 std::unique_ptr<ImageDecoder> ImageDecoder::CreateByMimeType(
@@ -185,7 +180,8 @@ std::unique_ptr<ImageDecoder> ImageDecoder::CreateByMimeType(
     HighBitDepthDecodingOption high_bit_depth_decoding_option,
     const ColorBehavior& color_behavior,
     const OverrideAllowDecodeToYuv allow_decode_to_yuv,
-    const SkISize& desired_size) {
+    const SkISize& desired_size,
+    AnimationOption animation_option) {
   const size_t max_decoded_bytes =
       CalculateMaxDecodedBytes(high_bit_depth_decoding_option, desired_size);
 
@@ -219,7 +215,7 @@ std::unique_ptr<ImageDecoder> ImageDecoder::CreateByMimeType(
              mime_type == "image/avif") {
     decoder = std::make_unique<AVIFImageDecoder>(
         alpha_option, high_bit_depth_decoding_option, color_behavior,
-        max_decoded_bytes);
+        max_decoded_bytes, animation_option);
 #endif
   }
 
@@ -620,6 +616,10 @@ bool ImageDecoder::InitFrameBuffer(size_t frame_index) {
     }
   }
 
+  DCHECK_EQ(high_bit_depth_decoding_option_ == kHighBitDepthToHalfFloat &&
+                ImageIsHighBitDepth(),
+            buffer->GetPixelFormat() == ImageFrame::kRGBA_F16);
+
   OnInitFrameBuffer(frame_index);
 
   // Update our status to be partially complete.
@@ -725,13 +725,17 @@ size_t ImageDecoder::FindRequiredPreviousFrame(size_t frame_index,
 }
 
 ImagePlanes::ImagePlanes() {
+  color_type_ = kUnknown_SkColorType;
   for (int i = 0; i < 3; ++i) {
     planes_[i] = nullptr;
     row_bytes_[i] = 0;
   }
 }
 
-ImagePlanes::ImagePlanes(void* planes[3], const size_t row_bytes[3]) {
+ImagePlanes::ImagePlanes(void* planes[3],
+                         const size_t row_bytes[3],
+                         SkColorType color_type)
+    : color_type_(color_type) {
   for (int i = 0; i < 3; ++i) {
     planes_[i] = planes[i];
     row_bytes_[i] = row_bytes[i];

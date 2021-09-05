@@ -20,9 +20,10 @@
 
 namespace autofill_assistant {
 class BasicInteractions;
-class GenericUiControllerAndroid;
+class GenericUiNestedControllerAndroid;
 class UserModel;
 class ViewHandlerAndroid;
+class RadioButtonController;
 
 // Receives incoming events and runs the corresponding set of callbacks.
 //
@@ -36,11 +37,11 @@ class InteractionHandlerAndroid : public EventHandler::Observer {
 
   // Constructor. All dependencies must outlive this instance.
   InteractionHandlerAndroid(
-      const std::map<std::string, std::string>& context,
       EventHandler* event_handler,
       UserModel* user_model,
       BasicInteractions* basic_interactions,
       ViewHandlerAndroid* view_handler,
+      RadioButtonController* radio_button_controller,
       base::android::ScopedJavaGlobalRef<jobject> jcontext,
       base::android::ScopedJavaGlobalRef<jobject> jdelegate);
   ~InteractionHandlerAndroid() override;
@@ -49,15 +50,6 @@ class InteractionHandlerAndroid : public EventHandler::Observer {
 
   void StartListening();
   void StopListening();
-
-  // Adds |context| to the current context of this interaction handler.
-  void AddContext(const std::map<std::string, std::string>& context);
-
-  // Removes the keys in |context| from this handler's context.
-  void RemoveContext(const std::map<std::string, std::string>& context);
-
-  // Returns a copy of the current context.
-  std::map<std::string, std::string> GetContext() const { return context_; }
 
   // Access to the user model that this interaction handler is bound to.
   UserModel* GetUserModel() const;
@@ -82,17 +74,18 @@ class InteractionHandlerAndroid : public EventHandler::Observer {
   // bound to the model.
   void RunValueChangedCallbacks();
 
- private:
+  // Creates a callback from |proto|.
   base::Optional<InteractionCallback> CreateInteractionCallbackFromProto(
       const CallbackProto& proto);
 
+ private:
   // Deletes the nested ui controller associated with |identifier|.
   void DeleteNestedUi(const std::string& identifier);
 
   // Attempts to inflate |proto|. If successful, the new controller is added
   // to the list of managed nested controllers. Note that *this keeps ownership
   // of created nested UIs!
-  const GenericUiControllerAndroid* CreateNestedUi(
+  const GenericUiNestedControllerAndroid* CreateNestedUi(
       const GenericUserInterfaceProto& proto,
       const std::string& identifier);
 
@@ -103,15 +96,11 @@ class InteractionHandlerAndroid : public EventHandler::Observer {
   std::map<EventHandler::EventKey, std::vector<InteractionCallback>>
       interactions_;
 
-  // These key-value pairs specify context variables that the handler will use
-  // to resolve views and values. Nested instances will inherit their parents'
-  // context variables. Special interactions, such as ForEach, may modify the
-  // context while they are being executed.
-  std::map<std::string, std::string> context_;
   EventHandler* event_handler_ = nullptr;
   UserModel* user_model_ = nullptr;
   BasicInteractions* basic_interactions_ = nullptr;
   ViewHandlerAndroid* view_handler_ = nullptr;
+  RadioButtonController* radio_button_controller_ = nullptr;
   base::android::ScopedJavaGlobalRef<jobject> jcontext_ = nullptr;
   base::android::ScopedJavaGlobalRef<jobject> jdelegate_ = nullptr;
   bool is_listening_ = false;
@@ -119,7 +108,7 @@ class InteractionHandlerAndroid : public EventHandler::Observer {
   // TODO(b/154811503): move nested_ui_controllers_ to
   // generic_ui_controller_android.
   // Maps nested-ui identifiers to their instances.
-  std::map<std::string, std::unique_ptr<GenericUiControllerAndroid>>
+  std::map<std::string, std::unique_ptr<GenericUiNestedControllerAndroid>>
       nested_ui_controllers_;
 
   base::WeakPtrFactory<InteractionHandlerAndroid> weak_ptr_factory_{this};

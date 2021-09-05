@@ -32,6 +32,7 @@
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
+#include "third_party/blink/renderer/core/loader/document_loader.h"
 #include "third_party/blink/renderer/core/script/script_loader.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
@@ -141,13 +142,52 @@ void ScriptRunner::NotifyDelayedAsyncScriptsMilestoneReached() {
 }
 
 bool ScriptRunner::CanDelayAsyncScripts() {
-  static bool flags_enabled =
-      base::FeatureList::IsEnabled(features::kDelayAsyncScriptExecution) ||
-      RuntimeEnabledFeatures::
+  if (delay_async_script_milestone_reached_)
+    return false;
+
+  // We first check to see if the base::Feature is enabled, before the
+  // RuntimeEnabledFeatures. This is because the RuntimeEnabledFeatures simply
+  // exist for testing, so if they are enabled *and* the base::Feature is
+  // enabled, we should log UKM via DocumentLoader::DidObserveLoadingBehavior,
+  // which is associated with the experiment running the base::Feature flag.
+  static bool feature_enabled =
+      base::FeatureList::IsEnabled(features::kDelayAsyncScriptExecution);
+  bool optimization_guide_hints_unknown =
+      !document_->GetFrame() ||
+      !document_->GetFrame()->GetOptimizationGuideHints() ||
+      !document_->GetFrame()
+           ->GetOptimizationGuideHints()
+           ->delay_async_script_execution_hints ||
+      document_->GetFrame()
+              ->GetOptimizationGuideHints()
+              ->delay_async_script_execution_hints->delay_type ==
+          mojom::blink::DelayAsyncScriptExecutionDelayType::kUnknown;
+  if (feature_enabled) {
+    if (document_->Parsing() && document_->Loader()) {
+      document_->Loader()->DidObserveLoadingBehavior(
+          kLoadingBehaviorAsyncScriptReadyBeforeDocumentFinishedParsing);
+    }
+
+    // If the base::Feature is enabled, we always want to delay async scripts,
+    // unless we delegate to the OptimizationGuide, but the hints aren't
+    // available.
+    if (features::kDelayAsyncScriptExecutionDelayParam.Get() !=
+            features::DelayAsyncScriptDelayType::kUseOptimizationGuide ||
+        !optimization_guide_hints_unknown) {
+      return true;
+    }
+  }
+
+  // Delay milestone has not been reached yet. We have to check the feature flag
+  // configuration to see if we are able to delay async scripts or not:
+  if (RuntimeEnabledFeatures::
           DelayAsyncScriptExecutionUntilFinishedParsingEnabled() ||
       RuntimeEnabledFeatures::
-          DelayAsyncScriptExecutionUntilFirstPaintOrFinishedParsingEnabled();
-  return !delay_async_script_milestone_reached_ && flags_enabled;
+          DelayAsyncScriptExecutionUntilFirstPaintOrFinishedParsingEnabled()) {
+    return true;
+  }
+
+  return false;
 }
 
 void ScriptRunner::NotifyScriptReady(PendingScript* pending_script) {

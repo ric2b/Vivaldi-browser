@@ -62,12 +62,14 @@ ResponseAction PasswordsPrivateChangeSavedPasswordFunction::Run() {
       api::passwords_private::ChangeSavedPassword::Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(parameters);
 
-  GetDelegate(browser_context())
-      ->ChangeSavedPassword(
-          parameters->id, base::UTF8ToUTF16(parameters->new_username),
-          parameters->new_password ? base::make_optional(base::UTF8ToUTF16(
-                                         *parameters->new_password))
-                                   : base::nullopt);
+  if (!GetDelegate(browser_context())
+           ->ChangeSavedPassword(parameters->ids,
+                                 base::UTF8ToUTF16(parameters->new_password))) {
+    return RespondNow(Error(
+        "Could not change the password. Either the password is empty, the user "
+        "is not authenticated, vector of ids is empty or no matching password "
+        "could be found at least for one of the ids."));
+  }
 
   return RespondNow(NoArguments());
 }
@@ -315,6 +317,12 @@ ResponseAction PasswordsPrivateChangeCompromisedCredentialFunction::Run() {
       api::passwords_private::ChangeCompromisedCredential::Params::Create(
           *args_);
   EXTENSION_FUNCTION_VALIDATE(parameters);
+
+  if (parameters->new_password.empty()) {
+    return RespondNow(
+        Error("Could not change the compromised credential. The new password "
+              "can't be empty."));
+  }
 
   if (!GetDelegate(browser_context())
            ->ChangeCompromisedCredential(parameters->credential,

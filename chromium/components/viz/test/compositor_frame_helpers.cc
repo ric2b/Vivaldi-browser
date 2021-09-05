@@ -4,6 +4,9 @@
 
 #include "components/viz/test/compositor_frame_helpers.h"
 
+#include <memory>
+#include <utility>
+
 namespace viz {
 namespace {
 
@@ -32,8 +35,8 @@ CompositorFrameBuilder& CompositorFrameBuilder::AddRenderPass(
     const gfx::Rect& output_rect,
     const gfx::Rect& damage_rect) {
   std::unique_ptr<RenderPass> pass = RenderPass::Create();
-  pass->SetNew(next_render_pass_id_++, output_rect, damage_rect,
-               gfx::Transform());
+  pass->SetNew(render_pass_id_generator_.GenerateNextId(), output_rect,
+               damage_rect, gfx::Transform());
   frame_->render_pass_list.push_back(std::move(pass));
   return *this;
 }
@@ -41,8 +44,8 @@ CompositorFrameBuilder& CompositorFrameBuilder::AddRenderPass(
 CompositorFrameBuilder& CompositorFrameBuilder::AddRenderPass(
     std::unique_ptr<RenderPass> render_pass) {
   // Give the render pass a unique id if one hasn't been assigned.
-  if (render_pass->id == 0)
-    render_pass->id = next_render_pass_id_++;
+  if (render_pass->id.is_null())
+    render_pass->id = render_pass_id_generator_.GenerateNextId();
   frame_->render_pass_list.push_back(std::move(render_pass));
   return *this;
 }
@@ -134,6 +137,13 @@ CompositorFrame CompositorFrameBuilder::MakeInitCompositorFrame() const {
 
 CompositorFrame MakeDefaultCompositorFrame() {
   return CompositorFrameBuilder().AddDefaultRenderPass().Build();
+}
+
+AggregatedFrame MakeDefaultAggregatedFrame() {
+  AggregatedFrame frame;
+  frame.render_pass_list =
+      std::move(MakeDefaultCompositorFrame().render_pass_list);
+  return frame;
 }
 
 CompositorFrame MakeEmptyCompositorFrame() {

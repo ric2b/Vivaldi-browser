@@ -7,7 +7,6 @@ package org.chromium.content.browser;
 import android.content.pm.ActivityInfo;
 import android.graphics.Rect;
 import android.os.Build;
-import android.support.test.InstrumentationRegistry;
 
 import androidx.test.filters.MediumTest;
 
@@ -27,7 +26,6 @@ import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.CriteriaNotSatisfiedException;
 import org.chromium.content_public.browser.test.util.DOMUtils;
 import org.chromium.content_public.browser.test.util.JavaScriptUtils;
-import org.chromium.content_public.browser.test.util.UiUtils;
 import org.chromium.content_shell_apk.ContentShellActivityTestRule;
 import org.chromium.media.MediaSwitches;
 import org.chromium.ui.test.util.UiRestriction;
@@ -128,8 +126,7 @@ public class VideoFullscreenOrientationLockTest {
 
     @Test
     @MediumTest
-    @DisableIf.Build(message = "crbug.com/837423", sdk_is_greater_than = Build.VERSION_CODES.KITKAT,
-            sdk_is_less_than = Build.VERSION_CODES.M)
+    @DisableIf.Build(message = "crbug.com/837423", sdk_is_less_than = Build.VERSION_CODES.M)
     @Restriction({UiRestriction.RESTRICTION_TYPE_PHONE})
     public void testEnterExitFullscreenWithControlsButton() throws Exception {
         // Start playback to guarantee it's properly loaded.
@@ -144,14 +141,30 @@ public class VideoFullscreenOrientationLockTest {
         // Should be locked to landscape now, `waitUntilLockedToLandscape` will throw otherwise.
         waitUntilLockedToLandscape();
 
-        // Because of the fullscreen animation, the click on the exit fullscreen button will fail
-        // roughly 10% of the time. Settling down the UI reduces the flake to 0%.
-        UiUtils.settleDownUI(InstrumentationRegistry.getInstrumentation());
-
         // Leave fullscreen by clicking back on the button.
-        Assert.assertTrue(clickFullscreenButton());
-        waitForContentsFullscreenState(false);
-        waitUntilUnlocked();
+        // Use a loop to retry due to fullscreen re-layout.
+        int i = 0;
+        AssertionError lastException = null;
+        while (i < 10) {
+            Thread.sleep(100);
+            ++i;
+
+            if (!clickFullscreenButton()) {
+                continue;
+            }
+            AssertionError exception = null;
+            try {
+                waitForContentsFullscreenState(false);
+                waitUntilUnlocked();
+            } catch (AssertionError e) {
+                exception = e;
+            }
+            lastException = exception;
+            if (lastException == null) break;
+        }
+        if (lastException != null) throw lastException;
+        // Ensure clickFullscreenButton doesn't fail repeatedly.
+        Assert.assertTrue(i < 10);
     }
 
     @Test

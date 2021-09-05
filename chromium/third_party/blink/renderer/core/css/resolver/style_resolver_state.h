@@ -24,10 +24,8 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_CSS_RESOLVER_STYLE_RESOLVER_STATE_H_
 
 #include <memory>
-#include "base/macros.h"
 #include "third_party/blink/renderer/core/animation/css/css_animation_update.h"
 #include "third_party/blink/renderer/core/core_export.h"
-#include "third_party/blink/renderer/core/css/css_pending_substitution_value.h"
 #include "third_party/blink/renderer/core/css/css_property_name.h"
 #include "third_party/blink/renderer/core/css/css_property_names.h"
 #include "third_party/blink/renderer/core/css/css_to_length_conversion_data.h"
@@ -39,7 +37,6 @@
 #include "third_party/blink/renderer/core/css/resolver/font_builder.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/element.h"
-#include "third_party/blink/renderer/core/style/cached_ua_style.h"
 
 namespace blink {
 
@@ -64,6 +61,8 @@ class CORE_EXPORT StyleResolverState {
                      PseudoElementStyleRequest::RequestType,
                      const ComputedStyle* parent_style,
                      const ComputedStyle* layout_parent_style);
+  StyleResolverState(const StyleResolverState&) = delete;
+  StyleResolverState& operator=(const StyleResolverState&) = delete;
   ~StyleResolverState();
 
   // In FontFaceSet and CanvasRenderingContext2D, we don't have an element to
@@ -77,7 +76,9 @@ class CORE_EXPORT StyleResolverState {
     return element_context_.ParentNode();
   }
   const ComputedStyle* RootElementStyle() const {
-    return element_context_.RootElementStyle();
+    if (const auto* root_element_style = element_context_.RootElementStyle())
+      return root_element_style;
+    return Style();
   }
   EInsideLink ElementLinkState() const {
     return element_context_.ElementLinkState();
@@ -125,13 +126,6 @@ class CORE_EXPORT StyleResolverState {
     is_animation_interpolation_map_ready_ = true;
   }
 
-  bool IsAnimatingCustomProperties() const {
-    return is_animating_custom_properties_;
-  }
-  void SetIsAnimatingCustomProperties(bool value) {
-    is_animating_custom_properties_ = value;
-  }
-
   Element* GetAnimatingElement() const;
 
   void SetParentStyle(scoped_refptr<const ComputedStyle>);
@@ -140,12 +134,6 @@ class CORE_EXPORT StyleResolverState {
   void SetLayoutParentStyle(scoped_refptr<const ComputedStyle>);
   const ComputedStyle* LayoutParentStyle() const {
     return layout_parent_style_.get();
-  }
-
-  void CacheUserAgentBorderAndBackground();
-
-  const CachedUAStyle* GetCachedUAStyle() const {
-    return cached_ua_style_.get();
   }
 
   ElementStyleResources& GetElementStyleResources() {
@@ -177,24 +165,6 @@ class CORE_EXPORT StyleResolverState {
 
   void SetHasDirAutoAttribute(bool value) { has_dir_auto_attribute_ = value; }
   bool HasDirAutoAttribute() const { return has_dir_auto_attribute_; }
-
-  const CSSValue* GetCascadedColorValue() const {
-    return cascaded_color_value_;
-  }
-  const CSSValue* GetCascadedVisitedColorValue() const {
-    return cascaded_visited_color_value_;
-  }
-
-  void SetCascadedColorValue(const CSSValue* color) {
-    cascaded_color_value_ = color;
-  }
-  void SetCascadedVisitedColorValue(const CSSValue* color) {
-    cascaded_visited_color_value_ = color;
-  }
-
-  HeapHashMap<CSSPropertyID, Member<const CSSValue>>&
-  ParsedPropertiesForPendingSubstitutionCache(
-      const cssvalue::CSSPendingSubstitutionValue&) const;
 
   CSSParserMode GetParserMode() const;
 
@@ -253,6 +223,9 @@ class CORE_EXPORT StyleResolverState {
     return dependencies_.size() <= kMaxDependencies;
   }
 
+  void SetCanCacheBaseStyle(bool state) { can_cache_base_style_ = state; }
+  bool CanCacheBaseStyle() const { return can_cache_base_style_; }
+
  private:
   enum class AnimatingElementType { kElement, kPseudoElement };
 
@@ -285,16 +258,10 @@ class CORE_EXPORT StyleResolverState {
 
   CSSAnimationUpdate animation_update_;
   bool is_animation_interpolation_map_ready_ = false;
-  bool is_animating_custom_properties_ = false;
   bool has_dir_auto_attribute_ = false;
   PseudoElementStyleRequest::RequestType pseudo_request_type_;
 
-  const CSSValue* cascaded_color_value_ = nullptr;
-  const CSSValue* cascaded_visited_color_value_ = nullptr;
-
   FontBuilder font_builder_;
-
-  std::unique_ptr<CachedUAStyle> cached_ua_style_;
 
   ElementStyleResources element_style_resources_;
   Element* pseudo_element_;
@@ -307,11 +274,9 @@ class CORE_EXPORT StyleResolverState {
   // CSSProperty::kComputedValueComparable flag set.
   bool has_incomparable_dependency_ = false;
 
-  mutable HeapHashMap<
-      Member<const cssvalue::CSSPendingSubstitutionValue>,
-      Member<HeapHashMap<CSSPropertyID, Member<const CSSValue>>>>
-      parsed_properties_for_pending_substitution_cache_;
-  DISALLOW_COPY_AND_ASSIGN(StyleResolverState);
+  // True if the base style can be cached to optimize style recalculations for
+  // animation updates or transition retargeting.
+  bool can_cache_base_style_ = false;
 };
 
 }  // namespace blink

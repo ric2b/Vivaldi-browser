@@ -33,6 +33,7 @@
 #include "third_party/blink/renderer/core/layout/intrinsic_sizing_info.h"
 #include "third_party/blink/renderer/core/layout/layout_embedded_content.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
+#include "third_party/blink/renderer/core/layout/text_autosizer.h"
 #include "third_party/blink/renderer/core/loader/frame_load_request.h"
 #include "third_party/blink/renderer/core/loader/frame_loader.h"
 #include "third_party/blink/renderer/core/loader/mixed_content_checker.h"
@@ -82,6 +83,11 @@ RemoteFrame* RemoteFrame::FromFrameToken(
   return it == remote_frames_map.end() ? nullptr : it->value.Get();
 }
 
+// static
+RemoteFrame* RemoteFrame::FromFrameToken(const RemoteFrameToken& frame_token) {
+  return FromFrameToken(frame_token.value());
+}
+
 RemoteFrame::RemoteFrame(
     RemoteFrameClient* client,
     Page& page,
@@ -95,7 +101,10 @@ RemoteFrame::RemoteFrame(
             owner,
             frame_token,
             MakeGarbageCollected<RemoteWindowProxyManager>(*this),
-            inheriting_agent_factory) {
+            inheriting_agent_factory),
+      interface_registry_(
+          interface_registry ? interface_registry
+                             : InterfaceRegistry::GetEmptyInterfaceRegistry()) {
   // TODO(crbug.com/1094850): Remove this check once the renderer is correctly
   // handling errors during the creation of HTML portal elements, which would
   // otherwise cause RemoteFrame() being created with empty frame tokens.
@@ -131,6 +140,14 @@ void RemoteFrame::Trace(Visitor* visitor) const {
 
 void RemoteFrame::Navigate(FrameLoadRequest& frame_request,
                            WebFrameLoadType frame_load_type) {
+  // RemoteFrame::Navigate doesn't support policies like
+  // kNavigationPolicyNewForegroundTab - such policies need to be handled via
+  // local frames.
+  DCHECK_EQ(kNavigationPolicyCurrentTab, frame_request.GetNavigationPolicy());
+
+  if (HTMLFrameOwnerElement* element = DeprecatedLocalOwner())
+    element->CancelPendingLazyLoad();
+
   if (!navigation_rate_limiter().CanProceed())
     return;
 
@@ -139,34 +156,29 @@ void RemoteFrame::Navigate(FrameLoadRequest& frame_request,
                                  : mojom::RequestContextFrameType::kNested);
 
   const KURL& url = frame_request.GetResourceRequest().Url();
+  auto* window = frame_request.GetOriginWindow();
   if (!frame_request.CanDisplay(url)) {
-    if (frame_request.OriginDocument()) {
-      frame_request.OriginDocument()->AddConsoleMessage(
-          MakeGarbageCollected<ConsoleMessage>(
-              mojom::ConsoleMessageSource::kSecurity,
-              mojom::ConsoleMessageLevel::kError,
-              "Not allowed to load local resource: " + url.ElidedString()));
+    if (window) {
+      window->AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
+          mojom::blink::ConsoleMessageSource::kSecurity,
+          mojom::blink::ConsoleMessageLevel::kError,
+          "Not allowed to load local resource: " + url.ElidedString()));
     }
     return;
   }
 
   // The process where this frame actually lives won't have sufficient
   // information to upgrade the url, since it won't have access to the
-  // originDocument. Do it now.
+  // origin context. Do it now.
   const FetchClientSettingsObject* fetch_client_settings_object = nullptr;
-  if (frame_request.OriginDocument()) {
-    fetch_client_settings_object = &frame_request.OriginDocument()
-                                        ->Fetcher()
-                                        ->GetProperties()
-                                        .GetFetchClientSettingsObject();
+  if (window) {
+    fetch_client_settings_object =
+        &window->Fetcher()->GetProperties().GetFetchClientSettingsObject();
   }
-  LocalFrame* frame = frame_request.OriginDocument()
-                          ? frame_request.OriginDocument()->GetFrame()
-                          : nullptr;
   MixedContentChecker::UpgradeInsecureRequest(
-      frame_request.GetResourceRequest(), fetch_client_settings_object,
-      frame ? frame->DomWindow() : nullptr, frame_request.GetFrameType(),
-      frame ? frame->GetContentSettingsClient() : nullptr);
+      frame_request.GetResourceRequest(), fetch_client_settings_object, window,
+      frame_request.GetFrameType(),
+      window ? window->GetFrame()->GetContentSettingsClient() : nullptr);
 
   // Navigations in portal contexts do not create back/forward entries.
   if (GetPage()->InsidePortal() &&
@@ -175,21 +187,19 @@ void RemoteFrame::Navigate(FrameLoadRequest& frame_request,
   }
 
   WebLocalFrame* initiator_frame =
-      frame ? frame->Client()->GetWebFrame() : nullptr;
+      window ? window->GetFrame()->Client()->GetWebFrame() : nullptr;
 
   bool is_opener_navigation = false;
   bool initiator_frame_has_download_sandbox_flag = false;
   bool initiator_frame_is_ad = false;
 
-  if (frame) {
-    is_opener_navigation = frame->Client()->Opener() == this;
+  if (window) {
+    is_opener_navigation = window->GetFrame()->Client()->Opener() == this;
     initiator_frame_has_download_sandbox_flag =
-        frame->GetSecurityContext() &&
-        frame->GetSecurityContext()->IsSandboxed(
-            network::mojom::blink::WebSandboxFlags::kDownloads);
-    initiator_frame_is_ad = frame->IsAdSubframe();
+        window->IsSandboxed(network::mojom::blink::WebSandboxFlags::kDownloads);
+    initiator_frame_is_ad = window->GetFrame()->IsAdSubframe();
     if (frame_request.ClientRedirectReason() != ClientNavigationReason::kNone) {
-      probe::FrameRequestedNavigation(frame, this, url,
+      probe::FrameRequestedNavigation(window->GetFrame(), this, url,
                                       frame_request.ClientRedirectReason(),
                                       kNavigationPolicyCurrentTab);
     }
@@ -224,6 +234,7 @@ void RemoteFrame::DetachImpl(FrameDetachType type) {
   if (cc_layer_)
     SetCcLayer(nullptr, false, false);
   receiver_.reset();
+  main_frame_receiver_.reset();
 }
 
 bool RemoteFrame::DetachDocument() {
@@ -373,7 +384,7 @@ void RemoteFrame::DidChangeVisibleToHitTesting() {
 
 void RemoteFrame::SetReplicatedFeaturePolicyHeaderAndOpenerPolicies(
     const ParsedFeaturePolicy& parsed_header,
-    const FeaturePolicy::FeatureState& opener_feature_state) {
+    const FeaturePolicyFeatureState& opener_feature_state) {
   feature_policy_header_ = parsed_header;
   if (RuntimeEnabledFeatures::FeaturePolicyForSandboxEnabled()) {
     DCHECK(opener_feature_state.empty() || IsMainFrame());
@@ -398,7 +409,8 @@ void RemoteFrame::SetInsecureNavigationsSet(const WebVector<unsigned>& set) {
   security_context_.SetInsecureNavigationsSet(set);
 }
 
-void RemoteFrame::WillEnterFullscreen() {
+void RemoteFrame::WillEnterFullscreen(
+    mojom::blink::FullscreenOptionsPtr request_options) {
   // This should only ever be called when the FrameOwner is local.
   HTMLFrameOwnerElement* owner_element = To<HTMLFrameOwnerElement>(Owner());
 
@@ -406,17 +418,19 @@ void RemoteFrame::WillEnterFullscreen() {
   // fullscreen element in anticipation of the coming |didEnterFullscreen()|
   // call.
   //
-  // PrefixedForCrossProcessDescendant is necessary because:
+  // ForCrossProcessDescendant is necessary because:
   //  - The fullscreen element ready check and other checks should be bypassed.
   //  - |ownerElement| will need :-webkit-full-screen-ancestor style in addition
   //    to :fullscreen.
-  //
-  // TODO(alexmos): currently, this assumes prefixed requests, but in the
-  // future, this should plumb in information about which request type
-  // (prefixed or unprefixed) to use for firing fullscreen events.
-  Fullscreen::RequestFullscreen(
-      *owner_element, FullscreenOptions::Create(),
-      Fullscreen::RequestType::kPrefixedForCrossProcessDescendant);
+  FullscreenRequestType request_type =
+      (request_options->is_prefixed ? FullscreenRequestType::kPrefixed
+                                    : FullscreenRequestType::kUnprefixed) |
+      (request_options->is_xr_overlay ? FullscreenRequestType::kForXrOverlay
+                                      : FullscreenRequestType::kNull) |
+      FullscreenRequestType::kForCrossProcessDescendant;
+
+  Fullscreen::RequestFullscreen(*owner_element, FullscreenOptions::Create(),
+                                request_type);
 }
 
 void RemoteFrame::AddReplicatedContentSecurityPolicies(
@@ -480,6 +494,12 @@ void RemoteFrame::SetReplicatedAdFrameType(
   }
 }
 
+void RemoteFrame::SetReplicatedName(const String& name,
+                                    const String& unique_name) {
+  Tree().SetName(AtomicString(name));
+  unique_name_ = unique_name;
+}
+
 void RemoteFrame::DispatchLoadEventForFrameOwner() {
   DCHECK(Owner()->IsLocal());
   Owner()->DispatchLoad();
@@ -512,10 +532,11 @@ void RemoteFrame::BubbleLogicalScroll(mojom::blink::ScrollDirection direction,
 }
 
 void RemoteFrame::UpdateUserActivationState(
-    mojom::blink::UserActivationUpdateType update_type) {
+    mojom::blink::UserActivationUpdateType update_type,
+    mojom::blink::UserActivationNotificationType notification_type) {
   switch (update_type) {
     case mojom::blink::UserActivationUpdateType::kNotifyActivation:
-      NotifyUserActivationInLocalTree();
+      NotifyUserActivationInLocalTree(notification_type);
       break;
     case mojom::blink::UserActivationUpdateType::kConsumeTransientActivation:
       ConsumeTransientUserActivationInLocalTree();
@@ -532,8 +553,8 @@ void RemoteFrame::UpdateUserActivationState(
 
 void RemoteFrame::SetEmbeddingToken(
     const base::UnguessableToken& embedding_token) {
-  FrameOwner* owner = Owner();
-  To<HTMLFrameOwnerElement>(owner)->SetEmbeddingToken(embedding_token);
+  DCHECK(IsA<HTMLFrameOwnerElement>(Owner()));
+  Frame::SetEmbeddingToken(embedding_token);
 }
 
 void RemoteFrame::SetPageFocus(bool is_focused) {
@@ -639,7 +660,7 @@ void RemoteFrame::DidSetFramePolicyHeaders(
   for (size_t i = 0; i < parsed_feature_policy.size(); ++i)
     parsed_feature_policy_copy[i] = parsed_feature_policy[i];
   SetReplicatedFeaturePolicyHeaderAndOpenerPolicies(
-      parsed_feature_policy_copy, FeaturePolicy::FeatureState());
+      parsed_feature_policy_copy, FeaturePolicyFeatureState());
 }
 
 // Update the proxy's FrameOwner with new sandbox flags and container policy
@@ -668,17 +689,8 @@ void RemoteFrame::UpdateOpener(
   if (auto* web_frame = WebFrame::FromFrame(this)) {
     auto* opener_frame = LocalFrame::ResolveFrame(
         opener_frame_token.value_or(base::UnguessableToken()));
-    auto* opener_web_frame = WebFrame::FromFrame(opener_frame);
-    web_frame->SetOpener(opener_web_frame);
+    SetOpenerDoNotNotify(opener_frame);
   }
-}
-
-void RemoteFrame::TransferUserActivationToRenderer(
-    const base::UnguessableToken& source_frame_token) {
-  RemoteFrame* source_frame = RemoteFrame::FromFrameToken(source_frame_token);
-  if (!source_frame)
-    return;
-  TransferUserActivationFrom(source_frame);
 }
 
 IntSize RemoteFrame::GetMainFrameViewportSize() const {
@@ -696,13 +708,14 @@ IntPoint RemoteFrame::GetMainFrameScrollOffset() const {
 }
 
 void RemoteFrame::SetOpener(Frame* opener_frame) {
-  auto* opener_web_frame = WebFrame::FromFrame(opener_frame);
-  auto* web_frame = WebFrame::FromFrame(this);
+  if (Opener() == opener_frame)
+    return;
 
-  if (web_frame && web_frame->Opener() != opener_web_frame) {
+  auto* web_frame = WebFrame::FromFrame(this);
+  if (web_frame) {
     // A proxy shouldn't normally be disowning its opener.  It is possible to
-    // get here when a proxy that is being detached clears its opener, in which
-    // case there is no need to notify the browser process.
+    // get here when a proxy that is being detached clears its opener, in
+    // which case there is no need to notify the browser process.
     if (opener_frame) {
       // Only a LocalFrame (i.e., the caller of window.open) should be able to
       // update another frame's opener.
@@ -712,8 +725,26 @@ void RemoteFrame::SetOpener(Frame* opener_frame) {
                              opener_frame->GetFrameToken())
                        : base::nullopt);
     }
-    web_frame->SetOpener(opener_web_frame);
   }
+  SetOpenerDoNotNotify(opener_frame);
+}
+
+void RemoteFrame::UpdateTextAutosizerPageInfo(
+    mojom::blink::TextAutosizerPageInfoPtr mojo_remote_page_info) {
+  // Only propagate the remote page info if our main frame is remote.
+  DCHECK(IsMainFrame());
+  Frame* root_frame = GetPage()->MainFrame();
+  DCHECK(root_frame->IsRemoteFrame());
+  if (*mojo_remote_page_info == GetPage()->TextAutosizerPageInfo())
+    return;
+
+  GetPage()->SetTextAutosizerPageInfo(*mojo_remote_page_info);
+  TextAutosizer::UpdatePageInfoInAllFrames(root_frame);
+}
+
+void RemoteFrame::WasAttachedAsRemoteMainFrame() {
+  interface_registry_->AddAssociatedInterface(WTF::BindRepeating(
+      &RemoteFrame::BindToMainFrameReceiver, WrapWeakPersistent(this)));
 }
 
 bool RemoteFrame::IsIgnoredForHitTest() const {
@@ -777,18 +808,24 @@ void RemoteFrame::ApplyReplicatedFeaturePolicyHeader() {
   ParsedFeaturePolicy container_policy;
   if (Owner())
     container_policy = Owner()->GetFramePolicy().container_policy;
-  const FeaturePolicy::FeatureState& opener_feature_state =
-      OpenerFeatureState();
+  const FeaturePolicyFeatureState& opener_feature_state = OpenerFeatureState();
   security_context_.InitializeFeaturePolicy(
       feature_policy_header_, container_policy, parent_feature_policy,
       opener_feature_state.empty() ? nullptr : &opener_feature_state);
 }
 
 void RemoteFrame::BindToReceiver(
-    blink::RemoteFrame* frame,
+    RemoteFrame* frame,
     mojo::PendingAssociatedReceiver<mojom::blink::RemoteFrame> receiver) {
   DCHECK(frame);
   frame->receiver_.Bind(std::move(receiver));
+}
+
+void RemoteFrame::BindToMainFrameReceiver(
+    RemoteFrame* frame,
+    mojo::PendingAssociatedReceiver<mojom::blink::RemoteMainFrame> receiver) {
+  DCHECK(frame);
+  frame->main_frame_receiver_.Bind(std::move(receiver));
 }
 
 }  // namespace blink

@@ -138,9 +138,10 @@ class TestNavigationLoaderInterceptor : public NavigationLoaderInterceptor {
 class NavigationURLLoaderImplTest : public testing::Test {
  public:
   NavigationURLLoaderImplTest()
-      : network_change_notifier_(
-            net::test::MockNetworkChangeNotifier::Create()),
-        task_environment_(BrowserTaskEnvironment::IO_MAINLOOP) {
+      : task_environment_(std::make_unique<BrowserTaskEnvironment>(
+            base::test::TaskEnvironment::MainThreadType::IO)),
+        network_change_notifier_(
+            net::test::MockNetworkChangeNotifier::Create()) {
     // Because the network service is enabled we need a system Connector or
     // BrowserContext::GetDefaultStoragePartition will segfault when
     // ContentBrowserClient::CreateNetworkContext tries to call
@@ -161,6 +162,11 @@ class NavigationURLLoaderImplTest : public testing::Test {
   ~NavigationURLLoaderImplTest() override {
     browser_context_.reset();
     SetSystemConnectorForTesting(nullptr);
+    // Reset the BrowserTaskEnvironment to force destruction of the local
+    // NetworkService, which is held in SequenceLocalStorage. This must happen
+    // before destruction of |network_change_notifier_|, to allow observers to
+    // be unregistered.
+    task_environment_.reset();
   }
 
   std::unique_ptr<NavigationURLLoader> CreateTestLoader(
@@ -185,7 +191,9 @@ class NavigationURLLoaderImplTest : public testing::Test {
             GURL() /* client_side_redirect_url */,
             base::nullopt /* devtools_initiator_info */,
             false /* attach_same_site_cookie */,
-            nullptr /* trust_token_params */, base::nullopt /* impression */);
+            nullptr /* trust_token_params */, base::nullopt /* impression */,
+            base::TimeTicks() /* renderer_before_unload_start */,
+            base::TimeTicks() /* renderer_before_unload_end */);
 
     auto common_params = CreateCommonNavigationParams();
     common_params->url = url;
@@ -243,7 +251,7 @@ class NavigationURLLoaderImplTest : public testing::Test {
                            redirect_url.GetOrigin().spec().c_str()),
         request_method, &delegate);
     delegate.WaitForRequestRedirected();
-    loader->FollowRedirect({}, {}, {}, PREVIEWS_OFF);
+    loader->FollowRedirect({}, {}, {}, blink::PreviewsTypes::PREVIEWS_OFF);
 
     EXPECT_EQ(expected_redirect_method, delegate.redirect_info().new_method);
 
@@ -284,7 +292,7 @@ class NavigationURLLoaderImplTest : public testing::Test {
                            url.GetOrigin().spec().c_str()),
         "GET", &delegate, NavigationDownloadPolicy(), is_main_frame);
     delegate.WaitForRequestRedirected();
-    loader->FollowRedirect({}, {}, {}, PREVIEWS_OFF);
+    loader->FollowRedirect({}, {}, {}, blink::PreviewsTypes::PREVIEWS_OFF);
     delegate.WaitForResponseStarted();
 
     return most_recent_resource_request_.value().priority;
@@ -301,7 +309,7 @@ class NavigationURLLoaderImplTest : public testing::Test {
         "GET", &delegate, NavigationDownloadPolicy(), true /*is_main_frame*/,
         upgrade_if_insecure);
     delegate.WaitForRequestRedirected();
-    loader->FollowRedirect({}, {}, {}, PREVIEWS_OFF);
+    loader->FollowRedirect({}, {}, {}, blink::PreviewsTypes::PREVIEWS_OFF);
     if (expect_request_fail) {
       delegate.WaitForRequestFailed();
     } else {
@@ -311,9 +319,9 @@ class NavigationURLLoaderImplTest : public testing::Test {
   }
 
  protected:
+  std::unique_ptr<BrowserTaskEnvironment> task_environment_;
   std::unique_ptr<net::test::MockNetworkChangeNotifier>
       network_change_notifier_;
-  BrowserTaskEnvironment task_environment_;
   std::unique_ptr<TestBrowserContext> browser_context_;
   net::EmbeddedTestServer http_test_server_;
   base::Optional<network::ResourceRequest> most_recent_resource_request_;
@@ -469,7 +477,8 @@ TEST_F(NavigationURLLoaderImplTest, RedirectModifiedHeaders) {
   net::HttpRequestHeaders redirect_headers;
   redirect_headers.SetHeader("Header2", "");
   redirect_headers.SetHeader("Header3", "Value3");
-  loader->FollowRedirect({}, redirect_headers, {}, PREVIEWS_OFF);
+  loader->FollowRedirect({}, redirect_headers, {},
+                         blink::PreviewsTypes::PREVIEWS_OFF);
   delegate.WaitForResponseStarted();
 
   // Redirected request should also have modified headers.

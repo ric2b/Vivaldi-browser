@@ -18,8 +18,9 @@
 VivaldiBrowserMainExtraPartsMac::VivaldiBrowserMainExtraPartsMac() {}
 VivaldiBrowserMainExtraPartsMac::~VivaldiBrowserMainExtraPartsMac() {}
 
-VivaldiBrowserMainExtraParts* VivaldiBrowserMainExtraParts::Create() {
-  return new VivaldiBrowserMainExtraPartsMac();
+std::unique_ptr<VivaldiBrowserMainExtraParts>
+VivaldiBrowserMainExtraParts::Create() {
+  return std::make_unique<VivaldiBrowserMainExtraPartsMac>();
 }
 
 bool VivaldiBrowserMainExtraPartsMac::checkVersionPath(std::string location,

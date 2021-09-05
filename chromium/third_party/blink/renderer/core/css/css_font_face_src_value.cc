@@ -83,14 +83,14 @@ bool CSSFontFaceSrcValue::HasFailedOrCanceledSubresources() const {
 
 FontResource& CSSFontFaceSrcValue::Fetch(ExecutionContext* context,
                                          FontResourceClient* client) const {
-  if (!fetched_) {
+  if (!fetched_ || fetched_->GetResource()->Options().world != world_) {
     ResourceRequest resource_request(absolute_resource_);
     resource_request.SetReferrerPolicy(
         ReferrerPolicyResolveDefault(referrer_.referrer_policy));
     resource_request.SetReferrerString(referrer_.referrer);
     if (is_ad_related_)
       resource_request.SetIsAdResource();
-    ResourceLoaderOptions options;
+    ResourceLoaderOptions options(world_);
     options.initiator_info.name = fetch_initiator_type_names::kCSS;
     options.initiator_info.referrer = referrer_.referrer;
     FetchParameters params(std::move(resource_request), options);
@@ -98,7 +98,6 @@ FontResource& CSSFontFaceSrcValue::Fetch(ExecutionContext* context,
             features::kWebFontsCacheAwareTimeoutAdaption)) {
       params.SetCacheAwareLoadingEnabled(kIsCacheAwareLoadingEnabled);
     }
-    params.SetContentSecurityCheck(should_check_content_security_policy_);
     params.SetFromOriginDirtyStyleSheet(origin_clean_ != OriginClean::kTrue);
     const SecurityOrigin* security_origin = context->GetSecurityOrigin();
 
@@ -135,12 +134,9 @@ void CSSFontFaceSrcValue::RestoreCachedResourceIfNeeded(
   DCHECK(context);
   DCHECK(context->Fetcher());
 
-  const String resource_url = context->CompleteURL(absolute_resource_);
-  DCHECK_EQ(should_check_content_security_policy_,
-            fetched_->GetResource()->Options().content_security_policy_option);
+  const KURL url = context->CompleteURL(absolute_resource_);
   context->Fetcher()->EmulateLoadStartedForInspector(
-      fetched_->GetResource(), KURL(resource_url),
-      mojom::RequestContextType::FONT,
+      fetched_->GetResource(), url, mojom::RequestContextType::FONT,
       network::mojom::RequestDestination::kFont,
       fetch_initiator_type_names::kCSS);
 }

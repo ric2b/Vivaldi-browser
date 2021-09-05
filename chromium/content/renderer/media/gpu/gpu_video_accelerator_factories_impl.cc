@@ -117,8 +117,7 @@ GpuVideoAcceleratorFactoriesImpl::GpuVideoAcceleratorFactoriesImpl(
           enable_media_stream_gpu_memory_buffers),
       video_accelerator_enabled_(enable_video_accelerator),
       gpu_memory_buffer_manager_(
-          RenderThreadImpl::current()->GetGpuMemoryBufferManager()),
-      thread_safe_sender_(ChildThreadImpl::current()->thread_safe_sender()) {
+          RenderThreadImpl::current()->GetGpuMemoryBufferManager()) {
   DCHECK(main_thread_task_runner_);
   DCHECK(gpu_channel_host_);
 
@@ -429,7 +428,7 @@ GpuVideoAcceleratorFactoriesImpl::VideoFrameOutputFormat(
   auto capabilities = context_provider_->ContextCapabilities();
   const size_t bit_depth = media::BitDepth(pixel_format);
   if (bit_depth > 8) {
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
     // If high bit depth rendering is enabled, bail here, otherwise try and use
     // XR30 storage, and if not and we support RG textures, use those, albeit at
     // a reduced bit depth of 8 bits per component.

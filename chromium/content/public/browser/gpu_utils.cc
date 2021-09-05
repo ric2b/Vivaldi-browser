@@ -104,7 +104,7 @@ const gpu::GpuPreferences GetGpuPreferencesFromCommandLine() {
   gpu_preferences.disable_vulkan_fallback_to_gl_for_testing =
       command_line->HasSwitch(switches::kDisableVulkanFallbackToGLForTesting);
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   gpu_preferences.enable_metal = base::FeatureList::IsEnabled(features::kMetal);
 #endif
 
@@ -117,10 +117,15 @@ const gpu::GpuPreferences GetGpuPreferencesFromCommandLine() {
   gpu_preferences.enable_native_gpu_memory_buffers =
       command_line->HasSwitch(switches::kEnableNativeGpuMemoryBuffers);
 
-#if BUILDFLAG(USE_CHROMEOS_MEDIA_ACCELERATION)
-  gpu_preferences.force_disable_new_accelerated_video_decoder =
+#if defined(OS_CHROMEOS)
+  gpu_preferences.platform_disallows_chromeos_direct_video_decoder =
       command_line->HasSwitch(
-          switches::kForceDisableNewAcceleratedVideoDecoder);
+          switches::kPlatformDisallowsChromeOSDirectVideoDecoder);
+#endif
+
+#if defined(OS_ANDROID)
+  gpu_preferences.disable_oopr_debug_crash_dump =
+      command_line->HasSwitch(switches::kDisableOoprDebugCrashDump);
 #endif
 
   // Some of these preferences are set or adjusted in

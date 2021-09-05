@@ -4,6 +4,8 @@
 
 #include "ui/views/animation/ink_drop_host_view.h"
 
+#include <utility>
+
 #include "ui/events/event.h"
 #include "ui/events/scoped_target_handler.h"
 #include "ui/gfx/color_palette.h"
@@ -130,6 +132,24 @@ InkDrop* InkDropHostView::GetInkDrop() {
   return ink_drop_.get();
 }
 
+bool InkDropHostView::GetHighlighted() const {
+  return ink_drop_ && ink_drop_->IsHighlightFadingInOrVisible();
+}
+
+PropertyChangedSubscription InkDropHostView::AddHighlightedChangedCallback(
+    PropertyChangedCallback callback) {
+  // Since the highlight state is not directly represented by a member, use the
+  // applicable member (|ink_drop_|) as the property key.  Note that this won't
+  // suffice if a future InkDrop-related property is added.
+  return AddPropertyChangedCallback(&ink_drop_, std::move(callback));
+}
+
+void InkDropHostView::OnInkDropHighlightedChanged() {
+  // See comments in AddHighlightedChangedCallback() re: using |ink_drop_| as
+  // the key.
+  OnPropertyChanged(&ink_drop_, kPropertyEffectsNone);
+}
+
 std::unique_ptr<InkDropImpl> InkDropHostView::CreateDefaultInkDropImpl() {
   auto ink_drop = std::make_unique<InkDropImpl>(this, size());
   ink_drop->SetAutoHighlightMode(
@@ -215,6 +235,15 @@ gfx::Size InkDropHostView::CalculateLargeInkDropSize(
   return gfx::ScaleToCeiledSize(gfx::Size(small_size), kLargeInkDropScale);
 }
 
+void InkDropHostView::OnLayerTransformed(const gfx::Transform& old_transform,
+                                         ui::PropertyChangeReason reason) {
+  View::OnLayerTransformed(old_transform, reason);
+
+  // Notify the ink drop that we have transformed so it can adapt accordingly.
+  if (HasInkDrop())
+    GetInkDrop()->HostTransformChanged(GetTransform());
+}
+
 const InkDropEventHandler* InkDropHostView::GetEventHandler() const {
   if (ink_drop_event_handler_override_)
     return ink_drop_event_handler_override_;
@@ -228,6 +257,7 @@ InkDropEventHandler* InkDropHostView::GetEventHandler() {
 
 BEGIN_METADATA(InkDropHostView)
 METADATA_PARENT_CLASS(View)
+ADD_READONLY_PROPERTY_METADATA(InkDropHostView, bool, Highlighted)
 END_METADATA()
 
 }  // namespace views

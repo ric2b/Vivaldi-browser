@@ -474,6 +474,10 @@ void CollectUserDataAction::EndAction(const ClientStatus& status) {
   delegate_->CleanUpAfterPrompt();
   action_successful_ = status.ok();
   UpdateProcessedAction(status);
+  if (action_successful_) {
+    delegate_->SetLastSuccessfulUserDataOptions(
+        std::move(collect_user_data_options_));
+  }
   std::move(callback_).Run(std::move(processed_action_proto_));
 }
 
@@ -1127,6 +1131,10 @@ void CollectUserDataAction::WriteProcessedAction(UserData* user_data,
     if (login_details != login_details_map_.end()) {
       if (login_details->second->login.has_value()) {
         user_data->selected_login_ = *login_details->second->login;
+        if (login_details->second->login->username.empty()) {
+          processed_action_proto_->mutable_collect_user_data_result()
+              ->set_login_missing_username(true);
+        }
       }
 
       processed_action_proto_->mutable_collect_user_data_result()
@@ -1338,8 +1346,11 @@ void CollectUserDataAction::UpdatePersonalDataManagerCards(
 }
 
 void CollectUserDataAction::OnPersonalDataChanged() {
-  personal_data_changed_ = true;
+  if (!callback_) {
+    return;
+  }
 
+  personal_data_changed_ = true;
   delegate_->WriteUserData(
       base::BindOnce(&CollectUserDataAction::UpdatePersonalDataManagerProfiles,
                      weak_ptr_factory_.GetWeakPtr()));

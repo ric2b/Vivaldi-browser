@@ -229,39 +229,6 @@ message {{union_name}} {
 {%- for interface in interfaces %}
 
 message {{interface.name}} {
-  // TODO(markbrand): remove the old types once crbug/955171 is landed.
-  message Ptr {
-    required uint32 id = 1;
-  }
-
-  message AssociatedPtr {
-    required uint32 id = 1;
-  }
-
-  message Request {
-    required uint32 id = 1;
-  }
-
-  message AssociatedRequest {
-    required uint32 id = 1;
-  }
-
-  message PendingRemote {
-    required uint32 id = 1;
-  }
-
-  message PendingReceiver {
-    required uint32 id = 1;
-  }
-
-  message PendingAssociatedRemote {
-    required uint32 id = 1;
-  }
-
-  message PendingAssociatedReceiver {
-    required uint32 id = 1;
-  }
-
   message Reset {
   }
 
@@ -349,8 +316,8 @@ message {{interface.name}} {
 {%-   endfor%}
 
 {%-   if interface.methods|length %}
-  message MethodCall {
-    required {{interface.name}}.Ptr ptr = 1;
+  message RemoteAction {
+    required uint32 id = 1;
 
     oneof method {
       Reset reset = 2;
@@ -360,8 +327,8 @@ message {{interface.name}} {
     }
   }
 
-  message MethodCallA {
-    required {{interface.name}}.AssociatedPtr ptr = 1;
+  message AssociatedRemoteAction {
+    required uint32 id = 1;
 
     oneof method {
       Reset reset = 2;
@@ -371,29 +338,9 @@ message {{interface.name}} {
     }
   }
 
-  message RemoteMethodCall {
-    required {{interface.name}}.PendingRemote remote = 1;
+  message ReceiverAction {
+    required uint32 id = 1;
 
-    oneof method {
-      Reset reset = 2;
-{%-     for method in interface.methods %}
-      {{interface.name}}_{{method.name}} m_{{method.name|camel_to_under}} = {{loop.index + 2}};
-{%-     endfor %}
-    }
-  }
-
-  message AssociatedRemoteMethodCall {
-    required {{interface.name}}.PendingAssociatedRemote remote = 1;
-
-    oneof method {
-      Reset reset = 2;
-{%-     for method in interface.methods %}
-      {{interface.name}}_{{method.name}} m_{{method.name|camel_to_under}} = {{loop.index + 2}};
-{%-     endfor %}
-    }
-  }
-
-  message ReceiverResponse {
     oneof response {
 {%-     for method in interface.methods %}
       {{interface.name}}_{{method.name}}Response m_{{method.name|camel_to_under}}_response = {{loop.index + 2}};

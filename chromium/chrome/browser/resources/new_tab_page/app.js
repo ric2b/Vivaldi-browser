@@ -10,10 +10,13 @@ import './iframe.js';
 import './fakebox.js';
 import './realbox.js';
 import './logo.js';
+import './module_wrapper.js';
+import './modules/modules.js'; // Registers module descriptors.
 import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
 import 'chrome://resources/cr_elements/shared_style_css.m.js';
 
 import {assert} from 'chrome://resources/js/assert.m.js';
+import {hexColorToSkColor, skColorToRgba} from 'chrome://resources/js/color_utils.js';
 import {FocusOutlineManager} from 'chrome://resources/js/cr/ui/focus_outline_manager.m.js';
 import {EventTracker} from 'chrome://resources/js/event_tracker.m.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
@@ -22,7 +25,19 @@ import {html, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/poly
 import {BackgroundManager} from './background_manager.js';
 import {BrowserProxy} from './browser_proxy.js';
 import {BackgroundSelection, BackgroundSelectionType} from './customize_dialog.js';
-import {$$, hexColorToSkColor, skColorToRgba} from './utils.js';
+import {ModuleDescriptor} from './modules/module_descriptor.js';
+import {ModuleRegistry} from './modules/module_registry.js';
+import {oneGoogleBarApi} from './one_google_bar_api.js';
+import {PromoBrowserCommandProxy} from './promo_browser_command_proxy.js';
+import {$$} from './utils.js';
+
+/**
+ * @typedef {{
+ *   commandId: promoBrowserCommand.mojom.Command<number>,
+ *   clickInfo: !promoBrowserCommand.mojom.ClickInfo
+ * }}
+ */
+let CommandData;
 
 class AppElement extends PolymerElement {
   static get is() {
@@ -187,6 +202,9 @@ class AppElement extends PolymerElement {
        * @private
        */
       lazyRender_: Boolean,
+
+      /** @private {!Array<!ModuleDescriptor>} */
+      moduleDescriptors_: Object,
     };
   }
 
@@ -225,7 +243,9 @@ class AppElement extends PolymerElement {
           performance.measure('theme-set');
           this.theme_ = theme;
         });
-    this.eventTracker_.add(window, 'message', ({data}) => {
+    this.eventTracker_.add(window, 'message', (event) => {
+      /** @type {!Object} */
+      const data = event.data;
       // Something in OneGoogleBar is sending a message that is received here.
       // Need to ignore it.
       if (typeof data !== 'object') {
@@ -233,9 +253,9 @@ class AppElement extends PolymerElement {
       }
       if ('frameType' in data) {
         if (data.frameType === 'promo') {
-          this.handlePromoMessage_(data);
+          this.handlePromoMessage_(event);
         } else if (data.frameType === 'one-google-bar') {
-          this.handleOneGoogleBarMessage_(data);
+          this.handleOneGoogleBarMessage_(event);
         }
       }
     });
@@ -344,10 +364,11 @@ class AppElement extends PolymerElement {
     document.body.appendChild(endOfBodyScript);
 
     this.pageHandler_.onOneGoogleBarRendered(BrowserProxy.getInstance().now());
+    oneGoogleBarApi.trackDarkModeChanges();
   }
 
   /** @private */
-  async onOneGoogleBarDarkThemeEnabledChange_() {
+  onOneGoogleBarDarkThemeEnabledChange_() {
     if (!this.oneGoogleBarLoaded_) {
       return;
     }
@@ -358,16 +379,7 @@ class AppElement extends PolymerElement {
       });
       return;
     }
-    const {gbar} = /** @type {{gbar}} */ (window);
-    if (!gbar) {
-      return;
-    }
-    const oneGoogleBar =
-        await /** @type {!{a: {bf: function(): !Promise<{pc: !Function}>}}} */ (
-            gbar)
-            .a.bf();
-    oneGoogleBar.pc.call(
-        oneGoogleBar, this.oneGoogleBarDarkThemeEnabled_ ? 1 : 0);
+    oneGoogleBarApi.setForegroundLight(this.oneGoogleBarDarkThemeEnabled_);
   }
 
   /**
@@ -443,10 +455,19 @@ class AppElement extends PolymerElement {
   }
 
   /** @private */
+  async onLazyRendered_() {
+    if (!loadTimeData.getBoolean('modulesEnabled')) {
+      return;
+    }
+    this.moduleDescriptors_ =
+        await ModuleRegistry.getInstance().initializeModules();
+  }
+
+  /** @private */
   onOpenVoiceSearch_() {
     this.showVoiceSearchOverlay_ = true;
     this.pageHandler_.onVoiceSearchAction(
-        newTabPage.mojom.VoiceSearchAction.ACTIVATE_SEARCH_BOX);
+        newTabPage.mojom.VoiceSearchAction.kActivateSearchBox);
   }
 
   /** @private */
@@ -478,7 +499,7 @@ class AppElement extends PolymerElement {
     if (ctrlKeyPressed && e.code === 'Period' && e.shiftKey) {
       this.showVoiceSearchOverlay_ = true;
       this.pageHandler_.onVoiceSearchAction(
-          newTabPage.mojom.VoiceSearchAction.ACTIVATE_KEYBOARD);
+          newTabPage.mojom.VoiceSearchAction.kActivateKeyboard);
     }
   }
 
@@ -584,7 +605,7 @@ class AppElement extends PolymerElement {
   computeDoodleAllowed_() {
     return loadTimeData.getBoolean('themeModeDoodlesEnabled') ||
         !this.showBackgroundImage_ && this.theme_ &&
-        this.theme_.type === newTabPage.mojom.ThemeType.DEFAULT &&
+        this.theme_.type === newTabPage.mojom.ThemeType.kDefault &&
         !this.theme_.isDark;
   }
 
@@ -634,6 +655,32 @@ class AppElement extends PolymerElement {
   }
 
   /**
+   * Sends the command and the accompanying mouse click info received from the
+   * promo of the given source and origin to the browser. Relays the execution
+   * status response back to the source promo frame. |commandSource| and
+   * |commandOrigin| are used only to send the execution status response back to
+   * the source promo frame and should not be used for anything else.
+   * @param {!CommandData} commandData Command and mouse click info.
+   * @param {Window} commandSource Source promo frame.
+   * @param {string} commandOrigin Origin of the source promo frame.
+   * @private
+   */
+  executePromoBrowserCommand_(commandData, commandSource, commandOrigin) {
+    // Make sure we don't send unsupported commands to the browser.
+    /** @type {!promoBrowserCommand.mojom.Command} */
+    const commandId = Object.values(promoBrowserCommand.mojom.Command)
+                          .includes(commandData.commandId) ?
+        commandData.commandId :
+        promoBrowserCommand.mojom.Command.kUnknownCommand;
+
+    PromoBrowserCommandProxy.getInstance()
+        .handler.executeCommand(commandId, commandData.clickInfo)
+        .then(({commandExecuted}) => {
+          commandSource.postMessage(commandExecuted, commandOrigin);
+        });
+  }
+
+  /**
    * Handles messages from the OneGoogleBar iframe. The messages that are
    * handled include show bar on load and overlay updates.
    *
@@ -643,10 +690,12 @@ class AppElement extends PolymerElement {
    * When modal overlays are enabled, activate/deactivate controls if the
    * OneGoogleBar is layered on top of #content with a backdrop. This would
    * happen when OneGoogleBar has an overlay open.
-   * @param {!Object} data
+   * @param {!MessageEvent} event
    * @private
    */
-  handleOneGoogleBarMessage_(data) {
+  handleOneGoogleBarMessage_(event) {
+    /** @type {!Object} */
+    const data = event.data;
     if (data.messageType === 'loaded') {
       if (!this.oneGoogleBarModalOverlaysEnabled_) {
         const oneGoogleBar = $$(this, '#oneGoogleBar');
@@ -677,6 +726,9 @@ class AppElement extends PolymerElement {
     } else if (data.messageType === 'deactivate') {
       this.$.oneGoogleBarOverlayBackdrop.toggleAttribute('show', false);
       $$(this, '#oneGoogleBar').style.zIndex = '0';
+    } else if (data.messageType === 'execute-browser-command') {
+      this.executePromoBrowserCommand_(
+          /** @type {!CommandData} */ (data.data), event.source, event.origin);
     }
   }
 
@@ -684,10 +736,12 @@ class AppElement extends PolymerElement {
    * Handle messages from promo iframe. This shows the promo on load and sets
    * up the show/hide logic (in case there is an overlap with most-visited
    * tiles).
-   * @param {!Object} data
+   * @param {!MessageEvent} event
    * @private
    */
-  handlePromoMessage_(data) {
+  handlePromoMessage_(event) {
+    /** @type {!Object} */
+    const data = event.data;
     if (data.messageType === 'loaded') {
       this.promoLoaded_ = true;
       const onResize = () => {
@@ -700,6 +754,9 @@ class AppElement extends PolymerElement {
       this.pageHandler_.onPromoRendered(BrowserProxy.getInstance().now());
     } else if (data.messageType === 'link-clicked') {
       this.pageHandler_.onPromoLinkClicked();
+    } else if (data.messageType === 'execute-browser-command') {
+      this.executePromoBrowserCommand_(
+          /** @type {!CommandData} */ (data), event.source, event.origin);
     }
   }
 

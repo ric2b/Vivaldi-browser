@@ -146,11 +146,11 @@ SPECIAL_CASES = {
         "License": "MIT",
         "License File": "/../third_party/_winsparkle_lib/COPYING",
     },
-    os.path.join('..', 'third_party', 'sparkle_lib'): {
+    os.path.join('..', 'thirdparty', 'macsparkle'): {
         "Name": "Sparkle",
         "URL": "http://sparkle-project.org/",
         "License": "MIT",
-        "License File": "/../third_party/sparkle_lib/LICENSE",
+        "License File": "/../thirdparty/macsparkle/LICENSE",
     },
     os.path.join('..', 'vivapp', 'src', 'browserjs'): {
         "Name": "boss-select",

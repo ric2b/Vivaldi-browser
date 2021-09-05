@@ -1,0 +1,37 @@
+<!doctype html>
+<html>
+  <head>
+    <script>
+      const params = new URLSearchParams(window.location.search);
+
+      // Watch for the testing trigger_id for HaTS Next, defined on the browser
+      // side in hats_service.cc.
+      if (params.get('trigger_id') == 'zishSVViB0kPN8UwQ150VGjBKuBP') {
+        history.pushState('', '', '#loaded');
+      }
+
+      if (params.get('trigger_id') == "close_for_testing") {
+        history.pushState('', '', '#close');
+      }
+
+      if (params.get('trigger_id') == "invalid_url_fragment_for_testing") {
+        history.pushState('', '', '#foo');
+      }
+
+      if (params.get('trigger_id') == "open_new_web_contents_for_testing"){
+        window.open('http://foo.com', '_blank');
+        history.pushState('', '', '#close');
+      }
+
+      if (params.get('trigger_id') == "resize_for_testing") {
+        window.resizeTo(123, 456);
+      }
+
+      if (params.get('trigger_id') == "invalid_size_for_testing") {
+        window.resizeTo(1000, 1000);
+      }
+    </script>
+  </head>
+  <body>
+  </body>
+</html>

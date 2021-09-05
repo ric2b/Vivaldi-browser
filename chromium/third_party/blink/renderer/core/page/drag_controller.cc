@@ -31,9 +31,9 @@
 #include "base/memory/scoped_refptr.h"
 #include "build/build_config.h"
 #include "third_party/blink/public/common/page/web_drag_operation.h"
+#include "third_party/blink/public/common/widget/screen_info.h"
 #include "third_party/blink/public/platform/web_common.h"
 #include "third_party/blink/public/platform/web_drag_data.h"
-#include "third_party/blink/public/platform/web_screen_info.h"
 #include "third_party/blink/renderer/core/clipboard/data_object.h"
 #include "third_party/blink/renderer/core/clipboard/data_transfer.h"
 #include "third_party/blink/renderer/core/clipboard/data_transfer_access_policy.h"
@@ -196,7 +196,8 @@ static DocumentFragment* DocumentFragmentFromDragData(
 
 bool DragController::DragIsMove(FrameSelection& selection,
                                 DragData* drag_data) {
-  return document_under_mouse_ == drag_initiator_ &&
+  return document_under_mouse_ ==
+             (drag_initiator_ ? drag_initiator_->document() : nullptr) &&
          selection.SelectionHasFocus() &&
          selection.ComputeVisibleSelectionInDOMTreeDeprecated()
              .IsContentEditable() &&
@@ -239,7 +240,8 @@ void DragController::PerformDrag(DragData* drag_data, LocalFrame& local_root) {
   document_under_mouse_ = local_root.DocumentAtPoint(
       PhysicalOffset::FromFloatPointRound(drag_data->ClientPosition()));
   LocalFrame::NotifyUserActivation(
-      document_under_mouse_ ? document_under_mouse_->GetFrame() : nullptr);
+      document_under_mouse_ ? document_under_mouse_->GetFrame() : nullptr,
+      mojom::blink::UserActivationNotificationType::kInteraction);
   if ((drag_destination_action_ & kDragDestinationActionDHTML) &&
       document_is_handling_drag_) {
     bool prevented_default = false;
@@ -306,7 +308,7 @@ void DragController::PerformDrag(DragData* drag_data, LocalFrame& local_root) {
       // current tab. See https://crbug.com/451659.
       request.SetNavigationPolicy(
           NavigationPolicy::kNavigationPolicyNewForegroundTab);
-      page_->MainFrame()->Navigate(request, WebFrameLoadType::kStandard);
+      local_root.Navigate(request, WebFrameLoadType::kStandard);
     }
 
     // TODO(bokan): This case happens when we end a URL drag inside a guest
@@ -391,9 +393,12 @@ bool DragController::TryDocumentDrag(DragData* drag_data,
   if (!document_under_mouse_)
     return false;
 
-  if (drag_initiator_ && !document_under_mouse_->GetSecurityOrigin()->CanAccess(
-                             drag_initiator_->GetSecurityOrigin()))
+  auto* under_mouse_origin =
+      document_under_mouse_->GetExecutionContext()->GetSecurityOrigin();
+  if (drag_initiator_ &&
+      !under_mouse_origin->CanAccess(drag_initiator_->GetSecurityOrigin())) {
     return false;
+  }
 
   bool is_handling_drag = false;
   if (action_mask & kDragDestinationActionDHTML) {
@@ -733,7 +738,9 @@ bool DragController::CanProcessDrag(DragData* drag_data,
     return false;
   }
 
-  if (did_initiate_drag_ && document_under_mouse_ == drag_initiator_) {
+  if (did_initiate_drag_ &&
+      document_under_mouse_ ==
+          (drag_initiator_ ? drag_initiator_->document() : nullptr)) {
     const PhysicalOffset point_in_frame =
         result.InnerNode()
             ->GetDocument()
@@ -1036,6 +1043,7 @@ FloatRect DragController::ClippedSelection(const LocalFrame& frame) {
 }
 
 static IntPoint DragLocationForSelectionDrag(const LocalFrame& frame) {
+  frame.View()->UpdateLifecycleToLayoutClean(DocumentUpdateReason::kSelection);
   IntRect dragging_rect =
       EnclosingIntRect(DragController::ClippedSelection(frame));
   int xpos = dragging_rect.MaxX();
@@ -1046,7 +1054,7 @@ static IntPoint DragLocationForSelectionDrag(const LocalFrame& frame) {
 }
 
 static const IntSize MaxDragImageSize(float device_scale_factor) {
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   // Match Safari's drag image size.
   static const IntSize kMaxDragImageSize(400, 400);
 #else
@@ -1166,8 +1174,11 @@ std::unique_ptr<DragImage> DragController::DragImageForSelection(
       builder.Context(), paint_flags,
       CullRect(EnclosingIntRect(painting_rect)));
 
-  PropertyTreeState property_tree_state =
-      frame.View()->GetLayoutView()->FirstFragment().LocalBorderBoxProperties();
+  auto property_tree_state = frame.View()
+                                 ->GetLayoutView()
+                                 ->FirstFragment()
+                                 .LocalBorderBoxProperties()
+                                 .Unalias();
   return DataTransfer::CreateDragImageForFrame(
       frame, opacity, kRespectImageOrientation, painting_rect.Size(),
       painting_rect.Location(), builder, property_tree_state);
@@ -1311,7 +1322,7 @@ void DragController::DoSystemDrag(DragImage* image,
                                   LocalFrame* frame,
                                   bool for_link) {
   did_initiate_drag_ = true;
-  drag_initiator_ = frame->GetDocument();
+  drag_initiator_ = frame->DomWindow();
   SetExecutionContext(frame->DomWindow());
 
   // TODO(pdr): |drag_location| and |event_pos| should be passed in as
@@ -1356,7 +1367,7 @@ DragOperation DragController::GetDragOperation(DragData* drag_data) {
 bool DragController::IsCopyKeyDown(DragData* drag_data) {
   int modifiers = drag_data->GetModifiers();
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   return modifiers & WebInputEvent::kAltKey;
 #else
   return modifiers & WebInputEvent::kControlKey;

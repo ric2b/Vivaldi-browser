@@ -24,7 +24,7 @@
 #include "net/url_request/url_request_context_builder.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-#if defined(OS_MACOSX) && !defined(OS_IOS)
+#if defined(OS_MAC)
 #include "base/mac/mac_util.h"
 #endif
 
@@ -67,6 +67,7 @@ TEST_F(NetworkSessionConfiguratorTest, Defaults) {
   EXPECT_TRUE(params_.enable_http2);
   EXPECT_TRUE(params_.http2_settings.empty());
   EXPECT_FALSE(params_.greased_http2_frame);
+  EXPECT_FALSE(params_.http2_end_stream_with_data_frame);
   EXPECT_FALSE(params_.enable_websocket_over_http2);
 
   EXPECT_TRUE(params_.enable_quic);
@@ -456,6 +457,18 @@ TEST_F(NetworkSessionConfiguratorTest,
   EXPECT_TRUE(quic_params_.disable_tls_zero_rtt);
 }
 
+TEST_F(NetworkSessionConfiguratorTest,
+       QuicDisableGQuicZeroRttFromFieldTrialParams) {
+  std::map<std::string, std::string> field_trial_params;
+  field_trial_params["disable_gquic_zero_rtt"] = "true";
+  variations::AssociateVariationParams("QUIC", "Enabled", field_trial_params);
+  base::FieldTrialList::CreateFieldTrial("QUIC", "Enabled");
+
+  ParseFieldTrials();
+
+  EXPECT_TRUE(quic_params_.disable_gquic_zero_rtt);
+}
+
 TEST_F(NetworkSessionConfiguratorTest, PacketLengthFromFieldTrialParams) {
   std::map<std::string, std::string> field_trial_params;
   field_trial_params["max_packet_length"] = "1450";
@@ -753,7 +766,7 @@ TEST_F(NetworkSessionConfiguratorTest, DefaultCacheBackend) {
 #if defined(OS_ANDROID) || defined(OS_LINUX) || defined(OS_CHROMEOS)
   EXPECT_EQ(net::URLRequestContextBuilder::HttpCacheParams::DISK_SIMPLE,
             ChooseCacheType());
-#elif defined(OS_MACOSX) && !defined(OS_IOS)
+#elif defined(OS_MAC)
   EXPECT_EQ(
       base::mac::IsAtLeastOS10_14()
           ? net::URLRequestContextBuilder::HttpCacheParams::DISK_SIMPLE
@@ -850,6 +863,18 @@ TEST_F(NetworkSessionConfiguratorTest, Http2GreaseFrameTypeFromFieldTrial) {
   ASSERT_TRUE(params_.greased_http2_frame);
   const uint8_t frame_type = params_.greased_http2_frame.value().type;
   EXPECT_EQ(0x0b, frame_type % 0x1f);
+}
+
+TEST_F(NetworkSessionConfiguratorTest,
+       Http2EndStreamWithDataFrameFromFieldTrial) {
+  std::map<std::string, std::string> field_trial_params;
+  field_trial_params["http2_end_stream_with_data_frame"] = "true";
+  variations::AssociateVariationParams("HTTP2", "Enabled", field_trial_params);
+  base::FieldTrialList::CreateFieldTrial("HTTP2", "Enabled");
+
+  ParseFieldTrials();
+
+  ASSERT_TRUE(params_.http2_end_stream_with_data_frame);
 }
 
 TEST_F(NetworkSessionConfiguratorTest,

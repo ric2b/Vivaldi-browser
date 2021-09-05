@@ -43,7 +43,7 @@ class PendingChildFrameAdapter : public UniqueNameHelper::FrameAdapter {
     NOTREACHED();
     return 0;
   }
-  std::vector<base::StringPiece> CollectAncestorNames(
+  std::vector<std::string> CollectAncestorNames(
       BeginPoint begin_point,
       bool (*should_stop)(base::StringPiece)) const override {
     DCHECK_EQ(BeginPoint::kParentFrame, begin_point);
@@ -69,13 +69,14 @@ constexpr char kDynamicFrameMarker[] = "<!--dynamicFrame";
 constexpr size_t kMaxRequestedNameSize = 80;
 
 bool IsNameWithFramePath(base::StringPiece name) {
-  return name.starts_with(kFramePathPrefix) && name.ends_with("-->") &&
+  return base::StartsWith(name, kFramePathPrefix) &&
+         base::EndsWith(name, "-->") &&
          (kFramePathPrefixLength + kFramePathSuffixLength) < name.size();
 }
 
 std::string GenerateCandidate(const FrameAdapter* frame) {
   std::string new_name(kFramePathPrefix);
-  std::vector<base::StringPiece> ancestor_names = frame->CollectAncestorNames(
+  std::vector<std::string> ancestor_names = frame->CollectAncestorNames(
       FrameAdapter::BeginPoint::kParentFrame, &IsNameWithFramePath);
   std::reverse(ancestor_names.begin(), ancestor_names.end());
   // Note: This checks ancestor_names[0] twice, but it's nicer to do the name

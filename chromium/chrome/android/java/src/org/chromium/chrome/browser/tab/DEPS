@@ -1,6 +1,7 @@
 include_rules = [
   "-chrome",
   "+chrome/android/java/src/org/chromium/chrome/browser/ActivityTabProvider.java",
+  "+chrome/android/java/src/org/chromium/chrome/browser/app/ChromeActivity.java",
   "+chrome/android/java/src/org/chromium/chrome/browser/AppHooks.java",
   "+chrome/android/java/src/org/chromium/chrome/browser/TabHidingType.java",
   "+chrome/android/java/src/org/chromium/chrome/browser/compositor/bottombar/ephemeraltab/EphemeralTabCoordinator.java",
@@ -19,6 +20,7 @@ include_rules = [
   "+chrome/browser/flags",
   "+chrome/browser/android/lifecycle",
   "+chrome/browser/preferences",
+  "+chrome/browser/tab",
   "+chrome/browser/ui/android/native_page",
   "+components/browser_ui/styles/android",
   "+components/browser_ui/widget/android",
@@ -32,7 +34,7 @@ include_rules = [
 
 specific_include_rules = {
   'InterceptNavigationDelegateClientImpl\.java': [
-    "+chrome/android/java/src/org/chromium/chrome/browser/ChromeActivity.java",
+    "+chrome/android/java/src/org/chromium/chrome/browser/app/ChromeActivity.java",
     "+chrome/android/java/src/org/chromium/chrome/browser/tabmodel/TabModelSelector.java",
   ],
   'RedirectHandlerTabHelper\.java': [
@@ -41,7 +43,7 @@ specific_include_rules = {
   ],
   'TabImpl\.java': [
     "+chrome/android/features/vr/java/src/org/chromium/chrome/browser/vr/VrModuleProvider.java",
-    "+chrome/android/java/src/org/chromium/chrome/browser/ChromeActivity.java",
+    "+chrome/android/java/src/org/chromium/chrome/browser/app/ChromeActivity.java",
     "+chrome/android/java/src/org/chromium/chrome/browser/ChromeVersionInfo.java",
     "+chrome/android/java/src/org/chromium/chrome/browser/WarmupManager.java",
     "+chrome/android/java/src/org/chromium/chrome/browser/WebContentsFactory.java",
@@ -75,5 +77,8 @@ specific_include_rules = {
   ],
   'TabViewManagerImpl\.java': [
     "+chrome/browser/browser_controls/android/java/src/org/chromium/chrome/browser/browser_controls/BrowserControlsMarginSupplier.java",
+  ],
+  'TabWebContentsObserver\.java': [
+    "+chrome/android/java/src/org/chromium/chrome/browser/display_cutout/DisplayCutoutTabHelper.java",
   ]
 }

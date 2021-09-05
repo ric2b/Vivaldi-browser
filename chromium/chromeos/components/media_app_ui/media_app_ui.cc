@@ -41,11 +41,25 @@ content::WebUIDataSource* CreateHostDataSource() {
   web_app::SetManifestRequestFilter(source, IDR_MEDIA_APP_MANIFEST,
                                     IDS_MEDIA_APP_APP_NAME);
 
-  // TODO(b/141588875): Switch this back to IDR_MEDIA_APP_APP_ICON_256_PNG (and
-  // add more icon resolutions) when the final icon is ready.
+  // Redirects "system_assets/app_icon_*.png" (from manifest.json) to the icons
+  // for the gallery app.
+  // TODO(b/141588875): Switch these to IDR_MEDIA_APP_APP_ICON_*_PNG in the
+  // internal media_app_bundle_resources.grd file (and add more icon
+  // resolutions) when the final icon is ready.
+  source->AddResourcePath("system_assets/app_icon_16.png",
+                          IDR_MEDIA_APP_GALLERY_ICON_16_PNG);
+  source->AddResourcePath("system_assets/app_icon_32.png",
+                          IDR_MEDIA_APP_GALLERY_ICON_32_PNG);
+  source->AddResourcePath("system_assets/app_icon_64.png",
+                          IDR_MEDIA_APP_GALLERY_ICON_64_PNG);
+  source->AddResourcePath("system_assets/app_icon_96.png",
+                          IDR_MEDIA_APP_GALLERY_ICON_96_PNG);
+  source->AddResourcePath("system_assets/app_icon_128.png",
+                          IDR_MEDIA_APP_GALLERY_ICON_128_PNG);
+  source->AddResourcePath("system_assets/app_icon_192.png",
+                          IDR_MEDIA_APP_GALLERY_ICON_192_PNG);
   source->AddResourcePath("system_assets/app_icon_256.png",
                           IDR_MEDIA_APP_GALLERY_ICON_256_PNG);
-
   return source;
 }
 
@@ -62,16 +76,21 @@ MediaAppUI::MediaAppUI(content::WebUI* web_ui,
   // The guest is in an <iframe>. Add it to CSP.
   std::string csp = std::string("frame-src ") + kChromeUIMediaAppGuestURL + ";";
   host_source->OverrideContentSecurityPolicy(
-      network::mojom::CSPDirectiveName::ChildSrc, csp);
+      network::mojom::CSPDirectiveName::FrameSrc, csp);
 
   // Register auto-granted permissions.
   auto* allowlist = WebUIAllowlist::GetOrCreate(browser_context);
   const url::Origin host_origin =
       url::Origin::Create(GURL(kChromeUIMediaAppURL));
-  allowlist->RegisterAutoGrantedPermission(
-      host_origin, ContentSettingsType::NATIVE_FILE_SYSTEM_READ_GUARD);
-  allowlist->RegisterAutoGrantedPermission(
-      host_origin, ContentSettingsType::NATIVE_FILE_SYSTEM_WRITE_GUARD);
+  allowlist->RegisterAutoGrantedPermissions(
+      host_origin, {
+                       ContentSettingsType::COOKIES,
+                       ContentSettingsType::FILE_SYSTEM_READ_GUARD,
+                       ContentSettingsType::FILE_SYSTEM_WRITE_GUARD,
+                       ContentSettingsType::IMAGES,
+                       ContentSettingsType::JAVASCRIPT,
+                       ContentSettingsType::SOUND,
+                   });
 
   content::WebUIDataSource* untrusted_source =
       CreateMediaAppUntrustedDataSource(delegate_.get());

@@ -56,6 +56,7 @@
 #include "chrome/browser/chromeos/login/signin_specifics.h"
 #include "chrome/browser/chromeos/login/test/js_checker.h"
 #include "chrome/browser/chromeos/login/test/local_policy_test_server_mixin.h"
+#include "chrome/browser/chromeos/login/test/oobe_base_test.h"
 #include "chrome/browser/chromeos/login/test/oobe_screen_waiter.h"
 #include "chrome/browser/chromeos/login/test/session_manager_state_waiter.h"
 #include "chrome/browser/chromeos/login/test/test_predicate_waiter.h"
@@ -161,8 +162,6 @@
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
-#include "net/url_request/url_fetcher_delegate.h"
-#include "net/url_request/url_request_status.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "third_party/icu/source/common/unicode/locid.h"
 #include "ui/base/ime/chromeos/extension_ime_util.h"
@@ -467,7 +466,8 @@ class DeviceLocalAccountTest : public DevicePolicyCrosBrowserTest,
       run_loop.Run();
 
     // Skip to the login screen.
-    chromeos::OobeScreenWaiter(chromeos::GaiaView::kScreenId).Wait();
+    chromeos::OobeScreenWaiter(chromeos::OobeBaseTest::GetFirstSigninScreen())
+        .Wait();
 
     chromeos::test::UserSessionManagerTestApi session_manager_test_api(
         chromeos::UserSessionManager::GetInstance());
@@ -2064,7 +2064,7 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, TermsOfServiceWithLocaleSwitch) {
   chromeos::ExistingUserController* controller =
       chromeos::ExistingUserController::current_controller();
   ASSERT_TRUE(controller);
-  controller->set_login_status_consumer(&login_status_consumer);
+  controller->AddLoginStatusConsumer(&login_status_consumer);
 
   // Manually select a different keyboard layout and click the enter button to
   // start the session.
@@ -2075,7 +2075,7 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, TermsOfServiceWithLocaleSwitch) {
   // Spin the loop until the login observer fires. Then, unregister the
   // observer.
   login_wait_run_loop.Run();
-  controller->set_login_status_consumer(NULL);
+  controller->RemoveLoginStatusConsumer(&login_status_consumer);
 
   // Verify that the Terms of Service screen is being shown.
   chromeos::WizardController* wizard_controller =
@@ -2220,6 +2220,52 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, PolicyForExtensions) {
   base::Value expected_new_value("policy test value two");
   EXPECT_EQ(expected_new_value,
             *policy_service->GetPolicies(ns).GetValue("string"));
+}
+
+IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, LoginWarningShown) {
+  UploadAndInstallDeviceLocalAccountPolicy();
+  AddPublicSessionToDevicePolicy(kAccountId1);
+
+  WaitForPolicy();
+
+  ExpandPublicSessionPod(false);
+
+  // Click the link that switches the pod to its advanced form. Verify that the
+  // pod switches from basic to advanced.
+  ash::LoginScreenTestApi::ClickPublicExpandedAdvancedViewButton();
+  ASSERT_TRUE(ash::LoginScreenTestApi::IsExpandedPublicSessionAdvanced());
+  ASSERT_TRUE(ash::LoginScreenTestApi::IsPublicSessionWarningShown());
+}
+
+class DeviceLocalAccountWarnings : public DeviceLocalAccountTest {
+  void SetUpInProcessBrowserTestFixture() override {
+    DeviceLocalAccountTest::SetUpInProcessBrowserTestFixture();
+    SetManagedSessionsWarningDisabled();
+  }
+
+  void SetManagedSessionsWarningDisabled() {
+    em::ChromeDeviceSettingsProto& proto(device_policy()->payload());
+    em::ManagedGuestSessionPrivacyWarningsProto* managed_sessions_warnings =
+        proto.mutable_managed_guest_session_privacy_warnings();
+    managed_sessions_warnings->set_enabled(false);
+    RefreshDevicePolicy();
+    ASSERT_TRUE(local_policy_mixin_.UpdateDevicePolicy(proto));
+  }
+};
+
+IN_PROC_BROWSER_TEST_F(DeviceLocalAccountWarnings, NoLoginWarningShown) {
+  UploadAndInstallDeviceLocalAccountPolicy();
+  AddPublicSessionToDevicePolicy(kAccountId1);
+
+  WaitForPolicy();
+
+  ExpandPublicSessionPod(false);
+
+  // Click the link that switches the pod to its advanced form. Verify that the
+  // pod switches from basic to advanced.
+  ash::LoginScreenTestApi::ClickPublicExpandedAdvancedViewButton();
+  ASSERT_TRUE(ash::LoginScreenTestApi::IsExpandedPublicSessionAdvanced());
+  ASSERT_FALSE(ash::LoginScreenTestApi::IsPublicSessionWarningShown());
 }
 
 class ManagedSessionsTest : public DeviceLocalAccountTest {
@@ -2605,9 +2651,9 @@ IN_PROC_BROWSER_TEST_P(TermsOfServiceDownloadTest, TermsOfServiceScreen) {
   chromeos::ExistingUserController* controller =
       chromeos::ExistingUserController::current_controller();
   ASSERT_TRUE(controller);
-  controller->set_login_status_consumer(&login_status_consumer);
+  controller->AddLoginStatusConsumer(&login_status_consumer);
   login_wait_run_loop.Run();
-  controller->set_login_status_consumer(NULL);
+  controller->RemoveLoginStatusConsumer(&login_status_consumer);
 
   // Verify that the Terms of Service screen is being shown.
   chromeos::WizardController* wizard_controller =
@@ -2721,9 +2767,9 @@ IN_PROC_BROWSER_TEST_P(TermsOfServiceDownloadTest, DeclineTermsOfService) {
   chromeos::ExistingUserController* controller =
       chromeos::ExistingUserController::current_controller();
   ASSERT_TRUE(controller);
-  controller->set_login_status_consumer(&login_status_consumer);
+  controller->AddLoginStatusConsumer(&login_status_consumer);
   login_wait_run_loop.Run();
-  controller->set_login_status_consumer(NULL);
+  controller->RemoveLoginStatusConsumer(&login_status_consumer);
 
   // Verify that the Terms of Service screen is being shown.
   chromeos::WizardController* wizard_controller =

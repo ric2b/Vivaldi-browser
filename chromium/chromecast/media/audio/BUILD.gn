@@ -13,6 +13,15 @@ declare_args() {
   default_output_buffer_size_in_frames = 2048
 }
 
+cast_source_set("audio_log") {
+  sources = [
+    "audio_log.cc",
+    "audio_log.h",
+  ]
+
+  deps = [ "//base" ]
+}
+
 cast_source_set("audio_io_thread") {
   sources = [
     "audio_io_thread.cc",
@@ -81,6 +90,8 @@ cast_source_set("audio") {
     "cast_audio_input_stream.h",
     "cast_audio_manager.cc",
     "cast_audio_manager.h",
+    "cast_audio_manager_helper.cc",
+    "cast_audio_manager_helper.h",
     "cast_audio_mixer.cc",
     "cast_audio_mixer.h",
     "cast_audio_output_stream.cc",
@@ -117,10 +128,7 @@ cast_source_set("audio") {
       "cast_audio_manager_alsa.cc",
       "cast_audio_manager_alsa.h",
     ]
-    deps += [
-      ":audio_buildflags",
-      "//content/public/browser",
-    ]
+    deps += [ ":audio_buildflags" ]
   }
 
   if (is_android) {

@@ -108,11 +108,8 @@ void PaintTimingDetector::NotifyBackgroundImagePaint(
     const Node* node,
     const Image* image,
     const StyleFetchedImage* style_image,
-    const PropertyTreeState& current_paint_chunk_properties,
+    const PropertyTreeStateOrAlias& current_paint_chunk_properties,
     const IntRect& image_border) {
-  if (IgnorePaintTimingScope::ShouldIgnore())
-    return;
-
   DCHECK(image);
   DCHECK(style_image->CachedImage());
   if (!node)
@@ -130,7 +127,7 @@ void PaintTimingDetector::NotifyBackgroundImagePaint(
     return;
   detector.GetImagePaintTimingDetector()->RecordImage(
       *object, image->Size(), *style_image->CachedImage(),
-      current_paint_chunk_properties, style_image, &image_border);
+      current_paint_chunk_properties, style_image, image_border);
 }
 
 // static
@@ -138,10 +135,10 @@ void PaintTimingDetector::NotifyImagePaint(
     const LayoutObject& object,
     const IntSize& intrinsic_size,
     const ImageResourceContent* cached_image,
-    const PropertyTreeState& current_paint_chunk_properties) {
+    const PropertyTreeStateOrAlias& current_paint_chunk_properties,
+    const IntRect& image_border) {
   if (IgnorePaintTimingScope::ShouldIgnore())
     return;
-
   LocalFrameView* frame_view = object.GetFrameView();
   if (!frame_view)
     return;
@@ -152,12 +149,14 @@ void PaintTimingDetector::NotifyImagePaint(
     return;
   detector.GetImagePaintTimingDetector()->RecordImage(
       object, intrinsic_size, *cached_image, current_paint_chunk_properties,
-      nullptr, nullptr);
+      nullptr, image_border);
 }
 
 void PaintTimingDetector::NotifyImageFinished(
     const LayoutObject& object,
     const ImageResourceContent* cached_image) {
+  if (IgnorePaintTimingScope::ShouldIgnore())
+    return;
   if (image_paint_timing_detector_)
     image_paint_timing_detector_->NotifyImageFinished(object, cached_image);
 }
@@ -330,7 +329,7 @@ void PaintTimingDetector::ConvertViewportToWindow(
 
 FloatRect PaintTimingDetector::CalculateVisualRect(
     const IntRect& visual_rect,
-    const PropertyTreeState& current_paint_chunk_properties) const {
+    const PropertyTreeStateOrAlias& current_paint_chunk_properties) const {
   // This case should be dealt with outside the function.
   DCHECK(!visual_rect.IsEmpty());
 
@@ -384,15 +383,23 @@ void PaintTimingDetector::UpdateLargestContentfulPaintCandidate() {
                                                     largest_image_record);
 }
 
+void PaintTimingDetector::ReportIgnoredContent() {
+  if (auto* text_timing_detector = GetTextPaintTimingDetector()) {
+    text_paint_timing_detector_->ReportLargestIgnoredText();
+  }
+  if (auto* image_timing_detector = GetImagePaintTimingDetector()) {
+    image_timing_detector->ReportLargestIgnoredImage();
+  }
+}
+
 ScopedPaintTimingDetectorBlockPaintHook*
     ScopedPaintTimingDetectorBlockPaintHook::top_ = nullptr;
 
 void ScopedPaintTimingDetectorBlockPaintHook::EmplaceIfNeeded(
     const LayoutBoxModelObject& aggregator,
-    const PropertyTreeState& property_tree_state) {
-  if (IgnorePaintTimingScope::ShouldIgnore())
+    const PropertyTreeStateOrAlias& property_tree_state) {
+  if (IgnorePaintTimingScope::IgnoreDepth() > 1)
     return;
-
   // |reset_top_| is unset when |aggregator| is anonymous so that each
   // aggregation corresponds to an element. See crbug.com/988593. When set,
   // |top_| becomes |this|, and |top_| is restored to the previous value when
@@ -411,7 +418,7 @@ void ScopedPaintTimingDetectorBlockPaintHook::EmplaceIfNeeded(
 
 ScopedPaintTimingDetectorBlockPaintHook::Data::Data(
     const LayoutBoxModelObject& aggregator,
-    const PropertyTreeState& property_tree_state,
+    const PropertyTreeStateOrAlias& property_tree_state,
     TextPaintTimingDetector* detector)
     : aggregator_(aggregator),
       property_tree_state_(property_tree_state),

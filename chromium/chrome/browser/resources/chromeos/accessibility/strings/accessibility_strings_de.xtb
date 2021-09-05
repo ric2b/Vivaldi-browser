@@ -6,6 +6,7 @@
 <translation id="1012173283529841972">Listenelement</translation>
 <translation id="1013742170491673792">srched</translation>
 <translation id="1014370462248694370">Mit zwei Fingern nach rechts wischen</translation>
+<translation id="1016393160682012902">Drücken Sie eine Taste auf der QWERTZ-Tastatur oder der Braillezeile oder führen Sie eine Touch-Geste aus, um mehr über die Taste bzw. Touch-Geste zu erfahren. Zum Beenden drücken Sie "Strg + w" oder "Esc".</translation>
 <translation id="1022586497894531524">Verwenden Sie gesprochenes Feedback von ChromeVox zum ersten Mal? In dieser kurzen Anleitung erfahren Sie die Grundlagen für die Nutzung von ChromeVox.</translation>
 <translation id="1025074108959230262">Fixierter Modus deaktiviert</translation>
 <translation id="1031961866430398710">und</translation>
@@ -504,7 +505,6 @@
 <translation id="489907760999452556">Interner Link</translation>
 <translation id="4909019435900810068">Ein Wort zurück</translation>
 <translation id="4911349081560453449">Kein vorheriges Kästchen</translation>
-<translation id="4915087353619183190">Der Lernmodus wird gestartet. Drücken Sie eine Taste auf der QWERTZ-Tastatur oder der Braillezeile oder führen Sie eine Bewegung (Geste) auf dem Bildschirm aus, um mehr über die Taste bzw. Bewegung zu erfahren. Zum Beenden drücken Sie "Strg + w" oder "Esc".</translation>
 <translation id="492295894462528572">Vorwort</translation>
 <translation id="495046168593986294">Nach oben scrollen</translation>
 <translation id="495170559598752135">Aktionen</translation>
@@ -647,6 +647,7 @@
 <translation id="6017514345406065928">Grün</translation>
 <translation id="602001110135236999">Nach links scrollen</translation>
 <translation id="6034000775414344507">Hellgrau</translation>
+<translation id="6036135911048686884">Zum Vorlesen berühren und ziehen</translation>
 <translation id="6037602951055904232">Nach vorn verschieben</translation>
 <translation id="6044160928851315051">Bildschirm abdunkeln</translation>
 <translation id="6082768461603900813">Grundlegende Navigation</translation>
@@ -716,7 +717,7 @@
 <translation id="6696967141280706829">Vorbemerkung</translation>
 <translation id="6697092096875747123">Vorheriges Kombinationsfeld</translation>
 <translation id="6702609185760332517">{COUNT,plural, =1{Ausrufezeichen}other{# Ausrufezeichen}}</translation>
-<translation id="6710213216561001401">Zurück</translation>
+<translation id="6710213216561001401">Vorherige Einreichung</translation>
 <translation id="6714813999819678458">Vorherige Überschrift der Ebene 2</translation>
 <translation id="6730312624811567147">Drücken Sie die Suchtaste in Verbindung mit dem Links- oder Rechtspfeil für "Pos1" oder "Ende", die Suchtaste in Verbindung mit der Steuerungstaste und dem Links- oder Rechtspfeil für "Steuerung-Pos1" oder "Steuerung-Ende" und die Suchtaste in Verbindung mit dem Aufwärts- oder Abwärtspfeil für "Bild auf" oder "Bild ab"</translation>
 <translation id="6736510033526053669">Tab erstellt</translation>
@@ -923,6 +924,7 @@
 <translation id="8345569862449483843">{COUNT,plural, =1{Doppelkreuz}other{# Doppelkreuze}}</translation>
 <translation id="8378855320830505539">Region</translation>
 <translation id="8382679411218029383">Inline-Autovervollständigung und Liste</translation>
+<translation id="8394908167088220973">Medien – Wiedergabe/Pause</translation>
 <translation id="8428213095426709021">Einstellungen</translation>
 <translation id="8428603554127842284">Ebene <ph name="DEPTH" /></translation>
 <translation id="8430049249787218991">mnubr</translation>
@@ -967,6 +969,7 @@
 <translation id="8770473310765924354">Strukturierte Inhalte wie z. B. Tabellen beenden</translation>
 <translation id="8779057862865475116">Kein vorheriger Link</translation>
 <translation id="8796411681063377102">Nächste Überschrift der Ebene 3</translation>
+<translation id="8823311177246872527">Seite <ph name="CURRENTPAGE" /> von <ph name="TOTALPAGES" /></translation>
 <translation id="8825828890761629845">bnr</translation>
 <translation id="8851136666856101339">main</translation>
 <translation id="8882002077197914455">Zeilenüberschrift</translation>

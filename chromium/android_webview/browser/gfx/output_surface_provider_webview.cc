@@ -28,8 +28,13 @@ namespace android_webview {
 
 namespace {
 
-void OnContextLost() {
-  NOTREACHED() << "Non owned context lost!";
+void OnContextLost(bool synthetic_loss) {
+  // TODO(https://crbug.com/1112841): Debugging contexts losts. WebView will
+  // intentionally crash in HardwareRendererViz::OnViz::DisplayOutputSurface
+  // that will happen after this callback. That crash happens on viz thread and
+  // doesn't have any useful information. Crash here on RenderThread to
+  // understand the reason of context losts.
+  LOG(FATAL) << "Non owned context lost!";
 }
 
 }  // namespace
@@ -125,8 +130,8 @@ OutputSurfaceProviderWebview::CreateOutputSurface() {
     auto skia_dependency = std::make_unique<SkiaOutputSurfaceDependencyWebView>(
         TaskQueueWebView::GetInstance(), GpuServiceWebView::GetInstance(),
         shared_context_state_.get(), gl_surface_.get());
-    return viz::SkiaOutputSurfaceImpl::Create(std::move(skia_dependency),
-                                              renderer_settings_);
+    return viz::SkiaOutputSurfaceImpl::Create(
+        std::move(skia_dependency), renderer_settings_, debug_settings());
   } else {
     auto context_provider = AwRenderThreadContextProvider::Create(
         gl_surface_, DeferredGpuCommandService::GetInstance());

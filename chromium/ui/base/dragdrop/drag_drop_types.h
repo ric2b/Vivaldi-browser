@@ -21,19 +21,12 @@ class COMPONENT_EXPORT(UI_BASE) DragDropTypes {
     DRAG_LINK = 1 << 2
   };
 
-  enum DragEventSource {
-    DRAG_EVENT_SOURCE_MOUSE = 0,
-    DRAG_EVENT_SOURCE_TOUCH,
-    DRAG_EVENT_SOURCE_LAST = DRAG_EVENT_SOURCE_TOUCH,
-    DRAG_EVENT_SOURCE_COUNT
-  };
-
 #if defined(OS_WIN)
   static uint32_t DragOperationToDropEffect(int drag_operation);
   static int DropEffectToDragOperation(uint32_t effect);
 #endif
 
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
   static uint64_t DragOperationToNSDragOperation(int drag_operation);
   static int NSDragOperationToDragOperation(uint64_t ns_drag_operation);
 #endif

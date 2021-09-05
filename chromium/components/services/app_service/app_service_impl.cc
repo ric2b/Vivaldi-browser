@@ -43,7 +43,8 @@ enum class PreferredAppsUpdateAction {
   kAdd = 0,
   kDeleteForFilter = 1,
   kDeleteForAppId = 2,
-  kMaxValue = kDeleteForAppId,
+  kUpgraded = 3,
+  kMaxValue = kUpgraded,
 };
 
 void Connect(apps::mojom::Publisher* publisher,
@@ -99,16 +100,20 @@ namespace apps {
 
 AppServiceImpl::AppServiceImpl(PrefService* profile_prefs,
                                const base::FilePath& profile_dir,
-                               base::OnceClosure read_completed_for_testing)
+                               bool is_share_intents_supported,
+                               base::OnceClosure read_completed_for_testing,
+                               base::OnceClosure write_completed_for_testing)
     : pref_service_(profile_prefs),
       profile_dir_(profile_dir),
+      is_share_intents_supported_(is_share_intents_supported),
       should_write_preferred_apps_to_file_(false),
       writing_preferred_apps_(false),
       task_runner_(base::ThreadPool::CreateSequencedTaskRunner(
           {base::ThreadPool(), base::MayBlock(),
            base::TaskPriority::BEST_EFFORT,
            base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN})),
-      read_completed_for_testing_(std::move(read_completed_for_testing)) {
+      read_completed_for_testing_(std::move(read_completed_for_testing)),
+      write_completed_for_testing_(std::move(write_completed_for_testing)) {
   DCHECK(pref_service_);
   InitializePreferredApps();
 }
@@ -174,7 +179,7 @@ void AppServiceImpl::RegisterSubscriber(
 void AppServiceImpl::LoadIcon(apps::mojom::AppType app_type,
                               const std::string& app_id,
                               apps::mojom::IconKeyPtr icon_key,
-                              apps::mojom::IconCompression icon_compression,
+                              apps::mojom::IconType icon_type,
                               int32_t size_hint_in_dip,
                               bool allow_placeholder_icon,
                               LoadIconCallback callback) {
@@ -183,7 +188,7 @@ void AppServiceImpl::LoadIcon(apps::mojom::AppType app_type,
     std::move(callback).Run(apps::mojom::IconValue::New());
     return;
   }
-  iter->second->LoadIcon(app_id, std::move(icon_key), icon_compression,
+  iter->second->LoadIcon(app_id, std::move(icon_key), icon_type,
                          size_hint_in_dip, allow_placeholder_icon,
                          std::move(callback));
 }
@@ -240,13 +245,15 @@ void AppServiceImpl::SetPermission(apps::mojom::AppType app_type,
 
 void AppServiceImpl::Uninstall(apps::mojom::AppType app_type,
                                const std::string& app_id,
+                               apps::mojom::UninstallSource uninstall_source,
                                bool clear_site_data,
                                bool report_abuse) {
   auto iter = publishers_.find(app_type);
   if (iter == publishers_.end()) {
     return;
   }
-  iter->second->Uninstall(app_id, clear_site_data, report_abuse);
+  iter->second->Uninstall(app_id, uninstall_source, clear_site_data,
+                          report_abuse);
 }
 
 void AppServiceImpl::PauseApp(apps::mojom::AppType app_type,
@@ -388,11 +395,6 @@ PreferredAppsList& AppServiceImpl::GetPreferredAppsForTesting() {
   return preferred_apps_;
 }
 
-void AppServiceImpl::SetWriteCompletedCallbackForTesting(
-    base::OnceClosure testing_callback) {
-  write_completed_for_testing_ = std::move(testing_callback);
-}
-
 void AppServiceImpl::OnPublisherDisconnected(apps::mojom::AppType app_type) {
   publishers_.erase(app_type);
 }
@@ -419,8 +421,8 @@ void AppServiceImpl::WriteToJSON(
 
   writing_preferred_apps_ = true;
 
-  auto preferred_apps_value =
-      apps::ConvertPreferredAppsToValue(preferred_apps.GetReference());
+  auto preferred_apps_value = apps::ConvertPreferredAppsToValue(
+      preferred_apps.GetReference(), is_share_intents_supported_);
 
   std::string json_string;
   JSONStringValueSerializer serializer(&json_string);
@@ -462,6 +464,7 @@ void AppServiceImpl::ReadFromJSON(const base::FilePath& profile_dir) {
 
 void AppServiceImpl::ReadCompleted(std::string preferred_apps_string) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  bool preferred_apps_upgraded = false;
   if (preferred_apps_string.empty()) {
     preferred_apps_.Init();
   } else {
@@ -477,11 +480,20 @@ void AppServiceImpl::ReadCompleted(std::string preferred_apps_string) {
                << error_code << " and error message: " << error_message;
       preferred_apps_.Init();
     } else {
+      preferred_apps_upgraded = IsUpgradedForSharing(*preferred_apps_value);
       auto preferred_apps =
           apps::ParseValueToPreferredApps(*preferred_apps_value);
+      if (is_share_intents_supported_ && !preferred_apps_upgraded) {
+        UpgradePreferredApps(preferred_apps);
+      }
       preferred_apps_.Init(preferred_apps);
     }
   }
+  if (is_share_intents_supported_ && !preferred_apps_upgraded) {
+    LogPreferredAppUpdateAction(PreferredAppsUpdateAction::kUpgraded);
+    WriteToJSON(profile_dir_, preferred_apps_);
+  }
+
   for (auto& subscriber : subscribers_) {
     subscriber->InitializePreferredApps(preferred_apps_.GetValue());
   }

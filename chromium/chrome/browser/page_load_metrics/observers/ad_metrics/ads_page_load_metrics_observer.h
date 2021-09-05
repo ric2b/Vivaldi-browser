@@ -11,11 +11,14 @@
 #include <memory>
 
 #include "base/macros.h"
+#include "base/metrics/field_trial_params.h"
 #include "base/scoped_observer.h"
 #include "base/time/tick_clock.h"
 #include "chrome/browser/page_load_metrics/observers/ad_metrics/frame_data.h"
+#include "chrome/browser/page_load_metrics/observers/ad_metrics/page_ad_density_tracker.h"
 #include "components/page_load_metrics/browser/page_load_metrics_observer.h"
 #include "components/page_load_metrics/common/page_load_metrics.mojom-forward.h"
+#include "components/performance_manager/public/v8_memory/v8_per_frame_memory_decorator.h"
 #include "components/subresource_filter/content/browser/subresource_filter_observer.h"
 #include "components/subresource_filter/content/browser/subresource_filter_observer_manager.h"
 #include "components/subresource_filter/core/common/load_policy.h"
@@ -24,6 +27,8 @@
 
 namespace features {
 extern const base::Feature kRestrictedNavigationAdTagging;
+extern const base::Feature kV8PerAdFrameMemoryMonitoring;
+extern const base::FeatureParam<int> kMemoryPollInterval;
 }
 
 class HeavyAdBlocklist;
@@ -32,6 +37,7 @@ class HeavyAdBlocklist;
 // relevant per-frame and whole-page byte statistics.
 class AdsPageLoadMetricsObserver
     : public page_load_metrics::PageLoadMetricsObserver,
+      public performance_manager::v8_memory::V8PerFrameMemoryObserverAnySeq,
       public subresource_filter::SubresourceFilterObserver {
  public:
   // Returns a new AdsPageLoadMetricsObserver. If the feature is disabled it
@@ -120,11 +126,23 @@ class AdsPageLoadMetricsObserver
   void MediaStartedPlaying(
       const content::WebContentsObserver::MediaPlayerInfo& video_type,
       content::RenderFrameHost* render_frame_host) override;
+  void OnFrameIntersectionUpdate(
+      content::RenderFrameHost* render_frame_host,
+      const page_load_metrics::mojom::FrameIntersectionUpdate&
+          intersection_update) override;
   void OnFrameDeleted(content::RenderFrameHost* render_frame_host) override;
 
   void SetHeavyAdThresholdNoiseProviderForTesting(
       std::unique_ptr<HeavyAdThresholdNoiseProvider> noise_provider) {
     heavy_ad_threshold_noise_provider_ = std::move(noise_provider);
+  }
+
+  // performance_manager::v8_memory::V8PerFrameMemoryObserverAnySeq
+  void OnV8MemoryMeasurementAvailable(
+      performance_manager::RenderProcessHostId render_process_host_id,
+      const performance_manager::v8_memory::V8PerFrameMemoryProcessData&
+          process_data,
+      const V8PerFrameMemoryObserverAnySeq::FrameDataMap& frame_data) override {
   }
 
  private:
@@ -226,6 +244,11 @@ class AdsPageLoadMetricsObserver
   // Tracks aggregate counts across all frames on the page.
   std::unique_ptr<FrameData> aggregate_frame_data_;
 
+  // Track aggregate counts across all non-ad frames on the page.
+  // TODO(crbug.com/1109754): Currently this only measures CPU metrics for the
+  // page.  That should be expanded to include other metrics.
+  std::unique_ptr<FrameData> aggregate_non_ad_frame_data_;
+
   // Tracks aggregate counts across all ad frames on the page by visibility
   // type.
   AggregateFrameInfo aggregate_ad_info_by_visibility_
@@ -240,7 +263,7 @@ class AdsPageLoadMetricsObserver
                  subresource_filter::SubresourceFilterObserver>
       subresource_observer_;
 
-  // The tick clock used to get the current time.  Can be replaced by tests.
+  // The tick clock used to get the current time. Can be replaced by tests.
   const base::TickClock* clock_;
 
   // Whether the page load currently being observed is a reload of a previous
@@ -269,6 +292,14 @@ class AdsPageLoadMetricsObserver
 
   std::unique_ptr<HeavyAdThresholdNoiseProvider>
       heavy_ad_threshold_noise_provider_;
+
+  // The maximum ad density measurements for the page during its lifecycle.
+  PageAdDensityTracker page_ad_density_tracker_;
+
+  // Tracks per ad-frame V8 memory measurements for the page during its
+  // lifecycle. Lazily initialized when the first ad is detected.
+  std::unique_ptr<performance_manager::v8_memory::V8PerFrameMemoryRequestAnySeq>
+      memory_request_;
 
   DISALLOW_COPY_AND_ASSIGN(AdsPageLoadMetricsObserver);
 };

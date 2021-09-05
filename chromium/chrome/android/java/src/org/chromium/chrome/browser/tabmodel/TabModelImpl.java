@@ -13,14 +13,15 @@ import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
 import org.chromium.chrome.browser.homepage.HomepageManager;
 import org.chromium.chrome.browser.ntp.RecentlyClosedBridge;
+import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.tab.HistoricalTabSaver;
 import org.chromium.chrome.browser.tab.InterceptNavigationDelegateTabHelper;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabCreationState;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tab.TabSelectionType;
-import org.chromium.chrome.browser.tab.TabState;
+import org.chromium.chrome.browser.tab.state.CriticalPersistedTabData;
 import org.chromium.chrome.browser.tabmodel.NextTabPolicy.NextTabPolicySupplier;
-import org.chromium.chrome.browser.tabmodel.TabCreatorManager.TabCreator;
 import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
 import org.chromium.components.external_intents.InterceptNavigationDelegateImpl;
 import org.chromium.content_public.browser.LoadUrlParams;
@@ -60,6 +61,7 @@ public class TabModelImpl extends TabModelJniBridge {
     private final TabModelDelegate mModelDelegate;
     private final ObserverList<TabModelObserver> mObservers;
     private final NextTabPolicySupplier mNextTabPolicySupplier;
+    private final AsyncTabParamsManager mAsyncTabParamsManager;
     private RecentlyClosedBridge mRecentlyClosedBridge;
 
     // Undo State Tracking -------------------------------------------------------------------------
@@ -86,7 +88,8 @@ public class TabModelImpl extends TabModelJniBridge {
             TabCreator incognitoTabCreator, TabModelSelectorUma uma,
             TabModelOrderController orderController, TabContentManager tabContentManager,
             TabPersistentStore tabSaver, NextTabPolicySupplier nextTabPolicySupplier,
-            TabModelDelegate modelDelegate, boolean supportUndo) {
+            AsyncTabParamsManager asyncTabParamsManager, TabModelDelegate modelDelegate,
+            boolean supportUndo) {
         super(incognito, isTabbedActivity);
         mRegularTabCreator = regularTabCreator;
         mIncognitoTabCreator = incognitoTabCreator;
@@ -95,6 +98,7 @@ public class TabModelImpl extends TabModelJniBridge {
         mTabContentManager = tabContentManager;
         mTabSaver = tabSaver;
         mNextTabPolicySupplier = nextTabPolicySupplier;
+        mAsyncTabParamsManager = asyncTabParamsManager;
         mModelDelegate = modelDelegate;
         mIsUndoSupported = supportUndo;
         mObservers = new ObserverList<TabModelObserver>();
@@ -118,7 +122,7 @@ public class TabModelImpl extends TabModelJniBridge {
             // When reparenting tabs, we skip destoying tabs that we're intentionally keeping in
             // memory.
             if (mModelDelegate.isReparentingInProgress()
-                    && AsyncTabParamsManager.hasParamsForTabId(tab.getId())) {
+                    && mAsyncTabParamsManager.hasParamsForTabId(tab.getId())) {
                 continue;
             }
 
@@ -265,7 +269,8 @@ public class TabModelImpl extends TabModelJniBridge {
 
         int closingTabIndex = indexOf(tabToClose);
         Tab adjacentTab = getTabAt((closingTabIndex == 0) ? 1 : closingTabIndex - 1);
-        Tab parentTab = findTabInAllTabModels(tabToClose.getParentId());
+        Tab parentTab =
+                findTabInAllTabModels(CriticalPersistedTabData.from(tabToClose).getParentId());
 
         // Determine which tab to select next according to these rules:
         //   * If closing a background tab, keep the current tab selected.
@@ -658,7 +663,7 @@ public class TabModelImpl extends TabModelJniBridge {
         if (mTabContentManager != null) mTabContentManager.removeTabThumbnail(tab.getId());
         mTabSaver.removeTabFromQueues(tab);
 
-        if (!isIncognito()) TabState.createHistoricalTab(tab);
+        if (!isIncognito()) HistoricalTabSaver.createHistoricalTab(tab);
 
         for (TabModelObserver obs : mObservers) obs.didCloseTab(tab.getId(), tab.isIncognito());
         if (notifyTabClosureCommitted) {
@@ -799,14 +804,16 @@ public class TabModelImpl extends TabModelJniBridge {
     }
 
     @Override
-    protected TabCreator getTabCreator(boolean incognito) {
-        return incognito ? mIncognitoTabCreator : mRegularTabCreator;
+    protected TabCreator getTabCreator(Profile profile) {
+        // TODO(https://crbug.com/1099642): Update to get the proper tab creator for different OTR
+        // profiles.
+        return profile.isOffTheRecord() ? mIncognitoTabCreator : mRegularTabCreator;
     }
 
     @Override
     protected boolean createTabWithWebContents(
-            Tab parent, boolean incognito, WebContents webContents) {
-        return getTabCreator(incognito).createTabWithWebContents(
+            Tab parent, Profile profile, WebContents webContents) {
+        return getTabCreator(profile).createTabWithWebContents(
                 parent, webContents, TabLaunchType.FROM_LONGPRESS_BACKGROUND);
     }
 
@@ -846,7 +853,10 @@ public class TabModelImpl extends TabModelJniBridge {
         loadUrlParams.setVerbatimHeaders(extraHeaders);
         loadUrlParams.setPostData(postData);
         loadUrlParams.setIsRendererInitiated(isRendererInitiated);
-        getTabCreator(incognito).createNewTab(
+        // TODO(https://crbug.com/1099642): Update to pass the correct OTR profile.
+        Profile profile = Profile.getLastUsedRegularProfile();
+        if (incognito) profile = profile.getPrimaryOTRProfile();
+        getTabCreator(profile).createNewTab(
                 loadUrlParams, tabLaunchType, persistParentage ? parent : null);
     }
 

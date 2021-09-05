@@ -153,13 +153,13 @@ void ShowPrintJobConfirmationDialog(gfx::NativeWindow parent,
 
 #endif  // OS_CHROMEOS
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 
 // Bridging methods that show/hide the toolkit-views based Task Manager on Mac.
 task_manager::TaskManagerTableModel* ShowTaskManagerViews(Browser* browser);
 void HideTaskManagerViews();
 
-#endif  // OS_MACOSX
+#endif  // OS_MAC
 
 #if defined(TOOLKIT_VIEWS)
 

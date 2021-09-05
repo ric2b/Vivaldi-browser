@@ -106,6 +106,7 @@ void ConfigValuesGenerator::Run() {
   FILL_DIR_CONFIG_VALUE(lib_dirs)
   FILL_STRING_CONFIG_VALUE(rustflags)
   FILL_STRING_CONFIG_VALUE(rustenv)
+  FILL_STRING_CONFIG_VALUE(swiftflags)
 
 #undef FILL_STRING_CONFIG_VALUE
 #undef FILL_DIR_CONFIG_VALUE

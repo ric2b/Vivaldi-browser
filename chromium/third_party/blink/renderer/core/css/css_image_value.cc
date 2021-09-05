@@ -68,7 +68,8 @@ StyleImage* CSSImageValue::CacheImage(
     resource_request.SetReferrerString(referrer_.referrer);
     if (is_ad_related_)
       resource_request.SetIsAdResource();
-    ResourceLoaderOptions options;
+    ResourceLoaderOptions options(
+        document.GetExecutionContext()->GetCurrentWorld());
     options.initiator_info.name = initiator_name_.IsEmpty()
                                       ? fetch_initiator_type_names::kCSS
                                       : initiator_name_;
@@ -76,8 +77,8 @@ StyleImage* CSSImageValue::CacheImage(
     FetchParameters params(std::move(resource_request), options);
 
     if (cross_origin != kCrossOriginAttributeNotSet) {
-      params.SetCrossOriginAccessControl(document.GetSecurityOrigin(),
-                                         cross_origin);
+      params.SetCrossOriginAccessControl(
+          document.GetExecutionContext()->GetSecurityOrigin(), cross_origin);
     }
 
     bool is_lazily_loaded =
@@ -97,7 +98,7 @@ StyleImage* CSSImageValue::CacheImage(
         GetNetworkStateNotifier().SaveDataEnabled()) {
       auto& resource_request = params.MutableResourceRequest();
       resource_request.SetPreviewsState(resource_request.GetPreviewsState() |
-                                        WebURLRequest::kSubresourceRedirectOn);
+                                        PreviewsTypes::kSubresourceRedirectOn);
     }
 
     if (origin_clean_ != OriginClean::kTrue)

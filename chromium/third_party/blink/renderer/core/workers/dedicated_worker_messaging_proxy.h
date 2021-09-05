@@ -8,8 +8,8 @@
 #include <memory>
 #include "base/macros.h"
 #include "base/memory/scoped_refptr.h"
-#include "base/optional.h"
 #include "services/network/public/mojom/referrer_policy.mojom-blink-forward.h"
+#include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/mojom/messaging/transferable_message.mojom-blink-forward.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/messaging/message_port.h"
@@ -24,6 +24,7 @@ class DedicatedWorker;
 class DedicatedWorkerObjectProxy;
 class FetchClientSettingsObjectSnapshot;
 class WorkerOptions;
+struct WorkerMainScriptLoadParameters;
 
 // A proxy class to talk to the DedicatedWorkerGlobalScope on a worker thread
 // via the DedicatedWorkerMessagingProxy from the main thread. See class
@@ -37,6 +38,8 @@ class CORE_EXPORT DedicatedWorkerMessagingProxy
   // These methods should only be used on the parent context thread.
   void StartWorkerGlobalScope(
       std::unique_ptr<GlobalScopeCreationParams>,
+      std::unique_ptr<WorkerMainScriptLoadParameters>
+          worker_main_script_load_params,
       const WorkerOptions*,
       const KURL& script_url,
       const FetchClientSettingsObjectSnapshot& outside_settings_object,

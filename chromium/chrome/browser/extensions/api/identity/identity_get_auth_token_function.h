@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_EXTENSIONS_API_IDENTITY_IDENTITY_GET_AUTH_TOKEN_FUNCTION_H_
 
 #include <memory>
+#include <set>
 #include <string>
 
 #include "base/callback_list.h"
@@ -127,6 +128,10 @@ class IdentityGetAuthTokenFunction : public ExtensionFunction,
   std::unique_ptr<signin::AccessTokenFetcher>
       token_key_account_access_token_fetcher_;
 
+  // Returns whether granular permissions will be requested.
+  // Exposed for testing.
+  bool enable_granular_permissions() const;
+
  private:
   FRIEND_TEST_ALL_PREFIXES(GetAuthTokenFunctionTest,
                            ComponentWithChromeClientId);
@@ -167,7 +172,8 @@ class IdentityGetAuthTokenFunction : public ExtensionFunction,
   // Helpers to report async function results to the caller.
   void StartAsyncRun();
   void CompleteAsyncRun(ResponseValue response);
-  void CompleteFunctionWithResult(const std::string& access_token);
+  void CompleteFunctionWithResult(const std::string& access_token,
+                                  const std::set<std::string>& granted_scopes);
   void CompleteFunctionWithError(const IdentityGetAuthTokenError& error);
 
   // Whether a signin flow should be initiated in the user's current state.
@@ -183,6 +189,7 @@ class IdentityGetAuthTokenFunction : public ExtensionFunction,
 
   // OAuth2MintTokenFlow::Delegate implementation:
   void OnMintTokenSuccess(const std::string& access_token,
+                          const std::set<std::string>& granted_scopes,
                           int time_to_live) override;
   void OnMintTokenFailure(const GoogleServiceAuthError& error) override;
   void OnIssueAdviceSuccess(const IssueAdviceInfo& issue_advice) override;
@@ -213,17 +220,20 @@ class IdentityGetAuthTokenFunction : public ExtensionFunction,
   // Returns true if extensions are restricted to the primary account.
   bool IsPrimaryAccountOnly() const;
 
-  bool interactive_;
-  bool should_prompt_for_scopes_;
+  bool interactive_ = false;
+  bool should_prompt_for_scopes_ = false;
   IdentityMintRequestQueue::MintType mint_token_flow_type_;
   std::unique_ptr<OAuth2MintTokenFlow> mint_token_flow_;
   OAuth2MintTokenFlow::Mode gaia_mint_token_mode_;
-  bool should_prompt_for_signin_;
+  bool should_prompt_for_signin_ = false;
+  bool enable_granular_permissions_ = false;
 
   // Shown in the extension login prompt.
   std::string email_for_default_web_account_;
 
-  ExtensionTokenKey token_key_;
+  ExtensionTokenKey token_key_{/*extension_id=*/"",
+                               /*account_id=*/CoreAccountId(),
+                               /*scopes=*/{}};
   std::string oauth2_client_id_;
   // When launched in interactive mode, and if there is no existing grant,
   // a permissions prompt will be popped up to the user.
@@ -237,11 +247,11 @@ class IdentityGetAuthTokenFunction : public ExtensionFunction,
   bool remote_consent_approved_ = false;
 
   // Invoked when IdentityAPI is shut down.
-  std::unique_ptr<base::CallbackList<void()>::Subscription>
+  std::unique_ptr<base::OnceCallbackList<void()>::Subscription>
       identity_api_shutdown_subscription_;
 
   ScopedObserver<signin::IdentityManager, signin::IdentityManager::Observer>
-      scoped_identity_manager_observer_;
+      scoped_identity_manager_observer_{this};
 
   // This class can be listening to account changes, but only for one type of
   // events at a time.

@@ -79,8 +79,6 @@
 #include "net/ssl/ssl_info.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "net/url_request/redirect_util.h"
-#include "net/url_request/url_request.h"
-#include "net/url_request/url_request_context.h"
 #include "ppapi/buildflags/buildflags.h"
 #include "services/network/public/cpp/constants.h"
 #include "services/network/public/cpp/features.h"
@@ -334,8 +332,7 @@ uint32_t NavigationURLLoaderImpl::GetURLLoaderOptions(bool is_main_frame) {
 }
 
 void NavigationURLLoaderImpl::Start(
-    std::unique_ptr<network::PendingSharedURLLoaderFactory>
-        pending_network_loader_factory,
+    scoped_refptr<network::SharedURLLoaderFactory> network_loader_factory,
     AppCacheNavigationHandle* appcache_handle,
     scoped_refptr<PrefetchedSignedExchangeCache>
         prefetched_signed_exchange_cache,
@@ -356,8 +353,7 @@ void NavigationURLLoaderImpl::Start(
                      weak_factory_.GetWeakPtr(), base::TimeTicks::Now()));
 
   // TODO(kinuko): This can likely be initialized in the ctor.
-  network_loader_factory_ = network::SharedURLLoaderFactory::Create(
-      std::move(pending_network_loader_factory));
+  network_loader_factory_ = network_loader_factory;
   if (needs_loader_factory_interceptor && g_loader_factory_interceptor.Get()) {
     mojo::PendingRemote<network::mojom::URLLoaderFactory> factory;
     mojo::PendingReceiver<network::mojom::URLLoaderFactory> receiver =
@@ -419,7 +415,8 @@ void NavigationURLLoaderImpl::CreateInterceptors(
   if (prefetched_signed_exchange_cache) {
     std::unique_ptr<NavigationLoaderInterceptor>
         prefetched_signed_exchange_interceptor =
-            prefetched_signed_exchange_cache->MaybeCreateInterceptor(url_);
+            prefetched_signed_exchange_cache->MaybeCreateInterceptor(
+                url_, frame_tree_node_id_);
     if (prefetched_signed_exchange_interceptor) {
       interceptors_.push_back(
           std::move(prefetched_signed_exchange_interceptor));
@@ -697,7 +694,7 @@ void NavigationURLLoaderImpl::FollowRedirectInternal(
     const std::vector<std::string>& removed_headers,
     const net::HttpRequestHeaders& modified_headers,
     const net::HttpRequestHeaders& modified_cors_exempt_headers,
-    PreviewsState new_previews_state,
+    blink::PreviewsState new_previews_state,
     base::Time ui_post_time) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   DCHECK(!redirect_info_.new_url.is_empty());
@@ -1153,22 +1150,26 @@ NavigationURLLoaderImpl::NavigationURLLoaderImpl(
         &factory_receiver, nullptr /* header_client */,
         nullptr /* bypass_redirect_checks */, nullptr /* disable_secure_dns */,
         nullptr /* factory_override */);
-    CreateWebUIURLLoaderBinding(frame_tree_node->current_frame_host(), scheme,
+    CreateWebUIURLLoaderBinding(frame_tree_node, scheme,
                                 std::move(factory_receiver));
   }
 
   mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>
       header_client;
+  // |frame_tree_node| may be null in some unit test environments.
   if (frame_tree_node) {
     // Initialize proxied factory remote/receiver if necessary.
     // This also populates |bypass_redirect_checks_|.
     DCHECK(frame_tree_node->navigation_request());
 
-    // |frame_tree_node| may be null in some unit test environments.
     GetContentClient()
         ->browser()
         ->RegisterNonNetworkNavigationURLLoaderFactories(
-            frame_tree_node_id_, &non_network_url_loader_factories_);
+            frame_tree_node_id_,
+            base::UkmSourceId::FromOtherId(
+                frame_tree_node->navigation_request()->GetNavigationId(),
+                base::UkmSourceId::Type::NAVIGATION_ID),
+            &non_network_url_loader_factories_);
 
     // The embedder may want to proxy all network-bound URLLoaderFactory
     // receivers that it can. If it elects to do so, those proxies will be
@@ -1214,8 +1215,10 @@ NavigationURLLoaderImpl::NavigationURLLoaderImpl(
       std::make_unique<FileURLLoaderFactory>(
           browser_context_->GetPath(),
           browser_context_->GetSharedCorsOriginAccessList(),
-          // USER_VISIBLE because loaded file resources may affect the UI.
-          base::TaskPriority::USER_VISIBLE);
+          // USER_BLOCKING because this scenario is exactly one of the examples
+          // given by the doc comment for USER_BLOCKING:
+          // Loading and rendering a web page after the user clicks a link.
+          base::TaskPriority::USER_BLOCKING);
 
   if (frame_tree_node) {  // May be nullptr in some unit tests.
     devtools_instrumentation::WillCreateURLLoaderFactory(
@@ -1239,21 +1242,20 @@ NavigationURLLoaderImpl::NavigationURLLoaderImpl(
     known_schemes_.insert(iter.first);
 
   bool needs_loader_factory_interceptor = false;
-  std::unique_ptr<network::PendingSharedURLLoaderFactory>
-      pending_network_factory =
-          storage_partition_->GetURLLoaderFactoryForBrowserProcess()->Clone();
+  scoped_refptr<network::SharedURLLoaderFactory> network_factory =
+      storage_partition_->GetURLLoaderFactoryForBrowserProcess();
   if (header_client) {
     needs_loader_factory_interceptor = true;
     mojo::PendingRemote<network::mojom::URLLoaderFactory> factory_remote;
     CreateURLLoaderFactoryWithHeaderClient(
         std::move(header_client),
         factory_remote.InitWithNewPipeAndPassReceiver(), storage_partition_);
-    pending_network_factory =
-        std::make_unique<network::WrapperPendingSharedURLLoaderFactory>(
+    network_factory =
+        base::MakeRefCounted<network::WrapperSharedURLLoaderFactory>(
             std::move(factory_remote));
   }
 
-  Start(std::move(pending_network_factory), appcache_handle,
+  Start(network_factory, appcache_handle,
         std::move(prefetched_signed_exchange_cache),
         std::move(signed_exchange_prefetch_metric_recorder),
         std::move(factory_for_webui), std::move(accept_langs),
@@ -1264,7 +1266,7 @@ void NavigationURLLoaderImpl::FollowRedirect(
     const std::vector<std::string>& removed_headers,
     const net::HttpRequestHeaders& modified_headers,
     const net::HttpRequestHeaders& modified_cors_exempt_headers,
-    PreviewsState new_previews_state) {
+    blink::PreviewsState new_previews_state) {
   FollowRedirectInternal(removed_headers, modified_headers,
                          modified_cors_exempt_headers, new_previews_state,
                          base::Time::Now());

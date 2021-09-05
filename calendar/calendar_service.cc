@@ -197,8 +197,8 @@ base::CancelableTaskTracker::TaskId CalendarService::CreateCalendarEvent(
   DCHECK(backend_task_runner_) << "Calendar service being called after cleanup";
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  std::shared_ptr<CreateEventResult> create_results =
-      std::shared_ptr<CreateEventResult>(new CreateEventResult());
+  std::shared_ptr<EventResultCB> create_results =
+      std::shared_ptr<EventResultCB>(new EventResultCB());
 
   return tracker->PostTaskAndReply(
       backend_task_runner_.get(), FROM_HERE,
@@ -421,10 +421,8 @@ base::CancelableTaskTracker::TaskId CalendarService::CreateRecurrenceException(
   DCHECK(backend_task_runner_) << "Calendar service being called after cleanup";
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  std::shared_ptr<CreateRecurrenceExceptionResult>
-      create_recurrence_exception_results =
-          std::shared_ptr<CreateRecurrenceExceptionResult>(
-              new CreateRecurrenceExceptionResult());
+  std::shared_ptr<EventResultCB> create_recurrence_exception_results =
+      std::shared_ptr<EventResultCB>(new EventResultCB());
 
   return tracker->PostTaskAndReply(
       backend_task_runner_.get(), FROM_HERE,

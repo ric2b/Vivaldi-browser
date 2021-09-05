@@ -6,6 +6,7 @@
 <translation id="1012173283529841972">Στοιχείο λίστας</translation>
 <translation id="1013742170491673792">αναζήτηση ρόλου</translation>
 <translation id="1014370462248694370">Σύρετε δύο δάκτυλα προς τα δεξιά</translation>
+<translation id="1016393160682012902">Πατήστε ένα πλήκτρο qwerty, ένα κουμπί μπράιγ με δυνατότητα ανανέωσης ή κάντε μια κίνηση αφής για να μάθετε πώς λειτουργεί. Για έξοδο, πατήστε το πλήκτρο Escape ή τα πλήκτρα Control και w.</translation>
 <translation id="1022586497894531524">Χρησιμοποιείτε τα εκφωνημένα σχόλια του ChromeVox για πρώτη φορά; Αυτός ο γρήγορος οδηγός εξηγεί τα βασικά για να ξεκινήσετε τη χρήση του ChromeVox.</translation>
 <translation id="1025074108959230262">Η λειτουργία διατήρησης ενδιαφέροντος (Sticky) απενεργοποιήθηκε</translation>
 <translation id="1031961866430398710">τότε</translation>
@@ -505,7 +506,6 @@
 <translation id="489907760999452556">Ετικέτα "Εσωτερικός σύνδεσμος" (&lt;a&gt;)</translation>
 <translation id="4909019435900810068">Μετακίνηση προς τα πίσω κατά έναν χαρακτήρα</translation>
 <translation id="4911349081560453449">Δεν υπάρχει προηγούμενο πλαίσιο ελέγχου.</translation>
-<translation id="4915087353619183190">Έναρξη Λειτουργίας εκμάθησης. Πατήστε ένα πλήκτρο qwerty, ένα πλήκτρο Μπράιγ με δυνατότητα ανανέωσης ή κάντε μια κίνηση αφής, για να μάθετε πώς λειτουργεί. Πατήστε control και w ή escape για έξοδο.</translation>
 <translation id="492295894462528572">Εισαγωγή</translation>
 <translation id="495046168593986294">Κύλιση προς τα επάνω</translation>
 <translation id="495170559598752135">Ενέργειες</translation>
@@ -648,6 +648,7 @@
 <translation id="6017514345406065928">Πράσινο</translation>
 <translation id="602001110135236999">Κύλιση αριστερά</translation>
 <translation id="6034000775414344507">Ανοιχτό γκρι</translation>
+<translation id="6036135911048686884">Εξερεύνηση μέσω αφής</translation>
 <translation id="6037602951055904232">Μετακίνηση προς τα εμπρός</translation>
 <translation id="6044160928851315051">Απενεργοποίηση φωτισμού οθόνης</translation>
 <translation id="6082768461603900813">Βασική πλοήγηση</translation>
@@ -924,6 +925,7 @@
 <translation id="8345569862449483843">{COUNT,plural, =1{σύμβολο λίρας}other{# σύμβολα λίρας}}</translation>
 <translation id="8378855320830505539">Περιοχή</translation>
 <translation id="8382679411218029383">Ενσωματωμένη αυτόματη συμπλήρωση και λίστα</translation>
+<translation id="8394908167088220973">Αναπαραγωγή/παύση πολυμέσων</translation>
 <translation id="8428213095426709021">Ρυθμίσεις</translation>
 <translation id="8428603554127842284">επίπεδο <ph name="DEPTH" /></translation>
 <translation id="8430049249787218991">γραμμή μενού</translation>
@@ -968,6 +970,7 @@
 <translation id="8770473310765924354">έξοδος από δομημένο περιεχόμενο, όπως πίνακες</translation>
 <translation id="8779057862865475116">Δεν υπάρχει προηγούμενος σύνδεσμος.</translation>
 <translation id="8796411681063377102">Επικεφαλίδα επόμενου επιπέδου 3</translation>
+<translation id="8823311177246872527">Σελίδα <ph name="CURRENTPAGE" /> από <ph name="TOTALPAGES" /></translation>
 <translation id="8825828890761629845">banner</translation>
 <translation id="8851136666856101339">κύριο</translation>
 <translation id="8882002077197914455">Κεφαλίδα γραμμής</translation>

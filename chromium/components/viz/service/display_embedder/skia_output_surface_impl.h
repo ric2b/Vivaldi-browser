@@ -50,11 +50,13 @@ class VIZ_SERVICE_EXPORT SkiaOutputSurfaceImpl : public SkiaOutputSurface {
  public:
   static std::unique_ptr<SkiaOutputSurface> Create(
       std::unique_ptr<SkiaOutputSurfaceDependency> deps,
-      const RendererSettings& renderer_settings);
+      const RendererSettings& renderer_settings,
+      const DebugRendererSettings* debug_settings);
 
   SkiaOutputSurfaceImpl(util::PassKey<SkiaOutputSurfaceImpl> pass_key,
                         std::unique_ptr<SkiaOutputSurfaceDependency> deps,
-                        const RendererSettings& renderer_settings);
+                        const RendererSettings& renderer_settings,
+                        const DebugRendererSettings* debug_settings);
   ~SkiaOutputSurfaceImpl() override;
 
   // OutputSurface implementation:
@@ -62,6 +64,7 @@ class VIZ_SERVICE_EXPORT SkiaOutputSurfaceImpl : public SkiaOutputSurface {
   void BindToClient(OutputSurfaceClient* client) override;
   void BindFramebuffer() override;
   void SetDrawRectangle(const gfx::Rect& draw_rectangle) override;
+  void SetEnableDCLayers(bool enable) override;
   void EnsureBackbuffer() override;
   void DiscardBackbuffer() override;
   void Reshape(const gfx::Size& size,
@@ -89,6 +92,7 @@ class VIZ_SERVICE_EXPORT SkiaOutputSurfaceImpl : public SkiaOutputSurface {
       override;
   gfx::Rect GetCurrentFramebufferDamage() const override;
   void SetFrameRate(float frame_rate) override;
+  void SetNeedsMeasureNextDrawLatency() override;
 
   // SkiaOutputSurface implementation:
   SkCanvas* BeginPaintCurrentFrame() override;
@@ -119,9 +123,6 @@ class VIZ_SERVICE_EXPORT SkiaOutputSurfaceImpl : public SkiaOutputSurface {
   void ScheduleOverlays(OverlayList overlays,
                         std::vector<gpu::SyncToken> sync_tokens) override;
 
-#if defined(OS_WIN)
-  void SetEnableDCLayers(bool enable) override;
-#endif
   void CopyOutput(RenderPassId id,
                   const copy_output::RenderPassGeometry& geometry,
                   const gfx::ColorSpace& color_space,
@@ -247,10 +248,13 @@ class VIZ_SERVICE_EXPORT SkiaOutputSurfaceImpl : public SkiaOutputSurface {
 
   const RendererSettings renderer_settings_;
 
+  // Points to the viz-global singleton.
+  const DebugRendererSettings* const debug_settings_;
+
   // The display transform relative to the hardware natural orientation,
   // applied to the frame content. The transform can be rotations in 90 degree
   // increments or flips.
-  gfx::OverlayTransform pre_transform_ = gfx::OVERLAY_TRANSFORM_NONE;
+  gfx::OverlayTransform display_transform_ = gfx::OVERLAY_TRANSFORM_NONE;
 
   // |gpu_task_scheduler_| holds a gpu::SingleTaskSequence, and helps schedule
   // tasks on GPU as a single sequence. It is shared with OverlayProcessor so
@@ -262,8 +266,12 @@ class VIZ_SERVICE_EXPORT SkiaOutputSurfaceImpl : public SkiaOutputSurface {
   // |impl_on_gpu| is created and destroyed on the GPU thread.
   std::unique_ptr<SkiaOutputSurfaceImplOnGpu> impl_on_gpu_;
 
+  sk_sp<GrContextThreadSafeProxy> gr_context_thread_safe_;
+
   bool has_set_draw_rectangle_for_frame_ = false;
   base::Optional<gfx::Rect> draw_rectangle_;
+
+  bool should_measure_next_post_task_ = false;
 
   // We defer the draw to the framebuffer until SwapBuffers or CopyOutput
   // to avoid the expense of posting a task and calling MakeCurrent.

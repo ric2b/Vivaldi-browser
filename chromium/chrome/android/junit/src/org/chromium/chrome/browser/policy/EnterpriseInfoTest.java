@@ -4,27 +4,50 @@
 
 package org.chromium.chrome.browser.policy;
 
+import android.os.Handler;
+import android.os.Looper;
 import android.support.test.filters.SmallTest;
 
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.Mock;
+import org.mockito.Mockito;
+import org.mockito.MockitoAnnotations;
+import org.robolectric.annotation.Config;
 
 import org.chromium.base.Callback;
+import org.chromium.base.task.TaskTraits;
+import org.chromium.base.task.test.ShadowPostTask;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.CallbackHelper;
+
+import java.util.concurrent.RejectedExecutionException;
 
 /**
  * Tests EnterpriseInfo.
  */
 @RunWith(BaseRobolectricTestRunner.class)
+@Config(manifest = Config.NONE, shadows = {ShadowPostTask.class})
 public class EnterpriseInfoTest {
+    @Mock
+    public EnterpriseInfo.Natives mNatives;
+
     @Before
     public void setUp() {
         EnterpriseInfo.reset();
         // Skip the AsyncTask, we don't actually want to query the device, just enqueue callbacks.
         EnterpriseInfo.getInstance().setSkipAsyncCheckForTesting(true);
+
+        MockitoAnnotations.initMocks(this);
+        EnterpriseInfoJni.TEST_HOOKS.setInstanceForTesting(mNatives);
+    }
+
+    @After
+    public void tearDown() {
+        EnterpriseInfoJni.TEST_HOOKS.setInstanceForTesting(null);
     }
 
     /**
@@ -39,7 +62,7 @@ public class EnterpriseInfoTest {
         EnterpriseInfo.OwnedState stateIn = new EnterpriseInfo.OwnedState(false, true);
 
         class CallbackWithResult implements Callback<EnterpriseInfo.OwnedState> {
-            public EnterpriseInfo.OwnedState result = null;
+            public EnterpriseInfo.OwnedState result;
 
             @Override
             public void onResult(EnterpriseInfo.OwnedState result) {
@@ -52,7 +75,8 @@ public class EnterpriseInfoTest {
         // Make the request and service the callbacks.
         instance.getDeviceEnterpriseInfo(callback);
         instance.getDeviceEnterpriseInfo(callback2);
-        instance.onEnterpriseInfoResult(stateIn);
+        instance.setCacheResult(stateIn);
+        instance.onEnterpriseInfoResultAvailable();
 
         // Results should be the same for all callbacks.
         Assert.assertEquals("Callback doesn't match the expected result on servicing.",
@@ -67,11 +91,14 @@ public class EnterpriseInfoTest {
         Assert.assertNotEquals("Callback wasn't reset properly.", callback2.result, stateIn);
 
         // Check the cached value is returned correctly.
+        // Cached results are immediately added to the message queue. With the Roboelectric
+        // framework these async tasks are run synchronously. Meaning as soon as we make the call
+        // we'll have the result when it returns.
         instance.getDeviceEnterpriseInfo(callback);
-        instance.getDeviceEnterpriseInfo(callback2);
-        // This should happen immediately, see testCallbackServicedWhenResultCached.
         Assert.assertEquals(
                 "Callback doesn't match the expected cached result.", callback.result, stateIn);
+
+        instance.getDeviceEnterpriseInfo(callback2);
         Assert.assertEquals(
                 "Callback doesn't match the expected cached result.", callback2.result, stateIn);
     }
@@ -101,40 +128,68 @@ public class EnterpriseInfoTest {
                 "Callbacks were serviced before they were meant to be.", 0, helper.getCallCount());
 
         // Do it. The result value here is irrelevant, put anything.
-        instance.onEnterpriseInfoResult(new EnterpriseInfo.OwnedState(true, true));
+        instance.setCacheResult(new EnterpriseInfo.OwnedState(true, true));
+        instance.onEnterpriseInfoResultAvailable();
 
         Assert.assertEquals(
                 "The wrong number of callbacks were serviced.", count, helper.getCallCount());
     }
 
     /**
-     * Tests that a callback is only serviced immediately if there is a cached result.
+     * Tests that a reentrant callback doesn't cause a synchronous reentry.
      */
     @Test
     @SmallTest
-    public void testCallbackServicedWhenResultCached() {
+    public void testReentrantCallback() {
         EnterpriseInfo instance = EnterpriseInfo.getInstance();
         CallbackHelper helper = new CallbackHelper();
+
+        // Make sure there is a cached value so that the getDeviceEnterpriseInfo() calls below will
+        // post() immediately with a result. The value itself doesn't matter.
+        instance.setCacheResult(new EnterpriseInfo.OwnedState(false, true));
 
         Callback<EnterpriseInfo.OwnedState> callback = (result) -> {
             // We don't care about the result in this test.
             helper.notifyCalled();
         };
 
-        // First: Callback should not be serviced if nothing is cached.
-        instance.getDeviceEnterpriseInfo(callback);
-        Assert.assertEquals(
-                "Callbacks were serviced before they were meant to be.", 0, helper.getCallCount());
+        Callback<EnterpriseInfo.OwnedState> reentrantCallback = (result) -> {
+            // We don't care about the result in this test.
+            helper.notifyCalled();
+            instance.getDeviceEnterpriseInfo(callback);
+        };
 
-        // Set a cached result (of any value) and process the callback.
-        instance.onEnterpriseInfoResult(new EnterpriseInfo.OwnedState(false, false));
-        Assert.assertEquals("Only a single callback should have been serviced at this point.", 1,
-                helper.getCallCount());
+        Handler handler = new Handler(Looper.myLooper());
 
-        // Second: Callback should now be serviced immediately.
-        instance.getDeviceEnterpriseInfo(callback);
-        Assert.assertEquals(
-                "Callback wasn't serviced by the cached result.", 2, helper.getCallCount());
+        // Roboelectric synchronously calls post() functions in its Looper, but we can still use it
+        // to test for async behavior by inserting a post() with our assert at the correct point.
+        handler.post(() -> {
+            // getDeviceEnterpriseInfo should insert a post() to run its callback. This post() will
+            // run after the outer post() is finished.
+            instance.getDeviceEnterpriseInfo(reentrantCallback);
+
+            // This inner post() will be inserted after the one from
+            // getDeviceEnterpriseInfo(reentrantCallback). Therefore it will run after
+            // |reentrantCallback| is invoked. When |reentrantCallback| is invoked it will run its
+            // own getDeviceEnterpriseInfo() which will in turn insert its own post(). If all goes
+            // as expected this assert should check after |helper| is notified once by
+            // |reentrantCallback| but before it's notified a second time by |callback|.
+            handler.post(() -> {
+                Assert.assertEquals(
+                        "Reentrant callback wasn't executed as expect.", 1, helper.getCallCount());
+            });
+
+            /* At this point the message queue should look like:
+               -------------------------------
+               Outer post() // Being run now.
+               post(reentrantCallback) // Inserts the `post(callback)`.
+               post(Assert)
+               post(callback) // Not yet inserted.
+               -------------------------------
+            */
+        });
+        // By this point all post()s should have been run, including |callback|'s.
+        Assert.assertEquals("Second callback wasn't executed.", 2, helper.getCallCount());
     }
 
     /**
@@ -172,5 +227,31 @@ public class EnterpriseInfoTest {
         Assert.assertNotEquals("Wrong value check failed.", trueTrue, trueFalse);
         Assert.assertNotEquals("Wrong value check failed.", trueTrue, falseTrue);
         Assert.assertEquals("Correct value check failed.", trueTrue, trueTrue2);
+    }
+
+    @Test
+    @SmallTest
+    public void testGetManagedStateForNative() {
+        EnterpriseInfo.getManagedStateForNative();
+        Mockito.verifyZeroInteractions(mNatives);
+
+        EnterpriseInfo.getInstance().setCacheResult(new EnterpriseInfo.OwnedState(true, false));
+        EnterpriseInfo.getInstance().onEnterpriseInfoResultAvailable();
+        Mockito.verify(mNatives, Mockito.times(1)).updateNativeOwnedState(true, false);
+    }
+
+    @Test
+    @SmallTest
+    public void testGetManagedStateForNativeNullOwnedState() {
+        EnterpriseInfo.getInstance().setSkipAsyncCheckForTesting(false);
+        ShadowPostTask.setTestImpl(new ShadowPostTask.TestImpl() {
+            @Override
+            public void postDelayedTask(TaskTraits taskTraits, Runnable task, long delay) {
+                throw new RejectedExecutionException();
+            }
+        });
+
+        EnterpriseInfo.getManagedStateForNative();
+        Mockito.verify(mNatives, Mockito.times(1)).updateNativeOwnedState(false, false);
     }
 }

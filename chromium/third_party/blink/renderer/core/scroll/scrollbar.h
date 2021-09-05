@@ -40,7 +40,6 @@ namespace blink {
 class Element;
 class GraphicsContext;
 class IntRect;
-class ChromeClient;
 class ScrollableArea;
 class ScrollbarTheme;
 class WebGestureEvent;
@@ -53,17 +52,14 @@ class CORE_EXPORT Scrollbar : public GarbageCollected<Scrollbar>,
   // scrollbar.
   static Scrollbar* CreateForTesting(ScrollableArea* scrollable_area,
                                      ScrollbarOrientation orientation,
-                                     ScrollbarControlSize size,
                                      ScrollbarTheme* theme) {
-    return MakeGarbageCollected<Scrollbar>(scrollable_area, orientation, size,
-                                           nullptr, nullptr, theme);
+    return MakeGarbageCollected<Scrollbar>(scrollable_area, orientation,
+                                           nullptr, theme);
   }
 
   Scrollbar(ScrollableArea*,
             ScrollbarOrientation,
-            ScrollbarControlSize,
             Element* style_source,
-            ChromeClient* = nullptr,
             ScrollbarTheme* = nullptr);
   ~Scrollbar() override;
 
@@ -93,7 +89,6 @@ class CORE_EXPORT Scrollbar : public GarbageCollected<Scrollbar>,
   int VisibleSize() const { return visible_size_; }
   int TotalSize() const { return total_size_; }
   int Maximum() const;
-  ScrollbarControlSize GetControlSize() const { return control_size_; }
 
   ScrollbarPart PressedPart() const { return pressed_part_; }
   ScrollbarPart HoveredPart() const { return hovered_part_; }
@@ -103,10 +98,6 @@ class CORE_EXPORT Scrollbar : public GarbageCollected<Scrollbar>,
   bool Enabled() const { return enabled_; }
   virtual void SetEnabled(bool);
 
-  // This returns device-scale-factor-aware pixel value.
-  // e.g. 15 in dsf=1.0, 30 in dsf=2.0.
-  // This returns 0 for overlay scrollbars.
-  // See also ScrolbarTheme::scrollbatThickness().
   int ScrollbarThickness() const;
 
   // Called by the ScrollableArea when the scroll offset changes.
@@ -170,14 +161,11 @@ class CORE_EXPORT Scrollbar : public GarbageCollected<Scrollbar>,
   bool ThumbNeedsRepaint() const { return thumb_needs_repaint_; }
   void ClearThumbNeedsRepaint() { thumb_needs_repaint_ = false; }
 
-  // DisplayItemClient methods.
+  // DisplayItemClient.
   String DebugName() const final {
     return orientation_ == kHorizontalScrollbar ? "HorizontalScrollbar"
                                                 : "VerticalScrollbar";
   }
-  IntRect VisualRect() const final { return visual_rect_; }
-
-  virtual void SetVisualRect(const IntRect& r) { visual_rect_ = r; }
 
   // Marks the scrollbar as needing to be redrawn.
   //
@@ -193,6 +181,9 @@ class CORE_EXPORT Scrollbar : public GarbageCollected<Scrollbar>,
   void SetNeedsPaintInvalidation(ScrollbarPart invalid_parts);
 
   CompositorElementId GetElementId() const;
+
+  // Used to scale a length in dip units into a length in layout/paint units.
+  float ScaleFromDIP() const;
 
   float EffectiveZoom() const;
   bool ContainerIsRightToLeft() const;
@@ -222,9 +213,7 @@ class CORE_EXPORT Scrollbar : public GarbageCollected<Scrollbar>,
 
   Member<ScrollableArea> scrollable_area_;
   ScrollbarOrientation orientation_;
-  ScrollbarControlSize control_size_;
   ScrollbarTheme& theme_;
-  Member<ChromeClient> chrome_client_;
 
   int visible_size_;
   int total_size_;
@@ -250,7 +239,6 @@ class CORE_EXPORT Scrollbar : public GarbageCollected<Scrollbar>,
   bool ThumbWillBeUnderMouse() const;
   bool DeltaWillScroll(ScrollOffset delta) const;
 
-  int theme_scrollbar_thickness_;
   bool track_needs_repaint_;
   bool thumb_needs_repaint_;
   bool injected_gesture_scroll_begin_;
@@ -263,7 +251,6 @@ class CORE_EXPORT Scrollbar : public GarbageCollected<Scrollbar>,
   // additional state is necessary.
   bool scrollbar_manipulation_in_progress_on_cc_thread_;
 
-  IntRect visual_rect_;
   IntRect frame_rect_;
   Member<Element> style_source_;
 };

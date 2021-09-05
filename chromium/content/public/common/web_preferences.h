@@ -34,7 +34,8 @@ enum EditingBehavior {
   EDITING_BEHAVIOR_WIN,
   EDITING_BEHAVIOR_UNIX,
   EDITING_BEHAVIOR_ANDROID,
-  EDITING_BEHAVIOR_LAST = EDITING_BEHAVIOR_ANDROID
+  EDITING_BEHAVIOR_CHROMEOS,
+  EDITING_BEHAVIOR_LAST = EDITING_BEHAVIOR_CHROMEOS
 };
 
 // ImageAnimationPolicy is used for controlling image animation
@@ -151,7 +152,6 @@ struct CONTENT_EXPORT WebPreferences {
   bool enable_scroll_animator;
   bool prefers_reduced_motion;
   bool touch_event_feature_detection_enabled;
-  bool touch_adjustment_enabled;
   int pointer_events_max_touch_points;
   int available_pointer_types;
   ui::PointerType primary_pointer_type;
@@ -178,7 +178,6 @@ struct CONTENT_EXPORT WebPreferences {
   bool initialize_at_minimum_page_scale;
   bool smart_insert_delete_enabled;
   bool spatial_navigation_enabled;
-  bool caret_browsing_enabled;
   bool navigate_on_drag_drop;
   blink::mojom::V8CacheOptions v8_cache_options;
   bool record_whole_document;
@@ -359,6 +358,15 @@ struct CONTENT_EXPORT WebPreferences {
   // Whether the focused element should always be indicated (for example, by
   // forcing :focus-visible to match regardless of focus method).
   bool always_show_focus;
+
+  // Whether touch input can trigger HTML drag-and-drop operations. The
+  // default value depends on the platform.
+  bool touch_drag_drop_enabled;
+
+  // Whether the end of a drag fires a contextmenu event and possibly shows a
+  // context-menu (depends on how the event is handled).  Currently touch-drags
+  // cannot show context menus, see crbug.com/1096189.
+  bool touch_dragend_context_menu = false;
 
   // Vivaldi specific preferences:
   // Maps to the Cycle focus setting in Vivaldi.

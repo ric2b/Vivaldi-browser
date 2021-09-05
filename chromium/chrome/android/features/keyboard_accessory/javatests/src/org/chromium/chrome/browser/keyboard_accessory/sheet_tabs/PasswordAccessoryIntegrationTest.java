@@ -21,6 +21,8 @@ import static org.chromium.chrome.browser.keyboard_accessory.ManualFillingTestHe
 import static org.chromium.chrome.browser.keyboard_accessory.ManualFillingTestHelper.whenDisplayed;
 import static org.chromium.chrome.browser.keyboard_accessory.tab_layout_component.KeyboardAccessoryTabTestHelper.isKeyboardAccessoryTabLayout;
 
+import android.os.Build.VERSION_CODES;
+
 import androidx.test.filters.SmallTest;
 
 import org.junit.After;
@@ -29,6 +31,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.DisableIf;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.keyboard_accessory.ManualFillingTestHelper;
@@ -37,6 +40,7 @@ import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
+import org.chromium.ui.test.util.UiDisableIf;
 
 import java.util.concurrent.TimeoutException;
 
@@ -69,7 +73,11 @@ public class PasswordAccessoryIntegrationTest {
 
     @Test
     @SmallTest
-    public void testPasswordSheetDisplaysProvidedItems() throws TimeoutException {
+    @DisableIf.
+    Build(sdk_is_greater_than = VERSION_CODES.LOLLIPOP_MR1, sdk_is_less_than = VERSION_CODES.N,
+            message = "Flaky on Marshmallow https://crbug.com/1102302")
+    public void
+    testPasswordSheetDisplaysProvidedItems() throws TimeoutException {
         mHelper.loadTestPage(false);
         mHelper.cacheCredentials("mayapark@gmail.com", "SomeHiddenPassword");
 
@@ -102,6 +110,7 @@ public class PasswordAccessoryIntegrationTest {
 
     @Test
     @SmallTest
+    @DisableIf.Device(type = {UiDisableIf.TABLET}) // https://crbug.com/1111770
     public void testFillsPasswordOnTap() throws TimeoutException {
         mHelper.loadTestPage(false);
         mHelper.cacheCredentials("mpark@abc.com", "ShorterPassword");

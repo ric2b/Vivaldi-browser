@@ -30,24 +30,20 @@ void RecordExtendedReportingPrefChanged(
 
   switch (location) {
     case safe_browsing::SBER_OPTIN_SITE_CHROME_SETTINGS:
-      UMA_HISTOGRAM_BOOLEAN(
-          "SafeBrowsing.Pref.Scout.SetPref.SBER2Pref.ChromeSettings",
-          pref_value);
+      UMA_HISTOGRAM_BOOLEAN("SafeBrowsing.Pref.Extended.ChromeSettings",
+                            pref_value);
       break;
     case safe_browsing::SBER_OPTIN_SITE_ANDROID_SETTINGS:
-      UMA_HISTOGRAM_BOOLEAN(
-          "SafeBrowsing.Pref.Scout.SetPref.SBER2Pref.AndroidSettings",
-          pref_value);
+      UMA_HISTOGRAM_BOOLEAN("SafeBrowsing.Pref.Extended.AndroidSettings",
+                            pref_value);
       break;
     case safe_browsing::SBER_OPTIN_SITE_DOWNLOAD_FEEDBACK_POPUP:
-      UMA_HISTOGRAM_BOOLEAN(
-          "SafeBrowsing.Pref.Scout.SetPref.SBER2Pref.DownloadPopup",
-          pref_value);
+      UMA_HISTOGRAM_BOOLEAN("SafeBrowsing.Pref.Extended.DownloadPopup",
+                            pref_value);
       break;
     case safe_browsing::SBER_OPTIN_SITE_SECURITY_INTERSTITIAL:
-      UMA_HISTOGRAM_BOOLEAN(
-          "SafeBrowsing.Pref.Scout.SetPref.SBER2Pref.SecurityInterstitial",
-          pref_value);
+      UMA_HISTOGRAM_BOOLEAN("SafeBrowsing.Pref.Extended.SecurityInterstitial",
+                            pref_value);
       break;
     default:
       NOTREACHED();
@@ -75,6 +71,8 @@ GURL GetSimplifiedURL(const GURL& url) {
 namespace prefs {
 const char kSafeBrowsingEnabled[] = "safebrowsing.enabled";
 const char kSafeBrowsingEnhanced[] = "safebrowsing.enhanced";
+const char kSafeBrowsingEnterpriseRealTimeUrlCheckMode[] =
+    "safebrowsing.enterprise_real_time_url_check_mode";
 const char kSafeBrowsingExtendedReportingOptInAllowed[] =
     "safebrowsing.extended_reporting_opt_in_allowed";
 const char kSafeBrowsingIncidentsSent[] = "safebrowsing.incidents_sent";
@@ -138,6 +136,19 @@ SafeBrowsingState GetSafeBrowsingState(const PrefService& prefs) {
   }
 }
 
+void SetSafeBrowsingState(PrefService* prefs, SafeBrowsingState state) {
+  if (state == ENHANCED_PROTECTION) {
+    SetEnhancedProtectionPref(prefs, true);
+    SetStandardProtectionPref(prefs, true);
+  } else if (state == STANDARD_PROTECTION) {
+    SetEnhancedProtectionPref(prefs, false);
+    SetStandardProtectionPref(prefs, true);
+  } else {
+    SetEnhancedProtectionPref(prefs, false);
+    SetStandardProtectionPref(prefs, false);
+  }
+}
+
 bool IsSafeBrowsingEnabled(const PrefService& prefs) {
   return prefs.GetBoolean(prefs::kSafeBrowsingEnabled);
 }
@@ -176,6 +187,11 @@ bool IsExtendedReportingPolicyManaged(const PrefService& prefs) {
   return prefs.IsManagedPreference(prefs::kSafeBrowsingScoutReportingEnabled);
 }
 
+bool IsSafeBrowsingPolicyManaged(const PrefService& prefs) {
+  return prefs.IsManagedPreference(prefs::kSafeBrowsingEnabled) ||
+         prefs.IsManagedPreference(prefs::kSafeBrowsingEnhanced);
+}
+
 void RecordExtendedReportingMetrics(const PrefService& prefs) {
   // This metric tracks the extended browsing opt-in based on whichever setting
   // the user is currently seeing. It tells us whether extended reporting is
@@ -185,7 +201,7 @@ void RecordExtendedReportingMetrics(const PrefService& prefs) {
 
   // Track whether this user has ever seen a security interstitial.
   UMA_HISTOGRAM_BOOLEAN(
-      "SafeBrowsing.Pref.SawInterstitial.SBER2Pref",
+      "SafeBrowsing.Pref.SawInterstitial",
       prefs.GetBoolean(prefs::kSafeBrowsingSawInterstitialScoutReporting));
 }
 
@@ -217,6 +233,9 @@ void RegisterProfilePrefs(PrefRegistrySimple* registry) {
   registry->RegisterIntegerPref(prefs::kSafeBrowsingSendFilesForMalwareCheck,
                                 DO_NOT_SCAN);
   registry->RegisterBooleanPref(prefs::kAdvancedProtectionAllowed, true);
+  registry->RegisterIntegerPref(
+      prefs::kSafeBrowsingEnterpriseRealTimeUrlCheckMode,
+      REAL_TIME_CHECK_DISABLED);
 }
 
 void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
@@ -249,11 +268,19 @@ void SetExtendedReportingPrefForTests(PrefService* prefs, bool value) {
   prefs->SetBoolean(prefs::kSafeBrowsingScoutReportingEnabled, value);
 }
 
-void SetEnhancedProtectionPref(PrefService* prefs, bool value) {
+void SetEnhancedProtectionPrefForTests(PrefService* prefs, bool value) {
   // SafeBrowsingEnabled pref needs to be turned on in order for enhanced
   // protection pref to be turned on. This method is only used for tests.
   prefs->SetBoolean(prefs::kSafeBrowsingEnabled, value);
   prefs->SetBoolean(prefs::kSafeBrowsingEnhanced, value);
+}
+
+void SetEnhancedProtectionPref(PrefService* prefs, bool value) {
+  prefs->SetBoolean(prefs::kSafeBrowsingEnhanced, value);
+}
+
+void SetStandardProtectionPref(PrefService* prefs, bool value) {
+  prefs->SetBoolean(prefs::kSafeBrowsingEnabled, value);
 }
 
 void UpdatePrefsBeforeSecurityInterstitial(PrefService* prefs) {

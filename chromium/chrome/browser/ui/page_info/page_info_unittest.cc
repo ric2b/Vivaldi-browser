@@ -18,10 +18,13 @@
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
-#include "chrome/browser/content_settings/tab_specific_content_settings_delegate.h"
+#include "chrome/browser/content_settings/page_specific_content_settings_delegate.h"
 #include "chrome/browser/infobars/mock_infobar_service.h"
 #include "chrome/browser/ssl/stateful_ssl_host_state_delegate_factory.h"
 #include "chrome/browser/ssl/tls_deprecation_test_utils.h"
+#include "chrome/browser/subresource_filter/subresource_filter_content_settings_manager.h"
+#include "chrome/browser/subresource_filter/subresource_filter_profile_context.h"
+#include "chrome/browser/subresource_filter/subresource_filter_profile_context_factory.h"
 #include "chrome/browser/ui/page_info/chrome_page_info_delegate.h"
 #include "chrome/browser/ui/page_info/chrome_page_info_ui_delegate.h"
 #include "chrome/browser/usb/usb_chooser_context.h"
@@ -149,9 +152,9 @@ class PageInfoTest : public ChromeRenderViewHostTestHarness {
     ASSERT_TRUE(cert_);
 
     MockInfoBarService::CreateForWebContents(web_contents());
-    content_settings::TabSpecificContentSettings::CreateForWebContents(
+    content_settings::PageSpecificContentSettings::CreateForWebContents(
         web_contents(),
-        std::make_unique<chrome::TabSpecificContentSettingsDelegate>(
+        std::make_unique<chrome::PageSpecificContentSettingsDelegate>(
             web_contents()));
 
     // Setup mock ui.
@@ -165,6 +168,12 @@ class PageInfoTest : public ChromeRenderViewHostTestHarness {
     RenderViewHostTestHarness::TearDown();
     page_info_.reset();
     incognito_page_info_.reset();
+  }
+
+  TestingProfile::TestingFactories GetTestingFactories() const override {
+    return {
+        {StatefulSSLHostStateDelegateFactory::GetInstance(),
+         StatefulSSLHostStateDelegateFactory::GetDefaultFactoryForTesting()}};
   }
 
   void SetDefaultUIExpectations(MockPageInfoUI* mock_ui) {
@@ -233,13 +242,19 @@ class PageInfoTest : public ChromeRenderViewHostTestHarness {
 
   PageInfo* incognito_page_info() {
     if (!incognito_page_info_.get()) {
+      // Build the incognito profile manually in order to override testing
+      // factories.
+      TestingProfile::Builder incognito_profile_builder;
+      incognito_profile_builder.AddTestingFactories(GetTestingFactories());
+      incognito_profile_builder.BuildIncognito(profile());
+
       incognito_web_contents_ =
           content::WebContentsTester::CreateTestWebContents(
               profile()->GetPrimaryOTRProfile(), nullptr);
 
-      content_settings::TabSpecificContentSettings::CreateForWebContents(
+      content_settings::PageSpecificContentSettings::CreateForWebContents(
           incognito_web_contents_.get(),
-          std::make_unique<chrome::TabSpecificContentSettingsDelegate>(
+          std::make_unique<chrome::PageSpecificContentSettingsDelegate>(
               incognito_web_contents_.get()));
 
       incognito_mock_ui_ = std::make_unique<MockPageInfoUI>();
@@ -1240,7 +1255,13 @@ TEST_F(PageInfoTest, TimeOpenMetrics) {
 
 // Tests that metrics are recorded on a PageInfo for pages with
 // various Safety Tip statuses.
-TEST_F(PageInfoTest, SafetyTipMetrics) {
+// See https://crbug.com/1114659 for why the test is disabled on Android.
+#if defined(OS_ANDROID)
+#define MAYBE_SafetyTipMetrics DISABLED_SafetyTipMetrics
+#else
+#define MAYBE_SafetyTipMetrics SafetyTipMetrics
+#endif
+TEST_F(PageInfoTest, MAYBE_SafetyTipMetrics) {
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitAndEnableFeature(
       security_state::features::kSafetyTipUI);
@@ -1484,13 +1505,16 @@ TEST_F(PageInfoTest, SubresourceFilterSetting_MatchesActivation) {
   ClearPageInfo();
   SetDefaultUIExpectations(mock_ui());
 
-  // Now, simulate activation on that origin, which is encoded by the existence
-  // of the website setting. The setting should then appear in page_info.
-  HostContentSettingsMap* content_settings =
-      HostContentSettingsMapFactory::GetForProfile(profile());
-  content_settings->SetWebsiteSettingDefaultScope(
-      url(), GURL(), ContentSettingsType::ADS_DATA, std::string(),
-      std::make_unique<base::DictionaryValue>());
+  // Now, explicitly set site activation metadata to simulate activation on
+  // that origin, which is encoded by the existence of the website setting. The
+  // setting should then appear in page_info.
+  SubresourceFilterContentSettingsManager* settings_manager =
+      SubresourceFilterProfileContextFactory::GetForProfile(profile())
+          ->settings_manager();
+  settings_manager->SetSiteMetadataBasedOnActivation(
+      url(), true,
+      SubresourceFilterContentSettingsManager::ActivationSource::kSafeBrowsing);
+
   page_info();
   EXPECT_TRUE(showing_setting(last_permission_info_list()));
 }

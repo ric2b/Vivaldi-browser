@@ -77,15 +77,12 @@ TEST_F(WriteBarrierPerfTest, MemberWritePerformance) {
 
   // Reporting.
   auto reporter = SetUpReporter("member_write_performance");
-  reporter.AddResult(
-      kMetricWritesDuringGcRunsPerS,
-      static_cast<double>(kNumElements) / during_gc_duration.InSecondsF());
-  reporter.AddResult(
-      kMetricWritesOutsideGcRunsPerS,
-      static_cast<double>(kNumElements) / outside_gc_duration.InSecondsF());
-  reporter.AddResult(
-      kMetricRelativeSpeedDifferenceUnitless,
-      during_gc_duration.InSecondsF() / outside_gc_duration.InSecondsF());
+  reporter.AddResult(kMetricWritesDuringGcRunsPerS,
+                     kNumElements / during_gc_duration.InSecondsF());
+  reporter.AddResult(kMetricWritesOutsideGcRunsPerS,
+                     kNumElements / outside_gc_duration.InSecondsF());
+  reporter.AddResult(kMetricRelativeSpeedDifferenceUnitless,
+                     during_gc_duration / outside_gc_duration);
 }
 
 }  // namespace blink

@@ -24,7 +24,6 @@
 #include "content/common/frame_replication_state.h"
 #include "content/common/input_messages.h"
 #include "content/common/view_messages.h"
-#include "content/common/visual_properties.h"
 #include "content/common/widget_messages.h"
 #include "content/public/common/content_features.h"
 #include "content/public/test/fake_render_widget_host.h"
@@ -40,10 +39,11 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/input/synthetic_web_input_event_builders.h"
 #include "third_party/blink/public/common/input/web_coalesced_input_event.h"
+#include "third_party/blink/public/common/widget/device_emulation_params.h"
+#include "third_party/blink/public/common/widget/visual_properties.h"
 #include "third_party/blink/public/mojom/input/input_handler.mojom.h"
 #include "third_party/blink/public/mojom/page/widget.mojom-test-utils.h"
 #include "third_party/blink/public/platform/scheduler/test/renderer_scheduler_test_support.h"
-#include "third_party/blink/public/web/web_device_emulation_params.h"
 #include "third_party/blink/public/web/web_external_widget.h"
 #include "third_party/blink/public/web/web_external_widget_client.h"
 #include "third_party/blink/public/web/web_frame_widget.h"
@@ -156,7 +156,7 @@ class InteractiveRenderWidget : public RenderWidget {
                      /*is_hidden=*/false,
                      /*never_composited=*/false) {}
 
-  void Init(blink::WebWidget* widget, const ScreenInfo& screen_info) {
+  void Init(blink::WebWidget* widget, const blink::ScreenInfo& screen_info) {
     Initialize(base::NullCallback(), widget, screen_info);
   }
 
@@ -170,11 +170,6 @@ class InteractiveRenderWidget : public RenderWidget {
   }
 
   IPC::TestSink* sink() { return &sink_; }
-
-  const viz::LocalSurfaceIdAllocation& local_surface_id_allocation_from_parent()
-      const {
-    return local_surface_id_allocation_from_parent_;
-  }
 
   bool OverscrollGestureEvent(const blink::WebGestureEvent& event) {
     if (event.GetType() == blink::WebInputEvent::Type::kGestureScrollUpdate) {
@@ -209,6 +204,9 @@ int InteractiveRenderWidget::next_routing_id_ = 0;
 
 class RenderWidgetUnittest : public testing::Test {
  public:
+  explicit RenderWidgetUnittest(bool is_for_nested_main_frame = false)
+      : is_for_nested_main_frame_(is_for_nested_main_frame) {}
+
   void SetUp() override {
     mojo::AssociatedRemote<blink::mojom::FrameWidget> frame_widget_remote;
     mojo::PendingAssociatedReceiver<blink::mojom::FrameWidget>
@@ -233,6 +231,7 @@ class RenderWidgetUnittest : public testing::Test {
 
     web_view_ = blink::WebView::Create(/*client=*/&web_view_client_,
                                        /*is_hidden=*/false,
+                                       /*is_inside_portal=*/false,
                                        /*compositing_enabled=*/true, nullptr,
                                        mojo::NullAssociatedReceiver());
     widget_ = std::make_unique<InteractiveRenderWidget>(&compositor_deps_);
@@ -242,8 +241,8 @@ class RenderWidgetUnittest : public testing::Test {
     web_frame_widget_ = blink::WebFrameWidget::CreateForMainFrame(
         widget_.get(), web_local_frame_, frame_widget_host.Unbind(),
         std::move(frame_widget_receiver), widget_host.Unbind(),
-        std::move(widget_receiver));
-    widget_->Init(web_frame_widget_, ScreenInfo());
+        std::move(widget_receiver), is_for_nested_main_frame_);
+    widget_->Init(web_frame_widget_, blink::ScreenInfo());
     web_view_->DidAttachLocalMainFrame();
   }
 
@@ -283,6 +282,7 @@ class RenderWidgetUnittest : public testing::Test {
   FakeCompositorDependencies compositor_deps_;
   std::unique_ptr<InteractiveRenderWidget> widget_;
   base::HistogramTester histogram_tester_;
+  const bool is_for_nested_main_frame_;
 };
 
 class RenderWidgetExternalWidgetUnittest : public testing::Test {
@@ -297,7 +297,7 @@ class RenderWidgetExternalWidgetUnittest : public testing::Test {
         std::move(widget_host_remote), std::move(widget_receiver));
 
     widget_ = std::make_unique<InteractiveRenderWidget>(&compositor_deps_);
-    widget_->Init(external_web_widget_.get(), ScreenInfo());
+    widget_->Init(external_web_widget_.get(), blink::ScreenInfo());
   }
 
   void TearDown() override {
@@ -533,47 +533,11 @@ TEST_F(RenderWidgetExternalWidgetUnittest,
   widget()->SendInputEvent(scroll, base::DoNothing());
 }
 
-// Tests that if a RenderWidget is auto-resized, it requests a new
-// viz::LocalSurfaceId to be allocated on the impl thread.
-TEST_F(RenderWidgetUnittest, AutoResizeAllocatedLocalSurfaceId) {
-  viz::ParentLocalSurfaceIdAllocator allocator;
-
-  // Enable auto-resize.
-  content::VisualProperties visual_properties;
-  visual_properties.auto_resize_enabled = true;
-  visual_properties.min_size_for_auto_resize = gfx::Size(100, 100);
-  visual_properties.max_size_for_auto_resize = gfx::Size(200, 200);
-  allocator.GenerateId();
-  visual_properties.local_surface_id_allocation =
-      allocator.GetCurrentLocalSurfaceIdAllocation();
-  {
-    WidgetMsg_UpdateVisualProperties msg(widget()->routing_id(),
-                                         visual_properties);
-    widget()->OnMessageReceived(msg);
-  }
-  EXPECT_EQ(allocator.GetCurrentLocalSurfaceIdAllocation(),
-            widget()->local_surface_id_allocation_from_parent());
-  EXPECT_FALSE(widget()
-                   ->layer_tree_host()
-                   ->new_local_surface_id_request_for_testing());
-
-  constexpr gfx::Size size(200, 200);
-  widget()->DidAutoResize(size);
-  EXPECT_EQ(allocator.GetCurrentLocalSurfaceIdAllocation(),
-            widget()->local_surface_id_allocation_from_parent());
-  EXPECT_TRUE(widget()
-                  ->layer_tree_host()
-                  ->new_local_surface_id_request_for_testing());
-}
-
 class StubRenderWidgetDelegate : public RenderWidgetDelegate {
  public:
   void SetActiveForWidget(bool active) override {}
   bool SupportsMultipleWindowsForWidget() override { return true; }
   bool ShouldAckSyntheticInputImmediately() override { return true; }
-  void ApplyAutoResizeLimitsForWidget(const gfx::Size& min_size,
-                                      const gfx::Size& max_size) override {}
-  void DisableAutoResizeForWidget() override {}
   void ScrollFocusedNodeIntoViewForWidget() override {}
   void DidReceiveSetFocusEventForWidget() override {}
   void DidCommitCompositorFrameForWidget() override {}
@@ -583,23 +547,26 @@ class StubRenderWidgetDelegate : public RenderWidgetDelegate {
                                 cc::BrowserControlsParams) override {}
   void SetScreenMetricsEmulationParametersForWidget(
       bool enabled,
-      const blink::WebDeviceEmulationParams& params) override {}
+      const blink::DeviceEmulationParams& params) override {}
+};
+
+class RenderWidgetSubFrameUnittest : public RenderWidgetUnittest {
+ public:
+  RenderWidgetSubFrameUnittest()
+      : RenderWidgetUnittest(/*is_for_nested_main_frame=*/true) {}
 };
 
 // Tests that the value of VisualProperties::is_pinch_gesture_active is
 // propagated to the LayerTreeHost when properties are synced for subframes.
-TEST_F(RenderWidgetUnittest, ActivePinchGestureUpdatesLayerTreeHostSubFrame) {
+TEST_F(RenderWidgetSubFrameUnittest,
+       ActivePinchGestureUpdatesLayerTreeHostSubFrame) {
   cc::LayerTreeHost* layer_tree_host = widget()->layer_tree_host();
   EXPECT_FALSE(layer_tree_host->is_external_pinch_gesture_active_for_testing());
-  content::VisualProperties visual_properties;
+  blink::VisualProperties visual_properties;
 
   // Sync visual properties on a child RenderWidget.
   visual_properties.is_pinch_gesture_active = true;
-  {
-    WidgetMsg_UpdateVisualProperties msg(widget()->routing_id(),
-                                         visual_properties);
-    widget()->OnMessageReceived(msg);
-  }
+  widget()->GetWebWidget()->ApplyVisualProperties(visual_properties);
   // We expect the |is_pinch_gesture_active| value to propagate to the
   // LayerTreeHost for sub-frames. Since GesturePinch events are handled
   // directly in the main-frame's layer tree (and only there), information about
@@ -609,38 +576,9 @@ TEST_F(RenderWidgetUnittest, ActivePinchGestureUpdatesLayerTreeHostSubFrame) {
   // pinch gestures are active.
   EXPECT_TRUE(layer_tree_host->is_external_pinch_gesture_active_for_testing());
   visual_properties.is_pinch_gesture_active = false;
-  {
-    WidgetMsg_UpdateVisualProperties msg(widget()->routing_id(),
-                                         visual_properties);
-    widget()->OnMessageReceived(msg);
-  }
+  widget()->GetWebWidget()->ApplyVisualProperties(visual_properties);
   EXPECT_FALSE(layer_tree_host->is_external_pinch_gesture_active_for_testing());
 }
-
-// Verify desktop memory limit calculations.
-#if !defined(OS_ANDROID)
-TEST(RenderWidgetTest, IgnoreGivenMemoryPolicy) {
-  auto policy = RenderWidget::GetGpuMemoryPolicy(cc::ManagedMemoryPolicy(256),
-                                                 gfx::Size(), 1.f);
-  EXPECT_EQ(512u * 1024u * 1024u, policy.bytes_limit_when_visible);
-  EXPECT_EQ(gpu::MemoryAllocation::CUTOFF_ALLOW_NICE_TO_HAVE,
-            policy.priority_cutoff_when_visible);
-}
-
-TEST(RenderWidgetTest, LargeScreensUseMoreMemory) {
-  auto policy = RenderWidget::GetGpuMemoryPolicy(cc::ManagedMemoryPolicy(256),
-                                                 gfx::Size(4096, 2160), 1.f);
-  EXPECT_EQ(2u * 512u * 1024u * 1024u, policy.bytes_limit_when_visible);
-  EXPECT_EQ(gpu::MemoryAllocation::CUTOFF_ALLOW_NICE_TO_HAVE,
-            policy.priority_cutoff_when_visible);
-
-  policy = RenderWidget::GetGpuMemoryPolicy(cc::ManagedMemoryPolicy(256),
-                                            gfx::Size(2048, 1080), 2.f);
-  EXPECT_EQ(2u * 512u * 1024u * 1024u, policy.bytes_limit_when_visible);
-  EXPECT_EQ(gpu::MemoryAllocation::CUTOFF_ALLOW_NICE_TO_HAVE,
-            policy.priority_cutoff_when_visible);
-}
-#endif
 
 #if defined(OS_ANDROID)
 TEST_F(RenderWidgetUnittest, ForceSendMetadataOnInput) {
@@ -667,7 +605,7 @@ class NotifySwapTimesRenderWidgetUnittest : public RenderWidgetUnittest {
     widget()->OnMessageReceived(msg);
 
     // TODO(danakj): This usually happens through
-    // RenderWidget::OnUpdateVisualProperties() and we are cutting past that for
+    // RenderWidget::UpdateVisualProperties() and we are cutting past that for
     // some reason.
     allocator.GenerateId();
     widget()->layer_tree_host()->SetViewportRectAndScale(

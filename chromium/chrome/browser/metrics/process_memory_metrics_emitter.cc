@@ -169,6 +169,10 @@ const Metric kAllocatorDumpNamesForMetrics[] = {
      &Memory_Experimental::SetDownloadService},
     {"discardable", "Discardable", MetricSize::kLarge, kEffectiveSize,
      EmitTo::kSizeInUkmAndUma, &Memory_Experimental::SetDiscardable},
+    {"discardable", "Discardable.FreelistSize", MetricSize::kSmall,
+     "freelist_size", EmitTo::kSizeInUmaOnly, nullptr},
+    {"discardable", "Discardable.VirtualSize", MetricSize::kSmall,
+     "virtual_size", EmitTo::kSizeInUmaOnly, nullptr},
     {"extensions/functions", "ExtensionFunctions", MetricSize::kLarge,
      kEffectiveSize, EmitTo::kSizeInUmaOnly, nullptr},
     {"extensions/value_store", "Extensions.ValueStore", MetricSize::kLarge,
@@ -485,7 +489,7 @@ void EmitProcessUmaAndUkm(const GlobalMemoryDump::ProcessDump& pmd,
     }
   }
 
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
   // Resident set is not populated on Mac.
   builder->SetResident(pmd.os_dump().resident_set_kb / kKiB);
 #endif
@@ -502,7 +506,7 @@ void EmitProcessUmaAndUkm(const GlobalMemoryDump::ProcessDump& pmd,
     return;
 
   const char* process_name = HistogramProcessTypeToString(process_type);
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   // Resident set is not populated on Mac.
   DCHECK_EQ(pmd.os_dump().resident_set_kb, 0U);
 #else
@@ -942,7 +946,7 @@ void ProcessMemoryMetricsEmitter::CollateResults() {
     UMA_HISTOGRAM_MEMORY_LARGE_MB(
         "Memory.Experimental.Total2.PrivateMemoryFootprint",
         private_footprint_total_kb / kKiB);
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
     // Resident set is not populated on Mac.
     DCHECK_EQ(resident_set_total_kb, 0U);
 #else

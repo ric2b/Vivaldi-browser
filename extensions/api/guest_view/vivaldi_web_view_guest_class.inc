@@ -6,6 +6,7 @@
 
 // class WebViewGuest .... {
 // other declarations
+#if BUILDFLAG(ENABLE_EXTENSIONS)
 
  public:
   void ShowPageInfo(gfx::Point pos);
@@ -46,6 +47,11 @@
                                          bool allowed_per_prefs,
                                          const url::Origin& origin,
                                          const GURL& resource_url) override;
+
+  void OnWindowBlocked(const GURL& window_target_url,
+                       const std::string& frame_name,
+                       WindowOpenDisposition disposition,
+                       const blink::mojom::WindowFeatures& features);
 
   content::KeyboardEventProcessingResult PreHandleKeyboardEvent(
       content::WebContents* source,
@@ -154,5 +160,7 @@
 
  private:
   int inspecting_tab_id_ = 0;
+
+#endif  // Extensions
 
 // };

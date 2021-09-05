@@ -16,7 +16,7 @@
 #include "build/build_config.h"
 #include "device/bluetooth/bluetooth_adapter.h"
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include "base/mac/mac_util.h"
 #endif
 #if defined(OS_WIN)
@@ -46,7 +46,7 @@ bool BluetoothAdapterFactory::IsBluetoothSupported() {
   if (Get()->adapter_)
     return true;
 #if defined(OS_ANDROID) || defined(OS_WIN) || defined(OS_LINUX) || \
-    defined(OS_MACOSX)
+    defined(OS_CHROMEOS) || defined(OS_MAC)
   return true;
 #else
   return false;
@@ -66,9 +66,9 @@ bool BluetoothAdapterFactory::IsLowEnergySupported() {
   // scanning, initiating connections and GATT Server. To keep the API
   // consistent we consider Windows 8 as lacking Low Energy support.
   return base::win::GetVersion() >= base::win::Version::WIN10;
-#elif defined(OS_MACOSX)
+#elif defined(OS_MAC)
   return true;
-#elif defined(OS_LINUX)
+#elif (defined(OS_LINUX) || defined(OS_CHROMEOS))
   return true;
 #else
   return false;
@@ -130,7 +130,7 @@ void BluetoothAdapterFactory::GetClassicAdapter(AdapterCallback callback) {
 #endif  // defined(OS_WIN)
 }
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
 // static
 void BluetoothAdapterFactory::Shutdown() {
   if (Get()->adapter_)

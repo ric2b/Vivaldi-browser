@@ -252,12 +252,10 @@ void MediaRouterIntegrationBrowserTest::SetTestData(
 
 base::FilePath MediaRouterIntegrationBrowserTest::GetResourceFile(
     base::FilePath::StringPieceType relative_path) const {
-  base::FilePath base_dir;
-  // ASSERT_TRUE can only be used in void returning functions.
-  // Use CHECK instead in non-void returning functions.
-  CHECK(base::PathService::Get(base::DIR_MODULE, &base_dir));
-  base::FilePath full_path =
-      base_dir.Append(kResourcePath).Append(relative_path);
+  const base::FilePath full_path =
+      base::PathService::CheckedGet(base::DIR_MODULE)
+          .Append(kResourcePath)
+          .Append(relative_path);
   {
     // crbug.com/724573
     base::ScopedAllowBlockingForTesting allow_blocking;
@@ -391,7 +389,7 @@ void MediaRouterIntegrationBrowserTest::SetEnableMediaRouter(bool enable) {
   policy::PolicyMap policy;
   policy.Set(policy::key::kEnableMediaRouter, policy::POLICY_LEVEL_MANDATORY,
              policy::POLICY_SCOPE_USER, policy::POLICY_SOURCE_CLOUD,
-             std::make_unique<base::Value>(enable), nullptr);
+             base::Value(enable), nullptr);
   provider_.UpdateChromePolicy(policy);
   base::RunLoop().RunUntilIdle();
 }
@@ -443,7 +441,7 @@ IN_PROC_BROWSER_TEST_F(MediaRouterIntegrationBrowserTest,
 }
 
 // Crashes on Linux. http://crbug.com/1095068
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
 #define MAYBE_OpenLocalMediaFileInNewTab DISABLED_OpenLocalMediaFileInNewTab
 #else
 #define MAYBE_OpenLocalMediaFileInNewTab OpenLocalMediaFileInNewTab
@@ -502,9 +500,17 @@ IN_PROC_BROWSER_TEST_F(MediaRouterIntegrationBrowserTest,
       web_contents->GetDelegate()->IsFullscreenForTabOrPending(web_contents));
 }
 
+// Flaky on MSan bots: http://crbug.com/879885
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_OpenLocalMediaFileCastFailNoFullscreen \
+  DISABLED_OpenLocalMediaFileCastFailNoFullscreen
+#else
+#define MAYBE_OpenLocalMediaFileCastFailNoFullscreen \
+  OpenLocalMediaFileCastFailNoFullscreen
+#endif
 // Tests that failed route creation of local file does not enter fullscreen.
 IN_PROC_BROWSER_TEST_F(MediaRouterIntegrationBrowserTest,
-                       OpenLocalMediaFileCastFailNoFullscreen) {
+                       MAYBE_OpenLocalMediaFileCastFailNoFullscreen) {
   // Start at a new tab, the file should open in the same tab.
   ui_test_utils::NavigateToURL(browser(), GURL(chrome::kChromeUINewTabURL));
   // Make sure there is 1 tab.

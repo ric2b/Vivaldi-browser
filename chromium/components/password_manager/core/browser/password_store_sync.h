@@ -120,20 +120,6 @@ class PasswordStoreSync {
 
   PasswordStoreSync();
 
-  // TODO(http://crbug.com/925307) Move the following 2 APIs to PasswordStore
-  // upon full migration to USS Sync architecture.
-  // Overwrites |forms| with all stored non-blacklisted credentials. Returns
-  // true on success.
-  virtual bool FillAutofillableLogins(
-      std::vector<std::unique_ptr<autofill::PasswordForm>>* forms)
-      WARN_UNUSED_RESULT = 0;
-
-  // Overwrites |forms| with all stored blacklisted credentials. Returns true on
-  // success.
-  virtual bool FillBlacklistLogins(
-      std::vector<std::unique_ptr<autofill::PasswordForm>>* forms)
-      WARN_UNUSED_RESULT = 0;
-
   // Overwrites |key_to_form_map| with a map from the DB primary key to the
   // corresponding form for all stored credentials. Returns true on success.
   virtual FormRetrievalResult ReadAllLogins(
@@ -172,7 +158,7 @@ class PasswordStoreSync {
   // in order to offer the user the option of saving them in the profile store.
   // Should only be called for the account store.
   virtual void NotifyUnsyncedCredentialsWillBeDeleted(
-      const std::vector<autofill::PasswordForm>& unsynced_credentials) = 0;
+      std::vector<autofill::PasswordForm> unsynced_credentials) = 0;
 
   // The methods below adds transaction support to the password store that's
   // required by sync to guarantee atomic writes of data and sync metadata.

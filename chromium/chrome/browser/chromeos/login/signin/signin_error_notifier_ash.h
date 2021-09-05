@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "base/auto_reset.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
@@ -19,6 +20,7 @@
 #include "components/signin/core/browser/signin_error_controller.h"
 
 class Profile;
+class PrefRegistrySimple;
 
 namespace signin {
 class IdentityManager;
@@ -30,6 +32,10 @@ class SigninErrorNotifier : public SigninErrorController::Observer,
  public:
   SigninErrorNotifier(SigninErrorController* controller, Profile* profile);
   ~SigninErrorNotifier() override;
+
+  static std::unique_ptr<base::AutoReset<bool>> IgnoreSyncErrorsForTesting();
+
+  static void RegisterPrefs(PrefRegistrySimple* registry);
 
   // KeyedService:
   void Shutdown() override;

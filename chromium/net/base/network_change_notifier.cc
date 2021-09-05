@@ -33,7 +33,7 @@
 #include "net/base/network_change_notifier_win.h"
 #elif defined(OS_LINUX) && !defined(OS_CHROMEOS)
 #include "net/base/network_change_notifier_linux.h"
-#elif defined(OS_MACOSX)
+#elif defined(OS_APPLE)
 #include "net/base/network_change_notifier_mac.h"
 #elif defined(OS_CHROMEOS) || defined(OS_ANDROID)
 #include "net/base/network_change_notifier_posix.h"
@@ -66,8 +66,12 @@ class MockNetworkChangeNotifier : public NetworkChangeNotifier {
  public:
   MockNetworkChangeNotifier(
       std::unique_ptr<SystemDnsConfigChangeNotifier> dns_config_notifier)
-      : NetworkChangeNotifier(NetworkChangeCalculatorParams(),
-                              dns_config_notifier.get()),
+      : NetworkChangeNotifier(
+            NetworkChangeCalculatorParams(),
+            dns_config_notifier.get(),
+            // Omit adding observers from the constructor as that would prevent
+            // construction when SequencedTaskRunnerHandle isn't set.
+            /* omit_observers_in_constructor_for_testing=*/true),
         dns_config_notifier_(std::move(dns_config_notifier)) {}
 
   ~MockNetworkChangeNotifier() override { StopSystemDnsConfigNotifier(); }
@@ -235,11 +239,11 @@ std::unique_ptr<NetworkChangeNotifier> NetworkChangeNotifier::CreateIfNeeded(
 #elif defined(OS_LINUX)
   return std::make_unique<NetworkChangeNotifierLinux>(
       std::unordered_set<std::string>());
-#elif defined(OS_MACOSX)
+#elif defined(OS_APPLE)
   return std::make_unique<NetworkChangeNotifierMac>();
 #elif defined(OS_FUCHSIA)
   return std::make_unique<NetworkChangeNotifierFuchsia>(
-      0 /* required_features */);
+      fuchsia::hardware::ethernet::Features());
 #else
   NOTIMPLEMENTED();
   return NULL;
@@ -420,7 +424,7 @@ const char* NetworkChangeNotifier::ConnectionTypeToString(
   return kConnectionTypeNames[type];
 }
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
 // static
 const internal::AddressTrackerLinux*
 NetworkChangeNotifier::GetAddressTracker() {
@@ -474,7 +478,7 @@ NetworkChangeNotifier::ConnectionTypeFromInterfaceList(
     if (interfaces[i].friendly_name == "Teredo Tunneling Pseudo-Interface")
       continue;
 #endif
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
     // Ignore link-local addresses as they aren't globally routable.
     // Mac assigns these to disconnected interfaces like tunnel interfaces
     // ("utun"), airdrop interfaces ("awdl"), and ethernet ports ("en").
@@ -534,7 +538,8 @@ NetworkChangeNotifier::NetworkObserver::NetworkObserver() = default;
 NetworkChangeNotifier::NetworkObserver::~NetworkObserver() = default;
 
 void NetworkChangeNotifier::AddIPAddressObserver(IPAddressObserver* observer) {
-  if (g_network_change_notifier) {
+  if (g_network_change_notifier &&
+      g_network_change_notifier->can_add_observers_) {
     observer->observer_list_ =
         g_network_change_notifier->ip_address_observer_list_;
     observer->observer_list_->AddObserver(observer);
@@ -543,7 +548,8 @@ void NetworkChangeNotifier::AddIPAddressObserver(IPAddressObserver* observer) {
 
 void NetworkChangeNotifier::AddConnectionTypeObserver(
     ConnectionTypeObserver* observer) {
-  if (g_network_change_notifier) {
+  if (g_network_change_notifier &&
+      g_network_change_notifier->can_add_observers_) {
     observer->observer_list_ =
         g_network_change_notifier->connection_type_observer_list_;
     observer->observer_list_->AddObserver(observer);
@@ -551,7 +557,8 @@ void NetworkChangeNotifier::AddConnectionTypeObserver(
 }
 
 void NetworkChangeNotifier::AddDNSObserver(DNSObserver* observer) {
-  if (g_network_change_notifier) {
+  if (g_network_change_notifier &&
+      g_network_change_notifier->can_add_observers_) {
     observer->observer_list_ =
         g_network_change_notifier->resolver_state_observer_list_;
     observer->observer_list_->AddObserver(observer);
@@ -560,7 +567,8 @@ void NetworkChangeNotifier::AddDNSObserver(DNSObserver* observer) {
 
 void NetworkChangeNotifier::AddNetworkChangeObserver(
     NetworkChangeObserver* observer) {
-  if (g_network_change_notifier) {
+  if (g_network_change_notifier &&
+      g_network_change_notifier->can_add_observers_) {
     observer->observer_list_ =
         g_network_change_notifier->network_change_observer_list_;
     observer->observer_list_->AddObserver(observer);
@@ -569,7 +577,8 @@ void NetworkChangeNotifier::AddNetworkChangeObserver(
 
 void NetworkChangeNotifier::AddMaxBandwidthObserver(
     MaxBandwidthObserver* observer) {
-  if (g_network_change_notifier) {
+  if (g_network_change_notifier &&
+      g_network_change_notifier->can_add_observers_) {
     observer->observer_list_ =
         g_network_change_notifier->max_bandwidth_observer_list_;
     observer->observer_list_->AddObserver(observer);
@@ -578,7 +587,8 @@ void NetworkChangeNotifier::AddMaxBandwidthObserver(
 
 void NetworkChangeNotifier::AddNetworkObserver(NetworkObserver* observer) {
   DCHECK(AreNetworkHandlesSupported());
-  if (g_network_change_notifier) {
+  if (g_network_change_notifier &&
+      g_network_change_notifier->can_add_observers_) {
     observer->observer_list_ =
         g_network_change_notifier->network_observer_list_;
     observer->observer_list_->AddObserver(observer);
@@ -680,7 +690,8 @@ void NetworkChangeNotifier::SetTestNotificationsOnly(bool test_only) {
 NetworkChangeNotifier::NetworkChangeNotifier(
     const NetworkChangeCalculatorParams& params
     /*= NetworkChangeCalculatorParams()*/,
-    SystemDnsConfigChangeNotifier* system_dns_config_notifier /*= nullptr */)
+    SystemDnsConfigChangeNotifier* system_dns_config_notifier /*= nullptr */,
+    bool omit_observers_in_constructor_for_testing /*= false */)
     : ip_address_observer_list_(
           new base::ObserverListThreadSafe<IPAddressObserver>(
               base::ObserverListPolicy::EXISTING_ONLY)),
@@ -700,7 +711,8 @@ NetworkChangeNotifier::NetworkChangeNotifier(
           base::ObserverListPolicy::EXISTING_ONLY)),
       system_dns_config_notifier_(system_dns_config_notifier),
       system_dns_config_observer_(std::make_unique<SystemDnsConfigObserver>()),
-      network_change_calculator_(new NetworkChangeCalculator(params)) {
+      network_change_calculator_(new NetworkChangeCalculator(params)),
+      can_add_observers_(!omit_observers_in_constructor_for_testing) {
   if (!system_dns_config_notifier_) {
     static base::NoDestructor<SystemDnsConfigChangeNotifier> singleton{};
     system_dns_config_notifier_ = singleton.get();
@@ -711,9 +723,11 @@ NetworkChangeNotifier::NetworkChangeNotifier(
   network_change_calculator_->Init();
 
   system_dns_config_notifier_->AddObserver(system_dns_config_observer_.get());
+
+  can_add_observers_ = true;
 }
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
 const internal::AddressTrackerLinux*
 NetworkChangeNotifier::GetAddressTrackerInternal() const {
   return NULL;

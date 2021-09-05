@@ -8,7 +8,7 @@
 #include "media/base/test_data_util.h"
 
 #include "media/base/limits.h"
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include "platform_media/renderer/decoders/mac/at_audio_decoder.h"
 #elif defined(OS_WIN)
 #include "platform_media/renderer/decoders/win/wmf_audio_decoder.h"
@@ -137,7 +137,7 @@ void PlatformPipelineTestBase::AppendPlatformAudioDecoders(
         std::make_unique<PassThroughAudioDecoder>(media_task_runner));
   }
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   audio_decoders.push_back(std::make_unique<ATAudioDecoder>(media_task_runner));
 #elif defined(OS_WIN)
   audio_decoders.push_back(

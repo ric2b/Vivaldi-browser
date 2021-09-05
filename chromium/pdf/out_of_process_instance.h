@@ -14,34 +14,47 @@
 #include <utility>
 #include <vector>
 
+#include "base/callback.h"
 #include "base/containers/queue.h"
-#include "base/macros.h"
+#include "base/memory/weak_ptr.h"
 #include "pdf/paint_manager.h"
-#include "pdf/pdf_engine.h"
+#include "pdf/pdf_view_plugin_base.h"
 #include "pdf/preview_mode_client.h"
 #include "ppapi/c/private/ppp_pdf.h"
 #include "ppapi/cpp/dev/printing_dev.h"
 #include "ppapi/cpp/image_data.h"
 #include "ppapi/cpp/instance.h"
 #include "ppapi/cpp/private/find_private.h"
-#include "ppapi/cpp/private/uma_private.h"
 #include "ppapi/cpp/url_loader.h"
-#include "ppapi/utility/completion_callback_factory.h"
+#include "third_party/skia/include/core/SkBitmap.h"
+
+namespace gfx {
+class Rect;
+class Size;
+class Vector2d;
+}  // namespace gfx
 
 namespace pp {
+class Size;
 class TextInput_Dev;
-}
+}  // namespace pp
 
 namespace chrome_pdf {
 
-class OutOfProcessInstance : public pp::Instance,
+class Graphics;
+class PaintReadyRect;
+class PDFiumEngine;
+
+class OutOfProcessInstance : public PdfViewPluginBase,
+                             public pp::Instance,
                              public pp::Find_Private,
                              public pp::Printing_Dev,
                              public PaintManager::Client,
-                             public PDFEngine::Client,
                              public PreviewModeClient::Client {
  public:
   explicit OutOfProcessInstance(PP_Instance instance);
+  OutOfProcessInstance(const OutOfProcessInstance&) = delete;
+  OutOfProcessInstance& operator=(const OutOfProcessInstance&) = delete;
   ~OutOfProcessInstance() override;
 
   // pp::Instance implementation.
@@ -57,9 +70,11 @@ class OutOfProcessInstance : public pp::Instance,
   void StopFind() override;
 
   // pp::PaintManager::Client implementation.
-  void OnPaint(const std::vector<pp::Rect>& paint_rects,
-               std::vector<PaintManager::ReadyRect>* ready,
-               std::vector<pp::Rect>* pending) override;
+  std::unique_ptr<Graphics> CreatePaintGraphics(const gfx::Size& size) override;
+  bool BindPaintGraphics(Graphics& graphics) override;
+  void OnPaint(const std::vector<gfx::Rect>& paint_rects,
+               std::vector<PaintReadyRect>* ready,
+               std::vector<gfx::Rect>* pending) override;
 
   // pp::Printing_Dev implementation.
   uint32_t QuerySupportedPrintOutputFormats() override;
@@ -93,13 +108,13 @@ class OutOfProcessInstance : public pp::Instance,
   void DidOpen(int32_t result);
   void DidOpenPreview(int32_t result);
 
-  // PDFEngine::Client implementation.
+  // PdfViewPluginBase implementation.
   void ProposeDocumentLayout(const DocumentLayout& layout) override;
   void Invalidate(const pp::Rect& rect) override;
-  void DidScroll(const pp::Point& point) override;
+  void DidScroll(const gfx::Vector2d& offset) override;
   void ScrollToX(int x_in_screen_coords) override;
   void ScrollToY(int y_in_screen_coords, bool compensate_for_toolbar) override;
-  void ScrollBy(const pp::Point& point) override;
+  void ScrollBy(const gfx::Vector2d& scroll_delta) override;
   void ScrollToPage(int page) override;
   void NavigateTo(const std::string& url,
                   WindowOpenDisposition disposition) override;
@@ -113,7 +128,7 @@ class OutOfProcessInstance : public pp::Instance,
   void NotifySelectedFindResultChanged(int current_find_index) override;
   void NotifyTouchSelectionOccurred() override;
   void GetDocumentPassword(
-      pp::CompletionCallbackWithOutput<pp::Var> callback) override;
+      base::OnceCallback<void(const std::string&)> callback) override;
   void Beep() override;
   void Alert(const std::string& message) override;
   bool Confirm(const std::string& message) override;
@@ -166,12 +181,17 @@ class OutOfProcessInstance : public pp::Instance,
   void HandleDisplayAnnotations(const pp::VarDictionary& dict);
   void HandleGetNamedDestinationMessage(const pp::VarDictionary& dict);
   void HandleGetPasswordCompleteMessage(const pp::VarDictionary& dict);
-  void HandleGetSelectedTextMessage();
+  void HandleGetSelectedTextMessage(const pp::VarDictionary& dict);
   void HandleLoadPreviewPageMessage(const pp::VarDictionary& dict);
-  void HandlePrintMessage(const pp::VarDictionary& dict);
   void HandleResetPrintPreviewModeMessage(const pp::VarDictionary& dict);
+  void HandleSaveAttachmentMessage(const pp::VarDictionary& dict);
+  void HandleSaveMessage(const pp::VarDictionary& dict);
   void HandleSetTwoUpViewMessage(const pp::VarDictionary& dict);
+  void HandleUpdateScrollMessage(const pp::VarDictionary& dict);
   void HandleViewportMessage(const pp::VarDictionary& dict);
+
+  // Repaints plugin contents based on the current scroll position.
+  void UpdateScroll();
 
   void ResetRecentlySentFindUpdate(int32_t);
 
@@ -263,20 +283,38 @@ class OutOfProcessInstance : public pp::Instance,
   pp::FloatPoint BoundScrollOffsetToDocument(
       const pp::FloatPoint& scroll_offset);
 
+  // These values are persisted to logs. Entries should not be renumbered and
+  // numeric values should never be reused.
+  enum class PdfHasAttachment {
+    kNo = 0,
+    kYes = 1,
+    kMaxValue = kYes,
+  };
+
+  // These values are persisted to logs. Entries should not be renumbered and
+  // numeric values should never be reused.
+  enum class PdfIsTagged {
+    kNo = 0,
+    kYes = 1,
+    kMaxValue = kYes,
+  };
+
   // Add a sample to an enumerated histogram and filter out print preview usage.
   template <typename T>
   void HistogramEnumeration(const char* name, T sample);
 
-  // Wrappers for |uma_| so histogram reporting only occurs when the PDF Viewer
-  // is not being used for print preview.
-  void HistogramCustomCountsDeprecated(const std::string& name,
-                                       int32_t sample,
-                                       int32_t min,
-                                       int32_t max,
-                                       uint32_t bucket_count);
-  void HistogramEnumerationDeprecated(const std::string& name,
-                                      int32_t sample,
-                                      int32_t boundary_value);
+  // Add a sample to an enumerated legacy histogram and filter out print preview
+  // usage.
+  template <typename T>
+  void HistogramEnumeration(const char* name, T sample, T enum_size);
+
+  // Add a sample to a custom counts histogram and filter out print preview
+  // usage.
+  void HistogramCustomCounts(const char* name,
+                             int32_t sample,
+                             int32_t min,
+                             int32_t max,
+                             uint32_t bucket_count);
 
   // Callback to print without re-entrancy issues.
   void OnPrint(int32_t /*unused_but_required*/);
@@ -285,6 +323,8 @@ class OutOfProcessInstance : public pp::Instance,
   void InvalidateAfterPaintDone(int32_t /*unused_but_required*/);
 
   pp::ImageData image_data_;
+  SkBitmap skia_image_data_;  // Must be kept in sync with |image_data_|.
+
   // Used when the plugin is embedded in a page and we have to create the loader
   // ourself.
   pp::URLLoader embed_loader_;
@@ -370,8 +410,6 @@ class OutOfProcessInstance : public pp::Instance,
 
   PrintSettings print_settings_;
 
-  std::unique_ptr<PDFEngine> engine_;
-
   // The PreviewModeClient used for print preview. Will be passed to
   // |preview_engine_|.
   std::unique_ptr<PreviewModeClient> preview_client_;
@@ -379,23 +417,18 @@ class OutOfProcessInstance : public pp::Instance,
   // This engine is used to render the individual preview page data. This is
   // used only in print preview mode. This will use |PreviewModeClient|
   // interface which has very limited access to the pp::Instance.
-  std::unique_ptr<PDFEngine> preview_engine_;
+  std::unique_ptr<PDFiumEngine> preview_engine_;
 
   std::string url_;
 
   // Used for submitting forms.
   pp::URLLoader form_loader_;
 
-  pp::CompletionCallbackFactory<OutOfProcessInstance> callback_factory_;
-
   // The callback for receiving the password from the page.
-  std::unique_ptr<pp::CompletionCallbackWithOutput<pp::Var>> password_callback_;
+  base::OnceCallback<void(const std::string&)> password_callback_;
 
   DocumentLoadState document_load_state_ = LOAD_STATE_LOADING;
   DocumentLoadState preview_document_load_state_ = LOAD_STATE_COMPLETE;
-
-  // A UMA resource for histogram reporting.
-  pp::UMAPrivate uma_;
 
   // Used so that we only tell the browser once about an unsupported feature, to
   // avoid the infobar going up more than once.
@@ -471,7 +504,7 @@ class OutOfProcessInstance : public pp::Instance,
     ACCESSIBILITY_STATE_LOADED
   } accessibility_state_ = ACCESSIBILITY_STATE_OFF;
 
-  DISALLOW_COPY_AND_ASSIGN(OutOfProcessInstance);
+  base::WeakPtrFactory<OutOfProcessInstance> weak_factory_{this};
 };
 
 }  // namespace chrome_pdf

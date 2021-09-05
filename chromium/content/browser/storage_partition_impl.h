@@ -32,6 +32,7 @@
 #include "content/browser/content_index/content_index_context_impl.h"
 #include "content/browser/devtools/devtools_background_services_context_impl.h"
 #include "content/browser/dom_storage/dom_storage_context_wrapper.h"
+#include "content/browser/font_access/font_access_manager_impl.h"
 #include "content/browser/indexed_db/indexed_db_control_wrapper.h"
 #include "content/browser/locks/lock_manager.h"
 #include "content/browser/notifications/platform_notification_context_impl.h"
@@ -76,7 +77,6 @@ class NativeFileSystemEntryFactory;
 class NativeFileSystemManagerImpl;
 class NativeIOContext;
 class QuotaContext;
-class IdleManager;
 
 class CONTENT_EXPORT StoragePartitionImpl
     : public StoragePartition,
@@ -134,7 +134,6 @@ class CONTENT_EXPORT StoragePartitionImpl
   storage::FileSystemContext* GetFileSystemContext() override;
   storage::DatabaseTracker* GetDatabaseTracker() override;
   DOMStorageContextWrapper* GetDOMStorageContext() override;
-  IdleManager* GetIdleManager() override;
   LockManager* GetLockManager();  // override; TODO: Add to interface
   storage::mojom::IndexedDBControl& GetIndexedDBControl() override;
   NativeFileSystemEntryFactory* GetNativeFileSystemEntryFactory() override;
@@ -181,6 +180,8 @@ class CONTENT_EXPORT StoragePartitionImpl
   void Flush() override;
   void ResetURLLoaderFactories() override;
   void ClearBluetoothAllowedDevicesMapForTesting() override;
+  void AddObserver(DataRemovalObserver* observer) override;
+  void RemoveObserver(DataRemovalObserver* observer) override;
   void FlushNetworkInterfaceForTesting() override;
   void WaitForDeletionTasksForTesting() override;
   void WaitForCodeCacheShutdownForTesting() override;
@@ -198,6 +199,8 @@ class CONTENT_EXPORT StoragePartitionImpl
   QuotaContext* GetQuotaContext();
   NativeIOContext* GetNativeIOContext();
   ConversionManagerImpl* GetConversionManager();
+  FontAccessManagerImpl* GetFontAccessManager();
+  std::string GetPartitionDomain();
 
   // blink::mojom::DomStorage interface.
   void OpenLocalStorage(
@@ -266,6 +269,7 @@ class CONTENT_EXPORT StoragePartitionImpl
 #if defined(OS_CHROMEOS)
   void OnTrustAnchorUsed() override;
 #endif
+  void OnSCTReportReady(const std::string& cache_key) override;
 
   scoped_refptr<URLLoaderFactoryGetter> url_loader_factory_getter() {
     return url_loader_factory_getter_;
@@ -476,7 +480,6 @@ class CONTENT_EXPORT StoragePartitionImpl
   scoped_refptr<storage::FileSystemContext> filesystem_context_;
   scoped_refptr<storage::DatabaseTracker> database_tracker_;
   scoped_refptr<DOMStorageContextWrapper> dom_storage_context_;
-  std::unique_ptr<IdleManager> idle_manager_;
   std::unique_ptr<LockManager> lock_manager_;
   std::unique_ptr<IndexedDBControlWrapper> indexed_db_control_wrapper_;
   scoped_refptr<CacheStorageContextImpl> cache_storage_context_;
@@ -507,6 +510,7 @@ class CONTENT_EXPORT StoragePartitionImpl
   scoped_refptr<ContentIndexContextImpl> content_index_context_;
   std::unique_ptr<NativeIOContext> native_io_context_;
   std::unique_ptr<ConversionManagerImpl> conversion_manager_;
+  std::unique_ptr<FontAccessManagerImpl> font_access_manager_;
 
   // ReceiverSet for DomStorage, using the
   // ChildProcessSecurityPolicyImpl::Handle as the binding context type. The
@@ -561,6 +565,8 @@ class CONTENT_EXPORT StoragePartitionImpl
 
   // Track number of running deletion. For test use only.
   int deletion_helpers_running_;
+
+  base::ObserverList<DataRemovalObserver> data_removal_observers_;
 
   bool is_vivaldi_ = false;
 

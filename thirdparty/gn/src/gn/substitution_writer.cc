@@ -576,6 +576,8 @@ std::string SubstitutionWriter::GetLinkerSubstitution(
   } else if (type == &kRustSubstitutionCrateName) {
     // Only include the toolchain for non-default toolchains.
     return target->rust_values().crate_name();
+  } else if (type == &CSubstitutionSwiftModuleName) {
+    return target->swift_values().module_name();
   } else {
     NOTREACHED();
     return std::string();

@@ -8,13 +8,14 @@
 #include "base/ios/ios_util.h"
 #include "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/ui/authentication/cells/signin_promo_view_constants.h"
+#import "ios/chrome/browser/ui/authentication/signin_earl_grey.h"
 #import "ios/chrome/browser/ui/authentication/signin_earl_grey_ui.h"
-#import "ios/chrome/browser/ui/authentication/signin_earlgrey_utils.h"
 #import "ios/chrome/browser/ui/history/history_ui_constants.h"
 #import "ios/chrome/browser/ui/list_model/list_model.h"
 #import "ios/chrome/browser/ui/recent_tabs/recent_tabs_constants.h"
 #import "ios/chrome/browser/ui/table_view/feature_flags.h"
 #import "ios/chrome/browser/ui/table_view/table_view_navigation_controller_constants.h"
+#import "ios/chrome/browser/ui/ui_feature_flags.h"
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey_ui.h"
@@ -87,7 +88,7 @@ id<GREYMatcher> TitleOfTestPage() {
       grey_accessibilityID(kTableViewNavigationDismissButtonId);
   [[EarlGrey selectElementWithMatcher:exitMatcher] performAction:grey_tap()];
   // Wait until the recent tabs panel is dismissed.
-  [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
+  [ChromeEarlGreyUI waitForAppToIdle];
 }
 
 // Tests that a closed tab appears in the Recent Tabs panel, and that tapping
@@ -159,23 +160,26 @@ id<GREYMatcher> TitleOfTestPage() {
 - (void)testRecentTabSigninPromoReloaded {
   OpenRecentTabsPanel();
   // Sign-in promo should be visible with cold state.
-  [SigninEarlGreyUI checkSigninPromoVisibleWithMode:SigninPromoViewModeColdState
-                                        closeButton:NO];
-  FakeChromeIdentity* fakeIdentity = [SigninEarlGreyUtils fakeIdentity1];
-  [SigninEarlGreyUtils addFakeIdentity:fakeIdentity];
+  [SigninEarlGreyUI
+      verifySigninPromoVisibleWithMode:SigninPromoViewModeColdState
+                           closeButton:NO];
+  FakeChromeIdentity* fakeIdentity = [SigninEarlGrey fakeIdentity1];
+  [SigninEarlGrey addFakeIdentity:fakeIdentity];
   // Sign-in promo should be visible with warm state.
-  [SigninEarlGreyUI checkSigninPromoVisibleWithMode:SigninPromoViewModeWarmState
-                                        closeButton:NO];
+  [SigninEarlGreyUI
+      verifySigninPromoVisibleWithMode:SigninPromoViewModeWarmState
+                           closeButton:NO];
   [self closeRecentTabs];
-  [SigninEarlGreyUtils removeFakeIdentity:fakeIdentity];
+  [SigninEarlGrey forgetFakeIdentity:fakeIdentity];
 }
 
 // Tests that the sign-in promo can be reloaded correctly while being hidden.
 // crbug.com/776939
 - (void)testRecentTabSigninPromoReloadedWhileHidden {
   OpenRecentTabsPanel();
-  [SigninEarlGreyUI checkSigninPromoVisibleWithMode:SigninPromoViewModeColdState
-                                        closeButton:NO];
+  [SigninEarlGreyUI
+      verifySigninPromoVisibleWithMode:SigninPromoViewModeColdState
+                           closeButton:NO];
 
   // Tap on "Other Devices", to hide the sign-in promo.
   NSString* otherDevicesLabel =
@@ -185,23 +189,28 @@ id<GREYMatcher> TitleOfTestPage() {
       grey_sufficientlyVisible(), nil);
   [[EarlGrey selectElementWithMatcher:otherDevicesMatcher]
       performAction:grey_tap()];
-  [SigninEarlGreyUI checkSigninPromoNotVisible];
+  [SigninEarlGreyUI verifySigninPromoNotVisible];
 
   // Add an account.
-  FakeChromeIdentity* fakeIdentity = [SigninEarlGreyUtils fakeIdentity1];
-  [SigninEarlGreyUtils addFakeIdentity:fakeIdentity];
+  FakeChromeIdentity* fakeIdentity = [SigninEarlGrey fakeIdentity1];
+  [SigninEarlGrey addFakeIdentity:fakeIdentity];
 
   // Tap on "Other Devices", to show the sign-in promo.
   [[EarlGrey selectElementWithMatcher:otherDevicesMatcher]
       performAction:grey_tap()];
-  [SigninEarlGreyUI checkSigninPromoVisibleWithMode:SigninPromoViewModeWarmState
-                                        closeButton:NO];
+  [SigninEarlGreyUI
+      verifySigninPromoVisibleWithMode:SigninPromoViewModeWarmState
+                           closeButton:NO];
   [self closeRecentTabs];
-  [SigninEarlGreyUtils removeFakeIdentity:fakeIdentity];
+  [SigninEarlGrey forgetFakeIdentity:fakeIdentity];
 }
 
 // Tests that the VC can be dismissed by swiping down.
 - (void)testSwipeDownDismiss {
+  // TODO(crbug.com/1129589): Test disabled on iOS14 iPhones.
+  if (base::ios::IsRunningOnIOS14OrLater() && ![ChromeEarlGrey isIPadIdiom]) {
+    EARL_GREY_TEST_DISABLED(@"Fails on iOS14 iPhones.");
+  }
   if (!base::ios::IsRunningOnOrLater(13, 0, 0)) {
     EARL_GREY_TEST_SKIPPED(@"Test disabled on iOS 12 and lower.");
   }
@@ -233,10 +242,49 @@ id<GREYMatcher> TitleOfTestPage() {
 // Tests that the Recent Tabs can be opened while signed in (prevent regression
 // for https://crbug.com/1056613).
 - (void)testOpenWhileSignedIn {
-  FakeChromeIdentity* fakeIdentity = [SigninEarlGreyUtils fakeIdentity1];
+  FakeChromeIdentity* fakeIdentity = [SigninEarlGrey fakeIdentity1];
   [SigninEarlGreyUI signinWithFakeIdentity:fakeIdentity];
 
   OpenRecentTabsPanel();
+}
+
+// Tests that there is a text cell in the Recently Closed section when it's
+// empty (Only with illustrated-empty-states flag enabled).
+- (void)testRecentlyClosedEmptyState {
+  OpenRecentTabsPanel();
+
+  id<GREYInteraction> detailTextCell = [EarlGrey
+      selectElementWithMatcher:
+          grey_allOf(chrome_test_util::StaticTextWithAccessibilityLabelId(
+                         IDS_IOS_RECENT_TABS_RECENTLY_CLOSED_EMPTY),
+                     grey_sufficientlyVisible(), nil)];
+  if (base::FeatureList::IsEnabled(kIllustratedEmptyStates)) {
+    [detailTextCell assertWithMatcher:grey_notNil()];
+  } else {
+    [detailTextCell assertWithMatcher:grey_nil()];
+  }
+}
+
+// Test that the Cold Mode Signin promo is visible in the Other Devices section
+// (and with illustrated-empty-states enabled, there is the illustrated cell)
+- (void)testOtherDevicesDefaultEmptyState {
+  OpenRecentTabsPanel();
+
+  id<GREYInteraction> illustratedCell = [EarlGrey
+      selectElementWithMatcher:
+          grey_allOf(
+              grey_accessibilityID(
+                  kRecentTabsOtherDevicesIllustratedCellAccessibilityIdentifier),
+              grey_sufficientlyVisible(), nil)];
+  if (base::FeatureList::IsEnabled(kIllustratedEmptyStates)) {
+    [illustratedCell assertWithMatcher:grey_notNil()];
+  } else {
+    [illustratedCell assertWithMatcher:grey_nil()];
+  }
+
+  [SigninEarlGreyUI
+      verifySigninPromoVisibleWithMode:SigninPromoViewModeColdState
+                           closeButton:NO];
 }
 
 @end

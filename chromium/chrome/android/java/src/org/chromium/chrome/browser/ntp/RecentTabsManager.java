@@ -5,12 +5,10 @@
 package org.chromium.chrome.browser.ntp;
 
 import android.content.Context;
-import android.view.View;
 
 import androidx.annotation.IntDef;
 import androidx.annotation.VisibleForTesting;
 
-import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.task.PostTask;
 import org.chromium.chrome.R;
@@ -111,7 +109,7 @@ public class RecentTabsManager implements AndroidSyncSettingsObserver, SignInSta
         mRecentlyClosedTabManager = sRecentlyClosedTabManagerForTests != null
                 ? sRecentlyClosedTabManagerForTests
                 : new RecentlyClosedBridge(profile);
-        mSignInManager = IdentityServicesProvider.get().getSigninManager();
+        mSignInManager = IdentityServicesProvider.get().getSigninManager(mProfile);
 
         mProfileDataCache = ProfileDataCache.createProfileDataCache(context, 0);
         mSigninPromoController = new SigninPromoController(SigninAccessPoint.RECENT_TABS);
@@ -405,39 +403,20 @@ public class RecentTabsManager implements AndroidSyncSettingsObserver, SignInSta
         return PromoState.PROMO_SYNC;
     }
 
-    void recordRecentTabMetrics() {
-        RecordHistogram.recordCountHistogram(
-                "Android.RecentTabsManager.RecentlyClosedTabs", mRecentlyClosedTabs.size());
-        RecordHistogram.recordCountHistogram(
-                "Android.RecentTabsManager.OtherDevices", mForeignSessions.size());
-
-        int totalCount = mRecentlyClosedTabs.size();
-        for (int i = 0; i < mForeignSessions.size(); i++) {
-            ForeignSession foreignSession = mForeignSessions.get(i);
-            for (int j = 0; j < foreignSession.windows.size(); j++) {
-                totalCount += foreignSession.windows.get(j).tabs.size();
-            }
-        }
-        RecordHistogram.recordCountHistogram("Android.RecentTabsManager.TotalTabs", totalCount);
-    }
-
     /**
      * Sets up the personalized signin promo and records user actions for promo impressions.
      * @param view The view to be configured.
      */
     void setupPersonalizedSigninPromo(PersonalizedSigninPromoView view) {
         mProfileDataCache.updateBadgeConfig(0);
-        SigninPromoUtil.setupPromoViewFromCache(
+        SigninPromoUtil.setupSigninPromoViewFromCache(
                 mSigninPromoController, mProfileDataCache, view, null);
     }
 
     void setupPersonalizedSyncPromo(PersonalizedSigninPromoView view) {
         mProfileDataCache.updateBadgeConfig(R.drawable.ic_sync_badge_off_20dp);
-        SigninPromoUtil.setupPromoViewFromCache(
+        SigninPromoUtil.setupSyncPromoViewFromCache(
                 mSigninPromoController, mProfileDataCache, view, null);
-        view.getStatusMessage().setVisibility(View.VISIBLE);
-        view.getChooseAccountButton().setVisibility(View.GONE);
-        view.getSigninButton().setText(R.string.sync_promo_turn_on_sync);
     }
 
     // SignInStateObserver implementation.

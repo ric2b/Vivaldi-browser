@@ -283,7 +283,8 @@ class Node(object):
     # Finally build the XML for our node and return it
     if len(inside_content) > 0:
       if one_line:
-        return u'<%s%s>%s</%s>' % (self.name, attribs, inside_content, self.name)
+        return u'<%s%s>%s</%s>' % (self.name, attribs, inside_content,
+                                   self.name)
       elif content_one_line:
         return u'%s<%s%s>\n%s  %s\n%s</%s>' % (
           indent, self.name, attribs,
@@ -429,6 +430,15 @@ class Node(object):
       return True
     else:
       return self.attrs['translateable'] == 'true'
+
+  def IsAccessibilityWithNoUI(self):
+    '''Returns true if the node is marked as an accessibility label and the
+    message isn't shown in the UI. Otherwise returns false. This label is
+    used to determine if the text requires screenshots.'''
+    if not 'is_accessibility_with_no_ui' in self.attrs:
+      return False
+    else:
+      return self.attrs['is_accessibility_with_no_ui'] == 'true'
 
   def GetNodeById(self, id):
     '''Returns the node in the subtree parented by this node that has a 'name'

@@ -10,6 +10,7 @@
 #include "chrome/browser/ui/views/payments/validating_textfield.h"
 #include "components/autofill/core/browser/autofill_type.h"
 #include "components/autofill/core/browser/data_model/autofill_profile.h"
+#include "components/autofill/core/browser/data_model/autofill_structured_address_component.h"
 #include "components/autofill/core/browser/geo/autofill_country.h"
 #include "components/autofill/core/browser/geo/phone_number_i18n.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
@@ -53,6 +54,9 @@ bool ContactInfoEditorViewController::IsEditingExistingItem() {
 std::vector<EditorField>
 ContactInfoEditorViewController::GetFieldDefinitions() {
   std::vector<EditorField> fields;
+  if (!spec())
+    return fields;
+
   if (spec()->request_payer_name()) {
     fields.push_back(EditorField(
         autofill::NAME_FULL,
@@ -133,8 +137,10 @@ base::string16 ContactInfoEditorViewController::GetSheetTitle() {
 void ContactInfoEditorViewController::PopulateProfile(
     autofill::AutofillProfile* profile) {
   for (const auto& field : text_fields()) {
-    profile->SetInfo(autofill::AutofillType(field.second.type),
-                     field.first->GetText(), state()->GetApplicationLocale());
+    profile->SetInfoWithVerificationStatus(
+        autofill::AutofillType(field.second.type), field.first->GetText(),
+        state()->GetApplicationLocale(),
+        autofill::structured_address::VerificationStatus::kUserVerified);
   }
   profile->set_origin(autofill::kSettingsOrigin);
 }
@@ -197,7 +203,8 @@ bool ContactInfoEditorViewController::ContactInfoValidationDelegate::
 bool ContactInfoEditorViewController::ContactInfoValidationDelegate::
     ValidateTextfield(views::Textfield* textfield,
                       base::string16* error_message) {
-  bool is_valid = true;
+  if (!controller_->spec())
+    return false;
 
   // Show errors from merchant's retry() call.
   autofill::AutofillProfile* invalid_contact_profile =
@@ -210,6 +217,7 @@ bool ContactInfoEditorViewController::ContactInfoValidationDelegate::
       return false;
   }
 
+  bool is_valid = true;
   if (textfield->GetText().empty()) {
     is_valid = false;
     if (error_message) {

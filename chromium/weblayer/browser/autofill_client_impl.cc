@@ -69,6 +69,11 @@ autofill::AddressNormalizer* AutofillClientImpl::GetAddressNormalizer() {
   return nullptr;
 }
 
+const GURL& AutofillClientImpl::GetLastCommittedURL() {
+  NOTREACHED();
+  return GURL::EmptyGURL();
+}
+
 security_state::SecurityLevel
 AutofillClientImpl::GetSecurityLevelForUmaHistograms() {
   NOTREACHED();
@@ -92,13 +97,13 @@ void AutofillClientImpl::OnUnmaskVerificationResult(PaymentsRpcResult result) {
 
 #if !defined(OS_ANDROID)
 std::vector<std::string>
-AutofillClientImpl::GetMerchantWhitelistForVirtualCards() {
+AutofillClientImpl::GetAllowedMerchantsForVirtualCards() {
   NOTREACHED();
   return std::vector<std::string>();
 }
 
 std::vector<std::string>
-AutofillClientImpl::GetBinRangeWhitelistForVirtualCards() {
+AutofillClientImpl::GetAllowedBinRangesForVirtualCards() {
   NOTREACHED();
   return std::vector<std::string>();
 }

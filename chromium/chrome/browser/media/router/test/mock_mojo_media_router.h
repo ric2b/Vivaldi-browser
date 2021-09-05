@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_MEDIA_ROUTER_TEST_MOCK_MOJO_MEDIA_ROUTER_H_
 #define CHROME_BROWSER_MEDIA_ROUTER_TEST_MOCK_MOJO_MEDIA_ROUTER_H_
 
+#include "chrome/browser/media/router/logger_impl.h"
 #include "chrome/browser/media/router/test/mock_media_router.h"
 #include "chrome/common/media_router/media_route_provider_helper.h"
 #include "chrome/common/media_router/mojom/media_router.mojom.h"
@@ -59,21 +60,8 @@ class MockMojoMediaRouter : public MockMediaRouter, public mojom::MediaRouter {
   MOCK_METHOD2(OnRouteMessagesReceived,
                void(const std::string& route_id,
                     std::vector<mojom::RouteMessagePtr> messages));
-  void OnMediaRemoterCreated(
-      int32_t tab_id,
-      mojo::PendingRemote<media::mojom::MirrorServiceRemoter> remoter,
-      mojo::PendingReceiver<media::mojom::MirrorServiceRemotingSource>
-          source_receiver) override {
-    OnMediaRemoterCreatedInternal(tab_id, std::move(remoter),
-                                  std::move(source_receiver));
-  }
-  MOCK_METHOD3(
-      OnMediaRemoterCreatedInternal,
-      void(int32_t tab_id,
-           mojo::PendingRemote<media::mojom::MirrorServiceRemoter> remoter,
-           mojo::PendingReceiver<media::mojom::MirrorServiceRemotingSource>
-               source_receiver));
   MOCK_METHOD1(GetLogger, void(mojo::PendingReceiver<mojom::Logger> receiver));
+  MOCK_METHOD0(GetLogger, LoggerImpl*());
   MOCK_METHOD1(GetLogsAsString, void(GetLogsAsStringCallback callback));
   void GetMediaSinkServiceStatus(
       mojom::MediaRouter::GetMediaSinkServiceStatusCallback callback) override {

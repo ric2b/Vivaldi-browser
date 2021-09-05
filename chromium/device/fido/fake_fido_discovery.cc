@@ -21,7 +21,6 @@ namespace test {
 FakeFidoDiscovery::FakeFidoDiscovery(FidoTransportProtocol transport,
                                      StartMode mode)
     : FidoDeviceDiscovery(transport), mode_(mode) {}
-FakeFidoDiscovery::~FakeFidoDiscovery() = default;
 
 void FakeFidoDiscovery::WaitForCallToStart() {
   wait_for_start_loop_.Run();
@@ -88,6 +87,7 @@ std::unique_ptr<FidoDiscoveryBase> FakeFidoDiscoveryFactory::Create(
     case FidoTransportProtocol::kNearFieldCommunication:
       return std::move(next_nfc_discovery_);
     case FidoTransportProtocol::kBluetoothLowEnergy:
+    case FidoTransportProtocol::kAndroidAccessory:
       return nullptr;
     case FidoTransportProtocol::kCloudAssistedBluetoothLowEnergy:
       return std::move(next_cable_discovery_);

@@ -9,6 +9,7 @@ android_resources("java_resources") {
     "java/res/drawable/camera_img.xml",
     "java/res/drawable/delete.xml",
     "java/res/drawable/edit.xml",
+    "java/res/drawable/link.xml",
     "java/res/drawable/qrcode_background.xml",
     "java/res/drawable/save.xml",
     "java/res/drawable/share.xml",
@@ -23,13 +24,12 @@ android_resources("java_resources") {
     "java/res/values/colors.xml",
     "java/res/values/dimens.xml",
   ]
-  custom_package = "org.chromium.chrome.browser.share"
+  create_srcjar = false
 }
 
 generate_jni("jni_headers") {
   sources = [
     "java/src/org/chromium/chrome/browser/share/BitmapDownloadRequest.java",
-    "java/src/org/chromium/chrome/browser/share/BitmapUriRequest.java",
     "java/src/org/chromium/chrome/browser/share/qrcode/QRCodeGenerationRequest.java",
   ]
 }

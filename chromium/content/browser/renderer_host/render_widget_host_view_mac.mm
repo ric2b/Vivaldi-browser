@@ -82,7 +82,7 @@ SkColor RenderWidgetHostViewMac::BrowserCompositorMacGetGutterColor() const {
   // When making an element on the page fullscreen the element's background
   // may not match the page's, so use black as the gutter color to avoid
   // flashes of brighter colors during the transition.
-  if (host()->delegate() && host()->delegate()->IsFullscreenForCurrentTab()) {
+  if (host()->delegate() && host()->delegate()->IsFullscreen()) {
     return SK_ColorBLACK;
   }
   return last_frame_root_background_color_;
@@ -425,7 +425,7 @@ void RenderWidgetHostViewMac::UpdateNSViewAndDisplayProperties() {
   }
 }
 
-void RenderWidgetHostViewMac::GetScreenInfo(ScreenInfo* screen_info) {
+void RenderWidgetHostViewMac::GetScreenInfo(blink::ScreenInfo* screen_info) {
   browser_compositor_->GetRendererScreenInfo(screen_info);
 }
 
@@ -819,6 +819,12 @@ void RenderWidgetHostViewMac::SpeakSelection() {
   GetPageTextForSpeech(base::BindOnce(ui::TextServicesContextMenu::SpeakText));
 }
 
+void RenderWidgetHostViewMac::SetWindowFrameInScreen(const gfx::Rect& rect) {
+  DCHECK(GetInProcessNSView() && ![GetInProcessNSView() window])
+      << "This method should only be called in headless browser!";
+  OnWindowFrameInScreenChanged(rect);
+}
+
 //
 // RenderWidgetHostViewCocoa uses the stored selection text,
 // which implements NSServicesRequests protocol.
@@ -1086,15 +1092,15 @@ blink::mojom::PointerLockResult RenderWidgetHostViewMac::LockMouse(
   if (mouse_locked_)
     return blink::mojom::PointerLockResult::kSuccess;
 
-  if (request_unadjusted_movement) {
-    // TODO(crbug/998688): implement pointerlock unadjusted movement on mac.
-    NOTIMPLEMENTED();
+  if (request_unadjusted_movement && !IsUnadjustedMouseMovementSupported()) {
     return blink::mojom::PointerLockResult::kUnsupportedOptions;
   }
 
   mouse_locked_ = true;
+  mouse_lock_unadjusted_movement_ = request_unadjusted_movement;
 
   // Lock position of mouse cursor and hide it.
+  ns_view_->SetCursorLockedUnacceleratedMovement(request_unadjusted_movement);
   ns_view_->SetCursorLocked(true);
 
   // Clear the tooltip window.
@@ -1105,22 +1111,42 @@ blink::mojom::PointerLockResult RenderWidgetHostViewMac::LockMouse(
 
 blink::mojom::PointerLockResult RenderWidgetHostViewMac::ChangeMouseLock(
     bool request_unadjusted_movement) {
-  // Unadjusted movement is not supported on Mac. Which means that
-  // |mouse_locked_unadjusted_movement_| must not be set. Therefore,
-  // |request_unadjusted_movement| must be true so this request will always
-  // fail with kUnsupportedOptions.
-  NOTIMPLEMENTED();
-  return blink::mojom::PointerLockResult::kUnsupportedOptions;
+  if (request_unadjusted_movement && !IsUnadjustedMouseMovementSupported()) {
+    return blink::mojom::PointerLockResult::kUnsupportedOptions;
+  }
+
+  mouse_lock_unadjusted_movement_ = request_unadjusted_movement;
+  ns_view_->SetCursorLockedUnacceleratedMovement(request_unadjusted_movement);
+  return blink::mojom::PointerLockResult::kSuccess;
 }
 
 void RenderWidgetHostViewMac::UnlockMouse() {
   if (!mouse_locked_)
     return;
   mouse_locked_ = false;
+  mouse_lock_unadjusted_movement_ = false;
   ns_view_->SetCursorLocked(false);
+  ns_view_->SetCursorLockedUnacceleratedMovement(false);
 
   if (host())
     host()->LostMouseLock();
+}
+
+bool RenderWidgetHostViewMac::GetIsMouseLockedUnadjustedMovementForTesting() {
+  return mouse_locked_ && mouse_lock_unadjusted_movement_;
+}
+
+bool RenderWidgetHostViewMac::IsUnadjustedMouseMovementSupported() {
+  // kCGEventUnacceleratedPointerMovementX/Y were first added as CGEventField
+  // enum values in the 10.15.1 SDK.
+  //
+  // While they do seem to work at runtime back to 10.14, the safest approach is
+  // to limit their use to 10.15.1 and newer to avoid relying on private or
+  // undocumented APIs on earlier OSes.
+  if (@available(macOS 10.15.1, *)) {
+    return true;
+  }
+  return false;
 }
 
 bool RenderWidgetHostViewMac::LockKeyboard(
@@ -2046,7 +2072,7 @@ void RenderWidgetHostViewMac::OnGotStringForDictionaryOverlay(
     int32_t target_widget_routing_id,
     ui::mojom::AttributedStringPtr attributed_string,
     const gfx::Point& baseline_point) {
-  if (attributed_string->string.empty()) {
+  if (!attributed_string || attributed_string->string.empty()) {
     // The PDF plugin does not support getting the attributed string at point.
     // Until it does, use NSPerformService(), which opens Dictionary.app.
     // TODO(shuchen): Support GetStringAtPoint() & GetStringFromRange() for PDF.

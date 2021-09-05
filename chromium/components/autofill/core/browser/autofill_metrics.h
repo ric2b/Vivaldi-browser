@@ -856,8 +856,8 @@ class AutofillMetrics {
     WALLET_UNSUPPORTED_API_VERSION,
     // Catch all error type.
     WALLET_UNKNOWN_ERROR,
-    // The merchant has been blacklisted for Online Wallet due to some manner
-    // of compliance violation.
+    // The merchant has been blocked for Online Wallet due to some manner of
+    // compliance violation.
     WALLET_UNSUPPORTED_MERCHANT,
     // Buyer Legal Address has a country which is unsupported by Wallet.
     WALLET_BUYER_LEGAL_ADDRESS_NOT_SUPPORTED,
@@ -1603,6 +1603,13 @@ class AutofillMetrics {
 
   static const char* GetMetricsSyncStateSuffix(
       AutofillSyncSigninState sync_state);
+
+  // Records whether a document collected phone number, and/or used WebOTP,
+  // and/or used OneTimeCode (OTC) during its lifecycle.
+  static void LogWebOTPPhoneCollectionMetricStateUkm(
+      ukm::UkmRecorder* ukm_recorder,
+      ukm::SourceId source_id,
+      uint32_t phone_collection_metric_state);
 
  private:
   static void Log(AutocompleteEvent event);

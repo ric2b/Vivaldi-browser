@@ -38,7 +38,7 @@
 #include "sandbox/linux/suid/client/setuid_sandbox_client.h"
 #include "sandbox/linux/suid/client/setuid_sandbox_host.h"
 #include "sandbox/linux/suid/common/sandbox.h"
-#include "services/service_manager/sandbox/switches.h"
+#include "sandbox/policy/switches.h"
 
 namespace {
 
@@ -131,6 +131,13 @@ namespace nacl {
 
 void AddNaClZygoteForkDelegates(
     std::vector<std::unique_ptr<content::ZygoteForkDelegate>>* delegates) {
+  // We don't need the delegates for the unsandboxed zygote since NaCl always
+  // starts from the sandboxed zygote.
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          sandbox::policy::switches::kNoZygoteSandbox)) {
+    return;
+  }
+
   delegates->push_back(
       std::make_unique<NaClForkDelegate>(false /* nonsfi_mode */));
   delegates->push_back(
@@ -220,9 +227,9 @@ void NaClForkDelegate::Init(const int sandboxdesc,
 
       // Append any switches that need to be forwarded to the NaCl helper.
       static constexpr const char* kForwardSwitches[] = {
-          service_manager::switches::kAllowSandboxDebugging,
-          service_manager::switches::kDisableSeccompFilterSandbox,
-          service_manager::switches::kNoSandbox,
+          sandbox::policy::switches::kAllowSandboxDebugging,
+          sandbox::policy::switches::kDisableSeccompFilterSandbox,
+          sandbox::policy::switches::kNoSandbox,
           switches::kEnableNaClDebug,
           switches::kNaClDangerousNoSandboxNonSfi,
       };

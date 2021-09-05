@@ -65,7 +65,7 @@ class MenubarMenuAPI : public BrowserContextKeyedAPI {
   std::string hover_url_;
 };
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 // Not used on Mac but we still need a stub
 class MenubarMenuShowFunction : public ExtensionFunction {
  public:

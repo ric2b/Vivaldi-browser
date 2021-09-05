@@ -6,6 +6,7 @@
 
 #import <AppKit/AppKit.h>
 #import <QuartzCore/QuartzCore.h>
+#include <cups/cups.h>
 
 #import <iomanip>
 #import <numeric>
@@ -16,6 +17,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "printing/print_settings_initializer_mac.h"
+#include "printing/printing_features.h"
 #include "printing/units.h"
 
 namespace printing {
@@ -186,7 +188,7 @@ PrintingContext::Result PrintingContextMac::UpdatePrinterSettings(
         !SetCopiesInPrintSettings(settings_->copies()) ||
         !SetCollateInPrintSettings(settings_->collate()) ||
         !SetDuplexModeInPrintSettings(settings_->duplex_mode()) ||
-        !SetOutputColor(settings_->color())) {
+        !SetOutputColor(static_cast<int>(settings_->color()))) {
       return OnError();
     }
   }
@@ -389,7 +391,12 @@ bool PrintingContextMac::SetOutputColor(int color_mode) {
       static_cast<PMPrintSettings>([print_info_.get() PMPrintSettings]);
   std::string color_setting_name;
   std::string color_value;
-  GetColorModelForMode(color_mode, &color_setting_name, &color_value);
+  if (base::FeatureList::IsEnabled(features::kCupsIppPrintingBackend)) {
+    color_setting_name = CUPS_PRINT_COLOR_MODE;
+    color_value = GetIppColorModelForMode(color_mode);
+  } else {
+    GetColorModelForMode(color_mode, &color_setting_name, &color_value);
+  }
   base::ScopedCFTypeRef<CFStringRef> color_setting(
       base::SysUTF8ToCFStringRef(color_setting_name));
   base::ScopedCFTypeRef<CFStringRef> output_color(

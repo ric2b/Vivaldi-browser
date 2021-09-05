@@ -24,10 +24,16 @@ message UserWhitelistProto {
   repeated string user_whitelist = 1;
 }
 
+message UserAllowlistProto {
+  // If a UserAllowlistProto is included in the ChromeDeviceSettingsProto but
+  // the user_whitelist field is empty then no user can sign-in.
+  repeated string user_allowlist = 1;
+}
+
 message AllowNewUsersProto {
   // Determines whether we allow arbitrary users to log into the device.
-  // This interacts with the UserWhitelistProto as follows:
-  // allow_new_users | user_whitelist     | anyone can log in
+  // This interacts with the UserAllowlistProto as follows:
+  // allow_new_users | user_allowlist     | anyone can log in
   //-----------------+--------------------+------------------
   //  present, true  | not present        | Yes
   //-----------------+--------------------+------------------
@@ -87,6 +93,9 @@ message ReleaseChannelProto {
   // field is not set or left empty, the user can select the channel. If the
   // |release_channel| is specified it will always override users choice!
   optional bool release_channel_delegated = 2;
+
+  // |release_lts_tag| is forwarded as the "ltshint" attribute to Omaha.
+  optional string release_lts_tag = 3;
 }
 
 message DeviceOpenNetworkConfigurationProto {
@@ -127,6 +136,7 @@ message DeviceReportingProto {
   optional bool report_bluetooth_info = 22 [default = false];
   optional bool report_fan_info = 23 [default = false];
   optional bool report_vpd_info = 24 [default = false];
+  optional bool report_system_info = 25 [default = false];
 
   // Frequency to report device status, default to 3 hours.
   optional int64 device_status_frequency = 9 [default = 10800000];
@@ -310,6 +320,27 @@ message AutoUpdateSettingsProto {
   // This field is primarily used for quick fixes, but it is also used by the
   // Hotrod team to subdivide the Stable channel into cohorts.
   optional string device_quick_fix_build_token = 15;
+
+  // Types of channel downgrade behavior.
+  enum ChannelDowngradeBehavior {
+    // Channel downgrade behavior unspecified. Default is
+    // WAIT_FOR_VERSION_CATCH_UP.
+    CHANNEL_DOWNGRADE_BEHAVIOR_UNSPECIFIED = 0;
+    // On a channel downgrade, e.g. beta to stable, wait for the device's
+    // version to become available on the new channel. No updates happen until
+    // then. This is the default.
+    WAIT_FOR_VERSION_CATCH_UP = 1;
+    // Roll back and reset the device on a channel downgrade. This does a full
+    // powerwash and tries to preserve wifi and enrollment.
+    ROLLBACK = 2;
+    // Allow the user to decide whether to wait or roll back and reset on a
+    // user-initiated channel downgrade.
+    ALLOW_USER_TO_CONFIGURE = 3;
+  }
+
+  // Specifies what should happen if the device channel is downgraded.
+  optional ChannelDowngradeBehavior channel_downgrade_behavior = 16
+      [default = WAIT_FOR_VERSION_CATCH_UP];
 }
 
 message OBSOLETE_StartUpUrlsProto {
@@ -1116,6 +1147,21 @@ message UsbDetachableWhitelistProto {
   repeated UsbDeviceIdProto id = 1;
 }
 
+// Identifiers of a USB device or device family.
+message UsbDeviceIdInclusiveProto {
+  // USB Vendor Identifier (aka idVendor).
+  optional int32 vendor_id = 1;
+  // USB Product Identifier (aka idProduct).
+  optional int32 product_id = 2;
+}
+
+// This setting contains the list of USB devices to detach from the kernel
+// drivers in order to use them in web applications.
+// The list is used by the permission_broker daemon.
+message UsbDetachableAllowlistProto {
+  repeated UsbDeviceIdInclusiveProto id = 1;
+}
+
 message AllowBluetoothProto {
   // Policy which controls whether Bluetooth is available.
   optional bool allow_bluetooth = 1 [default = true];
@@ -1288,6 +1334,55 @@ message DeviceNativePrintersBlacklistProto {
 message DeviceNativePrintersWhitelistProto {
   // A collection of ids for the list of printers which are accessible.
   repeated string whitelist = 1;
+}
+
+// The url and hash specified in JSON format that can be used to retrieve
+// the device-level printers configuration file.
+message DevicePrintersProto {
+  // External policy blob encoded as JSON.
+  optional string external_policy = 1;
+}
+
+// A collection of ids for the list of print servers which are accessible.
+// The policy which determines the type of access restriction that is applied to
+// the devicel-level printers list.
+message DevicePrintersAccessModeProto {
+  enum AccessMode {
+    ACCESS_MODE_BLOCKLIST = 0;  // Use DevicePrintersBlocklistProto.
+    ACCESS_MODE_ALLOWLIST = 1;  // Use DevicePrintersAllowlistProto.
+    ACCESS_MODE_ALL = 2;        // Allow access to all specified printers.
+  }
+
+  // The type of access which is applied to the device-level printer list.
+  optional AccessMode access_mode = 1;
+}
+
+// A collection of ids defining the printers which are explicitly disallowed for
+// the device.
+message DevicePrintersBlocklistProto {
+  // A collection of ids for which are explicitly disallowed.
+  repeated string blocklist = 1;
+}
+
+// A collection of ids defining the printers which are explicitly allowed for
+// the device.
+message DevicePrintersAllowlistProto {
+  // A collection of ids for the list of printers which are accessible.
+  repeated string allowlist = 1;
+}
+
+// The url and hash specified in JSON format that can be used to retrieve
+// the device-level external print servers configuration file.
+message DeviceExternalPrintServersProto {
+  // External policy blob encoded as JSON.
+  optional string external_policy = 1;
+}
+
+// A collection of ids defining the external print servers which are explicitly
+// allowed for the device.
+message DeviceExternalPrintServersAllowlistProto {
+  // A collection of ids for the list of print servers which are accessible.
+  repeated string allowlist = 1;
 }
 
 // Settings to control the behavior of the TPM firmware update functionality.
@@ -1618,6 +1713,10 @@ message DeviceCrostiniArcAdbSideloadingAllowedProto {
   optional AllowanceMode mode = 1 [default = DISALLOW];
 }
 
+message DeviceShowLowDiskSpaceNotificationProto {
+  optional bool device_show_low_disk_space_notification = 1;
+}
+
 message ChromeDeviceSettingsProto {
   reserved 61, 90;
   optional DevicePolicyRefreshRateProto device_policy_refresh_rate = 1;
@@ -1738,7 +1837,7 @@ message ChromeDeviceSettingsProto {
   optional StringListPolicyProto device_web_based_attestation_allowed_urls = 94;
   optional BooleanPolicyProto device_show_numeric_keyboard_for_password = 95;
   optional BooleanPolicyProto login_screen_primary_mouse_button_switch = 96;
-  optional StringPolicyProto minimum_chrome_version_enforced = 97;
+  optional StringPolicyProto device_minimum_version = 97;
   optional SystemProxySettingsProto system_proxy_settings = 98;
   optional IntegerPolicyProto device_chrome_variations_type = 99;
   optional DeviceLoginScreenPrivacyScreenEnabledProto
@@ -1747,7 +1846,18 @@ message ChromeDeviceSettingsProto {
       required_client_certificate_for_device = 101;
   optional DeviceCrostiniArcAdbSideloadingAllowedProto
       device_crostini_arc_adb_sideloading_allowed = 102;
-  optional StringPolicyProto minimum_chrome_version_eol_message = 103;
+  optional StringPolicyProto device_minimum_version_aue_message = 103;
   optional ManagedGuestSessionPrivacyWarningsProto
       managed_guest_session_privacy_warnings = 104;
+  optional DeviceExternalPrintServersProto external_print_servers = 105;
+  optional DeviceExternalPrintServersAllowlistProto
+      external_print_servers_allowlist = 106;
+  optional DevicePrintersAccessModeProto device_printers_access_mode = 107;
+  optional DevicePrintersBlocklistProto device_printers_blocklist = 108;
+  optional DevicePrintersAllowlistProto device_printers_allowlist = 109;
+  optional DevicePrintersProto device_printers = 110;
+  optional DeviceShowLowDiskSpaceNotificationProto
+      device_show_low_disk_space_notification = 111;
+  optional UserAllowlistProto user_allowlist = 112;
+  optional UsbDetachableAllowlistProto usb_detachable_allowlist = 113;
 }

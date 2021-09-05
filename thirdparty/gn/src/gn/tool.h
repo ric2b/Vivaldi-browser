@@ -157,6 +157,12 @@ class Tool {
     lib_dir_switch_ = std::move(s);
   }
 
+  const std::string& swiftmodule_switch() const { return swiftmodule_switch_; }
+  void set_swiftmodule_switch(std::string s) {
+    DCHECK(!complete_);
+    swiftmodule_switch_ = std::move(s);
+  }
+
   const std::string& linker_arg() const { return linker_arg_; }
   void set_linker_arg(std::string s) {
     DCHECK(!complete_);
@@ -167,6 +173,12 @@ class Tool {
   void set_outputs(SubstitutionList out) {
     DCHECK(!complete_);
     outputs_ = std::move(out);
+  }
+
+  const SubstitutionList& partial_outputs() const { return partial_outputs_; }
+  void set_partial_outputs(SubstitutionList partial_out) {
+    DCHECK(!complete_);
+    partial_outputs_ = std::move(partial_out);
   }
 
   const SubstitutionList& runtime_outputs() const { return runtime_outputs_; }
@@ -271,8 +283,10 @@ class Tool {
   std::string framework_dir_switch_;
   std::string lib_switch_;
   std::string lib_dir_switch_;
+  std::string swiftmodule_switch_;
   std::string linker_arg_;
   SubstitutionList outputs_;
+  SubstitutionList partial_outputs_;
   SubstitutionList runtime_outputs_;
   std::string output_prefix_;
   bool restat_ = false;

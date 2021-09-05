@@ -8,9 +8,11 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_testing.h"
+#include "third_party/blink/renderer/core/css/style_sheet_contents.h"
 #include "third_party/blink/renderer/core/frame/event_handler_registry.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/html/html_frame_owner_element.h"
+#include "third_party/blink/renderer/core/html/html_style_element.h"
 #include "third_party/blink/renderer/core/layout/layout_text_fragment.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
 #include "third_party/blink/renderer/core/svg/svg_g_element.h"
@@ -381,7 +383,10 @@ TEST_F(
       EPosition::kFixed));
 
   auto offset = layout_object->OffsetFromContainer(span_layout_object);
-  EXPECT_EQ(PhysicalOffset(20, 10), offset);
+  if (RuntimeEnabledFeatures::LayoutNGEnabled())
+    EXPECT_EQ(PhysicalOffset(22, 11), offset);
+  else
+    EXPECT_EQ(PhysicalOffset(20, 10), offset);
 
   // Sanity check: Make sure we don't generate anonymous objects.
   EXPECT_EQ(nullptr, body_layout_object->SlowFirstChild()->NextSibling());
@@ -445,8 +450,8 @@ TEST_F(LayoutObjectTest, InlineFloatMismatch) {
   LayoutObject* span =
       ToLayoutBoxModelObject(GetLayoutObjectByElementId("span"));
   if (RuntimeEnabledFeatures::LayoutNGEnabled()) {
-    // 10px for margin.
-    EXPECT_EQ(PhysicalOffset(10, 0), float_obj->OffsetFromAncestor(span));
+    // 10px for margin + 40px for inset.
+    EXPECT_EQ(PhysicalOffset(50, 0), float_obj->OffsetFromAncestor(span));
   } else {
     // 10px for margin, -40px because float is to the left of the span.
     EXPECT_EQ(PhysicalOffset(-30, 0), float_obj->OffsetFromAncestor(span));
@@ -504,7 +509,7 @@ TEST_F(LayoutObjectTest, MutableForPaintingClearPaintFlags) {
   LayoutObject* object = GetDocument().body()->GetLayoutObject();
   object->SetShouldDoFullPaintInvalidation();
   EXPECT_TRUE(object->ShouldDoFullPaintInvalidation());
-  EXPECT_TRUE(object->NeedsPaintOffsetAndVisualRectUpdate());
+  EXPECT_TRUE(object->ShouldCheckGeometryForPaintInvalidation());
   object->SetShouldCheckForPaintInvalidation();
   EXPECT_TRUE(object->ShouldCheckForPaintInvalidation());
   object->SetSubtreeShouldCheckForPaintInvalidation();
@@ -549,68 +554,68 @@ TEST_F(LayoutObjectTest, SubtreePaintPropertyUpdateReasons) {
   EXPECT_FALSE(object->NeedsPaintPropertyUpdate());
 }
 
-TEST_F(LayoutObjectTest, NeedsPaintOffsetAndVisualRectUpdate) {
+TEST_F(LayoutObjectTest, ShouldCheckGeometryForPaintInvalidation) {
   LayoutObject* object = GetDocument().body()->GetLayoutObject();
   LayoutObject* parent = object->Parent();
 
   object->SetShouldDoFullPaintInvalidation();
   EXPECT_TRUE(object->ShouldDoFullPaintInvalidation());
-  EXPECT_TRUE(object->NeedsPaintOffsetAndVisualRectUpdate());
+  EXPECT_TRUE(object->ShouldCheckGeometryForPaintInvalidation());
   EXPECT_TRUE(parent->ShouldCheckForPaintInvalidation());
-  EXPECT_FALSE(parent->NeedsPaintOffsetAndVisualRectUpdate());
-  EXPECT_TRUE(parent->DescendantNeedsPaintOffsetAndVisualRectUpdate());
+  EXPECT_FALSE(parent->ShouldCheckGeometryForPaintInvalidation());
+  EXPECT_TRUE(parent->DescendantShouldCheckGeometryForPaintInvalidation());
   object->ClearPaintInvalidationFlags();
   EXPECT_FALSE(object->ShouldDoFullPaintInvalidation());
-  EXPECT_FALSE(object->NeedsPaintOffsetAndVisualRectUpdate());
+  EXPECT_FALSE(object->ShouldCheckGeometryForPaintInvalidation());
   parent->ClearPaintInvalidationFlags();
   EXPECT_FALSE(parent->ShouldCheckForPaintInvalidation());
-  EXPECT_FALSE(parent->NeedsPaintOffsetAndVisualRectUpdate());
-  EXPECT_FALSE(parent->DescendantNeedsPaintOffsetAndVisualRectUpdate());
+  EXPECT_FALSE(parent->ShouldCheckGeometryForPaintInvalidation());
+  EXPECT_FALSE(parent->DescendantShouldCheckGeometryForPaintInvalidation());
 
   object->SetShouldCheckForPaintInvalidation();
   EXPECT_TRUE(object->ShouldCheckForPaintInvalidation());
-  EXPECT_TRUE(object->NeedsPaintOffsetAndVisualRectUpdate());
+  EXPECT_TRUE(object->ShouldCheckGeometryForPaintInvalidation());
   EXPECT_TRUE(parent->ShouldCheckForPaintInvalidation());
-  EXPECT_FALSE(parent->NeedsPaintOffsetAndVisualRectUpdate());
-  EXPECT_TRUE(parent->DescendantNeedsPaintOffsetAndVisualRectUpdate());
+  EXPECT_FALSE(parent->ShouldCheckGeometryForPaintInvalidation());
+  EXPECT_TRUE(parent->DescendantShouldCheckGeometryForPaintInvalidation());
   object->ClearPaintInvalidationFlags();
   EXPECT_FALSE(object->ShouldCheckForPaintInvalidation());
-  EXPECT_FALSE(object->NeedsPaintOffsetAndVisualRectUpdate());
+  EXPECT_FALSE(object->ShouldCheckGeometryForPaintInvalidation());
   parent->ClearPaintInvalidationFlags();
   EXPECT_FALSE(parent->ShouldCheckForPaintInvalidation());
-  EXPECT_FALSE(parent->NeedsPaintOffsetAndVisualRectUpdate());
-  EXPECT_FALSE(parent->DescendantNeedsPaintOffsetAndVisualRectUpdate());
+  EXPECT_FALSE(parent->ShouldCheckGeometryForPaintInvalidation());
+  EXPECT_FALSE(parent->DescendantShouldCheckGeometryForPaintInvalidation());
 
   object->SetShouldDoFullPaintInvalidationWithoutGeometryChange();
   EXPECT_TRUE(object->ShouldDoFullPaintInvalidation());
-  EXPECT_FALSE(object->NeedsPaintOffsetAndVisualRectUpdate());
+  EXPECT_FALSE(object->ShouldCheckGeometryForPaintInvalidation());
   EXPECT_TRUE(parent->ShouldCheckForPaintInvalidation());
-  EXPECT_FALSE(parent->NeedsPaintOffsetAndVisualRectUpdate());
-  EXPECT_FALSE(parent->DescendantNeedsPaintOffsetAndVisualRectUpdate());
+  EXPECT_FALSE(parent->ShouldCheckGeometryForPaintInvalidation());
+  EXPECT_FALSE(parent->DescendantShouldCheckGeometryForPaintInvalidation());
   object->SetShouldCheckForPaintInvalidation();
-  EXPECT_TRUE(object->NeedsPaintOffsetAndVisualRectUpdate());
-  EXPECT_TRUE(parent->DescendantNeedsPaintOffsetAndVisualRectUpdate());
+  EXPECT_TRUE(object->ShouldCheckGeometryForPaintInvalidation());
+  EXPECT_TRUE(parent->DescendantShouldCheckGeometryForPaintInvalidation());
   object->ClearPaintInvalidationFlags();
   EXPECT_FALSE(object->ShouldCheckForPaintInvalidation());
-  EXPECT_FALSE(object->NeedsPaintOffsetAndVisualRectUpdate());
+  EXPECT_FALSE(object->ShouldCheckGeometryForPaintInvalidation());
   parent->ClearPaintInvalidationFlags();
   EXPECT_FALSE(parent->ShouldCheckForPaintInvalidation());
-  EXPECT_FALSE(parent->DescendantNeedsPaintOffsetAndVisualRectUpdate());
+  EXPECT_FALSE(parent->DescendantShouldCheckGeometryForPaintInvalidation());
 
   object->SetShouldCheckForPaintInvalidationWithoutGeometryChange();
   EXPECT_TRUE(object->ShouldCheckForPaintInvalidation());
-  EXPECT_FALSE(object->NeedsPaintOffsetAndVisualRectUpdate());
+  EXPECT_FALSE(object->ShouldCheckGeometryForPaintInvalidation());
   EXPECT_TRUE(parent->ShouldCheckForPaintInvalidation());
-  EXPECT_FALSE(parent->DescendantNeedsPaintOffsetAndVisualRectUpdate());
+  EXPECT_FALSE(parent->DescendantShouldCheckGeometryForPaintInvalidation());
   object->SetShouldCheckForPaintInvalidation();
-  EXPECT_TRUE(object->NeedsPaintOffsetAndVisualRectUpdate());
-  EXPECT_TRUE(parent->DescendantNeedsPaintOffsetAndVisualRectUpdate());
+  EXPECT_TRUE(object->ShouldCheckGeometryForPaintInvalidation());
+  EXPECT_TRUE(parent->DescendantShouldCheckGeometryForPaintInvalidation());
   object->ClearPaintInvalidationFlags();
   EXPECT_FALSE(object->ShouldCheckForPaintInvalidation());
-  EXPECT_FALSE(object->NeedsPaintOffsetAndVisualRectUpdate());
+  EXPECT_FALSE(object->ShouldCheckGeometryForPaintInvalidation());
   parent->ClearPaintInvalidationFlags();
   EXPECT_FALSE(parent->ShouldCheckForPaintInvalidation());
-  EXPECT_FALSE(parent->DescendantNeedsPaintOffsetAndVisualRectUpdate());
+  EXPECT_FALSE(parent->DescendantShouldCheckGeometryForPaintInvalidation());
 }
 
 TEST_F(LayoutObjectTest, AssociatedLayoutObjectOfFirstLetterPunctuations) {
@@ -1226,6 +1231,53 @@ TEST_F(LayoutObjectTest, FirstLineBackgroundImageChangeStyleCrash) {
   UpdateAllLifecyclePhasesForTest();
 }
 
+TEST_F(LayoutObjectSimTest, FirstLineBackgroundImageDirtyStyleCrash) {
+  SimRequest main_resource("https://example.com/test.html", "text/html");
+
+  LoadURL("https://example.com/test.html");
+  main_resource.Complete(R"HTML(
+    <style id="style">
+      #target { display: list-item; }
+      div::first-line {
+        background-image: url(data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==);
+      }
+    </style>
+    <div id="target">Text</div>
+  )HTML");
+
+  GetDocument().View()->UpdateAllLifecyclePhases(DocumentUpdateReason::kTest);
+
+  CSSStyleSheet* sheet =
+      To<HTMLStyleElement>(GetDocument().getElementById("style"))->sheet();
+  {
+    // "Mutate" the rules to clear the StyleSheetContents RuleSet member.
+    CSSStyleSheet::RuleMutationScope scope(sheet);
+  }
+  EXPECT_FALSE(sheet->Contents()->HasRuleSet());
+
+  auto* target = GetDocument().getElementById("target");
+  auto* target_object = target->GetLayoutObject();
+  auto* image_resource_content = target_object->FirstLineStyleRef()
+                                     .BackgroundLayers()
+                                     .GetImage()
+                                     ->CachedImage();
+  auto* image = image_resource_content->GetImage();
+  auto* image_observer = static_cast<ImageObserver*>(image_resource_content);
+
+  // LayoutBlock::ImageChanged() will be triggered which makes us look up the
+  // ::first-line style before marking for paint invalidation. We should not try
+  // to compute style if it doesn't exist. The first invocation will mark for
+  // paint invalidation which will clear the cached ::first-line styles.
+  image_observer->Changed(image);
+  EXPECT_TRUE(target_object->ShouldDoFullPaintInvalidation());
+
+  // For the second invocation, the ::first-line styles is null. If we try to
+  // compute the styles here, we will crash since the RuleSet is null and we
+  // need an active style update.
+  image_observer->Changed(image);
+  EXPECT_TRUE(target_object->ShouldDoFullPaintInvalidation());
+}
+
 TEST_F(LayoutObjectTest, NeedsLayoutOverflowRecalc) {
   if (!RuntimeEnabledFeatures::LayoutNGEnabled())
     return;
@@ -1321,6 +1373,68 @@ TEST_F(LayoutObjectTest, PerspectiveWithAnonymousTable) {
   TransformationMatrix::DecomposedType decomposed;
   EXPECT_TRUE(transform.Decompose(decomposed));
   EXPECT_EQ(-0.01, decomposed.perspective_z);
+}
+
+TEST_F(LayoutObjectTest, LocalToAncestorRectFastPath) {
+  SetBodyInnerHTML(R"HTML(
+    <style>body { margin:0; }</style>
+    <div id=target
+         style="transform: translate(50px, 25px); width: 10px; height: 10px">
+    </div>
+    <div id=ancestor2 style="position: relative">
+      <div id=target2
+         style="transform: translate(75px, 15px); width: 10px; height: 10px">
+      </div>
+    </div>
+  )HTML");
+
+  LayoutObject* target = GetLayoutObjectByElementId("target");
+  PhysicalRect rect(0, 0, 10, 10);
+  PhysicalRect result;
+
+  EXPECT_TRUE(target->LocalToAncestorRectFastPath(
+      rect, nullptr, kUseGeometryMapperMode, result));
+  EXPECT_EQ(PhysicalRect(50, 25, 10, 10), result);
+  // Compare with non-fast path.
+  EXPECT_EQ(PhysicalRect(50, 25, 10, 10),
+            target->LocalToAncestorRect(rect, nullptr));
+
+  // No other modes are supported.
+  EXPECT_FALSE(target->LocalToAncestorRectFastPath(rect, nullptr, 0, result));
+  EXPECT_FALSE(
+      target->LocalToAncestorRectFastPath(rect, nullptr, kIsFixed, result));
+  EXPECT_FALSE(target->LocalToAncestorRectFastPath(rect, nullptr,
+                                                   kIgnoreTransforms, result));
+  EXPECT_FALSE(target->LocalToAncestorRectFastPath(
+      rect, nullptr, kIgnoreStickyOffset, result));
+  EXPECT_FALSE(target->LocalToAncestorRectFastPath(
+      rect, nullptr, kIgnoreScrollOffset, result));
+  EXPECT_FALSE(target->LocalToAncestorRectFastPath(
+      rect, nullptr, kApplyRemoteMainFrameTransform, result));
+
+  EXPECT_EQ(PhysicalRect(50, 25, 10, 10),
+            target->LocalToAncestorRect(rect, nullptr, kUseGeometryMapperMode));
+
+  LayoutObject* target2 = GetLayoutObjectByElementId("target2");
+  LayoutObject* ancestor2 = GetLayoutObjectByElementId("ancestor2");
+  PhysicalRect result2;
+
+  EXPECT_TRUE(target2->LocalToAncestorRectFastPath(
+      rect, ToLayoutBoxModelObject(ancestor2), kUseGeometryMapperMode,
+      result2));
+  EXPECT_EQ(PhysicalRect(75, 15, 10, 10), result2);
+
+  EXPECT_EQ(
+      PhysicalRect(75, 15, 10, 10),
+      target2->LocalToAncestorRect(rect, ToLayoutBoxModelObject(ancestor2)));
+  // Compare with non-fast path.
+  EXPECT_TRUE(target2->LocalToAncestorRectFastPath(
+      rect, nullptr, kUseGeometryMapperMode, result2));
+  // 25 instead of 15, because #target is 10px high.
+  EXPECT_EQ(PhysicalRect(75, 25, 10, 10), result2);
+
+  EXPECT_EQ(PhysicalRect(75, 25, 10, 10),
+            target2->LocalToAncestorRect(rect, nullptr));
 }
 
 }  // namespace blink

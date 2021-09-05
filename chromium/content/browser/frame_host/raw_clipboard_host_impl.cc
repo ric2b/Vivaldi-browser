@@ -4,6 +4,8 @@
 
 #include "content/browser/frame_host/raw_clipboard_host_impl.h"
 
+#include <memory>
+
 #include "base/bind.h"
 #include "base/i18n/number_formatting.h"
 #include "content/browser/frame_host/clipboard_host_impl.h"
@@ -16,10 +18,24 @@
 #include "third_party/blink/public/mojom/clipboard/raw_clipboard.mojom.h"
 #include "third_party/blink/public/mojom/permissions/permission_status.mojom-shared.h"
 #include "ui/base/clipboard/clipboard.h"
+#include "ui/base/clipboard/clipboard_data_endpoint.h"
 #include "ui/base/clipboard/clipboard_format_type.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
 
 namespace content {
+
+namespace {
+
+std::unique_ptr<ui::ClipboardDataEndpoint> CreateDataEndpoint(
+    RenderFrameHost* render_frame_host) {
+  if (render_frame_host)
+    return std::make_unique<ui::ClipboardDataEndpoint>(
+        render_frame_host->GetLastCommittedURL());
+
+  return nullptr;
+}
+
+}  // namespace
 
 void RawClipboardHostImpl::Create(
     RenderFrameHost* render_frame_host,
@@ -80,7 +96,8 @@ RawClipboardHostImpl::RawClipboardHostImpl(
     : receiver_(this, std::move(receiver)),
       clipboard_(ui::Clipboard::GetForCurrentThread()),
       clipboard_writer_(
-          new ui::ScopedClipboardWriter(ui::ClipboardBuffer::kCopyPaste)),
+          new ui::ScopedClipboardWriter(ui::ClipboardBuffer::kCopyPaste,
+                                        CreateDataEndpoint(render_frame_host))),
       render_frame_host_(render_frame_host) {
   DCHECK(render_frame_host);
 }
@@ -91,7 +108,7 @@ void RawClipboardHostImpl::ReadAvailableFormatNames(
     return;
   std::vector<base::string16> raw_types =
       clipboard_->ReadAvailablePlatformSpecificFormatNames(
-          ui::ClipboardBuffer::kCopyPaste);
+          ui::ClipboardBuffer::kCopyPaste, /* data_dst = */ nullptr);
   std::move(callback).Run(raw_types);
 }
 
@@ -106,7 +123,8 @@ void RawClipboardHostImpl::Read(const base::string16& format,
 
   std::string result;
   clipboard_->ReadData(
-      ui::ClipboardFormatType::GetType(base::UTF16ToUTF8(format)), &result);
+      ui::ClipboardFormatType::GetType(base::UTF16ToUTF8(format)),
+      /* data_dst = */ nullptr, &result);
   base::span<const uint8_t> span(
       reinterpret_cast<const uint8_t*>(result.data()), result.size());
   mojo_base::BigBuffer buffer = mojo_base::BigBuffer(span);
@@ -151,8 +169,8 @@ void RawClipboardHostImpl::Write(const base::string16& format,
 }
 
 void RawClipboardHostImpl::CommitWrite() {
-  clipboard_writer_.reset(
-      new ui::ScopedClipboardWriter(ui::ClipboardBuffer::kCopyPaste));
+  clipboard_writer_ = std::make_unique<ui::ScopedClipboardWriter>(
+      ui::ClipboardBuffer::kCopyPaste, CreateDataEndpoint(render_frame_host_));
 }
 
 bool RawClipboardHostImpl::HasTransientUserActivation() const {

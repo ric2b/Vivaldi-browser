@@ -6,8 +6,6 @@
 
 #include "base/location.h"
 #include "base/run_loop.h"
-#include "base/single_thread_task_runner.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "chrome/browser/net/system_network_context_manager.h"
 #include "chrome/browser/profiles/profile_destroyer.h"
@@ -111,8 +109,10 @@ void BrowserWithTestWindowTest::TearDown() {
 
   testing::Test::TearDown();
 
-  // A Task is leaked if we don't destroy everything, then run the message loop.
-  base::RunLoop().RunUntilIdle();
+  // A Task is leaked if we don't destroy everything, then run all pending
+  // tasks. This includes backend tasks which could otherwise be affected by the
+  // deletion of the temp dir.
+  task_environment_->RunUntilIdle();
 }
 
 gfx::NativeWindow BrowserWithTestWindowTest::GetContext() {

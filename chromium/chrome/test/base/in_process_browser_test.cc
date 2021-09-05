@@ -71,8 +71,9 @@
 #include "content/public/test/test_navigation_observer.h"
 #include "extensions/buildflags/buildflags.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
+#include "ui/base/ui_base_features.h"
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include "base/mac/scoped_nsautorelease_pool.h"
 #include "chrome/test/base/scoped_bundle_swizzler_mac.h"
 #endif
@@ -116,6 +117,11 @@
 #include "ui/views/test/widget_test.h"
 #include "ui/views/views_delegate.h"
 #include "ui/views/widget/widget.h"
+#endif
+
+#if BUILDFLAG(IS_LACROS)
+#include "ui/aura/test/ui_controls_factory_aura.h"
+#include "ui/base/test/ui_controls.h"
 #endif
 
 namespace {
@@ -200,7 +206,7 @@ void InProcessBrowserTest::Initialize() {
   CHECK(base::PathService::Override(chrome::DIR_TEST_DATA,
                                     src_dir.Append(GetChromeTestDataDir())));
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   bundle_swizzler_ = std::make_unique<ScopedBundleSwizzlerMac>();
 #endif
 }
@@ -282,7 +288,7 @@ void InProcessBrowserTest::SetUp() {
   // Cookies). Without this on Mac and Linux, many tests will hang waiting for a
   // user to approve KeyChain/kwallet access. On Windows this is not needed as
   // OS APIs never block.
-#if defined(OS_MACOSX) || defined(OS_LINUX)
+#if defined(OS_MAC) || defined(OS_LINUX) || defined(OS_CHROMEOS)
   OSCryptMocker::SetUp();
 #endif
 
@@ -293,8 +299,6 @@ void InProcessBrowserTest::SetUp() {
 
   chrome_browser_net::NetErrorTabHelper::set_state_for_testing(
       chrome_browser_net::NetErrorTabHelper::TESTING_FORCE_DISABLED);
-
-  google_util::SetMockLinkDoctorBaseURLForTesting();
 
 #if defined(OS_CHROMEOS)
   chromeos::device_sync::DeviceSyncImpl::Factory::SetFactoryForTesting(
@@ -344,7 +348,7 @@ void InProcessBrowserTest::TearDown() {
   com_initializer_.reset();
 #endif
   BrowserTestBase::TearDown();
-#if defined(OS_MACOSX) || defined(OS_LINUX)
+#if defined(OS_MAC) || defined(OS_LINUX) || defined(OS_CHROMEOS)
   OSCryptMocker::TearDown();
 #endif
 
@@ -366,7 +370,7 @@ void InProcessBrowserTest::CloseBrowserSynchronously(Browser* browser) {
 
 void InProcessBrowserTest::CloseBrowserAsynchronously(Browser* browser) {
   browser->window()->Close();
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   // BrowserWindowController depends on the auto release pool being recycled
   // in the message loop to delete itself.
   AutoreleasePool()->Recycle();
@@ -375,7 +379,7 @@ void InProcessBrowserTest::CloseBrowserAsynchronously(Browser* browser) {
 
 void InProcessBrowserTest::CloseAllBrowsers() {
   chrome::CloseAllBrowsers();
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   // BrowserWindowController depends on the auto release pool being recycled
   // in the message loop to delete itself.
   AutoreleasePool()->Recycle();
@@ -420,13 +424,15 @@ bool InProcessBrowserTest::SetUpUserDataDirectory() {
 
 void InProcessBrowserTest::SetScreenInstance() {
 #if defined(USE_X11) && !defined(OS_CHROMEOS)
-  DCHECK(!display::Screen::GetScreen());
-  display::Screen::SetScreenInstance(
-      views::test::TestDesktopScreenX11::GetInstance());
+  if (!features::IsUsingOzonePlatform()) {
+    DCHECK(!display::Screen::GetScreen());
+    display::Screen::SetScreenInstance(
+        views::test::TestDesktopScreenX11::GetInstance());
+  }
 #endif
 }
 
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
 void InProcessBrowserTest::OpenDevToolsWindow(
     content::WebContents* web_contents) {
   ASSERT_FALSE(content::DevToolsAgentHost::HasFor(web_contents));
@@ -478,7 +484,7 @@ Browser* InProcessBrowserTest::CreateBrowserForApp(const std::string& app_name,
   AddBlankTabAndShow(browser);
   return browser;
 }
-#endif  // !defined(OS_MACOSX)
+#endif  // !defined(OS_MAC)
 
 void InProcessBrowserTest::AddBlankTabAndShow(Browser* browser) {
   content::WindowedNotificationObserver observer(
@@ -491,7 +497,7 @@ void InProcessBrowserTest::AddBlankTabAndShow(Browser* browser) {
   browser->window()->Show();
 }
 
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
 base::CommandLine InProcessBrowserTest::GetCommandLineForRelaunch() {
   base::CommandLine new_command_line(
       base::CommandLine::ForCurrentProcess()->GetProgram());
@@ -538,6 +544,19 @@ void InProcessBrowserTest::PreRunTestOnMainThread() {
     auto* tab = browser_->tab_strip_model()->GetActiveWebContents();
     content::WaitForLoadStop(tab);
     SetInitialWebContents(tab);
+
+    // For other platforms, they install ui controls in
+    // interactive_ui_tests_main.cc. We can't add it there because we have no
+    // WindowTreeHost initialized at the test runner level.
+    // The ozone implementation of CreateUIControlsAura differs from other
+    // implementation in that it requires a WindowTreeHost. Thus, it must be
+    // initialized here rather than earlier.
+#if BUILDFLAG(IS_LACROS)
+    BrowserWindow* window = browser_->window();
+    CHECK(window);
+    ui_controls::InstallUIControlsAura(
+        aura::test::CreateUIControlsAura(window->GetNativeWindow()->GetHost()));
+#endif
   }
 
 #if !defined(OS_ANDROID)
@@ -546,7 +565,7 @@ void InProcessBrowserTest::PreRunTestOnMainThread() {
   ASSERT_TRUE(storage_monitor::TestStorageMonitor::CreateForBrowserTests());
 #endif
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   // On Mac, without the following autorelease pool, code which is directly
   // executed (as opposed to executed inside a message loop) would autorelease
   // objects into a higher-level pool. This pool is not recycled in-sync with
@@ -564,13 +583,13 @@ void InProcessBrowserTest::PreRunTestOnMainThread() {
   if (browser_ && global_browser_set_up_function_)
     ASSERT_TRUE(global_browser_set_up_function_(browser_));
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   autorelease_pool_->Recycle();
 #endif
 }
 
 void InProcessBrowserTest::PostRunTestOnMainThread() {
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   autorelease_pool_->Recycle();
 #endif
 
@@ -607,7 +626,7 @@ void InProcessBrowserTest::QuitBrowsers() {
       FROM_HERE, base::BindOnce(&chrome::AttemptExit));
   RunUntilBrowserProcessQuits();
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   // chrome::AttemptExit() will attempt to close all browsers by deleting
   // their tab contents. The last tab contents being removed triggers closing of
   // the browser window.

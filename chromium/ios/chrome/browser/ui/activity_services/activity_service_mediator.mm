@@ -13,6 +13,7 @@
 #include "base/strings/sys_string_conversions.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/prefs/pref_service.h"
+#include "ios/chrome/browser/pref_names.h"
 #include "ios/chrome/browser/sync/send_tab_to_self_sync_service_factory.h"
 #import "ios/chrome/browser/ui/activity_services/activities/bookmark_activity.h"
 #import "ios/chrome/browser/ui/activity_services/activities/copy_activity.h"
@@ -39,9 +40,9 @@
 
 @interface ActivityServiceMediator ()
 
-@property(nonatomic, weak)
-    id<BrowserCommands, FindInPageCommands, QRGenerationCommands>
-        handler;
+@property(nonatomic, weak) id<BrowserCommands, FindInPageCommands> handler;
+
+@property(nonatomic, weak) id<QRGenerationCommands> qrGenerationHandler;
 
 @property(nonatomic, assign) PrefService* prefService;
 
@@ -53,13 +54,13 @@
 
 #pragma mark - Public
 
-- (instancetype)
-    initWithHandler:
-        (id<BrowserCommands, FindInPageCommands, QRGenerationCommands>)handler
-        prefService:(PrefService*)prefService
-      bookmarkModel:(bookmarks::BookmarkModel*)bookmarkModel {
+- (instancetype)initWithHandler:(id<BrowserCommands, FindInPageCommands>)handler
+            qrGenerationHandler:(id<QRGenerationCommands>)qrGenerationHandler
+                    prefService:(PrefService*)prefService
+                  bookmarkModel:(bookmarks::BookmarkModel*)bookmarkModel {
   if (self = [super init]) {
     _handler = handler;
+    _qrGenerationHandler = qrGenerationHandler;
     _prefService = prefService;
     _bookmarkModel = bookmarkModel;
   }
@@ -69,11 +70,11 @@
 - (NSArray<ChromeActivityURLSource*>*)activityItemsForData:(ShareToData*)data {
   // The provider object ChromeActivityURLSource supports the public.url UTType
   // for Share Extensions (e.g. Facebook, Twitter).
-  ChromeActivityURLSource* urlActivitySource = [[ChromeActivityURLSource alloc]
-        initWithShareURL:data.shareNSURL
-                 subject:data.title
-      thumbnailGenerator:data.thumbnailGenerator];
-  return @[ urlActivitySource ];
+  ChromeActivityURLSource* activityURLSource =
+      [[ChromeActivityURLSource alloc] initWithShareURL:data.shareNSURL
+                                                subject:data.title];
+  activityURLSource.thumbnailGenerator = data.thumbnailGenerator;
+  return @[ activityURLSource ];
 }
 
 - (NSArray*)applicationActivitiesForData:(ShareToData*)data {
@@ -103,7 +104,7 @@
     GenerateQrCodeActivity* generateQrCodeActivity =
         [[GenerateQrCodeActivity alloc] initWithURL:data.shareURL
                                               title:data.title
-                                            handler:self.handler];
+                                            handler:self.qrGenerationHandler];
     [applicationActivities addObject:generateQrCodeActivity];
 
     FindInPageActivity* findInPageActivity =
@@ -116,9 +117,13 @@
                       handler:self.handler];
     [applicationActivities addObject:requestActivity];
   }
-  PrintActivity* printActivity =
-      [[PrintActivity alloc] initWithData:data handler:self.handler];
-  [applicationActivities addObject:printActivity];
+
+  if (self.prefService->GetBoolean(prefs::kPrintingEnabled)) {
+    PrintActivity* printActivity =
+        [[PrintActivity alloc] initWithData:data handler:self.handler];
+    [applicationActivities addObject:printActivity];
+  }
+
   return applicationActivities;
 }
 

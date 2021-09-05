@@ -22,6 +22,7 @@ class SkBitmap;
 namespace ui {
 class WaylandConnection;
 class WaylandShmBuffer;
+class WaylandWindow;
 }  // namespace ui
 
 namespace gfx {
@@ -61,6 +62,16 @@ gfx::Rect TranslateBoundsToTopLevelCoordinates(const gfx::Rect& child_bounds,
 
 // Says if the type is kPopup or kMenu.
 bool IsMenuType(ui::PlatformWindowType type);
+
+// Returns the root WaylandWindow for the given wl_surface.
+ui::WaylandWindow* RootWindowFromWlSurface(wl_surface* surface);
+
+// Returns bounds of the given window, adjusted to its subsurface. We need to
+// adjust bounds because WaylandWindow::GetBounds() returns absolute bounds in
+// pixels, but wl_subsurface works with bounds relative to the parent surface
+// and in DIP.
+gfx::Rect TranslateWindowBoundsToParentDIP(ui::WaylandWindow* window,
+                                           ui::WaylandWindow* parent_window);
 
 }  // namespace wl
 

@@ -6,6 +6,7 @@
 <translation id="1012173283529841972">清單項目</translation>
 <translation id="1013742170491673792">srched</translation>
 <translation id="1014370462248694370">以兩隻手指向右滑動</translation>
+<translation id="1016393160682012902">按一下 Qwerty 鍵、可重新整理的點字或觸控手勢即可學習相關功能。按一下 Ctrl + W 或 Escape 鍵即可退出。</translation>
 <translation id="1022586497894531524">首次使用 ChromeVox 朗讀功能嗎？此教學課程提供簡要的基本操作說明，協助您開始使用 ChromeVox。</translation>
 <translation id="1025074108959230262">相黏模式已停用</translation>
 <translation id="1031961866430398710">然後</translation>
@@ -504,7 +505,6 @@
 <translation id="489907760999452556">內部連結</translation>
 <translation id="4909019435900810068">移到上一個字詞</translation>
 <translation id="4911349081560453449">冇上一個選框</translation>
-<translation id="4915087353619183190">正在啟動學習模式。按一下 Qwerty 鍵、可重新整理的點字或觸控手勢即可學習相關功能。按一下 Ctrl + W 或 Escape 鍵即可退出。</translation>
 <translation id="492295894462528572">前言</translation>
 <translation id="495046168593986294">向上捲動</translation>
 <translation id="495170559598752135">動作</translation>
@@ -647,6 +647,7 @@
 <translation id="6017514345406065928">綠色</translation>
 <translation id="602001110135236999">向左捲動</translation>
 <translation id="6034000775414344507">淺灰色</translation>
+<translation id="6036135911048686884">輕觸探索</translation>
 <translation id="6037602951055904232">向前平移</translation>
 <translation id="6044160928851315051">校暗螢幕</translation>
 <translation id="6082768461603900813">基本導覽操作</translation>
@@ -922,6 +923,7 @@
 <translation id="8345569862449483843">{COUNT,plural, =1{1 個英鎊符號}other{# 個英鎊符號}}</translation>
 <translation id="8378855320830505539">區域</translation>
 <translation id="8382679411218029383">自動完成內嵌元素和清單</translation>
+<translation id="8394908167088220973">媒體播放/暫停</translation>
 <translation id="8428213095426709021">設定</translation>
 <translation id="8428603554127842284">第 <ph name="DEPTH" /> 級</translation>
 <translation id="8430049249787218991">mnubr</translation>
@@ -966,6 +968,7 @@
 <translation id="8770473310765924354">離開結構化內容，例如表格</translation>
 <translation id="8779057862865475116">冇上一個連結</translation>
 <translation id="8796411681063377102">下一個第 3 級標題</translation>
+<translation id="8823311177246872527">第 <ph name="CURRENTPAGE" /> 頁 (共 <ph name="TOTALPAGES" /> 頁)</translation>
 <translation id="8825828890761629845">橫額</translation>
 <translation id="8851136666856101339">主要元素</translation>
 <translation id="8882002077197914455">列標題</translation>

@@ -6,6 +6,7 @@
 <translation id="1012173283529841972">リスト項目</translation>
 <translation id="1013742170491673792">検索用語を編集</translation>
 <translation id="1014370462248694370">2 本の指で右にスワイプします</translation>
+<translation id="1016393160682012902">QWERTY キーまたは点字キーを押すか、タップ操作を行って、機能を認識させてください。終了するには Ctrl+W キーまたは Esc キーを押します。</translation>
 <translation id="1022586497894531524">ChromeVox の音声フィードバックを初めてご利用になる場合は、このクイック チュートリアルで、ChromeVox の利用を開始するための基本事項をご確認ください。</translation>
 <translation id="1025074108959230262">スティッキー モードは無効</translation>
 <translation id="1031961866430398710">この場合</translation>
@@ -504,7 +505,6 @@
 <translation id="489907760999452556">内部リンク</translation>
 <translation id="4909019435900810068">1 単語後ろへ移動</translation>
 <translation id="4911349081560453449">前のチェックボックスはありません</translation>
-<translation id="4915087353619183190">学習モードを開始しました。QWERTY キーまたは点字キーを押すか、タップ操作を行って、機能を認識させてください。終了するには Ctrl+W キーまたは Esc キーを押します。</translation>
 <translation id="492295894462528572">前書き</translation>
 <translation id="495046168593986294">上にスクロール</translation>
 <translation id="495170559598752135">操作</translation>
@@ -647,6 +647,7 @@
 <translation id="6017514345406065928">緑</translation>
 <translation id="602001110135236999">左にスクロール</translation>
 <translation id="6034000775414344507">ライトグレー</translation>
+<translation id="6036135911048686884">タッチガイド</translation>
 <translation id="6037602951055904232">前方にパンします</translation>
 <translation id="6044160928851315051">画面表示をオフにする</translation>
 <translation id="6082768461603900813">基本的な操作</translation>
@@ -923,6 +924,7 @@
 <translation id="8345569862449483843">{COUNT,plural, =1{ポンド}other{# 個のポンド記号}}</translation>
 <translation id="8378855320830505539">地域</translation>
 <translation id="8382679411218029383">オートコンプリートはインライン表示とリスト形式の両方</translation>
+<translation id="8394908167088220973">メディアの再生/一時停止</translation>
 <translation id="8428213095426709021">設定</translation>
 <translation id="8428603554127842284"><ph name="DEPTH" /> 階層</translation>
 <translation id="8430049249787218991">メニューバー</translation>
@@ -967,6 +969,7 @@
 <translation id="8770473310765924354">表などの構造化コンテンツの外に出ます</translation>
 <translation id="8779057862865475116">前のリンクはありません</translation>
 <translation id="8796411681063377102">次のレベル 3 見出し</translation>
+<translation id="8823311177246872527"><ph name="CURRENTPAGE" />/<ph name="TOTALPAGES" /> ページ目</translation>
 <translation id="8825828890761629845">バナー</translation>
 <translation id="8851136666856101339">本文</translation>
 <translation id="8882002077197914455">行見出し</translation>

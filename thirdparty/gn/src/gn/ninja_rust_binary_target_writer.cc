@@ -118,12 +118,7 @@ void NinjaRustBinaryTargetWriter::Run() {
   WriteCompilerVars();
 
   // Classify our dependencies.
-  UniqueVector<const Target*> linkable_deps;
-  UniqueVector<const Target*> non_linkable_deps;
-  UniqueVector<const Target*> framework_deps;
-  UniqueVector<OutputFile> extra_obj_files;
-  GetDeps(&extra_obj_files, &linkable_deps, &non_linkable_deps,
-          &framework_deps);
+  ClassifiedDeps classified_deps = GetClassifiedDeps();
 
   // The input dependencies will be an order-only dependency. This will cause
   // Ninja to make sure the inputs are up to date before compiling this source,
@@ -139,24 +134,26 @@ void NinjaRustBinaryTargetWriter::Run() {
   // -Ldependency. Also assemble a list of extra (i.e. implicit) deps
   // for ninja dependency tracking.
   UniqueVector<OutputFile> implicit_deps;
-  AppendSourcesToImplicitDeps(&implicit_deps);
-  implicit_deps.Append(extra_obj_files.begin(), extra_obj_files.end());
+  AppendSourcesAndInputsToImplicitDeps(&implicit_deps);
+  implicit_deps.Append(classified_deps.extra_object_files.begin(),
+                       classified_deps.extra_object_files.end());
 
   std::vector<OutputFile> rustdeps;
   std::vector<OutputFile> nonrustdeps;
-  nonrustdeps.insert(nonrustdeps.end(), extra_obj_files.begin(),
-                     extra_obj_files.end());
-  for (const auto* framework_dep : framework_deps) {
+  nonrustdeps.insert(nonrustdeps.end(),
+                     classified_deps.extra_object_files.begin(),
+                     classified_deps.extra_object_files.end());
+  for (const auto* framework_dep : classified_deps.framework_deps) {
     order_only_deps.push_back(framework_dep->dependency_output_file());
   }
-  for (const auto* non_linkable_dep : non_linkable_deps) {
+  for (const auto* non_linkable_dep : classified_deps.non_linkable_deps) {
     if (non_linkable_dep->source_types_used().RustSourceUsed() &&
         non_linkable_dep->output_type() != Target::SOURCE_SET) {
       rustdeps.push_back(non_linkable_dep->dependency_output_file());
     }
     order_only_deps.push_back(non_linkable_dep->dependency_output_file());
   }
-  for (const auto* linkable_dep : linkable_deps) {
+  for (const auto* linkable_dep : classified_deps.linkable_deps) {
     if (linkable_dep->source_types_used().RustSourceUsed()) {
       rustdeps.push_back(linkable_dep->link_output_file());
     } else {
@@ -188,15 +185,18 @@ void NinjaRustBinaryTargetWriter::Run() {
   std::vector<OutputFile> tool_outputs;
   SubstitutionWriter::ApplyListToLinkerAsOutputFile(
       target_, tool_, tool_->outputs(), &tool_outputs);
-  WriteCompilerBuildLine(target_->rust_values().crate_root(),
+  WriteCompilerBuildLine({target_->rust_values().crate_root()},
                          implicit_deps.vector(), order_only_deps, tool_->name(),
                          tool_outputs);
 
-  std::vector<const Target*> extern_deps(linkable_deps.vector());
-  std::copy(non_linkable_deps.begin(), non_linkable_deps.end(),
+  std::vector<const Target*> extern_deps(
+      classified_deps.linkable_deps.vector());
+  std::copy(classified_deps.non_linkable_deps.begin(),
+            classified_deps.non_linkable_deps.end(),
             std::back_inserter(extern_deps));
   WriteExterns(extern_deps);
   WriteRustdeps(transitive_rustlibs, rustdeps, nonrustdeps);
+  WriteSourcesAndInputs();
 }
 
 void NinjaRustBinaryTargetWriter::WriteCompilerVars() {
@@ -214,7 +214,7 @@ void NinjaRustBinaryTargetWriter::WriteCompilerVars() {
   WriteSharedVars(subst);
 }
 
-void NinjaRustBinaryTargetWriter::AppendSourcesToImplicitDeps(
+void NinjaRustBinaryTargetWriter::AppendSourcesAndInputsToImplicitDeps(
     UniqueVector<OutputFile>* deps) const {
   // Only the crate_root file needs to be given to rustc as input.
   // Any other 'sources' are just implicit deps.
@@ -224,6 +224,22 @@ void NinjaRustBinaryTargetWriter::AppendSourcesToImplicitDeps(
   for (const auto& source : target_->sources()) {
     deps->push_back(OutputFile(settings_->build_settings(), source));
   }
+  for (const auto& data : target_->config_values().inputs()) {
+    deps->push_back(OutputFile(settings_->build_settings(), data));
+  }
+}
+
+void NinjaRustBinaryTargetWriter::WriteSourcesAndInputs() {
+  out_ << "  sources =";
+  for (const auto& source : target_->sources()) {
+    out_ << " ";
+    path_output_.WriteFile(out_, OutputFile(settings_->build_settings(), source));
+  }
+  for (const auto& data : target_->config_values().inputs()) {
+    out_ << " ";
+    path_output_.WriteFile(out_, OutputFile(settings_->build_settings(), data));
+  }
+  out_ << std::endl;
 }
 
 void NinjaRustBinaryTargetWriter::WriteExterns(

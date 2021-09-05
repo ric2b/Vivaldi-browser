@@ -83,6 +83,7 @@ Polymer({
   ],
 
   properties: {
+
     /**
      * Current mode of this screen.
      * @private
@@ -711,8 +712,6 @@ Polymer({
    * Event handler that is invoked just before the frame is shown.
    */
   onBeforeShow() {
-    this.screenMode_ = AuthMode.DEFAULT;
-    this.loadingFrameContents_ = true;
     chrome.send('loginUIStateChanged', ['gaia-signin', true]);
 
     // Ensure that GAIA signin (or loading UI) is actually visible.
@@ -815,8 +814,6 @@ Polymer({
     }
 
     params.doSamlRedirect = (this.screenMode_ == AuthMode.SAML_INTERSTITIAL);
-    params.menuGuestMode = data.guestSignin;
-    params.menuKeyboardOptions = false;
     params.menuEnterpriseEnrollment =
         !(data.enterpriseManagedDevice || data.hasDeviceOwner);
     params.isFirstUser = !(data.enterpriseManagedDevice || data.hasDeviceOwner);
@@ -980,10 +977,7 @@ Polymer({
    * @private
    */
   onMenuItemClicked_(e) {
-    if (e.detail == 'gm') {
-      Oobe.disableSigninUI();
-      chrome.send('launchIncognito');
-    } else if (e.detail == 'ee') {
+    if (e.detail == 'ee') {
       cr.ui.Oobe.handleAccelerator(ACCELERATOR_ENROLLMENT);
     }
   },
@@ -1350,10 +1344,7 @@ Polymer({
     if (this.screenMode_ == AuthMode.AD_AUTH)
       chrome.send('cancelAdAuthentication');
 
-    if (this.isClosable_())
-      Oobe.showUserPods();
-    else
-      Oobe.resetSigninUI(true);
+    this.userActed('cancel');
   },
 
   /**

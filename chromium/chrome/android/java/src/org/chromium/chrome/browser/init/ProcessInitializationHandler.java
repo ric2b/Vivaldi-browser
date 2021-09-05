@@ -15,8 +15,6 @@ import android.view.inputmethod.InputMethodSubtype;
 
 import androidx.annotation.WorkerThread;
 
-import com.google.ipc.invalidation.external.client.android.service.AndroidLogger;
-
 import org.chromium.base.CommandLine;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
@@ -37,8 +35,10 @@ import org.chromium.chrome.browser.ChromeBackupAgent;
 import org.chromium.chrome.browser.DefaultBrowserInfo;
 import org.chromium.chrome.browser.DeferredStartupHandler;
 import org.chromium.chrome.browser.DevToolsServer;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.banners.AppBannerManager;
 import org.chromium.chrome.browser.bookmarkswidget.BookmarkWidgetProvider;
+import org.chromium.chrome.browser.contacts_picker.ChromePickerAdapter;
 import org.chromium.chrome.browser.contacts_picker.ContactsPickerDialog;
 import org.chromium.chrome.browser.content_capture.ContentCaptureHistoryDeletionObserver;
 import org.chromium.chrome.browser.crash.CrashUploadCountStore;
@@ -55,7 +55,6 @@ import org.chromium.chrome.browser.homepage.HomepageManager;
 import org.chromium.chrome.browser.identity.UniqueIdentificationGeneratorFactory;
 import org.chromium.chrome.browser.identity.UuidBasedUniqueIdentificationGenerator;
 import org.chromium.chrome.browser.incognito.IncognitoTabLauncher;
-import org.chromium.chrome.browser.invalidation.UniqueIdInvalidationClientNameGenerator;
 import org.chromium.chrome.browser.locale.LocaleManager;
 import org.chromium.chrome.browser.media.MediaCaptureNotificationService;
 import org.chromium.chrome.browser.media.MediaViewerUtils;
@@ -73,10 +72,11 @@ import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.chromium.chrome.browser.profiles.ProfileManagerUtils;
 import org.chromium.chrome.browser.rlz.RevenueStats;
 import org.chromium.chrome.browser.searchwidget.SearchWidgetProvider;
-import org.chromium.chrome.browser.services.GoogleServicesManager;
 import org.chromium.chrome.browser.share.clipboard.ClipboardImageFileProvider;
 import org.chromium.chrome.browser.sharing.shared_clipboard.SharedClipboardShareActivity;
+import org.chromium.chrome.browser.signin.SigninHelper;
 import org.chromium.chrome.browser.sync.SyncController;
+import org.chromium.chrome.browser.vr.VrModeProviderImpl;
 import org.chromium.chrome.browser.webapps.WebApkVersionManager;
 import org.chromium.chrome.browser.webapps.WebappRegistry;
 import org.chromium.components.background_task_scheduler.BackgroundTaskSchedulerFactory;
@@ -93,10 +93,12 @@ import org.chromium.content_public.browser.ChildProcessLauncherHelper;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.content_public.common.ContentSwitches;
 import org.chromium.ui.ContactsPickerListener;
-import org.chromium.ui.PhotoPickerListener;
 import org.chromium.ui.UiUtils;
 import org.chromium.ui.base.Clipboard;
+import org.chromium.ui.base.PhotoPickerDelegate;
+import org.chromium.ui.base.PhotoPickerListener;
 import org.chromium.ui.base.SelectFileDialog;
+import org.chromium.ui.base.WindowAndroid;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -170,16 +172,6 @@ public class ProcessInitializationHandler {
         AccountManagerFacadeProvider.setInstance(
                 new AccountManagerFacadeImpl(AppHooks.get().createAccountManagerDelegate()));
 
-        // Set the unique identification generator for invalidations.  The
-        // invalidations system can start and attempt to fetch the client ID
-        // very early.  We need this generator to be ready before that happens.
-        UniqueIdInvalidationClientNameGenerator.doInitializeAndInstallGenerator(application);
-
-        // Set minimum Tango log level. This sets an in-memory static field, and needs to be
-        // set in the ApplicationContext instead of an activity, since Tango can be woken up
-        // by the system directly though messages from GCM.
-        AndroidLogger.setMinimumAndroidLogLevel(Log.WARN);
-
         // Set up the identification generator for sync. The ID is actually generated
         // in the SyncController constructor.
         UniqueIdentificationGeneratorFactory.registerGenerator(SyncController.GENERATOR_ID,
@@ -223,14 +215,16 @@ public class ProcessInitializationHandler {
         Clipboard.getInstance().setImageFileProvider(new ClipboardImageFileProvider());
 
         if (ChromeFeatureList.isEnabled(ChromeFeatureList.NEW_PHOTO_PICKER)) {
-            UiUtils.setPhotoPickerDelegate(new UiUtils.PhotoPickerDelegate() {
+            SelectFileDialog.setPhotoPickerDelegate(new PhotoPickerDelegate() {
                 private PhotoPickerDialog mDialog;
 
                 @Override
-                public void showPhotoPicker(Context context, PhotoPickerListener listener,
-                        boolean allowMultiple, List<String> mimeTypes) {
-                    mDialog = new PhotoPickerDialog(context, context.getContentResolver(), listener,
-                            allowMultiple, mimeTypes);
+                public void showPhotoPicker(WindowAndroid windowAndroid,
+                        PhotoPickerListener listener, boolean allowMultiple,
+                        List<String> mimeTypes) {
+                    mDialog = new PhotoPickerDialog(windowAndroid,
+                            windowAndroid.getContext().get().getContentResolver(), listener,
+                            allowMultiple, mimeTypes, new VrModeProviderImpl());
                     mDialog.getWindow().getAttributes().windowAnimations =
                             R.style.PickerDialogAnimation;
                     mDialog.show();
@@ -257,8 +251,12 @@ public class ProcessInitializationHandler {
                     boolean allowMultiple, boolean includeNames, boolean includeEmails,
                     boolean includeTel, boolean includeAddresses, boolean includeIcons,
                     String formattedOrigin) {
-                mDialog = new ContactsPickerDialog(context, listener, allowMultiple, includeNames,
-                        includeEmails, includeTel, includeAddresses, includeIcons, formattedOrigin);
+                // TODO(crbug.com/1117536): remove this cast.
+                ChromeActivity activity = (ChromeActivity) context;
+                mDialog = new ContactsPickerDialog(activity.getWindowAndroid(),
+                        new ChromePickerAdapter(), listener, allowMultiple, includeNames,
+                        includeEmails, includeTel, includeAddresses, includeIcons, formattedOrigin,
+                        new VrModeProviderImpl());
                 mDialog.getWindow().getAttributes().windowAnimations =
                         R.style.PickerDialogAnimation;
                 mDialog.show();
@@ -393,7 +391,7 @@ public class ProcessInitializationHandler {
         deferredStartupHandler.addDeferredTask(new Runnable() {
             @Override
             public void run() {
-                GoogleServicesManager.get().onMainActivityStart();
+                SigninHelper.get().onMainActivityStart();
                 RevenueStats.getInstance();
             }
         });

@@ -12,13 +12,13 @@ import static org.junit.Assert.assertEquals;
 import static org.chromium.chrome.browser.tasks.tab_management.TabUiTestHelper.areAnimatorsEnabled;
 
 import android.graphics.drawable.ColorDrawable;
-import android.support.test.annotation.UiThreadTest;
 import android.view.View;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 
 import androidx.test.filters.MediumTest;
 
+import org.hamcrest.Matchers;
 import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.Test;
@@ -28,6 +28,7 @@ import org.junit.runner.RunWith;
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.CommandLine;
 import org.chromium.base.MathUtils;
+import org.chromium.base.test.UiThreadTest;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.DisableIf;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
@@ -137,7 +138,8 @@ public class TabListContainerViewBinderTest extends DummyUiActivityTestCase {
         }
         assertThat(mIsAnimating, equalTo(true));
 
-        CriteriaHelper.pollUiThread(Criteria.equals(1.0f, mRecyclerView::getAlpha));
+        CriteriaHelper.pollUiThread(
+                () -> Criteria.checkThat(mRecyclerView.getAlpha(), Matchers.is(1.0f)));
     }
 
     @Test
@@ -185,7 +187,9 @@ public class TabListContainerViewBinderTest extends DummyUiActivityTestCase {
         }
         assertThat(mIsAnimating, equalTo(true));
         // Invisibility signals the end of the animation, not alpha being zero.
-        CriteriaHelper.pollUiThread(Criteria.equals(View.INVISIBLE, mRecyclerView::getVisibility));
+        CriteriaHelper.pollUiThread(() -> {
+            Criteria.checkThat(mRecyclerView.getVisibility(), Matchers.is(View.INVISIBLE));
+        });
         assertThat(mRecyclerView.getAlpha(), equalTo(0.0f));
     }
 
@@ -258,7 +262,7 @@ public class TabListContainerViewBinderTest extends DummyUiActivityTestCase {
     @Test
     @MediumTest
     @UiThreadTest
-    public void testSetShadowTopMarginUpdatesMargin() {
+    public void testSetShadowTopOffsetUpdatesTranslation() {
         mContainerModel.set(
                 TabListContainerProperties.VISIBILITY_LISTENER, mMockVisibilityListener);
 
@@ -273,28 +277,6 @@ public class TabListContainerViewBinderTest extends DummyUiActivityTestCase {
                 TabListContainerProperties.SHADOW_TOP_OFFSET, INCREASED_CONTAINER_HEIGHT);
         assertEquals(
                 INCREASED_CONTAINER_HEIGHT, shadowImageView.getTranslationY(), MathUtils.EPSILON);
-    }
-
-    @Test
-    @MediumTest
-    @UiThreadTest
-    public void testTranslationYSetsTranslation() {
-        mContainerModel.set(
-                TabListContainerProperties.VISIBILITY_LISTENER, mMockVisibilityListener);
-
-        mContainerModel.set(TabListContainerProperties.ANIMATE_VISIBILITY_CHANGES, false);
-        mContainerModel.set(TabListContainerProperties.IS_VISIBLE, true);
-
-        assertEquals("Wrong initial translationY.", 0, mRecyclerView.getTranslationY(),
-                MathUtils.EPSILON);
-
-        mContainerModel.set(TabListContainerProperties.TRANSLATION_Y, INCREASED_CONTAINER_HEIGHT);
-        assertEquals("translationY is not set to the correct value.", INCREASED_CONTAINER_HEIGHT,
-                mRecyclerView.getTranslationY(), MathUtils.EPSILON);
-
-        mContainerModel.set(TabListContainerProperties.TRANSLATION_Y, 0);
-        assertEquals("translationY is not set to the correct value.", 0,
-                mRecyclerView.getTranslationY(), MathUtils.EPSILON);
     }
 
     @Override

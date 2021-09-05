@@ -26,7 +26,7 @@ void PassThroughAudioDecoder::Initialize(const AudioDecoderConfig& config,
 }
 
 void PassThroughAudioDecoder::Decode(scoped_refptr<DecoderBuffer> buffer,
-                                     const DecodeCB& decode_cb) {
+                                     DecodeCB decode_cb) {
   impl_.Decode(buffer, std::move(decode_cb));
 }
 

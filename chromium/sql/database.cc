@@ -40,6 +40,8 @@
 
 namespace {
 
+bool enable_mmap_by_default_ = true;
+
 // Spin for up to a second waiting for the lock to clear when setting
 // up the database.
 // TODO(shess): Better story on this.  http://crbug.com/56559
@@ -148,7 +150,7 @@ int GetSqlite3FileAndSize(sqlite3* db,
 
 std::string AsUTF8ForSQL(const base::FilePath& path) {
 #if defined(OS_WIN)
-  return base::UTF16ToUTF8(path.value());
+  return base::WideToUTF8(path.value());
 #elif defined(OS_POSIX) || defined(OS_FUCHSIA)
   return path.value();
 #endif
@@ -249,13 +251,17 @@ Database::Database()
       in_memory_(false),
       poisoned_(false),
       mmap_alt_status_(false),
-      mmap_disabled_(false),
+      mmap_disabled_(!enable_mmap_by_default_),
       mmap_enabled_(false),
       total_changes_at_last_release_(0),
       stats_histogram_(nullptr) {}
 
 Database::~Database() {
   Close();
+}
+
+void Database::DisableMmapByDefault() {
+  enable_mmap_by_default_ = false;
 }
 
 void Database::RecordEvent(Events event, size_t count) {
@@ -459,7 +465,7 @@ base::FilePath Database::DbPath() const {
   const char* path = sqlite3_db_filename(db_, "main");
   const base::StringPiece db_path(path);
 #if defined(OS_WIN)
-  return base::FilePath(base::UTF8ToUTF16(db_path));
+  return base::FilePath(base::UTF8ToWide(db_path));
 #elif defined(OS_POSIX) || defined(OS_FUCHSIA)
   return base::FilePath(db_path);
 #else
@@ -1006,11 +1012,11 @@ bool Database::Delete(const base::FilePath& path) {
   CHECK(vfs->xDelete);
   CHECK(vfs->xAccess);
 
-  // We only work with unix, win32 and mojo filesystems. If you're trying to
+  // We only work with the VFS implementations listed below. If you're trying to
   // use this code with any other VFS, you're not in a good place.
   CHECK(strncmp(vfs->zName, "unix", 4) == 0 ||
         strncmp(vfs->zName, "win32", 5) == 0 ||
-        strcmp(vfs->zName, "mojo") == 0);
+        strcmp(vfs->zName, "storage_service") == 0);
 
   vfs->xDelete(vfs, journal_str.c_str(), 0);
   vfs->xDelete(vfs, wal_str.c_str(), 0);
@@ -1117,7 +1123,7 @@ bool Database::AttachDatabase(const base::FilePath& other_db_path,
 
   Statement s(GetUniqueStatement("ATTACH DATABASE ? AS ?"));
 #if OS_WIN
-  s.BindString16(0, other_db_path.value());
+  s.BindString16(0, base::AsStringPiece16(other_db_path.value()));
 #elif defined(OS_POSIX) || defined(OS_FUCHSIA)
   s.BindString(0, other_db_path.value());
 #else

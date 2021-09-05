@@ -4,6 +4,8 @@
 
 #include "chrome/browser/chromeos/printing/history/print_job_info_proto_conversions.h"
 
+#include <string>
+
 #include "base/optional.h"
 #include "chrome/browser/chromeos/printing/printer_error_codes.h"
 #include "printing/mojom/print.mojom.h"
@@ -14,8 +16,10 @@ namespace proto = printing::proto;
 
 namespace {
 
-proto::PrintSettings_ColorMode ColorModelToProto(::printing::ColorModel color) {
-  base::Optional<bool> is_color = ::printing::IsColorModelSelected(color);
+proto::PrintSettings_ColorMode ColorModelToProto(
+    ::printing::mojom::ColorModel color) {
+  base::Optional<bool> is_color =
+      ::printing::IsColorModelSelected(static_cast<int>(color));
   return is_color.value() ? proto::PrintSettings_ColorMode_COLOR
                           : proto::PrintSettings_ColorMode_BLACK_AND_WHITE;
 }
@@ -134,7 +138,7 @@ int64_t TimeToMillisecondsPastUnixEpoch(const base::Time& time) {
 proto::Printer PrinterToProto(const chromeos::Printer& printer) {
   proto::Printer printer_proto;
   printer_proto.set_name(printer.display_name());
-  printer_proto.set_uri(printer.uri());
+  printer_proto.set_uri(printer.uri().GetNormalized());
   printer_proto.set_source(PrinterSourceToProto(printer.source()));
   return printer_proto;
 }

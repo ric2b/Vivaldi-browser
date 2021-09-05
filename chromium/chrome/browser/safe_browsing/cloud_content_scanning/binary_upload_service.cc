@@ -11,12 +11,15 @@
 #include "base/base64.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/command_line.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/optional.h"
 #include "base/rand_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
+#include "build/branding_buildflags.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/enterprise/connectors/connectors_manager.h"
 #include "chrome/browser/profiles/profile.h"
@@ -31,6 +34,7 @@
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/content/web_ui/safe_browsing_ui.h"
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
+#include "components/safe_browsing/core/features.h"
 #include "components/safe_browsing/core/proto/webprotect.pb.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
@@ -84,7 +88,33 @@ std::string ResultToString(BinaryUploadService::Result result) {
   }
 }
 
+#if !BUILDFLAG(GOOGLE_CHROME_BRANDING)
+constexpr char kBinaryUploadServiceUrlFlag[] = "binary-upload-service-url";
+#endif
+
+base::Optional<GURL> GetUrlOverride() {
+#if !BUILDFLAG(GOOGLE_CHROME_BRANDING)
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  if (command_line->HasSwitch(kBinaryUploadServiceUrlFlag)) {
+    GURL url =
+        GURL(command_line->GetSwitchValueASCII(kBinaryUploadServiceUrlFlag));
+    if (url.is_valid())
+      return url;
+  }
+#endif
+
+  return base::nullopt;
+}
+
 }  // namespace
+
+BinaryUploadService::BinaryUploadService(Profile* profile)
+    : url_loader_factory_(profile->GetURLLoaderFactory()),
+      binary_fcm_service_(BinaryFCMService::Create(profile)),
+      profile_(profile),
+      weakptr_factory_(this) {
+  DCHECK(base::FeatureList::IsEnabled(kSafeBrowsingRemoveCookies));
+}
 
 BinaryUploadService::BinaryUploadService(
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
@@ -273,7 +303,7 @@ void BinaryUploadService::OnGetRequestData(Request* request,
         request->deep_scanning_request());
   } else {
     WebUIInfoSingleton::GetInstance()->AddToDeepScanRequests(
-        request->content_analysis_request());
+        request->tab_url(), request->content_analysis_request());
   }
 
   // |request| might have been deleted by the call to Start() in tests, so don't
@@ -330,7 +360,7 @@ void BinaryUploadService::OnGetConnectorResponse(
     if (result.has_tag() && !result.tag().empty()) {
       VLOG(1) << "Request " << request->request_token()
               << " finished scanning tag <" << result.tag() << ">";
-      *received_connector_responses_[request].add_results() = result;
+      received_connector_results_[request][result.tag()] = result;
     }
   }
 
@@ -361,10 +391,11 @@ void BinaryUploadService::OnGetLegacyResponse(
 
 void BinaryUploadService::MaybeFinishConnectorRequest(Request* request) {
   for (const std::string& tag : request->content_analysis_request().tags()) {
-    const auto& results = received_connector_responses_[request].results();
-    if (std::none_of(
-            results.begin(), results.end(),
-            [&tag](const auto& result) { return result.tag() == tag; })) {
+    const auto& results = received_connector_results_[request];
+    if (std::none_of(results.begin(), results.end(),
+                     [&tag](const auto& tag_and_result) {
+                       return tag_and_result.first == tag;
+                     })) {
       VLOG(1) << "Request " << request->request_token() << " is waiting for <"
               << tag << "> scanning to complete.";
       return;
@@ -372,9 +403,10 @@ void BinaryUploadService::MaybeFinishConnectorRequest(Request* request) {
   }
 
   // It's OK to move here since the map entry is about to be removed.
-  enterprise_connectors::ContentAnalysisResponse response =
-      std::move(received_connector_responses_[request]);
+  enterprise_connectors::ContentAnalysisResponse response;
   response.set_request_token(request->request_token());
+  for (auto& tag_and_result : received_connector_results_[request])
+    *response.add_results() = std::move(tag_and_result.second);
   FinishConnectorRequest(request, Result::SUCCESS, std::move(response));
 }
 
@@ -439,7 +471,7 @@ void BinaryUploadService::FinishConnectorRequest(
   // We add the request here in case we never actually uploaded anything, so it
   // wasn't added in OnGetRequestData
   WebUIInfoSingleton::GetInstance()->AddToDeepScanRequests(
-      request->content_analysis_request());
+      request->tab_url(), request->content_analysis_request());
   WebUIInfoSingleton::GetInstance()->AddToDeepScanResponses(
       active_tokens_[request], ResultToString(result), response);
 
@@ -473,7 +505,7 @@ void BinaryUploadService::FinishRequestCleanup(Request* request,
   active_uploads_.erase(request);
   received_malware_verdicts_.erase(request);
   received_dlp_verdicts_.erase(request);
-  received_connector_responses_.erase(request);
+  received_connector_results_.erase(request);
 
   auto token_it = active_tokens_.find(request);
   DCHECK(token_it != active_tokens_.end());
@@ -576,6 +608,16 @@ BinaryUploadService::Request::Request(ContentAnalysisCallback callback,
 
 BinaryUploadService::Request::~Request() = default;
 
+void BinaryUploadService::Request::set_tab_url(const GURL& tab_url) {
+  DCHECK(!use_legacy_proto_);
+  tab_url_ = tab_url;
+}
+
+const GURL& BinaryUploadService::Request::tab_url() const {
+  DCHECK(!use_legacy_proto_);
+  return tab_url_;
+}
+
 void BinaryUploadService::Request::set_request_dlp_scan(
     DlpDeepScanningClientRequest dlp_request) {
   DCHECK(use_legacy_proto_);
@@ -657,6 +699,11 @@ void BinaryUploadService::Request::add_tag(const std::string& tag) {
   content_analysis_request_.add_tags(tag);
 }
 
+void BinaryUploadService::Request::set_email(const std::string& email) {
+  DCHECK(!use_legacy_proto_);
+  content_analysis_request_.mutable_request_data()->set_email(email);
+}
+
 const std::string& BinaryUploadService::Request::device_token() const {
   if (use_legacy_proto_)
     return deep_scanning_request_.dm_token();
@@ -723,10 +770,10 @@ void BinaryUploadService::Request::SerializeToString(
 }
 
 GURL BinaryUploadService::Request::GetUrlWithParams() const {
-  if (use_legacy_proto_)
-    return url_;
+  GURL url = GetUrlOverride().value_or(url_);
 
-  GURL url(url_);
+  if (use_legacy_proto_)
+    return url;
 
   url = net::AppendQueryParameter(url, enterprise::kUrlParamDeviceToken,
                                   device_token());

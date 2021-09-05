@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "third_party/blink/public/common/browser_interface_broker_proxy.h"
+#include "third_party/blink/public/mojom/feature_policy/feature_policy_feature.mojom-blink.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_share_data.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
@@ -50,7 +51,7 @@ String ErrorToString(mojom::blink::ShareError error) {
 }
 
 bool HasFiles(const ShareData& data) {
-  if (!RuntimeEnabledFeatures::WebShareV2Enabled() || !data.hasFiles())
+  if (!data.hasFiles())
     return false;
 
   return !data.files().IsEmpty();
@@ -202,17 +203,24 @@ ScriptPromise NavigatorShare::share(ScriptState* script_state,
     return ScriptPromise();
   }
 
-  LocalDOMWindow* window = LocalDOMWindow::From(script_state);
-  KURL url;
-  if (!CanShareInternal(*window, *data, url, &exception_state)) {
-    DCHECK(exception_state.HadException());
-    return ScriptPromise();
-  }
+  // The feature policy is currently not enforced.
+  LocalDOMWindow* const window = LocalDOMWindow::From(script_state);
+  window->CountUse(
+      ExecutionContext::From(script_state)
+              ->IsFeatureEnabled(mojom::blink::FeaturePolicyFeature::kWebShare)
+          ? WebFeature::kWebSharePolicyAllow
+          : WebFeature::kWebSharePolicyDisallow);
 
-  if (!LocalFrame::HasTransientUserActivation(window->GetFrame())) {
+  if (!LocalFrame::ConsumeTransientUserActivation(window->GetFrame())) {
     exception_state.ThrowDOMException(
         DOMExceptionCode::kNotAllowedError,
         "Must be handling a user gesture to perform a share request.");
+    return ScriptPromise();
+  }
+
+  KURL url;
+  if (!CanShareInternal(*window, *data, url, &exception_state)) {
+    DCHECK(exception_state.HadException());
     return ScriptPromise();
   }
 

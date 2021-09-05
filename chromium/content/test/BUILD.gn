@@ -7,7 +7,6 @@ import("//build/config/chromecast_build.gni")
 import("//build/config/compiler/compiler.gni")
 import("//build/config/crypto.gni")
 import("//build/config/features.gni")
-import("//build/config/jumbo.gni")
 import("//build/config/ui.gni")
 import("//build/nocompile.gni")
 import("//content/common/features.gni")
@@ -27,7 +26,7 @@ if (is_android) {
 
 # Use a static library here because many test binaries depend on this but don't
 # require many files from it. This makes linking more efficient.
-jumbo_static_library("test_support") {
+static_library("test_support") {
   testonly = true
 
   # See comment at the top of //content/BUILD.gn for why this is disabled in
@@ -83,6 +82,8 @@ jumbo_static_library("test_support") {
     "../browser/sms/test/mock_sms_provider.h",
     "../browser/sms/test/mock_sms_web_contents_delegate.cc",
     "../browser/sms/test/mock_sms_web_contents_delegate.h",
+    "../browser/sms/test/mock_user_consent_handler.cc",
+    "../browser/sms/test/mock_user_consent_handler.h",
     "../browser/web_package/mock_signed_exchange_handler.cc",
     "../browser/web_package/mock_signed_exchange_handler.h",
     "../browser/web_package/mock_web_bundle_reader_factory.cc",
@@ -96,6 +97,8 @@ jumbo_static_library("test_support") {
     "../public/test/audio_service_test_helper.h",
     "../public/test/back_forward_cache_util.cc",
     "../public/test/back_forward_cache_util.h",
+    "../public/test/background_color_change_waiter.cc",
+    "../public/test/background_color_change_waiter.h",
     "../public/test/background_sync_test_util.cc",
     "../public/test/background_sync_test_util.h",
     "../public/test/blink_test_environment.cc",
@@ -137,6 +140,8 @@ jumbo_static_library("test_support") {
     "../public/test/frame_load_waiter.h",
     "../public/test/hit_test_region_observer.cc",
     "../public/test/hit_test_region_observer.h",
+    "../public/test/idle_test_utils.cc",
+    "../public/test/idle_test_utils.h",
     "../public/test/javascript_test_observer.cc",
     "../public/test/javascript_test_observer.h",
     "../public/test/local_frame_host_interceptor.cc",
@@ -227,6 +232,8 @@ jumbo_static_library("test_support") {
     "../public/test/test_web_ui.h",
     "../public/test/test_web_ui_data_source.cc",
     "../public/test/test_web_ui_data_source.h",
+    "../public/test/test_web_ui_listener_observer.cc",
+    "../public/test/test_web_ui_listener_observer.h",
     "../public/test/text_input_test_utils.cc",
     "../public/test/text_input_test_utils.h",
     "../public/test/text_input_test_utils_mac.mm",
@@ -243,8 +250,8 @@ jumbo_static_library("test_support") {
     "../public/test/web_contents_tester.h",
     "../public/test/web_ui_browsertest_util.cc",
     "../public/test/web_ui_browsertest_util.h",
-    "content_browser_sanity_checker.cc",
-    "content_browser_sanity_checker.h",
+    "content_browser_consistency_checker.cc",
+    "content_browser_consistency_checker.h",
     "content_test_suite.cc",
     "content_test_suite.h",
     "did_commit_navigation_interceptor.cc",
@@ -272,6 +279,10 @@ jumbo_static_library("test_support") {
     "mock_background_sync_controller.h",
     "mock_badge_service.cc",
     "mock_badge_service.h",
+    "mock_client_hints_controller_delegate.cc",
+    "mock_client_hints_controller_delegate.h",
+    "mock_client_hints_utils.cc",
+    "mock_client_hints_utils.h",
     "mock_clipboard_host.cc",
     "mock_clipboard_host.h",
     "mock_keyboard.cc",
@@ -287,12 +298,12 @@ jumbo_static_library("test_support") {
     "mock_render_widget_host_delegate.h",
     "mock_ssl_host_state_delegate.cc",
     "mock_ssl_host_state_delegate.h",
+    "mock_widget.cc",
+    "mock_widget.h",
     "mock_widget_input_handler.cc",
     "mock_widget_input_handler.h",
     "navigation_simulator_impl.cc",
     "navigation_simulator_impl.h",
-    "not_implemented_network_url_loader_factory.cc",
-    "not_implemented_network_url_loader_factory.h",
     "portal/portal_activated_observer.cc",
     "portal/portal_activated_observer.h",
     "portal/portal_created_observer.cc",
@@ -343,8 +354,8 @@ jumbo_static_library("test_support") {
     "test_web_contents.cc",
     "test_web_contents.h",
     "test_web_contents_factory.cc",
-    "web_contents_observer_sanity_checker.cc",
-    "web_contents_observer_sanity_checker.h",
+    "web_contents_observer_consistency_checker.cc",
+    "web_contents_observer_consistency_checker.h",
     "web_gesture_curve_mock.cc",
     "web_gesture_curve_mock.h",
   ]
@@ -385,7 +396,6 @@ jumbo_static_library("test_support") {
     "//content/public/browser:proto",
     "//content/public/child",
     "//content/public/common",
-    "//content/public/common:client_hints_mojom",
     "//content/public/common:service_names",
     "//content/public/renderer",
     "//content/public/utility",
@@ -474,7 +484,7 @@ jumbo_static_library("test_support") {
   }
 
   # HID support is not available without udev.
-  is_linux_without_udev = is_linux && !use_udev
+  is_linux_without_udev = (is_linux || is_chromeos) && !use_udev
   if (!is_linux_without_udev && !is_android) {
     sources += [
       "../browser/hid/hid_test_utils.cc",
@@ -540,7 +550,10 @@ jumbo_static_library("test_support") {
   }
 
   if (is_mac) {
-    deps += [ "//ui/views:test_support" ]
+    deps += [
+      "//ui/base/mojom",
+      "//ui/views:test_support",
+    ]
   }
 
   if (use_ozone) {
@@ -585,7 +598,7 @@ jumbo_static_library("test_support") {
     ]
   }
 
-  if (is_linux) {
+  if (is_linux || is_chromeos) {
     deps += [ "//ui/platform_window/common" ]
   }
 
@@ -675,7 +688,7 @@ group("telemetry_gpu_integration_test_support") {
 
 # browsertest_support can be used by targets that run content_shell based
 # browser tests.
-jumbo_static_library("browsertest_support") {
+static_library("browsertest_support") {
   testonly = true
 
   # See comment at the top of //content/BUILD.gn for why this is disabled in
@@ -795,26 +808,6 @@ if (is_android) {
   }
 }
 
-static_library("web_test_support_browser") {
-  testonly = true
-
-  # See comment at the top of //content/BUILD.gn for why this is disabled in
-  # component builds.
-  if (is_component_build) {
-    check_includes = false
-  }
-
-  sources = [
-    "../public/test/web_test_support_browser.h",
-    "web_test_support_browser.cc",
-  ]
-  deps = [
-    "//content/browser:for_content_tests",  # For non-component builds.
-    "//content/public/browser",  # For component builds.
-    "//net:test_support",
-  ]
-}
-
 static_library("blink_test_browser_support") {
   testonly = true
 
@@ -852,6 +845,7 @@ if (is_android) {
 
   android_library("content_browsertests_java") {
     testonly = true
+    resources_package = "org.chromium.content_browsertests_apk"
     sources = [
       "../shell/android/browsertests_apk/src/org/chromium/content_browsertests_apk/ContentBrowserTestsActivity.java",
       "../shell/android/browsertests_apk/src/org/chromium/content_browsertests_apk/ContentBrowserTestsApplication.java",
@@ -877,11 +871,15 @@ if (is_android) {
       "//content/shell/android/browsertests_apk/res/layout/test_activity.xml",
       "//content/shell/android/browsertests_apk/res/xml/file_paths.xml",
     ]
-    custom_package = "org.chromium.content_browsertests_apk"
+    create_srcjar = false
   }
 }
 
 test("content_browsertests") {
+  if ((is_linux && !is_chromeos) || chromeos_is_browser_only) {
+    use_xvfb = true
+  }
+
   # See comment at the top of //content/BUILD.gn for why this is disabled in
   # component builds.
   if (is_component_build) {
@@ -985,6 +983,7 @@ test("content_browsertests") {
     "../browser/loader/cors_file_origin_browsertest.cc",
     "../browser/loader/cors_preflight_cache_browsertest.cc",
     "../browser/loader/cross_site_document_blocking_browsertest.cc",
+    "../browser/loader/derived_origin_in_fetch_browsertest.cc",
     "../browser/loader/file_url_loader_factory_browsertest.cc",
     "../browser/loader/loader_browsertest.cc",
     "../browser/loader/prefetch_browsertest.cc",
@@ -1016,6 +1015,7 @@ test("content_browsertests") {
     "../browser/message_port_provider_browsertest.cc",
     "../browser/mojo_sandbox_browsertest.cc",
     "../browser/native_file_system/file_system_chooser_browsertest.cc",
+    "../browser/native_file_system/native_file_system_drag_drop_browsertest.cc",
     "../browser/native_file_system/native_file_system_file_writer_impl_browsertest.cc",
     "../browser/navigation_browsertest.cc",
     "../browser/navigation_mhtml_browsertest.cc",
@@ -1043,6 +1043,7 @@ test("content_browsertests") {
     "../browser/renderer_host/input/compositor_event_ack_browsertest.cc",
     "../browser/renderer_host/input/event_latency_aura_browsertest.cc",
     "../browser/renderer_host/input/fling_browsertest.cc",
+    "../browser/renderer_host/input/input_event_browsertest.cc",
     "../browser/renderer_host/input/interaction_mq_dynamic_browsertest.cc",
     "../browser/renderer_host/input/main_thread_event_queue_browsertest.cc",
     "../browser/renderer_host/input/mouse_latency_browsertest.cc",
@@ -1198,6 +1199,7 @@ test("content_browsertests") {
     "//components/url_formatter:url_formatter",
     "//components/viz/host",
     "//components/viz/test:test_support",
+    "//components/web_package:test_support",
     "//content/app:for_content_tests",
     "//content/browser:for_content_tests",
     "//content/browser/background_sync:background_sync_proto",
@@ -1247,6 +1249,7 @@ test("content_browsertests") {
     "//services/image_annotation/public/mojom:mojom",
     "//services/metrics/public/cpp:ukm_builders",
     "//services/network:test_support",
+    "//services/network/public/cpp",
     "//services/network/trust_tokens:test_support",
     "//services/service_manager/public/cpp",
     "//services/test/echo/public/mojom",
@@ -1316,7 +1319,7 @@ test("content_browsertests") {
     }
   }
 
-  if (is_android || is_linux || is_mac || is_win) {
+  if (is_android || is_linux || is_chromeos || is_mac || is_win) {
     data += [
       "$root_out_dir/content_shell.pak",
       "data/",
@@ -1324,7 +1327,7 @@ test("content_browsertests") {
     ]
   }
 
-  if (is_linux || is_mac || is_win) {
+  if (is_linux || is_chromeos || is_mac || is_win) {
     sources += [
       "../browser/media/capture/content_capture_device_browsertest_base.cc",
       "../browser/media/capture/content_capture_device_browsertest_base.h",
@@ -1386,7 +1389,7 @@ test("content_browsertests") {
     configs += [ "//build/config/win:delayloads" ]
   }
 
-  if (is_linux) {
+  if (is_linux || is_chromeos) {
     sources += [
       "../browser/utility_process_sandbox_browsertest.cc",
       "../browser/zygote_host/zygote_browsertest.cc",
@@ -1460,7 +1463,7 @@ test("content_browsertests") {
   }
 
   # HID support is not available without udev.
-  is_linux_without_udev = is_linux && !use_udev
+  is_linux_without_udev = (is_linux || is_chromeos) && !use_udev
   if (!is_linux_without_udev && !is_android) {
     sources += [
       "../browser/hid/hid_browsertest.cc",
@@ -1537,6 +1540,9 @@ test("content_browsertests") {
       "//content/shell:content_shell",
       "//mojo/core:shared_library",
     ]
+    if (use_ozone) {
+      deps += [ "//ui/ozone" ]
+    }
   }
 
   if (!is_chrome_branded) {
@@ -1590,6 +1596,10 @@ test("content_browsertests") {
       "../browser/snapshot_browsertest.cc",
     ]
   }
+
+  if (use_ozone) {
+    deps += [ "//ui/ozone" ]
+  }
 }
 
 static_library("run_all_unittests") {
@@ -1599,12 +1609,16 @@ static_library("run_all_unittests") {
     ":test_support",
     "//base/test:test_support",
   ]
-  if (is_linux) {
+  if (is_linux || is_chromeos) {
     deps += [ "//services/service_manager/embedder:set_process_title_linux" ]
   }
 }
 
 test("content_unittests") {
+  if ((is_linux && !is_chromeos) || chromeos_is_browser_only) {
+    use_xvfb = true
+  }
+
   # See comment at the top of //content/BUILD.gn for why this is disabled in
   # component builds.
   if (is_component_build) {
@@ -1620,6 +1634,7 @@ test("content_unittests") {
     "../browser/accessibility/browser_accessibility_unittest.cc",
     "../browser/accessibility/browser_accessibility_win_unittest.cc",
     "../browser/accessibility/one_shot_accessibility_tree_search_unittest.cc",
+    "../browser/android/nfc_host_unittest.cc",
     "../browser/appcache/appcache_cache_test_helper.cc",
     "../browser/appcache/appcache_cache_test_helper.h",
     "../browser/appcache/appcache_cache_test_helper_unittest.cc",
@@ -1715,6 +1730,7 @@ test("content_unittests") {
     "../browser/download/save_package_unittest.cc",
     "../browser/file_system/browser_file_system_helper_unittest.cc",
     "../browser/file_system/file_system_operation_runner_unittest.cc",
+    "../browser/font_access/font_access_manager_impl_unittest.cc",
     "../browser/frame_host/ancestor_throttle_unittest.cc",
     "../browser/frame_host/back_forward_cache_metrics_unittest.cc",
     "../browser/frame_host/clipboard_host_impl_unittest.cc",
@@ -1822,6 +1838,7 @@ test("content_unittests") {
     "../browser/picture_in_picture/picture_in_picture_service_impl_unittest.cc",
     "../browser/plugin_list_unittest.cc",
     "../browser/presentation/presentation_service_impl_unittest.cc",
+    "../browser/quota/quota_change_dispatcher_unittest.cc",
     "../browser/renderer_host/cursor_manager_unittest.cc",
     "../browser/renderer_host/direct_manipulation_test_helper_win.cc",
     "../browser/renderer_host/direct_manipulation_test_helper_win.h",
@@ -1931,6 +1948,7 @@ test("content_unittests") {
     "../browser/sms/sms_fetcher_impl_unittest.cc",
     "../browser/sms/sms_parser_unittest.cc",
     "../browser/sms/sms_service_unittest.cc",
+    "../browser/sms/user_consent_handler_unittest.cc",
     "../browser/speech/tts_controller_unittest.cc",
     "../browser/startup_task_runner_unittest.cc",
     "../browser/storage_partition_impl_map_unittest.cc",
@@ -2020,9 +2038,6 @@ test("content_unittests") {
     "../renderer/accessibility/ax_image_stopwords_unittest.cc",
     "../renderer/categorized_worker_pool_unittest.cc",
     "../renderer/child_frame_compositing_helper_unittest.cc",
-    "../renderer/frame_swap_message_queue_unittest.cc",
-    "../renderer/input/input_event_prediction_unittest.cc",
-    "../renderer/input/main_thread_event_queue_unittest.cc",
     "../renderer/loader/navigation_body_loader_unittest.cc",
     "../renderer/loader/resource_dispatcher_unittest.cc",
     "../renderer/loader/sync_load_context_unittest.cc",
@@ -2042,7 +2057,6 @@ test("content_unittests") {
     "../renderer/media/power_status_helper_impl_unittest.cc",
     "../renderer/media/renderer_webaudiodevice_impl_unittest.cc",
     "../renderer/peripheral_content_heuristic_unittest.cc",
-    "../renderer/queue_message_swap_promise_unittest.cc",
     "../renderer/render_frame_metadata_observer_impl_unittest.cc",
     "../renderer/render_thread_impl_unittest.cc",
     "../renderer/render_widget_unittest.cc",
@@ -2073,7 +2087,7 @@ test("content_unittests") {
         [ "../browser/accessibility/browser_accessibility_android_unittest.cc" ]
   }
 
-  if (is_android || is_linux || is_mac || is_win || is_fuchsia) {
+  if (is_android || is_linux || is_chromeos || is_mac || is_win || is_fuchsia) {
     data = [
       "$root_out_dir/content_shell.pak",
       "data/",
@@ -2106,6 +2120,7 @@ test("content_unittests") {
     "//components/offline_pages/buildflags",
     "//components/payments/mojom",
     "//components/rappor:test_support",
+    "//components/services/quarantine/public/mojom",
     "//components/services/storage",
     "//components/services/storage:test_support",
     "//components/services/storage/dom_storage:local_storage_proto",
@@ -2186,6 +2201,7 @@ test("content_unittests") {
     "//testing/gmock",
     "//testing/gtest",
     "//third_party/blink/public:blink",
+    "//third_party/blink/public/common:font_enumeration_table_proto",
     "//third_party/icu",
     "//third_party/inspector_protocol:crdtp_test",
     "//third_party/leveldatabase",
@@ -2279,7 +2295,7 @@ test("content_unittests") {
     }
   }
 
-  if (is_linux) {
+  if (is_linux || is_chromeos) {
     if (use_dbus) {
       deps += [ "//dbus:test_support" ]
     }
@@ -2304,7 +2320,7 @@ test("content_unittests") {
       "//ui/accelerated_widget_mac",
       "//ui/base/mojom",
     ]
-    libs = [
+    frameworks = [
       "Carbon.framework",
       "IOSurface.framework",
     ]
@@ -2369,7 +2385,7 @@ test("content_unittests") {
   }
 
   # HID support is not available without udev.
-  is_linux_without_udev = is_linux && !use_udev
+  is_linux_without_udev = (is_linux || is_chromeos) && !use_udev
   if (!is_linux_without_udev && !is_android) {
     sources += [
       "../browser/hid/hid_service_unittest.cc",
@@ -2420,7 +2436,7 @@ test("content_unittests") {
     deps += [ "//ui/gfx/x" ]
   }
 
-  if (is_linux) {
+  if (is_linux || is_chromeos) {
     sources += [ "../../services/service_manager/embedder/set_process_title_linux_unittest.cc" ]
     deps += [ "//services/service_manager/embedder:set_process_title_linux" ]
   }
@@ -2428,6 +2444,10 @@ test("content_unittests") {
   if (enable_vr) {
     sources += [ "../browser/xr/service/xr_runtime_manager_unittest.cc" ]
     deps += [ "//device/vr:vr_fakes" ]
+  }
+
+  if (is_chromecast) {
+    deps += [ "//chromecast:chromecast_buildflags" ]
   }
 }
 

@@ -11,6 +11,7 @@
 #include <iterator>
 #include <memory>
 #include <set>
+#include <string>
 #include <utility>
 
 #include "base/base_paths.h"
@@ -180,29 +181,29 @@ ScopedIsPostReboot::ScopedIsPostReboot() {
   scoped_command_line_.GetProcessCommandLine()->AppendSwitch(kPostRebootSwitch);
 }
 
-bool RunOnceCommandLineContains(const base::string16& product_shortname,
+bool RunOnceCommandLineContains(const std::wstring& product_shortname,
                                 const wchar_t* sub_string) {
   DCHECK(sub_string);
   PostRebootRegistration post_reboot(product_shortname);
-  base::string16 run_once_value = post_reboot.RunOnceOnRestartRegisteredValue();
-  return String16ContainsCaseInsensitive(run_once_value, sub_string);
+  std::wstring run_once_value = post_reboot.RunOnceOnRestartRegisteredValue();
+  return WStringContainsCaseInsensitive(run_once_value, sub_string);
 }
 
 bool RunOnceOverrideCommandLineContains(const std::string& cleanup_id,
                                         const wchar_t* sub_string) {
   DCHECK(sub_string);
 
-  base::string16 reg_value;
+  std::wstring reg_value;
   base::win::RegKey run_once_key(
       HKEY_CURRENT_USER,
       PostRebootRegistration::GetPostRebootSwitchKeyPath().c_str(), KEY_READ);
   if (run_once_key.Valid()) {
     // There is no need to check the return value, since ReadValue will leave
     // |reg_value| empty on error.
-    run_once_key.ReadValue(base::UTF8ToUTF16(cleanup_id).c_str(), &reg_value);
+    run_once_key.ReadValue(base::UTF8ToWide(cleanup_id).c_str(), &reg_value);
   }
 
-  return String16ContainsCaseInsensitive(reg_value, sub_string);
+  return WStringContainsCaseInsensitive(reg_value, sub_string);
 }
 
 bool RegisterTestTask(TaskScheduler* task_scheduler,
@@ -389,7 +390,7 @@ bool ScopedTempDirNoWow64::CreateUniqueSystem32TempDir() {
 }
 
 bool ScopedTempDirNoWow64::CreateEmptyFileInUniqueSystem32TempDir(
-    const base::string16& file_name) {
+    const std::wstring& file_name) {
   if (!CreateUniqueSystem32TempDir())
     return false;
   ScopedDisableWow64Redirection disable_wow64_redirection;
@@ -438,11 +439,11 @@ bool ResetAclForUcrtbase() {
   int exit_code = 0;
   if (!process.WaitForExitWithTimeout(TestTimeouts::action_timeout(),
                                       &exit_code)) {
-    LOG(ERROR) << "Failed to reset acl for file " << ucrt_path.AsUTF16Unsafe();
+    LOG(ERROR) << "Failed to reset acl for file " << ucrt_path.value();
     return false;
   }
   if (exit_code) {
-    LOG(ERROR) << "Failed to reset acl for file " << ucrt_path.AsUTF16Unsafe()
+    LOG(ERROR) << "Failed to reset acl for file " << ucrt_path.value()
                << " with exit code " << exit_code;
   }
   return !exit_code;

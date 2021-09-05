@@ -1662,6 +1662,8 @@ const char* ToString(ax::mojom::IntAttribute int_attribute) {
       return "checkedState";
     case ax::mojom::IntAttribute::kListStyle:
       return "listStyle";
+    case ax::mojom::IntAttribute::kTextAlign:
+      return "text-align";
     case ax::mojom::IntAttribute::kTextDirection:
       return "textDirection";
     case ax::mojom::IntAttribute::kTextPosition:
@@ -1788,6 +1790,8 @@ ax::mojom::IntAttribute ParseIntAttribute(const char* int_attribute) {
     return ax::mojom::IntAttribute::kCheckedState;
   if (0 == strcmp(int_attribute, "listStyle"))
     return ax::mojom::IntAttribute::kListStyle;
+  if (0 == strcmp(int_attribute, "text-align"))
+    return ax::mojom::IntAttribute::kTextAlign;
   if (0 == strcmp(int_attribute, "textDirection"))
     return ax::mojom::IntAttribute::kTextDirection;
   if (0 == strcmp(int_attribute, "textPosition"))
@@ -1878,6 +1882,8 @@ const char* ToString(ax::mojom::BoolAttribute bool_attribute) {
       return "clickable";
     case ax::mojom::BoolAttribute::kClipsChildren:
       return "clipsChildren";
+    case ax::mojom::BoolAttribute::kNotUserSelectableStyle:
+      return "notUserSelectableStyle";
     case ax::mojom::BoolAttribute::kSelected:
       return "selected";
     case ax::mojom::BoolAttribute::kSelectedFromFocus:
@@ -1922,6 +1928,8 @@ ax::mojom::BoolAttribute ParseBoolAttribute(const char* bool_attribute) {
     return ax::mojom::BoolAttribute::kClickable;
   if (0 == strcmp(bool_attribute, "clipsChildren"))
     return ax::mojom::BoolAttribute::kClipsChildren;
+  if (0 == strcmp(bool_attribute, "notUserSelectableStyle"))
+    return ax::mojom::BoolAttribute::kNotUserSelectableStyle;
   if (0 == strcmp(bool_attribute, "selected"))
     return ax::mojom::BoolAttribute::kSelected;
   if (0 == strcmp(bool_attribute, "selectedFromFocus"))
@@ -2314,35 +2322,66 @@ ax::mojom::TextDecorationStyle ParseTextDecorationStyle(
   return ax::mojom::TextDecorationStyle::kNone;
 }
 
-const char* ToString(ax::mojom::TextDirection text_direction) {
-  switch (text_direction) {
-    case ax::mojom::TextDirection::kNone:
+const char* ToString(ax::mojom::TextAlign text_align) {
+  switch (text_align) {
+    case ax::mojom::TextAlign::kNone:
       return "none";
-    case ax::mojom::TextDirection::kLtr:
+    case ax::mojom::TextAlign::kLeft:
+      return "left";
+    case ax::mojom::TextAlign::kRight:
+      return "right";
+    case ax::mojom::TextAlign::kCenter:
+      return "center";
+    case ax::mojom::TextAlign::kJustify:
+      return "justify";
+  }
+
+  return "";
+}
+
+ax::mojom::TextAlign ParseTextAlign(const char* text_align) {
+  if (0 == strcmp(text_align, "none"))
+    return ax::mojom::TextAlign::kNone;
+  if (0 == strcmp(text_align, "left"))
+    return ax::mojom::TextAlign::kLeft;
+  if (0 == strcmp(text_align, "right"))
+    return ax::mojom::TextAlign::kRight;
+  if (0 == strcmp(text_align, "center"))
+    return ax::mojom::TextAlign::kCenter;
+  if (0 == strcmp(text_align, "justify"))
+    return ax::mojom::TextAlign::kJustify;
+  return ax::mojom::TextAlign::kNone;
+}
+
+const char* ToString(ax::mojom::WritingDirection text_direction) {
+  switch (text_direction) {
+    case ax::mojom::WritingDirection::kNone:
+      return "none";
+    case ax::mojom::WritingDirection::kLtr:
       return "ltr";
-    case ax::mojom::TextDirection::kRtl:
+    case ax::mojom::WritingDirection::kRtl:
       return "rtl";
-    case ax::mojom::TextDirection::kTtb:
+    case ax::mojom::WritingDirection::kTtb:
       return "ttb";
-    case ax::mojom::TextDirection::kBtt:
+    case ax::mojom::WritingDirection::kBtt:
       return "btt";
   }
 
   return "";
 }
 
-ax::mojom::TextDirection ParseTextDirection(const char* text_direction) {
+ax::mojom::WritingDirection ParseTextDirection(const char* text_direction) {
   if (0 == strcmp(text_direction, "none"))
-    return ax::mojom::TextDirection::kNone;
+    return ax::mojom::WritingDirection::kNone;
   if (0 == strcmp(text_direction, "ltr"))
-    return ax::mojom::TextDirection::kLtr;
+    return ax::mojom::WritingDirection::kLtr;
   if (0 == strcmp(text_direction, "rtl"))
-    return ax::mojom::TextDirection::kRtl;
+    return ax::mojom::WritingDirection::kRtl;
   if (0 == strcmp(text_direction, "ttb"))
-    return ax::mojom::TextDirection::kTtb;
+    return ax::mojom::WritingDirection::kTtb;
   if (0 == strcmp(text_direction, "btt"))
-    return ax::mojom::TextDirection::kBtt;
-  return ax::mojom::TextDirection::kNone;
+    return ax::mojom::WritingDirection::kBtt;
+  return ax::mojom::WritingDirection::kNone;
 }
 
 const char* ToString(ax::mojom::TextPosition text_position) {
@@ -2754,6 +2793,8 @@ const char* ToString(ax::mojom::Gesture gesture) {
       return "tap3";
     case ax::mojom::Gesture::kTap4:
       return "tap4";
+    case ax::mojom::Gesture::kTouchExplore:
+      return "touchExplore";
   }
 
   return "";
@@ -2802,6 +2843,8 @@ ax::mojom::Gesture ParseGesture(const char* gesture) {
     return ax::mojom::Gesture::kTap3;
   if (0 == strcmp(gesture, "tap4"))
     return ax::mojom::Gesture::kTap4;
+  if (0 == strcmp(gesture, "touchExplore"))
+    return ax::mojom::Gesture::kTouchExplore;
   return ax::mojom::Gesture::kNone;
 }
 

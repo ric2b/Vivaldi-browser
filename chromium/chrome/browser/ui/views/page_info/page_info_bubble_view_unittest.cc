@@ -9,7 +9,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
-#include "chrome/browser/content_settings/tab_specific_content_settings_delegate.h"
+#include "chrome/browser/content_settings/page_specific_content_settings_delegate.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/ssl/security_state_tab_helper.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_manager.h"
@@ -202,9 +202,9 @@ class PageInfoBubbleViewTest : public testing::Test {
     parent_window_->Init(std::move(parent_params));
 
     content::WebContents* web_contents = web_contents_helper_.web_contents();
-    content_settings::TabSpecificContentSettings::CreateForWebContents(
+    content_settings::PageSpecificContentSettings::CreateForWebContents(
         web_contents,
-        std::make_unique<chrome::TabSpecificContentSettingsDelegate>(
+        std::make_unique<chrome::PageSpecificContentSettingsDelegate>(
             web_contents));
     api_ = std::make_unique<test::PageInfoBubbleViewTestApi>(
         parent_window_->GetNativeView(), web_contents_helper_.profile(),
@@ -272,9 +272,7 @@ TEST_F(PageInfoBubbleViewTest, NotificationPermissionRevokeUkm) {
   TestingProfile* profile =
       static_cast<TestingProfile*>(web_contents_helper_.profile());
   ukm::TestAutoSetUkmRecorder ukm_recorder;
-  ASSERT_TRUE(profile->CreateHistoryService(
-      /* delete_file= */ true,
-      /* no_db= */ false));
+  ASSERT_TRUE(profile->CreateHistoryService());
   auto* history_service = HistoryServiceFactory::GetForProfile(
       profile, ServiceAccessType::EXPLICIT_ACCESS);
   history_service->AddPage(origin_url, base::Time::Now(),
@@ -320,9 +318,7 @@ TEST_F(PageInfoBubbleViewTest, SetPermissionInfo) {
 
   TestingProfile* profile =
       static_cast<TestingProfile*>(web_contents_helper_.profile());
-  ASSERT_TRUE(profile->CreateHistoryService(
-      /* delete_file= */ true,
-      /* no_db= */ false));
+  ASSERT_TRUE(profile->CreateHistoryService());
 
   PermissionInfoList list(1);
   list.back().type = ContentSettingsType::GEOLOCATION;
@@ -456,7 +452,7 @@ TEST_F(PageInfoBubbleViewTest, SetPermissionInfoWithPolicyUsbDevices) {
             label->GetText());
 
   views::Button* button = static_cast<views::Button*>(children[2]);
-  EXPECT_EQ(button->state(), views::Button::STATE_DISABLED);
+  EXPECT_EQ(button->GetState(), views::Button::STATE_DISABLED);
 
   views::Label* desc_label = static_cast<views::Label*>(children[3]);
   EXPECT_EQ(base::ASCIIToUTF16("USB device allowed by your administrator"),
@@ -518,7 +514,7 @@ TEST_F(PageInfoBubbleViewTest, SetPermissionInfoWithUserAndPolicyUsbDevices) {
     EXPECT_EQ(base::ASCIIToUTF16("Gizmo"), label->GetText());
 
     views::Button* button = static_cast<views::Button*>(children[2]);
-    EXPECT_NE(button->state(), views::Button::STATE_DISABLED);
+    EXPECT_NE(button->GetState(), views::Button::STATE_DISABLED);
 
     views::Label* desc_label = static_cast<views::Label*>(children[3]);
     EXPECT_EQ(base::ASCIIToUTF16("USB device"), desc_label->GetText());
@@ -545,7 +541,7 @@ TEST_F(PageInfoBubbleViewTest, SetPermissionInfoWithUserAndPolicyUsbDevices) {
               label->GetText());
 
     views::Button* button = static_cast<views::Button*>(children[2]);
-    EXPECT_EQ(button->state(), views::Button::STATE_DISABLED);
+    EXPECT_EQ(button->GetState(), views::Button::STATE_DISABLED);
 
     views::Label* desc_label = static_cast<views::Label*>(children[3]);
     EXPECT_EQ(base::ASCIIToUTF16("USB device allowed by your administrator"),

@@ -31,6 +31,7 @@
 
 #include <algorithm>
 #include <utility>
+
 #include "base/bind.h"
 #include "base/feature_list.h"
 #include "base/metrics/histogram_functions.h"
@@ -40,14 +41,15 @@
 #include "services/metrics/public/cpp/mojo_ukm_recorder.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "services/network/public/cpp/features.h"
+#include "services/network/public/mojom/blocked_by_response_reason.mojom-shared.h"
 #include "services/network/public/mojom/fetch_api.mojom-blink.h"
 #include "third_party/blink/public/common/client_hints/client_hints.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/thread_safe_browser_interface_broker_proxy.h"
 #include "third_party/blink/public/mojom/blob/blob_registry.mojom-blink.h"
 #include "third_party/blink/public/mojom/devtools/console_message.mojom-blink.h"
-#include "third_party/blink/public/platform/code_cache_loader.h"
 #include "third_party/blink/public/platform/platform.h"
+#include "third_party/blink/public/platform/web_code_cache_loader.h"
 #include "third_party/blink/public/platform/web_data.h"
 #include "third_party/blink/public/platform/web_security_origin.h"
 #include "third_party/blink/public/platform/web_url_error.h"
@@ -191,22 +193,23 @@ SchedulingPolicy::Feature GetFeatureFromRequestContextType(
 }  // namespace
 
 // CodeCacheRequest handles the requests to fetch data from code cache.
-// This owns CodeCacheLoader that actually loads the data from the
+// This owns WebCodeCacheLoader that actually loads the data from the
 // code cache. This class performs the necessary checks of matching the
-// resource response time and the code cache response time before sending
-// the data to the resource. It caches the data returned from the code cache
-// if the response wasn't received.  One CodeCacheRequest handles only one
-// request. On a restart new CodeCacheRequest is created.
+// resource response time and the code cache response time before sending the
+// data to the resource (see https://crbug.com/1099587). It caches the data
+// returned from the code cache if the response wasn't received. One
+// CodeCacheRequest handles only one request. On a restart new CodeCacheRequest
+// is created.
 class ResourceLoader::CodeCacheRequest {
   USING_FAST_MALLOC(ResourceLoader::CodeCacheRequest);
 
  public:
-  CodeCacheRequest(std::unique_ptr<CodeCacheLoader> code_cache_loader,
+  CodeCacheRequest(std::unique_ptr<WebCodeCacheLoader> code_cache_loader,
                    const KURL& url,
                    bool defers_loading)
       : status_(kNoRequestSent),
         code_cache_loader_(std::move(code_cache_loader)),
-        gurl_(url),
+        url_(url),
         defers_loading_(defers_loading) {
     DCHECK(RuntimeEnabledFeatures::IsolatedCodeCacheEnabled());
   }
@@ -238,7 +241,7 @@ class ResourceLoader::CodeCacheRequest {
     kReceivedResponse
   };
 
-  // Callback to receive data from CodeCacheLoader.
+  // Callback to receive data from WebCodeCacheLoader.
   void DidReceiveCachedCode(ResourceLoader* loader,
                             base::Time response_time,
                             mojo_base::BigBuffer data);
@@ -254,8 +257,8 @@ class ResourceLoader::CodeCacheRequest {
                            ResourceLoader* resource_loader);
 
   CodeCacheRequestStatus status_;
-  std::unique_ptr<CodeCacheLoader> code_cache_loader_;
-  const GURL gurl_;
+  std::unique_ptr<WebCodeCacheLoader> code_cache_loader_;
+  const WebURL url_;
   bool defers_loading_ = false;
   mojo_base::BigBuffer cached_code_;
   base::Time cached_code_response_time_;
@@ -278,12 +281,11 @@ bool ResourceLoader::CodeCacheRequest::FetchFromCodeCache(
   // through ResourceLoader.
   url_loader->SetDefersLoading(true);
 
-  CodeCacheLoader::FetchCodeCacheCallback callback =
+  WebCodeCacheLoader::FetchCodeCacheCallback callback =
       base::BindOnce(&ResourceLoader::CodeCacheRequest::DidReceiveCachedCode,
                      weak_ptr_factory_.GetWeakPtr(), resource_loader);
   auto cache_type = resource_loader->GetCodeCacheType();
-  code_cache_loader_->FetchFromCodeCache(cache_type, gurl_,
-                                         std::move(callback));
+  code_cache_loader_->FetchFromCodeCache(cache_type, url_, std::move(callback));
   return true;
 }
 
@@ -296,7 +298,7 @@ bool ResourceLoader::CodeCacheRequest::FetchFromCodeCacheSynchronously(
 
   base::Time response_time;
   mojo_base::BigBuffer data;
-  code_cache_loader_->FetchFromCodeCacheSynchronously(gurl_, &response_time,
+  code_cache_loader_->FetchFromCodeCacheSynchronously(url_, &response_time,
                                                       &data);
   ProcessCodeCacheResponse(response_time, std::move(data), resource_loader);
   return true;
@@ -368,8 +370,14 @@ void ResourceLoader::CodeCacheRequest::MaybeSendCachedCode(
   // If the resource was fetched for service worker script or was served from
   // CacheStorage via service worker then they maintain their own code cache.
   // We should not use the isolated cache.
-  if (!use_isolated_code_cache_ ||
-      resource_response_time_ != cached_code_response_time_) {
+  if (!use_isolated_code_cache_) {
+    resource_loader->ClearCachedCode();
+    return;
+  }
+
+  // If the timestamps don't match, the code cache data may be for a different
+  // response. See https://crbug.com/1099587.
+  if (resource_response_time_ != cached_code_response_time_) {
     resource_loader->ClearCachedCode();
     return;
   }
@@ -721,6 +729,17 @@ bool ResourceLoader::WillFollowRedirect(
     return false;
   }
 
+  const ResourceRequestHead& initial_request = resource_->GetResourceRequest();
+  if (initial_request.GetRedirectMode() ==
+      network::mojom::RedirectMode::kError) {
+    // The network::cors::CorsURLLoader would reject the redirect in any case,
+    // but we reject the redirect here because otherwise we would see confusing
+    // errors such as MixedContent errors in the console during redirect
+    // handling.
+    HandleError(ResourceError::Failure(new_url));
+    return false;
+  }
+
   std::unique_ptr<ResourceRequest> new_request =
       resource_->LastResourceRequest().CreateRedirectRequest(
           new_url, new_method, new_site_for_cookies, new_referrer,
@@ -734,7 +753,6 @@ bool ResourceLoader::WillFollowRedirect(
 
   ResourceType resource_type = resource_->GetType();
 
-  const ResourceRequestHead& initial_request = resource_->GetResourceRequest();
   // The following parameters never change during the lifetime of a request.
   mojom::RequestContextType request_context =
       initial_request.GetRequestContext();
@@ -1000,7 +1018,9 @@ void ResourceLoader::DidReceiveResponseInternal(
       !response.CurrentRequestUrl().ProtocolIsData() &&
       !response.CurrentRequestUrl().ProtocolIs("blob")) {
     DCHECK(!base::FeatureList::IsEnabled(features::kPlzDedicatedWorker));
-    HandleError(ResourceError::Failure(response.CurrentRequestUrl()));
+    HandleError(ResourceError::BlockedByResponse(
+        response.CurrentRequestUrl(), network::mojom::BlockedByResponseReason::
+                                          kCoepFrameResourceNeedsCoepHeader));
     return;
   }
 
@@ -1253,7 +1273,7 @@ void ResourceLoader::DidFail(const WebURLError& error,
   resource_->SetEncodedDataLength(encoded_data_length);
   resource_->SetEncodedBodyLength(encoded_body_length);
   resource_->SetDecodedBodyLength(decoded_body_length);
-  HandleError(error);
+  HandleError(ResourceError(error));
 }
 
 void ResourceLoader::HandleError(const ResourceError& error) {

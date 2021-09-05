@@ -65,8 +65,8 @@ class ChromeSpeechRecognitionClient
   media::mojom::AudioDataS16Ptr ConvertToAudioDataS16(
       scoped_refptr<media::AudioBuffer> buffer);
 
-  // Called as a response to sending a transcription to the browser.
-  void OnTranscriptionCallback(bool success);
+  // Called as a response to sending a message to the browser.
+  void OnBrowserCallback(bool success);
 
   media::mojom::AudioDataS16Ptr ConvertToAudioDataS16(
       std::unique_ptr<media::AudioBus> audio_bus,
@@ -82,6 +82,14 @@ class ChromeSpeechRecognitionClient
   void ResetChannelMixer(int frame_count, media::ChannelLayout channel_layout);
 
   bool IsUrlBlocked(const std::string& url) const;
+
+  // Called when the speech recognition context or the speech recognition
+  // recognizer is disconnected. Sends an error message to the UI and halts
+  // future transcriptions.
+  void OnRecognizerDisconnected();
+
+  // Called when the caption host is disconnected. Halts future transcriptions.
+  void OnCaptionHostDisconnected();
 
   media::SpeechRecognitionClient::OnReadyCallback on_ready_callback_;
 
@@ -103,10 +111,13 @@ class ChromeSpeechRecognitionClient
   // format.
   std::unique_ptr<media::AudioBus> temp_audio_bus_;
 
-  // Whether the browser is still requesting transcriptions.
+  // Whether the UI in the browser is still requesting transcriptions.
   bool is_browser_requesting_transcription_ = true;
 
   bool is_recognizer_bound_ = false;
+
+  // Whether or not the on ready message has been sent to the caption host.
+  bool on_ready_message_sent_to_caption_host_ = false;
 
   // The temporary audio bus used to mix multichannel audio into a single
   // channel.

@@ -12,8 +12,10 @@
 #include "base/memory/ref_counted.h"
 #include "chrome/browser/chromeos/printing/printer_installation_manager.h"
 #include "chromeos/printing/printer_configuration.h"
+#include "chromeos/printing/uri.h"
 #include "components/keyed_service/core/keyed_service.h"
 
+class PrefRegistrySimple;
 class PrefService;
 class Profile;
 
@@ -33,7 +35,7 @@ class SyncedPrintersManager;
 class UsbPrinterNotificationController;
 
 // Returns true if |printer_uri| is an IPP uri.
-bool IsIppUri(base::StringPiece printer_uri);
+bool IsIppUri(const Uri& printer_uri);
 
 // Top level manager of available CUPS printers in ChromeOS.  All functions
 // in this class must be called from a sequenced context.
@@ -75,8 +77,11 @@ class CupsPrintersManager : public PrinterInstallationManager,
       PrinterEventTracker* event_tracker,
       PrefService* pref_service);
 
-  // Register the printing preferences with the |registry|.
+  // Register the profile printing preferences with the |registry|.
   static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
+
+  // Register the printing preferences with the |registry|.
+  static void RegisterLocalStatePrefs(PrefRegistrySimple* registry);
 
   ~CupsPrintersManager() override = default;
 

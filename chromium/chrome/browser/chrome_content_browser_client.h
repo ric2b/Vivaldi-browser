@@ -22,13 +22,13 @@
 #include "chrome/browser/startup_data.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/common/previews_state.h"
 #include "extensions/buildflags/buildflags.h"
 #include "media/media_buildflags.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "ppapi/buildflags/buildflags.h"
 #include "services/network/public/mojom/network_context.mojom-forward.h"
+#include "third_party/blink/public/common/loader/previews_state.h"
 
 class ChromeContentBrowserClientParts;
 class PrefRegistrySimple;
@@ -154,8 +154,8 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
                                        const GURL& site_url) override;
   bool DoesSiteRequireDedicatedProcess(content::BrowserContext* browser_context,
                                        const GURL& effective_site_url) override;
-  bool ShouldLockToOrigin(content::BrowserContext* browser_context,
-                          const GURL& effective_site_url) override;
+  bool ShouldLockProcess(content::BrowserContext* browser_context,
+                         const GURL& effective_site_url) override;
   bool DoesWebUISchemeRequireProcessLock(base::StringPiece scheme) override;
   bool ShouldTreatURLSchemeAsFirstPartyWhenTopLevel(
       base::StringPiece scheme,
@@ -217,6 +217,8 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
   void AppendExtraCommandLineSwitches(base::CommandLine* command_line,
                                       int child_process_id) override;
   std::string GetApplicationClientGUIDForQuarantineCheck() override;
+  download::QuarantineConnectionCallback GetQuarantineConnectionCallback()
+      override;
   std::string GetApplicationLocale() override;
   std::string GetAcceptLangs(content::BrowserContext* context) override;
   gfx::ImageSkia GetDefaultFavicon() override;
@@ -279,6 +281,8 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
 #if defined(OS_CHROMEOS)
   void OnTrustAnchorUsed(content::BrowserContext* browser_context) override;
 #endif
+  void OnSCTReportReady(content::BrowserContext* browser_context,
+                        const std::string& cache_key) override;
   scoped_refptr<network::SharedURLLoaderFactory>
   GetSystemSharedURLLoaderFactory() override;
   network::mojom::NetworkContext* GetSystemNetworkContext() override;
@@ -333,6 +337,9 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
   content::TtsPlatform* GetTtsPlatform() override;
   void OverrideWebkitPrefs(content::RenderViewHost* rvh,
                            content::WebPreferences* prefs) override;
+  bool OverrideWebPreferencesAfterNavigation(
+      content::WebContents* web_contents,
+      content::WebPreferences* prefs) override;
   void BrowserURLHandlerCreated(content::BrowserURLHandler* handler) override;
   base::FilePath GetDefaultDownloadDirectory() override;
   std::string GetDefaultDownloadName() override;
@@ -381,17 +388,17 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
   void OverridePageVisibilityState(
       content::RenderFrameHost* render_frame_host,
       content::PageVisibilityState* visibility_state) override;
-#if defined(OS_POSIX) && !defined(OS_MACOSX)
+#if defined(OS_POSIX) && !defined(OS_MAC)
   void GetAdditionalMappedFilesForChildProcess(
       const base::CommandLine& command_line,
       int child_process_id,
       content::PosixFileDescriptorInfo* mappings) override;
-#endif  // defined(OS_POSIX) && !defined(OS_MACOSX)
+#endif  // defined(OS_POSIX) && !defined(OS_MAC)
 #if defined(OS_WIN)
   bool PreSpawnRenderer(sandbox::TargetPolicy* policy,
                         RendererSpawnFlags flags) override;
   base::string16 GetAppContainerSidForSandboxType(
-      service_manager::SandboxType sandbox_type) override;
+      sandbox::policy::SandboxType sandbox_type) override;
   bool IsRendererCodeIntegrityEnabled() override;
 #endif
   void ExposeInterfacesToRenderer(
@@ -417,8 +424,6 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
       content::RenderProcessHost* render_process_host,
       mojo::GenericPendingReceiver receiver) override;
   void WillStartServiceManager() override;
-  base::Optional<service_manager::Manifest> GetServiceManifestOverlay(
-      base::StringPiece name) override;
   void OpenURL(
       content::SiteInstance* site_instance,
       const content::OpenURLParams& params,
@@ -454,6 +459,7 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
       int frame_tree_node_id) override;
   void RegisterNonNetworkNavigationURLLoaderFactories(
       int frame_tree_node_id,
+      base::UkmSourceId ukm_source_id,
       NonNetworkURLLoaderFactoryMap* factories) override;
   void RegisterNonNetworkWorkerMainResourceURLLoaderFactories(
       content::BrowserContext* browser_context,
@@ -514,6 +520,7 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
       network::mojom::CertVerifierCreationParams* cert_verifier_creation_params)
       override;
   std::vector<base::FilePath> GetNetworkContextsParentDirectory() override;
+  base::DictionaryValue GetNetLogConstants() override;
   bool AllowRenderingMhtmlOverHttp(
       content::NavigationUIData* navigation_ui_data) override;
   bool ShouldForceDownloadResource(const GURL& url,
@@ -569,13 +576,14 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
                                      int64_t recv_bytes,
                                      int64_t sent_bytes) override;
   base::FilePath GetSandboxedStorageServiceDataDirectory() override;
-  content::PreviewsState DetermineAllowedPreviews(
-      content::PreviewsState initial_state,
+  bool ShouldSandboxAudioService() override;
+  blink::PreviewsState DetermineAllowedPreviews(
+      blink::PreviewsState initial_state,
       content::NavigationHandle* navigation_handle,
       const GURL& current_navigation_url) override;
 
-  content::PreviewsState DetermineCommittedPreviews(
-      content::PreviewsState initial_state,
+  blink::PreviewsState DetermineCommittedPreviews(
+      blink::PreviewsState initial_state,
       content::NavigationHandle* navigation_handle,
       const net::HttpResponseHeaders* response_headers) override;
 
@@ -591,8 +599,8 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
   bool IsBuiltinComponent(content::BrowserContext* browser_context,
                           const url::Origin& origin) override;
 
-  bool IsRendererDebugURLBlacklisted(const GURL& url,
-                                     content::BrowserContext* context) override;
+  bool ShouldBlockRendererDebugURL(const GURL& url,
+                                   content::BrowserContext* context) override;
 
   ui::AXMode GetAXModeForBrowserContext(
       content::BrowserContext* browser_context) override;
@@ -627,23 +635,23 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
       const GURL& site_for_cookies,
       const base::Optional<url::Origin>& top_frame_origin) override;
 
-  content::PreviewsState DetermineAllowedPreviewsWithoutHoldback(
-      content::PreviewsState initial_state,
+  blink::PreviewsState DetermineAllowedPreviewsWithoutHoldback(
+      blink::PreviewsState initial_state,
       content::NavigationHandle* navigation_handle,
       const GURL& current_navigation_url);
 
-  content::PreviewsState DetermineCommittedPreviewsWithoutHoldback(
-      content::PreviewsState initial_state,
+  blink::PreviewsState DetermineCommittedPreviewsWithoutHoldback(
+      blink::PreviewsState initial_state,
       content::NavigationHandle* navigation_handle,
       const net::HttpResponseHeaders* response_headers);
 
   // Determines the committed previews state for the passed in params.
-  static content::PreviewsState DetermineCommittedPreviewsForURL(
+  static blink::PreviewsState DetermineCommittedPreviewsForURL(
       const GURL& url,
       data_reduction_proxy::DataReductionProxyData* drp_data,
       previews::PreviewsUserData* previews_user_data,
       const previews::PreviewsDecider* previews_decider,
-      content::PreviewsState initial_state,
+      blink::PreviewsState initial_state,
       content::NavigationHandle* navigation_handle);
 
 #if !defined(OS_ANDROID)
@@ -678,6 +686,9 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
   void BindBrowserControlInterface(
       mojo::GenericPendingReceiver receiver) override;
   bool ShouldInheritCrossOriginEmbedderPolicyImplicitly(
+      const GURL& url) override;
+  network::mojom::PrivateNetworkRequestPolicy GetPrivateNetworkRequestPolicy(
+      content::BrowserContext* browser_context,
       const GURL& url) override;
   ukm::UkmService* GetUkmService() override;
 

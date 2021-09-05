@@ -8,14 +8,25 @@
 #error "This file requires ARC support."
 #endif
 
+void DiscoverFeedProvider::StartFeed(
+    DiscoverFeedConfiguration* discover_config) {}
+void DiscoverFeedProvider::StartFeed(AuthenticationService* auth_service) {}
+
 bool DiscoverFeedProvider::IsDiscoverFeedEnabled() {
   return false;
 }
 
 UIViewController* DiscoverFeedProvider::NewFeedViewController(
-    id<ApplicationCommands> dispatcher) {
+    Browser* browser) {
   return nil;
 }
 
-void DiscoverFeedProvider::RefreshFeedWithCompletion(
-    ProceduralBlock completion) {}
+void DiscoverFeedProvider::UpdateTheme() {}
+
+void DiscoverFeedProvider::RefreshFeed() {}
+
+void DiscoverFeedProvider::UpdateFeedForAccountChange() {}
+
+void DiscoverFeedProvider::AddObserver(Observer* observer) {}
+void DiscoverFeedProvider::RemoveObserver(Observer* observer) {}
+void DiscoverFeedProvider::LoadMoreFeedArticles() {}

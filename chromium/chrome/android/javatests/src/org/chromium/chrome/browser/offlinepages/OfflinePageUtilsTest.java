@@ -29,7 +29,7 @@ import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.MetricsUtils.HistogramDelta;
 import org.chromium.base.test.util.UrlUtils;
 import org.chromium.blink.mojom.MhtmlLoadResult;
-import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.offlinepages.OfflinePageBridge.OfflinePageModelObserver;
 import org.chromium.chrome.browser.offlinepages.OfflinePageBridge.SavePageCallback;
@@ -41,7 +41,6 @@ import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.components.browser_ui.share.ShareParams;
 import org.chromium.components.offlinepages.SavePageResult;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
-import org.chromium.content_public.browser.test.util.Criteria;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.net.ConnectionType;
@@ -162,14 +161,10 @@ public class OfflinePageUtilsTest {
         }
 
         public void waitForSnackbarControllerToFinish() {
-            CriteriaHelper.pollUiThread(
-                    new Criteria("Failed while waiting for snackbar calls to complete.") {
-                        @Override
-                        public boolean isSatisfied() {
-                            return mDismissed;
-                        }
-                    },
-                    SNACKBAR_TIMEOUT, POLLING_INTERVAL);
+            CriteriaHelper.pollUiThread(()
+                                                -> mDismissed,
+                    "Failed while waiting for snackbar calls to complete.", SNACKBAR_TIMEOUT,
+                    POLLING_INTERVAL);
         }
 
         @Override
@@ -267,8 +262,6 @@ public class OfflinePageUtilsTest {
     @Test
     @MediumTest
     @CommandLineFlags.Add({"enable-features=OfflinePagesSharing"})
-    @DisableIf.Build(
-            message = "https://crbug.com/853255", sdk_is_less_than = Build.VERSION_CODES.LOLLIPOP)
     public void testSharePublicOfflinePage() throws Exception {
         loadOfflinePage(ASYNC_ID);
         final Semaphore semaphore = new Semaphore(0);

@@ -30,6 +30,7 @@
 #include <memory>
 #include <utility>
 
+#include "third_party/blink/public/common/loader/worker_main_script_load_parameters.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_source_code.h"
@@ -211,6 +212,8 @@ void WorkerThread::EvaluateClassicScript(
 
 void WorkerThread::FetchAndRunClassicScript(
     const KURL& script_url,
+    std::unique_ptr<WorkerMainScriptLoadParameters>
+        worker_main_script_load_params,
     std::unique_ptr<CrossThreadFetchClientSettingsObjectData>
         outside_settings_object_data,
     WorkerResourceTimingNotifier* outside_resource_timing_notifier,
@@ -221,6 +224,7 @@ void WorkerThread::FetchAndRunClassicScript(
       CrossThreadBindOnce(
           &WorkerThread::FetchAndRunClassicScriptOnWorkerThread,
           CrossThreadUnretained(this), script_url,
+          WTF::Passed(std::move(worker_main_script_load_params)),
           WTF::Passed(std::move(outside_settings_object_data)),
           WrapCrossThreadPersistent(outside_resource_timing_notifier),
           stack_id));
@@ -228,6 +232,8 @@ void WorkerThread::FetchAndRunClassicScript(
 
 void WorkerThread::FetchAndRunModuleScript(
     const KURL& script_url,
+    std::unique_ptr<WorkerMainScriptLoadParameters>
+        worker_main_script_load_params,
     std::unique_ptr<CrossThreadFetchClientSettingsObjectData>
         outside_settings_object_data,
     WorkerResourceTimingNotifier* outside_resource_timing_notifier,
@@ -239,6 +245,7 @@ void WorkerThread::FetchAndRunModuleScript(
       CrossThreadBindOnce(
           &WorkerThread::FetchAndRunModuleScriptOnWorkerThread,
           CrossThreadUnretained(this), script_url,
+          WTF::Passed(std::move(worker_main_script_load_params)),
           WTF::Passed(std::move(outside_settings_object_data)),
           WrapCrossThreadPersistent(outside_resource_timing_notifier),
           credentials_mode, reject_coep_unsafe_none.value()));
@@ -433,6 +440,14 @@ scheduler::WorkerScheduler* WorkerThread::GetScheduler() {
   return worker_scheduler_.get();
 }
 
+scoped_refptr<base::SingleThreadTaskRunner> WorkerThread::GetTaskRunner(
+    TaskType type) {
+  // Task runners must be captured when the worker scheduler is initialized. See
+  // comments in InitializeSchedulerOnWorkerThread().
+  CHECK(worker_task_runners_.Contains(type)) << static_cast<int>(type);
+  return worker_task_runners_.at(type);
+}
+
 void WorkerThread::ChildThreadStartedOnWorkerThread(WorkerThread* child) {
   DCHECK(IsCurrentThread());
 #if DCHECK_IS_ON()
@@ -538,6 +553,46 @@ void WorkerThread::InitializeSchedulerOnWorkerThread(
       static_cast<scheduler::WorkerThreadScheduler*>(
           worker_thread.GetNonMainThreadScheduler()),
       worker_thread.worker_scheduler_proxy());
+
+  // Capture the worker task runners so that it's safe to access GetTaskRunner()
+  // from any threads even after the worker scheduler is disposed of on the
+  // worker thread. See also comments on GetTaskRunner().
+  // We only capture task types that are actually used. When you want to use a
+  // new task type, add it here.
+  Vector<TaskType> available_task_types = {TaskType::kBackgroundFetch,
+                                           TaskType::kCanvasBlobSerialization,
+                                           TaskType::kDatabaseAccess,
+                                           TaskType::kDOMManipulation,
+                                           TaskType::kFileReading,
+                                           TaskType::kFontLoading,
+                                           TaskType::kInternalDefault,
+                                           TaskType::kInternalInspector,
+                                           TaskType::kInternalLoading,
+                                           TaskType::kInternalMedia,
+                                           TaskType::kInternalMediaRealTime,
+                                           TaskType::kInternalTest,
+                                           TaskType::kInternalWebCrypto,
+                                           TaskType::kJavascriptTimerDelayed,
+                                           TaskType::kJavascriptTimerImmediate,
+                                           TaskType::kMediaElementEvent,
+                                           TaskType::kMicrotask,
+                                           TaskType::kMiscPlatformAPI,
+                                           TaskType::kNetworking,
+                                           TaskType::kPerformanceTimeline,
+                                           TaskType::kPermission,
+                                           TaskType::kPostedMessage,
+                                           TaskType::kRemoteEvent,
+                                           TaskType::kUserInteraction,
+                                           TaskType::kWebGL,
+                                           TaskType::kWebLocks,
+                                           TaskType::kWebSocket,
+                                           TaskType::kWorkerAnimation};
+  for (auto type : available_task_types) {
+    auto task_runner = worker_scheduler_->GetTaskRunner(type);
+    auto result = worker_task_runners_.insert(type, std::move(task_runner));
+    DCHECK(result.is_new_entry);
+  }
+
   waitable_event->Signal();
 }
 
@@ -628,6 +683,8 @@ void WorkerThread::EvaluateClassicScriptOnWorkerThread(
 
 void WorkerThread::FetchAndRunClassicScriptOnWorkerThread(
     const KURL& script_url,
+    std::unique_ptr<WorkerMainScriptLoadParameters>
+        worker_main_script_load_params,
     std::unique_ptr<CrossThreadFetchClientSettingsObjectData>
         outside_settings_object,
     WorkerResourceTimingNotifier* outside_resource_timing_notifier,
@@ -636,9 +693,10 @@ void WorkerThread::FetchAndRunClassicScriptOnWorkerThread(
     outside_resource_timing_notifier =
         MakeGarbageCollected<NullWorkerResourceTimingNotifier>();
   }
+
   To<WorkerGlobalScope>(GlobalScope())
       ->FetchAndRunClassicScript(
-          script_url,
+          script_url, std::move(worker_main_script_load_params),
           *MakeGarbageCollected<FetchClientSettingsObjectSnapshot>(
               std::move(outside_settings_object)),
           *outside_resource_timing_notifier, stack_id);
@@ -646,6 +704,8 @@ void WorkerThread::FetchAndRunClassicScriptOnWorkerThread(
 
 void WorkerThread::FetchAndRunModuleScriptOnWorkerThread(
     const KURL& script_url,
+    std::unique_ptr<WorkerMainScriptLoadParameters>
+        worker_main_script_load_params,
     std::unique_ptr<CrossThreadFetchClientSettingsObjectData>
         outside_settings_object,
     WorkerResourceTimingNotifier* outside_resource_timing_notifier,
@@ -660,7 +720,7 @@ void WorkerThread::FetchAndRunModuleScriptOnWorkerThread(
   // Worklets.
   To<WorkerGlobalScope>(GlobalScope())
       ->FetchAndRunModuleScript(
-          script_url,
+          script_url, std::move(worker_main_script_load_params),
           *MakeGarbageCollected<FetchClientSettingsObjectSnapshot>(
               std::move(outside_settings_object)),
           *outside_resource_timing_notifier, credentials_mode,

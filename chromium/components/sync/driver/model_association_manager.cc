@@ -28,14 +28,13 @@ namespace {
 static const ModelType kStartOrder[] = {
     NIGORI,  //  Listed for completeness.
     DEVICE_INFO,
-    DEPRECATED_EXPERIMENTS,  //  Listed for completeness.
-    PROXY_TABS,              //  Listed for completeness.
+    PROXY_TABS,  //  Listed for completeness.
 
     // Kick off the association of the non-UI types first so they can associate
     // in parallel with the UI types.
     PASSWORDS, AUTOFILL, AUTOFILL_PROFILE, AUTOFILL_WALLET_DATA,
-    AUTOFILL_WALLET_METADATA, EXTENSION_SETTINGS, APP_SETTINGS, TYPED_URLS,
-    HISTORY_DELETE_DIRECTIVES,
+    AUTOFILL_WALLET_METADATA, AUTOFILL_WALLET_OFFER, EXTENSION_SETTINGS,
+    APP_SETTINGS, TYPED_URLS, HISTORY_DELETE_DIRECTIVES,
 
     // Chrome OS settings affect the initial desktop appearance before the
     // browser window opens, so start them before browser data types.
@@ -46,7 +45,7 @@ static const ModelType kStartOrder[] = {
     ARC_PACKAGE, READING_LIST, THEMES, SEARCH_ENGINES, SESSIONS, DICTIONARY,
     DEPRECATED_FAVICON_IMAGES, DEPRECATED_FAVICON_TRACKING, PRINTERS,
     USER_CONSENTS, USER_EVENTS, SHARING_MESSAGE, SUPERVISED_USER_SETTINGS,
-    SUPERVISED_USER_WHITELISTS, SEND_TAB_TO_SELF, SECURITY_EVENTS, WEB_APPS,
+    SUPERVISED_USER_ALLOWLISTS, SEND_TAB_TO_SELF, SECURITY_EVENTS, WEB_APPS,
     NOTES,
     WIFI_CONFIGURATIONS};
 
@@ -181,8 +180,7 @@ void ModelAssociationManager::StopDatatypeImpl(
   delegate_->OnSingleDataTypeWillStop(dtc->type(), error);
 
   // Note: Depending on |shutdown_reason|, USS types might clear their metadata
-  // in response to Stop(). For directory types, the clearing happens in
-  // SyncManager::PurgeDisabledTypes() instead.
+  // in response to Stop().
   dtc->Stop(shutdown_reason, std::move(callback));
 }
 

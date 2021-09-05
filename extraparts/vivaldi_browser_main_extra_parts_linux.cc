@@ -6,6 +6,7 @@ VivaldiBrowserMainExtraPartsLinux::VivaldiBrowserMainExtraPartsLinux() {}
 
 VivaldiBrowserMainExtraPartsLinux::~VivaldiBrowserMainExtraPartsLinux() {}
 
-VivaldiBrowserMainExtraParts* VivaldiBrowserMainExtraParts::Create() {
-  return new VivaldiBrowserMainExtraPartsLinux();
+std::unique_ptr<VivaldiBrowserMainExtraParts>
+VivaldiBrowserMainExtraParts::Create() {
+  return std::make_unique <VivaldiBrowserMainExtraPartsLinux>();
 }

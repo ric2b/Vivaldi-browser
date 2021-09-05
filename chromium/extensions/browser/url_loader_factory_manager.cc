@@ -29,6 +29,7 @@
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_set.h"
 #include "extensions/common/manifest_handlers/content_scripts_handler.h"
+#include "extensions/common/script_constants.h"
 #include "extensions/common/switches.h"
 #include "extensions/common/user_script.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
@@ -148,7 +149,6 @@ const char* kHardcodedPartOfAllowlist[] = {
     "7246C8B523C1023D028327EA0D228787A8F72C97",
     "7527942941BFF13D66B46E7A2A56FDBA873FB9E6",
     "77D83E0A4157A0E77B51AD60BAB69A346CD4FEA3",
-    "7879DB88205D880B64D55E51B9726E1D12F7261F",
     "7B179178FD3246EF29212093F1025A11C0F127ED",
     "7BFE588B209A15260DE12777B4BBB738DE98FE6C",
     "7C9DEE7EABBF6C722DC7C1B86460F0507E5AA561",
@@ -405,12 +405,12 @@ void MarkIsolatedWorldsAsRequiringSeparateURLLoaderFactory(
 // first non-about-scheme document and returns its url.  Otherwise, simply
 // returns |document_url|.
 //
-// This function approximates ScriptContext::GetEffectiveDocumentURL from the
-// renderer side.  Unlike the renderer version of this code (in
-// ScriptContext::GetEffectiveDocumentURL) the code below doesn't consider
-// whether security origin of |frame| can access |next_candidate|.  This is
-// okay, because our only caller (DoesContentScriptMatchNavigatingFrame) expects
-// false positives.
+// This function approximates
+// ScriptContext::GetEffectiveDocumentURLForInjection() from the renderer side.
+// Unlike the renderer code, this just iterates up frame tree, and doesn't look
+// at the effective or precursor origin of the frame. This is okay, because our
+// only caller (DoesContentScriptMatchNavigatingFrame()) expects false
+// positives.
 GURL GetEffectiveDocumentURL(content::RenderFrameHost* frame,
                              const GURL& document_url,
                              bool match_about_blank) {
@@ -479,8 +479,19 @@ bool DoesContentScriptMatchNavigatingFrame(
   if (user_script.js_scripts().empty())
     return false;
 
+  // TODO(devlin): Update GetEffectiveDocumentURL() to take a
+  // MatchOriginAsFallbackBehavior.
+  bool match_about_blank = false;
+  switch (user_script.match_origin_as_fallback()) {
+    case MatchOriginAsFallbackBehavior::kAlways:
+    case MatchOriginAsFallbackBehavior::kMatchForAboutSchemeAndClimbTree:
+      match_about_blank = true;
+      break;
+    case MatchOriginAsFallbackBehavior::kNever:
+      break;  // `false` is correct for |match_about_blank|.
+  }
   GURL effective_url = GetEffectiveDocumentURL(
-      navigating_frame, navigation_target, user_script.match_about_blank());
+      navigating_frame, navigation_target, match_about_blank);
   bool is_subframe = navigating_frame->GetParent();
   return user_script.MatchesDocument(effective_url, is_subframe);
 }

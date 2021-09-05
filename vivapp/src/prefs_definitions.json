@@ -931,6 +931,37 @@
         "syncable": false
       }
     },
+    "chat": {
+      "notifications": {
+        "description": "Enable notifications when receiving chat messages",
+        "type": "boolean",
+        "default": true,
+        "syncable": false
+      },
+      "notifications_sound_on": {
+        "description": "Play sound when receiving chat messages",
+        "type": "boolean",
+        "default": true,
+        "syncable": false
+      },
+      "typing_indication": {
+        "description": "Let other people see you're typing a message",
+        "type": "boolean",
+        "default": true,
+        "syncable": false
+      },
+      "process_hint_no_store": {
+        "description": "Tell the server not to store the outgoing message",
+        "type": "boolean",
+        "default": false,
+        "syncable": false
+      },
+      "conversation_timestamps": {
+        "type": "list",
+        "default": [],
+        "syncable": false
+      }
+    },
     "mouse_gestures": {
       "alt_gestures_enabled": {
         "description": "Allow gestures using Alt key and left mouse button",
@@ -1145,6 +1176,12 @@
             "forMailOnly": false,
             "width": -1,
             "resizable": false
+          }, {
+            "id": "chat",
+            "available": true,
+            "forMailOnly": false,
+            "width": -1,
+            "resizable": false
           }
         ],
         "syncable": false
@@ -1241,12 +1278,6 @@
     },
     "privacy": {
       "break_mode": {
-        "enabled": {
-          "description": "Pause, hide and dim content to focus outside the browser",
-          "type": "boolean",
-          "default": false,
-          "syncable": false
-        },
         "introduction_show": {
           "description": "Shows Break Mode introduction",
           "type": "boolean",
@@ -1498,6 +1529,13 @@
           "default": "always",
           "syncable": true
         },
+        "game_button_show": {
+          "description": "Show Game button on the Speed Dial",
+          "type": "boolean",
+          "default": true,
+          "syncable": true
+        },
+
         "width": {
           "type": "integer",
           "default": 220,
@@ -1909,6 +1947,14 @@
         "default": "",
         "syncable": false
       },
+      "hud": {
+        "enabled": {
+          "description": "Display overlaid Head-Up Display",
+          "type": "boolean",
+          "default": true,
+          "syncable": true
+        }
+      },
       "tree_columns": {
         "entries": {
           "type": "dictionary",
@@ -2168,7 +2214,8 @@
           "type": "enum",
           "enum_values": {
             "file": 0,
-            "clipboard": 1
+            "clipboard": 1,
+            "note": 2
           },
           "default": "file",
           "syncable": true
@@ -2538,6 +2585,10 @@
       "path": "webkit.webprefs.fonts.cursive.Zyyy",
       "type": "string"
     },
+    "kWebKitDefaultFontSize": {
+      "path": "webkit.webprefs.default_font_size",
+      "type": "integer"
+    },
     "kWebKitFantasyFontFamily": {
       "path": "webkit.webprefs.fonts.fantasy.Zyyy",
       "type": "string"
@@ -2548,7 +2599,7 @@
     },
     "kWebKitMinimumFontSize": {
       "path": "webkit.webprefs.minimum_font_size",
-      "type": "string"
+      "type": "integer"
     },
     "kWebKitSansSerifFontFamily": {
       "path": "webkit.webprefs.fonts.sansserif.Zyyy",

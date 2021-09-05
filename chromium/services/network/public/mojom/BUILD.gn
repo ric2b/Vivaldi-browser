@@ -385,16 +385,17 @@ mojom("cookies_mojom") {
           move_only = true
         },
         {
-          mojom = "network.mojom.CookieWithStatus"
-          cpp = "::net::CookieWithStatus"
+          mojom = "network.mojom.CookieAccessResult"
+          cpp = "::net::CookieAccessResult"
+          move_only = true
         },
         {
           mojom = "network.mojom.CookieWithAccessResult"
           cpp = "::net::CookieWithAccessResult"
         },
         {
-          mojom = "network.mojom.CookieAndLineWithStatus"
-          cpp = "::net::CookieAndLineWithStatus"
+          mojom = "network.mojom.CookieAndLineWithAccessResult"
+          cpp = "::net::CookieAndLineWithAccessResult"
         },
         {
           mojom = "network.mojom.CookieChangeCause"
@@ -416,9 +417,20 @@ mojom("cookies_mojom") {
       traits_public_deps = [ "//net" ]
     },
   ]
-
   cpp_typemaps += shared_cpp_typemaps
-  blink_cpp_typemaps = shared_cpp_typemaps
+
+  blink_cpp_typemaps = [
+    {
+      types = [
+        {
+          mojom = "network.mojom.CanonicalCookie"
+          cpp = "::blink::CanonicalCookie"
+        },
+      ]
+      traits_headers = [ "//third_party/blink/renderer/platform/cookie/canonical_cookie_mojom_traits.h" ]
+    },
+  ]
+  blink_cpp_typemaps += shared_cpp_typemaps
 }
 
 mojom("mojom") {
@@ -561,7 +573,7 @@ mojom("mojom") {
         },
         {
           mojom = "network.mojom.URLRequestReferrerPolicy"
-          cpp = "::net::URLRequest::ReferrerPolicy"
+          cpp = "::net::ReferrerPolicy"
         },
         {
           mojom = "network.mojom.RequestPriority"

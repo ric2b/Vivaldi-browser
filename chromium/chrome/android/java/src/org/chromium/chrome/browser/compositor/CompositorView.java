@@ -343,7 +343,18 @@ public class CompositorView
      * @param enabled Whether to enter or leave overlay immersive ar mode.
      */
     public void setOverlayImmersiveArMode(boolean enabled) {
-        setOverlayVideoMode(enabled);
+        // In SurfaceControl mode, we don't need to switch surfaces for the compositor, we can
+        // continue using its already-translucent surface. (The ArImmersiveOverlay has its own
+        // separate opaque surface which is used for displaying the camera image and WebGL drawn
+        // content. The compositor surface appears on top of that as an overlay.)
+        // TODO(https://crbug.com/1122103): revisit once the stale-ChromeChildSurface issue is
+        // fixed.
+        if (!canUseSurfaceControl()
+                || mCompositorSurfaceManager.getFormatOfOwnedSurface() != PixelFormat.TRANSLUCENT) {
+            // If SurfaceControl is off, or if we haven't started using it yet, switch the
+            // compositor to a translucent surface, same as overlay video mode.
+            setOverlayVideoMode(enabled);
+        }
         CompositorViewJni.get().setOverlayImmersiveArMode(
                 mNativeCompositorView, CompositorView.this, enabled);
     }
@@ -433,6 +444,11 @@ public class CompositorView
                 mNativeCompositorView, CompositorView.this, webContents, width, height);
     }
 
+    void onControlsResizeViewChanged(WebContents webContents, boolean controlsResizeView) {
+        CompositorViewJni.get().onControlsResizeViewChanged(
+                mNativeCompositorView, CompositorView.this, webContents, controlsResizeView);
+    }
+
     @CalledByNative
     private void onCompositorLayout() {
         mRenderHost.onCompositorLayout();
@@ -519,9 +535,8 @@ public class CompositorView
 
         CompositorViewJni.get().setLayoutBounds(mNativeCompositorView, CompositorView.this);
 
-        SceneLayer sceneLayer =
-                provider.getUpdatedActiveSceneLayer(mLayerTitleCache, mTabContentManager,
-                mResourceManager, provider.getFullscreenManager());
+        SceneLayer sceneLayer = provider.getUpdatedActiveSceneLayer(mLayerTitleCache,
+                mTabContentManager, mResourceManager, provider.getBrowserControlsManager());
 
         CompositorViewJni.get().setSceneLayer(
                 mNativeCompositorView, CompositorView.this, sceneLayer);
@@ -630,6 +645,8 @@ public class CompositorView
                 int height, boolean backedBySurfaceTexture, Surface surface);
         void onPhysicalBackingSizeChanged(long nativeCompositorView, CompositorView caller,
                 WebContents webContents, int width, int height);
+        void onControlsResizeViewChanged(long nativeCompositorView, CompositorView caller,
+                WebContents webContents, boolean controlsResizeView);
         void finalizeLayers(long nativeCompositorView, CompositorView caller);
         void setNeedsComposite(long nativeCompositorView, CompositorView caller);
         void setLayoutBounds(long nativeCompositorView, CompositorView caller);

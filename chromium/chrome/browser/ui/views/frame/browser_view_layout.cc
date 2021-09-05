@@ -22,9 +22,9 @@
 #include "chrome/browser/ui/views/exclusive_access_bubble_views.h"
 #include "chrome/browser/ui/views/frame/browser_non_client_frame_view.h"
 #include "chrome/browser/ui/views/frame/browser_view_layout_delegate.h"
-#include "chrome/browser/ui/views/frame/caption_button_container.h"
 #include "chrome/browser/ui/views/frame/contents_layout_manager.h"
 #include "chrome/browser/ui/views/frame/immersive_mode_controller.h"
+#include "chrome/browser/ui/views/frame/tab_strip_region_view.h"
 #include "chrome/browser/ui/views/frame/top_container_view.h"
 #include "chrome/browser/ui/views/infobars/infobar_container_view.h"
 #include "chrome/browser/ui/views/tabs/tab_strip.h"
@@ -185,8 +185,8 @@ gfx::Size BrowserViewLayout::GetMinimumSize(const views::View* host) const {
       bookmark_bar_ && bookmark_bar_->GetVisible() &&
       delegate_->SupportsWindowFeature(Browser::FEATURE_BOOKMARKBAR);
 
-  gfx::Size tabstrip_size(has_tabstrip ? tab_strip_->GetMinimumSize()
-                                       : gfx::Size());
+  gfx::Size tabstrip_size(
+      has_tabstrip ? tab_strip_region_view_->GetMinimumSize() : gfx::Size());
   gfx::Size toolbar_size((has_toolbar || has_location_bar)
                              ? toolbar_->GetMinimumSize()
                              : gfx::Size());
@@ -229,20 +229,6 @@ int BrowserViewLayout::NonClientHitTest(const gfx::Point& point) {
   gfx::Point point_in_browser_view_coords(point);
   views::View::ConvertPointToTarget(
       parent, browser_view_, &point_in_browser_view_coords);
-
-  // In some configurations, the caption button container may be part of the
-  // browser top area instead of the frame, but we still have to treat it as
-  // part of the frame for hit testing purposes.
-  auto* const caption_buttons =
-      browser_view_->frame()->GetFrameView()->GetCaptionButtonContainer();
-  if (caption_buttons && top_container_->Contains(caption_buttons)) {
-    gfx::Point test_point = point;
-    if (ConvertedHitTest(parent, caption_buttons, &test_point)) {
-      const int result = caption_buttons->NonClientHitTest(test_point);
-      if (result != HTNOWHERE)
-        return result;
-    }
-  }
 
   // Determine if the TabStrip exists and is capable of being clicked on. We
   // might be a popup window without a TabStrip.
@@ -288,7 +274,10 @@ int BrowserViewLayout::NonClientHitTest(const gfx::Point& point) {
   // caller will hit-test the window controls before finally falling back to
   // HTCAPTION.
   gfx::Rect tabstrip_background_bounds = browser_view_->bounds();
-  tabstrip_background_bounds.set_height(toolbar_->y());
+  gfx::Point toolbar_origin = toolbar_->origin();
+  views::View::ConvertPointToTarget(top_container_, browser_view_,
+                                    &toolbar_origin);
+  tabstrip_background_bounds.set_height(toolbar_origin.y());
   if (tabstrip_background_bounds.Contains(point))
     return HTNOWHERE;
 

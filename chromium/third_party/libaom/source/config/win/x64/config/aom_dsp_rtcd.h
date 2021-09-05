@@ -245,6 +245,19 @@ void aom_comp_mask_upsampled_pred_sse2(MACROBLOCKD* xd,
                                        int subpel_search);
 #define aom_comp_mask_upsampled_pred aom_comp_mask_upsampled_pred_sse2
 
+void aom_convolve8_c(const uint8_t* src,
+                     ptrdiff_t src_stride,
+                     uint8_t* dst,
+                     ptrdiff_t dst_stride,
+                     const InterpKernel* filter,
+                     int x0_q4,
+                     int x_step_q4,
+                     int y0_q4,
+                     int y_step_q4,
+                     int w,
+                     int h);
+#define aom_convolve8 aom_convolve8_c
+
 void aom_convolve8_horiz_c(const uint8_t* src,
                            ptrdiff_t src_stride,
                            uint8_t* dst,
@@ -5505,8 +5518,21 @@ uint32_t aom_highbd_10_sub_pixel_variance8x16_sse2(const uint8_t* src_ptr,
                                                    const uint8_t* ref_ptr,
                                                    int ref_stride,
                                                    uint32_t* sse);
-#define aom_highbd_10_sub_pixel_variance8x16 \
-  aom_highbd_10_sub_pixel_variance8x16_sse2
+uint32_t aom_highbd_10_sub_pixel_variance8x16_avx2(const uint8_t* src_ptr,
+                                                   int source_stride,
+                                                   int xoffset,
+                                                   int yoffset,
+                                                   const uint8_t* ref_ptr,
+                                                   int ref_stride,
+                                                   uint32_t* sse);
+RTCD_EXTERN uint32_t (*aom_highbd_10_sub_pixel_variance8x16)(
+    const uint8_t* src_ptr,
+    int source_stride,
+    int xoffset,
+    int yoffset,
+    const uint8_t* ref_ptr,
+    int ref_stride,
+    uint32_t* sse);
 
 uint32_t aom_highbd_10_sub_pixel_variance8x32_c(const uint8_t* src_ptr,
                                                 int source_stride,
@@ -5556,8 +5582,21 @@ uint32_t aom_highbd_10_sub_pixel_variance8x8_sse2(const uint8_t* src_ptr,
                                                   const uint8_t* ref_ptr,
                                                   int ref_stride,
                                                   uint32_t* sse);
-#define aom_highbd_10_sub_pixel_variance8x8 \
-  aom_highbd_10_sub_pixel_variance8x8_sse2
+uint32_t aom_highbd_10_sub_pixel_variance8x8_avx2(const uint8_t* src_ptr,
+                                                  int source_stride,
+                                                  int xoffset,
+                                                  int yoffset,
+                                                  const uint8_t* ref_ptr,
+                                                  int ref_stride,
+                                                  uint32_t* sse);
+RTCD_EXTERN uint32_t (*aom_highbd_10_sub_pixel_variance8x8)(
+    const uint8_t* src_ptr,
+    int source_stride,
+    int xoffset,
+    int yoffset,
+    const uint8_t* ref_ptr,
+    int ref_stride,
+    uint32_t* sse);
 
 unsigned int aom_highbd_10_variance128x128_c(const uint8_t* src_ptr,
                                              int source_stride,
@@ -26235,6 +26274,16 @@ static void setup_rtcd_internal(void) {
   if (flags & HAS_AVX2)
     aom_highbd_10_sub_pixel_variance64x64 =
         aom_highbd_10_sub_pixel_variance64x64_avx2;
+  aom_highbd_10_sub_pixel_variance8x16 =
+      aom_highbd_10_sub_pixel_variance8x16_sse2;
+  if (flags & HAS_AVX2)
+    aom_highbd_10_sub_pixel_variance8x16 =
+        aom_highbd_10_sub_pixel_variance8x16_avx2;
+  aom_highbd_10_sub_pixel_variance8x8 =
+      aom_highbd_10_sub_pixel_variance8x8_sse2;
+  if (flags & HAS_AVX2)
+    aom_highbd_10_sub_pixel_variance8x8 =
+        aom_highbd_10_sub_pixel_variance8x8_avx2;
   aom_highbd_10_variance128x128 = aom_highbd_10_variance128x128_sse2;
   if (flags & HAS_AVX2)
     aom_highbd_10_variance128x128 = aom_highbd_10_variance128x128_avx2;

@@ -47,7 +47,8 @@ std::unique_ptr<SystemInfo::Size> GfxSizeToSystemInfoSize(
 // Give the GPU process a few seconds to provide GPU info.
 // Linux Debug builds need more time -- see Issue 796437 and 1046598.
 // Windows builds need more time -- see Issue 873112 and 1004472.
-#if (defined(OS_LINUX) && !defined(NDEBUG)) || defined(OS_WIN)
+#if ((defined(OS_LINUX) || defined(OS_CHROMEOS)) && !defined(NDEBUG)) || \
+    defined(OS_WIN)
 const int kGPUInfoWatchdogTimeoutMs = 30000;
 #else
 const int kGPUInfoWatchdogTimeoutMs = 5000;
@@ -302,7 +303,7 @@ class SystemInfoHandlerGpuObserver : public content::GpuDataManagerObserver {
     base::CommandLine* command = base::CommandLine::ForCurrentProcess();
     // Only wait for DX12/Vulkan info if requested at Chrome start up.
     if (!command->HasSwitch(
-            switches::kDisableGpuProcessForDX12VulkanInfoCollection) &&
+            switches::kDisableGpuProcessForDX12InfoCollection) &&
         command->HasSwitch(switches::kNoDelayForDX12VulkanInfoCollection) &&
         !GpuDataManagerImpl::GetInstance()->IsDx12VulkanVersionAvailable())
       return;
@@ -351,7 +352,7 @@ namespace {
 
 std::unique_ptr<base::ProcessMetrics> CreateProcessMetrics(
     base::ProcessHandle handle) {
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   return base::ProcessMetrics::CreateProcessMetrics(
       handle, content::BrowserChildProcessHost::GetPortProvider());
 #else

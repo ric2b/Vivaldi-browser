@@ -181,7 +181,8 @@ var HistoryMetricsTest = class extends HistoryBrowserTest {
   }
 };
 
-TEST_F('HistoryMetricsTest', 'All', function() {
+// TODO(https://crbug.com/1000573): Re-enable once flakiness is fixed.
+TEST_F('HistoryMetricsTest', 'DISABLED_All', function() {
   mocha.run();
 });
 
@@ -250,7 +251,7 @@ var HistorySupervisedUserTest = class extends HistoryBrowserTest {
   }
 };
 
-GEN('#if defined(OS_MACOSX)');
+GEN('#if defined(OS_MAC)');
 GEN('#define MAYBE_AllSupervised DISABLED_All');
 GEN('#else');
 GEN('#define MAYBE_AllSupervised All');

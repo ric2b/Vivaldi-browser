@@ -11,12 +11,8 @@
 #include "base/callback_forward.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "base/observer_list.h"
-#include "base/scoped_observer.h"
 #include "chrome/browser/web_applications/components/app_registrar.h"
-#include "chrome/browser/web_applications/components/app_registrar_observer.h"
 #include "chrome/browser/web_applications/components/web_app_id.h"
-#include "chrome/browser/web_applications/components/web_app_run_on_os_login.h"
 #include "chrome/browser/web_applications/components/web_app_shortcut.h"
 #include "chrome/browser/web_applications/components/web_app_shortcuts_menu.h"
 #include "chrome/common/web_application_info.h"
@@ -35,35 +31,26 @@ struct ShortcutInfo;
 // web_app_extension_shortcut.(h|cc) and
 // platform_apps/shortcut_manager.(h|cc) to web_app::AppShortcutManager and
 // its subclasses.
-class AppShortcutManager : public AppRegistrarObserver {
+class AppShortcutManager {
  public:
   explicit AppShortcutManager(Profile* profile);
-  ~AppShortcutManager() override;
+  virtual ~AppShortcutManager();
 
   void SetSubsystems(AppIconManager* icon_manager, AppRegistrar* registrar);
 
   void Start();
   void Shutdown();
 
-  // AppRegistrarObserver:
-  void OnWebAppInstalled(const AppId& app_id) override;
-  void OnWebAppManifestUpdated(const web_app::AppId& app_id,
-                               base::StringPiece old_name) override;
-  void OnWebAppUninstalled(const AppId& app_id) override;
-  void OnWebAppProfileWillBeDeleted(const AppId& app_id) override;
-
   // Tells the AppShortcutManager that no shortcuts should actually be written
   // to the disk.
   void SuppressShortcutsForTesting();
 
-  // virtual for testing.
-  virtual bool CanCreateShortcuts() const;
-  // virtual for testing.
-  virtual void CreateShortcuts(const AppId& app_id,
-                               bool add_to_desktop,
-                               CreateShortcutsCallback callback);
-  virtual void RegisterRunOnOsLogin(const AppId& app_id,
-                                    RegisterRunOnOsLoginCallback callback);
+  bool CanCreateShortcuts() const;
+  void CreateShortcuts(const AppId& app_id,
+                       bool add_to_desktop,
+                       CreateShortcutsCallback callback);
+  void UpdateShortcuts(const web_app::AppId& app_id,
+                       base::StringPiece old_name);
 
   // TODO(crbug.com/1098471): Move this into web_app_shortcuts_menu_win.cc when
   // a callback is integrated into the Shortcuts Menu registration flow.
@@ -83,7 +70,8 @@ class AppShortcutManager : public AppRegistrarObserver {
   // registration flow.
   void RegisterShortcutsMenuWithOs(
       const AppId& app_id,
-      const std::vector<WebApplicationShortcutsMenuItemInfo>& shortcut_infos,
+      const std::vector<WebApplicationShortcutsMenuItemInfo>&
+          shortcuts_menu_item_infos,
       const ShortcutsMenuIconsBitmaps& shortcuts_menu_icons_bitmaps);
 
   void UnregisterShortcutsMenuWithOs(const AppId& app_id);
@@ -105,7 +93,6 @@ class AppShortcutManager : public AppRegistrarObserver {
   static void SetShortcutUpdateCallbackForTesting(ShortcutCallback callback);
 
  protected:
-  void DeleteSharedAppShims(const AppId& app_id);
   void OnShortcutsCreated(const AppId& app_id,
                           CreateShortcutsCallback callback,
                           bool success);
@@ -122,10 +109,6 @@ class AppShortcutManager : public AppRegistrarObserver {
       CreateShortcutsCallback callback,
       std::unique_ptr<ShortcutInfo> info);
 
-  void OnShortcutInfoRetrievedRegisterRunOnOsLogin(
-      RegisterRunOnOsLoginCallback callback,
-      std::unique_ptr<ShortcutInfo> info);
-
   void OnShortcutInfoRetrievedUpdateShortcuts(
       base::string16 old_name,
       std::unique_ptr<ShortcutInfo> info);
@@ -134,9 +117,6 @@ class AppShortcutManager : public AppRegistrarObserver {
       const AppId& app_id,
       RegisterShortcutsMenuCallback callback,
       ShortcutsMenuIconsBitmaps shortcuts_menu_icons_bitmaps);
-
-  ScopedObserver<AppRegistrar, AppRegistrarObserver> app_registrar_observer_{
-      this};
 
   bool suppress_shortcuts_for_testing_ = false;
 

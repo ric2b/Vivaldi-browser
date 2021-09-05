@@ -24,8 +24,9 @@ class NativeFileSystemPermissionContext {
   // use to automatically grant write access to the path.
   enum class UserAction {
     // The path for which a permission grant is requested was the result of a
-    // "open" dialog, and as such the grant should probably not start out as
-    // granted.
+    // "open" dialog. As such, only read access to files should be automatically
+    // granted, but read access to directories as well as write access to files
+    // or directories should not be granted without needing to request it.
     kOpen,
     // The path for which a permission grant is requested was the result of a
     // "save" dialog, and as such it could make sense to return a grant that
@@ -35,13 +36,21 @@ class NativeFileSystemPermissionContext {
     // loading a handle from storage. As such the grant should not start out
     // as granted, even for read access.
     kLoadFromStorage,
+    // The path for which a permission grant is requested was the result of a
+    // drag&drop operation. Read access should start out granted, but write
+    // access will require a prompt.
+    kDragAndDrop,
   };
+
+  // This enum helps distinguish between file or directory Native File System
+  // handles.
+  enum class HandleType { kFile, kDirectory };
 
   // Returns the read permission grant to use for a particular path.
   virtual scoped_refptr<NativeFileSystemPermissionGrant> GetReadPermissionGrant(
       const url::Origin& origin,
       const base::FilePath& path,
-      bool is_directory,
+      HandleType handle_type,
       UserAction user_action) = 0;
 
   // Returns the permission grant to use for a particular path. This could be a
@@ -52,17 +61,8 @@ class NativeFileSystemPermissionContext {
   virtual scoped_refptr<NativeFileSystemPermissionGrant>
   GetWritePermissionGrant(const url::Origin& origin,
                           const base::FilePath& path,
-                          bool is_directory,
+                          HandleType handle_type,
                           UserAction user_action) = 0;
-
-  // Displays a dialog to confirm that the user intended to give read access to
-  // a specific directory.
-  using PermissionStatus = blink::mojom::PermissionStatus;
-  virtual void ConfirmDirectoryReadAccess(
-      const url::Origin& origin,
-      const base::FilePath& path,
-      GlobalFrameRoutingId frame_id,
-      base::OnceCallback<void(PermissionStatus)> callback) = 0;
 
   // These values are persisted to logs. Entries should not be renumbered and
   // numeric values should never be reused.
@@ -80,7 +80,7 @@ class NativeFileSystemPermissionContext {
   virtual void ConfirmSensitiveDirectoryAccess(
       const url::Origin& origin,
       const std::vector<base::FilePath>& paths,
-      bool is_directory,
+      HandleType handle_type,
       GlobalFrameRoutingId frame_id,
       base::OnceCallback<void(SensitiveDirectoryResult)> callback) = 0;
 
@@ -91,6 +91,11 @@ class NativeFileSystemPermissionContext {
       std::unique_ptr<NativeFileSystemWriteItem> item,
       GlobalFrameRoutingId frame_id,
       base::OnceCallback<void(AfterWriteCheckResult)> callback) = 0;
+
+  // Returns whether the give |origin| already allows read permission, or it is
+  // possible to request one. This is used to block file dialogs from being
+  // shown if permission won't be granted anyway.
+  virtual bool CanObtainReadPermission(const url::Origin& origin) = 0;
 
   // Returns whether the give |origin| already allows write permission, or it is
   // possible to request one. This is used to block save file dialogs from being

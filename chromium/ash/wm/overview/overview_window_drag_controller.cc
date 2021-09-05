@@ -30,6 +30,7 @@
 #include "ash/wm/window_util.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/numerics/ranges.h"
+#include "base/numerics/safe_conversions.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_observer.h"
 #include "ui/display/display.h"
@@ -726,9 +727,9 @@ SplitViewController::SnapPosition OverviewWindowDragController::GetSnapPosition(
     return SplitViewController::NONE;
   if (split_view_controller->InSplitViewMode()) {
     const int position =
-        gfx::ToRoundedInt(SplitViewController::IsLayoutHorizontal()
-                              ? location_in_screen.x() - area.x()
-                              : location_in_screen.y() - area.y());
+        base::ClampRound(SplitViewController::IsLayoutHorizontal()
+                             ? location_in_screen.x() - area.x()
+                             : location_in_screen.y() - area.y());
     SplitViewController::SnapPosition default_snap_position =
         split_view_controller->default_snap_position();
     // If we're trying to snap to a position that already has a snapped window:

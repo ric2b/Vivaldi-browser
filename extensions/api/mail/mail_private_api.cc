@@ -29,7 +29,7 @@ bool deleteFile(base::FilePath file_path,
     return false;
   }
 
-  return base::DeleteFile(file_path, false);
+  return base::DeleteFile(file_path);
 }
 
 bool Rename(base::FilePath file_path,

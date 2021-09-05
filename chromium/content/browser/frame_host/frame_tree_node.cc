@@ -243,7 +243,8 @@ void FrameTreeNode::ResetForNavigation() {
   // before arriving here. We just need to clear them here and in the other
   // renderer processes that may have a reference to this frame.
   UpdateUserActivationState(
-      blink::mojom::UserActivationUpdateType::kClearActivation);
+      blink::mojom::UserActivationUpdateType::kClearActivation,
+      blink::mojom::UserActivationNotificationType::kNone);
 }
 
 size_t FrameTreeNode::GetFrameTreeSize() const {
@@ -585,12 +586,13 @@ void FrameTreeNode::BeforeUnloadCanceled() {
     ResetNavigationRequest(false);
 }
 
-bool FrameTreeNode::NotifyUserActivation() {
+bool FrameTreeNode::NotifyUserActivation(
+    blink::mojom::UserActivationNotificationType notification_type) {
   for (RenderFrameHostImpl* rfh = current_frame_host(); rfh;
        rfh = rfh->GetParent()) {
     if (!rfh->frame_tree_node()->user_activation_state_.HasBeenActive())
       rfh->DidReceiveFirstUserActivation();
-    rfh->frame_tree_node()->user_activation_state_.Activate();
+    rfh->frame_tree_node()->user_activation_state_.Activate(notification_type);
   }
   replication_state_.has_active_user_gesture = true;
 
@@ -603,7 +605,7 @@ bool FrameTreeNode::NotifyUserActivation() {
     for (FrameTreeNode* node : frame_tree()->Nodes()) {
       if (node->current_frame_host()->GetLastCommittedOrigin().IsSameOriginWith(
               current_origin)) {
-        node->user_activation_state_.Activate();
+        node->user_activation_state_.Activate(notification_type);
       }
     }
   }
@@ -643,19 +645,21 @@ bool FrameTreeNode::VerifyUserActivation() {
 }
 
 bool FrameTreeNode::UpdateUserActivationState(
-    blink::mojom::UserActivationUpdateType update_type) {
+    blink::mojom::UserActivationUpdateType update_type,
+    blink::mojom::UserActivationNotificationType notification_type) {
   bool update_result = false;
   switch (update_type) {
     case blink::mojom::UserActivationUpdateType::kConsumeTransientActivation:
       update_result = ConsumeTransientUserActivation();
       break;
     case blink::mojom::UserActivationUpdateType::kNotifyActivation:
-      update_result = NotifyUserActivation();
+      update_result = NotifyUserActivation(notification_type);
       break;
     case blink::mojom::UserActivationUpdateType::
         kNotifyActivationPendingBrowserVerification:
       if (VerifyUserActivation()) {
-        update_result = NotifyUserActivation();
+        update_result = NotifyUserActivation(
+            blink::mojom::UserActivationNotificationType::kNone);
         update_type = blink::mojom::UserActivationUpdateType::kNotifyActivation;
       } else {
         // TODO(crbug.com/848778): We need to decide what to do when user
@@ -668,7 +672,7 @@ bool FrameTreeNode::UpdateUserActivationState(
       update_result = ClearUserActivation();
       break;
   }
-  render_manager_.UpdateUserActivationState(update_type);
+  render_manager_.UpdateUserActivationState(update_type, notification_type);
   return update_result;
 }
 
@@ -716,18 +720,6 @@ void FrameTreeNode::UpdateFramePolicyHeaders(
     render_manager()->OnDidSetFramePolicyHeaders();
 }
 
-void FrameTreeNode::TransferUserActivationFrom(
-    RenderFrameHostImpl* source_rfh) {
-  user_activation_state_.TransferFrom(
-      source_rfh->frame_tree_node()->user_activation_state_);
-
-  // Notify proxies in non-source and non-target renderer processes to
-  // transfer the activation state from the source proxy to the target
-  // so the user activation state of those proxies matches the source
-  // renderer and the target renderer (which are separately updated).
-  render_manager_.TransferUserActivationFrom(source_rfh);
-}
-
 void FrameTreeNode::PruneChildFrameNavigationEntries(
     NavigationEntryImpl* entry) {
   for (size_t i = 0; i < current_frame_host()->child_count(); ++i) {
@@ -742,7 +734,7 @@ void FrameTreeNode::PruneChildFrameNavigationEntries(
 }
 
 void FrameTreeNode::SetOpenerFeaturePolicyState(
-    const blink::FeaturePolicy::FeatureState& feature_state) {
+    const blink::FeaturePolicyFeatureState& feature_state) {
   DCHECK(IsMainFrame());
   if (base::FeatureList::IsEnabled(features::kFeaturePolicyForSandbox)) {
     replication_state_.opener_feature_state = feature_state;

@@ -12,6 +12,7 @@
 #include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "base/compiler_specific.h"
 #include "base/memory/ref_counted.h"
@@ -27,6 +28,7 @@
 #include "net/base/net_errors.h"
 #include "net/base/network_delegate_impl.h"
 #include "net/base/request_priority.h"
+#include "net/base/transport_info.h"
 #include "net/cert/cert_verifier.h"
 #include "net/cert/ct_policy_enforcer.h"
 #include "net/cookies/cookie_monster.h"
@@ -167,6 +169,9 @@ class TestDelegate : public URLRequest::Delegate {
     on_complete_ = std::move(on_complete);
   }
 
+  // Sets the result returned by subsequent calls to OnConnected().
+  void set_on_connected_result(int result) { on_connected_result_ = result; }
+
   void set_cancel_in_received_redirect(bool val) { cancel_in_rr_ = val; }
   void set_cancel_in_response_started(bool val) { cancel_in_rs_ = val; }
   void set_cancel_in_received_data(bool val) { cancel_in_rd_ = val; }
@@ -180,6 +185,10 @@ class TestDelegate : public URLRequest::Delegate {
   void set_credentials(const AuthCredentials& credentials) {
     credentials_ = credentials;
   }
+
+  // Returns the list of arguments with which OnConnected() was called.
+  // The arguments are listed in the same order as the calls were received.
+  const std::vector<TransportInfo>& transports() const { return transports_; }
 
   // query state
   const std::string& data_received() const { return data_received_; }
@@ -202,6 +211,7 @@ class TestDelegate : public URLRequest::Delegate {
   int request_status() const { return request_status_; }
 
   // URLRequest::Delegate:
+  int OnConnected(URLRequest* request, const TransportInfo& info) override;
   void OnReceivedRedirect(URLRequest* request,
                           const RedirectInfo& redirect_info,
                           bool* defer_redirect) override;
@@ -223,6 +233,7 @@ class TestDelegate : public URLRequest::Delegate {
   virtual void OnResponseCompleted(URLRequest* request);
 
   // options for controlling behavior
+  int on_connected_result_ = OK;
   bool cancel_in_rr_ = false;
   bool cancel_in_rs_ = false;
   bool cancel_in_rd_ = false;
@@ -240,6 +251,7 @@ class TestDelegate : public URLRequest::Delegate {
   base::OnceClosure on_auth_required_;
 
   // tracks status of callbacks
+  std::vector<TransportInfo> transports_;
   int response_started_count_ = 0;
   int received_bytes_count_ = 0;
   int received_redirect_count_ = 0;

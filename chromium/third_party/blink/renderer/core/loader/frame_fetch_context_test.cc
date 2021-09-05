@@ -88,7 +88,7 @@ class FrameFetchContextMockLocalFrameClient : public EmptyLocalFrameClient {
                void(const ResourceRequest&, const ResourceResponse&));
   MOCK_METHOD0(UserAgent, String());
   MOCK_METHOD0(MayUseClientLoFiForImageRequests, bool());
-  MOCK_CONST_METHOD0(GetPreviewsStateForFrame, WebURLRequest::PreviewsState());
+  MOCK_CONST_METHOD0(GetPreviewsStateForFrame, PreviewsState());
 };
 
 class FixedPolicySubresourceFilter : public WebDocumentSubresourceFilter {
@@ -237,7 +237,7 @@ class FrameFetchContextSubresourceFilterTest : public FrameFetchContextTest {
                                             ->GetProperties()
                                             .GetFetchClientSettingsObject()
                                             .GetSecurityOrigin());
-    ResourceLoaderOptions options;
+    ResourceLoaderOptions options(nullptr /* world */);
     // DJKim
     return GetFetchContext()->CanRequest(ResourceType::kImage, resource_request,
                                          input_url, options,
@@ -287,7 +287,7 @@ class FrameFetchContextModifyRequestTest : public FrameFetchContextTest {
     document->GetFrame()->Loader().ModifyRequestForCSP(
         resource_request,
         &document->Fetcher()->GetProperties().GetFetchClientSettingsObject(),
-        document.Get(), frame_type);
+        document->domWindow(), frame_type);
   }
 
   void ExpectUpgrade(const char* input, const char* expected) {
@@ -353,7 +353,8 @@ class FrameFetchContextModifyRequestTest : public FrameFetchContextTest {
     resource_request.SetRequestContext(mojom::RequestContextType::AUDIO);
 
     RecreateFetchContext(main_frame_url);
-    document->GetSecurityContext().SetInsecureRequestPolicy(policy);
+    document->domWindow()->GetSecurityContext().SetInsecureRequestPolicy(
+        policy);
 
     ModifyRequestForCSP(resource_request,
                         mojom::RequestContextFrameType::kNone);
@@ -413,11 +414,13 @@ TEST_F(FrameFetchContextModifyRequestTest, UpgradeInsecureResourceRequests) {
        "ftp://example.test:1212/image.png"},
   };
 
-  document->GetSecurityContext().SetInsecureRequestPolicy(
+  document->domWindow()->GetSecurityContext().SetInsecureRequestPolicy(
       mojom::blink::InsecureRequestPolicy::kUpgradeInsecureRequests);
 
   for (const auto& test : tests) {
-    document->GetSecurityContext().ClearInsecureNavigationsToUpgradeForTest();
+    document->domWindow()
+        ->GetSecurityContext()
+        .ClearInsecureNavigationsToUpgradeForTest();
 
     // We always upgrade for FrameTypeNone.
     ExpectUpgrade(test.original, mojom::RequestContextType::SCRIPT,
@@ -442,7 +445,7 @@ TEST_F(FrameFetchContextModifyRequestTest, UpgradeInsecureResourceRequests) {
 
     // Or unless the host of the resource is in the document's
     // InsecureNavigationsSet:
-    document->GetSecurityContext().AddInsecureNavigationUpgrade(
+    document->domWindow()->GetSecurityContext().AddInsecureNavigationUpgrade(
         example_origin->Host().Impl()->GetHash());
     ExpectUpgrade(test.original, mojom::RequestContextType::SCRIPT,
                   mojom::RequestContextFrameType::kTopLevel, test.upgraded);
@@ -457,7 +460,7 @@ TEST_F(FrameFetchContextModifyRequestTest,
   feature_list.InitAndDisableFeature(blink::features::kMixedContentAutoupgrade);
 
   RecreateFetchContext(KURL("https://secureorigin.test/image.png"));
-  document->GetSecurityContext().SetInsecureRequestPolicy(
+  document->domWindow()->GetSecurityContext().SetInsecureRequestPolicy(
       mojom::blink::InsecureRequestPolicy::kLeaveInsecureRequestsAlone);
 
   ExpectUpgrade("http://example.test/image.png",
@@ -533,24 +536,24 @@ TEST_F(FrameFetchContextModifyRequestTest, SendUpgradeInsecureRequestHeader) {
   // and when it doesn't (e.g. during main frame navigations), so run through
   // the tests both before and after providing a document to the context.
   for (const auto& test : tests) {
-    document->GetSecurityContext().SetInsecureRequestPolicy(
+    document->domWindow()->GetSecurityContext().SetInsecureRequestPolicy(
         mojom::blink::InsecureRequestPolicy::kLeaveInsecureRequestsAlone);
     ExpectUpgradeInsecureRequestHeader(test.to_request, test.frame_type,
                                        test.should_prefer);
 
-    document->GetSecurityContext().SetInsecureRequestPolicy(
+    document->domWindow()->GetSecurityContext().SetInsecureRequestPolicy(
         mojom::blink::InsecureRequestPolicy::kUpgradeInsecureRequests);
     ExpectUpgradeInsecureRequestHeader(test.to_request, test.frame_type,
                                        test.should_prefer);
   }
 
   for (const auto& test : tests) {
-    document->GetSecurityContext().SetInsecureRequestPolicy(
+    document->domWindow()->GetSecurityContext().SetInsecureRequestPolicy(
         mojom::blink::InsecureRequestPolicy::kLeaveInsecureRequestsAlone);
     ExpectUpgradeInsecureRequestHeader(test.to_request, test.frame_type,
                                        test.should_prefer);
 
-    document->GetSecurityContext().SetInsecureRequestPolicy(
+    document->domWindow()->GetSecurityContext().SetInsecureRequestPolicy(
         mojom::blink::InsecureRequestPolicy::kUpgradeInsecureRequests);
     ExpectUpgradeInsecureRequestHeader(test.to_request, test.frame_type,
                                        test.should_prefer);
@@ -645,8 +648,7 @@ class FrameFetchContextHintsTest : public FrameFetchContextTest {
 TEST_F(FrameFetchContextHintsTest, MonitorDeviceMemorySecureTransport) {
   ExpectHeader("https://www.example.com/1.gif", "Device-Memory", false, "");
   ClientHintsPreferences preferences;
-  preferences.SetShouldSendForTesting(
-      network::mojom::WebClientHintsType::kDeviceMemory);
+  preferences.SetShouldSend(network::mojom::WebClientHintsType::kDeviceMemory);
   document->GetFrame()->GetClientHintsPreferences().UpdateFrom(preferences);
   ApproximatedDeviceMemory::SetPhysicalMemoryMBForTesting(4096);
   ExpectHeader("https://www.example.com/1.gif", "Device-Memory", true, "4");
@@ -673,8 +675,7 @@ TEST_F(FrameFetchContextHintsTest, MonitorDeviceMemoryHintsInsecureContext) {
   // to a secure context and the persistent client hint features is enabled.
   ExpectHeader("http://www.example.com/1.gif", "Device-Memory", false, "");
   ClientHintsPreferences preferences;
-  preferences.SetShouldSendForTesting(
-      network::mojom::WebClientHintsType::kDeviceMemory);
+  preferences.SetShouldSend(network::mojom::WebClientHintsType::kDeviceMemory);
   document->GetFrame()->GetClientHintsPreferences().UpdateFrom(preferences);
   ApproximatedDeviceMemory::SetPhysicalMemoryMBForTesting(4096);
   ExpectHeader("http://www.example.com/1.gif", "Device-Memory", false, "");
@@ -690,8 +691,7 @@ TEST_F(FrameFetchContextHintsTest, MonitorDeviceMemoryHintsLocalContext) {
   document->GetSettings()->SetScriptEnabled(true);
   ExpectHeader("http://localhost/1.gif", "Device-Memory", false, "");
   ClientHintsPreferences preferences;
-  preferences.SetShouldSendForTesting(
-      network::mojom::WebClientHintsType::kDeviceMemory);
+  preferences.SetShouldSend(network::mojom::WebClientHintsType::kDeviceMemory);
   document->GetFrame()->GetClientHintsPreferences().UpdateFrom(preferences);
   ApproximatedDeviceMemory::SetPhysicalMemoryMBForTesting(4096);
   ExpectHeader("http://localhost/1.gif", "Device-Memory", true, "4");
@@ -703,8 +703,7 @@ TEST_F(FrameFetchContextHintsTest, MonitorDeviceMemoryHintsLocalContext) {
 TEST_F(FrameFetchContextHintsTest, MonitorDeviceMemoryHints) {
   ExpectHeader("https://www.example.com/1.gif", "Device-Memory", false, "");
   ClientHintsPreferences preferences;
-  preferences.SetShouldSendForTesting(
-      network::mojom::WebClientHintsType::kDeviceMemory);
+  preferences.SetShouldSend(network::mojom::WebClientHintsType::kDeviceMemory);
   document->GetFrame()->GetClientHintsPreferences().UpdateFrom(preferences);
   ApproximatedDeviceMemory::SetPhysicalMemoryMBForTesting(4096);
   ExpectHeader("https://www.example.com/1.gif", "Device-Memory", true, "4");
@@ -722,7 +721,7 @@ TEST_F(FrameFetchContextHintsTest, MonitorDeviceMemoryHints) {
 TEST_F(FrameFetchContextHintsTest, MonitorDPRHints) {
   ExpectHeader("https://www.example.com/1.gif", "DPR", false, "");
   ClientHintsPreferences preferences;
-  preferences.SetShouldSendForTesting(network::mojom::WebClientHintsType::kDpr);
+  preferences.SetShouldSend(network::mojom::WebClientHintsType::kDpr);
   document->GetFrame()->GetClientHintsPreferences().UpdateFrom(preferences);
   ExpectHeader("https://www.example.com/1.gif", "DPR", true, "1");
   dummy_page_holder->GetPage().SetDeviceScaleFactorDeprecated(2.5);
@@ -742,8 +741,7 @@ TEST_F(FrameFetchContextHintsTest, MonitorDPRHintsInsecureTransport) {
 TEST_F(FrameFetchContextHintsTest, MonitorResourceWidthHints) {
   ExpectHeader("https://www.example.com/1.gif", "Width", false, "");
   ClientHintsPreferences preferences;
-  preferences.SetShouldSendForTesting(
-      network::mojom::WebClientHintsType::kResourceWidth);
+  preferences.SetShouldSend(network::mojom::WebClientHintsType::kResourceWidth);
   document->GetFrame()->GetClientHintsPreferences().UpdateFrom(preferences);
   ExpectHeader("https://www.example.com/1.gif", "Width", true, "500", 500);
   ExpectHeader("https://www.example.com/1.gif", "Width", true, "667", 666.6666);
@@ -757,8 +755,7 @@ TEST_F(FrameFetchContextHintsTest, MonitorResourceWidthHints) {
 TEST_F(FrameFetchContextHintsTest, MonitorViewportWidthHints) {
   ExpectHeader("https://www.example.com/1.gif", "Viewport-Width", false, "");
   ClientHintsPreferences preferences;
-  preferences.SetShouldSendForTesting(
-      network::mojom::WebClientHintsType::kViewportWidth);
+  preferences.SetShouldSend(network::mojom::WebClientHintsType::kViewportWidth);
   document->GetFrame()->GetClientHintsPreferences().UpdateFrom(preferences);
   ExpectHeader("https://www.example.com/1.gif", "Viewport-Width", true, "500");
   dummy_page_holder->GetFrameView().SetLayoutSizeFixedToFrameSize(false);
@@ -774,8 +771,7 @@ TEST_F(FrameFetchContextHintsTest, MonitorLangHint) {
   ExpectHeader("http://www.example.com/1.gif", "Sec-CH-Lang", false, "");
 
   ClientHintsPreferences preferences;
-  preferences.SetShouldSendForTesting(
-      network::mojom::WebClientHintsType::kLang);
+  preferences.SetShouldSend(network::mojom::WebClientHintsType::kLang);
   document->GetFrame()->GetClientHintsPreferences().UpdateFrom(preferences);
 
   document->domWindow()->navigator()->SetLanguagesForTesting("en-US");
@@ -815,8 +811,7 @@ TEST_F(FrameFetchContextHintsTest, MonitorUAHints) {
 
   {
     ClientHintsPreferences preferences;
-    preferences.SetShouldSendForTesting(
-        network::mojom::WebClientHintsType::kUAArch);
+    preferences.SetShouldSend(network::mojom::WebClientHintsType::kUAArch);
     document->GetFrame()->GetClientHintsPreferences().UpdateFrom(preferences);
 
     ExpectHeader("https://www.example.com/1.gif", "Sec-CH-UA-Arch", true, "");
@@ -836,8 +831,7 @@ TEST_F(FrameFetchContextHintsTest, MonitorUAHints) {
 
   {
     ClientHintsPreferences preferences;
-    preferences.SetShouldSendForTesting(
-        network::mojom::WebClientHintsType::kUAPlatform);
+    preferences.SetShouldSend(network::mojom::WebClientHintsType::kUAPlatform);
     document->GetFrame()->GetClientHintsPreferences().UpdateFrom(preferences);
 
     ExpectHeader("https://www.example.com/1.gif", "Sec-CH-UA-Arch", false, "");
@@ -857,7 +851,7 @@ TEST_F(FrameFetchContextHintsTest, MonitorUAHints) {
 
   {
     ClientHintsPreferences preferences;
-    preferences.SetShouldSendForTesting(
+    preferences.SetShouldSend(
         network::mojom::WebClientHintsType::kUAPlatformVersion);
     document->GetFrame()->GetClientHintsPreferences().UpdateFrom(preferences);
 
@@ -878,8 +872,7 @@ TEST_F(FrameFetchContextHintsTest, MonitorUAHints) {
 
   {
     ClientHintsPreferences preferences;
-    preferences.SetShouldSendForTesting(
-        network::mojom::WebClientHintsType::kUAModel);
+    preferences.SetShouldSend(network::mojom::WebClientHintsType::kUAModel);
     document->GetFrame()->GetClientHintsPreferences().UpdateFrom(preferences);
 
     ExpectHeader("https://www.example.com/1.gif", "Sec-CH-UA-Arch", false, "");
@@ -918,28 +911,20 @@ TEST_F(FrameFetchContextHintsTest, MonitorAllHints) {
   ExpectHeader("https://www.example.com/1.gif", "Sec-CH-UA", true, "");
 
   ClientHintsPreferences preferences;
-  preferences.SetShouldSendForTesting(
-      network::mojom::WebClientHintsType::kDeviceMemory);
-  preferences.SetShouldSendForTesting(network::mojom::WebClientHintsType::kDpr);
-  preferences.SetShouldSendForTesting(
-      network::mojom::WebClientHintsType::kResourceWidth);
-  preferences.SetShouldSendForTesting(
-      network::mojom::WebClientHintsType::kViewportWidth);
-  preferences.SetShouldSendForTesting(network::mojom::WebClientHintsType::kRtt);
-  preferences.SetShouldSendForTesting(
-      network::mojom::WebClientHintsType::kDownlink);
-  preferences.SetShouldSendForTesting(network::mojom::WebClientHintsType::kEct);
-  preferences.SetShouldSendForTesting(
-      network::mojom::WebClientHintsType::kLang);
-  preferences.SetShouldSendForTesting(network::mojom::WebClientHintsType::kUA);
-  preferences.SetShouldSendForTesting(
-      network::mojom::WebClientHintsType::kUAArch);
-  preferences.SetShouldSendForTesting(
-      network::mojom::WebClientHintsType::kUAPlatform);
-  preferences.SetShouldSendForTesting(
+  preferences.SetShouldSend(network::mojom::WebClientHintsType::kDeviceMemory);
+  preferences.SetShouldSend(network::mojom::WebClientHintsType::kDpr);
+  preferences.SetShouldSend(network::mojom::WebClientHintsType::kResourceWidth);
+  preferences.SetShouldSend(network::mojom::WebClientHintsType::kViewportWidth);
+  preferences.SetShouldSend(network::mojom::WebClientHintsType::kRtt);
+  preferences.SetShouldSend(network::mojom::WebClientHintsType::kDownlink);
+  preferences.SetShouldSend(network::mojom::WebClientHintsType::kEct);
+  preferences.SetShouldSend(network::mojom::WebClientHintsType::kLang);
+  preferences.SetShouldSend(network::mojom::WebClientHintsType::kUA);
+  preferences.SetShouldSend(network::mojom::WebClientHintsType::kUAArch);
+  preferences.SetShouldSend(network::mojom::WebClientHintsType::kUAPlatform);
+  preferences.SetShouldSend(
       network::mojom::WebClientHintsType::kUAPlatformVersion);
-  preferences.SetShouldSendForTesting(
-      network::mojom::WebClientHintsType::kUAModel);
+  preferences.SetShouldSend(network::mojom::WebClientHintsType::kUAModel);
   ApproximatedDeviceMemory::SetPhysicalMemoryMBForTesting(4096);
   document->GetFrame()->GetClientHintsPreferences().UpdateFrom(preferences);
   ExpectHeader("https://www.example.com/1.gif", "Device-Memory", true, "4");
@@ -988,28 +973,20 @@ TEST_F(FrameFetchContextHintsTest, MonitorAllHintsFeaturePolicy) {
       "ch-viewport-width *; ch-width *");
   document->GetSettings()->SetScriptEnabled(true);
   ClientHintsPreferences preferences;
-  preferences.SetShouldSendForTesting(
-      network::mojom::WebClientHintsType::kDeviceMemory);
-  preferences.SetShouldSendForTesting(network::mojom::WebClientHintsType::kDpr);
-  preferences.SetShouldSendForTesting(
-      network::mojom::WebClientHintsType::kResourceWidth);
-  preferences.SetShouldSendForTesting(
-      network::mojom::WebClientHintsType::kViewportWidth);
-  preferences.SetShouldSendForTesting(network::mojom::WebClientHintsType::kRtt);
-  preferences.SetShouldSendForTesting(
-      network::mojom::WebClientHintsType::kDownlink);
-  preferences.SetShouldSendForTesting(network::mojom::WebClientHintsType::kEct);
-  preferences.SetShouldSendForTesting(
-      network::mojom::WebClientHintsType::kLang);
-  preferences.SetShouldSendForTesting(network::mojom::WebClientHintsType::kUA);
-  preferences.SetShouldSendForTesting(
-      network::mojom::WebClientHintsType::kUAArch);
-  preferences.SetShouldSendForTesting(
-      network::mojom::WebClientHintsType::kUAPlatform);
-  preferences.SetShouldSendForTesting(
+  preferences.SetShouldSend(network::mojom::WebClientHintsType::kDeviceMemory);
+  preferences.SetShouldSend(network::mojom::WebClientHintsType::kDpr);
+  preferences.SetShouldSend(network::mojom::WebClientHintsType::kResourceWidth);
+  preferences.SetShouldSend(network::mojom::WebClientHintsType::kViewportWidth);
+  preferences.SetShouldSend(network::mojom::WebClientHintsType::kRtt);
+  preferences.SetShouldSend(network::mojom::WebClientHintsType::kDownlink);
+  preferences.SetShouldSend(network::mojom::WebClientHintsType::kEct);
+  preferences.SetShouldSend(network::mojom::WebClientHintsType::kLang);
+  preferences.SetShouldSend(network::mojom::WebClientHintsType::kUA);
+  preferences.SetShouldSend(network::mojom::WebClientHintsType::kUAArch);
+  preferences.SetShouldSend(network::mojom::WebClientHintsType::kUAPlatform);
+  preferences.SetShouldSend(
       network::mojom::WebClientHintsType::kUAPlatformVersion);
-  preferences.SetShouldSendForTesting(
-      network::mojom::WebClientHintsType::kUAModel);
+  preferences.SetShouldSend(network::mojom::WebClientHintsType::kUAModel);
   ApproximatedDeviceMemory::SetPhysicalMemoryMBForTesting(4096);
   document->GetFrame()->GetClientHintsPreferences().UpdateFrom(preferences);
 
@@ -1056,9 +1033,8 @@ TEST_F(FrameFetchContextHintsTest, MonitorSomeHintsFeaturePolicy) {
                        "ch-device-memory 'self' https://www.example.net");
   document->GetSettings()->SetScriptEnabled(true);
   ClientHintsPreferences preferences;
-  preferences.SetShouldSendForTesting(
-      network::mojom::WebClientHintsType::kDeviceMemory);
-  preferences.SetShouldSendForTesting(network::mojom::WebClientHintsType::kDpr);
+  preferences.SetShouldSend(network::mojom::WebClientHintsType::kDeviceMemory);
+  preferences.SetShouldSend(network::mojom::WebClientHintsType::kDpr);
   ApproximatedDeviceMemory::SetPhysicalMemoryMBForTesting(4096);
   document->GetFrame()->GetClientHintsPreferences().UpdateFrom(preferences);
   // With a feature policy header, the client hints should be sent to the
@@ -1105,8 +1081,7 @@ TEST_F(FrameFetchContextHintsTest, MonitorHintsFeaturePolicyInsecureContext) {
   document->GetSettings()->SetScriptEnabled(true);
   ExpectHeader("https://www.example.com/1.gif", "Device-Memory", false, "");
   ClientHintsPreferences preferences;
-  preferences.SetShouldSendForTesting(
-      network::mojom::WebClientHintsType::kDeviceMemory);
+  preferences.SetShouldSend(network::mojom::WebClientHintsType::kDeviceMemory);
   document->GetFrame()->GetClientHintsPreferences().UpdateFrom(preferences);
   ApproximatedDeviceMemory::SetPhysicalMemoryMBForTesting(4096);
   // Device-Memory hint in this case is sent to all (and only) secure origins.
@@ -1340,32 +1315,32 @@ TEST_F(FrameFetchContextTest, PopulateResourceRequestWhenDetached) {
   ResourceRequest request(url);
 
   ClientHintsPreferences client_hints_preferences;
-  client_hints_preferences.SetShouldSendForTesting(
+  client_hints_preferences.SetShouldSend(
       network::mojom::WebClientHintsType::kDeviceMemory);
-  client_hints_preferences.SetShouldSendForTesting(
+  client_hints_preferences.SetShouldSend(
       network::mojom::WebClientHintsType::kDpr);
-  client_hints_preferences.SetShouldSendForTesting(
+  client_hints_preferences.SetShouldSend(
       network::mojom::WebClientHintsType::kResourceWidth);
-  client_hints_preferences.SetShouldSendForTesting(
+  client_hints_preferences.SetShouldSend(
       network::mojom::WebClientHintsType::kViewportWidth);
 
   FetchParameters::ResourceWidth resource_width;
-  ResourceLoaderOptions options;
+  ResourceLoaderOptions options(nullptr /* world */);
 
-  document->GetFrame()->GetClientHintsPreferences().SetShouldSendForTesting(
+  document->GetFrame()->GetClientHintsPreferences().SetShouldSend(
       network::mojom::WebClientHintsType::kDeviceMemory);
-  document->GetFrame()->GetClientHintsPreferences().SetShouldSendForTesting(
+  document->GetFrame()->GetClientHintsPreferences().SetShouldSend(
       network::mojom::WebClientHintsType::kDpr);
-  document->GetFrame()->GetClientHintsPreferences().SetShouldSendForTesting(
+  document->GetFrame()->GetClientHintsPreferences().SetShouldSend(
       network::mojom::WebClientHintsType::kResourceWidth);
-  document->GetFrame()->GetClientHintsPreferences().SetShouldSendForTesting(
+  document->GetFrame()->GetClientHintsPreferences().SetShouldSend(
       network::mojom::WebClientHintsType::kViewportWidth);
 
   dummy_page_holder = nullptr;
 
-  GetFetchContext()->PopulateResourceRequest(
-      ResourceType::kRaw, client_hints_preferences, resource_width, request,
-      FetchInitiatorInfo());
+  GetFetchContext()->PopulateResourceRequest(ResourceType::kRaw,
+                                             client_hints_preferences,
+                                             resource_width, request, options);
   // Should not crash.
 }
 
@@ -1387,7 +1362,7 @@ TEST_F(FrameFetchContextTest, SetFirstPartyCookieWhenDetached) {
 TEST_F(FrameFetchContextTest, TopFrameOrigin) {
   const KURL document_url("https://www2.example.com/foo/bar");
   RecreateFetchContext(document_url);
-  const SecurityOrigin* origin = document->GetSecurityOrigin();
+  const SecurityOrigin* origin = document->domWindow()->GetSecurityOrigin();
 
   const KURL url("https://www.example.com/hoge/fuga");
   ResourceRequest request(url);
@@ -1398,7 +1373,7 @@ TEST_F(FrameFetchContextTest, TopFrameOrigin) {
 TEST_F(FrameFetchContextTest, TopFrameOriginDetached) {
   const KURL document_url("https://www2.example.com/foo/bar");
   RecreateFetchContext(document_url);
-  const SecurityOrigin* origin = document->GetSecurityOrigin();
+  const SecurityOrigin* origin = document->domWindow()->GetSecurityOrigin();
 
   const KURL url("https://www.example.com/hoge/fuga");
   ResourceRequest request(url);
@@ -1406,6 +1381,71 @@ TEST_F(FrameFetchContextTest, TopFrameOriginDetached) {
   dummy_page_holder = nullptr;
 
   EXPECT_EQ(origin, GetTopFrameOrigin());
+}
+
+// Verify the value of the sec-bfcache-experiment HTTP header varies according
+// to whether BackForwardCacheExperimentHTTPHeader and BackForwardCacheSameSite
+// is enabled or not.
+TEST_F(FrameFetchContextTest, SameSiteBackForwardCache) {
+  base::FieldTrialParams params;
+
+  {
+    RuntimeEnabledFeatures::SetBackForwardCacheExperimentHTTPHeaderEnabled(
+        false);
+    params[features::kBackForwardCacheABExperimentGroup] = "foo";
+    base::test::ScopedFeatureList scoped_feature_list;
+    scoped_feature_list.InitAndEnableFeatureWithParameters(
+        features::kBackForwardCacheABExperimentControl, params);
+
+    ResourceRequest resource_request("http://www.example.com");
+    GetFetchContext()->AddAdditionalRequestHeaders(resource_request);
+
+    // BackForwardCacheExperimentHTTPHeader is not enabled and
+    // BackForwardCacheSameSite's experiment group is "foo".
+    EXPECT_EQ(String(),
+              resource_request.HttpHeaderField("Sec-bfcache-experiment"));
+  }
+
+  {
+    RuntimeEnabledFeatures::SetBackForwardCacheExperimentHTTPHeaderEnabled(
+        true);
+    ResourceRequest resource_request("http://www.example.com");
+    GetFetchContext()->AddAdditionalRequestHeaders(resource_request);
+
+    // BackForwardCacheExperimentHTTPHeader is enabled and
+    // BackForwardCacheSameSite's experiment group is not set.
+    EXPECT_EQ(String(),
+              resource_request.HttpHeaderField("Sec-bfcache-experiment"));
+  }
+
+  {
+    params[features::kBackForwardCacheABExperimentGroup] = "control";
+    base::test::ScopedFeatureList scoped_feature_list;
+    scoped_feature_list.InitAndEnableFeatureWithParameters(
+        features::kBackForwardCacheABExperimentControl, params);
+
+    ResourceRequest resource_request("http://www.example.com");
+    GetFetchContext()->AddAdditionalRequestHeaders(resource_request);
+
+    // BackForwardCacheExperimentHTTPHeader is enabled and
+    // BackForwardCacheSameSite's experiment group is "control".
+    EXPECT_EQ("control",
+              resource_request.HttpHeaderField("Sec-bfcache-experiment"));
+  }
+
+  {
+    params[features::kBackForwardCacheABExperimentGroup] = "enabled";
+    base::test::ScopedFeatureList scoped_feature_list;
+    scoped_feature_list.InitAndEnableFeatureWithParameters(
+        features::kBackForwardCacheABExperimentControl, params);
+    ResourceRequest resource_request("http://www.example.com");
+    GetFetchContext()->AddAdditionalRequestHeaders(resource_request);
+
+    // BackForwardCacheExperimentHTTPHeader is enabled and
+    // BackForwardCacheSameSite experiment group is "enabled".
+    EXPECT_EQ("enabled",
+              resource_request.HttpHeaderField("Sec-bfcache-experiment"));
+  }
 }
 
 }  // namespace blink

@@ -15,14 +15,14 @@
 #include "chrome/browser/favicon/favicon_utils.h"
 #include "chrome/browser/installable/installable_manager.h"
 #include "chrome/browser/installable/installable_metrics.h"
+#include "chrome/browser/installable/installable_params.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ssl/security_state_tab_helper.h"
-#include "chrome/browser/web_applications/components/app_shortcut_manager.h"
-#include "chrome/browser/web_applications/components/file_handler_manager.h"
 #include "chrome/browser/web_applications/components/install_finalizer.h"
 #include "chrome/browser/web_applications/components/install_manager.h"
 #include "chrome/browser/web_applications/components/web_app_constants.h"
 #include "chrome/browser/web_applications/components/web_app_ui_manager.h"
+#include "chrome/browser/web_applications/os_integration_manager.h"
 #include "chrome/common/web_application_info.h"
 #include "content/public/browser/browser_thread.h"
 
@@ -49,16 +49,14 @@ void PendingAppInstallTask::CreateTabHelpers(
 PendingAppInstallTask::PendingAppInstallTask(
     Profile* profile,
     AppRegistrar* registrar,
-    AppShortcutManager* shortcut_manager,
-    FileHandlerManager* file_handler_manager,
+    OsIntegrationManager* os_integration_manager,
     WebAppUiManager* ui_manager,
     InstallFinalizer* install_finalizer,
     InstallManager* install_manager,
     ExternalInstallOptions install_options)
     : profile_(profile),
       registrar_(registrar),
-      shortcut_manager_(shortcut_manager),
-      file_handler_manager_(file_handler_manager),
+      os_integration_manager_(os_integration_manager),
       install_finalizer_(install_finalizer),
       install_manager_(install_manager),
       ui_manager_(ui_manager),
@@ -125,6 +123,22 @@ void PendingAppInstallTask::Install(content::WebContents* web_contents,
       base::BindOnce(std::move(result_callback), Result(code, base::nullopt)));
 }
 
+void PendingAppInstallTask::InstallFromInfo(ResultCallback result_callback) {
+  auto internal_install_source = ConvertExternalInstallSourceToInstallSource(
+      install_options().install_source);
+  auto install_params = ConvertExternalInstallOptionsToParams(install_options_);
+  auto web_app_info = install_options_.app_info_factory.Run();
+  for (std::string& search_term : install_params.additional_search_terms) {
+    web_app_info->additional_search_terms.push_back(std::move(search_term));
+  }
+  install_manager_->InstallWebAppFromInfo(
+      std::move(web_app_info), ForInstallableSite::kYes, install_params,
+      internal_install_source,
+      base::BindOnce(&PendingAppInstallTask::OnWebAppInstalled,
+                     weak_ptr_factory_.GetWeakPtr(), /* is_placeholder=*/false,
+                     std::move(result_callback)));
+}
+
 void PendingAppInstallTask::UninstallPlaceholderApp(
     content::WebContents* web_contents,
     ResultCallback result_callback) {
@@ -165,7 +179,6 @@ void PendingAppInstallTask::OnPlaceholderUninstalled(
 void PendingAppInstallTask::ContinueWebAppInstall(
     content::WebContents* web_contents,
     ResultCallback result_callback) {
-
   auto install_params = ConvertExternalInstallOptionsToParams(install_options_);
   auto install_source = ConvertExternalInstallSourceToInstallSource(
       install_options_.install_source);
@@ -246,36 +259,19 @@ void PendingAppInstallTask::OnWebAppInstalled(bool is_placeholder,
   if (!is_placeholder) {
     return;
   }
+  InstallOsHooksOptions options;
+  options.add_to_applications_menu = install_options_.add_to_applications_menu;
+  options.add_to_desktop = install_options_.add_to_desktop;
+  options.add_to_quick_launch_bar = install_options_.add_to_quick_launch_bar;
+  options.run_on_os_login = install_options_.run_on_os_login;
 
-  // Installation through InstallFinalizer doesn't create shortcuts so create
-  // them here.
-  if (install_options_.add_to_quick_launch_bar &&
-      install_finalizer_->CanAddAppToQuickLaunchBar()) {
-    install_finalizer_->AddAppToQuickLaunchBar(app_id);
-  }
-
-  // TODO(ortuno): Make adding a shortcut to the applications menu independent
-  // from adding a shortcut to desktop.
-  if (install_options_.add_to_applications_menu &&
-      shortcut_manager_->CanCreateShortcuts()) {
-    shortcut_manager_->CreateShortcuts(
-        app_id, install_options_.add_to_desktop,
-        base::BindOnce(
-            [](base::WeakPtr<PendingAppInstallTask> task, const AppId& app_id,
-               base::ScopedClosureRunner scoped_closure,
-               bool shortcuts_created) {
-              if (task) {
-                task->file_handler_manager_->EnableAndRegisterOsFileHandlers(
-                    app_id);
-              }
-
-              // Even if the shortcuts failed to be created, we consider the
-              // installation successful since an app was created.
-              scoped_closure.RunAndReset();
-            },
-            weak_ptr_factory_.GetWeakPtr(), app_id, std::move(scoped_closure)));
-    return;
-  }
+  os_integration_manager_->InstallOsHooks(
+      app_id,
+      base::BindOnce(
+          [](base::ScopedClosureRunner scoped_closure,
+             OsHooksResults os_hooks_results) { scoped_closure.RunAndReset(); },
+          std::move(scoped_closure)),
+      nullptr, options);
 }
 
 }  // namespace web_app

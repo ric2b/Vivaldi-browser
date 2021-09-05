@@ -47,7 +47,7 @@ TEST(FontCache, NoFallbackForPrivateUseArea) {
   }
 }
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
 TEST(FontCache, FallbackForEmojis) {
   FontCache* font_cache = FontCache::GetFontCache();
   ASSERT_TRUE(font_cache);
@@ -96,7 +96,7 @@ TEST(FontCache, FallbackForEmojis) {
     }
   }
 }
-#endif  // defined(OS_LINUX)
+#endif  // defined(OS_LINUX) || defined(OS_CHROMEOS)
 
 TEST(FontCache, firstAvailableOrFirst) {
   EXPECT_TRUE(FontCache::FirstAvailableOrFirst("").IsEmpty());
@@ -129,7 +129,7 @@ TEST(FontCache, getLargerThanMaxUnsignedFont) {
   FontFaceCreationParams creation_params;
   scoped_refptr<blink::SimpleFontData> font_data =
       font_cache->GetFontData(font_description, AtomicString());
-#if !defined(OS_ANDROID) && !defined(OS_MACOSX) && !defined(OS_WIN)
+#if !defined(OS_ANDROID) && !defined(OS_MAC) && !defined(OS_WIN)
   // Unfortunately, we can't ensure a font here since on Android and Mac the
   // unittests can't access the font configuration. However, this test passes
   // when it's not crashing in FontCache.
@@ -137,7 +137,7 @@ TEST(FontCache, getLargerThanMaxUnsignedFont) {
 #endif
 }
 
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
 TEST(FontCache, systemFont) {
   FontCache::SystemFontFamily();
   // Test the function does not crash. Return value varies by system and config.
@@ -180,7 +180,7 @@ TEST(FontCache, EnumerateAvailableFonts) {
 
   std::vector<FontEnumerationEntry> expectations;
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   expectations.push_back(FontEnumerationEntry{"Monaco", "Monaco", "Monaco"});
   expectations.push_back(
       FontEnumerationEntry{"Menlo-Regular", "Menlo Regular", "Menlo"});

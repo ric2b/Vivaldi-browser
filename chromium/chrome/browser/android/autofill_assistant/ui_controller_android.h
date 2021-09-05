@@ -12,6 +12,7 @@
 #include "base/android/scoped_java_ref.h"
 #include "base/macros.h"
 #include "base/timer/timer.h"
+#include "chrome/browser/android/autofill_assistant/assistant_bottom_bar_delegate.h"
 #include "chrome/browser/android/autofill_assistant/assistant_collect_user_data_delegate.h"
 #include "chrome/browser/android/autofill_assistant/assistant_form_delegate.h"
 #include "chrome/browser/android/autofill_assistant/assistant_generic_ui_delegate.h"
@@ -26,12 +27,10 @@
 #include "components/autofill_assistant/browser/overlay_state.h"
 #include "components/autofill_assistant/browser/trigger_context.h"
 #include "components/autofill_assistant/browser/user_action.h"
-#include "content/public/browser/navigation_handle.h"
-#include "content/public/browser/web_contents_observer.h"
 
 namespace autofill_assistant {
 struct ClientSettings;
-class GenericUiControllerAndroid;
+class GenericUiRootControllerAndroid;
 
 // Starts and owns the UI elements required to display AA.
 //
@@ -61,17 +60,15 @@ class UiControllerAndroid : public ControllerObserver {
 
   // Attaches the UI to the given client, its web contents and delegate.
   //
-  // |web_contents| and |client| must remain valid for the lifetime of this
-  // instance or until Attach() is called again, with different pointers.
-  //
-  // |ui_delegate| must remain valid for the lifetime of this instance or until
-  // either Attach() or Detach() are called.
+  // |web_contents|, |client| and |ui_delegate| must remain valid for the
+  // lifetime of this instance or until Attach() is called again, with different
+  // pointers.
   void Attach(content::WebContents* web_contents,
               Client* client,
               UiDelegate* ui_delegate);
 
-  // Detaches the UI from its delegate. This guarantees the delegate is not
-  // called anymore after the call.
+  // Detaches the UI from |ui_delegate_|. It will stop receiving notifications
+  // from the delegate until it is attached again.
   void Detach();
 
   // Returns true if the UI is attached to a delegate.
@@ -124,6 +121,7 @@ class UiControllerAndroid : public ControllerObserver {
   void OnClientSettingsChanged(const ClientSettings& settings) override;
   void OnGenericUserInterfaceChanged(
       const GenericUserInterfaceProto* generic_ui) override;
+  void OnShouldShowOverlayChanged(bool should_show) override;
 
   // Called by AssistantOverlayDelegate:
   void OnUnexpectedTaps();
@@ -168,6 +166,9 @@ class UiControllerAndroid : public ControllerObserver {
                                 int choice_index,
                                 bool selected);
 
+  // Called by AssistantBottomBarNativeDelegate:
+  bool OnBackButtonClicked();
+
   // Called by Java.
   void SnackbarResult(JNIEnv* env,
                       const base::android::JavaParamRef<jobject>& obj,
@@ -196,28 +197,16 @@ class UiControllerAndroid : public ControllerObserver {
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& jcaller,
       jboolean visible);
-  bool OnBackButtonClicked(JNIEnv* env,
-                           const base::android::JavaParamRef<jobject>& jcaller);
   void SetVisible(JNIEnv* env,
                   const base::android::JavaParamRef<jobject>& jcaller,
                   jboolean visible);
+  void OnTabSwitched(JNIEnv* env,
+                     const base::android::JavaParamRef<jobject>& jcaller,
+                     jint state);
+  void OnTabSelected(JNIEnv* env,
+                     const base::android::JavaParamRef<jobject>& jcaller);
 
  private:
-  class SelfDestructObserver : private content::WebContentsObserver {
-   public:
-    SelfDestructObserver(content::WebContents* web_contents,
-                         UiControllerAndroid* ui_controller,
-                         int64_t navigation_id_to_ignore);
-    ~SelfDestructObserver() override;
-
-    void DidStartNavigation(
-        content::NavigationHandle* navigation_handle) override;
-
-   private:
-    UiControllerAndroid* ui_controller_;
-    int64_t navigation_id_to_ignore_;
-  };
-
   // A pointer to the client. nullptr until Attach() is called.
   Client* client_ = nullptr;
 
@@ -228,6 +217,7 @@ class UiControllerAndroid : public ControllerObserver {
   AssistantCollectUserDataDelegate collect_user_data_delegate_;
   AssistantFormDelegate form_delegate_;
   AssistantGenericUiDelegate generic_ui_delegate_;
+  AssistantBottomBarDelegate bottom_bar_delegate_;
 
   // What to do if undo is not pressed on the current snackbar.
   base::OnceCallback<void()> snackbar_action_;
@@ -241,7 +231,13 @@ class UiControllerAndroid : public ControllerObserver {
   base::android::ScopedJavaLocalRef<jobject> GetFormModel();
   base::android::ScopedJavaLocalRef<jobject> GetGenericUiModel();
 
+  // The UiDelegate has the last say on whether we should show the overlay.
+  // This saves the AutofillAssistantState-determined OverlayState and then
+  // applies it the actual UI only if the UiDelegate's ShouldShowOverlay is
+  // true.
   void SetOverlayState(OverlayState state);
+  // Applies the specified OverlayState to the UI.
+  void ApplyOverlayState(OverlayState state);
   void AllowShowingSoftKeyboard(bool enabled);
   void ShowContentAndExpandBottomSheet();
   void SetSpinPoodle(bool enabled);
@@ -252,8 +248,8 @@ class UiControllerAndroid : public ControllerObserver {
   void HideKeyboardIfFocusNotOnText();
 
   void ResetGenericUiControllers();
-  std::unique_ptr<GenericUiControllerAndroid> CreateGenericUiControllerForProto(
-      const GenericUserInterfaceProto& proto);
+  std::unique_ptr<GenericUiRootControllerAndroid>
+  CreateGenericUiControllerForProto(const GenericUserInterfaceProto& proto);
 
   // Hide the UI, show a snackbar with an undo button, and execute the given
   // action after a short delay unless the user taps the undo button.
@@ -271,27 +267,25 @@ class UiControllerAndroid : public ControllerObserver {
   // Makes the whole of AA invisible or visible again.
   void SetVisible(bool visible);
 
+  // Restore the UI for the current UIDelegate.
+  void RestoreUi();
+
   // Timer started when reaching the STOPPED state. It allows keeping the UI up
   // for a few seconds before it destroys itself.
   std::unique_ptr<base::OneShotTimer> destroy_timer_;
-
-  // Debug context captured previously. If non-empty, GetDebugContext() returns
-  // this context.
-  std::string captured_debug_context_;
 
   // Java-side AutofillAssistantUiController object.
   base::android::ScopedJavaGlobalRef<jobject> java_object_;
 
   // Native controllers for generic UI.
-  std::unique_ptr<GenericUiControllerAndroid>
+  std::unique_ptr<GenericUiRootControllerAndroid>
       collect_user_data_prepended_generic_ui_controller_;
-  std::unique_ptr<GenericUiControllerAndroid>
+  std::unique_ptr<GenericUiRootControllerAndroid>
       collect_user_data_appended_generic_ui_controller_;
-  std::unique_ptr<GenericUiControllerAndroid> generic_ui_controller_;
+  std::unique_ptr<GenericUiRootControllerAndroid> generic_ui_controller_;
 
   OverlayState desired_overlay_state_ = OverlayState::FULL;
-
-  std::unique_ptr<SelfDestructObserver> self_destruct_observer_;
+  OverlayState overlay_state_ = OverlayState::FULL;
 
   base::WeakPtrFactory<UiControllerAndroid> weak_ptr_factory_{this};
 

@@ -155,6 +155,7 @@ void RegisterLocalState(PrefRegistrySimple* registry) {
   registry->RegisterIntegerPref(vivaldiprefs::kVivaldiStatsExtraPing, 0);
   registry->RegisterTimePref(vivaldiprefs::kVivaldiStatsExtraPingTime,
                              base::Time());
+  registry->RegisterListPref(vivaldiprefs::kVivaldiProfileImagePath);
 }
 
 namespace {

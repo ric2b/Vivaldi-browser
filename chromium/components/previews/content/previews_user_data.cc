@@ -24,7 +24,6 @@ PreviewsUserData::PreviewsUserData(const PreviewsUserData& other)
       data_savings_inflation_percent_(other.data_savings_inflation_percent_),
       cache_control_no_transform_directive_(
           other.cache_control_no_transform_directive_),
-      offline_preview_used_(other.offline_preview_used_),
       block_listed_for_lite_page_(other.block_listed_for_lite_page_),
       committed_previews_type_without_holdback_(
           other.committed_previews_type_without_holdback_),
@@ -96,25 +95,24 @@ previews::PreviewsType PreviewsUserData::CommittedPreviewsType() const {
   return committed_previews_type_without_holdback_;
 }
 
-content::PreviewsState PreviewsUserData::PreHoldbackAllowedPreviewsState()
-    const {
+blink::PreviewsState PreviewsUserData::PreHoldbackAllowedPreviewsState() const {
   return allowed_previews_state_without_holdback_;
 }
 
-content::PreviewsState PreviewsUserData::AllowedPreviewsState() const {
+blink::PreviewsState PreviewsUserData::AllowedPreviewsState() const {
   if (coin_flip_holdback_result_ == CoinFlipHoldbackResult::kHoldback)
-    return content::PREVIEWS_OFF;
+    return blink::PreviewsTypes::PREVIEWS_OFF;
   return allowed_previews_state_without_holdback_;
 }
 
-content::PreviewsState PreviewsUserData::PreHoldbackCommittedPreviewsState()
+blink::PreviewsState PreviewsUserData::PreHoldbackCommittedPreviewsState()
     const {
   return committed_previews_state_without_holdback_;
 }
 
-content::PreviewsState PreviewsUserData::CommittedPreviewsState() const {
+blink::PreviewsState PreviewsUserData::CommittedPreviewsState() const {
   if (coin_flip_holdback_result_ == CoinFlipHoldbackResult::kHoldback)
-    return content::PREVIEWS_OFF;
+    return blink::PreviewsTypes::PREVIEWS_OFF;
   return committed_previews_state_without_holdback_;
 }
 

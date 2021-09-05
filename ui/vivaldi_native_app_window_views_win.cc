@@ -88,10 +88,11 @@ void VivaldiNativeAppWindowViewsWin::InitializeDefaultWindow(
   base::string16 app_name_wide = base::UTF8ToWide(app_name);
   HWND hwnd = GetNativeAppWindowHWND();
   Profile* profile = window()->GetProfile();
-  app_model_id_ = shell_integration::win::GetAppModelIdForProfile(
+  app_model_id_ = shell_integration::win::GetAppUserModelIdForApp(
       app_name_wide, profile->GetPath());
   ui::win::SetAppIdForWindow(app_model_id_, hwnd);
-  web_app::UpdateRelaunchDetailsForApp(profile, extension, hwnd);
+  // web_app::UpdateRelaunchDetailsForApp removed as it would change
+  // the name of the running app to vivaldi_proxy.exe. See VB-72821.
 
   if (!create_params.alpha_enabled)
     EnsureCaptionStyleSet();

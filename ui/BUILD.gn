@@ -1,14 +1,23 @@
-import("//build/config/jumbo.gni")
+# Copyright 2020 Vivaldi Technologies AS. All rights reserved.
+#
+import("//build/buildflag_header.gni")
+import("//vivaldi/gn/config/product.gni")
+
+buildflag_header("buildflags") {
+  header = "buildflags.h"
+  header_dir = "ui"
+  flags = [ "FORCE_SOPRANOS_BUILD=$force_sopranos_build" ]
+}
 
 static_library("ui") {
   sources = [
     "vivaldi_browser_window.h",
     "views/vivaldi_pin_shortcut.cpp",
     "views/vivaldi_pin_shortcut.h",
-    "webgui/notes_ui.cpp",
-    "webgui/notes_ui.h",
-    "webgui/vivaldi_web_ui_controller_factory.cpp",
-    "webgui/vivaldi_web_ui_controller_factory.h",
+    "webui/vivaldi_web_ui_controller_factory.cc",
+    "webui/vivaldi_web_ui_controller_factory.h",
+    "webui/game_ui.cc",
+    "webui/game_ui.h",
   ]
   if (is_win) {
     sources += [
@@ -16,11 +25,13 @@ static_library("ui") {
       "lights/razer_chroma_platform_driver_win.h",
     ]
   }
+
   public_configs = [ "//third_party/protobuf:using_proto" ]
   public_deps = [
     "//components/renderer_context_menu",
   ]
   deps = [
+    ":buildflags",
     "//base:base",
     "//chrome/browser/devtools",
     "//chrome/common:buildflags",
@@ -60,7 +71,10 @@ static_library("ui") {
 
 static_library("skia_utils") {
   deps = [
+    "//base:base",
     "//skia:skia",
+    "//ui/gfx/codec:codec",
+    "//ui/gfx:gfx",
   ]
   sources = [
     "vivaldi_skia_utils.cc",

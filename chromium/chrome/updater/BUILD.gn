@@ -41,6 +41,7 @@ if (is_win || is_mac) {
       "action_handler.h",
       "constants.cc",
       "constants.h",
+      "control_service.h",
       "crash_client.cc",
       "crash_client.h",
       "crash_reporter.cc",
@@ -53,6 +54,7 @@ if (is_win || is_mac) {
       "policy_manager.h",
       "registration_data.cc",
       "registration_data.h",
+      "service_scope.h",
       "unzipper.cc",
       "unzipper.h",
       "update_service.cc",
@@ -89,12 +91,9 @@ if (is_win || is_mac) {
       "app/app_wake.h",
       "configurator.cc",
       "configurator.h",
-      "dm_cached_policy_info.cc",
-      "dm_cached_policy_info.h",
-      "dm_policy_manager.cc",
-      "dm_policy_manager.h",
-      "dm_storage.cc",
-      "dm_storage.h",
+      "control_service_in_process.cc",
+      "control_service_in_process.h",
+      "crx_downloader_factory.h",
       "external_constants.cc",
       "external_constants.h",
       "external_constants_impl.h",
@@ -106,7 +105,6 @@ if (is_win || is_mac) {
       "prefs_impl.h",
       "tag.cc",
       "tag.h",
-      "update_apps.h",
       "update_service_in_process.cc",
       "update_service_in_process.h",
       "updater.cc",
@@ -123,10 +121,11 @@ if (is_win || is_mac) {
         "app/server/mac/service_protocol.mm",
         "app/server/mac/update_service_wrappers.h",
         "app/server/mac/update_service_wrappers.mm",
-        "dm_storage_mac.mm",
         "external_constants_mac.mm",
         "installer_mac.cc",
         "lib_util_mac.mm",
+        "mac/control_service_out_of_process.h",
+        "mac/control_service_out_of_process.mm",
         "mac/update_service_out_of_process.h",
         "mac/update_service_out_of_process.mm",
         "prefs_mac.mm",
@@ -144,12 +143,11 @@ if (is_win || is_mac) {
         "app/server/win/server.h",
         "app/server/win/service_main.cc",
         "app/server/win/service_main.h",
-        "dm_storage_win.cc",
         "external_constants_win.cc",
         "installer_win.cc",
         "lib_util_win.cc",
         "prefs_win.cc",
-        "update_apps_win.cc",
+        "service_factory_win.cc",
       ]
     }
 
@@ -157,15 +155,15 @@ if (is_win || is_mac) {
       ":base",
       ":version_header",
       "//base",
-      "//chrome/updater/protos:omaha_proto",
+      "//chrome/updater/device_management",
       "//components/crash/core/common:crash_key",
       "//components/crx_file:crx_file",
       "//components/prefs",
       "//components/update_client",
       "//components/version_info",
+      "//third_party/boringssl",
       "//url",
     ]
-    public_deps = [ "//components/policy/proto" ]
 
     if (is_win) {
       deps += [
@@ -186,7 +184,7 @@ if (is_win || is_mac) {
     }
 
     if (is_mac) {
-      libs = [ "Foundation.framework" ]
+      frameworks = [ "Foundation.framework" ]
     }
 
     if (is_win) {
@@ -219,13 +217,70 @@ if (is_win || is_mac) {
     output = "$target_gen_dir/updater_version.h"
   }
 
+  # This build target is defined to minimize the impact of -Wno-missing-braces
+  # compiler switch. In the future it might be possible to isolate the
+  # dependency of ATL in the UI so ATL headers are not visible in the
+  # compilation units outside the UI itself.
+  # TODO(sorin): https://crbug.com/1014311
+  source_set("app_install") {
+    sources = [ "app/app_install.h" ]
+
+    if (is_mac) {
+      sources += [ "mac/setup/app_install.cc" ]
+    }
+
+    if (is_win) {
+      sources += [ "win/app_install.cc" ]
+    }
+
+    deps = [
+      ":lib",
+      "//base",
+      "//chrome/updater:base",
+      "//chrome/updater:version_header",
+    ]
+    if (is_mac) {
+      deps += [ "//chrome/updater/mac:updater_setup_sources" ]
+    }
+
+    if (is_win) {
+      deps += [
+        "//base:i18n",
+        "//chrome/updater/win:install_progress_observer",
+        "//chrome/updater/win:lib",
+        "//chrome/updater/win/ui",
+        "//components/prefs",
+        "//components/update_client",
+      ]
+    }
+
+    allow_circular_includes_from = [ ":lib" ]
+
+    if (is_win) {
+      cflags_cc = [ "-Wno-missing-braces" ]
+    }
+  }
+
+  source_set("updater_tests_support") {
+    testonly = true
+
+    sources = [
+      "unittest_util.cc",
+      "unittest_util.h",
+    ]
+
+    deps = [
+      ":base",
+      ":lib",
+      "//base",
+    ]
+  }
+
   test("updater_tests") {
     testonly = true
 
     sources = [
       "app/app_server_unittest.cc",
-      "dm_policy_manager_unittest.cc",
-      "dm_storage_unittest.cc",
       "external_constants_unittest.cc",
       "external_constants_unittest.h",
       "lib_util_unittest.cc",
@@ -236,8 +291,6 @@ if (is_win || is_mac) {
       "tag_unittest.cc",
       "test/integration_tests.cc",
       "test/integration_tests.h",
-      "unittest_util.cc",
-      "unittest_util.h",
       "unittest_util_unittest.cc",
       "updater_unittest.cc",
     ]
@@ -246,10 +299,12 @@ if (is_win || is_mac) {
       ":base",
       ":lib",
       ":updater",
+      ":updater_tests_support",
       ":version_header",
       "//base",
       "//base/test:test_support",
       "//chrome/common:constants",
+      "//chrome/updater/device_management:unittest",
       "//chrome/updater/test/test_app",
       "//chrome/updater/tools:unittest",
       "//components/prefs:test_support",
@@ -257,8 +312,6 @@ if (is_win || is_mac) {
       "//testing/gtest",
       "//url",
     ]
-
-    public_deps = [ "//chrome/updater/protos:omaha_proto" ]
 
     if (is_win) {
       sources += [
@@ -268,6 +321,7 @@ if (is_win || is_mac) {
 
       deps += [
         "//chrome/updater/win:constants",
+        "//chrome/updater/win:lib",
         "//chrome/updater/win:updater_tests",
       ]
 
@@ -290,6 +344,7 @@ if (is_win || is_mac) {
         "//chrome/common/mac:launchd",
         "//chrome/updater/app/server/mac:protocol",
         "//chrome/updater/mac:enterprise_tests",
+        "//chrome/updater/mac:network_fetcher_sources",
         "//chrome/updater/mac:updater_bundle",
         "//chrome/updater/mac:updater_setup_tests",
         "//chrome/updater/mac:updater_tests",

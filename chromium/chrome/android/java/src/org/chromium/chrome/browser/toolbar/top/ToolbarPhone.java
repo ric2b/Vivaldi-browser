@@ -65,13 +65,14 @@ import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.toolbar.ButtonData;
 import org.chromium.chrome.browser.toolbar.HomeButton;
 import org.chromium.chrome.browser.toolbar.KeyboardNavigationListener;
-import org.chromium.chrome.browser.toolbar.MenuButton;
 import org.chromium.chrome.browser.toolbar.TabCountProvider;
 import org.chromium.chrome.browser.toolbar.TabCountProvider.TabCountObserver;
 import org.chromium.chrome.browser.toolbar.TabSwitcherDrawable;
 import org.chromium.chrome.browser.toolbar.ToolbarColors;
 import org.chromium.chrome.browser.toolbar.bottom.BottomToolbarConfiguration;
 import org.chromium.chrome.browser.toolbar.bottom.BottomToolbarVariationManager;
+import org.chromium.chrome.browser.toolbar.menu_button.MenuButton;
+import org.chromium.chrome.browser.toolbar.menu_button.MenuButtonCoordinator;
 import org.chromium.chrome.browser.toolbar.top.TopToolbarCoordinator.UrlExpansionObserver;
 import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.components.browser_ui.widget.animation.CancelAwareAnimatorListener;
@@ -91,6 +92,7 @@ import org.chromium.chrome.browser.ChromeApplication;
 import org.chromium.chrome.browser.NavigationPopup;
 import org.chromium.chrome.browser.ThemeColorProvider;
 
+import org.vivaldi.browser.common.VivaldiUtils;
 import org.vivaldi.browser.panels.PanelUtils;
 import org.vivaldi.browser.toolbar.PanelButton;
 import org.vivaldi.browser.toolbar.TrackerShieldButton;
@@ -609,6 +611,12 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
 
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        // Note(david@vivaldi.com): Handle buttons visibility for different scenarios.
+        int isGone = !isTabSwitcherOnBottom() ? VISIBLE : GONE;
+        mToggleTabStackButton.setVisibility(isGone);
+        mPanelButton.setVisibility(isGone);
+        mHomeButton.setVisibility(isGone);
+
         if (!mDisableLocationBarRelayout) {
             super.onMeasure(widthMeasureSpec, heightMeasureSpec);
 
@@ -1892,13 +1900,13 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
     }
 
     @Override
-    public void setTabSwitcherMode(
-            boolean inTabSwitcherMode, boolean showToolbar, boolean delayAnimation) {
+    public void setTabSwitcherMode(boolean inTabSwitcherMode, boolean showToolbar,
+            boolean delayAnimation, MenuButtonCoordinator menuButtonCoordinator) {
         setTabSwitcherMode(inTabSwitcherMode, showToolbar, delayAnimation, true);
     }
 
     /**
-     * See {@link #setTabSwitcherMode(boolean, boolean, boolean)}.
+     * See {@link #setTabSwitcherMode(boolean, boolean, boolean, MenuButtonCoordinator)}.
      */
     public void setTabSwitcherMode(boolean inTabSwitcherMode, boolean showToolbar,
             boolean delayAnimation, boolean animate) {
@@ -2534,6 +2542,8 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
      *         Return false when bottom toolbar is not visible.
      */
     private boolean isTabSwitcherOnBottom() {
+        // Note(david@vivaldi.com): We ignore this when toolbar is at the bottom.
+        if (!VivaldiUtils.isTopToolbarOn()) return false;
         return mIsBottomToolbarVisible && BottomToolbarVariationManager.isTabSwitcherOnBottom();
     }
 
@@ -2654,12 +2664,6 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
     @Override
     public LocationBar getLocationBar() {
         return mLocationBar;
-    }
-
-    @Override
-    void removeAppMenuUpdateBadge(boolean animate) {
-        if (getMenuBadge() == null) return;
-        super.removeAppMenuUpdateBadge(animate);
     }
 
     @Override

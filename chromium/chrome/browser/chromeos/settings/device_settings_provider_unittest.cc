@@ -343,6 +343,83 @@ class DeviceSettingsProviderTest : public DeviceSettingsTestBase {
     BuildAndInstallDevicePolicy();
   }
 
+  void SetNativeDevicePrinterAccessMode(
+      em::DeviceNativePrintersAccessModeProto::AccessMode access_mode) {
+    em::DeviceNativePrintersAccessModeProto* proto =
+        device_policy_->payload().mutable_native_device_printers_access_mode();
+    proto->set_access_mode(access_mode);
+  }
+
+  void SetDevicePrinterAccessMode(
+      em::DevicePrintersAccessModeProto::AccessMode access_mode) {
+    em::DevicePrintersAccessModeProto* proto =
+        device_policy_->payload().mutable_device_printers_access_mode();
+    proto->set_access_mode(access_mode);
+  }
+
+  void SetNativeDevicePrintersBlacklist(std::vector<std::string>& values) {
+    em::DeviceNativePrintersBlacklistProto* proto =
+        device_policy_->payload().mutable_native_device_printers_blacklist();
+    for (auto const& value : values) {
+      proto->add_blacklist(value);
+    }
+  }
+
+  void SetDevicePrintersBlocklist(std::vector<std::string>& values) {
+    em::DevicePrintersBlocklistProto* proto =
+        device_policy_->payload().mutable_device_printers_blocklist();
+    for (auto const& value : values) {
+      proto->add_blocklist(value);
+    }
+  }
+
+  void SetNativeDevicePrintersWhitelist(std::vector<std::string>& values) {
+    em::DeviceNativePrintersWhitelistProto* proto =
+        device_policy_->payload().mutable_native_device_printers_whitelist();
+    for (auto const& value : values) {
+      proto->add_whitelist(value);
+    }
+  }
+
+  void SetDevicePrintersAllowlist(std::vector<std::string>& values) {
+    em::DevicePrintersAllowlistProto* proto =
+        device_policy_->payload().mutable_device_printers_allowlist();
+    for (auto const& value : values) {
+      proto->add_allowlist(value);
+    }
+  }
+
+  void VerifyDevicePrinterList(const char* policy_key,
+                               std::vector<std::string>& values) {
+    base::Value list(base::Value::Type::LIST);
+    for (auto const& value : values) {
+      list.Append(value);
+    }
+
+    VerifyPolicyValue(policy_key, &list);
+  }
+
+  // Helper routine clear the ShowLowDiskSpaceNotification policy.
+  void ClearDeviceShowLowDiskSpaceNotification() {
+    device_policy_->payload().clear_device_show_low_disk_space_notification();
+    BuildAndInstallDevicePolicy();
+  }
+
+  // Helper routine set the ShowLowDiskSpaceNotification policy.
+  void SetDeviceShowLowDiskSpaceNotification(bool show) {
+    em::DeviceShowLowDiskSpaceNotificationProto* proto =
+        device_policy_->payload()
+            .mutable_device_show_low_disk_space_notification();
+    proto->set_device_show_low_disk_space_notification(show);
+    BuildAndInstallDevicePolicy();
+  }
+
+  void VerifyDeviceShowLowDiskSpaceNotification(bool expected) {
+    const base::Value expected_value(expected);
+    EXPECT_EQ(expected_value,
+              *provider_->Get(kDeviceShowLowDiskSpaceNotification));
+  }
+
   ScopedTestingLocalState local_state_;
 
   std::unique_ptr<DeviceSettingsProvider> provider_;
@@ -960,6 +1037,137 @@ TEST_F(DeviceSettingsProviderTest, DeviceShowNumericKeyboardForPassword) {
   SetShowNumericKeyboardForPassword(false);
   EXPECT_EQ(base::Value(false),
             *provider_->Get(kDeviceShowNumericKeyboardForPassword));
+}
+
+TEST_F(DeviceSettingsProviderTest, DevicePrintersAccessMode_empty) {
+  // Policy should be ACCESS_MODE_ALL by default
+  base::Value default_value(em::DevicePrintersAccessModeProto::ACCESS_MODE_ALL);
+  VerifyPolicyValue(kDevicePrintersAccessMode, &default_value);
+}
+
+TEST_F(DeviceSettingsProviderTest, DevicePrintersAccessMode_native) {
+  // WHITELIST => ALLOWLIST
+  SetNativeDevicePrinterAccessMode(
+      em::DeviceNativePrintersAccessModeProto::ACCESS_MODE_WHITELIST);
+  BuildAndInstallDevicePolicy();
+  base::Value expected_value(
+      em::DevicePrintersAccessModeProto::ACCESS_MODE_ALLOWLIST);
+  VerifyPolicyValue(kDevicePrintersAccessMode, &expected_value);
+}
+
+TEST_F(DeviceSettingsProviderTest, DevicePrintersAccessMode_accessmode) {
+  SetDevicePrinterAccessMode(
+      em::DevicePrintersAccessModeProto::ACCESS_MODE_ALLOWLIST);
+  BuildAndInstallDevicePolicy();
+  base::Value expected_value(
+      em::DevicePrintersAccessModeProto::ACCESS_MODE_ALLOWLIST);
+  VerifyPolicyValue(kDevicePrintersAccessMode, &expected_value);
+}
+
+TEST_F(DeviceSettingsProviderTest, DevicePrintersAccessMode_both) {
+  // If both are set use the DevicePrintersAccessMode
+  SetNativeDevicePrinterAccessMode(
+      em::DeviceNativePrintersAccessModeProto::ACCESS_MODE_BLACKLIST);
+  SetDevicePrinterAccessMode(
+      em::DevicePrintersAccessModeProto::ACCESS_MODE_ALLOWLIST);
+  BuildAndInstallDevicePolicy();
+  base::Value expected_value(
+      em::DevicePrintersAccessModeProto::ACCESS_MODE_ALLOWLIST);
+  VerifyPolicyValue(kDevicePrintersAccessMode, &expected_value);
+}
+
+TEST_F(DeviceSettingsProviderTest, DevicePrintersBlocklist_empty) {
+  // Policy should not be set by default
+  VerifyPolicyValue(kDevicePrintersBlocklist, nullptr);
+}
+
+TEST_F(DeviceSettingsProviderTest, DevicePrintersBlocklist_blacklist) {
+  std::vector<std::string> values = {"foo", "bar"};
+
+  // If the blacklist only is set, use that.
+  SetNativeDevicePrintersBlacklist(values);
+  BuildAndInstallDevicePolicy();
+  VerifyDevicePrinterList(kDevicePrintersBlocklist, values);
+}
+
+TEST_F(DeviceSettingsProviderTest, DevicePrintersBlocklist_blocklist) {
+  std::vector<std::string> values = {"foo", "bar"};
+
+  // If the blocklist only is set, use that.
+  SetDevicePrintersBlocklist(values);
+  BuildAndInstallDevicePolicy();
+  VerifyDevicePrinterList(kDevicePrintersBlocklist, values);
+}
+
+TEST_F(DeviceSettingsProviderTest, DevicePrintersBlocklist_both) {
+  std::vector<std::string> values = {"foo", "bar"};
+  std::vector<std::string> other_values = {"baz"};
+
+  // If both are set use the blocklist
+  SetNativeDevicePrintersBlacklist(other_values);
+  SetDevicePrintersBlocklist(values);
+  BuildAndInstallDevicePolicy();
+  VerifyDevicePrinterList(kDevicePrintersBlocklist, values);
+}
+
+TEST_F(DeviceSettingsProviderTest, DevicePrintersAllowlist_empty) {
+  // Policy should not be set by default
+  VerifyPolicyValue(kDevicePrintersAllowlist, nullptr);
+}
+
+TEST_F(DeviceSettingsProviderTest, DevicePrintersAllowlist_whitelist) {
+  std::vector<std::string> values = {"foo", "bar"};
+
+  // If the blacklist only is set, use that.
+  SetNativeDevicePrintersWhitelist(values);
+  BuildAndInstallDevicePolicy();
+  VerifyDevicePrinterList(kDevicePrintersAllowlist, values);
+}
+
+TEST_F(DeviceSettingsProviderTest, DevicePrintersAllowlist_allowlist) {
+  std::vector<std::string> values = {"foo", "bar"};
+
+  // If the blocklist only is set, use that.
+  SetDevicePrintersAllowlist(values);
+  BuildAndInstallDevicePolicy();
+  VerifyDevicePrinterList(kDevicePrintersAllowlist, values);
+}
+
+TEST_F(DeviceSettingsProviderTest, DevicePrintersAllowlist_both) {
+  std::vector<std::string> values = {"foo", "bar"};
+  std::vector<std::string> other_values = {"baz"};
+
+  // If both are set use the blocklist
+  SetNativeDevicePrintersWhitelist(other_values);
+  SetDevicePrintersAllowlist(values);
+  BuildAndInstallDevicePolicy();
+  VerifyDevicePrinterList(kDevicePrintersAllowlist, values);
+}
+
+TEST_F(DeviceSettingsProviderTest,
+       DeviceShowLowDiskSpaceNotificationDefaultTrue) {
+  ClearDeviceShowLowDiskSpaceNotification();
+  // Missing policy should default to showing the low disk space
+  // notification for consumer devices.
+  VerifyDeviceShowLowDiskSpaceNotification(true);
+}
+
+TEST_F(DeviceSettingsProviderTestEnterprise,
+       DeviceShowLowDiskSpaceNotificationDefaultFalse) {
+  ClearDeviceShowLowDiskSpaceNotification();
+  // Missing policy should default to suppressing the low disk space
+  // notification for enrolled devices by default.
+  VerifyDeviceShowLowDiskSpaceNotification(false);
+}
+
+TEST_F(DeviceSettingsProviderTestEnterprise,
+       DeviceShowLowDiskSpaceNotification) {
+  // Showing the low disk space notification can be controlled by policy.
+  SetDeviceShowLowDiskSpaceNotification(true);
+  VerifyDeviceShowLowDiskSpaceNotification(true);
+
+  SetDeviceShowLowDiskSpaceNotification(false);
+  VerifyDeviceShowLowDiskSpaceNotification(false);
 }
 
 }  // namespace chromeos

@@ -4,13 +4,11 @@
 
 package org.chromium.chrome.browser.app.tab_activity_glue;
 
-import android.annotation.TargetApi;
 import android.content.Context;
 import android.content.Intent;
 import android.content.res.Resources;
 import android.graphics.Rect;
 import android.media.AudioManager;
-import android.os.Build;
 import android.view.KeyEvent;
 import android.view.View;
 
@@ -24,12 +22,11 @@ import org.chromium.base.Log;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.AppHooks;
-import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.SwipeRefreshHandler;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.document.ChromeIntentUtil;
 import org.chromium.chrome.browser.document.DocumentWebContentsDelegate;
-import org.chromium.chrome.browser.fullscreen.ChromeFullscreenManager;
 import org.chromium.chrome.browser.fullscreen.FullscreenManager;
 import org.chromium.chrome.browser.fullscreen.FullscreenOptions;
 import org.chromium.chrome.browser.media.PictureInPicture;
@@ -39,7 +36,7 @@ import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tab.TabWebContentsDelegateAndroid;
-import org.chromium.chrome.browser.tabmodel.TabCreatorManager.TabCreator;
+import org.chromium.chrome.browser.tabmodel.TabCreator;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelUtils;
 import org.chromium.chrome.browser.webapps.WebDisplayMode;
@@ -87,7 +84,13 @@ public class ActivityTabWebContentsDelegateAndroid extends TabWebContentsDelegat
         return mActivity != null ? mActivity.getTabCreator(mTab.isIncognito()) : null;
     }
 
-    private ChromeFullscreenManager getFullscreenManager() {
+    private BrowserControlsStateProvider getBrowserControlsStateProvider() {
+        return mActivity != null && !mActivity.isActivityFinishingOrDestroyed()
+                ? mActivity.getBrowserControlsManager()
+                : null;
+    }
+
+    private FullscreenManager getFullscreenManager() {
         return mActivity != null && !mActivity.isActivityFinishingOrDestroyed()
                 ? mActivity.getFullscreenManager()
                 : null;
@@ -272,9 +275,7 @@ public class ActivityTabWebContentsDelegateAndroid extends TabWebContentsDelegat
      * Redispatches unhandled media keys. This allows bluetooth headphones with play/pause or
      * other buttons to function correctly.
      */
-    @TargetApi(19)
     private void handleMediaKey(KeyEvent e) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.KITKAT) return;
         switch (e.getKeyCode()) {
             case KeyEvent.KEYCODE_MUTE:
             case KeyEvent.KEYCODE_HEADSETHOOK:
@@ -307,38 +308,32 @@ public class ActivityTabWebContentsDelegateAndroid extends TabWebContentsDelegat
 
     @Override
     public int getTopControlsHeight() {
-        BrowserControlsStateProvider provider = getFullscreenManager();
+        BrowserControlsStateProvider provider = getBrowserControlsStateProvider();
         return provider != null ? provider.getTopControlsHeight() : 0;
     }
 
     @Override
     public int getTopControlsMinHeight() {
-        BrowserControlsStateProvider provider = getFullscreenManager();
+        BrowserControlsStateProvider provider = getBrowserControlsStateProvider();
         return provider != null ? provider.getTopControlsMinHeight() : 0;
     }
 
     @Override
     public int getBottomControlsHeight() {
-        BrowserControlsStateProvider provider = getFullscreenManager();
+        BrowserControlsStateProvider provider = getBrowserControlsStateProvider();
         return provider != null ? provider.getBottomControlsHeight() : 0;
     }
 
     @Override
     public int getBottomControlsMinHeight() {
-        BrowserControlsStateProvider provider = getFullscreenManager();
+        BrowserControlsStateProvider provider = getBrowserControlsStateProvider();
         return provider != null ? provider.getBottomControlsMinHeight() : 0;
     }
 
     @Override
     public boolean shouldAnimateBrowserControlsHeightChanges() {
-        BrowserControlsStateProvider provider = getFullscreenManager();
+        BrowserControlsStateProvider provider = getBrowserControlsStateProvider();
         return provider != null && provider.shouldAnimateBrowserControlsHeightChanges();
-    }
-
-    @Override
-    public boolean controlsResizeView() {
-        return mActivity != null && mActivity.getCompositorViewHolder() != null
-                && mActivity.getCompositorViewHolder().controlsResizeView();
     }
 
     @Override

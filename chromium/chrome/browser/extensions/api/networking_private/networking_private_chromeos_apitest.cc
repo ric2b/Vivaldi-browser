@@ -115,18 +115,18 @@ class TestNetworkingCastPrivateDelegate
 
   // VerifyDelegate
   void VerifyDestination(std::unique_ptr<Credentials> credentials,
-                         const VerifiedCallback& success_callback,
-                         const FailureCallback& failure_callback) override {
+                         VerifiedCallback success_callback,
+                         FailureCallback failure_callback) override {
     AssertCredentials(*credentials);
-    success_callback.Run(true);
+    std::move(success_callback).Run(true);
   }
 
   void VerifyAndEncryptData(const std::string& data,
                             std::unique_ptr<Credentials> credentials,
-                            const DataCallback& success_callback,
-                            const FailureCallback& failure_callback) override {
+                            DataCallback success_callback,
+                            FailureCallback failure_callback) override {
     AssertCredentials(*credentials);
-    success_callback.Run("encrypted_data");
+    std::move(success_callback).Run("encrypted_data");
   }
 
  private:
@@ -212,9 +212,9 @@ class NetworkingPrivateChromeOSApiTest : public extensions::ExtensionApiTest {
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
     extensions::ExtensionApiTest::SetUpCommandLine(command_line);
-    // Whitelist the extension ID of the test extension.
+    // Allowlist the extension ID of the test extension.
     command_line->AppendSwitchASCII(
-        extensions::switches::kWhitelistedExtensionID,
+        extensions::switches::kAllowlistedExtensionID,
         "epcifkihnkjgphfkloaaleeakhpmgdmn");
 
     // TODO(pneubeck): Remove the following hack, once the NetworkingPrivateAPI
@@ -335,7 +335,7 @@ class NetworkingPrivateChromeOSApiTest : public extensions::ExtensionApiTest {
   }
 
   void SetUp() override {
-    networking_cast_delegate_factory_ = base::Bind(
+    networking_cast_delegate_factory_ = base::BindRepeating(
         &NetworkingPrivateChromeOSApiTest::CreateNetworkingCastPrivateDelegate,
         base::Unretained(this));
     ChromeNetworkingCastPrivateDelegate::SetFactoryCallbackForTest(
@@ -670,8 +670,8 @@ IN_PROC_BROWSER_TEST_F(NetworkingPrivateChromeOSApiTest,
   policy::PolicyMap policy;
   policy.Set(policy::key::kOpenNetworkConfiguration,
              policy::POLICY_LEVEL_MANDATORY, policy::POLICY_SCOPE_USER,
-             policy::POLICY_SOURCE_CLOUD,
-             std::make_unique<base::Value>(kUserPolicyBlob), nullptr);
+             policy::POLICY_SOURCE_CLOUD, base::Value(kUserPolicyBlob),
+             nullptr);
   provider_.UpdateChromePolicy(policy);
 
   content::RunAllPendingInMessageLoop();
@@ -705,8 +705,8 @@ IN_PROC_BROWSER_TEST_F(NetworkingPrivateChromeOSApiTest,
   policy::PolicyMap policy;
   policy.Set(policy::key::kOpenNetworkConfiguration,
              policy::POLICY_LEVEL_MANDATORY, policy::POLICY_SCOPE_USER,
-             policy::POLICY_SOURCE_CLOUD,
-             std::make_unique<base::Value>(kUserPolicyBlob), nullptr);
+             policy::POLICY_SOURCE_CLOUD, base::Value(kUserPolicyBlob),
+             nullptr);
   provider_.UpdateChromePolicy(policy);
 
   content::RunAllPendingInMessageLoop();
@@ -754,8 +754,8 @@ IN_PROC_BROWSER_TEST_F(NetworkingPrivateChromeOSApiTest, GetManagedProperties) {
   policy::PolicyMap policy;
   policy.Set(policy::key::kOpenNetworkConfiguration,
              policy::POLICY_LEVEL_MANDATORY, policy::POLICY_SCOPE_USER,
-             policy::POLICY_SOURCE_CLOUD,
-             std::make_unique<base::Value>(kUserPolicyBlob), nullptr);
+             policy::POLICY_SOURCE_CLOUD, base::Value(kUserPolicyBlob),
+             nullptr);
   provider_.UpdateChromePolicy(policy);
 
   content::RunAllPendingInMessageLoop();
@@ -819,17 +819,6 @@ IN_PROC_BROWSER_TEST_F(NetworkingPrivateChromeOSApiTest, VerifyAndEncryptData) {
 }
 
 IN_PROC_BROWSER_TEST_F(NetworkingPrivateChromeOSApiTest,
-                       SetWifiTDLSEnabledState) {
-  device_test_->SetTDLSState(shill::kTDLSConnectedState);
-  EXPECT_TRUE(RunNetworkingSubtest("setWifiTDLSEnabledState")) << message_;
-}
-
-IN_PROC_BROWSER_TEST_F(NetworkingPrivateChromeOSApiTest, GetWifiTDLSStatus) {
-  device_test_->SetTDLSState(shill::kTDLSConnectedState);
-  EXPECT_TRUE(RunNetworkingSubtest("getWifiTDLSStatus")) << message_;
-}
-
-IN_PROC_BROWSER_TEST_F(NetworkingPrivateChromeOSApiTest,
                        GetCaptivePortalStatus) {
   SetupCellular();
 
@@ -859,8 +848,9 @@ IN_PROC_BROWSER_TEST_F(NetworkingPrivateChromeOSApiTest,
 
   TestListener listener(
       "notifyPortalDetectorObservers",
-      base::Bind(&NetworkPortalDetectorTestImpl::NotifyObserversForTesting,
-                 base::Unretained(detector())));
+      base::BindRepeating(
+          &NetworkPortalDetectorTestImpl::NotifyObserversForTesting,
+          base::Unretained(detector())));
   EXPECT_TRUE(RunNetworkingSubtest("captivePortalNotification")) << message_;
 }
 

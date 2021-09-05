@@ -26,6 +26,8 @@ extern const base::Feature kExtensionSettingsOverriddenDialogs;
 
 extern const base::Feature kExtensionsToolbarMenu;
 
+extern const base::Feature kForceEnableDevicesPage;
+
 extern const base::Feature kMixBrowserTypeTabs;
 
 extern const base::Feature kNewProfilePicker;
@@ -36,11 +38,17 @@ extern const base::Feature kPermissionChip;
 
 extern const base::Feature kProminentDarkModeActiveTabTitle;
 
+extern const base::Feature kReadLater;
+
 extern const base::Feature kScrollableTabStrip;
+
+extern const base::Feature kSignInProfileCreationFlow;
 
 extern const base::Feature kTabGroups;
 
 extern const base::Feature kTabGroupsCollapse;
+
+extern const base::Feature kTabGroupsCollapseFreezing;
 
 extern const base::Feature kTabGroupsFeedback;
 
@@ -58,8 +66,6 @@ extern const base::Feature kUseTextForUpdateButton;
 extern const base::Feature kWebFooterExperiment;
 
 extern const base::Feature kWebUITabStrip;
-
-extern const base::Feature kWebUITabStripDemoOptions;
 
 extern const base::Feature kSyncSetupFriendlySettings;
 

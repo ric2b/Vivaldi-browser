@@ -33,6 +33,7 @@
 
 #include <memory>
 #include "cc/paint/paint_canvas.h"
+#include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/mojom/frame/tree_scope_type.mojom-shared.h"
 #include "third_party/blink/public/mojom/security_context/insecure_request_policy.mojom-shared.h"
 #include "third_party/blink/public/platform/web_common.h"
@@ -43,7 +44,6 @@
 namespace blink {
 
 class Frame;
-class OpenedFrameTracker;
 class Visitor;
 class WebLocalFrame;
 class WebRemoteFrame;
@@ -73,7 +73,9 @@ class BLINK_EXPORT WebFrame {
   // Returns the number of live WebFrame objects, used for leak checking.
   static int InstanceCount();
 
+  // TODO(crbug.com/1096617): Remove the UnguessableToken version of this.
   static WebFrame* FromFrameToken(const base::UnguessableToken&);
+  static WebFrame* FromFrameToken(const FrameToken&);
 
   virtual bool IsWebLocalFrame() const = 0;
   virtual WebLocalFrame* ToWebLocalFrame() = 0;
@@ -109,9 +111,6 @@ class BLINK_EXPORT WebFrame {
 
   // Returns the frame that opened this frame or 0 if there is none.
   WebFrame* Opener() const;
-
-  // Sets the frame that opened this one or 0 if there is none.
-  void SetOpener(WebFrame*);
 
   // Reset the frame that opened this frame to 0.
   // This is executed between web tests runs
@@ -159,6 +158,7 @@ class BLINK_EXPORT WebFrame {
   // This identifier represents the stable identifier between a
   // LocalFrame  <--> RenderFrameHostImpl or a
   // RemoteFrame <--> RenderFrameProxyHost in the browser process.
+  // TODO(crbug.com/1096617): Make this return a FrameToken instead.
   const base::UnguessableToken& GetFrameToken() const { return frame_token_; }
 
 #if INSIDE_BLINK
@@ -177,7 +177,7 @@ class BLINK_EXPORT WebFrame {
  protected:
   explicit WebFrame(mojom::TreeScopeType,
                     const base::UnguessableToken& frame_token);
-  virtual ~WebFrame();
+  virtual ~WebFrame() = default;
 
   // Sets the parent WITHOUT fulling adding it to the frame tree.
   // Used to lie to a local frame that is replacing a remote frame,
@@ -194,7 +194,6 @@ class BLINK_EXPORT WebFrame {
 
  private:
 #if INSIDE_BLINK
-  friend class OpenedFrameTracker;
   friend class WebFrameTest;
 
   static void TraceFrame(Visitor*, const WebFrame*);
@@ -218,7 +217,6 @@ class BLINK_EXPORT WebFrame {
   WebFrame* last_child_;
 
   WebFrame* opener_;
-  std::unique_ptr<OpenedFrameTracker> opened_frame_tracker_;
 };
 
 }  // namespace blink

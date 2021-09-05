@@ -23,7 +23,6 @@
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
-#include "base/message_loop/message_loop_current.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
@@ -31,6 +30,7 @@
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/task/cancelable_task_tracker.h"
+#include "base/task/current_thread.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time_to_iso8601.h"
 #include "base/values.h"
@@ -462,11 +462,10 @@ void GetManagers(content::BrowserContext* context,
                  DownloadManager** incognito_manager) {
   Profile* profile = Profile::FromBrowserContext(context);
   *manager = BrowserContext::GetDownloadManager(profile->GetOriginalProfile());
-  if (profile->HasOffTheRecordProfile() &&
-      (include_incognito ||
-       profile->IsOffTheRecord())) {
-    *incognito_manager = BrowserContext::GetDownloadManager(
-        profile->GetOffTheRecordProfile());
+  if (profile->HasPrimaryOTRProfile() &&
+      (include_incognito || profile->IsOffTheRecord())) {
+    *incognito_manager =
+        BrowserContext::GetDownloadManager(profile->GetPrimaryOTRProfile());
   } else {
     *incognito_manager = NULL;
   }
@@ -1049,8 +1048,8 @@ ExtensionFunction::ResponseAction DownloadsDownloadFunction::Run() {
             "This feature cannot be disabled in settings, but disabling all "
             "extensions will prevent it."
           chrome_policy {
-            ExtensionInstallBlacklist {
-              ExtensionInstallBlacklist: {
+            ExtensionInstallBlocklist {
+              ExtensionInstallBlocklist: {
                 entries: '*'
               }
             }
@@ -1197,7 +1196,7 @@ ExtensionFunction::ResponseAction DownloadsSearchFunction::Run() {
                        (incognito_manager->GetDownload(download_id) != NULL));
     Profile* profile = Profile::FromBrowserContext(browser_context());
     std::unique_ptr<base::DictionaryValue> json_item(
-        DownloadItemToJSON(*it, off_record ? profile->GetOffTheRecordProfile()
+        DownloadItemToJSON(*it, off_record ? profile->GetPrimaryOTRProfile()
                                            : profile->GetOriginalProfile()));
     json_results->Append(std::move(json_item));
   }

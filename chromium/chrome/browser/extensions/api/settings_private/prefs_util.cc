@@ -13,9 +13,11 @@
 #include "chrome/browser/extensions/api/settings_private/generated_prefs.h"
 #include "chrome/browser/extensions/api/settings_private/generated_prefs_factory.h"
 #include "chrome/browser/extensions/settings_api_helpers.h"
-#include "chrome/browser/nearby_sharing/nearby_sharing_prefs.h"
+#include "chrome/browser/nearby_sharing/common/nearby_share_prefs.h"
+#include "chrome/browser/password_manager/generated_password_leak_detection_pref.h"
 #include "chrome/browser/prefs/session_startup_pref.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/safe_browsing/generated_safe_browsing_pref.h"
 #include "chrome/common/pref_names.h"
 #include "components/autofill/core/common/autofill_prefs.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
@@ -117,9 +119,12 @@ bool IsSettingReadOnly(const std::string& pref_name) {
   // System timezone is never directly changeable by the user.
   if (pref_name == chromeos::kSystemTimezone)
     return chromeos::system::PerUserTimezoneEnabled();
-  // enable_screen_lock must be changed through the quickUnlockPrivate API.
-  if (pref_name == ash::prefs::kEnableAutoScreenLock)
+  // enable_screen_lock and pin_unlock_autosubmit_enabled
+  // must be changed through the quickUnlockPrivate API.
+  if (pref_name == ash::prefs::kEnableAutoScreenLock ||
+      pref_name == prefs::kPinUnlockAutosubmitEnabled) {
     return true;
+  }
 #endif
 #if defined(OS_WIN)
   // Don't allow user to change sw_reporter preferences.
@@ -196,7 +201,7 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
       settings_api::PrefType::PREF_TYPE_STRING;
   (*s_whitelist)[::prefs::kDefaultCharset] =
       settings_api::PrefType::PREF_TYPE_STRING;
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   (*s_whitelist)[::prefs::kWebkitTabsToLinks] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)[::prefs::kConfirmToQuitEnabled] =
@@ -254,12 +259,16 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
       settings_api::PrefType::PREF_TYPE_STRING;
 
   // Security page
+  (*s_whitelist)[::kGeneratedPasswordLeakDetectionPref] =
+      settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)[::prefs::kSafeBrowsingEnabled] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)[::prefs::kSafeBrowsingEnhanced] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)[::prefs::kSafeBrowsingScoutReportingEnabled] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)[::safe_browsing::kGeneratedSafeBrowsingPref] =
+      settings_api::PrefType::PREF_TYPE_NUMBER;
 
   // Sync and personalization page.
   (*s_whitelist)[::prefs::kSearchSuggestEnabled] =
@@ -277,7 +286,7 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
       settings_api::PrefType::PREF_TYPE_LIST;
   (*s_whitelist)[spellcheck::prefs::kSpellCheckForcedDictionaries] =
       settings_api::PrefType::PREF_TYPE_LIST;
-  (*s_whitelist)[spellcheck::prefs::kSpellCheckBlacklistedDictionaries] =
+  (*s_whitelist)[spellcheck::prefs::kSpellCheckBlocklistedDictionaries] =
       settings_api::PrefType::PREF_TYPE_LIST;
   (*s_whitelist)[spellcheck::prefs::kSpellCheckUseSpellingService] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
@@ -301,6 +310,10 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)[::prefs::kNearbySharingActiveProfilePrefName] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)[::prefs::kNearbySharingDeviceNamePrefName] =
+      settings_api::PrefType::PREF_TYPE_STRING;
+  (*s_whitelist)[::prefs::kNearbySharingDataUsageName] =
+      settings_api::PrefType::PREF_TYPE_NUMBER;
 
   // Search page.
   (*s_whitelist)[DefaultSearchManager::kDefaultSearchProviderDataPrefName] =
@@ -377,6 +390,8 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
   (*s_whitelist)[::prefs::kAccessibilityFocusHighlightEnabled] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
 #endif
+  (*s_whitelist)[::prefs::kCaretBrowsingEnabled] =
+      settings_api::PrefType::PREF_TYPE_BOOLEAN;
 
 #if defined(OS_CHROMEOS)
   // Accounts / Users / People.
@@ -394,6 +409,9 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
   // kEnableAutoScreenLock is read-only.
   (*s_whitelist)[ash::prefs::kEnableAutoScreenLock] =
+      settings_api::PrefType::PREF_TYPE_BOOLEAN;
+  // kPinUnlockAutosubmitEnabled is read-only.
+  (*s_whitelist)[prefs::kPinUnlockAutosubmitEnabled] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)[ash::prefs::kMessageCenterLockScreenMode] =
       settings_api::PrefType::PREF_TYPE_STRING;
@@ -549,8 +567,6 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)[proxy_config::prefs::kUseSharedProxies] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)[::prefs::kWakeOnWifiDarkConnect] =
-      settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)[::chromeos::kSignedDataRoamingEnabled] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)[::ash::prefs::kUserBluetoothAdapterEnabled] =
@@ -667,7 +683,7 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
       settings_api::PrefType::PREF_TYPE_LIST;
 
   // Native Printing settings.
-  (*s_whitelist)[::prefs::kUserNativePrintersAllowed] =
+  (*s_whitelist)[::prefs::kUserPrintersAllowed] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
 
 #else
@@ -1056,8 +1072,7 @@ bool PrefsUtil::IsPrefOwnerControlled(const std::string& pref_name) {
 bool PrefsUtil::IsPrefPrimaryUserControlled(const std::string& pref_name) {
   // chromeos::kSystemTimezone is read-only, but for the non-primary users
   // it should have "primary user controlled" attribute.
-  if (pref_name == prefs::kWakeOnWifiDarkConnect ||
-      pref_name == prefs::kUserTimezone ||
+  if (pref_name == prefs::kUserTimezone ||
       pref_name == chromeos::kSystemTimezone) {
     user_manager::UserManager* user_manager = user_manager::UserManager::Get();
     const user_manager::User* user =

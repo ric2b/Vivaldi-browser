@@ -164,7 +164,7 @@ LayoutText* FirstLetterPseudoElement::FirstLetterTextLayoutObject(
       first_letter_text_layout_object =
           first_letter_text_layout_object->NextSibling();
     } else if (first_letter_text_layout_object->IsAtomicInlineLevel() ||
-               first_letter_text_layout_object->IsLayoutButton() ||
+               first_letter_text_layout_object->IsButtonOrNGButton() ||
                IsMenuList(first_letter_text_layout_object)) {
       return nullptr;
     } else if (first_letter_text_layout_object
@@ -241,10 +241,9 @@ void FirstLetterPseudoElement::ClearRemainingTextLayoutObject() {
   DCHECK(remaining_text_layout_object_);
   remaining_text_layout_object_ = nullptr;
 
-  if (GetDocument().GetStyleEngine().InRebuildLayoutTree()) {
-    // We are in the layout tree rebuild phase. We will do UpdateFirstLetter()
-    // as part of RebuildFirstLetterLayoutTree() or AttachLayoutTree(). Marking
-    // us style-dirty during layout tree rebuild is not allowed.
+  if (GetDocument().InStyleRecalc()) {
+    // UpdateFirstLetterPseudoElement will handle remaining_text_layout_object_
+    // changes during style recalc and layout tree rebuild.
     return;
   }
 

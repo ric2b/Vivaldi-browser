@@ -41,7 +41,6 @@
 #include "content/common/associated_interfaces.mojom.h"
 #include "content/common/child_process.mojom.h"
 #include "content/common/content_export.h"
-#include "content/common/media/renderer_audio_output_stream_factory.mojom.h"
 #include "content/common/renderer.mojom.h"
 #include "content/common/renderer_host.mojom.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -62,6 +61,7 @@
 #include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/system/invitation.h"
 #include "net/base/network_isolation_key.h"
+#include "net/net_buildflags.h"
 #include "ppapi/buildflags/buildflags.h"
 #include "services/device/public/mojom/battery_monitor.mojom-forward.h"
 #include "services/network/public/mojom/mdns_responder.mojom.h"
@@ -81,6 +81,7 @@
 #include "third_party/blink/public/mojom/filesystem/file_system.mojom.h"
 #include "third_party/blink/public/mojom/indexeddb/indexeddb.mojom-shared.h"
 #include "third_party/blink/public/mojom/loader/code_cache.mojom.h"
+#include "third_party/blink/public/mojom/media/renderer_audio_output_stream_factory.mojom.h"
 #include "third_party/blink/public/mojom/mediastream/media_stream.mojom.h"
 #include "third_party/blink/public/mojom/native_io/native_io.mojom-forward.h"
 #include "third_party/blink/public/mojom/peerconnection/peer_connection_tracker.mojom.h"
@@ -117,6 +118,7 @@ class P2PSocketDispatcherHost;
 class PermissionServiceContext;
 class PeerConnectionTrackerHost;
 class PluginRegistryImpl;
+class ProcessLock;
 class PushMessagingManager;
 class RenderFrameMessageFilter;
 class RenderProcessHostCreationObserver;
@@ -166,13 +168,12 @@ class CONTENT_EXPORT RenderProcessHostImpl
   // Special depth used when there are no PriorityClients.
   static const unsigned int kMaxFrameDepthForPriority;
 
-  // Create a new RenderProcessHost.  If |storage_partition_impl| is null, the
-  // default partition from the browser_context is used, using |site_instance|
-  // (for which a null value is legal). |site_instance| is not used if
-  // |storage_partition_impl| is not null.
+  // Create a new RenderProcessHost. The storage partition for the process
+  // is retrieved from |browser_context| based on information in
+  // |site_instance|. The default storage partition is selected if
+  // |site_instance| is null.
   static RenderProcessHost* CreateRenderProcessHost(
       BrowserContext* browser_context,
-      StoragePartitionImpl* storage_partition_impl,
       SiteInstanceImpl* site_instance);
 
   // Returns whether the process-per-site model is in use (globally or just for
@@ -199,6 +200,7 @@ class CONTENT_EXPORT RenderProcessHostImpl
   bool IsForGuestsOnly() override;
   StoragePartition* GetStoragePartition() override;
   bool Shutdown(int exit_code) override;
+  bool ShutdownRequested() override;
   bool FastShutdownIfPossible(size_t page_count = 0,
                               bool skip_unload_handlers = false) override;
   const base::Process& GetProcess() override;
@@ -211,7 +213,7 @@ class CONTENT_EXPORT RenderProcessHostImpl
   bool IsBlocked() override;
   std::unique_ptr<base::CallbackList<void(bool)>::Subscription>
   RegisterBlockStateChangedCallback(
-      const base::RepeatingCallback<void(bool)>& cb) override;
+      const BlockStateChangedCallback& cb) override;
   void Cleanup() override;
   void AddPendingView() override;
   void RemovePendingView() override;
@@ -259,9 +261,9 @@ class CONTENT_EXPORT RenderProcessHostImpl
   void SetIsUsed() override;
 
   bool HostHasNotBeenUsed() override;
-  void LockToOrigin(const IsolationContext& isolation_context,
-                    const GURL& lock_url) override;
-  bool IsLockedToOriginForTesting() override;
+  void SetProcessLock(const IsolationContext& isolation_context,
+                      const ProcessLock& process_lock) override;
+  bool IsProcessLockedForTesting() override;
   void BindCacheStorage(
       const network::CrossOriginEmbedderPolicy& cross_origin_embedder_policy,
       mojo::PendingRemote<network::mojom::CrossOriginEmbedderPolicyReporter>
@@ -273,6 +275,7 @@ class CONTENT_EXPORT RenderProcessHostImpl
       mojo::PendingReceiver<blink::mojom::IDBFactory> receiver) override;
   void ForceCrash() override;
   void CleanupNetworkServicePluginExceptionsUponDestruction() override;
+  std::string GetInfoForBrowserContextDestructionCrashReporting() override;
 #if BUILDFLAG(CLANG_PROFILING_INSIDE_SANDBOX)
   void DumpProfilingData(base::OnceClosure callback) override;
 #endif
@@ -332,19 +335,16 @@ class CONTENT_EXPORT RenderProcessHostImpl
   static void FilterURL(RenderProcessHost* rph, bool empty_allowed, GURL* url);
 
   // Returns true if |host| is suitable for rendering a page in the given
-  // |isolation_context|, where the page would utilize |site_url| as its
-  // SiteInstance site URL, and its process would be locked to |lock_url|.
-  // |site_url| and |lock_url| may differ in cases where an effective URL is
-  // not the actual site that the process is locked to, which happens for
-  // hosted apps. |is_guest| should be set to true if the call is being made
-  // for a <webview> guest SiteInstance.
-  // TODO(wjmaclean): Rethink |how site_url|/|lock_url| parameters are passed.
-  // |site_url| will probably become a SiteInfo, but whether we want to combine
-  // |lock_url| into that or keep it separate needs to be decided.
+  // |isolation_context|, where the page would utilize |site_info.site_url()| as
+  // its SiteInstance site URL, and its process would be locked to
+  // |site_info.lock_url()|. Site and lock urls may differ in cases where
+  // an effective URL is not the actual site that the process is locked to,
+  // which happens for hosted apps. |is_guest| should be set to true if the call
+  // is being made for a <webview> guest SiteInstance.
+  // TODO(wjmaclean): move is_guest into SiteInfo at some point.
   static bool IsSuitableHost(RenderProcessHost* host,
                              const IsolationContext& isolation_context,
-                             const GURL& site_url,
-                             const GURL& lock_url,
+                             const SiteInfo& site_info,
                              bool is_guest);
 
   // Returns an existing RenderProcessHost for |url| in |isolation_context|, if
@@ -358,13 +358,12 @@ class CONTENT_EXPORT RenderProcessHostImpl
       const IsolationContext& isolation_context,
       const GURL& url);
 
-  // Variant of the above that takes in a SiteInstance site URL and the
-  // process's origin lock URL, when they are known. |is_guest| should be set
-  // to true if the call is being made for a <webview> guest SiteInstance.
+  // Variant of the above that takes in a SiteInfo. |is_guest| should be set to
+  // true if the call is being made for a <webview> guest SiteInstance.
+  // TODO(wjmaclean): Move is_guest into SiteInfo at some point.
   static RenderProcessHost* GetSoleProcessHostForSite(
       const IsolationContext& isolation_context,
       const SiteInfo& site_info,
-      const GURL& lock_url,
       const bool is_guest);
 
   // Registers the given |process| to be used for all sites identified by
@@ -478,10 +477,10 @@ class CONTENT_EXPORT RenderProcessHostImpl
     is_for_guests_only_ = is_for_guests_only;
   }
 
-#if defined(OS_POSIX) && !defined(OS_ANDROID) && !defined(OS_MACOSX)
+#if defined(OS_POSIX) && !defined(OS_ANDROID) && !defined(OS_MAC)
   // Launch the zygote early in the browser startup.
   static void EarlyZygoteLaunch();
-#endif  // defined(OS_POSIX) && !defined(OS_ANDROID) && !defined(OS_MACOSX)
+#endif  // defined(OS_POSIX) && !defined(OS_ANDROID) && !defined(OS_MAC)
 
   // Called when a video capture stream or an audio stream is added or removed
   // and used to determine if the process should be backgrounded or not.
@@ -530,6 +529,13 @@ class CONTENT_EXPORT RenderProcessHostImpl
 
   // Returns true if a spare RenderProcessHost should be kept at all times.
   static bool IsSpareProcessKeptAtAllTimes();
+
+  // Helper method that allows crash reporting logic to determine if a
+  // specific RenderProcessHost is the current spare process.
+  // Returns true if |render_process_host| is the current spare
+  // RenderProcessHost.
+  static bool IsSpareProcessForCrashReporting(
+      RenderProcessHost* render_process_host);
 
   PermissionServiceContext& permission_service_context() {
     return *permission_service_context_;
@@ -636,7 +642,7 @@ class CONTENT_EXPORT RenderProcessHostImpl
       override;
 
   // Disables CORB (Cross-Origin Read Blocking) and
-  // |request_initiator_site_lock| enforcement for |process_id|.
+  // |request_initiator_origin_lock| enforcement for |process_id|.
   //
   // The exception will be removed when the corresponding RenderProcessHostImpl
   // is destroyed (see
@@ -644,7 +650,7 @@ class CONTENT_EXPORT RenderProcessHostImpl
   static void AddCorbExceptionForPlugin(int process_id);
 
   // Allows |process_id| to use an additional |allowed_request_initiator|
-  // (bypassing |request_initiator_site_lock| enforcement).
+  // (bypassing |request_initiator_origin_lock| enforcement).
   //
   // The exception will be removed when the corresponding RenderProcessHostImpl
   // is destroyed (see
@@ -686,6 +692,9 @@ class CONTENT_EXPORT RenderProcessHostImpl
 
   // True if fast shutdown has been performed on this RPH.
   bool fast_shutdown_started_;
+
+  // True if shutdown from started by the |Shutdown()| method.
+  bool shutdown_requested_ = false;
 
   // True if we've posted a DeleteTask and will be deleted soon.
   bool deleting_soon_;
@@ -934,7 +943,7 @@ class CONTENT_EXPORT RenderProcessHostImpl
   // Creates a URLLoaderFactory that can be used by the renderer process,
   // without binding it to a specific frame or an origin.
   //
-  // TODO(kinuko, lukasza): https://crbug.com/891872: Remove, once all
+  // TODO(kinuko, lukasza): https://crbug.com/1114822: Remove, once all
   // URLLoaderFactories vended to a renderer process are associated with a
   // specific origin and an execution context (e.g. a frame, a service worker or
   // any other kind of worker).
@@ -951,12 +960,12 @@ class CONTENT_EXPORT RenderProcessHostImpl
   // if the request isn't handled on the IO thread.
   void OnBindHostReceiver(mojo::GenericPendingReceiver receiver);
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
   // Provides /proc/{renderer pid}/status and statm files for the renderer,
   // because the files are required to calculate the renderer's private
   // footprint on Chromium Linux. Regarding MacOS X and Windows, we have
   // the different way to calculate renderer's private memory footprint.
-  // So this method is implemented only when OS_LINUX is defined.
+  // So this method is implemented only when OS_LINUX or OS_CHROMEOS is defined.
   void ProvideStatusFileForRenderer();
 #endif
 
@@ -1099,7 +1108,7 @@ class CONTENT_EXPORT RenderProcessHostImpl
   bool is_blocked_;
 
   // The clients who want to know when the blocked state has changed.
-  base::CallbackList<void(bool)> blocked_state_changed_callback_list_;
+  BlockStateChangedCallbackList blocked_state_changed_callback_list_;
 
   // Records the last time we regarded the child process active.
   base::TimeTicks child_process_activity_time_;

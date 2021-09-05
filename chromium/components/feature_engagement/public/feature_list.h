@@ -10,7 +10,6 @@
 #include "base/feature_list.h"
 #include "base/stl_util.h"
 #include "build/build_config.h"
-#include "components/feature_engagement/buildflags.h"
 #include "components/feature_engagement/public/feature_constants.h"
 #include "components/flags_ui/feature_entry.h"
 
@@ -69,6 +68,8 @@ DEFINE_VARIATION_PARAM(kIPHChromeReengagementNotification2Feature,
                        "IPH_ChromeReengagementNotification2");
 DEFINE_VARIATION_PARAM(kIPHChromeReengagementNotification3Feature,
                        "IPH_ChromeReengagementNotification3");
+DEFINE_VARIATION_PARAM(kIPHContextualSearchTranslationEnableFeature,
+                       "IPH_ContextualSearchTranslationEnable");
 DEFINE_VARIATION_PARAM(kIPHContextualSearchWebSearchFeature,
                        "IPH_ContextualSearchWebSearch");
 DEFINE_VARIATION_PARAM(kIPHContextualSearchPromoteTapFeature,
@@ -119,9 +120,11 @@ DEFINE_VARIATION_PARAM(kIPHNewIncognitoTabTipFeature, "IPH_NewIncognitoTabTip");
 DEFINE_VARIATION_PARAM(kIPHBadgedReadingListFeature, "IPH_BadgedReadingList");
 DEFINE_VARIATION_PARAM(kIPHBadgedTranslateManualTriggerFeature,
                        "IPH_BadgedTranslateManualTrigger");
+DEFINE_VARIATION_PARAM(kIPHDiscoverFeedHeaderFeature,
+                       "IPH_DiscoverFeedHeaderMenu");
 #endif  // defined(OS_IOS)
 
-#if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX) || \
+#if defined(OS_WIN) || defined(OS_APPLE) || defined(OS_LINUX) || \
     defined(OS_CHROMEOS)
 DEFINE_VARIATION_PARAM(kIPHDesktopTabGroupsNewGroupFeature,
                        "IPH_DesktopTabGroupsNewGroup");
@@ -131,12 +134,7 @@ DEFINE_VARIATION_PARAM(kIPHPasswordsAccountStorageFeature,
                        "IPH_PasswordsAccountStorage");
 DEFINE_VARIATION_PARAM(kIPHReopenTabFeature, "IPH_ReopenTab");
 DEFINE_VARIATION_PARAM(kIPHWebUITabStripFeature, "IPH_WebUITabStrip");
-#if BUILDFLAG(ENABLE_LEGACY_DESKTOP_IN_PRODUCT_HELP)
-DEFINE_VARIATION_PARAM(kIPHBookmarkFeature, "IPH_Bookmark");
-DEFINE_VARIATION_PARAM(kIPHIncognitoWindowFeature, "IPH_IncognitoWindow");
-DEFINE_VARIATION_PARAM(kIPHNewTabFeature, "IPH_NewTab");
-#endif  // BUILDFLAG(ENABLE_LEGACY_DESKTOP_IN_PRODUCT_HELP)
-#endif  // defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX) ||
+#endif  // defined(OS_WIN) || defined(OS_APPLE) || defined(OS_LINUX) ||
         // defined(OS_CHROMEOS)
 
 }  // namespace
@@ -161,6 +159,7 @@ constexpr flags_ui::FeatureEntry::FeatureVariation
         VARIATION_ENTRY(kIPHChromeReengagementNotification1Feature),
         VARIATION_ENTRY(kIPHChromeReengagementNotification2Feature),
         VARIATION_ENTRY(kIPHChromeReengagementNotification3Feature),
+        VARIATION_ENTRY(kIPHContextualSearchTranslationEnableFeature),
         VARIATION_ENTRY(kIPHContextualSearchWebSearchFeature),
         VARIATION_ENTRY(kIPHContextualSearchPromoteTapFeature),
         VARIATION_ENTRY(kIPHContextualSearchPromotePanelOpenFeature),
@@ -192,19 +191,16 @@ constexpr flags_ui::FeatureEntry::FeatureVariation
         VARIATION_ENTRY(kIPHNewIncognitoTabTipFeature),
         VARIATION_ENTRY(kIPHBadgedReadingListFeature),
         VARIATION_ENTRY(kIPHBadgedTranslateManualTriggerFeature),
-#elif defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX) || \
+        VARIATION_ENTRY(kIPHDiscoverFeedHeaderFeature),
+#elif defined(OS_WIN) || defined(OS_APPLE) || defined(OS_LINUX) || \
     defined(OS_CHROMEOS)
         VARIATION_ENTRY(kIPHDesktopTabGroupsNewGroupFeature),
         VARIATION_ENTRY(kIPHFocusModeFeature),
         VARIATION_ENTRY(kIPHGlobalMediaControls),
+        VARIATION_ENTRY(kIPHPasswordsAccountStorageFeature),
         VARIATION_ENTRY(kIPHReopenTabFeature),
         VARIATION_ENTRY(kIPHWebUITabStripFeature),
-#if BUILDFLAG(ENABLE_LEGACY_DESKTOP_IN_PRODUCT_HELP)
-        VARIATION_ENTRY(kIPHBookmarkFeature),
-        VARIATION_ENTRY(kIPHIncognitoWindowFeature),
-        VARIATION_ENTRY(kIPHNewTabFeature),
-#endif  // BUILDFLAG(ENABLE_LEGACY_DESKTOP_IN_PRODUCT_HELP)
-#endif  // defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX) ||
+#endif  // defined(OS_WIN) || defined(OS_APPLE) || defined(OS_LINUX) ||
         // defined(OS_CHROMEOS)
 };
 

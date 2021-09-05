@@ -56,6 +56,12 @@ public final class ChromePreferenceKeys {
     /** Whether the Autofill Assistant onboarding has been accepted. */
     public static final String AUTOFILL_ASSISTANT_ONBOARDING_ACCEPTED =
             "AUTOFILL_ASSISTANT_ONBOARDING_ACCEPTED";
+    /** Whether the user has seen a lite-script before or is a first-time user. */
+    public static final String AUTOFILL_ASSISTANT_FIRST_TIME_LITE_SCRIPT_USER =
+            "Chrome.AutofillAssistant.LiteScriptFirstTimeUser";
+    /** The number of times a user has explicitly canceled a lite script. */
+    public static final String AUTOFILL_ASSISTANT_NUMBER_OF_LITE_SCRIPTS_CANCELED =
+            "Chrome.AutofillAssistant.NumberOfLiteScriptsCanceled";
     /**
      * LEGACY preference indicating whether "do not show again" was checked in the autofill
      * assistant onboarding
@@ -324,6 +330,7 @@ public final class ChromePreferenceKeys {
      * consistent with {@link Pref.ARTICLES_LIST_VISIBLE}.
      */
     public static final String FEED_ARTICLES_LIST_VISIBLE = "Chrome.Feed.ArticlesListVisible";
+    public static final String FEED_PLACEHOLDER_DENSE = "Chrome.Feed.PlaceholderIsDense";
 
     public static final String FIRST_RUN_CACHED_TOS_ACCEPTED = "first_run_tos_accepted";
     public static final String FIRST_RUN_FLOW_COMPLETE = "first_run_flow";
@@ -423,13 +430,6 @@ public final class ChromePreferenceKeys {
     public static final String FLAGS_CACHED_START_SURFACE_ENABLED = "start_surface_enabled";
 
     /**
-     * Whether or not the start surface single pane is enabled.
-     * Default value is false.
-     */
-    public static final String START_SURFACE_SINGLE_PANE_ENABLED_KEY =
-            "start_surface_single_pane_enabled";
-
-    /**
      * Key to cache whether SWAP_PIXEL_FORMAT_TO_FIX_CONVERT_FROM_TRANSLUCENT is enabled.
      */
     public static final String FLAGS_CACHED_SWAP_PIXEL_FORMAT_TO_FIX_CONVERT_FROM_TRANSLUCENT =
@@ -458,11 +458,6 @@ public final class ChromePreferenceKeys {
     public static final String HOMEPAGE_LOCATION_POLICY = "Chrome.Policy.HomepageLocation";
 
     public static final String INCOGNITO_SHORTCUT_ADDED = "incognito-shortcut-added";
-
-    /**
-     * Key for UUID-based generator used for Chrome Invalidations (sync, etc.).
-     */
-    public static final String INVALIDATIONS_UUID_PREF_KEY = "chromium.invalidations.uuid";
 
     /**
      * When the user is shown a badge that the current Android OS version is unsupported, and they
@@ -604,6 +599,13 @@ public final class ChromePreferenceKeys {
             "org.chromium.chrome.browser.settings.privacy."
             + "PREF_OTHER_FORMS_OF_HISTORY_DIALOG_SHOWN";
 
+    /** Stores the timestamp of the last performed Safety check. */
+    public static final String SETTINGS_SAFETY_CHECK_LAST_RUN_TIMESTAMP =
+            "Chrome.SafetyCheck.LastRunTimestamp";
+
+    /** Stores the number of times the user has performed Safety check. */
+    public static final String SETTINGS_SAFETY_CHECK_RUN_COUNTER = "Chrome.SafetyCheck.RunCounter";
+
     public static final String SETTINGS_WEBSITE_FAILED_BUILD_VERSION =
             "ManagedSpace.FailedBuildVersion";
 
@@ -656,6 +658,10 @@ public final class ChromePreferenceKeys {
      */
     public static final String SIGNIN_PROMO_SETTINGS_PERSONALIZED_DISMISSED =
             "settings_personalized_signin_promo_dismissed";
+
+    // TODO(https://crbug.com/1091858): Remove this after migrating the legacy code that uses
+    //                                  the sync account before the native is loaded.
+    public static final String SIGNIN_LEGACY_SYNC_ACCOUNT_EMAIL = "google.services.username";
 
     public static final String SNAPSHOT_DATABASE_REMOVED = "snapshot_database_removed";
 
@@ -769,6 +775,8 @@ public final class ChromePreferenceKeys {
             new KeyPrefix("zero_suggest_header_group_id*");
     public static final KeyPrefix KEY_ZERO_SUGGEST_HEADER_GROUP_TITLE_PREFIX =
             new KeyPrefix("zero_suggest_header_group_title*");
+    public static final KeyPrefix KEY_ZERO_SUGGEST_HEADER_GROUP_COLLAPSED_BY_DEFAULT_PREFIX =
+            new KeyPrefix("zero_suggest_header_group_collapsed_by_default*");
 
     /**
      * These values are currently used as SharedPreferences keys, along with the keys in
@@ -781,6 +789,8 @@ public final class ChromePreferenceKeys {
     static List<String> getKeysInUse() {
         // clang-format off
         return Arrays.asList(
+                AUTOFILL_ASSISTANT_FIRST_TIME_LITE_SCRIPT_USER,
+                AUTOFILL_ASSISTANT_NUMBER_OF_LITE_SCRIPTS_CANCELED,
                 CLIPBOARD_SHARED_URI,
                 CONDITIONAL_TAB_STRIP_CONTINUOUS_DISMISS_COUNTER,
                 CONDITIONAL_TAB_STRIP_FEATURE_STATUS,
@@ -800,6 +810,7 @@ public final class ChromePreferenceKeys {
                 DEFAULT_BROWSER_PROMO_SESSION_COUNT,
                 EXPLORE_OFFLINE_CONTENT_AVAILABILITY_STATUS,
                 FEED_ARTICLES_LIST_VISIBLE,
+                FEED_PLACEHOLDER_DENSE,
                 FLAGS_CACHED.pattern(),
                 FLAGS_CACHED_DUET_TABSTRIP_INTEGRATION_ANDROID_ENABLED,
                 FLAGS_FIELD_TRIAL_PARAM_CACHED.pattern(),
@@ -807,6 +818,8 @@ public final class ChromePreferenceKeys {
                 HOMEPAGE_USE_CHROME_NTP,
                 PROMO_IS_DISMISSED.pattern(),
                 PROMO_TIMES_SEEN.pattern(),
+                SETTINGS_SAFETY_CHECK_LAST_RUN_TIMESTAMP,
+                SETTINGS_SAFETY_CHECK_RUN_COUNTER,
                 TWA_DISCLOSURE_SEEN_PACKAGES
         );
         // clang-format on

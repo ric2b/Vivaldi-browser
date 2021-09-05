@@ -31,11 +31,12 @@
 #include <bitset>
 #include <memory>
 
-#include "base/location.h"
 #include "base/macros.h"
 #include "base/optional.h"
-#include "base/unguessable_token.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
+#include "services/network/public/mojom/ip_address_space.mojom-blink-forward.h"
 #include "services/network/public/mojom/referrer_policy.mojom-blink-forward.h"
+#include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/mojom/devtools/inspector_issue.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/feature_policy/feature_policy.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/feature_policy/feature_policy_feature.mojom-blink-forward.h"
@@ -45,7 +46,6 @@
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context_lifecycle_observer.h"
 #include "third_party/blink/renderer/core/execution_context/security_context.h"
-#include "third_party/blink/renderer/core/feature_policy/feature_policy_parser_delegate.h"
 #include "third_party/blink/renderer/core/frame/dom_timer_coordinator.h"
 #include "third_party/blink/renderer/platform/context_lifecycle_notifier.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
@@ -60,7 +60,12 @@
 
 namespace base {
 class SingleThreadTaskRunner;
+class UnguessableToken;
 }
+
+namespace ukm {
+class UkmRecorder;
+}  // namespace ukm
 
 namespace blink {
 
@@ -71,6 +76,7 @@ class ContentSecurityPolicy;
 class ContentSecurityPolicyDelegate;
 class CoreProbeSink;
 class DOMTimerCoordinator;
+class DOMWrapperWorld;
 class ErrorEvent;
 class EventTarget;
 class FrameOrWorkerScheduler;
@@ -116,8 +122,7 @@ class CORE_EXPORT ExecutionContext : public Supplementable<ExecutionContext>,
                                      public ContextLifecycleNotifier,
                                      public ConsoleLogger,
                                      public UseCounter,
-                                     public FeaturePolicyParserDelegate {
-
+                                     public FeatureContext {
  public:
   void Trace(Visitor*) const override;
 
@@ -127,11 +132,15 @@ class CORE_EXPORT ExecutionContext : public Supplementable<ExecutionContext>,
   // Returns the ExecutionContext of the current realm.
   static ExecutionContext* ForCurrentRealm(
       const v8::FunctionCallbackInfo<v8::Value>&);
+  static ExecutionContext* ForCurrentRealm(
+      const v8::PropertyCallbackInfo<v8::Value>&);
   // Returns the ExecutionContext of the relevant realm for the receiver object.
   static ExecutionContext* ForRelevantRealm(
       const v8::FunctionCallbackInfo<v8::Value>&);
+  static ExecutionContext* ForRelevantRealm(
+      const v8::PropertyCallbackInfo<v8::Value>&);
 
-  virtual bool IsDocument() const { return false; }
+  virtual bool IsWindow() const { return false; }
   virtual bool IsWorkerOrWorkletGlobalScope() const { return false; }
   virtual bool IsWorkerGlobalScope() const { return false; }
   virtual bool IsWorkletGlobalScope() const { return false; }
@@ -158,14 +167,22 @@ class CORE_EXPORT ExecutionContext : public Supplementable<ExecutionContext>,
   network::mojom::blink::WebSandboxFlags GetSandboxFlags() const;
   bool IsSandboxed(network::mojom::blink::WebSandboxFlags mask) const;
 
+  // Returns a reference to the current world we are in. If the current v8
+  // context is empty, returns null.
+  scoped_refptr<const DOMWrapperWorld> GetCurrentWorld() const;
+
   // Returns the content security policy to be used based on the current
   // JavaScript world we are in.
   // Note: As part of crbug.com/896041, existing usages of
   // ContentSecurityPolicy::ShouldBypassMainWorld should eventually be replaced
-  // by GetContentSecurityPolicyForWorld. However this is under active
+  // by GetContentSecurityPolicyForCurrentWorld. However this is under active
   // development, hence new callers should still use
   // ContentSecurityPolicy::ShouldBypassMainWorld for now.
-  virtual ContentSecurityPolicy* GetContentSecurityPolicyForWorld();
+  ContentSecurityPolicy* GetContentSecurityPolicyForCurrentWorld();
+
+  // Returns the content security policy to be used for the given |world|.
+  virtual ContentSecurityPolicy* GetContentSecurityPolicyForWorld(
+      const DOMWrapperWorld* world);
 
   virtual const KURL& Url() const = 0;
   virtual const KURL& BaseURL() const = 0;
@@ -186,8 +203,10 @@ class CORE_EXPORT ExecutionContext : public Supplementable<ExecutionContext>,
 
   virtual ResourceFetcher* Fetcher() const = 0;
 
-  virtual SecurityContext& GetSecurityContext() = 0;
-  virtual const SecurityContext& GetSecurityContext() const = 0;
+  SecurityContext& GetSecurityContext() { return security_context_; }
+  const SecurityContext& GetSecurityContext() const {
+    return security_context_;
+  }
 
   // https://tc39.github.io/ecma262/#sec-agent-clusters
   const base::UnguessableToken& GetAgentClusterID() const;
@@ -239,12 +258,14 @@ class CORE_EXPORT ExecutionContext : public Supplementable<ExecutionContext>,
   // Decides whether this context is privileged, as described in
   // https://w3c.github.io/webappsec-secure-contexts/#is-settings-object-contextually-secure.
   SecureContextMode GetSecureContextMode() const {
-    return GetSecurityContext().GetSecureContextMode();
+    return security_context_.GetSecureContextMode();
   }
   bool IsSecureContext() const {
     return GetSecureContextMode() == SecureContextMode::kSecureContext;
   }
   bool IsSecureContext(String& error_message) const;
+
+  virtual bool HasInsecureContextInAncestors() { return false; }
 
   // Returns a referrer to be used in the "Determine request's Referrer"
   // algorithm defined in the Referrer Policy spec.
@@ -259,11 +280,24 @@ class CORE_EXPORT ExecutionContext : public Supplementable<ExecutionContext>,
   // If |supportLegacyKeywords| is true, then the legacy keywords
   // "never", "default", "always", and "origin-when-crossorigin" are
   // parsed as valid policies.
-  void ParseAndSetReferrerPolicy(const String& policies,
-                                 bool support_legacy_keywords = false);
-  void SetReferrerPolicy(network::mojom::ReferrerPolicy);
+  //
+  // If |from_meta_tag_with_list_of_policies| is *false*, also updates
+  // |referrer_policy_but_for_meta_tags_with_lists_of_policies_|, which
+  // maintains a counterfactual to determine what the policy would look like if
+  // we started ignoring <meta name=referrer content=policy1,policy2,...> tags
+  // in order to align with the HTML standard (crbug.com/1092930).
+  void ParseAndSetReferrerPolicy(
+      const String& policies,
+      bool support_legacy_keywords = false,
+      bool from_meta_tag_with_list_of_policies = false);
+  void SetReferrerPolicy(network::mojom::ReferrerPolicy,
+                         bool from_meta_tag_with_list_of_policies = false);
   virtual network::mojom::ReferrerPolicy GetReferrerPolicy() const {
     return referrer_policy_;
+  }
+  virtual network::mojom::blink::ReferrerPolicy
+  ReferrerPolicyButForMetaTagsWithListsOfPolicies() const {
+    return referrer_policy_but_for_meta_tags_with_lists_of_policies_;
   }
 
   virtual CoreProbeSink* GetProbeSink() { return nullptr; }
@@ -280,17 +314,14 @@ class CORE_EXPORT ExecutionContext : public Supplementable<ExecutionContext>,
   v8::MicrotaskQueue* GetMicrotaskQueue() const;
 
   OriginTrialContext* GetOriginTrialContext() const {
-    return GetSecurityContext().GetOriginTrialContext();
+    return origin_trial_context_;
   }
 
   virtual TrustedTypePolicyFactory* GetTrustedTypes() const { return nullptr; }
   virtual bool RequireTrustedTypes() const;
 
-  // FeaturePolicyParserDelegate override
+  // FeatureContext override
   bool FeatureEnabled(OriginTrialFeature) const override;
-  void CountFeaturePolicyUsage(mojom::WebFeature feature) override;
-  bool FeaturePolicyFeatureObserved(
-      mojom::blink::FeaturePolicyFeature feature) override;
 
   // Tests whether the policy-controlled feature is enabled in this frame.
   // Optionally sends a report to any registered reporting observers or
@@ -330,6 +361,10 @@ class CORE_EXPORT ExecutionContext : public Supplementable<ExecutionContext>,
       const String& source_file = g_empty_string) const {}
 
   String addressSpaceForBindings() const;
+  void SetAddressSpace(network::mojom::IPAddressSpace space) {
+    address_space_ = space;
+  }
+  network::mojom::IPAddressSpace AddressSpace() const { return address_space_; }
 
   void AddContextLifecycleObserver(ContextLifecycleObserver*) override;
   void RemoveContextLifecycleObserver(ContextLifecycleObserver*) override;
@@ -341,8 +376,27 @@ class CORE_EXPORT ExecutionContext : public Supplementable<ExecutionContext>,
   // Implementation of WindowOrWorkerGlobalScope.crossOriginIsolated.
   bool IsCrossOriginIsolated() const;
 
+  virtual ukm::UkmRecorder* UkmRecorder() { return nullptr; }
+  virtual ukm::SourceId UkmSourceID() const { return ukm::kInvalidSourceId; }
+
+  // Returns the token that uniquely identifies this ExecutionContext.
+  virtual ExecutionContextToken GetExecutionContextToken() const = 0;
+
+  // Returns the token that uniquely identifies the parent ExecutionContext of
+  // this context. If an ExecutionContext has a parent context, it means that it
+  // was created from that context, and the lifetime of this context is tied to
+  // the lifetime of its parent. This is used for resource usage attribution,
+  // where the resource usage of a child context will be charged to its parent
+  // (and so on up the tree).
+  virtual base::Optional<ExecutionContextToken> GetParentExecutionContextToken()
+      const {
+    return base::nullopt;
+  }
+
  protected:
   explicit ExecutionContext(v8::Isolate* isolate, Agent*);
+  ExecutionContext(const ExecutionContext&) = delete;
+  ExecutionContext& operator=(const ExecutionContext&) = delete;
   ~ExecutionContext() override;
 
   // Resetting the Agent is only necessary for a special case related to the
@@ -364,6 +418,8 @@ class CORE_EXPORT ExecutionContext : public Supplementable<ExecutionContext>,
       mojom::blink::FeaturePolicyFeature feature) const;
 
   v8::Isolate* const isolate_;
+
+  SecurityContext security_context_;
 
   Member<Agent> agent_;
 
@@ -393,17 +449,22 @@ class CORE_EXPORT ExecutionContext : public Supplementable<ExecutionContext>,
 
   network::mojom::ReferrerPolicy referrer_policy_;
 
-  // Tracks which feature policies have already been parsed, so as not to count
-  // them multiple times.
-  // The size of this vector is 0 until FeaturePolicyFeatureObserved is called.
-  Vector<bool> parsed_feature_policies_;
+  // This is the same value as |referrer_policy_| except that it ignores
+  // referrer policies set as the result of parsing <meta name=referrer> tags
+  // whose values are comma-separated lists of policies. Its purpose is to allow
+  // evaluating the impact of switching to a behavior of no longer supporting
+  // these lists (crbug.com/1092930).
+  network::mojom::blink::ReferrerPolicy
+      referrer_policy_but_for_meta_tags_with_lists_of_policies_;
+
+  network::mojom::blink::IPAddressSpace address_space_;
+
+  Member<OriginTrialContext> origin_trial_context_;
 
   // Tracks which feature policy features have been logged in this execution
   // context as to the FeaturePolicyProposalWouldChangeBehaviour
   // histogram, in order not to overcount.
   mutable Vector<bool> feature_policy_behaviour_change_counted_;
-
-  DISALLOW_COPY_AND_ASSIGN(ExecutionContext);
 };
 
 }  // namespace blink

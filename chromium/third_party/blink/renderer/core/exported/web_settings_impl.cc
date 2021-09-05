@@ -425,6 +425,10 @@ void WebSettingsImpl::SetTouchDragDropEnabled(bool enabled) {
   settings_->SetTouchDragDropEnabled(enabled);
 }
 
+void WebSettingsImpl::SetTouchDragEndContextMenu(bool enabled) {
+  settings_->SetTouchDragEndContextMenu(enabled);
+}
+
 void WebSettingsImpl::SetBarrelButtonForDragEnabled(bool enabled) {
   settings_->SetBarrelButtonForDragEnabled(enabled);
 }
@@ -562,10 +566,6 @@ void WebSettingsImpl::SetEnableScrollAnimator(bool enabled) {
 
 void WebSettingsImpl::SetPrefersReducedMotion(bool enabled) {
   settings_->SetPrefersReducedMotion(enabled);
-}
-
-void WebSettingsImpl::SetEnableTouchAdjustment(bool enabled) {
-  settings_->SetTouchAdjustmentEnabled(enabled);
 }
 
 bool WebSettingsImpl::ViewportEnabled() const {
@@ -782,6 +782,14 @@ void WebSettingsImpl::SetNavigationControls(
 
 void WebSettingsImpl::SetAriaModalPrunesAXTree(bool enabled) {
   settings_->SetAriaModalPrunesAXTree(enabled);
+}
+
+void WebSettingsImpl::SetUseAXMenuList(bool enabled) {
+  settings_->SetUseAXMenuList(enabled);
+}
+
+void WebSettingsImpl::SetSelectionClipboardBufferAvailable(bool available) {
+  settings_->SetSelectionClipboardBufferAvailable(available);
 }
 
 STATIC_ASSERT_ENUM(WebSettings::ImageAnimationPolicy::kAllowed,

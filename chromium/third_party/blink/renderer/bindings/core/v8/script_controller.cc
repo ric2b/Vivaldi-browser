@@ -37,10 +37,8 @@
 
 #include "base/bind_helpers.h"
 #include "third_party/blink/public/web/web_settings.h"
-#include "third_party/blink/renderer/bindings/core/v8/referrer_script_info.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_source_code.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
-#include "third_party/blink/renderer/bindings/core/v8/v8_code_cache.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_gc_controller.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_script_runner.h"
 #include "third_party/blink/renderer/bindings/core/v8/window_proxy.h"
@@ -61,6 +59,7 @@
 #include "third_party/blink/renderer/core/loader/frame_loader.h"
 #include "third_party/blink/renderer/core/loader/progress_tracker.h"
 #include "third_party/blink/renderer/core/probe/core_probes.h"
+#include "third_party/blink/renderer/core/script/classic_script.h"
 #include "third_party/blink/renderer/platform/bindings/dom_wrapper_world.h"
 #include "third_party/blink/renderer/platform/instrumentation/histogram.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/trace_event.h"
@@ -111,53 +110,11 @@ v8::Local<v8::Value> ScriptController::ExecuteScriptAndReturnValue(
     v8::TryCatch try_catch(GetIsolate());
     try_catch.SetVerbose(true);
 
-    // Omit storing base URL if it is same as source URL.
-    // Note: This improves chance of getting into a fast path in
-    //       ReferrerScriptInfo::ToV8HostDefinedOptions.
-    KURL stored_base_url = (base_url == source.Url()) ? KURL() : base_url;
-
-    // TODO(hiroshige): Remove this code and related use counters once the
-    // measurement is done.
-    ReferrerScriptInfo::BaseUrlSource base_url_source =
-        ReferrerScriptInfo::BaseUrlSource::kOther;
-    if (source.SourceLocationType() ==
-            ScriptSourceLocationType::kExternalFile &&
-        !base_url.IsNull()) {
-      switch (sanitize_script_errors) {
-        case SanitizeScriptErrors::kDoNotSanitize:
-          base_url_source =
-              ReferrerScriptInfo::BaseUrlSource::kClassicScriptCORSSameOrigin;
-          break;
-        case SanitizeScriptErrors::kSanitize:
-          base_url_source =
-              ReferrerScriptInfo::BaseUrlSource::kClassicScriptCORSCrossOrigin;
-          break;
-      }
-    }
-    const ReferrerScriptInfo referrer_info(stored_base_url, fetch_options,
-                                           base_url_source);
-
-    v8::Local<v8::Script> script;
-
-    v8::ScriptCompiler::CompileOptions compile_options;
-    V8CodeCache::ProduceCacheOptions produce_cache_options;
-    v8::ScriptCompiler::NoCacheReason no_cache_reason;
-    std::tie(compile_options, produce_cache_options, no_cache_reason) =
-        V8CodeCache::GetCompileOptions(v8_cache_options, source);
-    if (!V8ScriptRunner::CompileScript(ScriptState::From(context), source,
-                                       sanitize_script_errors, compile_options,
-                                       no_cache_reason, referrer_info)
-             .ToLocal(&script))
-      return result;
-
-    v8::MaybeLocal<v8::Value> maybe_result;
-    maybe_result = V8ScriptRunner::RunCompiledScript(GetIsolate(), script,
-                                                     GetFrame()->DomWindow());
-    probe::ProduceCompilationCache(frame_, source, script);
-    V8CodeCache::ProduceCache(GetIsolate(), script, source,
-                              produce_cache_options);
-
-    if (!maybe_result.ToLocal(&result)) {
+    if (!V8ScriptRunner::CompileAndRunScript(
+             GetIsolate(), ScriptState::From(context), GetFrame()->DomWindow(),
+             source, base_url, sanitize_script_errors, fetch_options,
+             v8_cache_options)
+             .ToLocal(&result)) {
       return result;
     }
   }
@@ -254,29 +211,34 @@ void ScriptController::UpdateDocument() {
 
 void ScriptController::ExecuteJavaScriptURL(
     const KURL& url,
-    network::mojom::CSPDisposition check_main_world_csp) {
+    network::mojom::CSPDisposition csp_disposition,
+    const DOMWrapperWorld* world_for_csp) {
   DCHECK(url.ProtocolIsJavaScript());
 
   const int kJavascriptSchemeLength = sizeof("javascript:") - 1;
   String script_source = DecodeURLEscapeSequences(
       url.GetString(), DecodeURLMode::kUTF8OrIsomorphic);
 
-  bool should_bypass_main_world_content_security_policy =
-      check_main_world_csp == network::mojom::CSPDisposition::DO_NOT_CHECK ||
-      ContentSecurityPolicy::ShouldBypassMainWorld(GetFrame()->DomWindow());
   if (!GetFrame()->GetPage())
     return;
 
-  if (!should_bypass_main_world_content_security_policy &&
-      !GetFrame()->GetDocument()->GetContentSecurityPolicy()->AllowInline(
-          ContentSecurityPolicy::InlineType::kNavigation, nullptr,
-          script_source, String() /* nonce */, GetFrame()->GetDocument()->Url(),
-          EventHandlerPosition().line_)) {
+  ContentSecurityPolicy* policy =
+      GetFrame()->DomWindow()->GetContentSecurityPolicyForWorld(world_for_csp);
+  if (csp_disposition == network::mojom::CSPDisposition::CHECK &&
+      !policy->AllowInline(ContentSecurityPolicy::InlineType::kNavigation,
+                           nullptr, script_source, String() /* nonce */,
+                           GetFrame()->GetDocument()->Url(),
+                           EventHandlerPosition().line_)) {
     return;
   }
 
+  // TODO(crbug.com/896041): Investigate how trusted type checks can be
+  // implemented for isolated worlds.
+  const bool should_bypass_trusted_type_check =
+      csp_disposition == network::mojom::CSPDisposition::DO_NOT_CHECK ||
+      ContentSecurityPolicy::ShouldBypassMainWorld(world_for_csp);
   script_source = script_source.Substring(kJavascriptSchemeLength);
-  if (!should_bypass_main_world_content_security_policy) {
+  if (!should_bypass_trusted_type_check) {
     script_source = TrustedTypesCheckForJavascriptURLinNavigation(
         script_source, GetFrame()->DomWindow());
     if (script_source.IsEmpty())
@@ -285,21 +247,23 @@ void ScriptController::ExecuteJavaScriptURL(
 
   bool had_navigation_before = GetFrame()->Loader().HasProvisionalNavigation();
 
-  v8::HandleScope handle_scope(GetIsolate());
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#javascript-protocol
+  // Step 6. "Let baseURL be settings's API base URL." [spec text]
+  const KURL base_url = GetFrame()->GetDocument()->BaseURL();
 
-  // https://html.spec.whatwg.org/C/#navigate
-  // Step 12.8 "Let base URL be settings object's API base URL." [spec text]
-  KURL base_url = GetFrame()->GetDocument()->BaseURL();
-
-  // Step 12.9 "Let script be result of creating a classic script given script
-  // source, settings, base URL, and the default classic script fetch options."
-  // [spec text]
+  // Step 7. "Let script be the result of creating a classic script given
+  // scriptSource, settings, baseURL, and the default classic script fetch
+  // options." [spec text]
+  //
   // We pass |SanitizeScriptErrors::kDoNotSanitize| because |muted errors| is
   // false by default.
-  v8::Local<v8::Value> v8_result = EvaluateScriptInMainWorld(
+  ClassicScript* script = MakeGarbageCollected<ClassicScript>(
       ScriptSourceCode(script_source, ScriptSourceLocationType::kJavascriptUrl),
-      base_url, SanitizeScriptErrors::kDoNotSanitize, ScriptFetchOptions(),
-      kDoNotExecuteScriptWhenScriptsDisabled);
+      base_url, ScriptFetchOptions(), SanitizeScriptErrors::kDoNotSanitize);
+
+  DCHECK_EQ(&GetFrame()->GetScriptController(), this);
+  v8::HandleScope handle_scope(GetIsolate());
+  v8::Local<v8::Value> v8_result = script->RunScriptAndReturnValue(GetFrame());
   UseCounter::Count(*GetFrame()->GetDocument(),
                     WebFeature::kExecutedJavaScriptURL);
 
@@ -327,43 +291,13 @@ void ScriptController::ExecuteJavaScriptURL(
   params->url = GetFrame()->GetDocument()->Url();
   if (auto* owner = GetFrame()->Owner())
     params->frame_policy = owner->GetFramePolicy();
+  params->origin_to_commit = GetFrame()->DomWindow()->GetSecurityOrigin();
 
   String result = ToCoreString(v8::Local<v8::String>::Cast(v8_result));
   WebNavigationParams::FillStaticResponse(params.get(), "text/html", "UTF-8",
                                           StringUTF8Adaptor(result));
   GetFrame()->Loader().CommitNavigation(std::move(params), nullptr,
                                         CommitReason::kJavascriptUrl);
-}
-
-void ScriptController::ExecuteScriptInMainWorld(
-    const String& script,
-    ScriptSourceLocationType source_location_type,
-    ExecuteScriptPolicy policy) {
-  v8::HandleScope handle_scope(GetIsolate());
-  EvaluateScriptInMainWorld(ScriptSourceCode(script, source_location_type),
-                            KURL(), SanitizeScriptErrors::kSanitize,
-                            ScriptFetchOptions(), policy);
-}
-
-void ScriptController::ExecuteScriptInMainWorld(
-    const ScriptSourceCode& source_code,
-    const KURL& base_url,
-    SanitizeScriptErrors sanitize_script_errors,
-    const ScriptFetchOptions& fetch_options) {
-  v8::HandleScope handle_scope(GetIsolate());
-  EvaluateScriptInMainWorld(source_code, base_url, sanitize_script_errors,
-                            fetch_options,
-                            kDoNotExecuteScriptWhenScriptsDisabled);
-}
-
-v8::Local<v8::Value> ScriptController::ExecuteScriptInMainWorldAndReturnValue(
-    const ScriptSourceCode& source_code,
-    const KURL& base_url,
-    SanitizeScriptErrors sanitize_script_errors,
-    const ScriptFetchOptions& fetch_options,
-    ExecuteScriptPolicy policy) {
-  return EvaluateScriptInMainWorld(
-      source_code, base_url, sanitize_script_errors, fetch_options, policy);
 }
 
 v8::Local<v8::Value> ScriptController::EvaluateScriptInMainWorld(

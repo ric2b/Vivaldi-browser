@@ -67,6 +67,9 @@ class CONTENT_EXPORT ServiceWorkerContext {
  public:
   using ResultCallback = base::OnceCallback<void(bool success)>;
 
+  using GetInstalledRegistrationOriginsCallback =
+      base::OnceCallback<void(const std::vector<url::Origin>& origins)>;
+
   using GetUsageInfoCallback =
       base::OnceCallback<void(const std::vector<StorageUsageInfo>& usage_info)>;
 
@@ -165,12 +168,15 @@ class CONTENT_EXPORT ServiceWorkerContext {
   // Must be called on the UI thread.
   virtual bool MaybeHasRegistrationForOrigin(const url::Origin& origin) = 0;
 
-  // TODO(nidhijaju): Remove the ForTest() functions here and the tests that
-  // need it (e.g. in IsolatedPrerender) should use FakeServiceWorkerContext
-  // instead.
-  virtual void WaitForRegistrationsInitializedForTest() = 0;
-  virtual void AddRegistrationToRegisteredOriginsForTest(
-      const url::Origin& origin) = 0;
+  // Returns a set of origins which have at least one stored registration.
+  // The set doesn't include installing/uninstalling/uninstalled registrations.
+  // When |host_filter| is specified the set only includes origins whose host
+  // matches |host_filter|.
+  // This function can be called from any thread and the callback is called on
+  // that thread.
+  virtual void GetInstalledRegistrationOrigins(
+      base::Optional<std::string> host_filter,
+      GetInstalledRegistrationOriginsCallback callback) = 0;
 
   // May be called from any thread, and the callback is called on that thread.
   virtual void GetAllOriginsInfo(GetUsageInfoCallback callback) = 0;
@@ -180,7 +186,7 @@ class CONTENT_EXPORT ServiceWorkerContext {
   // service workers belonging to the registrations. All clients controlled by
   // those service workers will lose their controllers immediately after this
   // operation.
-  virtual void DeleteForOrigin(const GURL& origin_url,
+  virtual void DeleteForOrigin(const url::Origin& origin_url,
                                ResultCallback callback) = 0;
 
   // Performs internal storage cleanup. Operations to the storage in the past

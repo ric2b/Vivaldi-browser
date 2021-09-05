@@ -11,6 +11,7 @@
 #include "base/logging.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "build/build_config.h"
 #include "media/base/audio_buffer.h"
 #include "media/base/cdm_context.h"
 #include "media/base/demuxer_stream.h"
@@ -33,12 +34,21 @@ MojoAudioDecoder::~MojoAudioDecoder() {
   DVLOG(1) << __func__;
 }
 
-std::string MojoAudioDecoder::GetDisplayName() const {
-  return "MojoAudioDecoder";
-}
-
 bool MojoAudioDecoder::IsPlatformDecoder() const {
   return true;
+}
+
+bool MojoAudioDecoder::SupportsDecryption() const {
+  // Currently only the android backends support decryption
+#if defined(OS_ANDROID)
+  return true;
+#else
+  return false;
+#endif
+}
+
+std::string MojoAudioDecoder::GetDisplayName() const {
+  return "MojoAudioDecoder";
 }
 
 void MojoAudioDecoder::FailInit(InitCB init_cb, Status err) {
@@ -65,11 +75,11 @@ void MojoAudioDecoder::Initialize(const AudioDecoderConfig& config,
   }
 
   // Fail immediately if the stream is encrypted but |cdm_context| is invalid.
-  int cdm_id = (config.is_encrypted() && cdm_context)
-                   ? cdm_context->GetCdmId()
-                   : CdmContext::kInvalidCdmId;
+  base::Optional<base::UnguessableToken> cdm_id;
+  if (config.is_encrypted() && cdm_context)
+    cdm_id = cdm_context->GetCdmId();
 
-  if (config.is_encrypted() && CdmContext::kInvalidCdmId == cdm_id) {
+  if (config.is_encrypted() && !cdm_id) {
     DVLOG(1) << __func__ << ": Invalid CdmContext.";
     FailInit(std::move(init_cb),
              StatusCode::kDecoderMissingCdmForEncryptedContent);
@@ -88,13 +98,14 @@ void MojoAudioDecoder::Initialize(const AudioDecoderConfig& config,
 }
 
 void MojoAudioDecoder::Decode(scoped_refptr<DecoderBuffer> media_buffer,
-                              const DecodeCB& decode_cb) {
+                              DecodeCB decode_cb) {
   DVLOG(3) << __func__;
   DCHECK(task_runner_->BelongsToCurrentThread());
 
   if (!remote_decoder_.is_connected()) {
     task_runner_->PostTask(
-        FROM_HERE, base::BindOnce(decode_cb, DecodeStatus::DECODE_ERROR));
+        FROM_HERE,
+        base::BindOnce(std::move(decode_cb), DecodeStatus::DECODE_ERROR));
     return;
   }
 
@@ -102,12 +113,13 @@ void MojoAudioDecoder::Decode(scoped_refptr<DecoderBuffer> media_buffer,
       mojo_decoder_buffer_writer_->WriteDecoderBuffer(std::move(media_buffer));
   if (!buffer) {
     task_runner_->PostTask(
-        FROM_HERE, base::BindOnce(decode_cb, DecodeStatus::DECODE_ERROR));
+        FROM_HERE,
+        base::BindOnce(std::move(decode_cb), DecodeStatus::DECODE_ERROR));
     return;
   }
 
   DCHECK(!decode_cb_);
-  decode_cb_ = decode_cb;
+  decode_cb_ = std::move(decode_cb);
 
   remote_decoder_->Decode(std::move(buffer),
                           base::BindOnce(&MojoAudioDecoder::OnDecodeStatus,

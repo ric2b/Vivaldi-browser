@@ -17,6 +17,11 @@ import androidx.annotation.NonNull;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.MathUtils;
+import org.chromium.components.browser_ui.banners.SwipableOverlayView;
+import org.chromium.components.infobars.InfoBar;
+import org.chromium.components.infobars.InfoBarAnimationListener;
+import org.chromium.components.infobars.InfoBarContainerLayout;
+import org.chromium.components.infobars.InfoBarUiItem;
 import org.chromium.ui.display.DisplayAndroid;
 import org.chromium.ui.display.DisplayUtil;
 
@@ -27,7 +32,7 @@ public class InfoBarContainerView extends SwipableOverlayView {
     /**
      * Observes container view changes.
      */
-    public interface ContainerViewObserver extends InfoBarContainer.InfoBarAnimationListener {
+    public interface ContainerViewObserver extends InfoBarAnimationListener {
         /**
          * Called when the height of shown content changed.
          * @param shownFraction The ratio of height of shown content to the height of the container
@@ -52,7 +57,7 @@ public class InfoBarContainerView extends SwipableOverlayView {
     /** Parent view that contains the InfoBarContainerLayout. */
     private ViewGroup mParentView;
 
-    private final TabImpl mTab;
+    private TabImpl mTab;
 
     /** Animation used to snap the container to the nearest state if scroll direction changes. */
     private Animator mScrollDirectionChangeAnimation;
@@ -82,8 +87,8 @@ public class InfoBarContainerView extends SwipableOverlayView {
         updateLayoutParams(context, isTablet);
 
         Runnable makeContainerVisibleRunnable = () -> runUpEventAnimation(true);
-        mLayout = new InfoBarContainerLayout(context, makeContainerVisibleRunnable,
-                new InfoBarContainer.InfoBarAnimationListener() {
+        mLayout = new InfoBarContainerLayout(
+                context, makeContainerVisibleRunnable, new InfoBarAnimationListener() {
                     @Override
                     public void notifyAnimationFinished(int animationType) {
                         mContainerViewObserver.notifyAnimationFinished(animationType);
@@ -102,6 +107,7 @@ public class InfoBarContainerView extends SwipableOverlayView {
 
     void destroy() {
         removeFromParentView();
+        mTab = null;
     }
 
     // SwipableOverlayView implementation.
@@ -135,8 +141,9 @@ public class InfoBarContainerView extends SwipableOverlayView {
     // View implementation.
     @Override
     public void setTranslationY(float translationY) {
-        int contentHeightDelta =
-                mTab.getBrowser().getViewController().getBottomContentHeightDelta();
+        int contentHeightDelta = mTab != null
+                ? mTab.getBrowser().getViewController().getBottomContentHeightDelta()
+                : 0;
 
         // Push the infobar container up by any delta caused by the bottom toolbar while ensuring
         // that it does not ascend beyond the top of the bottom toolbar nor descend beyond its own
@@ -183,7 +190,9 @@ public class InfoBarContainerView extends SwipableOverlayView {
      * Adds this class to the parent view {@link #mParentView}.
      */
     void addToParentView() {
-        super.addToParentView(mParentView,
+        // If mTab is null, destroy() was called. This should not be added after destroyed.
+        assert mTab != null;
+        super.addToParentViewAtIndex(mParentView,
                 mTab.getBrowser().getViewController().getDesiredInfoBarContainerViewIndex());
     }
 

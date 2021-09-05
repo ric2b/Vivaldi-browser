@@ -34,6 +34,7 @@ extern const char kVivaldiMailURL[];
 extern const char kVivaldiReservedApiError[];
 
 extern const char kVivaldiUIScheme[];
+extern const char kVivaldiGameHost[];
 
 extern const char kVivaldiNativeScheme[];
 

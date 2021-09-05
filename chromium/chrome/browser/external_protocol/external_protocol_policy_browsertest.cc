@@ -42,7 +42,7 @@ IN_PROC_BROWSER_TEST_F(ExternalProtocolPolicyBrowserTest,
   PolicyMap policies;
   policies.Set(key::kAutoLaunchProtocolsFromOrigins, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               protocol_origins_map.CreateDeepCopy(), nullptr);
+               protocol_origins_map.Clone(), nullptr);
   UpdateProviderPolicy(policies);
 
   block_state = ExternalProtocolHandler::GetBlockState(
@@ -105,7 +105,7 @@ IN_PROC_BROWSER_TEST_F(ExternalProtocolPolicyBrowserTest,
   PolicyMap policies;
   policies.Set(key::kAutoLaunchProtocolsFromOrigins, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               protocol_origins_map_list.CreateDeepCopy(), nullptr);
+               protocol_origins_map_list.Clone(), nullptr);
   UpdateProviderPolicy(policies);
 
   block_state = ExternalProtocolHandler::GetBlockState(
@@ -133,7 +133,7 @@ IN_PROC_BROWSER_TEST_F(ExternalProtocolPolicyBrowserTest,
   PolicyMap policies;
   policies.Set(key::kAutoLaunchProtocolsFromOrigins, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               protocol_origins_map_list.CreateDeepCopy(), nullptr);
+               protocol_origins_map_list.Clone(), nullptr);
   UpdateProviderPolicy(policies);
 
   url::Origin test_origin = url::Origin::Create(GURL("https://example.test"));
@@ -186,7 +186,7 @@ IN_PROC_BROWSER_TEST_F(ExternalProtocolPolicyBrowserTest,
   PolicyMap policies;
   policies.Set(key::kAutoLaunchProtocolsFromOrigins, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               protocol_origins_map_list.CreateDeepCopy(), nullptr);
+               protocol_origins_map_list.Clone(), nullptr);
   UpdateProviderPolicy(policies);
 
   url::Origin test_origin = url::Origin::Create(GURL("https://example.test"));
@@ -217,7 +217,7 @@ IN_PROC_BROWSER_TEST_F(ExternalProtocolPolicyBrowserTest,
   PolicyMap policies;
   policies.Set(key::kAutoLaunchProtocolsFromOrigins, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               protocol_origins_map_list.CreateDeepCopy(), nullptr);
+               protocol_origins_map_list.Clone(), nullptr);
   UpdateProviderPolicy(policies);
 
   // Test that secure origin matches.
@@ -262,7 +262,7 @@ IN_PROC_BROWSER_TEST_F(ExternalProtocolPolicyBrowserTest,
   PolicyMap policies;
   policies.Set(key::kAutoLaunchProtocolsFromOrigins, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               protocol_origins_map_list.CreateDeepCopy(), nullptr);
+               protocol_origins_map_list.Clone(), nullptr);
   UpdateProviderPolicy(policies);
 
   // Test that secure origin matches.
@@ -307,7 +307,7 @@ IN_PROC_BROWSER_TEST_F(ExternalProtocolPolicyBrowserTest,
   PolicyMap policies;
   policies.Set(key::kAutoLaunchProtocolsFromOrigins, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               protocol_origins_map_list.CreateDeepCopy(), nullptr);
+               protocol_origins_map_list.Clone(), nullptr);
   UpdateProviderPolicy(policies);
 
   // Test that a subdomain matches.
@@ -340,7 +340,7 @@ IN_PROC_BROWSER_TEST_F(ExternalProtocolPolicyBrowserTest,
   PolicyMap policies;
   policies.Set(key::kAutoLaunchProtocolsFromOrigins, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               protocol_origins_map_list.CreateDeepCopy(), nullptr);
+               protocol_origins_map_list.Clone(), nullptr);
   UpdateProviderPolicy(policies);
 
   // Test that secure origin matches.
@@ -379,7 +379,7 @@ IN_PROC_BROWSER_TEST_F(ExternalProtocolPolicyBrowserTest,
   PolicyMap policies;
   policies.Set(key::kAutoLaunchProtocolsFromOrigins, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               protocol_origins_map_list.CreateDeepCopy(), nullptr);
+               protocol_origins_map_list.Clone(), nullptr);
   UpdateProviderPolicy(policies);
 
   // Test that default HTTPS port 443 matches.
@@ -424,7 +424,7 @@ IN_PROC_BROWSER_TEST_F(ExternalProtocolPolicyBrowserTest,
   PolicyMap policies;
   policies.Set(key::kAutoLaunchProtocolsFromOrigins, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               protocol_origins_map_list.CreateDeepCopy(), nullptr);
+               protocol_origins_map_list.Clone(), nullptr);
   UpdateProviderPolicy(policies);
 
   url::Origin test_origin =
@@ -456,7 +456,7 @@ IN_PROC_BROWSER_TEST_F(ExternalProtocolPolicyBrowserTest,
   PolicyMap policies;
   policies.Set(key::kAutoLaunchProtocolsFromOrigins, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               protocol_origins_map_list.CreateDeepCopy(), nullptr);
+               protocol_origins_map_list.Clone(), nullptr);
   UpdateProviderPolicy(policies);
 
   url::Origin test_origin = url::Origin::Create(GURL(kFullUrlWithPath));

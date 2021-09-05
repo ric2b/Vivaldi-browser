@@ -4,6 +4,8 @@
 
 #include "components/viz/host/renderer_settings_creation.h"
 
+#include <string>
+
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/logging.h"
@@ -15,7 +17,7 @@
 #include "components/viz/common/switches.h"
 #include "ui/base/ui_base_switches.h"
 
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
 #include "ui/base/cocoa/remote_layer_api.h"
 #endif
 
@@ -53,30 +55,22 @@ RendererSettings CreateRendererSettings() {
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   renderer_settings.partial_swap_enabled =
       !command_line->HasSwitch(switches::kUIDisablePartialSwap);
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
   renderer_settings.release_overlay_resources_after_gpu_query = true;
   renderer_settings.auto_resize_output_surface = false;
 #elif defined(OS_CHROMEOS)
   renderer_settings.auto_resize_output_surface = false;
 #endif
-  renderer_settings.tint_gl_composited_content =
-      command_line->HasSwitch(switches::kTintGlCompositedContent);
-  renderer_settings.show_overdraw_feedback =
-      command_line->HasSwitch(switches::kShowOverdrawFeedback);
-  renderer_settings.show_aggregated_damage =
-      command_line->HasSwitch(switches::kShowAggregatedDamage);
   renderer_settings.allow_antialiasing =
       !command_line->HasSwitch(switches::kDisableCompositedAntialiasing);
   renderer_settings.use_skia_renderer = features::IsUsingSkiaRenderer();
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
   renderer_settings.allow_overlays =
       ui::RemoteLayerAPISupported() &&
       !base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kDisableMacOverlays);
 #endif
   renderer_settings.record_sk_picture = features::IsRecordingSkPicture();
-  renderer_settings.show_dc_layer_debug_borders =
-      command_line->HasSwitch(switches::kShowDCLayerDebugBorders);
 
   if (command_line->HasSwitch(switches::kSlowDownCompositingScaleFactor)) {
     const int kMinSlowDownScaleFactor = 1;
@@ -104,6 +98,20 @@ RendererSettings CreateRendererSettings() {
 #endif
 
   return renderer_settings;
+}
+
+DebugRendererSettings CreateDefaultDebugRendererSettings() {
+  DebugRendererSettings result;
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  result.tint_composited_content =
+      command_line->HasSwitch(switches::kTintCompositedContent);
+  result.show_overdraw_feedback =
+      command_line->HasSwitch(switches::kShowOverdrawFeedback);
+  result.show_dc_layer_debug_borders =
+      command_line->HasSwitch(switches::kShowDCLayerDebugBorders);
+  result.show_aggregated_damage =
+      command_line->HasSwitch(switches::kShowAggregatedDamage);
+  return result;
 }
 
 }  // namespace viz

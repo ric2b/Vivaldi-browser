@@ -28,13 +28,10 @@ import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.supplier.Supplier;
-import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ChromeKeyboardVisibilityDelegate;
 import org.chromium.chrome.browser.ChromeWindow;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.compositor.CompositorViewHolder;
-import org.chromium.chrome.browser.compositor.layouts.Layout;
-import org.chromium.chrome.browser.compositor.layouts.LayoutManager;
-import org.chromium.chrome.browser.compositor.layouts.SceneChangeObserver;
 import org.chromium.chrome.browser.contextualsearch.ContextualSearchManager;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.fullscreen.FullscreenManager;
@@ -60,6 +57,7 @@ import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabModelObserver;
 import org.chromium.chrome.browser.vr.VrModuleProvider;
 import org.chromium.components.autofill.AutofillDelegate;
 import org.chromium.components.autofill.AutofillSuggestion;
+import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController.SheetState;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetObserver;
 import org.chromium.components.browser_ui.bottomsheet.EmptyBottomSheetObserver;
@@ -94,20 +92,7 @@ class ManualFillingMediator extends EmptyTabObserver
     private ChromeActivity mActivity; // Used to control the keyboard.
     private TabModelSelectorTabModelObserver mTabModelObserver;
     private DropdownPopupWindow mPopup;
-
-    private final SceneChangeObserver mTabSwitcherObserver = new SceneChangeObserver() {
-        @Override
-        public void onTabSelectionHinted(int tabId) {}
-
-        @Override
-        public void onSceneStartShowing(Layout layout) {
-            // Includes events like side-swiping between tabs and triggering contextual search.
-            pause();
-        }
-
-        @Override
-        public void onSceneChange(Layout layout) {}
-    };
+    private BottomSheetController mBottomSheetController;
 
     private final TabObserver mTabObserver = new EmptyTabObserver() {
         @Override
@@ -144,12 +129,14 @@ class ManualFillingMediator extends EmptyTabObserver
     }
 
     void initialize(KeyboardAccessoryCoordinator keyboardAccessory,
-            AccessorySheetCoordinator accessorySheet, WindowAndroid windowAndroid) {
+            AccessorySheetCoordinator accessorySheet, WindowAndroid windowAndroid,
+            BottomSheetController sheetController) {
         mActivity = (ChromeActivity) windowAndroid.getActivity().get();
         assert mActivity != null;
         mWindowAndroid = windowAndroid;
         mWindowAndroid.getApplicationBottomInsetProvider().addSupplier(mViewportInsetSupplier);
         mKeyboardAccessory = keyboardAccessory;
+        mBottomSheetController = sheetController;
         mModel.set(PORTRAIT_ORIENTATION, hasPortraitOrientation());
         mModel.addObserver(this::onPropertyChanged);
         mAccessorySheet = accessorySheet;
@@ -158,8 +145,6 @@ class ManualFillingMediator extends EmptyTabObserver
                 * mActivity.getResources().getDimensionPixelSize(
                         R.dimen.keyboard_accessory_suggestion_height));
         setInsetObserverViewSupplier(mActivity::getInsetObserverView);
-        LayoutManager manager = getLayoutManager();
-        if (manager != null) manager.addSceneChangeObserver(mTabSwitcherObserver);
         mActivity.findViewById(android.R.id.content).addOnLayoutChangeListener(this);
         mTabModelObserver = new TabModelSelectorTabModelObserver(mActivity.getTabModelSelector()) {
             @Override
@@ -177,7 +162,7 @@ class ManualFillingMediator extends EmptyTabObserver
             }
         };
         mActivity.getFullscreenManager().addObserver(mFullscreenObserver);
-        mActivity.getBottomSheetController().addObserver(mBottomSheetObserver);
+        mBottomSheetController.addObserver(mBottomSheetObserver);
         ensureObserverRegistered(getActiveBrowserTab());
         refreshTabs();
     }
@@ -258,10 +243,8 @@ class ManualFillingMediator extends EmptyTabObserver
         mStateCache.destroy();
         for (Tab tab : mObservedTabs) tab.removeObserver(mTabObserver);
         mObservedTabs.clear();
-        LayoutManager manager = getLayoutManager();
-        if (manager != null) manager.removeSceneChangeObserver(mTabSwitcherObserver);
         mActivity.getFullscreenManager().removeObserver(mFullscreenObserver);
-        mActivity.getBottomSheetController().removeObserver(mBottomSheetObserver);
+        mBottomSheetController.removeObserver(mBottomSheetObserver);
         mWindowAndroid = null;
         mActivity = null;
     }
@@ -520,7 +503,6 @@ class ManualFillingMediator extends EmptyTabObserver
         }
         mKeyboardAccessory.setBottomOffset(newControlsOffset);
         mViewportInsetSupplier.set(newControlsHeight);
-        mActivity.getFullscreenManager().updateViewportSize();
     }
 
     /**
@@ -536,18 +518,6 @@ class ManualFillingMediator extends EmptyTabObserver
         Tab tab = getActiveBrowserTab();
         if (tab == null) return null;
         return tab.getContentView();
-    }
-
-    /**
-     * Shorthand to check whether there is a valid {@link LayoutManager} for the current activity.
-     * If there isn't (e.g. before initialization or after destruction), return null.
-     * @return {@code null} or a {@link LayoutManager}.
-     */
-    private @Nullable LayoutManager getLayoutManager() {
-        if (mActivity == null) return null;
-        CompositorViewHolder compositorViewHolder = mActivity.getCompositorViewHolder();
-        if (compositorViewHolder == null) return null;
-        return compositorViewHolder.getLayoutManager();
     }
 
     /**

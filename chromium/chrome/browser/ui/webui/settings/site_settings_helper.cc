@@ -10,11 +10,8 @@
 #include <string>
 
 #include "base/feature_list.h"
-#include "base/no_destructor.h"
 #include "base/stl_util.h"
-#include "base/strings/strcat.h"
 #include "base/strings/string16.h"
-#include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "chrome/browser/bluetooth/bluetooth_chooser_context.h"
@@ -26,6 +23,9 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/serial/serial_chooser_context.h"
 #include "chrome/browser/serial/serial_chooser_context_factory.h"
+#include "chrome/browser/subresource_filter/subresource_filter_content_settings_manager.h"
+#include "chrome/browser/subresource_filter/subresource_filter_profile_context.h"
+#include "chrome/browser/subresource_filter/subresource_filter_profile_context_factory.h"
 #include "chrome/browser/usb/usb_chooser_context.h"
 #include "chrome/browser/usb/usb_chooser_context_factory.h"
 #include "chrome/common/pref_names.h"
@@ -47,7 +47,6 @@
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/constants.h"
 #include "url/origin.h"
-#include "url/url_constants.h"
 
 namespace site_settings {
 
@@ -106,8 +105,7 @@ const ContentSettingsTypeNameEntry kContentSettingsTypeGroupNames[] = {
     {ContentSettingsType::BLUETOOTH_SCANNING, "bluetooth-scanning"},
     {ContentSettingsType::HID_GUARD, "hid-devices"},
     {ContentSettingsType::HID_CHOOSER_DATA, kHidChooserDataGroupType},
-    {ContentSettingsType::NATIVE_FILE_SYSTEM_WRITE_GUARD,
-     "native-file-system-write"},
+    {ContentSettingsType::FILE_SYSTEM_WRITE_GUARD, "file-system-write"},
     {ContentSettingsType::MIXEDSCRIPT, "mixed-script"},
     {ContentSettingsType::VR, "vr"},
     {ContentSettingsType::AR, "ar"},
@@ -115,6 +113,7 @@ const ContentSettingsTypeNameEntry kContentSettingsTypeGroupNames[] = {
     {ContentSettingsType::BLUETOOTH_CHOOSER_DATA,
      kBluetoothChooserDataGroupType},
     {ContentSettingsType::WINDOW_PLACEMENT, "window-placement"},
+    {ContentSettingsType::FONT_ACCESS, "font-access"},
 
     // Add new content settings here if a corresponding Javascript string
     // representation for it is not required. Note some exceptions do have UI in
@@ -145,9 +144,10 @@ const ContentSettingsTypeNameEntry kContentSettingsTypeGroupNames[] = {
     {ContentSettingsType::INSTALLED_WEB_APP_METADATA, nullptr},
     {ContentSettingsType::NFC, nullptr},
     {ContentSettingsType::SAFE_BROWSING_URL_CHECK_DATA, nullptr},
-    {ContentSettingsType::NATIVE_FILE_SYSTEM_READ_GUARD, nullptr},
+    {ContentSettingsType::FILE_SYSTEM_READ_GUARD, nullptr},
     {ContentSettingsType::STORAGE_ACCESS, nullptr},
     {ContentSettingsType::CAMERA_PAN_TILT_ZOOM, nullptr},
+    {ContentSettingsType::INSECURE_PRIVATE_NETWORK, nullptr},
 };
 static_assert(base::size(kContentSettingsTypeGroupNames) ==
                   // ContentSettingsType starts at -1, so add 1 here.
@@ -162,7 +162,7 @@ struct SiteSettingSourceStringMapping {
 
 const SiteSettingSourceStringMapping kSiteSettingSourceStringMapping[] = {
     {SiteSettingSource::kAllowlist, "allowlist"},
-    {SiteSettingSource::kAdsFilterBlacklist, "ads-filter-blacklist"},
+    {SiteSettingSource::kAdsFilterBlocklist, "ads-filter-blacklist"},
     {SiteSettingSource::kDefault, "default"},
     {SiteSettingSource::kDrmDisabled, "drm-disabled"},
     {SiteSettingSource::kEmbargo, "embargo"},
@@ -198,13 +198,6 @@ static_assert(base::size(kPolicyIndicatorTypeStringMapping) ==
                   static_cast<int>(PolicyIndicatorType::kNumIndicators),
               "kPolicyIndicatorStringMapping should have "
               "PolicyIndicatorType::kNumIndicators elements");
-
-const std::string& GetDevtoolsPatternPrefix() {
-  static const base::NoDestructor<std::string> kDevtoolsPatternPrefix(
-      base::StrCat({content_settings::kChromeDevToolsScheme,
-                    url::kStandardSchemeSeparator}));
-  return *kDevtoolsPatternPrefix;
-}
 
 // Retrieves the corresponding string, according to the following precedence
 // order from highest to lowest priority:
@@ -246,12 +239,12 @@ SiteSettingSource CalculateSiteSettingSource(
   if (content_type == ContentSettingsType::ADS &&
       base::FeatureList::IsEnabled(
           subresource_filter::kSafeBrowsingSubresourceFilter)) {
-    HostContentSettingsMap* map =
-        HostContentSettingsMapFactory::GetForProfile(profile);
-    if (map->GetWebsiteSetting(origin, GURL(), ContentSettingsType::ADS_DATA,
-                               /*resource_identifier=*/std::string(),
-                               /*setting_info=*/nullptr) != nullptr) {
-      return SiteSettingSource::kAdsFilterBlacklist;  // Source #6.
+    SubresourceFilterContentSettingsManager* settings_manager =
+        SubresourceFilterProfileContextFactory::GetForProfile(profile)
+            ->settings_manager();
+
+    if (settings_manager->GetSiteActivationFromMetadata(origin)) {
+      return SiteSettingSource::kAdsFilterBlocklist;  // Source #6.
     }
   }
 
@@ -306,9 +299,8 @@ bool PatternAppliesToWebUISchemes(const ContentSettingPatternSource& pattern) {
              ContentSettingsPattern::SchemeType::SCHEME_CHROME ||
          pattern.primary_pattern.GetScheme() ==
              ContentSettingsPattern::SchemeType::SCHEME_CHROMEUNTRUSTED ||
-         base::StartsWith(pattern.primary_pattern.ToString(),
-                          GetDevtoolsPatternPrefix(),
-                          base::CompareCase::INSENSITIVE_ASCII);
+         pattern.primary_pattern.GetScheme() ==
+             ContentSettingsPattern::SchemeType::SCHEME_DEVTOOLS;
 }
 
 // Retrieves the source of a chooser exception as a string. This method uses the

@@ -6,6 +6,7 @@
 <translation id="1012173283529841972">Saraksta vienums</translation>
 <translation id="1013742170491673792">meklēšana</translation>
 <translation id="1014370462248694370">Velciet ar diviem pirkstiem pa labi</translation>
+<translation id="1016393160682012902">Lai uzzinātu par pieejamajām funkcijām, nospiediet kādu no QWERTY tastatūras taustiņiem, atsvaidzināmās Braila raksta tastatūras taustiņu vai veiciet kādu skāriena žestu. Lai izietu, nospiediet taustiņu kombināciju Ctrl+W vai nospiediet taustiņu Escape.</translation>
 <translation id="1022586497894531524">Vai izmantojat ChromeVox balss funkciju pirmo reizi? Šajā ātrajā pamācībā ir izskaidroti darba sākšanas ar ChromeVox pamati.</translation>
 <translation id="1025074108959230262">Saistošais režīms atspējots</translation>
 <translation id="1031961866430398710">, pēc tam</translation>
@@ -504,7 +505,6 @@
 <translation id="489907760999452556">Iekšējā saite</translation>
 <translation id="4909019435900810068">Pārvietot atpakaļ par vienu vārdu</translation>
 <translation id="4911349081560453449">Nav iepriekšējās izvēles rūtiņas.</translation>
-<translation id="4915087353619183190">Notiek mācību režīma aktivizēšana. Lai uzzinātu par šajā režīmā pieejamajām funkcijām, nospiediet Qwerty taustiņu vai atsvaidzināma Braila raksta taustiņu vai arī veiciet kādu žestu. Lai izietu, nospiediet taustiņu kombināciju Ctrl+W vai nospiediet taustiņu Esc.</translation>
 <translation id="492295894462528572">Priekšvārds</translation>
 <translation id="495046168593986294">Ritināt uz augšu</translation>
 <translation id="495170559598752135">Darbības</translation>
@@ -647,6 +647,7 @@
 <translation id="6017514345406065928">Zaļa</translation>
 <translation id="602001110135236999">Ritināt pa kreisi</translation>
 <translation id="6034000775414344507">Gaiši pelēka</translation>
+<translation id="6036135911048686884">Izpētiet ar pieskārienu</translation>
 <translation id="6037602951055904232">Pārvietot uz priekšu</translation>
 <translation id="6044160928851315051">Aptumšot ekrānu</translation>
 <translation id="6082768461603900813">Navigācijas pamatiespējas</translation>
@@ -923,6 +924,7 @@
 <translation id="8345569862449483843">{COUNT,plural, =1{numura zīme}zero{# numura zīmju}one{# numura zīme}other{# numura zīmes}}</translation>
 <translation id="8378855320830505539">Reģions</translation>
 <translation id="8382679411218029383">Automātiskā pabeigšana: iekļauta un sarakstā</translation>
+<translation id="8394908167088220973">Multivide — atskaņot/apturēt</translation>
 <translation id="8428213095426709021">Iestatījumi</translation>
 <translation id="8428603554127842284"><ph name="DEPTH" />. līmenis</translation>
 <translation id="8430049249787218991">izvēļņu josla</translation>
@@ -967,6 +969,7 @@
 <translation id="8770473310765924354">aizvērt strukturētu saturu, piemēram, tabulas</translation>
 <translation id="8779057862865475116">Nav iepriekšējās saites.</translation>
 <translation id="8796411681063377102">Nākamais 3. līmeņa virsraksts</translation>
+<translation id="8823311177246872527"><ph name="CURRENTPAGE" />. lapa no <ph name="TOTALPAGES" /></translation>
 <translation id="8825828890761629845">reklāmkarogs</translation>
 <translation id="8851136666856101339">galvenais</translation>
 <translation id="8882002077197914455">Rindas virsraksts</translation>

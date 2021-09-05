@@ -40,12 +40,12 @@
 #include "chrome/installer/util/create_reg_key_work_item.h"
 #include "chrome/installer/util/delete_after_reboot_helper.h"
 #include "chrome/installer/util/delete_old_versions.h"
+#include "chrome/installer/util/initial_preferences.h"
+#include "chrome/installer/util/initial_preferences_constants.h"
 #include "chrome/installer/util/install_util.h"
 #include "chrome/installer/util/installation_state.h"
 #include "chrome/installer/util/installer_util_strings.h"
 #include "chrome/installer/util/l10n_string_util.h"
-#include "chrome/installer/util/master_preferences.h"
-#include "chrome/installer/util/master_preferences_constants.h"
 #include "chrome/installer/util/util_constants.h"
 #include "chrome/installer/util/work_item.h"
 #include "chrome/installer/util/work_item_list.h"
@@ -611,8 +611,7 @@ InstallStatus InstallOrUpdateProduct(const InstallParams& install_params,
       // Kill any remaining notifier
       vivaldi::KillProcesses(update_notifier_processes);
       base::DeleteFile(installer_state.target_path().Append(
-          vivaldi::constants::kVivaldiUpdateNotifierOldExe),
-          false);
+          vivaldi::constants::kVivaldiUpdateNotifierOldExe));
     }
     // For Vivaldi, do not clean up old versions here. The old setup.exe is used
     // when delta patching itself. The cleanup is done in setup_main.cc.
@@ -639,7 +638,7 @@ InstallStatus InstallOrUpdateProduct(const InstallParams& install_params,
 void LaunchDeleteOldVersionsProcess(const base::FilePath& setup_path,
                                     const InstallerState& installer_state) {
   base::CommandLine command_line(setup_path);
-  InstallUtil::AppendModeSwitch(&command_line);
+  InstallUtil::AppendModeAndChannelSwitches(&command_line);
   command_line.AppendSwitch(switches::kDeleteOldVersions);
 
   if (installer_state.system_install())

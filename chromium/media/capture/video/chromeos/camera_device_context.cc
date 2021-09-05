@@ -47,14 +47,8 @@ void CameraDeviceContext::SubmitCapturedVideoCaptureBuffer(
     VideoCaptureDevice::Client::Buffer buffer,
     const VideoCaptureFormat& frame_format,
     base::TimeTicks reference_time,
-    base::TimeDelta timestamp) {
-  VideoFrameMetadata metadata;
-  // All frames are pre-rotated to the display orientation.
-  metadata.rotation = VideoRotation::VIDEO_ROTATION_0;
-
-  // TODO: Figure out the right color space for the camera frame.  We may need
-  // to populate the camera metadata with the color space reported by the V4L2
-  // device.
+    base::TimeDelta timestamp,
+    const VideoFrameMetadata& metadata) {
   client_->OnIncomingCapturedBufferExt(
       std::move(buffer), frame_format, gfx::ColorSpace(), reference_time,
       timestamp, gfx::Rect(frame_format.frame_size), std::move(metadata));
@@ -66,8 +60,8 @@ void CameraDeviceContext::SubmitCapturedGpuMemoryBuffer(
     base::TimeTicks reference_time,
     base::TimeDelta timestamp) {
   client_->OnIncomingCapturedGfxBuffer(buffer, frame_format,
-                                       GetCameraFrameOrientation(),
-                                       reference_time, timestamp);
+                                       GetCameraFrameRotation(), reference_time,
+                                       timestamp);
 }
 
 void CameraDeviceContext::SetSensorOrientation(int sensor_orientation) {
@@ -84,8 +78,16 @@ void CameraDeviceContext::SetScreenRotation(int screen_rotation) {
   screen_rotation_ = screen_rotation;
 }
 
-int CameraDeviceContext::GetCameraFrameOrientation() {
+int CameraDeviceContext::GetCameraFrameRotation() {
   return (sensor_orientation_ + screen_rotation_) % 360;
+}
+
+int CameraDeviceContext::GetRotationForDisplay() {
+  return screen_rotation_;
+}
+
+int CameraDeviceContext::GetRotationFromSensorOrientation() {
+  return sensor_orientation_;
 }
 
 bool CameraDeviceContext::ReserveVideoCaptureBufferFromPool(

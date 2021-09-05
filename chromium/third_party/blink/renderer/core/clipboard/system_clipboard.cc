@@ -12,11 +12,15 @@
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/web_drag_data.h"
 #include "third_party/blink/public/platform/web_string.h"
+#include "third_party/blink/public/web/web_local_frame.h"
+#include "third_party/blink/public/web/web_local_frame_client.h"
 #include "third_party/blink/renderer/core/clipboard/clipboard_mime_types.h"
 #include "third_party/blink/renderer/core/clipboard/clipboard_utilities.h"
 #include "third_party/blink/renderer/core/clipboard/data_object.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
+#include "third_party/blink/renderer/core/frame/local_frame_client.h"
+#include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/platform/graphics/image.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
 #include "third_party/blink/renderer/platform/wtf/std_lib_extras.h"
@@ -37,6 +41,10 @@ SystemClipboard::SystemClipboard(LocalFrame* frame)
   frame->GetBrowserInterfaceBroker().GetInterface(
       clipboard_.BindNewPipeAndPassReceiver(
           frame->GetTaskRunner(TaskType::kUserInteraction)));
+#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+  is_selection_buffer_available_ =
+      frame->GetSettings()->GetSelectionClipboardBufferAvailable();
+#endif  // defined(OS_LINUX) && !defined(OS_CHROMEOS)
 }
 
 bool SystemClipboard::IsSelectionMode() const {
@@ -49,7 +57,7 @@ void SystemClipboard::SetSelectionMode(bool selection_mode) {
 }
 
 bool SystemClipboard::CanSmartReplace() {
-  if (!IsValidBufferType(buffer_))
+  if (!IsValidBufferType(buffer_) || !clipboard_.is_bound())
     return false;
   bool result = false;
   clipboard_->IsFormatAvailable(mojom::ClipboardFormat::kSmartPaste, buffer_,
@@ -58,7 +66,7 @@ bool SystemClipboard::CanSmartReplace() {
 }
 
 bool SystemClipboard::IsHTMLAvailable() {
-  if (!IsValidBufferType(buffer_))
+  if (!IsValidBufferType(buffer_) || !clipboard_.is_bound())
     return false;
   bool result = false;
   clipboard_->IsFormatAvailable(mojom::ClipboardFormat::kHtml, buffer_,
@@ -67,7 +75,7 @@ bool SystemClipboard::IsHTMLAvailable() {
 }
 
 uint64_t SystemClipboard::SequenceNumber() {
-  if (!IsValidBufferType(buffer_))
+  if (!IsValidBufferType(buffer_) || !clipboard_.is_bound())
     return 0;
   uint64_t result = 0;
   clipboard_->GetSequenceNumber(buffer_, &result);
@@ -75,7 +83,7 @@ uint64_t SystemClipboard::SequenceNumber() {
 }
 
 Vector<String> SystemClipboard::ReadAvailableTypes() {
-  if (!IsValidBufferType(buffer_))
+  if (!IsValidBufferType(buffer_) || !clipboard_.is_bound())
     return {};
   Vector<String> types;
   clipboard_->ReadAvailableTypes(buffer_, &types);
@@ -87,7 +95,7 @@ String SystemClipboard::ReadPlainText() {
 }
 
 String SystemClipboard::ReadPlainText(mojom::ClipboardBuffer buffer) {
-  if (!IsValidBufferType(buffer))
+  if (!IsValidBufferType(buffer) || !clipboard_.is_bound())
     return String();
   String text;
   clipboard_->ReadText(buffer, &text);
@@ -124,22 +132,14 @@ String SystemClipboard::ReadHTML(KURL& url,
 
 void SystemClipboard::WriteHTML(const String& markup,
                                 const KURL& document_url,
-                                const String& plain_text,
                                 SmartReplaceOption smart_replace_option) {
-  String text = plain_text;
-#if defined(OS_WIN)
-  ReplaceNewlinesWithWindowsStyleNewlines(text);
-#endif
-  ReplaceNBSPWithSpace(text);
-
   clipboard_->WriteHtml(NonNullString(markup), document_url);
-  clipboard_->WriteText(NonNullString(text));
   if (smart_replace_option == kCanSmartReplace)
     clipboard_->WriteSmartPasteMarker();
 }
 
 String SystemClipboard::ReadRTF() {
-  if (!IsValidBufferType(buffer_))
+  if (!IsValidBufferType(buffer_) || !clipboard_.is_bound())
     return String();
   String rtf;
   clipboard_->ReadRtf(buffer_, &rtf);
@@ -147,7 +147,7 @@ String SystemClipboard::ReadRTF() {
 }
 
 SkBitmap SystemClipboard::ReadImage(mojom::ClipboardBuffer buffer) {
-  if (!IsValidBufferType(buffer))
+  if (!IsValidBufferType(buffer) || !clipboard_.is_bound())
     return SkBitmap();
   SkBitmap image;
   clipboard_->ReadImage(buffer, &image);
@@ -172,7 +172,7 @@ void SystemClipboard::WriteImageWithTag(Image* image,
   clipboard_->WriteImage(bitmap);
 
   if (url.IsValid() && !url.IsEmpty()) {
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
     // See http://crbug.com/838808: Not writing text/plain on Mac for
     // consistency between platforms, and to help fix errors in applications
     // which prefer text/plain content over image content for compatibility with
@@ -193,7 +193,7 @@ void SystemClipboard::WriteImage(const SkBitmap& bitmap) {
 }
 
 String SystemClipboard::ReadCustomData(const String& type) {
-  if (!IsValidBufferType(buffer_))
+  if (!IsValidBufferType(buffer_) || !clipboard_.is_bound())
     return String();
   String data;
   clipboard_->ReadCustomData(buffer_, NonNullString(type), &data);
@@ -235,6 +235,12 @@ void SystemClipboard::CommitWrite() {
   clipboard_->CommitWrite();
 }
 
+void SystemClipboard::CopyToFindPboard(const String& text) {
+#if defined(OS_MAC)
+  clipboard_->WriteStringToFindPboard(text);
+#endif
+}
+
 void SystemClipboard::Trace(Visitor* visitor) const {
   visitor->Trace(clipboard_);
 }
@@ -244,14 +250,7 @@ bool SystemClipboard::IsValidBufferType(mojom::ClipboardBuffer buffer) {
     case mojom::ClipboardBuffer::kStandard:
       return true;
     case mojom::ClipboardBuffer::kSelection:
-#if defined(USE_X11)
-      return true;
-#else
-      // Chrome OS and non-X11 unix builds do not support
-      // the X selection clipboard.
-      // TODO(http://crbug.com/361753): remove the need for this case.
-      return false;
-#endif
+      return is_selection_buffer_available_;
   }
   return true;
 }

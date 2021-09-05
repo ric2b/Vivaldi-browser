@@ -61,17 +61,14 @@ class COMPONENT_EXPORT(ASSISTANT_SERVICE) FakeAssistantManagerServiceImpl
                             AssistantQuerySource source,
                             bool allow_tts) override;
   void StartVoiceInteraction() override;
-  void StartWarmerWelcomeInteraction(int num_warmer_welcome_triggered,
-                                     bool allow_tts) override;
   void StopActiveInteraction(bool cancel_conversation) override;
   void AddAssistantInteractionSubscriber(
       AssistantInteractionSubscriber* subscriber) override;
   void RemoveAssistantInteractionSubscriber(
       AssistantInteractionSubscriber* subscriber) override;
-  void RetrieveNotification(const mojom::AssistantNotification& notification,
+  void RetrieveNotification(const AssistantNotification& notification,
                             int action_index) override;
-  void DismissNotification(
-      const mojom::AssistantNotification& notification) override;
+  void DismissNotification(const AssistantNotification& notification) override;
   void OnAccessibilityStatusChanged(bool spoken_feedback_enabled) override;
   void SendAssistantFeedback(const AssistantFeedback& feedback) override;
   void NotifyEntryIntoAssistantUi(AssistantEntryPoint entry_point) override;

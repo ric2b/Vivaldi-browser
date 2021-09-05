@@ -96,7 +96,7 @@ void WaylandDataDragController::StartSession(const OSExchangeData& data,
   Offer(data, operation);
 
   // Create drag icon surface (if any) and store the data to be exchanged.
-  icon_surface_.reset(CreateIconSurfaceIfNeeded(data));
+  CreateIconSurfaceIfNeeded(data);
   data_ = std::make_unique<OSExchangeData>(data.provider().Clone());
 
   // Starts the wayland drag session setting |this| object as delegate.
@@ -216,13 +216,21 @@ void WaylandDataDragController::OnDragDrop() {
 
 void WaylandDataDragController::OnDataSourceFinish(bool completed) {
   DCHECK(data_source_);
-  if (origin_window_)
-    origin_window_->OnDragSessionClose(data_source_->dnd_action());
+  DCHECK(origin_window_);
+
+  origin_window_->OnDragSessionClose(data_source_->dnd_action());
+
+  // DnD handlers expect DragLeave to be sent for drag sessions that end up
+  // with no data transfer (wl_data_source::cancelled event).
+  if (!completed)
+    origin_window_->OnDragLeave();
 
   origin_window_ = nullptr;
   data_source_.reset();
   data_offer_.reset();
   data_.reset();
+  data_device_->ResetDragDelegate();
+
   state_ = State::kIdle;
 }
 
@@ -265,11 +273,11 @@ void WaylandDataDragController::Offer(const OSExchangeData& data,
   data_source_->SetAction(operation);
 }
 
-wl_surface* WaylandDataDragController::CreateIconSurfaceIfNeeded(
+void WaylandDataDragController::CreateIconSurfaceIfNeeded(
     const OSExchangeData& data) {
   icon_bitmap_ = GetDragImage(data);
-  return icon_bitmap_ ? wl_compositor_create_surface(connection_->compositor())
-                      : nullptr;
+  if (icon_bitmap_)
+    icon_surface_ = connection_->CreateSurface();
 }
 
 // Asynchronously requests and reads data for every negotiated/supported mime
@@ -293,9 +301,10 @@ void WaylandDataDragController::HandleUnprocessedMimeTypes() {
 }
 
 void WaylandDataDragController::OnMimeTypeDataTransferred(
-    const PlatformClipboard::Data& contents) {
+    PlatformClipboard::Data contents) {
   DCHECK_EQ(state_, State::kTransferring);
-  if (!contents.empty()) {
+  DCHECK(contents);
+  if (!contents->data().empty()) {
     std::string mime_type = unprocessed_mime_types_.front();
     wl::AddToOSExchangeData(contents, mime_type, received_data_.get());
   }

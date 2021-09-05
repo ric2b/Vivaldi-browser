@@ -37,9 +37,11 @@
 <translation id="1842960171412779397">Atlasiet</translation>
 <translation id="1859234291848436338">Rakstīšanas virziens</translation>
 <translation id="1860796786778352021">Paziņojuma aizvēršana</translation>
+<translation id="186476001994626254">Web Smart Paste saturs</translation>
 <translation id="1871244248791675517">Iespraušana</translation>
 <translation id="1884435127456172652"><ph name="NUMBER" />%</translation>
 <translation id="1901303067676059328">Izvēlēties visus</translation>
+<translation id="19085484004813472">Šī ir jauna funkcija</translation>
 <translation id="2006524834898217237">Pārbaudiet, vai šajā ierīcē ir izveidots savienojums ar internetu.</translation>
 <translation id="208586643495776849">Lūdzu, mēģiniet vēlreiz</translation>
 <translation id="2090963878406559571">Lai no vietnes <ph name="ORIGIN" /> uz Android tālruni nosūtītu numuru, <ph name="TROUBLESHOOT_LINK" /> abām iestatījumos esošajām ierīcēm.</translation>
@@ -67,6 +69,7 @@
 <translation id="2570734079541893434">Pārvaldīt iestatījumus</translation>
 <translation id="2573731672208488250">{HOURS,plural, =1{pēc 1 h}zero{pēc # h}one{pēc # h}other{pēc # h}}</translation>
 <translation id="2583543531130364912">Skārienekrāna kalibrēšana</translation>
+<translation id="2586657967955657006">Starpliktuve</translation>
 <translation id="2666092431469916601">Augša</translation>
 <translation id="2701330563083355633">Kopīgota no: <ph name="DEVICE_NAME" /></translation>
 <translation id="271033894570825754">Jauns</translation>
@@ -74,6 +77,7 @@
 <translation id="2749082172777216925"><ph name="APP_NAME_INFO" />, <ph name="PRICE" /></translation>
 <translation id="2803313416453193357">Atvērt mapi</translation>
 <translation id="2824719307700604149">{YEARS,plural, =1{Pirms 1 gada}zero{Pirms # gadiem}one{Pirms # gada}other{Pirms # gadiem}}</translation>
+<translation id="2878511608894704031">Dzēst visu</translation>
 <translation id="2907671656515444832">{DAYS,plural, =1{pēc 1 d.}zero{pēc # d.}one{pēc # d.}other{pēc # d.}}</translation>
 <translation id="2931838996092594335">noklikšķināt</translation>
 <translation id="2981684127883932071">Tiek rādīti ieteikumi</translation>
@@ -114,6 +118,7 @@
 <translation id="4289300219472526559">Sākt runāt</translation>
 <translation id="430191667033048642">Lietotne <ph name="MOVED_APP_NAME" /> pārvietota uz mapi <ph name="FOLDER_NAME" />.</translation>
 <translation id="4316910396681052118">VISAS LIETOTNES</translation>
+<translation id="4491109536499578614">Attēls</translation>
 <translation id="4588090240171750605">Ritināt pa labi</translation>
 <translation id="4631891353005174729"><ph name="APP_NAME_TYPE" />, vērtējums zvaigznītēs: <ph name="RATING_SCORE" /></translation>
 <translation id="4648249871170053485"><ph name="APP_NAME" />, lietotņu ieteikumi</translation>
@@ -147,6 +152,7 @@
 <translation id="5768079895599174203">{DAYS,plural, =1{1 diena un }zero{# dienas un }one{# diena un }other{# dienas un }}</translation>
 <translation id="5789643057113097023">:</translation>
 <translation id="5866104238061687188">{YEARS,plural, =1{pēc 1 g.}zero{pēc # g.}one{pēc # g.}other{pēc # g.}}</translation>
+<translation id="588258955323874662">Pilnekrāna</translation>
 <translation id="5906667377645263094">{SECONDS,plural, =1{Atlikusi 1 sekunde}zero{Atlikušas # sekundes}one{Atlikusi # sekunde}other{Atlikušas # sekundes}}</translation>
 <translation id="5941711191222866238">Minimizēt</translation>
 <translation id="5943826764092288734">{HOURS,plural, =1{1 stunda}zero{# stundas}one{# stunda}other{# stundas}}</translation>
@@ -170,6 +176,7 @@
 <translation id="6417265370957905582">Google asistents</translation>
 <translation id="6430678249303439055">Bloķēt visus paziņojumus no šīs lietotnes</translation>
 <translation id="6483402905448010557">{SECONDS,plural, =1{Pirms 1 sekundes}zero{Pirms # sekundēm}one{Pirms # sekundes}other{Pirms # sekundēm}}</translation>
+<translation id="6503257047630241175">RTF saturs</translation>
 <translation id="6539092367496845964">Radās kļūda. Vēlāk mēģiniet vēlreiz.</translation>
 <translation id="654149438358937226">Bloķēt visus paziņojumus</translation>
 <translation id="6567071839949112727">noklikšķināt uz priekšteča</translation>

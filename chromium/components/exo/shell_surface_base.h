@@ -144,10 +144,12 @@ class ShellSurfaceBase : public SurfaceTreeHost,
   void OnSetFrameColors(SkColor active_color, SkColor inactive_color) override;
   void OnSetStartupId(const char* startup_id) override;
   void OnSetApplicationId(const char* application_id) override;
+  void SetUseImmersiveForFullscreen(bool value) override;
   void OnActivationRequested() override;
 
   // SurfaceObserver:
   void OnSurfaceDestroying(Surface* surface) override;
+  void OnContentSizeChanged(Surface*) override {}
 
   // CaptureClientObserver:
   void OnCaptureChanged(aura::Window* lost_capture,
@@ -165,7 +167,7 @@ class ShellSurfaceBase : public SurfaceTreeHost,
   views::Widget* GetWidget() override;
   const views::Widget* GetWidget() const override;
   views::View* GetContentsView() override;
-  views::NonClientFrameView* CreateNonClientFrameView(
+  std::unique_ptr<views::NonClientFrameView> CreateNonClientFrameView(
       views::Widget* widget) override;
   bool WidgetHasHitTestMask() const override;
   void GetWidgetHitTestMask(SkPath* mask) const override;
@@ -184,6 +186,7 @@ class ShellSurfaceBase : public SurfaceTreeHost,
   void OnWindowPropertyChanged(aura::Window* window,
                                const void* key,
                                intptr_t old_value) override;
+  void OnWindowAddedToRootWindow(aura::Window* window) override;
 
   // wm::ActivationChangeObserver:
   void OnWindowActivated(ActivationReason reason,
@@ -199,6 +202,9 @@ class ShellSurfaceBase : public SurfaceTreeHost,
   }
 
   Surface* surface_for_testing() { return root_surface(); }
+  bool get_shadow_bounds_changed_for_testing() {
+    return shadow_bounds_changed_;
+  }
 
  protected:
   // Creates the |widget_| for |surface_|. |show_state| is the initial state
@@ -244,9 +250,11 @@ class ShellSurfaceBase : public SurfaceTreeHost,
   void InstallCustomWindowTargeter();
 
   // Creates a NonClientFrameView for shell surface.
-  views::NonClientFrameView* CreateNonClientFrameViewInternal(
+  std::unique_ptr<views::NonClientFrameView> CreateNonClientFrameViewInternal(
       views::Widget* widget,
       bool client_controlled);
+
+  virtual void OnPostWidgetCommit();
 
   views::Widget* widget_ = nullptr;
   aura::Window* parent_ = nullptr;
@@ -284,7 +292,6 @@ class ShellSurfaceBase : public SurfaceTreeHost,
 
   // Commit is deferred if this returns false.
   virtual bool OnPreWidgetCommit() = 0;
-  virtual void OnPostWidgetCommit();
 
   void CommitWidget();
 
@@ -296,6 +303,7 @@ class ShellSurfaceBase : public SurfaceTreeHost,
   bool pending_show_widget_ = false;
   base::Optional<std::string> application_id_;
   base::Optional<std::string> startup_id_;
+  bool immersive_implied_by_fullscreen_ = true;
   base::RepeatingClosure close_callback_;
   base::RepeatingClosure pre_close_callback_;
   base::OnceClosure surface_destroyed_callback_;

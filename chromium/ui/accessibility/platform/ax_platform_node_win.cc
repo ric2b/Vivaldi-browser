@@ -18,6 +18,7 @@
 #include "base/json/json_writer.h"
 #include "base/lazy_instance.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -27,6 +28,7 @@
 #include "base/win/scoped_bstr.h"
 #include "base/win/scoped_safearray.h"
 #include "base/win/scoped_variant.h"
+#include "base/win/variant_vector.h"
 #include "skia/ext/skia_utils_win.h"
 #include "third_party/iaccessible2/ia2_api_all.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -51,7 +53,6 @@
 #include "ui/base/win/atl_module.h"
 #include "ui/display/win/screen_win.h"
 #include "ui/gfx/geometry/rect_conversions.h"
-#include "ui/gfx/geometry/safe_integer_conversions.h"
 
 //
 // Macros to use at the top of any AXPlatformNodeWin function that implements
@@ -515,7 +516,7 @@ gfx::Vector2d AXPlatformNodeWin::CalculateUIAScrollPoint(
   const float scale_factor =
       display::win::ScreenWin::GetScaleFactorForHWND(hwnd);
   const int small_change =
-      gfx::ToRoundedInt(kSmallScrollIncrement * scale_factor);
+      base::ClampRound(kSmallScrollIncrement * scale_factor);
 
   const int x_min = GetIntAttribute(ax::mojom::IntAttribute::kScrollXMin);
   const int x_max = GetIntAttribute(ax::mojom::IntAttribute::kScrollXMax);
@@ -1681,6 +1682,12 @@ IFACEMETHODIMP AXPlatformNodeWin::setSelectionRanges(LONG nRanges,
   if (!anchor_node || !focus_node)
     return E_INVALIDARG;
 
+  // Blink only supports selections within a single tree.
+  if (anchor_node->GetDelegate()->GetTreeData().tree_id !=
+      focus_node->GetDelegate()->GetTreeData().tree_id) {
+    return E_INVALIDARG;
+  }
+
   if (ranges->anchorOffset < 0 || ranges->activeOffset < 0)
     return E_INVALIDARG;
 
@@ -1988,9 +1995,9 @@ IFACEMETHODIMP AXPlatformNodeWin::SetScrollPercent(double horizontal_percent,
   const double y_min = GetIntAttribute(ax::mojom::IntAttribute::kScrollYMin);
   const double y_max = GetIntAttribute(ax::mojom::IntAttribute::kScrollYMax);
   const int x =
-      gfx::ToRoundedInt(horizontal_percent / 100.0 * (x_max - x_min) + x_min);
+      base::ClampRound(horizontal_percent / 100.0 * (x_max - x_min) + x_min);
   const int y =
-      gfx::ToRoundedInt(vertical_percent / 100.0 * (y_max - y_min) + y_min);
+      base::ClampRound(vertical_percent / 100.0 * (y_max - y_min) + y_min);
   const gfx::Point scroll_to(x, y);
 
   AXActionData action_data;
@@ -2077,11 +2084,8 @@ IFACEMETHODIMP AXPlatformNodeWin::get_VerticalViewSize(double* result) {
 HRESULT AXPlatformNodeWin::ISelectionItemProviderSetSelected(
     bool selected) const {
   UIA_VALIDATE_CALL();
-  int restriction;
-  if (GetIntAttribute(ax::mojom::IntAttribute::kRestriction, &restriction)) {
-    if (restriction == static_cast<int>(ax::mojom::Restriction::kDisabled))
-      return UIA_E_ELEMENTNOTENABLED;
-  }
+  if (GetData().GetRestriction() == ax::mojom::Restriction::kDisabled)
+    return UIA_E_ELEMENTNOTENABLED;
 
   // The platform implements selection follows focus for single-selection
   // container elements. Focus action can change a node's accessibility selected
@@ -3578,7 +3582,7 @@ IFACEMETHODIMP AXPlatformNodeWin::get_offsetAtPoint(
   const AXPlatformNodeWin* hit_child = static_cast<AXPlatformNodeWin*>(
       FromNativeViewAccessible(GetDelegate()->HitTestSync(x, y)));
 
-  if (!hit_child || !hit_child->IsTextOnlyObject()) {
+  if (!hit_child || !hit_child->IsText()) {
     return S_FALSE;
   }
 
@@ -4077,9 +4081,14 @@ HRESULT AXPlatformNodeWin::GetPropertyValueImpl(PROPERTYID property_id,
       result->lVal = ComputeUIAControlType();
       break;
 
-    case UIA_CulturePropertyId:
-      return GetCultureAttributeAsVariant(result);
+    case UIA_CulturePropertyId: {
+      base::Optional<LCID> lcid = GetCultureAttributeAsLCID();
+      if (!lcid)
+        return E_FAIL;
+      result->vt = VT_I4;
+      result->lVal = lcid.value();
       break;
+    }
 
     case UIA_DescribedByPropertyId:
       result->vt = VT_ARRAY | VT_UNKNOWN;
@@ -4596,49 +4605,55 @@ STDMETHODIMP AXPlatformNodeWin::InternalQueryInterface(
                                                     object);
 }
 
-HRESULT AXPlatformNodeWin::GetTextAttributeValue(TEXTATTRIBUTEID attribute_id,
-                                                 VARIANT* result) {
+HRESULT AXPlatformNodeWin::GetTextAttributeValue(
+    TEXTATTRIBUTEID attribute_id,
+    const base::Optional<int>& start_offset,
+    const base::Optional<int>& end_offset,
+    base::win::VariantVector* result) {
+  DCHECK(!start_offset || start_offset.value() >= 0);
+  DCHECK(!end_offset || end_offset.value() >= 0);
+
   switch (attribute_id) {
+    case UIA_AnnotationTypesAttributeId:
+      return GetAnnotationTypesAttribute(start_offset, end_offset, result);
     case UIA_BackgroundColorAttributeId:
-      V_VT(result) = VT_I4;
-      V_I4(result) =
-          GetIntAttributeAsCOLORREF(ax::mojom::IntAttribute::kBackgroundColor);
+      result->Insert<VT_I4>(
+          GetIntAttributeAsCOLORREF(ax::mojom::IntAttribute::kBackgroundColor));
       break;
     case UIA_BulletStyleAttributeId:
-      V_VT(result) = VT_I4;
-      V_I4(result) = ComputeUIABulletStyle();
+      result->Insert<VT_I4>(ComputeUIABulletStyle());
       break;
-    case UIA_CultureAttributeId:
-      return GetCultureAttributeAsVariant(result);
+    case UIA_CultureAttributeId: {
+      base::Optional<LCID> lcid = GetCultureAttributeAsLCID();
+      if (!lcid)
+        return E_FAIL;
+      result->Insert<VT_I4>(lcid.value());
+      break;
+    }
     case UIA_FontNameAttributeId:
-      V_VT(result) = VT_BSTR;
-      V_BSTR(result) = GetFontNameAttributeAsBSTR();
+      result->Insert<VT_BSTR>(GetFontNameAttributeAsBSTR());
       break;
     case UIA_FontSizeAttributeId: {
       base::Optional<float> font_size_in_points = GetFontSizeInPoints();
       if (font_size_in_points) {
-        V_VT(result) = VT_R8;
-        V_R8(result) = *font_size_in_points;
+        result->Insert<VT_R8>(*font_size_in_points);
       }
       break;
     }
     case UIA_FontWeightAttributeId:
-      V_VT(result) = VT_I4;
-      V_I4(result) = GetFloatAttribute(ax::mojom::FloatAttribute::kFontWeight);
+      result->Insert<VT_I4>(
+          GetFloatAttribute(ax::mojom::FloatAttribute::kFontWeight));
       break;
     case UIA_ForegroundColorAttributeId:
-      V_VT(result) = VT_I4;
-      V_I4(result) = GetIntAttributeAsCOLORREF(ax::mojom::IntAttribute::kColor);
+      result->Insert<VT_I4>(
+          GetIntAttributeAsCOLORREF(ax::mojom::IntAttribute::kColor));
       break;
     case UIA_IsHiddenAttributeId:
-      V_VT(result) = VT_BOOL;
-      V_BOOL(result) = IsInvisibleOrIgnored() ? VARIANT_TRUE : VARIANT_FALSE;
+      result->Insert<VT_BOOL>(IsInvisibleOrIgnored());
       break;
     case UIA_IsItalicAttributeId:
-      V_VT(result) = VT_BOOL;
-      V_BOOL(result) = GetData().HasTextStyle(ax::mojom::TextStyle::kItalic)
-                           ? VARIANT_TRUE
-                           : VARIANT_FALSE;
+      result->Insert<VT_BOOL>(
+          GetData().HasTextStyle(ax::mojom::TextStyle::kItalic));
       break;
     case UIA_IsReadOnlyAttributeId:
       // Placeholder text should return the enclosing element's read-only value.
@@ -4646,74 +4661,102 @@ HRESULT AXPlatformNodeWin::GetTextAttributeValue(TEXTATTRIBUTEID attribute_id,
         AXPlatformNodeWin* parent_platform_node =
             static_cast<AXPlatformNodeWin*>(
                 FromNativeViewAccessible(GetParent()));
-        return parent_platform_node->GetTextAttributeValue(attribute_id,
-                                                           result);
+        return parent_platform_node->GetTextAttributeValue(
+            attribute_id, start_offset, end_offset, result);
       }
-      V_VT(result) = VT_BOOL;
-      V_BOOL(result) =
-          GetData().IsReadOnlyOrDisabled() ? VARIANT_TRUE : VARIANT_FALSE;
+      result->Insert<VT_BOOL>(GetData().IsReadOnlyOrDisabled());
       break;
     case UIA_IsSubscriptAttributeId:
-      V_VT(result) = VT_BOOL;
-      V_BOOL(result) =
-          (GetData().GetTextPosition() == ax::mojom::TextPosition::kSubscript)
-              ? VARIANT_TRUE
-              : VARIANT_FALSE;
+      result->Insert<VT_BOOL>(GetData().GetTextPosition() ==
+                              ax::mojom::TextPosition::kSubscript);
       break;
     case UIA_IsSuperscriptAttributeId:
-      V_VT(result) = VT_BOOL;
-      V_BOOL(result) =
-          (GetData().GetTextPosition() == ax::mojom::TextPosition::kSuperscript)
-              ? VARIANT_TRUE
-              : VARIANT_FALSE;
+      result->Insert<VT_BOOL>(GetData().GetTextPosition() ==
+                              ax::mojom::TextPosition::kSuperscript);
       break;
     case UIA_OverlineStyleAttributeId:
-      V_VT(result) = VT_I4;
-      V_I4(result) = GetUIATextDecorationStyle(
-          ax::mojom::IntAttribute::kTextOverlineStyle);
+      result->Insert<VT_I4>(GetUIATextDecorationStyle(
+          ax::mojom::IntAttribute::kTextOverlineStyle));
       break;
     case UIA_StrikethroughStyleAttributeId:
-      V_VT(result) = VT_I4;
-      V_I4(result) = GetUIATextDecorationStyle(
-          ax::mojom::IntAttribute::kTextStrikethroughStyle);
+      result->Insert<VT_I4>(GetUIATextDecorationStyle(
+          ax::mojom::IntAttribute::kTextStrikethroughStyle));
       break;
     case UIA_StyleNameAttributeId:
-      V_VT(result) = VT_BSTR;
-      V_BSTR(result) = GetStyleNameAttributeAsBSTR();
+      result->Insert<VT_BSTR>(GetStyleNameAttributeAsBSTR());
       break;
     case UIA_StyleIdAttributeId:
-      V_VT(result) = VT_I4;
-      V_I4(result) = ComputeUIAStyleId();
+      result->Insert<VT_I4>(ComputeUIAStyleId());
       break;
+    case UIA_HorizontalTextAlignmentAttributeId: {
+      base::Optional<HorizontalTextAlignment> horizontal_text_alignment =
+          AXTextAlignToUIAHorizontalTextAlignment(GetData().GetTextAlign());
+      if (horizontal_text_alignment)
+        result->Insert<VT_I4>(*horizontal_text_alignment);
+      break;
+    }
     case UIA_UnderlineStyleAttributeId:
-      V_VT(result) = VT_I4;
-      V_I4(result) = GetUIATextDecorationStyle(
-          ax::mojom::IntAttribute::kTextUnderlineStyle);
+      result->Insert<VT_I4>(GetUIATextDecorationStyle(
+          ax::mojom::IntAttribute::kTextUnderlineStyle));
       break;
     case UIA_TextFlowDirectionsAttributeId:
-      V_VT(result) = VT_I4;
-      V_I4(result) =
-          TextDirectionToFlowDirections(GetData().GetTextDirection());
+      result->Insert<VT_I4>(
+          TextDirectionToFlowDirections(GetData().GetTextDirection()));
       break;
-    default:
-      V_VT(result) = VT_UNKNOWN;
-      return ::UiaGetReservedNotSupportedValue(&V_UNKNOWN(result));
+    default: {
+      Microsoft::WRL::ComPtr<IUnknown> not_supported_value;
+      HRESULT hr = ::UiaGetReservedNotSupportedValue(&not_supported_value);
+      if (SUCCEEDED(hr))
+        result->Insert<VT_UNKNOWN>(not_supported_value.Get());
+      return hr;
+    } break;
   }
 
   return S_OK;
 }
 
-HRESULT AXPlatformNodeWin::GetCultureAttributeAsVariant(VARIANT* result) const {
+HRESULT AXPlatformNodeWin::GetAnnotationTypesAttribute(
+    const base::Optional<int>& start_offset,
+    const base::Optional<int>& end_offset,
+    base::win::VariantVector* result) {
+  base::win::VariantVector variant_vector;
+
+  MarkerTypeRangeResult grammar_result = MarkerTypeRangeResult::kNone;
+  MarkerTypeRangeResult spelling_result = MarkerTypeRangeResult::kNone;
+
+  if (IsText() || IsPlainTextField()) {
+    grammar_result = GetMarkerTypeFromRange(start_offset, end_offset,
+                                            ax::mojom::MarkerType::kGrammar);
+    spelling_result = GetMarkerTypeFromRange(start_offset, end_offset,
+                                             ax::mojom::MarkerType::kSpelling);
+  }
+
+  if (grammar_result == MarkerTypeRangeResult::kMixed ||
+      spelling_result == MarkerTypeRangeResult::kMixed) {
+    Microsoft::WRL::ComPtr<IUnknown> mixed_attribute_value;
+    HRESULT hr = ::UiaGetReservedMixedAttributeValue(&mixed_attribute_value);
+    if (SUCCEEDED(hr))
+      result->Insert<VT_UNKNOWN>(mixed_attribute_value.Get());
+    return hr;
+  }
+
+  if (spelling_result == MarkerTypeRangeResult::kMatch)
+    result->Insert<VT_I4>(AnnotationType_SpellingError);
+  if (grammar_result == MarkerTypeRangeResult::kMatch)
+    result->Insert<VT_I4>(AnnotationType_GrammarError);
+
+  return S_OK;
+}
+
+base::Optional<LCID> AXPlatformNodeWin::GetCultureAttributeAsLCID() const {
   const base::string16 language =
       GetInheritedString16Attribute(ax::mojom::StringAttribute::kLanguage);
   const LCID lcid =
       LocaleNameToLCID(language.c_str(), LOCALE_ALLOW_NEUTRAL_NAMES);
   if (!lcid)
-    return E_FAIL;
+    return base::nullopt;
 
-  V_VT(result) = VT_I4;
-  V_I4(result) = lcid;
-  return S_OK;
+  return lcid;
 }
 
 COLORREF AXPlatformNodeWin::GetIntAttributeAsCOLORREF(
@@ -4777,6 +4820,24 @@ LONG AXPlatformNodeWin::ComputeUIAStyleId() const {
 }
 
 // static
+base::Optional<HorizontalTextAlignment>
+AXPlatformNodeWin::AXTextAlignToUIAHorizontalTextAlignment(
+    ax::mojom::TextAlign text_align) {
+  switch (text_align) {
+    case ax::mojom::TextAlign::kNone:
+      return base::nullopt;
+    case ax::mojom::TextAlign::kLeft:
+      return HorizontalTextAlignment_Left;
+    case ax::mojom::TextAlign::kRight:
+      return HorizontalTextAlignment_Right;
+    case ax::mojom::TextAlign::kCenter:
+      return HorizontalTextAlignment_Centered;
+    case ax::mojom::TextAlign::kJustify:
+      return HorizontalTextAlignment_Justified;
+  }
+}
+
+// static
 LONG AXPlatformNodeWin::AXHierarchicalLevelToUIAStyleId(
     int32_t hierarchical_level) {
   switch (hierarchical_level) {
@@ -4824,19 +4885,127 @@ LONG AXPlatformNodeWin::AXListStyleToUIAStyleId(
 
 // static
 FlowDirections AXPlatformNodeWin::TextDirectionToFlowDirections(
-    ax::mojom::TextDirection text_direction) {
+    ax::mojom::WritingDirection text_direction) {
   switch (text_direction) {
-    case ax::mojom::TextDirection::kNone:
+    case ax::mojom::WritingDirection::kNone:
       return FlowDirections::FlowDirections_Default;
-    case ax::mojom::TextDirection::kLtr:
+    case ax::mojom::WritingDirection::kLtr:
       return FlowDirections::FlowDirections_Default;
-    case ax::mojom::TextDirection::kRtl:
+    case ax::mojom::WritingDirection::kRtl:
       return FlowDirections::FlowDirections_RightToLeft;
-    case ax::mojom::TextDirection::kTtb:
+    case ax::mojom::WritingDirection::kTtb:
       return FlowDirections::FlowDirections_Vertical;
-    case ax::mojom::TextDirection::kBtt:
+    case ax::mojom::WritingDirection::kBtt:
       return FlowDirections::FlowDirections_BottomToTop;
   }
+}
+
+// static
+void AXPlatformNodeWin::AggregateRangesForMarkerType(
+    AXPlatformNodeBase* node,
+    ax::mojom::MarkerType marker_type,
+    int offset_ranges_amount,
+    std::vector<std::pair<int, int>>* ranges) {
+  DCHECK(node->IsText());
+  const std::vector<int32_t>& marker_types =
+      node->GetIntListAttribute(ax::mojom::IntListAttribute::kMarkerTypes);
+  const std::vector<int>& marker_starts =
+      node->GetIntListAttribute(ax::mojom::IntListAttribute::kMarkerStarts);
+  const std::vector<int>& marker_ends =
+      node->GetIntListAttribute(ax::mojom::IntListAttribute::kMarkerEnds);
+
+  for (size_t i = 0; i < marker_types.size(); ++i) {
+    if (static_cast<ax::mojom::MarkerType>(marker_types[i]) != marker_type)
+      continue;
+
+    const int marker_start = marker_starts[i] + offset_ranges_amount;
+    const int marker_end = marker_ends[i] + offset_ranges_amount;
+    ranges->emplace_back(std::make_pair(marker_start, marker_end));
+  }
+}
+
+AXPlatformNodeWin::MarkerTypeRangeResult
+AXPlatformNodeWin::GetMarkerTypeFromRange(
+    const base::Optional<int>& start_offset,
+    const base::Optional<int>& end_offset,
+    ax::mojom::MarkerType marker_type) {
+  DCHECK(IsText() || IsPlainTextField());
+  std::vector<std::pair<int, int>> relevant_ranges;
+
+  if (IsText()) {
+    AggregateRangesForMarkerType(this, marker_type, /*offset_ranges_amount=*/0,
+                                 &relevant_ranges);
+  } else if (IsPlainTextField()) {
+    int offset_ranges_amount = 0;
+    for (AXPlatformNodeBase* static_text = GetFirstTextOnlyDescendant();
+         static_text; static_text = static_text->GetNextSibling()) {
+      const int child_offset_ranges_amount = offset_ranges_amount;
+      if (start_offset || end_offset) {
+        // Break if the current node is after the desired |end_offset|.
+        if (end_offset && child_offset_ranges_amount > end_offset.value())
+          break;
+
+        // Skip over nodes preceding the desired |start_offset|.
+        offset_ranges_amount += static_text->GetHypertext().length();
+        if (start_offset && offset_ranges_amount < start_offset.value())
+          continue;
+      }
+
+      AggregateRangesForMarkerType(static_text, marker_type,
+                                   child_offset_ranges_amount,
+                                   &relevant_ranges);
+    }
+  }
+
+  // Sort the ranges by their start offset.
+  const auto sort_ranges_by_start_offset = [](const std::pair<int, int>& a,
+                                              const std::pair<int, int>& b) {
+    return a.first < b.first;
+  };
+  std::sort(relevant_ranges.begin(), relevant_ranges.end(),
+            sort_ranges_by_start_offset);
+
+  // Validate that the desired range has a contiguous MarkerType.
+  base::Optional<std::pair<int, int>> contiguous_range;
+  for (const std::pair<int, int>& range : relevant_ranges) {
+    if (end_offset && range.first > end_offset.value())
+      break;
+    if (start_offset && range.second < start_offset.value())
+      continue;
+
+    if (!contiguous_range) {
+      contiguous_range = range;
+      continue;
+    }
+
+    // If there is a gap, then the range must be mixed.
+    if ((range.first - contiguous_range->second) > 1)
+      return MarkerTypeRangeResult::kMixed;
+
+    // Expand the range if possible.
+    contiguous_range->second = std::max(contiguous_range->second, range.second);
+  }
+
+  // The desired range does not overlap with |marker_type|.
+  if (!contiguous_range)
+    return MarkerTypeRangeResult::kNone;
+
+  // If there is a partial overlap, then the desired range must be mixed.
+  // 1. The |start_offset| is not specified, treat it as offset 0.
+  if (!start_offset && contiguous_range->first > 0)
+    return MarkerTypeRangeResult::kMixed;
+  // 2. The |end_offset| is not specified, treat it as max text offset.
+  if (!end_offset && size_t{contiguous_range->second} < GetHypertext().length())
+    return MarkerTypeRangeResult::kMixed;
+  // 3. The |start_offset| is specified, but is before the first matching range.
+  if (start_offset && start_offset.value() < contiguous_range->first)
+    return MarkerTypeRangeResult::kMixed;
+  // 4. The |end_offset| is specified, but is after the last matching range.
+  if (end_offset && end_offset.value() > contiguous_range->second)
+    return MarkerTypeRangeResult::kMixed;
+
+  // The desired range is a complete match for |marker_type|.
+  return MarkerTypeRangeResult::kMatch;
 }
 
 // IRawElementProviderSimple support methods.
@@ -5141,18 +5310,14 @@ int AXPlatformNodeWin::MSAARole() {
       return ROLE_SYSTEM_EQUATION;
 
     case ax::mojom::Role::kMenu:
-    case ax::mojom::Role::kMenuButton:
       return ROLE_SYSTEM_MENUPOPUP;
 
     case ax::mojom::Role::kMenuBar:
       return ROLE_SYSTEM_MENUBAR;
 
+    case ax::mojom::Role::kMenuButton:
     case ax::mojom::Role::kMenuItem:
-      return ROLE_SYSTEM_MENUITEM;
-
     case ax::mojom::Role::kMenuItemCheckBox:
-      return ROLE_SYSTEM_MENUITEM;
-
     case ax::mojom::Role::kMenuItemRadio:
       return ROLE_SYSTEM_MENUITEM;
 
@@ -5973,12 +6138,12 @@ base::string16 AXPlatformNodeWin::UIAAriaRole() {
       return L"group";
 
     case ax::mojom::Role::kMenu:
-    case ax::mojom::Role::kMenuButton:
       return L"menu";
 
     case ax::mojom::Role::kMenuBar:
       return L"menubar";
 
+    case ax::mojom::Role::kMenuButton:
     case ax::mojom::Role::kMenuItem:
       return L"menuitem";
 
@@ -6640,12 +6805,12 @@ LONG AXPlatformNodeWin::ComputeUIAControlType() {  // NOLINT(runtime/int)
       return UIA_GroupControlTypeId;
 
     case ax::mojom::Role::kMenu:
-    case ax::mojom::Role::kMenuButton:
       return UIA_MenuControlTypeId;
 
     case ax::mojom::Role::kMenuBar:
       return UIA_MenuBarControlTypeId;
 
+    case ax::mojom::Role::kMenuButton:
     case ax::mojom::Role::kMenuItem:
       return UIA_MenuItemControlTypeId;
 
@@ -6928,7 +7093,7 @@ bool AXPlatformNodeWin::IsUIAControl() const {
     if (IsInvisibleOrIgnored())
       return false;
 
-    if (IsTextOnlyObject()) {
+    if (IsText()) {
       // A text leaf can be a UIAControl, but text inside of a heading, link,
       // button, etc. where the role allows the name to be generated from the
       // content is not. We want to avoid reading out a button, moving to the
@@ -7110,7 +7275,7 @@ bool AXPlatformNodeWin::ShouldHideChildrenForUIA() const {
       // Links with a single text-only child should hide their subtree.
       if (GetChildCount() == 1) {
         AXPlatformNodeBase* only_child = GetFirstChild();
-        return only_child && only_child->IsTextOnlyObject();
+        return only_child && only_child->IsText();
       }
       return false;
     case ax::mojom::Role::kPdfActionableHighlight:
@@ -7194,10 +7359,9 @@ int AXPlatformNodeWin::MSAAState() const {
   if (ShouldNodeHaveFocusableState(data))
     msaa_state |= STATE_SYSTEM_FOCUSABLE;
 
-  if (data.HasIntAttribute(ax::mojom::IntAttribute::kHasPopup) ||
-      data.HasState(ax::mojom::State::kAutofillAvailable)) {
+  // Built-in autofill and autocomplete wil also set has popup.
+  if (data.HasIntAttribute(ax::mojom::IntAttribute::kHasPopup))
     msaa_state |= STATE_SYSTEM_HASPOPUP;
-  }
 
   // TODO(dougt) unhandled ux::ax::mojom::State::kHorizontal
 
@@ -7233,7 +7397,7 @@ int AXPlatformNodeWin::MSAAState() const {
   // TODO(dougt) unhandled ux::ax::mojom::State::kRequired
   // TODO(dougt) unhandled ux::ax::mojom::State::kRichlyEditable
 
-  if (data.HasBoolAttribute(ax::mojom::BoolAttribute::kSelected))
+  if (data.IsSelectable())
     msaa_state |= STATE_SYSTEM_SELECTABLE;
 
   if (data.GetBoolAttribute(ax::mojom::BoolAttribute::kSelected))
@@ -7433,6 +7597,10 @@ base::Optional<PROPERTYID> AXPlatformNodeWin::MojoEventToUIAProperty(
     case ax::mojom::Event::kRowCollapsed:
     case ax::mojom::Event::kRowExpanded:
       return UIA_ExpandCollapseExpandCollapseStatePropertyId;
+    case ax::mojom::Event::kSelection:
+    case ax::mojom::Event::kSelectionAdd:
+    case ax::mojom::Event::kSelectionRemove:
+      return UIA_SelectionItemIsSelectedPropertyId;
     default:
       return base::nullopt;
   }
@@ -7838,7 +8006,7 @@ AXPlatformNodeWin::GetPatternProviderFactoryMethod(PATTERNID pattern_id) {
 
     case UIA_TextEditPatternId:
     case UIA_TextPatternId:
-      if (IsTextOnlyObject() || IsDocument() ||
+      if (IsText() || IsDocument() ||
           HasBoolAttribute(ax::mojom::BoolAttribute::kEditableRoot)) {
         return &AXPlatformNodeTextProviderWin::CreateIUnknown;
       }
@@ -7923,6 +8091,17 @@ AXPlatformNodeWin* AXPlatformNodeWin::GetLowestAccessibleElement() {
   }
 
   NOTREACHED();
+  return nullptr;
+}
+
+AXPlatformNodeWin* AXPlatformNodeWin::GetFirstTextOnlyDescendant() {
+  for (auto* child = static_cast<AXPlatformNodeWin*>(GetFirstChild()); child;
+       child = static_cast<AXPlatformNodeWin*>(child->GetNextSibling())) {
+    if (child->IsText())
+      return child;
+    if (AXPlatformNodeWin* descendant = child->GetFirstTextOnlyDescendant())
+      return descendant;
+  }
   return nullptr;
 }
 

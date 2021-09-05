@@ -33,7 +33,12 @@ class PasswordFeatureManager {
   // Whether it makes sense to ask the user to signin again to access the
   // account-based password storage. This is true if a user on this device
   // previously opted into using the account store but is signed-out now.
-  virtual bool ShouldShowAccountStorageReSignin() const = 0;
+  // |current_page_url| is the current URL, used to suppress the promo on the
+  // Google signin page (no point in asking the user to sign in while they're
+  // already doing that). For non-web contexts (e.g. native UIs), it is valid to
+  // pass an empty GURL.
+  virtual bool ShouldShowAccountStorageReSignin(
+      const GURL& current_page_url) const = 0;
 
   // Sets opt-in to using account storage for passwords for the current
   // signed-in user (unconsented primary account).
@@ -65,6 +70,18 @@ class PasswordFeatureManager {
   // definition of PasswordAccountStorageUsageLevel.
   virtual metrics_util::PasswordAccountStorageUsageLevel
   ComputePasswordAccountStorageUsageLevel() const = 0;
+
+  // Increases the count of how many times Chrome automatically offered a user
+  // not opted-in to the account-scoped passwords storage to move a password to
+  // their account. Should only be called if the user is signed-in and not
+  // opted-in.
+  virtual void RecordMoveOfferedToNonOptedInUser() = 0;
+
+  // Gets the count of how many times Chrome automatically offered a user
+  // not opted-in to the account-scoped passwords storage to move a password to
+  // their account. Should only be called if the user is signed-in and not
+  // opted-in.
+  virtual int GetMoveOfferedToNonOptedInUserCount() const = 0;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(PasswordFeatureManager);

@@ -21,61 +21,28 @@
 
 namespace blink {
 
-class ResourceLoaderDefersLoadingTest : public testing::Test {
- public:
-  using ProcessCodeCacheRequestCallback =
-      base::RepeatingCallback<void(CodeCacheLoader::FetchCodeCacheCallback)>;
-  class TestingPlatformSupportWithMockCodeCacheLoader;
-  class TestCodeCacheLoader;
-  class TestWebURLLoaderFactory;
-  class TestWebURLLoader;
+namespace {
 
-  ResourceLoaderDefersLoadingTest();
-
-  void SaveCodeCacheCallback(CodeCacheLoader::FetchCodeCacheCallback callback) {
-    // Store the callback to send back a response.
-    code_cache_response_callback_ = std::move(callback);
-  }
-
-  ResourceFetcher* CreateFetcher() {
-    return MakeGarbageCollected<ResourceFetcher>(ResourceFetcherInit(
-        MakeGarbageCollected<TestResourceFetcherProperties>()->MakeDetachable(),
-        MakeGarbageCollected<MockFetchContext>(),
-        base::MakeRefCounted<scheduler::FakeTaskRunner>(),
-        MakeGarbageCollected<TestLoaderFactory>()));
-  }
-
-  CodeCacheLoader::FetchCodeCacheCallback code_cache_response_callback_;
-  // Passed to TestWebURLLoader (via |platform_|) and updated when its
-  // SetDefersLoading method is called.
-  bool web_url_loader_defers_ = false;
-  const KURL test_url_;
-
-  ScopedTestingPlatformSupport<
-      ResourceLoaderDefersLoadingTest::
-          TestingPlatformSupportWithMockCodeCacheLoader,
-      bool*>
-      platform_;
-};
+using ProcessCodeCacheRequestCallback =
+    base::RepeatingCallback<void(WebCodeCacheLoader::FetchCodeCacheCallback)>;
 
 // A mock code cache loader that calls the processing function whenever it
 // receives fetch requests.
-class ResourceLoaderDefersLoadingTest::TestCodeCacheLoader
-    : public CodeCacheLoader {
+class TestCodeCacheLoader : public WebCodeCacheLoader {
  public:
   explicit TestCodeCacheLoader(ProcessCodeCacheRequestCallback callback)
       : process_request_(callback) {}
   ~TestCodeCacheLoader() override = default;
 
-  // CodeCacheLoader methods:
+  // WebCodeCacheLoader methods:
   void FetchFromCodeCacheSynchronously(
-      const GURL& url,
+      const WebURL& url,
       base::Time* response_time_out,
       mojo_base::BigBuffer* buffer_out) override {}
   void FetchFromCodeCache(
       blink::mojom::CodeCacheType cache_type,
-      const GURL& url,
-      CodeCacheLoader::FetchCodeCacheCallback callback) override {
+      const WebURL& url,
+      WebCodeCacheLoader::FetchCodeCacheCallback callback) override {
     process_request_.Run(std::move(callback));
   }
 
@@ -84,8 +51,7 @@ class ResourceLoaderDefersLoadingTest::TestCodeCacheLoader
 };
 
 // A mock WebURLLoader to know the status of defers flag.
-class ResourceLoaderDefersLoadingTest::TestWebURLLoader final
-    : public WebURLLoader {
+class TestWebURLLoader final : public WebURLLoader {
  public:
   explicit TestWebURLLoader(bool* const defers_flag_ptr)
       : defers_flag_ptr_(defers_flag_ptr) {}
@@ -129,60 +95,74 @@ class ResourceLoaderDefersLoadingTest::TestWebURLLoader final
   bool* const defers_flag_ptr_;
 };
 
-// Mock WebURLLoaderFactory.
-class ResourceLoaderDefersLoadingTest::TestWebURLLoaderFactory final
-    : public WebURLLoaderFactory {
+class DeferTestLoaderFactory final : public ResourceFetcher::LoaderFactory {
  public:
-  explicit TestWebURLLoaderFactory(bool* const defers_flag)
-      : defers_flag_(defers_flag) {}
+  DeferTestLoaderFactory(
+      bool* const defers_flag,
+      ProcessCodeCacheRequestCallback process_code_cache_request_callback)
+      : defers_flag_(defers_flag),
+        process_code_cache_request_callback_(
+            process_code_cache_request_callback) {}
 
+  // LoaderFactory implementations
   std::unique_ptr<WebURLLoader> CreateURLLoader(
-      const WebURLRequest& request,
-      std::unique_ptr<scheduler::WebResourceLoadingTaskRunnerHandle>) override {
+      const ResourceRequest& request,
+      const ResourceLoaderOptions& options,
+      scoped_refptr<base::SingleThreadTaskRunner> task_runner) override {
     return std::make_unique<TestWebURLLoader>(defers_flag_);
   }
 
+  std::unique_ptr<WebCodeCacheLoader> CreateCodeCacheLoader() override {
+    return std::make_unique<TestCodeCacheLoader>(
+        process_code_cache_request_callback_);
+  }
+
  private:
   // Points to |ResourceLoaderDefersLoadingTest::web_url_loader_defers_|.
   bool* const defers_flag_;
+
+  ProcessCodeCacheRequestCallback process_code_cache_request_callback_;
 };
 
-// Mock TestPlatform to create the specific WebURLLoaderFactory and
-// CodeCacheLoader required for the tests.
-class ResourceLoaderDefersLoadingTest::
-    TestingPlatformSupportWithMockCodeCacheLoader
-    : public TestingPlatformSupportWithMockScheduler {
- public:
-  TestingPlatformSupportWithMockCodeCacheLoader(bool* const defers_flag)
-      : defers_flag_(defers_flag) {}
+}  // namespace
 
-  std::unique_ptr<CodeCacheLoader> CreateCodeCacheLoader() override {
-    return std::make_unique<TestCodeCacheLoader>(process_code_cache_request_);
+class ResourceLoaderDefersLoadingTest : public testing::Test {
+ public:
+  ResourceLoaderDefersLoadingTest() {
+    SetCodeCacheProcessFunction(base::BindRepeating(
+        &ResourceLoaderDefersLoadingTest::SaveCodeCacheCallback,
+        base::Unretained(this)));
   }
 
-  std::unique_ptr<WebURLLoaderFactory> CreateDefaultURLLoaderFactory()
-      override {
-    return std::make_unique<TestWebURLLoaderFactory>(defers_flag_);
+  void SaveCodeCacheCallback(
+      WebCodeCacheLoader::FetchCodeCacheCallback callback) {
+    // Store the callback to send back a response.
+    code_cache_response_callback_ = std::move(callback);
+  }
+
+  ResourceFetcher* CreateFetcher() {
+    return MakeGarbageCollected<ResourceFetcher>(ResourceFetcherInit(
+        MakeGarbageCollected<TestResourceFetcherProperties>()->MakeDetachable(),
+        MakeGarbageCollected<MockFetchContext>(),
+        base::MakeRefCounted<scheduler::FakeTaskRunner>(),
+        MakeGarbageCollected<DeferTestLoaderFactory>(
+            &web_url_loader_defers_, process_code_cache_request_callback_)));
   }
 
   void SetCodeCacheProcessFunction(ProcessCodeCacheRequestCallback callback) {
-    process_code_cache_request_ = callback;
+    process_code_cache_request_callback_ = callback;
   }
 
- private:
-  ProcessCodeCacheRequestCallback process_code_cache_request_;
-  // Points to |ResourceLoaderDefersLoadingTest::web_url_loader_defers_|.
-  bool* const defers_flag_;
-};
+  ProcessCodeCacheRequestCallback process_code_cache_request_callback_;
+  WebCodeCacheLoader::FetchCodeCacheCallback code_cache_response_callback_;
+  // Passed to TestWebURLLoader (via |platform_|) and updated when its
+  // SetDefersLoading method is called.
+  bool web_url_loader_defers_ = false;
+  const KURL test_url_ = KURL("http://example.com/");
 
-ResourceLoaderDefersLoadingTest::ResourceLoaderDefersLoadingTest()
-    : test_url_("http://example.com/"), platform_(&web_url_loader_defers_) {
-  // Saves the callback to control when the response is sent from
-  // the code cache loader.
-  platform_->SetCodeCacheProcessFunction(base::BindRepeating(
-      &ResourceLoaderDefersLoadingTest::SaveCodeCacheCallback,
-      base::Unretained(this)));
-}
+  ScopedTestingPlatformSupport<TestingPlatformSupportWithMockScheduler>
+      platform_;
+};
 
 TEST_F(ResourceLoaderDefersLoadingTest, CodeCacheFetchCheckDefers) {
   auto* fetcher = CreateFetcher();
@@ -190,7 +170,8 @@ TEST_F(ResourceLoaderDefersLoadingTest, CodeCacheFetchCheckDefers) {
   ResourceRequest request;
   request.SetUrl(test_url_);
   request.SetRequestContext(mojom::RequestContextType::FETCH);
-  FetchParameters fetch_parameters(std::move(request));
+  FetchParameters fetch_parameters =
+      FetchParameters::CreateForTest(std::move(request));
 
   Resource* resource = RawResource::Fetch(fetch_parameters, fetcher, nullptr);
 
@@ -203,8 +184,8 @@ TEST_F(ResourceLoaderDefersLoadingTest, CodeCacheFetchCheckDefers) {
 }
 
 TEST_F(ResourceLoaderDefersLoadingTest, CodeCacheFetchSyncReturn) {
-  platform_->SetCodeCacheProcessFunction(
-      base::BindRepeating([](CodeCacheLoader::FetchCodeCacheCallback callback) {
+  SetCodeCacheProcessFunction(base::BindRepeating(
+      [](WebCodeCacheLoader::FetchCodeCacheCallback callback) {
         std::move(callback).Run(base::Time(), {});
       }));
 
@@ -213,7 +194,8 @@ TEST_F(ResourceLoaderDefersLoadingTest, CodeCacheFetchSyncReturn) {
   ResourceRequest request;
   request.SetUrl(test_url_);
   request.SetRequestContext(mojom::RequestContextType::FETCH);
-  FetchParameters fetch_parameters(std::move(request));
+  FetchParameters fetch_parameters =
+      FetchParameters::CreateForTest(std::move(request));
 
   Resource* resource = RawResource::Fetch(fetch_parameters, fetcher, nullptr);
   DCHECK(resource);
@@ -227,7 +209,8 @@ TEST_F(ResourceLoaderDefersLoadingTest, ChangeDefersToFalse) {
   ResourceRequest request;
   request.SetUrl(test_url_);
   request.SetRequestContext(mojom::RequestContextType::FETCH);
-  FetchParameters fetch_parameters(std::move(request));
+  FetchParameters fetch_parameters =
+      FetchParameters::CreateForTest(std::move(request));
 
   Resource* resource = RawResource::Fetch(fetch_parameters, fetcher, nullptr);
   DCHECK(web_url_loader_defers_);
@@ -245,7 +228,8 @@ TEST_F(ResourceLoaderDefersLoadingTest, ChangeDefersToTrue) {
   ResourceRequest request;
   request.SetUrl(test_url_);
   request.SetRequestContext(mojom::RequestContextType::FETCH);
-  FetchParameters fetch_parameters(std::move(request));
+  FetchParameters fetch_parameters =
+      FetchParameters::CreateForTest(std::move(request));
 
   Resource* resource = RawResource::Fetch(fetch_parameters, fetcher, nullptr);
   DCHECK(web_url_loader_defers_);
@@ -267,7 +251,8 @@ TEST_F(ResourceLoaderDefersLoadingTest, ChangeDefersMultipleTimes) {
   request.SetUrl(test_url_);
   request.SetRequestContext(mojom::RequestContextType::FETCH);
 
-  FetchParameters fetch_parameters(std::move(request));
+  FetchParameters fetch_parameters =
+      FetchParameters::CreateForTest(std::move(request));
   Resource* resource = RawResource::Fetch(fetch_parameters, fetcher, nullptr);
   DCHECK(web_url_loader_defers_);
 

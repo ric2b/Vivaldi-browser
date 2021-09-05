@@ -281,6 +281,7 @@ class UtilitiesSelectLocalImageFunction : public ExtensionFunction {
 
   void OnFileSelected(int64_t bookmark_id,
                       int preference_index,
+                      std::string preferences_path,
                       base::FilePath path);
 
   void SendResult(bool success);
@@ -745,8 +746,7 @@ class UtilitiesFocusDialogFunction : public ExtensionFunction {
 
 class UtilitiesStartChromecastFunction : public ExtensionFunction {
 public:
- DECLARE_EXTENSION_FUNCTION("utilities.startChromecast",
-                            UTILITIES_START_CHROMECAST)
+ DECLARE_EXTENSION_FUNCTION("utilities.startChromecast", UTILITIES_IS_FIRST_RUN)
  UtilitiesStartChromecastFunction() = default;
 
 private:
@@ -754,6 +754,19 @@ private:
   ResponseAction Run() override;
 
   DISALLOW_COPY_AND_ASSIGN(UtilitiesStartChromecastFunction);
+};
+
+class UtilitiesIsFirstRunFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.isFirstRun",
+                             UTILITIES_START_CHROMECAST)
+  UtilitiesIsFirstRunFunction() = default;
+
+ private:
+  ~UtilitiesIsFirstRunFunction() override = default;
+  ResponseAction Run() override;
+
+  DISALLOW_COPY_AND_ASSIGN(UtilitiesIsFirstRunFunction);
 };
 
 }  // namespace extensions

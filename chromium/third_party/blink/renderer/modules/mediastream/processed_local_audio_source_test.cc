@@ -108,7 +108,6 @@ class ProcessedLocalAudioSourceTest : public testing::Test {
             false /* disable_local_echo */, properties, base::DoNothing(),
             scheduler::GetSingleThreadTaskRunnerForTesting());
     source->SetAllowInvalidRenderFrameIdForTesting(true);
-    source->SetOwner(audio_source_.Get());
     audio_source_->SetPlatformSource(std::move(source));
   }
 
@@ -130,8 +129,7 @@ class ProcessedLocalAudioSourceTest : public testing::Test {
   }
 
   MediaStreamAudioSource* audio_source() const {
-    return MediaStreamAudioSource::From(
-        WebMediaStreamSource(audio_source_.Get()));
+    return MediaStreamAudioSource::From(audio_source_.Get());
   }
 
   MediaStreamComponent* audio_track() { return audio_component_; }

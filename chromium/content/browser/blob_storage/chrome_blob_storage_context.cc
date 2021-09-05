@@ -30,6 +30,7 @@
 #include "storage/browser/blob/blob_memory_controller.h"
 #include "storage/browser/blob/blob_storage_context.h"
 #include "storage/browser/blob/blob_url_loader_factory.h"
+#include "storage/browser/blob/blob_url_registry.h"
 
 using base::FilePath;
 using base::UserDataAdapter;
@@ -56,7 +57,7 @@ void RemoveOldBlobStorageDirectories(FilePath blob_storage_parent,
        name = enumerator.Next()) {
     cleanup_needed = true;
     if (current_run_dir.empty() || name != current_run_dir)
-      success &= base::DeleteFileRecursively(name);
+      success &= base::DeletePathRecursively(name);
   }
   if (cleanup_needed)
     UMA_HISTOGRAM_BOOLEAN("Storage.Blob.CleanupSuccess", success);
@@ -165,8 +166,9 @@ void ChromeBlobStorageContext::InitializeOnIOThread(
     const FilePath& blob_storage_dir,
     scoped_refptr<base::TaskRunner> file_task_runner) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  context_.reset(new BlobStorageContext(profile_dir, blob_storage_dir,
-                                        std::move(file_task_runner)));
+  url_registry_ = std::make_unique<storage::BlobUrlRegistry>();
+  context_ = std::make_unique<BlobStorageContext>(profile_dir, blob_storage_dir,
+                                                  std::move(file_task_runner));
   // Signal the BlobMemoryController when it's appropriate to calculate its
   // storage limits.
   content::GetIOThreadTaskRunner({base::TaskPriority::BEST_EFFORT})
@@ -179,6 +181,11 @@ void ChromeBlobStorageContext::InitializeOnIOThread(
 storage::BlobStorageContext* ChromeBlobStorageContext::context() const {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   return context_.get();
+}
+
+storage::BlobUrlRegistry* ChromeBlobStorageContext::url_registry() const {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  return url_registry_.get();
 }
 
 void ChromeBlobStorageContext::BindMojoContext(
@@ -223,7 +230,7 @@ ChromeBlobStorageContext::URLLoaderFactoryForToken(
              mojo::PendingReceiver<network::mojom::URLLoaderFactory> receiver,
              mojo::PendingRemote<blink::mojom::BlobURLToken> token) {
             storage::BlobURLLoaderFactory::Create(
-                std::move(token), context->context()->AsWeakPtr(),
+                std::move(token), context->url_registry()->AsWeakPtr(),
                 std::move(receiver));
           },
           base::WrapRefCounted(GetFor(browser_context)),
@@ -247,10 +254,9 @@ ChromeBlobStorageContext::URLLoaderFactoryForUrl(
           [](scoped_refptr<ChromeBlobStorageContext> context,
              mojo::PendingReceiver<network::mojom::URLLoaderFactory> receiver,
              const GURL& url) {
-            auto blob_remote = context->context()->GetBlobFromPublicURL(url);
-            storage::BlobURLLoaderFactory::Create(
-                std::move(blob_remote), url, context->context()->AsWeakPtr(),
-                std::move(receiver));
+            auto blob_remote = context->url_registry()->GetBlobFromUrl(url);
+            storage::BlobURLLoaderFactory::Create(std::move(blob_remote), url,
+                                                  std::move(receiver));
           },
           base::WrapRefCounted(GetFor(browser_context)),
           blob_url_loader_factory_remote.InitWithNewPipeAndPassReceiver(),

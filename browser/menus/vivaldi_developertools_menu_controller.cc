@@ -3,6 +3,7 @@
 //
 #include "browser/menus/vivaldi_developertools_menu_controller.h"
 
+#include "base/command_line.h"
 #include "browser/vivaldi_browser_finder.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/devtools/devtools_window.h"

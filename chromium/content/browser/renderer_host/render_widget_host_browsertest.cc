@@ -526,7 +526,7 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostSitePerProcessTest,
 // where popup menus don't create a popup RenderWidget, but rather they trigger
 // a FrameHostMsg_ShowPopup to ask the browser to build and display the actual
 // popup using native controls.
-#if !defined(OS_MACOSX) && !defined(OS_ANDROID)
+#if !defined(OS_MAC) && !defined(OS_ANDROID)
 IN_PROC_BROWSER_TEST_F(RenderWidgetHostSitePerProcessTest,
                        BrowserClosesSelectPopup) {
   // Navigate to a page with a <select> element.
@@ -625,7 +625,7 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostSitePerProcessTest,
 }
 #endif
 
-// Tests that the renderer receives the blink::WebScreenInfo size overrides
+// Tests that the renderer receives the blink::ScreenInfo size overrides
 // while the page is in fullscreen mode. This is a regression test for
 // https://crbug.com/1060795.
 IN_PROC_BROWSER_TEST_F(RenderWidgetHostBrowserTest,
@@ -635,10 +635,10 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostBrowserTest,
     explicit FullscreenWaiter(WebContents* wc) : WebContentsObserver(wc) {}
 
     void Wait(bool enter) {
-      if (web_contents()->IsFullscreenForCurrentTab() != enter) {
+      if (web_contents()->IsFullscreen() != enter) {
         run_loop_.Run();
       }
-      EXPECT_EQ(enter, web_contents()->IsFullscreenForCurrentTab());
+      EXPECT_EQ(enter, web_contents()->IsFullscreen());
     }
 
    private:
@@ -653,10 +653,10 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostBrowserTest,
   // Sanity-check: Ensure the Shell and WebContents both agree the browser is
   // not currently in fullscreen.
   ASSERT_FALSE(shell()->IsFullscreenForTabOrPending(web_contents()));
-  ASSERT_FALSE(web_contents()->IsFullscreenForCurrentTab());
+  ASSERT_FALSE(web_contents()->IsFullscreen());
 
   // While not fullscreened, expect the screen size to not be overridden.
-  ScreenInfo screen_info;
+  blink::ScreenInfo screen_info;
   host()->GetScreenInfo(&screen_info);
   WaitForVisualPropertiesAck();
   EXPECT_EQ(screen_info.rect.size().ToString(),
@@ -678,6 +678,189 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostBrowserTest,
   WaitForVisualPropertiesAck();
   EXPECT_EQ(screen_info.rect.size().ToString(),
             EvalJs(web_contents(), "`${screen.width}x${screen.height}`"));
+}
+
+class RenderWidgetHostFoldableCSSTest : public RenderWidgetHostBrowserTest {
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    ContentBrowserTest::SetUpCommandLine(command_line);
+    command_line->AppendSwitch(
+        switches::kEnableExperimentalWebPlatformFeatures);
+  }
+};
+
+// Tests that the renderer receives the root widget's window segments and
+// correctly exposes those via CSS.
+// TODO(crbug.com/1098549) Convert this to a WPT once emulation is available
+// via WebDriver.
+IN_PROC_BROWSER_TEST_F(RenderWidgetHostFoldableCSSTest,
+                       FoldablesCSSWithOverrides) {
+  const char kTestPageURL[] =
+      R"HTML(data:text/html,<!DOCTYPE html>
+      <style>
+        div {
+          margin: env(fold-top, 1px) env(fold-right, 1px)
+                  env(fold-bottom, 1px) env(fold-left, 1px);
+          width: env(fold-width, 1px);
+          height: env(fold-height, 1px);
+        }
+        @media (screen-spanning: none) {
+          div { opacity: 0.1; }
+        }
+        @media (screen-spanning: single-fold-vertical) {
+          div { opacity: 0.2; }
+        }
+        @media (screen-spanning: single-fold-horizontal) {
+          div { opacity: 0.3; }
+        }
+      </style>
+      <div id='target'></div>)HTML";
+
+  EXPECT_TRUE(NavigateToURL(shell(), GURL(kTestPageURL)));
+
+  EXPECT_EQ(
+      "1px",
+      EvalJs(shell(), "getComputedStyle(target).marginTop").ExtractString());
+  EXPECT_EQ(
+      "1px",
+      EvalJs(shell(), "getComputedStyle(target).marginRight").ExtractString());
+  EXPECT_EQ(
+      "1px",
+      EvalJs(shell(), "getComputedStyle(target).marginBottom").ExtractString());
+  EXPECT_EQ(
+      "1px",
+      EvalJs(shell(), "getComputedStyle(target).marginLeft").ExtractString());
+  EXPECT_EQ("1px",
+            EvalJs(shell(), "getComputedStyle(target).width").ExtractString());
+  EXPECT_EQ("1px",
+            EvalJs(shell(), "getComputedStyle(target).height").ExtractString());
+
+  EXPECT_EQ(
+      "0.1",
+      EvalJs(shell(), "getComputedStyle(target).opacity").ExtractString());
+
+  const gfx::Size root_view_size = view()->GetVisibleViewportSize();
+  const int kDisplayFeatureLength = 10;
+  DisplayFeature emulated_display_feature{
+      DisplayFeature::Orientation::kVertical,
+      /* offset */ root_view_size.width() / 2 - kDisplayFeatureLength / 2,
+      /* mask_length */ kDisplayFeatureLength};
+  view()->SetDisplayFeatureForTesting(emulated_display_feature);
+  host()->SynchronizeVisualProperties();
+
+  EXPECT_EQ(
+      "0px",
+      EvalJs(shell(), "getComputedStyle(target).marginTop").ExtractString());
+  EXPECT_EQ(
+      base::NumberToString(emulated_display_feature.offset +
+                           emulated_display_feature.mask_length) +
+          "px",
+      EvalJs(shell(), "getComputedStyle(target).marginRight").ExtractString());
+  EXPECT_EQ(
+      base::NumberToString(root_view_size.height()) + "px",
+      EvalJs(shell(), "getComputedStyle(target).marginBottom").ExtractString());
+  EXPECT_EQ(
+      base::NumberToString(emulated_display_feature.offset) + "px",
+      EvalJs(shell(), "getComputedStyle(target).marginLeft").ExtractString());
+  EXPECT_EQ(base::NumberToString(emulated_display_feature.mask_length) + "px",
+            EvalJs(shell(), "getComputedStyle(target).width").ExtractString());
+  EXPECT_EQ(base::NumberToString(root_view_size.height()) + "px",
+            EvalJs(shell(), "getComputedStyle(target).height").ExtractString());
+
+  EXPECT_EQ(
+      "0.2",
+      EvalJs(shell(), "getComputedStyle(target).opacity").ExtractString());
+
+  emulated_display_feature.orientation =
+      DisplayFeature::Orientation::kHorizontal;
+  emulated_display_feature.offset =
+      root_view_size.height() / 2 - kDisplayFeatureLength / 2,
+  view()->SetDisplayFeatureForTesting(emulated_display_feature);
+  host()->SynchronizeVisualProperties();
+
+  EXPECT_EQ(
+      base::NumberToString(emulated_display_feature.offset) + "px",
+      EvalJs(shell(), "getComputedStyle(target).marginTop").ExtractString());
+  EXPECT_EQ(
+      base::NumberToString(root_view_size.width()) + "px",
+      EvalJs(shell(), "getComputedStyle(target).marginRight").ExtractString());
+  EXPECT_EQ(
+      base::NumberToString(emulated_display_feature.offset +
+                           emulated_display_feature.mask_length) +
+          "px",
+      EvalJs(shell(), "getComputedStyle(target).marginBottom").ExtractString());
+  EXPECT_EQ(
+      "0px",
+      EvalJs(shell(), "getComputedStyle(target).marginLeft").ExtractString());
+  EXPECT_EQ(base::NumberToString(root_view_size.width()) + "px",
+            EvalJs(shell(), "getComputedStyle(target).width").ExtractString());
+  EXPECT_EQ(base::NumberToString(emulated_display_feature.mask_length) + "px",
+            EvalJs(shell(), "getComputedStyle(target).height").ExtractString());
+
+  EXPECT_EQ(
+      "0.3",
+      EvalJs(shell(), "getComputedStyle(target).opacity").ExtractString());
+
+  view()->SetDisplayFeatureForTesting(base::nullopt);
+  host()->SynchronizeVisualProperties();
+
+  EXPECT_EQ(
+      "1px",
+      EvalJs(shell(), "getComputedStyle(target).marginTop").ExtractString());
+  EXPECT_EQ(
+      "1px",
+      EvalJs(shell(), "getComputedStyle(target).marginRight").ExtractString());
+  EXPECT_EQ(
+      "1px",
+      EvalJs(shell(), "getComputedStyle(target).marginBottom").ExtractString());
+  EXPECT_EQ(
+      "1px",
+      EvalJs(shell(), "getComputedStyle(target).marginLeft").ExtractString());
+  EXPECT_EQ("1px",
+            EvalJs(shell(), "getComputedStyle(target).width").ExtractString());
+  EXPECT_EQ("1px",
+            EvalJs(shell(), "getComputedStyle(target).height").ExtractString());
+
+  EXPECT_EQ(
+      "0.1",
+      EvalJs(shell(), "getComputedStyle(target).opacity").ExtractString());
+}
+
+IN_PROC_BROWSER_TEST_F(RenderWidgetHostFoldableCSSTest,
+                       FoldablesCSSWithReload) {
+  const char kTestPageURL[] =
+      R"HTML(data:text/html,<!DOCTYPE html>
+      <style>
+        @media (screen-spanning: single-fold-vertical) {
+          div { margin-left: env(fold-left, 10px); }
+        }
+      </style>
+      <div id='target'></div>)HTML";
+
+  EXPECT_TRUE(NavigateToURL(shell(), GURL(kTestPageURL)));
+
+  const gfx::Size root_view_size = view()->GetVisibleViewportSize();
+  const int kDisplayFeatureLength = 10;
+  DisplayFeature emulated_display_feature{
+      DisplayFeature::Orientation::kVertical,
+      /* offset */ root_view_size.width() / 2 - kDisplayFeatureLength / 2,
+      /* mask_length */ kDisplayFeatureLength};
+  view()->SetDisplayFeatureForTesting(emulated_display_feature);
+  host()->SynchronizeVisualProperties();
+
+  EXPECT_EQ(
+      base::NumberToString(emulated_display_feature.offset) + "px",
+      EvalJs(shell(), "getComputedStyle(target).marginLeft").ExtractString());
+
+  // Ensure that the environment variables have the correct values in the new
+  // document that is created on reloading the page.
+  WindowedNotificationObserver load_stop_observer(
+      NOTIFICATION_LOAD_STOP, NotificationService::AllSources());
+  shell()->Reload();
+  load_stop_observer.Wait();
+
+  EXPECT_EQ(
+      base::NumberToString(emulated_display_feature.offset) + "px",
+      EvalJs(shell(), "getComputedStyle(target).marginLeft").ExtractString());
 }
 
 class RenderWidgetHostDelegatedInkMetadataTest

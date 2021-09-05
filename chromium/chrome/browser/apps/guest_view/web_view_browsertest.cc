@@ -37,7 +37,6 @@
 #include "chrome/browser/download/download_prefs.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/pdf/pdf_extension_test_util.h"
-#include "chrome/browser/prerender/prerender_link_manager.h"
 #include "chrome/browser/prerender/prerender_link_manager_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/renderer_context_menu/render_view_context_menu.h"
@@ -58,6 +57,7 @@
 #include "components/guest_view/browser/guest_view_manager_delegate.h"
 #include "components/guest_view/browser/guest_view_manager_factory.h"
 #include "components/guest_view/browser/test_guest_view_manager.h"
+#include "components/prerender/browser/prerender_link_manager.h"
 #include "components/security_interstitials/content/security_interstitial_tab_helper.h"
 #include "components/version_info/channel.h"
 #include "components/version_info/version_info.h"
@@ -635,19 +635,19 @@ class WebViewTest : public extensions::PlatformAppBrowserTest {
         LOG(ERROR) << "FAILED TO START TEST SERVER.";
         return;
       }
-      embedded_test_server()->RegisterRequestHandler(base::Bind(
+      embedded_test_server()->RegisterRequestHandler(base::BindRepeating(
           &WebViewTest::RedirectResponseHandler, kRedirectResponsePath,
           embedded_test_server()->GetURL(kRedirectResponseFullPath)));
 
-      embedded_test_server()->RegisterRequestHandler(
-          base::Bind(&WebViewTest::EmptyResponseHandler, kEmptyResponsePath));
+      embedded_test_server()->RegisterRequestHandler(base::BindRepeating(
+          &WebViewTest::EmptyResponseHandler, kEmptyResponsePath));
 
-      embedded_test_server()->RegisterRequestHandler(base::Bind(
+      embedded_test_server()->RegisterRequestHandler(base::BindRepeating(
           &WebViewTest::UserAgentResponseHandler,
           kUserAgentRedirectResponsePath,
           embedded_test_server()->GetURL(kRedirectResponseFullPath)));
 
-      embedded_test_server()->RegisterRequestHandler(base::Bind(
+      embedded_test_server()->RegisterRequestHandler(base::BindRepeating(
           &WebViewTest::CacheControlResponseHandler, kCacheResponsePath));
 
       EmbeddedTestServerAcceptConnections();
@@ -1346,7 +1346,16 @@ IN_PROC_BROWSER_TEST_F(WebViewTest, Shim_TestDisplayNoneWebviewLoad) {
   TestHelper("testDisplayNoneWebviewLoad", "web_view/shim", NO_TEST_SERVER);
 }
 
-IN_PROC_BROWSER_TEST_F(WebViewTest, Shim_TestDisplayNoneWebviewRemoveChild) {
+#if defined(OS_WIN) || defined(OS_LINUX)
+#define MAYBE_Shim_TestDisplayNoneWebviewRemoveChild \
+  DISABLED_Shim_TestDisplayNoneWebviewRemoveChild
+#else
+#define MAYBE_Shim_TestDisplayNoneWebviewRemoveChild \
+  Shim_TestDisplayNoneWebviewRemoveChild
+#endif
+// Flaky on Windows & Linux: https://crbug.com/1115106.
+IN_PROC_BROWSER_TEST_F(WebViewTest,
+                       MAYBE_Shim_TestDisplayNoneWebviewRemoveChild) {
   TestHelper("testDisplayNoneWebviewRemoveChild",
              "web_view/shim", NO_TEST_SERVER);
 }
@@ -1515,7 +1524,7 @@ IN_PROC_BROWSER_TEST_F(WebViewTest, Shim_TestNestedCrossOriginSubframes) {
              "web_view/shim", NEEDS_TEST_SERVER);
 }
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 // Flaky on Mac. See https://crbug.com/674904.
 #define MAYBE_Shim_TestNestedSubframes DISABLED_Shim_TestNestedSubframes
 #else
@@ -3012,23 +3021,23 @@ IN_PROC_BROWSER_TEST_F(WebViewTest,
 }
 
 // This test makes sure loading <webview> does not crash when there is an
-// extension which has content script whitelisted/forced.
-IN_PROC_BROWSER_TEST_F(WebViewTest, WhitelistedContentScript) {
-  // Whitelist the extension for running content script we are going to load.
-  extensions::ExtensionsClient::ScriptingWhitelist whitelist;
+// extension which has content script allowlisted/forced.
+IN_PROC_BROWSER_TEST_F(WebViewTest, AllowlistedContentScript) {
+  // Allowlist the extension for running content script we are going to load.
+  extensions::ExtensionsClient::ScriptingAllowlist allowlist;
   const std::string extension_id = "imeongpbjoodlnmlakaldhlcmijmhpbb";
-  whitelist.push_back(extension_id);
-  extensions::ExtensionsClient::Get()->SetScriptingWhitelist(whitelist);
+  allowlist.push_back(extension_id);
+  extensions::ExtensionsClient::Get()->SetScriptingAllowlist(allowlist);
 
   // Load the extension.
-  const extensions::Extension* content_script_whitelisted_extension =
+  const extensions::Extension* content_script_allowlisted_extension =
       LoadExtension(test_data_dir_.AppendASCII(
-                        "platform_apps/web_view/extension_api/content_script"));
-  ASSERT_TRUE(content_script_whitelisted_extension);
-  ASSERT_EQ(extension_id, content_script_whitelisted_extension->id());
+          "platform_apps/web_view/extension_api/content_script"));
+  ASSERT_TRUE(content_script_allowlisted_extension);
+  ASSERT_EQ(extension_id, content_script_allowlisted_extension->id());
 
   // Now load an app with <webview>.
-  LoadAndLaunchPlatformApp("web_view/content_script_whitelisted",
+  LoadAndLaunchPlatformApp("web_view/content_script_allowlisted",
                            "TEST_PASSED");
 }
 
@@ -4088,7 +4097,8 @@ class ChromeSignInWebViewTest : public WebViewTest {
         "var count = 10;"
         "var interval;"
         "interval = setInterval(function(){"
-        "  if (document.getElementsByTagName('webview').length) {"
+        "  if (document.querySelector('inline-login-app').shadowRoot"
+        "       .querySelector('webview')) {"
         "    document.title = 'success';"
         "    console.log('FOUND webview');"
         "    clearInterval(interval);"
@@ -4103,8 +4113,8 @@ class ChromeSignInWebViewTest : public WebViewTest {
   }
 };
 
-#if (defined(OS_LINUX) && !defined(OS_CHROMEOS)) || defined(OS_MACOSX) || \
-     defined(OS_WIN)
+#if (defined(OS_LINUX) && !defined(OS_CHROMEOS)) || defined(OS_MAC) || \
+    defined(OS_WIN)
 // This verifies the fix for http://crbug.com/667708.
 IN_PROC_BROWSER_TEST_F(ChromeSignInWebViewTest,
                        ClosingChromeSignInShouldNotCrash) {

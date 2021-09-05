@@ -42,7 +42,6 @@
 #include "chrome/grit/theme_resources.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
 #include "components/content_settings/core/common/cookie_controls_enforcement.h"
-#include "components/content_settings/core/common/features.h"
 #include "components/content_settings/core/common/pref_names.h"
 #include "components/google/core/common/google_util.h"
 #include "components/policy/core/common/policy_service.h"
@@ -69,7 +68,7 @@
 #include "chromeos/strings/grit/chromeos_strings.h"
 #endif
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include "chrome/browser/platform_util.h"
 #endif
 
@@ -186,10 +185,10 @@ NTPResourceCache::NTPResourceCache(Profile* profile)
                           base::Unretained(this)));
 }
 
-NTPResourceCache::~NTPResourceCache() {}
+NTPResourceCache::~NTPResourceCache() = default;
 
 bool NTPResourceCache::NewTabHTMLNeedsRefresh() {
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   // Invalidate if the current value is different from the cached value.
   bool is_enabled = platform_util::IsSwipeTrackingFromScrollEventsEnabled();
   if (is_enabled != is_swipe_tracking_from_scroll_events_enabled_) {
@@ -314,8 +313,6 @@ void NTPResourceCache::CreateNewTabIncognitoHTML() {
       l10n_util::GetStringUTF8(IDS_NEW_TAB_OTR_NOT_SAVED);
   replacements["learnMoreLink"] = kLearnMoreIncognitoUrl;
   replacements["title"] = l10n_util::GetStringUTF8(IDS_NEW_TAB_TITLE);
-  replacements["hideCookieControls"] =
-      cookie_controls_service->ShouldHideCookieControlsUI() ? "hidden" : "";
   replacements["cookieControlsTitle"] =
       l10n_util::GetStringUTF8(IDS_NEW_TAB_OTR_THIRD_PARTY_COOKIE);
   replacements["cookieControlsDescription"] =

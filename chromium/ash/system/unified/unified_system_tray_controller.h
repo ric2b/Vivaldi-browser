@@ -59,9 +59,6 @@ class ASH_EXPORT UnifiedSystemTrayController
   void HandleEnterpriseInfoAction();
   // Toggle expanded state of UnifiedSystemTrayView. Called from the view.
   void ToggleExpanded();
-  // Called when message center visibility is changed. Called from the
-  // view.
-  void OnMessageCenterVisibilityUpdated();
 
   // Handle finger dragging and expand/collapse the view. Called from view.
   void BeginDrag(const gfx::PointF& location);
@@ -89,6 +86,8 @@ class ASH_EXPORT UnifiedSystemTrayController
   void ShowLocaleDetailedView();
   // Show the detailed view of audio. Called from the view.
   void ShowAudioDetailedView();
+  // Show the detailed view for dark mode. Called from the feature pod button.
+  void ShowDarkModeDetailedView();
   // Show the detailed view of notifier settings. Called from the view.
   void ShowNotifierSettingsView();
 

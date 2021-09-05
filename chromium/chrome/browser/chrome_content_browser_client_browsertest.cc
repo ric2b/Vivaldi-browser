@@ -62,7 +62,7 @@
 #include "url/url_constants.h"
 #endif
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include "chrome/test/base/launchservices_utils_mac.h"
 #endif
 
@@ -354,8 +354,7 @@ IN_PROC_BROWSER_TEST_P(PrefersColorSchemeTest, PrefersColorScheme) {
   browser()
       ->tab_strip_model()
       ->GetActiveWebContents()
-      ->GetRenderViewHost()
-      ->OnWebkitPreferencesChanged();
+      ->OnWebPreferencesChanged();
   ui_test_utils::NavigateToURL(
       browser(),
       ui_test_utils::GetTestUrl(
@@ -368,6 +367,10 @@ IN_PROC_BROWSER_TEST_P(PrefersColorSchemeTest, PrefersColorScheme) {
 
 IN_PROC_BROWSER_TEST_P(PrefersColorSchemeTest, FeatureOverridesChromeSchemes) {
   test_theme_.SetDarkMode(true);
+  browser()
+      ->tab_strip_model()
+      ->GetActiveWebContents()
+      ->OnWebPreferencesChanged();
 
   ui_test_utils::NavigateToURL(browser(), GURL(chrome::kChromeUIDownloadsURL));
 
@@ -384,6 +387,10 @@ IN_PROC_BROWSER_TEST_P(PrefersColorSchemeTest, FeatureOverridesChromeSchemes) {
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 IN_PROC_BROWSER_TEST_P(PrefersColorSchemeTest, FeatureOverridesPdfUI) {
   test_theme_.SetDarkMode(true);
+  browser()
+      ->tab_strip_model()
+      ->GetActiveWebContents()
+      ->OnWebPreferencesChanged();
 
   std::string pdf_extension_url(extensions::kExtensionScheme);
   pdf_extension_url.append(url::kStandardSchemeSeparator);
@@ -432,7 +439,7 @@ class ProtocolHandlerTest : public InProcessBrowserTest {
 };
 
 IN_PROC_BROWSER_TEST_F(ProtocolHandlerTest, CustomHandler) {
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   ASSERT_TRUE(test::RegisterAppWithLaunchServices());
 #endif
   AddProtocolHandler("news", "https://abc.xyz/?url=%s");

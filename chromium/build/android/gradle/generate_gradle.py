@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env vpython
 # Copyright 2016 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
@@ -28,6 +28,9 @@ sys.path.append(os.path.join(_BUILD_ANDROID, 'gyp'))
 import jinja_template
 from util import build_utils
 from util import resource_utils
+
+sys.path.append(os.path.dirname(_BUILD_ANDROID))
+import gn_helpers
 
 _DEPOT_TOOLS_PATH = os.path.join(host_paths.DIR_SOURCE_ROOT, 'third_party',
                                  'depot_tools')
@@ -106,17 +109,8 @@ def _WriteFile(path, data):
     output_file.write(data)
 
 
-def _ReadPropertiesFile(path):
-  with open(path) as f:
-    return dict(l.rstrip().split('=', 1) for l in f if '=' in l)
-
-
 def _RunGnGen(output_dir, args=None):
-  cmd = [
-      os.path.join(_DEPOT_TOOLS_PATH, 'gn'),
-      'gen',
-      output_dir,
-  ]
+  cmd = [os.path.join(_DEPOT_TOOLS_PATH, 'gn'), 'gen', output_dir]
   if args:
     cmd.extend(args)
   logging.info('Running: %r', cmd)
@@ -126,36 +120,19 @@ def _RunGnGen(output_dir, args=None):
 def _RunNinja(output_dir, args):
   # Don't use version within _DEPOT_TOOLS_PATH, since most devs don't use
   # that one when building.
-  cmd = [
-      'autoninja',
-      '-C',
-      output_dir,
-  ]
+  cmd = ['autoninja', '-C', output_dir]
   cmd.extend(args)
   logging.info('Running: %r', cmd)
   subprocess.check_call(cmd)
 
 
 def _QueryForAllGnTargets(output_dir):
-  # Query ninja rather than GN since it's faster.
   cmd = [
-      'ninja',
-      '-C',
-      output_dir,
-      '-t',
-      'targets',
+      os.path.join(_BUILD_ANDROID, 'list_java_targets.py'), '--gn-labels',
+      '--nested', '--build-build-configs', '--output-directory', output_dir
   ]
   logging.info('Running: %r', cmd)
-  ninja_output = build_utils.CheckOutput(cmd)
-  ret = []
-  SUFFIX_LEN = len('__build_config_crbug_908819')
-  for line in ninja_output.splitlines():
-    ninja_target = line.rsplit(':', 1)[0]
-    # Ignore root aliases by ensure a : exists.
-    if ':' in ninja_target and ninja_target.endswith(
-        '__build_config_crbug_908819'):
-      ret.append('//' + ninja_target[:-SUFFIX_LEN])
-  return ret
+  return subprocess.check_output(cmd).splitlines()
 
 
 class _ProjectEntry(object):
@@ -203,9 +180,6 @@ class _ProjectEntry(object):
 
   def GnBuildConfigTarget(self):
     return '%s__build_config_crbug_908819' % self._gn_target
-
-  def NinjaBuildConfigTarget(self):
-    return '%s__build_config_crbug_908819' % self.NinjaTarget()
 
   def GradleSubdir(self):
     """Returns the output subdirectory."""
@@ -613,29 +587,39 @@ def _IsTestDir(path):
 
 # Example: //chrome/android:monochrome
 def _GetNative(relative_func, target_names):
+  """Returns an object containing native c++ sources list and its included path
+
+  Iterate through all target_names and their deps to get the list of included
+  paths and sources."""
   out_dir = constants.GetOutDirectory()
   with open(os.path.join(out_dir, 'project.json'), 'r') as project_file:
     projects = json.load(project_file)
   project_targets = projects['targets']
   root_dir = projects['build_settings']['root_path']
-  targets = {}
   includes = set()
+  processed_target = set()
+  targets_stack = list(target_names)
+  sources = []
+
+  while targets_stack:
+    target_name = targets_stack.pop()
+    if target_name in processed_target:
+      continue
+    processed_target.add(target_name)
+    target = project_targets[target_name]
+    includes.update(target.get('include_dirs', []))
+    targets_stack.extend(target.get('deps', []))
+    # Ignore generated files
+    sources.extend(f for f in target.get('sources', [])
+                   if f.endswith('.cc') and not f.startswith('//out'))
+
   def process_paths(paths):
     # Ignores leading //
     return relative_func(
         sorted(os.path.join(root_dir, path[2:]) for path in paths))
-  for target_name in target_names:
-    target = project_targets[target_name]
-    includes.update(target.get('include_dirs', []))
-    sources = [f for f in target.get('sources', []) if f.endswith('.cc')]
-    if sources:
-      # CMake does not like forward slashes or colons for the target name.
-      filtered_name = target_name.replace('/', '.').replace(':', '-')
-      targets[filtered_name] = {
-          'sources': process_paths(sources),
-      }
+
   return {
-      'targets': targets,
+      'sources': process_paths(sources),
       'includes': process_paths(includes),
   }
 
@@ -849,10 +833,11 @@ def main():
         for t in targets_from_args
     ]
     # Necessary after "gn clean"
-    if not os.path.exists(os.path.join(output_dir, 'build_vars.txt')):
+    if not os.path.exists(
+        os.path.join(output_dir, gn_helpers.BUILD_VARS_FILENAME)):
       _RunGnGen(output_dir)
 
-  build_vars = _ReadPropertiesFile(os.path.join(output_dir, 'build_vars.txt'))
+  build_vars = gn_helpers.ReadBuildVars(output_dir)
   jinja_processor = jinja_template.JinjaProcessor(_FILE_DIR)
   if args.beta:
     channel = 'beta'
@@ -869,9 +854,6 @@ def main():
       channel)
 
   main_entries = [_ProjectEntry.FromGnTarget(t) for t in targets]
-
-  logging.warning('Building .build_config files...')
-  _RunNinja(output_dir, [e.NinjaBuildConfigTarget() for e in main_entries])
 
   if args.all:
     # There are many unused libraries, so restrict to those that are actually

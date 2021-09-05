@@ -13,10 +13,20 @@ class Attachment {
  public:
   enum class Family { kFile, kText, kMaxValue = kText };
 
-  virtual ~Attachment() = default;
+  Attachment(Family family, int64_t size);
+  Attachment(int64_t id, Family family, int64_t size);
+  Attachment(const Attachment&);
+  Attachment& operator=(const Attachment&);
+  virtual ~Attachment();
 
-  virtual int64_t size() const = 0;
-  virtual Family family() const = 0;
+  int64_t id() const { return id_; }
+  Family family() const { return family_; }
+  int64_t size() const { return size_; }
+
+ private:
+  int64_t id_;
+  Family family_;
+  int64_t size_;
 };
 
 #endif  // CHROME_BROWSER_NEARBY_SHARING_ATTACHMENT_H_

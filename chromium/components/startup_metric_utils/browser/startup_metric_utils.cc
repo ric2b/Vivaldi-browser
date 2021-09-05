@@ -320,7 +320,7 @@ base::TimeTicks StartupTimeToTimeTicks(base::Time time) {
 
 // Enabling this logic on OS X causes a significant performance regression.
 // https://crbug.com/601270
-#if !defined(OS_MACOSX)
+#if !defined(OS_APPLE)
   static bool statics_initialized = false;
 
   base::ThreadPriority previous_priority = base::ThreadPriority::NORMAL;
@@ -334,7 +334,7 @@ base::TimeTicks StartupTimeToTimeTicks(base::Time time) {
   static const base::Time time_base = base::Time::Now();
   static const base::TimeTicks trace_ticks_base = base::TimeTicks::Now();
 
-#if !defined(OS_MACOSX)
+#if !defined(OS_APPLE)
   if (!statics_initialized) {
     base::PlatformThread::SetCurrentThreadPriority(previous_priority);
   }
@@ -376,8 +376,12 @@ void SetBackgroundModeEnabled() {
 }
 
 void RecordStartupProcessCreationTime(base::Time time) {
+  RecordStartupProcessCreationTime(StartupTimeToTimeTicks(time));
+}
+
+void RecordStartupProcessCreationTime(base::TimeTicks ticks) {
   DCHECK(g_process_creation_ticks.is_null());
-  g_process_creation_ticks = StartupTimeToTimeTicks(time);
+  g_process_creation_ticks = ticks;
   DCHECK(!g_process_creation_ticks.is_null());
 }
 

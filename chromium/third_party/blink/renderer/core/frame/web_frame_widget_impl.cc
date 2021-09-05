@@ -116,7 +116,8 @@ WebFrameWidget* WebFrameWidget::CreateForMainFrame(
     CrossVariantMojoAssociatedRemote<mojom::blink::WidgetHostInterfaceBase>
         mojo_widget_host,
     CrossVariantMojoAssociatedReceiver<mojom::blink::WidgetInterfaceBase>
-        mojo_widget) {
+        mojo_widget,
+    bool is_for_nested_main_frame) {
   DCHECK(client) << "A valid WebWidgetClient must be supplied.";
   DCHECK(!main_frame->Parent());  // This is the main frame.
 
@@ -135,7 +136,8 @@ WebFrameWidget* WebFrameWidget::CreateForMainFrame(
   auto* widget = MakeGarbageCollected<WebViewFrameWidget>(
       util::PassKey<WebFrameWidget>(), *client, web_view_impl,
       std::move(mojo_frame_widget_host), std::move(mojo_frame_widget),
-      std::move(mojo_widget_host), std::move(mojo_widget));
+      std::move(mojo_widget_host), std::move(mojo_widget),
+      is_for_nested_main_frame);
   widget->BindLocalRoot(*main_frame);
   return widget;
 }
@@ -196,11 +198,10 @@ void WebFrameWidgetImpl::Trace(Visitor* visitor) const {
 // WebWidget ------------------------------------------------------------------
 
 void WebFrameWidgetImpl::Close(
-    scoped_refptr<base::SingleThreadTaskRunner> cleanup_runner,
-    base::OnceCallback<void()> cleanup_task) {
+    scoped_refptr<base::SingleThreadTaskRunner> cleanup_runner) {
   GetPage()->WillCloseAnimationHost(LocalRootImpl()->GetFrame()->View());
 
-  WebFrameWidgetBase::Close(std::move(cleanup_runner), std::move(cleanup_task));
+  WebFrameWidgetBase::Close(std::move(cleanup_runner));
 
   self_keep_alive_.Clear();
 }
@@ -257,9 +258,9 @@ void WebFrameWidgetImpl::Resize(const WebSize& new_size) {
     // TODO(wjmaclean): This is updating when the size of the *child frame*
     // have changed which are completely independent of the WebView, and in an
     // OOPIF where the main frame is remote, are these limits even useful?
-    Client()->SetPageScaleStateAndLimits(
-        1.f, false /* is_pinch_gesture_active */,
-        View()->MinimumPageScaleFactor(), View()->MaximumPageScaleFactor());
+    SetPageScaleStateAndLimits(1.f, false /* is_pinch_gesture_active */,
+                               View()->MinimumPageScaleFactor(),
+                               View()->MaximumPageScaleFactor());
   }
 }
 
@@ -274,14 +275,6 @@ void WebFrameWidgetImpl::UpdateMainFrameLayoutSize() {
   WebSize layout_size = *size_;
 
   view->SetLayoutSize(layout_size);
-}
-
-void WebFrameWidgetImpl::DidEnterFullscreen() {
-  View()->DidEnterFullscreen();
-}
-
-void WebFrameWidgetImpl::DidExitFullscreen() {
-  View()->DidExitFullscreen();
 }
 
 void WebFrameWidgetImpl::SetSuppressFrameRequestsWorkaroundFor704763Only(
@@ -317,6 +310,17 @@ void WebFrameWidgetImpl::DidBeginMainFrame() {
   DCHECK(LocalRootImpl()->GetFrame());
   WebFrameWidgetBase::DidBeginMainFrame();
   PageWidgetDelegate::DidBeginFrame(*LocalRootImpl()->GetFrame());
+}
+
+bool WebFrameWidgetImpl::ShouldHandleImeEvents() {
+  // TODO(ekaramad): WebViewWidgetImpl returns true only if it has focus.
+  // We track page focus in all RenderViews on the page but
+  // the RenderWidgets corresponding to child local roots do not get the
+  // update. For now, this method returns true when the RenderWidget is for a
+  // child local frame, i.e., IME events will be processed regardless of page
+  // focus. We should revisit this after page focus for OOPIFs has been fully
+  // resolved (https://crbug.com/689777).
+  return LocalRootImpl();
 }
 
 void WebFrameWidgetImpl::BeginUpdateLayers() {
@@ -446,12 +450,10 @@ WebInputEventResult WebFrameWidgetImpl::HandleInputEvent(
   if (!GetPage())
     return WebInputEventResult::kNotHandled;
 
-  if (LocalRootImpl()) {
-    if (WebDevToolsAgentImpl* devtools = LocalRootImpl()->DevToolsAgentImpl()) {
-      auto result = devtools->HandleInputEvent(input_event);
-      if (result != WebInputEventResult::kNotHandled)
-        return result;
-    }
+  if (WebDevToolsAgentImpl* devtools = LocalRootImpl()->DevToolsAgentImpl()) {
+    auto result = devtools->HandleInputEvent(input_event);
+    if (result != WebInputEventResult::kNotHandled)
+      return result;
   }
 
   // Report the event to be NOT processed by WebKit, so that the browser can
@@ -495,7 +497,9 @@ WebInputEventResult WebFrameWidgetImpl::HandleInputEvent(
         break;
       case WebInputEvent::Type::kMouseDown:
         event_type = event_type_names::kMousedown;
-        LocalFrame::NotifyUserActivation(target->GetDocument().GetFrame());
+        LocalFrame::NotifyUserActivation(
+            target->GetDocument().GetFrame(),
+            mojom::blink::UserActivationNotificationType::kInteraction);
         break;
       case WebInputEvent::Type::kMouseUp:
         event_type = event_type_names::kMouseup;
@@ -551,6 +555,20 @@ bool WebFrameWidgetImpl::ScrollFocusedEditableElementIntoView() {
   element->GetLayoutObject()->ScrollRectToVisible(rect_to_scroll,
                                                   std::move(params));
   return true;
+}
+
+void WebFrameWidgetImpl::SetZoomLevelForTesting(double zoom_level) {
+  // Zoom level is only controlled for testing on the main frame.
+  NOTREACHED();
+}
+
+void WebFrameWidgetImpl::ResetZoomLevelForTesting() {
+  // Zoom level is only controlled for testing on the main frame.
+  NOTREACHED();
+}
+
+void WebFrameWidgetImpl::SetDeviceScaleFactorForTesting(float factor) {
+  NOTREACHED();
 }
 
 void WebFrameWidgetImpl::IntrinsicSizingInfoChanged(
@@ -614,6 +632,17 @@ void WebFrameWidgetImpl::FocusChanged(bool enable) {
   Client()->FocusChanged(enable);
 }
 
+void WebFrameWidgetImpl::EnableDeviceEmulation(
+    const DeviceEmulationParams& parameters) {
+  // This message should only be sent to the top level FrameWidget.
+  NOTREACHED();
+}
+
+void WebFrameWidgetImpl::DisableDeviceEmulation() {
+  // This message should only be sent to the top level FrameWidget.
+  NOTREACHED();
+}
+
 bool WebFrameWidgetImpl::SelectionBounds(WebRect& anchor_web,
                                          WebRect& focus_web) const {
   const LocalFrame* local_frame = FocusedLocalFrameInWidget();
@@ -639,6 +668,10 @@ void WebFrameWidgetImpl::SetRemoteViewportIntersection(
          LocalRootImpl()->Parent()->IsWebRemoteFrame() &&
          LocalRootImpl()->GetFrame());
 
+  compositor_visible_rect_ =
+      gfx::Rect(intersection_state.compositor_visible_rect);
+  widget_base_->LayerTreeHost()->SetViewportVisibleRect(
+      compositor_visible_rect_);
   LocalRootImpl()->GetFrame()->SetViewportIntersectionFromParent(
       intersection_state);
 }
@@ -725,7 +758,7 @@ void WebFrameWidgetImpl::HandleMouseDown(LocalFrame& main_frame,
 
   // Dispatch the contextmenu event regardless of if the click was swallowed.
   if (!GetPage()->GetSettings().GetShowContextMenuOnMouseUp()) {
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
     if (event.button == WebMouseEvent::Button::kRight ||
         (event.button == WebMouseEvent::Button::kLeft &&
          event.GetModifiers() & WebMouseEvent::kControlKey))
@@ -908,7 +941,7 @@ WebInputEventResult WebFrameWidgetImpl::HandleKeyEvent(
     return result;
   }
 
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
   const WebInputEvent::Type kContextMenuKeyTriggeringEventType =
 #if defined(OS_WIN)
       WebInputEvent::Type::kKeyUp;
@@ -930,7 +963,7 @@ WebInputEventResult WebFrameWidgetImpl::HandleKeyEvent(
     View()->SendContextMenuEvent();
     return WebInputEventResult::kHandledSystem;
   }
-#endif  // !defined(OS_MACOSX)
+#endif  // !defined(OS_MAC)
 
   return WebInputEventResult::kNotHandled;
 }
@@ -946,6 +979,12 @@ WebInputEventResult WebFrameWidgetImpl::HandleCharEvent(
   // only applies to the current keyPress event.
   bool suppress = suppress_next_keypress_event_;
   suppress_next_keypress_event_ = false;
+
+  // If there is a popup open, it should be the one processing the event,
+  // not the page.
+  scoped_refptr<WebPagePopupImpl> page_popup = View()->GetPagePopup();
+  if (page_popup)
+    return page_popup->HandleKeyEvent(event);
 
   LocalFrame* frame = To<LocalFrame>(FocusedCoreFrame());
   if (!frame) {
@@ -1018,9 +1057,9 @@ void WebFrameWidgetImpl::SetRootLayer(scoped_refptr<cc::Layer> layer) {
   widget_base_->LayerTreeHost()->set_background_color(SK_ColorTRANSPARENT);
   // Pass the limits even though this is for subframes, as the limits will
   // be needed in setting the raster scale.
-  Client()->SetPageScaleStateAndLimits(1.f, false /* is_pinch_gesture_active */,
-                                       View()->MinimumPageScaleFactor(),
-                                       View()->MaximumPageScaleFactor());
+  SetPageScaleStateAndLimits(1.f, false /* is_pinch_gesture_active */,
+                             View()->MinimumPageScaleFactor(),
+                             View()->MaximumPageScaleFactor());
 
   widget_base_->LayerTreeHost()->SetRootLayer(layer);
 }
@@ -1039,6 +1078,13 @@ void WebFrameWidgetImpl::ZoomToFindInPageRect(
     const WebRect& rect_in_root_frame) {
   GetAssociatedFrameWidgetHost()->ZoomToFindInPageRectInMainFrame(
       gfx::Rect(rect_in_root_frame));
+}
+
+void WebFrameWidgetImpl::SetAutoResizeMode(bool auto_resize,
+                                           const gfx::Size& min_size_before_dsf,
+                                           const gfx::Size& max_size_before_dsf,
+                                           float device_scale_factor) {
+  // Auto resize mode only exists on the top level widget.
 }
 
 HitTestResult WebFrameWidgetImpl::HitTestResultForRootFramePos(
@@ -1116,6 +1162,10 @@ void WebFrameWidgetImpl::GetScrollParamsForFocusedEditableElement(
       Intersection(absolute_caret_bounds, maximal_rect), maximal_rect);
   params->behavior = mojom::blink::ScrollBehavior::kInstant;
   rect_to_scroll = PhysicalRect(maximal_rect);
+}
+
+gfx::Rect WebFrameWidgetImpl::ViewportVisibleRect() {
+  return compositor_visible_rect_;
 }
 
 }  // namespace blink

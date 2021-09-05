@@ -300,9 +300,10 @@ IN_PROC_BROWSER_TEST_F(InstallReplacementWebAppApiTest, NotWebstore) {
     chrome.test.notifyPass();
   });)";
 
-  RunTest(kManifest,
-          "/management/install_replacement_web_app/good_web_app/index.html",
-          kBackground, false /* from_webstore */);
+  RunTest(
+      kManifest,
+      "/management/install_replacement_web_app/acceptable_web_app/index.html",
+      kBackground, false /* from_webstore */);
 }
 
 IN_PROC_BROWSER_TEST_F(InstallReplacementWebAppApiTest, NoGesture) {
@@ -313,9 +314,10 @@ IN_PROC_BROWSER_TEST_F(InstallReplacementWebAppApiTest, NoGesture) {
     chrome.test.notifyPass();
   });)";
 
-  RunTest(kManifest,
-          "/management/install_replacement_web_app/good_web_app/index.html",
-          kBackground, true /* from_webstore */);
+  RunTest(
+      kManifest,
+      "/management/install_replacement_web_app/acceptable_web_app/index.html",
+      kBackground, true /* from_webstore */);
 }
 
 IN_PROC_BROWSER_TEST_F(InstallReplacementWebAppApiTest, NotInstallableWebApp) {
@@ -335,7 +337,7 @@ IN_PROC_BROWSER_TEST_F(InstallReplacementWebAppApiTest, NotInstallableWebApp) {
 
 IN_PROC_BROWSER_TEST_F(InstallReplacementWebAppApiTest, InstallableWebApp) {
   static constexpr char kGoodWebAppURL[] =
-      "/management/install_replacement_web_app/good_web_app/index.html";
+      "/management/install_replacement_web_app/acceptable_web_app/index.html";
 
   RunInstallableWebAppTest(kManifest, kGoodWebAppURL, kGoodWebAppURL);
 }
@@ -345,10 +347,12 @@ IN_PROC_BROWSER_TEST_F(InstallReplacementWebAppApiTest, InstallableWebApp) {
 IN_PROC_BROWSER_TEST_F(InstallReplacementWebAppApiTest,
                        InstallableWebAppWithStartUrl) {
   static constexpr char kGoodWebAppUrl[] =
-      "/management/install_replacement_web_app/good_web_app_with_start_url/"
+      "/management/install_replacement_web_app/"
+      "acceptable_web_app_with_start_url/"
       "index.html";
   static constexpr char kGoodWebAppStartUrl[] =
-      "/management/install_replacement_web_app/good_web_app_with_start_url/"
+      "/management/install_replacement_web_app/"
+      "acceptable_web_app_with_start_url/"
       "pwa_start_url.html";
 
   RunInstallableWebAppTest(kManifest, kGoodWebAppUrl, kGoodWebAppStartUrl);
@@ -357,7 +361,7 @@ IN_PROC_BROWSER_TEST_F(InstallReplacementWebAppApiTest,
 IN_PROC_BROWSER_TEST_F(InstallReplacementWebAppApiTest,
                        InstallableWebAppInPlatformApp) {
   static constexpr char kGoodWebAppURL[] =
-      "/management/install_replacement_web_app/good_web_app/index.html";
+      "/management/install_replacement_web_app/acceptable_web_app/index.html";
 
   RunInstallableWebAppTest(kAppManifest, kGoodWebAppURL, kGoodWebAppURL);
 }
@@ -454,15 +458,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionManagementApiTest, LaunchPanelApp) {
   ASSERT_TRUE(app_browser->is_type_app());
 }
 
-// Disabled: crbug.com/230165, crbug.com/915339, crbug.com/979399
-#if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX) || \
-    defined(OS_CHROMEOS)
-#define MAYBE_LaunchTabApp DISABLED_LaunchTabApp
-#else
-#define MAYBE_LaunchTabApp LaunchTabApp
-#endif
-
-IN_PROC_BROWSER_TEST_F(ExtensionManagementApiTest, MAYBE_LaunchTabApp) {
+IN_PROC_BROWSER_TEST_F(ExtensionManagementApiTest, LaunchTabApp) {
   // Load an extension that calls launchApp() on any app that gets
   // installed.
   ExtensionTestMessageListener launcher_loaded("launcher loaded", false);
@@ -511,7 +507,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionManagementApiTest, MAYBE_LaunchTabApp) {
 }
 
 // Flaky on MacOS: crbug.com/915339
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #define MAYBE_LaunchType DISABLED_LaunchType
 #else
 #define MAYBE_LaunchType LaunchType

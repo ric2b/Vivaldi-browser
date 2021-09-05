@@ -8,12 +8,16 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/no_destructor.h"
+#include "base/optional.h"
 #include "base/time/time.h"
 #include "chrome/browser/chromeos/attestation/tpm_challenge_key_result.h"
 #include "chrome/browser/chromeos/cert_provisioning/cert_provisioning_common.h"
 #include "chrome/browser/chromeos/cert_provisioning/cert_provisioning_invalidator.h"
 #include "chrome/browser/chromeos/cert_provisioning/cert_provisioning_metrics.h"
 #include "chrome/browser/chromeos/cert_provisioning/cert_provisioning_serializer.h"
+#include "chrome/browser/chromeos/platform_keys/key_permissions/key_permissions_manager.h"
+#include "chrome/browser/chromeos/platform_keys/key_permissions/key_permissions_manager_user_service.h"
+#include "chrome/browser/chromeos/platform_keys/platform_keys.h"
 #include "chrome/browser/chromeos/platform_keys/platform_keys_service.h"
 #include "chrome/browser/chromeos/platform_keys/platform_keys_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
@@ -109,17 +113,24 @@ int GetStateOrderedIndex(CertProvisioningWorkerState state) {
   return res;
 }
 
-bool CheckPublicKeyInCertificate(
-    const scoped_refptr<net::X509Certificate>& cert,
-    const std::string& public_key) {
-  base::StringPiece spki_from_cert;
-  if (!net::asn1::ExtractSPKIFromDERCert(
-          net::x509_util::CryptoBufferAsStringPiece(cert->cert_buffer()),
-          &spki_from_cert)) {
-    return false;
+// Marks the key |public_key_spki_der| as corporate. |profile| can be nullptr if
+// |scope| is CertScope::kDevice.
+void MarkKeyAsCorporate(CertScope scope,
+                        Profile* profile,
+                        const std::string& public_key_spki_der) {
+  // Device-wide keys are implicitly corporate, and there is currently no
+  // device-wide KeyPermissionsManager.
+  // TODO(https://crbug.com/1127284): Use the device-wide KeyPermissionsManager
+  // when it exists.
+  if (scope == CertScope::kDevice) {
+    return;
   }
+  DCHECK(profile);
 
-  return (public_key == spki_from_cert);
+  platform_keys::KeyPermissionsManagerUserServiceFactory::GetForBrowserContext(
+      profile)
+      ->key_permissions_manager()
+      ->SetCorporateKey(public_key_spki_der, GetPlatformKeysTokenId(scope));
 }
 
 }  // namespace
@@ -199,9 +210,8 @@ CertProvisioningWorkerImpl::CertProvisioningWorkerImpl(
       request_backoff_(&kBackoffPolicy),
       cloud_policy_client_(cloud_policy_client),
       invalidator_(std::move(invalidator)) {
-  CHECK(profile);
-  platform_keys_service_ =
-      platform_keys::PlatformKeysServiceFactory::GetForBrowserContext(profile);
+  CHECK(profile || cert_scope == CertScope::kDevice);
+  platform_keys_service_ = GetPlatformKeysService(cert_scope, profile);
   CHECK(platform_keys_service_);
 
   CHECK(pref_service);
@@ -345,9 +355,11 @@ void CertProvisioningWorkerImpl::GenerateRegularKey() {
 
 void CertProvisioningWorkerImpl::OnGenerateRegularKeyDone(
     const std::string& public_key_spki_der,
-    const std::string& error_message) {
-  if (!error_message.empty() || public_key_spki_der.empty()) {
-    LOG(ERROR) << "Failed to prepare a non-VA key: " << error_message;
+    platform_keys::Status status) {
+  if (status != platform_keys::Status::kSuccess ||
+      public_key_spki_der.empty()) {
+    LOG(ERROR) << "Failed to prepare a non-VA key: "
+               << platform_keys::StatusToString(status);
     UpdateState(CertProvisioningWorkerState::kFailed);
     return;
   }
@@ -364,8 +376,8 @@ void CertProvisioningWorkerImpl::GenerateKeyForVa() {
       attestation::TpmChallengeKeySubtleFactory::Create();
   tpm_challenge_key_subtle_impl_->StartPrepareKeyStep(
       GetVaKeyType(cert_scope_),
-      GetVaKeyName(cert_scope_, cert_profile_.profile_id), profile_,
-      GetVaKeyNameForSpkac(cert_scope_, cert_profile_.profile_id),
+      /*will_register_key=*/true, GetKeyName(cert_profile_.profile_id),
+      profile_,
       base::BindOnce(&CertProvisioningWorkerImpl::OnGenerateKeyForVaDone,
                      weak_factory_.GetWeakPtr(), base::TimeTicks::Now()));
 }
@@ -457,7 +469,7 @@ void CertProvisioningWorkerImpl::BuildVaChallengeResponse() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   tpm_challenge_key_subtle_impl_->StartSignChallengeStep(
-      va_challenge_, /*include_signed_public_key=*/true,
+      va_challenge_,
       base::BindOnce(
           &CertProvisioningWorkerImpl::OnBuildVaChallengeResponseDone,
           weak_factory_.GetWeakPtr(), base::TimeTicks::Now()));
@@ -515,20 +527,22 @@ void CertProvisioningWorkerImpl::OnRegisterKeyDone(
 void CertProvisioningWorkerImpl::MarkKey() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
+  MarkKeyAsCorporate(cert_scope_, profile_, public_key_);
+
   platform_keys_service_->SetAttributeForKey(
       GetPlatformKeysTokenId(cert_scope_), public_key_,
-      platform_keys::KeyAttributeType::CertificateProvisioningId,
+      platform_keys::KeyAttributeType::kCertificateProvisioningId,
       cert_profile_.profile_id,
       base::BindOnce(&CertProvisioningWorkerImpl::OnMarkKeyDone,
                      weak_factory_.GetWeakPtr()));
 }
 
-void CertProvisioningWorkerImpl::OnMarkKeyDone(
-    const std::string& error_message) {
+void CertProvisioningWorkerImpl::OnMarkKeyDone(platform_keys::Status status) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  if (!error_message.empty()) {
-    LOG(ERROR) << "Failed to mark a key: " << error_message;
+  if (status != platform_keys::Status::kSuccess) {
+    LOG(ERROR) << "Failed to mark a key: "
+               << platform_keys::StatusToString(status);
     UpdateState(CertProvisioningWorkerState::kFailed);
     return;
   }
@@ -553,16 +567,16 @@ void CertProvisioningWorkerImpl::SignCsr() {
                           weak_factory_.GetWeakPtr(), base::TimeTicks::Now()));
 }
 
-void CertProvisioningWorkerImpl::OnSignCsrDone(
-    base::TimeTicks start_time,
-    const std::string& signature,
-    const std::string& error_message) {
+void CertProvisioningWorkerImpl::OnSignCsrDone(base::TimeTicks start_time,
+                                               const std::string& signature,
+                                               platform_keys::Status status) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   RecordCsrSignTime(cert_scope_, base::TimeTicks::Now() - start_time);
 
-  if (!error_message.empty()) {
-    LOG(ERROR) << "Failed to sign CSR: " << error_message;
+  if (status != platform_keys::Status::kSuccess) {
+    LOG(ERROR) << "Failed to sign CSR: "
+               << platform_keys::StatusToString(status);
     UpdateState(CertProvisioningWorkerState::kFailed);
     return;
   }
@@ -633,7 +647,9 @@ void CertProvisioningWorkerImpl::ImportCert(
     return;
   }
 
-  if (!CheckPublicKeyInCertificate(cert, public_key_)) {
+  std::string public_key_from_cert =
+      platform_keys::GetSubjectPublicKeyInfo(cert);
+  if (public_key_from_cert != public_key_) {
     LOG(ERROR) << "Downloaded certificate does not match the expected key pair";
     UpdateState(CertProvisioningWorkerState::kFailed);
     return;
@@ -646,11 +662,12 @@ void CertProvisioningWorkerImpl::ImportCert(
 }
 
 void CertProvisioningWorkerImpl::OnImportCertDone(
-    const std::string& error_message) {
+    platform_keys::Status status) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  if (!error_message.empty()) {
-    LOG(ERROR) << "Failed to import certificate: " << error_message;
+  if (status != platform_keys::Status::kSuccess) {
+    LOG(ERROR) << "Failed to import certificate: "
+               << platform_keys::StatusToString(status);
     UpdateState(CertProvisioningWorkerState::kFailed);
     return;
   }
@@ -797,12 +814,12 @@ void CertProvisioningWorkerImpl::OnDeleteVaKeyDone(
   OnCleanUpDone();
 }
 
-void CertProvisioningWorkerImpl::OnRemoveKeyDone(
-    const std::string& error_message) {
+void CertProvisioningWorkerImpl::OnRemoveKeyDone(platform_keys::Status status) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  if (!error_message.empty()) {
-    LOG(ERROR) << "Failed to delete a key: " << error_message;
+  if (status != platform_keys::Status::kSuccess) {
+    LOG(ERROR) << "Failed to delete a key: "
+               << platform_keys::StatusToString(status);
   }
 
   OnCleanUpDone();
@@ -858,8 +875,8 @@ void CertProvisioningWorkerImpl::InitAfterDeserialization() {
   tpm_challenge_key_subtle_impl_ =
       attestation::TpmChallengeKeySubtleFactory::CreateForPreparedKey(
           GetVaKeyType(cert_scope_),
-          GetVaKeyName(cert_scope_, cert_profile_.profile_id), profile_,
-          GetVaKeyNameForSpkac(cert_scope_, cert_profile_.profile_id));
+          /*will_register_key=*/true, GetKeyName(cert_profile_.profile_id),
+          profile_);
 }
 
 void CertProvisioningWorkerImpl::RegisterForInvalidationTopic() {

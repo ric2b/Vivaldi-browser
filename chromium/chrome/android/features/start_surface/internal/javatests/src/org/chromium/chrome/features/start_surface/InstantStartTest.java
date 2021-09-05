@@ -15,7 +15,9 @@ import static androidx.test.espresso.matcher.ViewMatchers.withText;
 import static com.google.common.truth.Truth.assertThat;
 
 import static org.hamcrest.CoreMatchers.allOf;
+import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.instanceOf;
+import static org.hamcrest.Matchers.notNullValue;
 
 import static org.chromium.chrome.browser.tabmodel.TestTabModelDirectory.M26_GOOGLE_COM;
 import static org.chromium.chrome.test.util.ViewUtils.onViewWaiting;
@@ -25,6 +27,7 @@ import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.drawable.BitmapDrawable;
 import android.os.Build;
+import android.support.test.filters.MediumTest;
 import android.text.TextUtils;
 import android.util.Base64;
 import android.view.View;
@@ -39,7 +42,6 @@ import org.hamcrest.core.AllOf;
 import org.junit.Assert;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.TestRule;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.Callback;
@@ -49,42 +51,44 @@ import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.FlakyTest;
-import org.chromium.base.test.util.Matchers;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
+import org.chromium.chrome.browser.compositor.layouts.Layout;
 import org.chromium.chrome.browser.compositor.layouts.LayoutManagerChromePhone;
 import org.chromium.chrome.browser.compositor.layouts.LayoutManagerChromeTablet;
 import org.chromium.chrome.browser.compositor.layouts.OverviewModeState;
-import org.chromium.chrome.browser.compositor.layouts.components.LayoutTab;
+import org.chromium.chrome.browser.compositor.layouts.StaticLayout;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
+import org.chromium.chrome.browser.device.DeviceClassManager;
 import org.chromium.chrome.browser.flags.CachedFeatureFlags;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.homepage.HomepageManager;
-import org.chromium.chrome.browser.ntp.cards.SignInPromo;
 import org.chromium.chrome.browser.preferences.Pref;
-import org.chromium.chrome.browser.preferences.PrefServiceBridge;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.TabState;
 import org.chromium.chrome.browser.tab.TabStateFileManager;
 import org.chromium.chrome.browser.tabmodel.TabModelFilter;
 import org.chromium.chrome.browser.tabmodel.TabPersistentStore;
 import org.chromium.chrome.browser.tabmodel.TabPersistentStore.TabModelMetadata;
 import org.chromium.chrome.browser.tabmodel.TabbedModeTabPersistencePolicy;
+import org.chromium.chrome.browser.tabpersistence.TabStateDirectory;
 import org.chromium.chrome.browser.tasks.ReturnToChromeExperimentsUtil;
 import org.chromium.chrome.browser.tasks.pseudotab.PseudoTab;
 import org.chromium.chrome.browser.tasks.pseudotab.TabAttributeCache;
 import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
 import org.chromium.chrome.browser.toolbar.top.StartSurfaceToolbarCoordinator;
 import org.chromium.chrome.browser.toolbar.top.TopToolbarCoordinator;
-import org.chromium.chrome.tab_ui.R;
+import org.chromium.chrome.browser.util.ChromeAccessibilityUtil;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
+import org.chromium.chrome.test.R;
 import org.chromium.chrome.test.util.ChromeRenderTestRule;
 import org.chromium.chrome.test.util.ViewUtils;
 import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
+import org.chromium.components.user_prefs.UserPrefs;
 import org.chromium.content_public.browser.test.util.Criteria;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
@@ -93,6 +97,7 @@ import org.chromium.ui.test.util.UiRestriction;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -116,10 +121,8 @@ public class InstantStartTest {
     public ChromeTabbedActivityTestRule mActivityTestRule = new ChromeTabbedActivityTestRule();
 
     @Rule
-    public TestRule mProcessor = new Features.InstrumentationProcessor();
-
-    @Rule
-    public ChromeRenderTestRule mRenderTestRule = new ChromeRenderTestRule();
+    public ChromeRenderTestRule mRenderTestRule =
+            ChromeRenderTestRule.Builder.withPublicCorpus().build();
 
     /**
      * Only launch Chrome without waiting for a current tab.
@@ -156,9 +159,8 @@ public class InstantStartTest {
     }
 
     private void createCorruptedTabStateFile() throws IOException {
-        File stateFile =
-                new File(TabbedModeTabPersistencePolicy.getOrCreateTabbedModeStateDirectory(),
-                        TabbedModeTabPersistencePolicy.getStateFileName(0));
+        File stateFile = new File(TabStateDirectory.getOrCreateTabbedModeStateDirectory(),
+                TabbedModeTabPersistencePolicy.getStateFileName(0));
         FileOutputStream output = new FileOutputStream(stateFile);
         output.write(0);
         output.close();
@@ -171,8 +173,7 @@ public class InstantStartTest {
      */
     private static void saveTabState(int tabId, boolean encrypted) {
         File file = TabStateFileManager.getTabStateFile(
-                TabbedModeTabPersistencePolicy.getOrCreateTabbedModeStateDirectory(), tabId,
-                encrypted);
+                TabStateDirectory.getOrCreateTabbedModeStateDirectory(), tabId, encrypted);
         writeFile(file, M26_GOOGLE_COM.encodedTabState);
 
         TabState tabState = TabStateFileManager.restoreTabState(file, false);
@@ -217,9 +218,8 @@ public class InstantStartTest {
 
         byte[] listData = TabPersistentStore.serializeMetadata(normalInfo, incognitoInfo);
 
-        File stateFile =
-                new File(TabbedModeTabPersistencePolicy.getOrCreateTabbedModeStateDirectory(),
-                        TabbedModeTabPersistencePolicy.getStateFileName(0));
+        File stateFile = new File(TabStateDirectory.getOrCreateTabbedModeStateDirectory(),
+                TabbedModeTabPersistencePolicy.getStateFileName(0));
         FileOutputStream output = new FileOutputStream(stateFile);
         output.write(listData);
         output.close();
@@ -231,18 +231,8 @@ public class InstantStartTest {
         CommandLine.getInstance().removeSwitch(ChromeSwitches.DISABLE_NATIVE_INITIALIZATION);
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> mActivityTestRule.getActivity().startDelayedNativeInitializationForTests());
-        CriteriaHelper.pollUiThread(() -> {
-            return mActivityTestRule.getActivity()
-                            .getTabModelSelector()
-                            .getTabModelFilterProvider()
-                            .getCurrentTabModelFilter()
-                    != null
-                    && mActivityTestRule.getActivity()
-                               .getTabModelSelector()
-                               .getTabModelFilterProvider()
-                               .getCurrentTabModelFilter()
-                               .isTabModelRestored();
-        });
+        CriteriaHelper.pollUiThread(
+                mActivityTestRule.getActivity().getTabModelSelector()::isTabStateInitialized);
         Assert.assertTrue(LibraryLoader.getInstance().isInitialized());
     }
 
@@ -268,22 +258,18 @@ public class InstantStartTest {
             mBitmap = bitmap;
         };
 
-        CriteriaHelper.pollUiThread(
-                ()
-                        -> Assert.assertThat(mActivityTestRule.getActivity().getTabContentManager(),
-                                Matchers.notNullValue()));
+        CriteriaHelper.pollUiThread(() -> {
+            Criteria.checkThat(
+                    mActivityTestRule.getActivity().getTabContentManager(), notNullValue());
+        });
 
         TabContentManager tabContentManager =
                 mActivityTestRule.getActivity().getTabContentManager();
 
         final Bitmap thumbnailBitmap = createThumbnailBitmapAndWriteToFile(tabId);
         tabContentManager.getTabThumbnailWithCallback(tabId, thumbnailFetchListener, false, false);
-        CriteriaHelper.pollInstrumentationThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                return mThumbnailFetchCount > 0;
-            }
-        });
+        CriteriaHelper.pollInstrumentationThread(
+                () -> Criteria.checkThat(mThumbnailFetchCount, greaterThan(0)));
 
         Assert.assertFalse(LibraryLoader.getInstance().isInitialized());
         Assert.assertEquals(1, mThumbnailFetchCount);
@@ -354,10 +340,7 @@ public class InstantStartTest {
             startSurfaceCoordinator.getController().setOverviewState(
                     OverviewModeState.SHOWN_TABSWITCHER);
         });
-        CriteriaHelper.pollUiThread(
-                ()
-                        -> Assert.assertTrue(
-                                startSurfaceCoordinator.isSecondaryTaskInitPendingForTesting()));
+        CriteriaHelper.pollUiThread(startSurfaceCoordinator::isSecondaryTaskInitPendingForTesting);
 
         // Initializes native.
         startAndWaitNativeInitialization();
@@ -387,10 +370,8 @@ public class InstantStartTest {
         Assert.assertEquals("single", StartSurfaceConfiguration.START_SURFACE_VARIATION.getValue());
         Assert.assertTrue(ReturnToChromeExperimentsUtil.shouldShowTabSwitcher(-1));
 
-        CriteriaHelper.pollUiThread(()
-                                            -> Assert.assertTrue(mActivityTestRule.getActivity()
-                                                                         .getLayoutManager()
-                                                                         .overviewVisible()));
+        CriteriaHelper.pollUiThread(
+                () -> mActivityTestRule.getActivity().getLayoutManager().overviewVisible());
 
         Assert.assertFalse(LibraryLoader.getInstance().isInitialized());
         TopToolbarCoordinator topToolbarCoordinator =
@@ -412,6 +393,52 @@ public class InstantStartTest {
                 startSurfaceToolbarCoordinator.getIncognitoSwitchCoordinatorForTesting());
     }
 
+    /**
+     * Tests that clicking the "more_tabs" button won't make Omnibox get focused when single tab is
+     * shown on the StartSurface.
+     */
+    @Test
+    @MediumTest
+    @Restriction({UiRestriction.RESTRICTION_TYPE_PHONE})
+    // clang-format off
+    @EnableFeatures({ChromeFeatureList.TAB_SWITCHER_ON_RETURN + "<Study,",
+            ChromeFeatureList.START_SURFACE_ANDROID + "<Study"})
+    @CommandLineFlags.Add({"force-fieldtrials=Study/Group", IMMEDIATE_RETURN_PARAMS +
+            "/start_surface_variation/single/show_last_active_tab_only/true"})
+    public void startSurfaceMoreTabsButtonTest() throws IOException {
+        // clang-format on
+        createTabStateFile(new int[] {0});
+        createThumbnailBitmapAndWriteToFile(0);
+        TabAttributeCache.setTitleForTesting(0, "Google");
+
+        startMainActivityFromLauncher();
+        Assert.assertFalse(mActivityTestRule.getActivity().isTablet());
+        Assert.assertTrue(CachedFeatureFlags.isEnabled(ChromeFeatureList.INSTANT_START));
+        Assert.assertEquals("single", StartSurfaceConfiguration.START_SURFACE_VARIATION.getValue());
+        Assert.assertTrue(ReturnToChromeExperimentsUtil.shouldShowTabSwitcher(-1));
+        Assert.assertTrue(StartSurfaceConfiguration.START_SURFACE_LAST_ACTIVE_TAB_ONLY.getValue());
+        Assert.assertFalse(
+                StartSurfaceConfiguration.START_SURFACE_SHOW_STACK_TAB_SWITCHER.getValue());
+
+        mActivityTestRule.waitForActivityNativeInitializationComplete();
+
+        // Note that onView(R.id.more_tabs).perform(click()) can not be used since it requires 90
+        // percent of the view's area is displayed to the users. However, this view has negative
+        // margin which makes the percentage is less than 90.
+        // TODO(crbug.com/1025296): Investigate whether this would be a problem for real users.
+        try {
+            TestThreadUtils.runOnUiThreadBlocking(()
+                                                          -> mActivityTestRule.getActivity()
+                                                                     .findViewById(R.id.more_tabs)
+                                                                     .performClick());
+        } catch (ExecutionException e) {
+            Assert.fail("Failed to tap 'more tabs' " + e.toString());
+        }
+
+        onViewWaiting(withId(R.id.tab_list_view));
+        Assert.assertFalse(mActivityTestRule.getActivity().findViewById(R.id.url_bar).isFocused());
+    }
+
     @Test
     @SmallTest
     @Restriction({UiRestriction.RESTRICTION_TYPE_TABLET})
@@ -420,10 +447,9 @@ public class InstantStartTest {
         Assert.assertTrue(mActivityTestRule.getActivity().isTablet());
         Assert.assertTrue(CachedFeatureFlags.isEnabled(ChromeFeatureList.INSTANT_START));
 
-        CriteriaHelper.pollUiThread(
-                ()
-                        -> Assert.assertThat(mActivityTestRule.getActivity().getLayoutManager(),
-                                Matchers.notNullValue()));
+        CriteriaHelper.pollUiThread(() -> {
+            Criteria.checkThat(mActivityTestRule.getActivity().getLayoutManager(), notNullValue());
+        });
 
         Assert.assertTrue(LibraryLoader.getInstance().isInitialized());
         assertThat(mActivityTestRule.getActivity().getLayoutManager())
@@ -527,8 +553,7 @@ public class InstantStartTest {
                 mActivityTestRule.getActivity().getLayoutManager()::overviewVisible);
         RecyclerView recyclerView =
                 mActivityTestRule.getActivity().findViewById(R.id.tab_list_view);
-        CriteriaHelper.pollUiThread(
-                Criteria.equals(true, () -> allCardsHaveThumbnail(recyclerView)));
+        CriteriaHelper.pollUiThread(() -> allCardsHaveThumbnail(recyclerView));
         mRenderTestRule.render(recyclerView, "tabSwitcher_3tabs");
 
         // Resume native initialization and make sure the GTS looks the same.
@@ -576,8 +601,7 @@ public class InstantStartTest {
                 mActivityTestRule.getActivity().getLayoutManager()::overviewVisible);
         RecyclerView recyclerView =
                 mActivityTestRule.getActivity().findViewById(R.id.tab_list_view);
-        CriteriaHelper.pollUiThread(
-                Criteria.equals(true, () -> allCardsHaveThumbnail(recyclerView)));
+        CriteriaHelper.pollUiThread(() -> allCardsHaveThumbnail(recyclerView));
         // TODO(crbug.com/1065314): Tab group cards should not have favicons.
         mRenderTestRule.render(mActivityTestRule.getActivity().findViewById(R.id.tab_list_view),
                 "tabSwitcher_tabGroups");
@@ -631,18 +655,17 @@ public class InstantStartTest {
         createThumbnailBitmapAndWriteToFile(0);
         TabAttributeCache.setTitleForTesting(0, "Google");
 
-        SignInPromo.setDisablePromoForTests(true);
         startMainActivityFromLauncher();
         CriteriaHelper.pollUiThread(
                 () -> mActivityTestRule.getActivity().getLayoutManager().overviewVisible());
 
-        View surface = mActivityTestRule.getActivity().findViewById(
-                org.chromium.chrome.start_surface.R.id.primary_tasks_surface_view);
+        View surface =
+                mActivityTestRule.getActivity().findViewById(R.id.primary_tasks_surface_view);
 
         ViewUtils.onViewWaiting(AllOf.allOf(withId(R.id.single_tab_view), isDisplayed()));
         ChromeRenderTestRule.sanitize(surface);
         // TODO(crbug.com/1065314): fix favicon.
-        mRenderTestRule.render(surface, "singlePane_singleTab_noMV");
+        mRenderTestRule.render(surface, "singlePane_singleTab_noMV3");
 
         // Initializes native.
         startAndWaitNativeInitialization();
@@ -665,14 +688,12 @@ public class InstantStartTest {
         startMainActivityFromLauncher();
         Assert.assertFalse(mActivityTestRule.getActivity().isTablet());
         Assert.assertTrue(CachedFeatureFlags.isEnabled(ChromeFeatureList.INSTANT_START));
-        onView(withId(org.chromium.chrome.start_surface.R.id.placeholders_layout))
-                .check(matches(isDisplayed()));
+        onView(withId(R.id.placeholders_layout)).check(matches(isDisplayed()));
         Assert.assertFalse(LibraryLoader.getInstance().isInitialized());
     }
 
     @Test
     @SmallTest
-    @FlakyTest(message = "crbug.com/1097003")
     @Restriction({UiRestriction.RESTRICTION_TYPE_PHONE})
     @EnableFeatures({ChromeFeatureList.TAB_SWITCHER_ON_RETURN + "<Study,",
             ChromeFeatureList.START_SURFACE_ANDROID + "<Study"})
@@ -684,9 +705,9 @@ public class InstantStartTest {
         startMainActivityFromLauncher();
         mActivityTestRule.waitForActivityNativeInitializationComplete();
         // FEED_ARTICLES_LIST_VISIBLE should equal to ARTICLES_LIST_VISIBLE.
-        CriteriaHelper.pollUiThread(
-                ()
-                        -> PrefServiceBridge.getInstance().getBoolean(Pref.ARTICLES_LIST_VISIBLE)
+        CriteriaHelper.pollUiThread(()
+                                            -> UserPrefs.get(Profile.getLastUsedRegularProfile())
+                                                       .getBoolean(Pref.ARTICLES_LIST_VISIBLE)
                         == StartSurfaceConfiguration.getFeedArticlesVisibility());
 
         // Hide articles and verify that FEED_ARTICLES_LIST_VISIBLE and ARTICLES_LIST_VISIBLE are
@@ -695,8 +716,8 @@ public class InstantStartTest {
         CriteriaHelper.pollUiThread(() -> !StartSurfaceConfiguration.getFeedArticlesVisibility());
         TestThreadUtils.runOnUiThreadBlocking(
                 ()
-                        -> Assert.assertEquals(PrefServiceBridge.getInstance().getBoolean(
-                                                       Pref.ARTICLES_LIST_VISIBLE),
+                        -> Assert.assertEquals(UserPrefs.get(Profile.getLastUsedRegularProfile())
+                                                       .getBoolean(Pref.ARTICLES_LIST_VISIBLE),
                                 StartSurfaceConfiguration.getFeedArticlesVisibility()));
 
         // Show articles and verify that FEED_ARTICLES_LIST_VISIBLE and ARTICLES_LIST_VISIBLE are
@@ -705,8 +726,8 @@ public class InstantStartTest {
         CriteriaHelper.pollUiThread(StartSurfaceConfiguration::getFeedArticlesVisibility);
         TestThreadUtils.runOnUiThreadBlocking(
                 ()
-                        -> Assert.assertEquals(PrefServiceBridge.getInstance().getBoolean(
-                                                       Pref.ARTICLES_LIST_VISIBLE),
+                        -> Assert.assertEquals(UserPrefs.get(Profile.getLastUsedRegularProfile())
+                                                       .getBoolean(Pref.ARTICLES_LIST_VISIBLE),
                                 StartSurfaceConfiguration.getFeedArticlesVisibility()));
     }
 
@@ -724,8 +745,7 @@ public class InstantStartTest {
         StartSurfaceConfiguration.setFeedVisibilityForTesting(false);
         startMainActivityFromLauncher();
 
-        onView(withId(org.chromium.chrome.start_surface.R.id.placeholders_layout))
-                .check(doesNotExist());
+        onView(withId(R.id.placeholders_layout)).check(doesNotExist());
     }
 
     @Test
@@ -742,8 +762,7 @@ public class InstantStartTest {
         StartSurfaceConfiguration.setFeedVisibilityForTesting(true);
         startMainActivityFromLauncher();
 
-        onView(withId(org.chromium.chrome.start_surface.R.id.placeholders_layout))
-                .check(matches(isDisplayed()));
+        onView(withId(R.id.placeholders_layout)).check(matches(isDisplayed()));
     }
 
     @Test
@@ -751,7 +770,7 @@ public class InstantStartTest {
     @Restriction({UiRestriction.RESTRICTION_TYPE_PHONE})
     @Features.DisableFeatures(ChromeFeatureList.START_SURFACE_ANDROID)
     public void testInstantStartWithoutStartSurface() throws IOException {
-        createTabStateFile(new int[] {0});
+        createTabStateFile(new int[] {123});
         mActivityTestRule.startMainActivityFromLauncher();
 
         Assert.assertTrue(TabUiFeatureUtilities.supportInstantStart(false));
@@ -760,10 +779,36 @@ public class InstantStartTest {
 
         Assert.assertEquals(1,
                 mActivityTestRule.getActivity().getTabModelSelector().getCurrentModel().getCount());
-        LayoutTab layoutTab =
-                mActivityTestRule.getActivity().getLayoutManager().getLayoutTabForTesting(
-                        mActivityTestRule.getActivity().getTabModelSelector().getCurrentTabId());
-        Assert.assertNotNull(layoutTab);
+        Layout activeLayout = mActivityTestRule.getActivity().getLayoutManager().getActiveLayout();
+        Assert.assertTrue(activeLayout instanceof StaticLayout);
+        Assert.assertEquals(123, ((StaticLayout) activeLayout).getCurrentTabIdForTesting());
+    }
+
+    @Test
+    @SmallTest
+    @Restriction({UiRestriction.RESTRICTION_TYPE_PHONE})
+    @EnableFeatures({ChromeFeatureList.START_SURFACE_ANDROID + "<Study"})
+    @CommandLineFlags.
+    Add({ChromeSwitches.ENABLE_ACCESSIBILITY_TAB_SWITCHER, "force-fieldtrials=Study/Group",
+            IMMEDIATE_RETURN_PARAMS + "/start_surface_variation/single"})
+    public void
+    testInstantStartNotCrashWhenAccessibilityLayoutEnabled() throws IOException {
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> ChromeAccessibilityUtil.get().setAccessibilityEnabledForTesting(true));
+        Assert.assertTrue(DeviceClassManager.enableAccessibilityLayout());
+
+        createTabStateFile(new int[] {123});
+        mActivityTestRule.startMainActivityFromLauncher();
+
+        Assert.assertFalse(TabUiFeatureUtilities.supportInstantStart(false));
+        Assert.assertTrue(CachedFeatureFlags.isEnabled(ChromeFeatureList.INSTANT_START));
+        Assert.assertTrue(StartSurfaceConfiguration.isStartSurfaceEnabled());
+
+        Assert.assertEquals(1,
+                mActivityTestRule.getActivity().getTabModelSelector().getCurrentModel().getCount());
+        Layout activeLayout = mActivityTestRule.getActivity().getLayoutManager().getActiveLayout();
+        Assert.assertTrue(activeLayout instanceof StaticLayout);
+        Assert.assertEquals(123, ((StaticLayout) activeLayout).getCurrentTabIdForTesting());
     }
 
     /**
@@ -772,16 +817,14 @@ public class InstantStartTest {
      * @param expanded Whether the header should be expanded.
      */
     private void toggleHeader(boolean expanded) {
-        onView(allOf(instanceOf(RecyclerView.class),
-                       withId(org.chromium.chrome.feed.R.id.feed_stream_recycler_view)))
+        onView(allOf(instanceOf(RecyclerView.class), withId(R.id.feed_stream_recycler_view)))
                 .perform(RecyclerViewActions.scrollToPosition(ARTICLE_SECTION_HEADER_POSITION),
                         RecyclerViewActions.actionOnItemAtPosition(
                                 ARTICLE_SECTION_HEADER_POSITION, click()));
 
         waitForView((ViewGroup) mActivityTestRule.getActivity().findViewById(
-                            org.chromium.chrome.feed.R.id.feed_stream_recycler_view),
-                allOf(withId(org.chromium.chrome.R.id.header_status),
-                        withText(expanded ? org.chromium.chrome.R.string.hide
-                                          : org.chromium.chrome.R.string.show)));
+                            R.id.feed_stream_recycler_view),
+                allOf(withId(R.id.header_status),
+                        withText(expanded ? R.string.hide_content : R.string.show_content)));
     }
 }

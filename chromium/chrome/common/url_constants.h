@@ -164,6 +164,9 @@ extern const char kGoogleAccountChooserURL[];
 // URL of the Google Password Manager.
 extern const char kGooglePasswordManagerURL[];
 
+// URL of the Google Photos.
+extern const char kGooglePhotosURL[];
+
 // The URL for the "Learn more" page for the usage/crash reporting option in the
 // first run dialog.
 extern const char kLearnMoreReportingURL[];
@@ -297,6 +300,9 @@ extern const char kEasyUnlockLearnMoreUrl[];
 // The URL for EOL notification
 extern const char kEolNotificationURL[];
 
+// The URL for Auto Update Policy.
+extern const char kAutoUpdatePolicyURL[];
+
 // The URL for providing more information about Google nameservers.
 extern const char kGoogleNameserversLearnMoreURL[];
 
@@ -369,7 +375,7 @@ extern const char kTabletModeGesturesLearnMoreURL[];
 extern const char kWifiSyncLearnMoreURL[];
 #endif  // defined(OS_CHROMEOS)
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 // "Learn more" URL for the enterprise sign-in confirmation dialog.
 extern const char kChromeEnterpriseSignInLearnMoreURL[];
 

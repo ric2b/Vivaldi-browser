@@ -6,6 +6,7 @@
 <translation id="1012173283529841972">பட்டியல் உருப்படி</translation>
 <translation id="1013742170491673792">srched</translation>
 <translation id="1014370462248694370">இரண்டு விரல்களை வலதுபுறமாக ஸ்வைப் செய்யவும்</translation>
+<translation id="1016393160682012902">ஏதேனும் ஒரு qwerty விசை, பிரெய்ல் விசை அல்லது தொடும் சைகையை அழுத்தி அதன் செயல்பாட்டை அறிந்துகொள்ளலாம். வெளியேறுவதற்கு w அல்லது escape விசையுடன் சேர்த்து control விசையை அழுத்தலாம்.</translation>
 <translation id="1022586497894531524">ChromeVox பேச்சு வடிவக் கருத்தை முதல் முறையாகப் பயன்படுத்துகிறீர்களா? இந்த விரைவான பயிற்சியில், ChromeVoxஐப் பயன்படுத்தத் தொடங்குவதற்குத் தேவைப்படும் முக்கியமான விஷயங்களைத் தெரிந்துகொள்வீர்கள்.</translation>
 <translation id="1025074108959230262">ஸ்டிக்கி முறை முடக்கப்பட்டது</translation>
 <translation id="1031961866430398710">பின்னர்</translation>
@@ -504,7 +505,6 @@
 <translation id="489907760999452556">அக இணைப்பு</translation>
 <translation id="4909019435900810068">முந்தைய வார்த்தைக்குச் செல்</translation>
 <translation id="4911349081560453449">முந்தையத் தேர்வுப் பெட்டி இல்லை</translation>
-<translation id="4915087353619183190">’கற்றல் பயன்முறையைத்’ தொடங்குகிறது. அதன் செயல்பாட்டைப் பற்றி அறிய, ஒரு qwerty விசையையோ புதுப்பிக்கக்கூடிய பிரெய்ல் விசையையோ அல்லது தொடு சைகையையோ அழுத்தவும். வெளியேற, 'control + w' அல்லது escape விசையை அழுத்தவும்.</translation>
 <translation id="492295894462528572">அறிமுகம்</translation>
 <translation id="495046168593986294">மேலே நகர்த்து</translation>
 <translation id="495170559598752135">செயல்கள்</translation>
@@ -647,6 +647,7 @@
 <translation id="6017514345406065928">பச்சை</translation>
 <translation id="602001110135236999">இடப்புறம் செல்</translation>
 <translation id="6034000775414344507">வெளிர் சாம்பல்</translation>
+<translation id="6036135911048686884">தொடுதல் மூலம் கண்டறிதல்</translation>
 <translation id="6037602951055904232">முன்னோக்கி நகர்த்து</translation>
 <translation id="6044160928851315051">விஷுவல் திரையை முடக்கும்</translation>
 <translation id="6082768461603900813">அடிப்படை வழிசெலுத்துதல்</translation>
@@ -923,6 +924,7 @@
 <translation id="8345569862449483843">{COUNT,plural, =1{எண் குறியீடு}other{# எண் குறியீடுகள்}}</translation>
 <translation id="8378855320830505539">பகுதி</translation>
 <translation id="8382679411218029383">தானே நிரப்புதல் இன்லைன் மற்றும் பட்டியல்</translation>
+<translation id="8394908167088220973">ஊடகத்தை இயக்கு/இடைநிறுத்து</translation>
 <translation id="8428213095426709021">அமைப்புகள்</translation>
 <translation id="8428603554127842284">நிலை <ph name="DEPTH" /></translation>
 <translation id="8430049249787218991">mnubr</translation>
@@ -967,6 +969,7 @@
 <translation id="8770473310765924354">அட்டவணைகள் போன்ற கட்டமைக்கப்பட்ட உள்ளடக்கத்தை வெளியேற்றும்</translation>
 <translation id="8779057862865475116">முந்தைய இணைப்பு எதுவும் இல்லை</translation>
 <translation id="8796411681063377102">அடுத்த 3 ஆம் படிநிலை தலைப்பு</translation>
+<translation id="8823311177246872527">பக்கம் <ph name="CURRENTPAGE" />/<ph name="TOTALPAGES" /></translation>
 <translation id="8825828890761629845">bnr</translation>
 <translation id="8851136666856101339">முதன்மை</translation>
 <translation id="8882002077197914455">வரிசை தலைப்பு</translation>

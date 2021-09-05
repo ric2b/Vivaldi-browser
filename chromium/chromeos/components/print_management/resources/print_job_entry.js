@@ -27,6 +27,9 @@ import {assert} from 'chrome://resources/js/assert.m.js';
 import {IronA11yAnnouncer} from 'chrome://resources/polymer/v3_0/iron-a11y-announcer/iron-a11y-announcer.js';
 import './strings.js';
 
+(function() {
+
+const GENERIC_FILE_EXTENSION_ICON = 'print-management:file-generic';
 
 /**
  * Converts a mojo time to a JS time.
@@ -102,7 +105,7 @@ function getFileExtensionIconName(fileName) {
     case 'xlr':
       return 'print-management:file-excel';
     default:
-      return 'print-management:file-generic';
+      return GENERIC_FILE_EXTENSION_ICON;
   }
 };
 
@@ -190,6 +193,15 @@ Polymer({
     completionStatus_: {
       type: String,
       computed: 'computeCompletionStatus_(jobEntry.completedInfo)',
+    },
+
+    /**
+     * Empty if there is no ongoing error.
+     * @private
+     */
+    ongoingErrorStatus_: {
+      type: String,
+      computed: 'getOngoingErrorStatus_(jobEntry.printerErrorCode)',
     },
 
     /**
@@ -333,7 +345,7 @@ Polymer({
       case chromeos.printing.printingManager.mojom.PrintJobCompletionStatus
            .kFailed:
         return this.getFailedStatusString_(
-            this.jobEntry.completedInfo.printerErrorCode);
+            this.jobEntry.printerErrorCode);
       case chromeos.printing.printingManager.mojom.PrintJobCompletionStatus
            .kCanceled:
         return loadTimeData.getString('completionStatusCanceled');
@@ -377,6 +389,11 @@ Polymer({
       return loadTimeData.getStringF('completePrintJobLabel', this.jobTitle_,
           this.printerName_, this.creationTime_, this.completionStatus_);
     }
+    if (this.ongoingErrorStatus_) {
+      return loadTimeData.getStringF('stoppedOngoingPrintJobLabel',
+          this.jobTitle_, this.printerName_, this.creationTime_,
+          this.ongoingErrorStatus_);
+    }
     return loadTimeData.getStringF('ongoingPrintJobLabel', this.jobTitle_,
         this.printerName_, this.creationTime_,
         this.jobEntry.activePrintJobInfo.printedPages.toString(),
@@ -409,7 +426,10 @@ Polymer({
    */
   getFileIcon_(fileName) {
     const file_extension = getFileExtensionIconName(fileName);
-    if (file_extension) {
+    // It's valid for a file to have '.' in its name and not be its extension.
+    // If this is the case and we don't have a non-generic file icon, attempt to
+    // see if this is a Google file.
+    if (file_extension && file_extension !== GENERIC_FILE_EXTENSION_ICON) {
       return file_extension;
     }
     const gfile_extension = getGFileIconName(fileName);
@@ -417,7 +437,7 @@ Polymer({
       return gfile_extension;
     }
 
-    return 'print-management:file-generic';
+    return GENERIC_FILE_EXTENSION_ICON;
   },
 
   /**
@@ -458,4 +478,42 @@ Polymer({
         return loadTimeData.getString('unknownPrinterError');
     }
   },
+
+  /**
+   * @param {number} mojoPrinterErrorCode
+   * @return {string}
+   * @private
+   */
+  getOngoingErrorStatus_(mojoPrinterErrorCode) {
+    if (this.isCompletedPrintJob_()) {
+      return '';
+    }
+
+    switch (mojoPrinterErrorCode) {
+      case chromeos.printing.printingManager.mojom.PrinterErrorCode.kNoError:
+        return '';
+      case chromeos.printing.printingManager.mojom.PrinterErrorCode.kPaperJam:
+        return loadTimeData.getString('paperJamStopped');
+      case chromeos.printing.printingManager.mojom.PrinterErrorCode.kOutOfPaper:
+        return loadTimeData.getString('outOfPaperStopped');
+      case chromeos.printing.printingManager.mojom.PrinterErrorCode.kOutOfInk:
+        return loadTimeData.getString('outOfInkStopped');
+      case chromeos.printing.printingManager.mojom.PrinterErrorCode.kDoorOpen:
+        return loadTimeData.getString('doorOpenStopped');
+      case chromeos.printing.printingManager.mojom.PrinterErrorCode
+          .kTrayMissing:
+        return loadTimeData.getString('trayMissingStopped');
+      case chromeos.printing.printingManager.mojom.PrinterErrorCode.kOutputFull:
+        return loadTimeData.getString('outputFullStopped');
+      case chromeos.printing.printingManager.mojom.PrinterErrorCode.kStopped:
+        return loadTimeData.getString('stoppedGeneric');
+      case chromeos.printing.printingManager.mojom.PrinterErrorCode
+          .kUnknownError:
+        return loadTimeData.getString('unknownPrinterErrorStopped');
+      default:
+        assertNotReached();
+        return loadTimeData.getString('unknownPrinterErrorStopped');
+    }
+  },
 });
+})()

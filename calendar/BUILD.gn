@@ -1,7 +1,5 @@
 # Copyright (c) 2015-2017 Vivaldi Technologies AS. All rights reserved
 
-import("//build/config/jumbo.gni")
-
 static_library("calendar") {
   sources = [
     "account_table.cc",
@@ -48,6 +46,14 @@ static_library("calendar") {
     "recurrence_exception_table.h",
     "recurrence_exception_type.h",
   ]
+
+  if (!is_android) {
+    sources += [
+      "calendar_util.cc",
+      "calendar_util.h",
+    ]
+  }
+
   deps = [
     "//base:base",
     "//chrome:strings",

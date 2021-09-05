@@ -30,7 +30,7 @@
 #include "sql/statement.h"
 #include "sql/transaction.h"
 
-#if defined(OS_MACOSX) && !defined(OS_IOS)
+#if defined(OS_MAC)
 #include "base/mac/mac_util.h"
 #endif
 
@@ -102,7 +102,7 @@ sql::InitStatus CalendarDatabase::Init(const base::FilePath& calendar_name) {
   if (!committer.Begin())
     return sql::INIT_FAILURE;
 
-#if defined(OS_MACOSX) && !defined(OS_IOS)
+#if defined(OS_MAC)
   // Exclude the calendar file from backups.
   base::mac::SetFileBackupExclusion(calendar_name);
 #endif
@@ -116,6 +116,8 @@ sql::InitStatus CalendarDatabase::Init(const base::FilePath& calendar_name) {
   if (!meta_table_.Init(&db_, GetCurrentVersion(), kCompatibleVersionNumber))
     return sql::INIT_FAILURE;
 
+  bool firstRun = !GetDB().DoesTableExist("accounts");
+
   if (!CreateCalendarTable() || !CreateEventTable() ||
       !CreateEventTypeTable() || !CreateRecurringExceptionTable() ||
       !CreateNotificationTable() || !CreateInviteTable() ||
@@ -128,8 +130,9 @@ sql::InitStatus CalendarDatabase::Init(const base::FilePath& calendar_name) {
     LogInitFailure(InitStep::VERSION);
     return version_status;
   }
-
-  CreateDefaultCalendarData();
+  if (firstRun) {
+    CreateDefaultCalendarData();
+  }
 
   return committer.Commit() ? sql::INIT_OK : sql::INIT_FAILURE;
 }

@@ -3,15 +3,9 @@
 # found in the LICENSE file.
 
 import("//build/config/features.gni")
-import("//build/config/jumbo.gni")
 import("//tools/grit/grit_rule.gni")
 
-declare_args() {
-  # Controls the product part of the user agent calculated in sync_util.cc.
-  sync_user_agent_product = "Chrome"
-}
-
-jumbo_static_library("driver") {
+static_library("driver") {
   sources = [
     "about_sync_util.cc",
     "about_sync_util.h",
@@ -29,8 +23,6 @@ jumbo_static_library("driver") {
     "data_type_manager_observer.h",
     "data_type_status_table.cc",
     "data_type_status_table.h",
-    "file_based_trusted_vault_client.cc",
-    "file_based_trusted_vault_client.h",
     "glue/sync_engine_backend.cc",
     "glue/sync_engine_backend.h",
     "glue/sync_engine_impl.cc",
@@ -74,8 +66,6 @@ jumbo_static_library("driver") {
     "sync_user_settings.h",
     "sync_user_settings_impl.cc",
     "sync_user_settings_impl.h",
-    "sync_util.cc",
-    "sync_util.h",
     "syncable_service_based_model_type_controller.cc",
     "syncable_service_based_model_type_controller.h",
     "trusted_vault_client.h",
@@ -104,10 +94,10 @@ jumbo_static_library("driver") {
     "//components/os_crypt",
     "//components/prefs",
     "//components/signin/public/identity_manager",
+    "//components/sync/invalidations",
     "//components/version_info",
     "//components/version_info:generate_version_info",
     "//services/network/public/cpp",
-    "//ui/base",
   ]
 
   if (!is_ios) {
@@ -124,8 +114,6 @@ jumbo_static_library("driver") {
   if (is_chromeos) {
     deps += [ "//chromeos/constants" ]
   }
-
-  defines = [ "SYNC_USER_AGENT_PRODUCT=$sync_user_agent_product" ]
 
   configs += [ "//build/config/compiler:wexit_time_destructors" ]
 }
@@ -180,6 +168,7 @@ static_library("test_support") {
     "//components/sync:test_support_engine",
     "//components/sync:test_support_model",
     "//components/sync/driver",
+    "//components/sync/invalidations:test_support",
     "//components/sync_preferences:test_support",
     "//components/version_info",
     "//components/version_info:generate_version_info",

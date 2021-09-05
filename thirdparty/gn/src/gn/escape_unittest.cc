@@ -101,3 +101,12 @@ TEST(EscapeJSONString, NinjaPreformatted) {
   EscapeJSONStringToStream(out2, "a: \"$\\b", opts);
   EXPECT_EQ("a: \\\"$$\\\\b", buffer2.str());
 }
+
+TEST(Escape, CompilationDatabase) {
+  EscapeOptions opts;
+  opts.mode = ESCAPE_COMPILATION_DATABASE;
+
+  // The only special characters are '"' and '\'.
+  std::string result = EscapeString("asdf:$ \\#*[|]bar", opts, nullptr);
+  EXPECT_EQ("\"asdf:$ \\\\#*[|]bar\"", result);
+}

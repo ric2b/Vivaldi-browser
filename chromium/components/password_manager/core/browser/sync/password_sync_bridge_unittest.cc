@@ -102,7 +102,7 @@ autofill::PasswordForm MakeBlacklistedForm(const std::string& signon_realm) {
   autofill::PasswordForm form;
   form.url = GURL("http://www.origin.com");
   form.signon_realm = signon_realm;
-  form.blacklisted_by_user = true;
+  form.blocked_by_user = true;
   return form;
 }
 
@@ -201,10 +201,6 @@ class MockSyncMetadataStore : public PasswordStoreSync::MetadataStore {
 
 class MockPasswordStoreSync : public PasswordStoreSync {
  public:
-  MOCK_METHOD1(FillAutofillableLogins,
-               bool(std::vector<std::unique_ptr<autofill::PasswordForm>>*));
-  MOCK_METHOD1(FillBlacklistLogins,
-               bool(std::vector<std::unique_ptr<autofill::PasswordForm>>*));
   MOCK_METHOD1(ReadAllLogins, FormRetrievalResult(PrimaryKeyToFormMap*));
   MOCK_METHOD1(RemoveLoginByPrimaryKeySync, PasswordStoreChangeList(int));
   MOCK_METHOD0(DeleteUndecryptableLogins, DatabaseCleanupResult());
@@ -219,9 +215,8 @@ class MockPasswordStoreSync : public PasswordStoreSync {
   MOCK_METHOD1(NotifyLoginsChanged, void(const PasswordStoreChangeList&));
   MOCK_METHOD1(NotifyDeletionsHaveSynced, void(bool));
 
-  MOCK_METHOD1(
-      NotifyUnsyncedCredentialsWillBeDeleted,
-      void(const std::vector<autofill::PasswordForm>& unsynced_credentials));
+  MOCK_METHOD1(NotifyUnsyncedCredentialsWillBeDeleted,
+               void(std::vector<autofill::PasswordForm> unsynced_credentials));
   MOCK_METHOD0(BeginTransaction, bool());
   MOCK_METHOD0(CommitTransaction, bool());
   MOCK_METHOD0(RollbackTransaction, void());
@@ -818,7 +813,7 @@ TEST_F(PasswordSyncBridgeTest,
                             mock_password_store_sync(), base::DoNothing());
 }
 
-#if defined(OS_MACOSX) && !defined(OS_IOS)
+#if defined(OS_MAC)
 // Tests that in case ReadAllLogins() during initial merge returns encryption
 // service failure, the bridge would try to do a DB clean up.
 TEST_F(PasswordSyncBridgeTest, ShouldDeleteUndecryptableLoginsDuringMerge) {

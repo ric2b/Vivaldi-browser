@@ -18,10 +18,11 @@
 #include "headless/public/headless_shell.h"
 #include "ui/gfx/switches.h"
 
-#if defined(OS_CHROMEOS)
-#include "chrome/browser/chromeos/tracing_allocation_failure_tracker.h"
+#if defined(OS_MAC)
+#include "chrome/app/chrome_main_mac.h"
 #endif
 
+// DO NOT move this further down in the file
 #if defined(VIVALDI_BUILD)
 #if defined(OS_WIN)
 #include "browser/win/vivaldi_running_dlg.h"
@@ -30,12 +31,10 @@
 #include "extraparts/vivaldi_main_delegate.h"
 #endif
 
-#if defined(OS_MACOSX)
-#include "chrome/app/chrome_main_mac.h"
-#endif
-
 #if defined(OS_WIN)
 #include "base/debug/dump_without_crashing.h"
+#include "base/files/file_util.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/win/win_util.h"
 #include "chrome/chrome_elf/chrome_elf_main.h"
 #include "chrome/common/chrome_constants.h"
@@ -48,7 +47,8 @@
 extern "C" {
 DLLEXPORT int __cdecl ChromeMain(HINSTANCE instance,
                                  sandbox::SandboxInterfaceInfo* sandbox_info,
-                                 int64_t exe_entry_point_ticks);
+                                 int64_t exe_entry_point_ticks,
+                                 base::PrefetchResultCode prefetch_result_code);
 }
 #elif defined(OS_POSIX)
 extern "C" {
@@ -58,15 +58,19 @@ int ChromeMain(int argc, const char** argv);
 #endif
 
 #if defined(OS_WIN)
-DLLEXPORT int __cdecl ChromeMain(HINSTANCE instance,
-                                 sandbox::SandboxInterfaceInfo* sandbox_info,
-                                 int64_t exe_entry_point_ticks) {
+DLLEXPORT int __cdecl ChromeMain(
+    HINSTANCE instance,
+    sandbox::SandboxInterfaceInfo* sandbox_info,
+    int64_t exe_entry_point_ticks,
+    base::PrefetchResultCode prefetch_result_code) {
 #elif defined(OS_POSIX)
 int ChromeMain(int argc, const char** argv) {
   int64_t exe_entry_point_ticks = 0;
 #endif
 
 #if defined(OS_WIN)
+  base::UmaHistogramEnumeration("Windows.ChromeDllPrefetchResult",
+                                prefetch_result_code);
   install_static::InitializeFromPrimaryModule();
 #endif
 
@@ -114,12 +118,8 @@ int ChromeMain(int argc, const char** argv) {
   const base::CommandLine* command_line(base::CommandLine::ForCurrentProcess());
   ALLOW_UNUSED_LOCAL(command_line);
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   SetUpBundleOverrides();
-#endif
-
-#if defined(OS_CHROMEOS)
-  chromeos::SetUpTracingAllocatorFailureTracker();
 #endif
 
   // Start the sampling profiler as early as possible - namely, once the command
@@ -129,11 +129,13 @@ int ChromeMain(int argc, const char** argv) {
   MainThreadStackSamplingProfiler scoped_sampling_profiler;
 
   // Chrome-specific process modes.
-#if defined(OS_LINUX) || defined(OS_MACOSX) || defined(OS_WIN)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_MAC) || \
+    defined(OS_WIN)
   if (command_line->HasSwitch(switches::kHeadless)) {
     return headless::HeadlessShellMain(params);
   }
-#endif  // defined(OS_LINUX) || defined(OS_MACOSX) || defined(OS_WIN)
+#endif  // defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_MAC) ||
+        // defined(OS_WIN)
 
   int rv = content::ContentMain(params);
 

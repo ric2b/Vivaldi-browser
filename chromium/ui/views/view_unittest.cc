@@ -51,6 +51,7 @@
 #include "ui/views/controls/native/native_view_host.h"
 #include "ui/views/controls/scroll_view.h"
 #include "ui/views/controls/textfield/textfield.h"
+#include "ui/views/layout/box_layout.h"
 #include "ui/views/metadata/metadata_types.h"
 #include "ui/views/paint_info.h"
 #include "ui/views/test/view_metadata_test_utils.h"
@@ -1531,7 +1532,8 @@ TEST_F(ViewTest, GetEventHandlerForRect) {
   // the center points of |v4| and |v41|.
   touch_rect.SetRect(310, 210, 80, 80);
   result_view = root_view->GetEventHandlerForRect(touch_rect);
-  EXPECT_EQ(v41, result_view);
+  // |v411| is the deepest view that is completely contained by |touch_rect|.
+  EXPECT_EQ(v411, result_view);
   result_view = nullptr;
 
   // Intersects all of |v4|, |v41|, and |v411| but only covers
@@ -1602,21 +1604,19 @@ TEST_F(ViewTest, GetEventHandlerForRect) {
 
   // Intersects all of |v2|, |v3|, |v32|, |v4|, |v41|, and |v411|.
   // Covers |v2|, |v32|, |v4|, |v41|, and |v411| by at least 60%.
-  // The center point of |touch_rect| is closest to the center
-  // point of |root_view|.
   touch_rect.SetRect(110, 15, 375, 450);
   result_view = root_view->GetEventHandlerForRect(touch_rect);
-  EXPECT_EQ(root_view, result_view);
+  // Target is |v411| as it is the deepest view touched by at least 60% of the
+  // rect.
+  EXPECT_EQ(v411, result_view);
   result_view = nullptr;
 
   // Covers all views (except |v5| and |v51|) by at least 60%. The
   // center point of |touch_rect| is equally close to the center
-  // points of |v2| and |v32|. One is not a descendant of the other,
-  // so in this case the view selected is arbitrary (i.e.,
-  // it depends only on the ordering of nodes in the views
-  // hierarchy).
+  // points of |v2| and |v32|.
   touch_rect.SetRect(0, 0, 400, 300);
   result_view = root_view->GetEventHandlerForRect(touch_rect);
+  // |v32| is the deepest view that is contained by the rest.
   EXPECT_EQ(v32, result_view);
   result_view = nullptr;
 
@@ -2040,21 +2040,24 @@ TEST_F(ViewTest, TextfieldCutCopyPaste) {
   normal->SelectAll(false);
   normal->ExecuteCommand(Textfield::kCut, 0);
   base::string16 result;
-  clipboard->ReadText(ui::ClipboardBuffer::kCopyPaste, &result);
+  clipboard->ReadText(ui::ClipboardBuffer::kCopyPaste, /* data_dst = */ nullptr,
+                      &result);
   EXPECT_EQ(kNormalText, result);
   normal->SetText(kNormalText);  // Let's revert to the original content.
 
   read_only->SelectAll(false);
   read_only->ExecuteCommand(Textfield::kCut, 0);
   result.clear();
-  clipboard->ReadText(ui::ClipboardBuffer::kCopyPaste, &result);
+  clipboard->ReadText(ui::ClipboardBuffer::kCopyPaste, /* data_dst = */ nullptr,
+                      &result);
   // Cut should have failed, so the clipboard content should not have changed.
   EXPECT_EQ(kNormalText, result);
 
   password->SelectAll(false);
   password->ExecuteCommand(Textfield::kCut, 0);
   result.clear();
-  clipboard->ReadText(ui::ClipboardBuffer::kCopyPaste, &result);
+  clipboard->ReadText(ui::ClipboardBuffer::kCopyPaste, /* data_dst = */ nullptr,
+                      &result);
   // Cut should have failed, so the clipboard content should not have changed.
   EXPECT_EQ(kNormalText, result);
 
@@ -2066,19 +2069,22 @@ TEST_F(ViewTest, TextfieldCutCopyPaste) {
   read_only->SelectAll(false);
   read_only->ExecuteCommand(Textfield::kCopy, 0);
   result.clear();
-  clipboard->ReadText(ui::ClipboardBuffer::kCopyPaste, &result);
+  clipboard->ReadText(ui::ClipboardBuffer::kCopyPaste, /* data_dst = */ nullptr,
+                      &result);
   EXPECT_EQ(kReadOnlyText, result);
 
   normal->SelectAll(false);
   normal->ExecuteCommand(Textfield::kCopy, 0);
   result.clear();
-  clipboard->ReadText(ui::ClipboardBuffer::kCopyPaste, &result);
+  clipboard->ReadText(ui::ClipboardBuffer::kCopyPaste, /* data_dst = */ nullptr,
+                      &result);
   EXPECT_EQ(kNormalText, result);
 
   password->SelectAll(false);
   password->ExecuteCommand(Textfield::kCopy, 0);
   result.clear();
-  clipboard->ReadText(ui::ClipboardBuffer::kCopyPaste, &result);
+  clipboard->ReadText(ui::ClipboardBuffer::kCopyPaste, /* data_dst = */ nullptr,
+                      &result);
   // Text cannot be copied from an obscured field; the clipboard won't change.
   EXPECT_EQ(kNormalText, result);
 
@@ -2288,7 +2294,7 @@ TEST_F(ViewTest, HandleAccelerator) {
 // TODO(themblsha): Bring this up on non-Mac platforms. It currently fails
 // because TestView::AcceleratorPressed() is not called. See
 // http://crbug.com/667757.
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
 // Test that BridgedContentView correctly handles Accelerator key events when
 // subject to OS event dispatch.
 TEST_F(ViewTest, ActivateAcceleratorOnMac) {
@@ -2331,11 +2337,11 @@ TEST_F(ViewTest, ActivateAcceleratorOnMac) {
                              key_down_accelerator.modifiers());
   EXPECT_EQ(view->accelerator_count_map_[key_down_accelerator], 1);
 }
-#endif  // OS_MACOSX
+#endif  // OS_APPLE
 
 // TODO(crbug.com/667757): these tests were initially commented out when getting
 // aura to run. Figure out if still valuable and either nuke or fix.
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
 TEST_F(ViewTest, ActivateAccelerator) {
   ui::Accelerator return_accelerator(ui::VKEY_RETURN, ui::EF_NONE);
   TestViewWidget test_widget(CreateParams(Widget::InitParams::TYPE_POPUP),
@@ -2417,7 +2423,7 @@ TEST_F(ViewTest, ViewInHiddenWidgetWithAccelerator) {
   EXPECT_FALSE(focus_manager->ProcessAccelerator(return_accelerator));
   EXPECT_EQ(1, view->accelerator_count_map_[return_accelerator]);
 }
-#endif  // OS_MACOSX
+#endif  // OS_APPLE
 
 // TODO(crbug.com/667757): these tests were initially commented out when getting
 // aura to run. Figure out if still valuable and either nuke or fix.
@@ -3774,6 +3780,62 @@ TEST_F(ViewTest, AddExistingChild) {
   v1.AddChildView(&v3);
   EXPECT_EQ(0, v1.GetIndexOf(&v2));
   EXPECT_EQ(1, v1.GetIndexOf(&v3));
+}
+
+TEST_F(ViewTest, UseMirroredLayoutDisableMirroring) {
+  base::i18n::SetICUDefaultLocale("ar");
+  ASSERT_TRUE(base::i18n::IsRTL());
+
+  View parent, child1, child2;
+  parent.SetLayoutManager(
+      std::make_unique<BoxLayout>(BoxLayout::Orientation::kHorizontal));
+
+  child1.SetPreferredSize(gfx::Size(10, 10));
+  child2.SetPreferredSize(gfx::Size(10, 10));
+
+  parent.AddChildView(&child1);
+  parent.AddChildView(&child2);
+  parent.SizeToPreferredSize();
+
+  EXPECT_EQ(child1.GetNextFocusableView(), &child2);
+  EXPECT_GT(child1.GetMirroredX(), child2.GetMirroredX());
+  EXPECT_LT(child1.x(), child2.x());
+  EXPECT_NE(parent.GetMirroredXInView(5), 5);
+
+  parent.SetMirrored(false);
+
+  EXPECT_EQ(child1.GetNextFocusableView(), &child2);
+  EXPECT_GT(child2.GetMirroredX(), child1.GetMirroredX());
+  EXPECT_LT(child1.x(), child2.x());
+  EXPECT_EQ(parent.GetMirroredXInView(5), 5);
+}
+
+TEST_F(ViewTest, UseMirroredLayoutEnableMirroring) {
+  base::i18n::SetICUDefaultLocale("en");
+  ASSERT_FALSE(base::i18n::IsRTL());
+
+  View parent, child1, child2;
+  parent.SetLayoutManager(
+      std::make_unique<BoxLayout>(BoxLayout::Orientation::kHorizontal));
+
+  child1.SetPreferredSize(gfx::Size(10, 10));
+  child2.SetPreferredSize(gfx::Size(10, 10));
+
+  parent.AddChildView(&child1);
+  parent.AddChildView(&child2);
+  parent.SizeToPreferredSize();
+
+  EXPECT_EQ(child1.GetNextFocusableView(), &child2);
+  EXPECT_LT(child1.GetMirroredX(), child2.GetMirroredX());
+  EXPECT_LT(child1.x(), child2.x());
+  EXPECT_NE(parent.GetMirroredXInView(5), 15);
+
+  parent.SetMirrored(true);
+
+  EXPECT_EQ(child1.GetNextFocusableView(), &child2);
+  EXPECT_LT(child2.GetMirroredX(), child1.GetMirroredX());
+  EXPECT_LT(child1.x(), child2.x());
+  EXPECT_EQ(parent.GetMirroredXInView(5), 15);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
